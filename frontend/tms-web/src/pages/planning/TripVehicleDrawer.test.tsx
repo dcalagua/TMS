@@ -6,7 +6,7 @@ import { ApiError } from '../../shared/api/httpClient'
 import type { TripDetailView, TripView } from '../../shared/api/planningApi'
 import i18n from '../../shared/i18n'
 import { DEFAULT_LANGUAGE } from '../../shared/i18n/config'
-import { TripVehicleModal } from './TripVehicleModal'
+import { TripVehicleDrawer } from './TripVehicleDrawer'
 
 const planningApiMocks = vi.hoisted(() => ({ updateTripVehicle: vi.fn() }))
 vi.mock('../../shared/api/planningApi', async () => {
@@ -44,7 +44,7 @@ function renderModal(tripFixture: TripView, onUpdated = vi.fn(), onClose = vi.fn
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <TripVehicleModal companyId="company-1" trip={tripFixture} onClose={onClose} onUpdated={onUpdated} />
+      <TripVehicleDrawer companyId="company-1" trip={tripFixture} onClose={onClose} onUpdated={onUpdated} />
     </QueryClientProvider>,
   )
   return { ...utils, onUpdated, onClose }
@@ -55,7 +55,7 @@ afterEach(async () => {
   await i18n.changeLanguage(DEFAULT_LANGUAGE)
 })
 
-describe('TripVehicleModal', () => {
+describe('TripVehicleDrawer', () => {
   it('sends the trip version alongside the selected vehicle', async () => {
     vehiclesApiMocks.fetchVehicles.mockResolvedValue(page([{ id: 'vehicle-1', code: 'VH-1', licensePlate: 'ABC-123' }]))
     const detail = { trip: trip({ vehicleId: 'vehicle-1', vehicleCode: 'VH-1' }) } as unknown as TripDetailView

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import type { ComponentProps } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { OrderDetailView } from '../../shared/api/ordersApi'
-import { OrderFormModal } from './OrderFormModal'
+import { OrderFormDrawer } from './OrderFormDrawer'
 
 const ordersApiMocks = vi.hoisted(() => ({ fetchOrder: vi.fn(), createOrder: vi.fn(), updateOrder: vi.fn() }))
 vi.mock('../../shared/api/ordersApi', async () => {
@@ -74,11 +74,11 @@ function mockLookups() {
   destinationsApiMocks.fetchDestinations.mockResolvedValue(page([DESTINATION]))
 }
 
-function renderModal(props: Partial<ComponentProps<typeof OrderFormModal>> = {}) {
+function renderModal(props: Partial<ComponentProps<typeof OrderFormDrawer>> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
-      <OrderFormModal companyId="company-1" orderId={null} onClose={vi.fn()} onSaved={vi.fn()} {...props} />
+      <OrderFormDrawer companyId="company-1" orderId={null} onClose={vi.fn()} onSaved={vi.fn()} {...props} />
     </QueryClientProvider>,
   )
 }
@@ -87,7 +87,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('OrderFormModal', () => {
+describe('OrderFormDrawer', () => {
   it('rejects an empty submission without calling the API', async () => {
     mockLookups()
     const onSaved = vi.fn()

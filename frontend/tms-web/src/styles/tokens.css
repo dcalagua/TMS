@@ -4,61 +4,88 @@
    else in the codebase may declare a hex value: components reference these
    variables, so a palette change is one file, not a search across screens.
 
+   The system is monochrome by decision: white, off-white, grey, charcoal and
+   near-black carry the whole interface. Colour is reserved for meaning - a
+   status pill, a capacity bar over its limit, a destructive action - so that
+   when something *is* coloured, it is because it matters. A generic framework
+   blue filling buttons, links and headers would drown that signal out.
+
    Bootstrap 5.3 is themed through its own `--bs-*` custom properties, so the
    product's identity is applied by remapping Bootstrap rather than by fighting
    it with overrides. Bootstrap keeps owning grid, utilities and behaviour. */
 
 :root {
-  /* ---- Brand ------------------------------------------------------------- */
-  /* A technical blue: readable on white at small sizes, and distinct from the
-     success green a planner scans for on capacity bars. */
-  --tms-primary: #1d4ed8;
-  --tms-primary-hover: #1a44bd;
-  --tms-primary-active: #163a9f;
-  --tms-primary-subtle: #eef2ff;
-  --tms-primary-border-subtle: #c7d2fe;
-  --tms-on-primary: #ffffff;
+  /* ---- Ink: the primary "colour" of the product ---------------------------
+     Near-black rather than pure black: #000 on white is harsh at text sizes and
+     reads as unfinished. This is also what fills primary buttons. */
+  --tms-ink: #16181d;
+  --tms-ink-hover: #24272e;
+  --tms-ink-active: #0d0f13;
+  --tms-on-ink: #ffffff;
+
+  /* Kept under the historical name so nothing has to know that "primary" is a
+     graphite rather than a hue. */
+  --tms-primary: var(--tms-ink);
+  --tms-primary-hover: var(--tms-ink-hover);
+  --tms-primary-active: var(--tms-ink-active);
+  --tms-primary-subtle: #f0f1f3;
+  --tms-primary-border-subtle: #d9dce1;
+  --tms-on-primary: var(--tms-on-ink);
 
   /* ---- Surfaces ---------------------------------------------------------- */
-  --tms-body-bg: #f1f4f9;
+  --tms-body-bg: #f4f5f7;
   --tms-surface: #ffffff;
-  --tms-surface-muted: #f8fafc;
-  --tms-surface-hover: #f1f5f9;
-  --tms-border: #e2e8f0;
-  --tms-border-strong: #cbd5e1;
+  --tms-surface-muted: #fafbfc;
+  /* Placeholder shimmer: two neutral greys, never a tinted one. */
+  --tms-skeleton-base: #eceef1;
+  --tms-skeleton-sheen: #f5f6f8;
+  --tms-surface-hover: #f5f6f8;
+  --tms-border: #e6e8ec;
+  --tms-border-strong: #d2d6dc;
 
   /* ---- Text -------------------------------------------------------------- */
-  --tms-text: #0f172a;
-  --tms-text-secondary: #475569;
-  --tms-muted: #64748b;
-  --tms-text-inverse: #f8fafc;
+  --tms-text: #16181d;
+  --tms-text-secondary: #4c525b;
+  --tms-muted: #757b85;
+  --tms-text-inverse: #f7f8f9;
 
-  /* ---- Navigation shell -------------------------------------------------- */
-  /* Deep slate rather than pure black: it reads as a product chrome, and white
-     text on it clears WCAG AA comfortably. */
-  --tms-sidebar-bg: #10192e;
-  --tms-sidebar-bg-elevated: #17223c;
-  --tms-sidebar-text: #cbd5e1;
+  /* ---- Navigation shell --------------------------------------------------
+     Charcoal, not navy: the sidebar is chrome, and a coloured chrome competes
+     with the status colours in the content it frames. */
+  --tms-sidebar-bg: #16181d;
+  --tms-sidebar-bg-elevated: #1d2026;
+  --tms-sidebar-text: #b9bdc5;
   --tms-sidebar-text-strong: #ffffff;
-  --tms-sidebar-muted: #7c8aa5;
-  --tms-sidebar-hover-bg: #1c2942;
-  --tms-sidebar-active-bg: #23324f;
-  --tms-sidebar-accent: #60a5fa;
-  --tms-sidebar-border: #223052;
+  --tms-sidebar-muted: #767c86;
+  --tms-sidebar-hover-bg: #22252c;
+  --tms-sidebar-active-bg: #2a2e36;
+  --tms-sidebar-accent: #ffffff;
+  --tms-sidebar-border: #282c34;
   --tms-topbar-bg: #ffffff;
-  --tms-topbar-border: #e2e8f0;
+  --tms-topbar-border: #e6e8ec;
 
-  /* ---- Semantic ---------------------------------------------------------- */
-  --tms-success: #15803d;
-  --tms-success-subtle: #dcfce7;
-  --tms-warning: #b45309;
-  --tms-warning-subtle: #fef3c7;
-  --tms-danger: #b91c1c;
-  --tms-danger-subtle: #fee2e2;
-  --tms-info: #0e7490;
-  --tms-info-subtle: #cffafe;
-  --tms-neutral: #475569;
-  --tms-neutral-subtle: #e2e8f0;
+  /* ---- Semantic ----------------------------------------------------------
+     The only saturated values in the system, and they exist to carry meaning.
+     Deliberately desaturated so a table of pills stays calm. */
+  --tms-success: #1f7a44;
+  --tms-success-subtle: #e8f3ec;
+  --tms-success-border: #c3e0ce;
+  --tms-warning: #9a6212;
+  --tms-warning-subtle: #fbf2e3;
+  --tms-warning-border: #ecd9b4;
+  --tms-danger: #a92d2d;
+  --tms-danger-subtle: #fbebeb;
+  --tms-danger-border: #eecccc;
+  --tms-info: #3a4552;
+  --tms-info-subtle: #eef0f3;
+  --tms-info-border: #d8dce2;
+  --tms-neutral: #5c626b;
+  --tms-neutral-subtle: #f0f1f3;
+  --tms-neutral-border: #dcdfe4;
+
+  /* The single discreet accent, used for nothing but focus and the active nav
+     marker. It never fills a surface. */
+  --tms-accent: #3b6ea5;
 
   /* ---- Shape ------------------------------------------------------------- */
   --tms-radius-sm: 0.375rem;
@@ -66,23 +93,34 @@
   --tms-radius-lg: 0.75rem;
   --tms-radius-pill: 999px;
 
-  /* ---- Elevation --------------------------------------------------------- */
-  /* Soft and low-contrast: an operational screen shows many panels at once, and
+  /* ---- Elevation ---------------------------------------------------------
+     Soft and low-contrast: an operational screen shows many panels at once, and
      heavy shadows turn a dense list into visual noise. */
-  --tms-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --tms-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
-  --tms-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
-  --tms-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.14);
+  --tms-shadow-xs: 0 1px 2px rgba(22, 24, 29, 0.05);
+  --tms-shadow-sm: 0 1px 3px rgba(22, 24, 29, 0.07), 0 1px 2px rgba(22, 24, 29, 0.04);
+  --tms-shadow-md: 0 4px 14px rgba(22, 24, 29, 0.08);
+  --tms-shadow-lg: 0 16px 40px rgba(22, 24, 29, 0.16);
+  --tms-shadow-drawer: -18px 0 48px rgba(22, 24, 29, 0.14);
 
   /* ---- Layout ------------------------------------------------------------ */
-  --tms-sidebar-width: 260px;
-  --tms-sidebar-rail-width: 68px;
+  --tms-sidebar-width: 244px;
+  --tms-sidebar-rail-width: 64px;
   --tms-topbar-height: 56px;
-  --tms-content-max-width: 1600px;
+  --tms-content-max-width: 1680px;
+
+  /* ---- Drawer widths ----------------------------------------------------- */
+  --tms-drawer-sm: 420px;
+  --tms-drawer-md: 520px;
+  --tms-drawer-lg: 660px;
+  --tms-drawer-xl: 820px;
+
+  /* ---- Motion ------------------------------------------------------------ */
+  --tms-motion-drawer: 220ms;
+  --tms-easing: cubic-bezier(0.32, 0.72, 0, 1);
 
   /* ---- Focus ------------------------------------------------------------- */
-  --tms-focus-ring: 0 0 0 0.2rem rgba(29, 78, 216, 0.28);
-  --tms-focus-ring-inverse: 0 0 0 0.2rem rgba(96, 165, 250, 0.45);
+  --tms-focus-ring: 0 0 0 3px rgba(59, 110, 165, 0.35);
+  --tms-focus-ring-inverse: 0 0 0 3px rgba(255, 255, 255, 0.45);
 }
 
 /* ---------------------------------------------------------------------------
@@ -91,30 +129,30 @@
    ------------------------------------------------------------------------- */
 :root,
 [data-bs-theme='light'] {
-  --bs-primary: var(--tms-primary);
-  --bs-primary-rgb: 29, 78, 216;
-  --bs-primary-text-emphasis: var(--tms-primary-active);
+  --bs-primary: var(--tms-ink);
+  --bs-primary-rgb: 22, 24, 29;
+  --bs-primary-text-emphasis: var(--tms-ink);
   --bs-primary-bg-subtle: var(--tms-primary-subtle);
   --bs-primary-border-subtle: var(--tms-primary-border-subtle);
 
   --bs-success: var(--tms-success);
-  --bs-success-rgb: 21, 128, 61;
+  --bs-success-rgb: 31, 122, 68;
   --bs-success-bg-subtle: var(--tms-success-subtle);
 
   --bs-warning: var(--tms-warning);
-  --bs-warning-rgb: 180, 83, 9;
+  --bs-warning-rgb: 154, 98, 18;
   --bs-warning-bg-subtle: var(--tms-warning-subtle);
 
   --bs-danger: var(--tms-danger);
-  --bs-danger-rgb: 185, 28, 28;
+  --bs-danger-rgb: 169, 45, 45;
   --bs-danger-bg-subtle: var(--tms-danger-subtle);
 
   --bs-info: var(--tms-info);
-  --bs-info-rgb: 14, 116, 144;
+  --bs-info-rgb: 58, 69, 82;
   --bs-info-bg-subtle: var(--tms-info-subtle);
 
   --bs-secondary: var(--tms-neutral);
-  --bs-secondary-rgb: 71, 85, 105;
+  --bs-secondary-rgb: 92, 98, 107;
 
   --bs-body-bg: var(--tms-body-bg);
   --bs-body-color: var(--tms-text);
@@ -124,9 +162,12 @@
   --bs-border-radius: var(--tms-radius-md);
   --bs-border-radius-sm: var(--tms-radius-sm);
   --bs-border-radius-lg: var(--tms-radius-lg);
-  --bs-link-color: var(--tms-primary);
-  --bs-link-hover-color: var(--tms-primary-hover);
-  --bs-link-color-rgb: 29, 78, 216;
+
+  /* Links are ink with an underline rather than a blue: in a monochrome system
+     the underline is what marks a link, not the hue. */
+  --bs-link-color: var(--tms-text);
+  --bs-link-hover-color: var(--tms-ink-active);
+  --bs-link-color-rgb: 22, 24, 29;
 
   --bs-body-font-family: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
   --bs-body-font-size: 0.9375rem;

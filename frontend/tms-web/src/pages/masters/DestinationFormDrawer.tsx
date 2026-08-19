@@ -15,7 +15,7 @@ import {
 import { fetchZones } from '../../shared/api/zonesApi'
 import { useEnumLabels } from '../../shared/i18n/enums'
 import { FormField } from '../../shared/ui/components/FormField'
-import { TmsModal } from '../../shared/ui/components/TmsModal'
+import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'destination-form'
 
@@ -39,7 +39,7 @@ interface DestinationFormValues {
   externalReference: string
 }
 
-interface DestinationFormModalProps {
+interface DestinationFormDrawerProps {
   companyId: string
   /** `null` creates a new destination; otherwise the form edits this one. */
   destination: DestinationView | null
@@ -55,7 +55,7 @@ const KNOWN_FIELDS = new Set<keyof DestinationFormValues>([
 /** Create and edit share one form: the fields and validation are identical (see
  * `DestinationRequest`). Fourteen fields is too many for one flat list, so they are grouped
  * the way a planner reads a delivery point: what it is, where it is, and how it is served. */
-export function DestinationFormModal({ companyId, destination, onClose, onSaved }: DestinationFormModalProps) {
+export function DestinationFormDrawer({ companyId, destination, onClose, onSaved }: DestinationFormDrawerProps) {
   const { t } = useTranslation('masters')
   const { t: tc } = useTranslation('common')
   const { t: tv } = useTranslation('validations')
@@ -73,7 +73,7 @@ export function DestinationFormModal({ companyId, destination, onClose, onSaved 
     register,
     handleSubmit,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isDirty, isSubmitting },
   } = useForm<DestinationFormValues>({
     defaultValues: {
       code: destination?.code ?? '',
@@ -145,12 +145,15 @@ export function DestinationFormModal({ companyId, destination, onClose, onSaved 
   }
 
   return (
-    <TmsModal
+    <TmsDrawer
       open
       title={isEdit ? t('destinations.form.edit') : t('destinations.form.create')}
+      subtitle={t('destinations.form.subtitle')}
       size="lg"
       onClose={onClose}
+      dirty={isDirty}
       closeOnEscape={!isSubmitting}
+      closeOnBackdrop={!isSubmitting}
       footer={
         <>
           <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
@@ -368,6 +371,6 @@ export function DestinationFormModal({ companyId, destination, onClose, onSaved 
           </div>
         </fieldset>
       </form>
-    </TmsModal>
+    </TmsDrawer>
   )
 }

@@ -21,7 +21,7 @@ import { useFormat } from '../../shared/i18n/format'
 import { FormField } from '../../shared/ui/components/FormField'
 import { LoadingState } from '../../shared/ui/components/LoadingState'
 import { StatusBadge } from '../../shared/ui/components/StatusBadge'
-import { TmsModal } from '../../shared/ui/components/TmsModal'
+import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'order-form'
 
@@ -55,7 +55,7 @@ interface OrderFormValues {
   lines: OrderLineFormValues[]
 }
 
-interface OrderFormModalProps {
+interface OrderFormDrawerProps {
   companyId: string
   /** `null` creates a new order; otherwise the modal loads and edits/views this order's full
    * detail (including lines) - the list row alone (`OrderView`) does not carry them. */
@@ -74,7 +74,7 @@ const BLANK_LINE: OrderLineFormValues = {
 }
 
 /** Prepends the currently assigned option if it fell out of the active-only list fetched for the
- * dropdown - the same "deactivating does not silently break the editor" invariant `RouteFormModal`
+ * dropdown - the same "deactivating does not silently break the editor" invariant `RouteFormDrawer`
  * uses for its origin/zone/frequency selects. */
 function withCurrentValue(options: SelectOption[], id: string, code: string | null, name: string | null) {
   if (id === '' || options.some((option) => option.id === id)) {
@@ -106,7 +106,7 @@ function previewTotals(lines: OrderLineFormValues[]) {
   return { weight, volume, pallets }
 }
 
-export function OrderFormModal({ companyId, orderId, onClose, onSaved }: OrderFormModalProps) {
+export function OrderFormDrawer({ companyId, orderId, onClose, onSaved }: OrderFormDrawerProps) {
   const { t } = useTranslation('orders')
   const { t: tc } = useTranslation('common')
 
@@ -120,7 +120,7 @@ export function OrderFormModal({ companyId, orderId, onClose, onSaved }: OrderFo
   // loading state rather than flashing an empty form.
   if (orderId !== null && !orderQuery.data) {
     return (
-      <TmsModal open title={t('form.loadingTitle')} size="lg" onClose={onClose}>
+      <TmsDrawer open title={t('form.loadingTitle')} subtitle={t('form.subtitle')} size="xl" onClose={onClose}>
         {orderQuery.isError ? (
           <div className="alert alert-danger py-2 small" role="alert">
             {describeApiError(orderQuery.error as ApiError)}
@@ -128,7 +128,7 @@ export function OrderFormModal({ companyId, orderId, onClose, onSaved }: OrderFo
         ) : (
           <LoadingState label={tc('loading.order')} />
         )}
-      </TmsModal>
+      </TmsDrawer>
     )
   }
 
@@ -174,7 +174,7 @@ function OrderForm({
     control,
     handleSubmit,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isDirty, isSubmitting },
   } = useForm<OrderFormValues>({
     defaultValues: {
       externalSource: order?.externalSource ?? '',
@@ -245,12 +245,15 @@ function OrderForm({
   const statusLabel = order ? enumLabels.orderStatus(order.status) : ''
 
   return (
-    <TmsModal
+    <TmsDrawer
       open
       title={isEdit ? t('form.edit', { number: order.orderNumber }) : t('form.create')}
-      size="lg"
+      subtitle={t('form.subtitle')}
+      size="xl"
       onClose={onClose}
+      dirty={isDirty}
       closeOnEscape={!isSubmitting}
+      closeOnBackdrop={!isSubmitting}
       footer={
         <>
           <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
@@ -537,6 +540,6 @@ function OrderForm({
           </fieldset>
         </fieldset>
       </form>
-    </TmsModal>
+    </TmsDrawer>
   )
 }

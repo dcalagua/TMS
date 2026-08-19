@@ -50,6 +50,7 @@
     "removeLine": "Quitar la línea {{position}}",
     "selectDestination": "Selecciona un destino",
     "selectOrigin": "Selecciona un origen",
+    "subtitle": "Cabecera y líneas del pedido de transporte.",
     "totalsLabel": "Totales estimados (el servidor los calcula al guardar)",
     "unitVolume": "Volumen unit. (m³)",
     "unitWeight": "Peso unit. (kg)",

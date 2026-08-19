@@ -50,6 +50,7 @@
     "removeLine": "Remove line {{position}}",
     "selectDestination": "Select a destination",
     "selectOrigin": "Select an origin",
+    "subtitle": "Header and lines of the transport order.",
     "totalsLabel": "Estimated totals (server-computed on save)",
     "unitVolume": "Unit volume (m³)",
     "unitWeight": "Unit weight (kg)",

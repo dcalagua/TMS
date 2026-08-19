@@ -7,11 +7,11 @@ import { fetchVehicles } from '../../shared/api/vehiclesApi'
 import { createTrip, type TripCreateRequest, type TripDetailView } from '../../shared/api/planningApi'
 import { describePlanningError } from '../../shared/api/problemMessages'
 import { FormField } from '../../shared/ui/components/FormField'
-import { TmsModal } from '../../shared/ui/components/TmsModal'
+import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'create-trip-form'
 
-interface CreateTripModalProps {
+interface CreateTripDrawerProps {
   companyId: string
   runId: string
   runVersion: number
@@ -28,7 +28,7 @@ interface CreateTripFormValues {
  * planner routinely sketches "trip 3" before deciding which truck runs it
  * (`TripCreateRequest`'s javadoc). Sends the *run's* version, since trip creation is a run-level
  * write that fails loudly if the run was confirmed or cancelled since it was loaded. */
-export function CreateTripModal({ companyId, runId, runVersion, onClose, onCreated }: CreateTripModalProps) {
+export function CreateTripDrawer({ companyId, runId, runVersion, onClose, onCreated }: CreateTripDrawerProps) {
   const { t } = useTranslation('planning')
   const { t: tc } = useTranslation('common')
   const [formError, setFormError] = useState<string | null>(null)
@@ -42,7 +42,7 @@ export function CreateTripModal({ companyId, runId, runVersion, onClose, onCreat
   const {
     register,
     handleSubmit,
-    formState: { isSubmitting },
+    formState: { isDirty, isSubmitting },
   } = useForm<CreateTripFormValues>({ defaultValues: { vehicleId: '', plannedDepartureAt: '' } })
 
   async function onSubmit(values: CreateTripFormValues) {
@@ -62,12 +62,16 @@ export function CreateTripModal({ companyId, runId, runVersion, onClose, onCreat
   }
 
   return (
-    <TmsModal
+    <TmsDrawer
       open
       title={t('trip.form.create')}
+      subtitle={t('trip.form.subtitle')}
+      size="md"
       onClose={onClose}
-      // A stray Escape must not abandon a submit that is already in flight.
+      dirty={isDirty}
+      // A stray Escape or backdrop click must not abandon a submit already in flight.
       closeOnEscape={!isSubmitting}
+      closeOnBackdrop={!isSubmitting}
       footer={
         <>
           <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
@@ -106,6 +110,6 @@ export function CreateTripModal({ companyId, runId, runVersion, onClose, onCreat
           />
         </FormField>
       </form>
-    </TmsModal>
+    </TmsDrawer>
   )
 }

@@ -76,6 +76,12 @@
     "noAccessTitle": "Sin acceso a compañías",
     "select": "Selecciona una compañía"
   },
+  "discardChanges": {
+    "cancel": "Seguir editando",
+    "confirm": "Descartar",
+    "text": "Tienes cambios sin guardar.",
+    "title": "¿Descartar cambios?"
+  },
   "fields": {
     "availability": "Disponibilidad",
     "axles": "Ejes",
@@ -186,6 +192,10 @@
     "loading": "Cargando...",
     "loadingRecords": "Cargando registros...",
     "noRecords": "Sin resultados"
+  },
+  "table": {
+    "results_one": "resultado",
+    "results_other": "resultados"
   },
   "weekdays": {
     "friday": "Viernes",

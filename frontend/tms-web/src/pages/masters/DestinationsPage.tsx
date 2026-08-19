@@ -25,7 +25,7 @@ import {
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
-import { DestinationFormModal } from './DestinationFormModal'
+import { DestinationFormDrawer } from './DestinationFormDrawer'
 
 const PAGE_SIZE = 25
 
@@ -175,6 +175,7 @@ export function DestinationsPage() {
   return (
     <div>
       <PageHeader
+        icon="geo-alt"
         title={t('destinations.title')}
         description={t('destinations.description')}
         actions={
@@ -267,6 +268,7 @@ export function DestinationsPage() {
           <DataTable
             columns={columns}
             rows={pageData?.content ?? []}
+            total={pageData?.totalElements}
             rowKey={(destination) => destination.id}
             isLoading={destinationsQuery.isPending}
             error={destinationsQuery.isError ? describeApiError(destinationsQuery.error as ApiError) : null}
@@ -283,7 +285,7 @@ export function DestinationsPage() {
       </div>
 
       {modal && (
-        <DestinationFormModal
+        <DestinationFormDrawer
           companyId={companyId}
           destination={modal.mode === 'edit' ? modal.destination : null}
           onClose={() => setModal(null)}

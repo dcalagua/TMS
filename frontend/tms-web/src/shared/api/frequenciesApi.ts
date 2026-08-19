@@ -84,7 +84,7 @@ export interface FrequencyExceptionView {
 }
 
 /** Mirrors the backend's `FrequencyExceptionRequest` record. Not wired into any V1 screen yet
- * (see FrequencyFormModal's exceptions placeholder); exposed here because the backend already
+ * (see FrequencyFormDrawer's exceptions placeholder); exposed here because the backend already
  * supports it correctly and a later step should not have to re-derive this shape. */
 export interface FrequencyExceptionRequest {
   exceptionDate: string

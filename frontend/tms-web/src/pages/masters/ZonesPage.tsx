@@ -16,7 +16,7 @@ import {
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
-import { ZoneFormModal } from './ZoneFormModal'
+import { ZoneFormDrawer } from './ZoneFormDrawer'
 
 const PAGE_SIZE = 25
 
@@ -145,6 +145,7 @@ export function ZonesPage() {
   return (
     <div>
       <PageHeader
+        icon="bounding-box"
         title={t('zones.title')}
         description={t('zones.description')}
         actions={
@@ -201,6 +202,7 @@ export function ZonesPage() {
           <DataTable
             columns={columns}
             rows={pageData?.content ?? []}
+            total={pageData?.totalElements}
             rowKey={(zone) => zone.id}
             isLoading={zonesQuery.isPending}
             error={zonesQuery.isError ? describeApiError(zonesQuery.error as ApiError) : null}
@@ -217,7 +219,7 @@ export function ZonesPage() {
       </div>
 
       {modal && (
-        <ZoneFormModal
+        <ZoneFormDrawer
           companyId={companyId}
           zone={modal.mode === 'edit' ? modal.zone : null}
           onClose={() => setModal(null)}

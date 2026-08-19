@@ -11,7 +11,7 @@ import {
 } from '../../shared/api/frequenciesApi'
 import type { CommonKey } from '../../shared/i18n/keys'
 import { FormField } from '../../shared/ui/components/FormField'
-import { TmsModal } from '../../shared/ui/components/TmsModal'
+import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'frequency-form'
 
@@ -32,7 +32,7 @@ interface FrequencyFormValues {
   weeklyRules: WeeklyRuleFormValue[]
 }
 
-interface FrequencyFormModalProps {
+interface FrequencyFormDrawerProps {
   companyId: string
   /** `null` creates a new frequency; otherwise the form edits this one. */
   frequency: FrequencyView | null
@@ -68,7 +68,7 @@ function buildDefaultWeeklyRules(frequency: FrequencyView | null): WeeklyRuleFor
 
 /** Create and edit share one form. The weekly grid always renders all 7 days and sends all 7
  * rows on submit - see `FrequencyRequest`'s doc comment for why that is not a partial update. */
-export function FrequencyFormModal({ companyId, frequency, onClose, onSaved }: FrequencyFormModalProps) {
+export function FrequencyFormDrawer({ companyId, frequency, onClose, onSaved }: FrequencyFormDrawerProps) {
   const { t } = useTranslation('masters')
   const { t: tc } = useTranslation('common')
   const { t: tv } = useTranslation('validations')
@@ -78,7 +78,7 @@ export function FrequencyFormModal({ companyId, frequency, onClose, onSaved }: F
     register,
     handleSubmit,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isDirty, isSubmitting },
   } = useForm<FrequencyFormValues>({
     defaultValues: {
       code: frequency?.code ?? '',
@@ -115,12 +115,15 @@ export function FrequencyFormModal({ companyId, frequency, onClose, onSaved }: F
   }
 
   return (
-    <TmsModal
+    <TmsDrawer
       open
       title={isEdit ? t('frequencies.form.edit') : t('frequencies.form.create')}
+      subtitle={t('frequencies.form.subtitle')}
       size="lg"
       onClose={onClose}
+      dirty={isDirty}
       closeOnEscape={!isSubmitting}
+      closeOnBackdrop={!isSubmitting}
       footer={
         <>
           <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
@@ -241,6 +244,6 @@ export function FrequencyFormModal({ companyId, frequency, onClose, onSaved }: F
           <p className="alert alert-secondary small mb-0">{t('frequencies.form.exceptionsNote')}</p>
         </fieldset>
       </form>
-    </TmsModal>
+    </TmsDrawer>
   )
 }

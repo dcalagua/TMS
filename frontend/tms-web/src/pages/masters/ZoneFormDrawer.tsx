@@ -5,7 +5,7 @@ import type { ApiError } from '../../shared/api/httpClient'
 import { applyApiFieldErrors } from '../../shared/api/formErrors'
 import { createZone, updateZone, type ZoneRequest, type ZoneView } from '../../shared/api/zonesApi'
 import { FormField } from '../../shared/ui/components/FormField'
-import { TmsModal } from '../../shared/ui/components/TmsModal'
+import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'zone-form'
 
@@ -18,7 +18,7 @@ interface ZoneFormValues {
   description: string
 }
 
-interface ZoneFormModalProps {
+interface ZoneFormDrawerProps {
   companyId: string
   /** `null` creates a new zone; otherwise the form edits this one. */
   zone: ZoneView | null
@@ -28,8 +28,8 @@ interface ZoneFormModalProps {
 
 const KNOWN_FIELDS = new Set<keyof ZoneFormValues>(['code', 'name', 'description'])
 
-/** Create and edit share one form; see `OriginFormModal` for the same pattern with more fields. */
-export function ZoneFormModal({ companyId, zone, onClose, onSaved }: ZoneFormModalProps) {
+/** Create and edit share one form; see `OriginFormDrawer` for the same pattern with more fields. */
+export function ZoneFormDrawer({ companyId, zone, onClose, onSaved }: ZoneFormDrawerProps) {
   const { t } = useTranslation('masters')
   const { t: tc } = useTranslation('common')
   const { t: tv } = useTranslation('validations')
@@ -39,7 +39,7 @@ export function ZoneFormModal({ companyId, zone, onClose, onSaved }: ZoneFormMod
     register,
     handleSubmit,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isDirty, isSubmitting },
   } = useForm<ZoneFormValues>({
     defaultValues: {
       code: zone?.code ?? '',
@@ -69,11 +69,15 @@ export function ZoneFormModal({ companyId, zone, onClose, onSaved }: ZoneFormMod
   }
 
   return (
-    <TmsModal
+    <TmsDrawer
       open
       title={isEdit ? t('zones.form.edit') : t('zones.form.create')}
+      subtitle={t('zones.form.subtitle')}
+      size="md"
       onClose={onClose}
+      dirty={isDirty}
       closeOnEscape={!isSubmitting}
+      closeOnBackdrop={!isSubmitting}
       footer={
         <>
           <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
@@ -129,6 +133,6 @@ export function ZoneFormModal({ companyId, zone, onClose, onSaved }: ZoneFormMod
           />
         </FormField>
       </form>
-    </TmsModal>
+    </TmsDrawer>
   )
 }

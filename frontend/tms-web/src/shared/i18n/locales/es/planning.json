@@ -86,6 +86,7 @@
     "stopOrders_one": "{{count}} pedido",
     "stopOrders_other": "{{count}} pedidos",
     "stopSequence": "Secuencia de destinos",
+    "subtitle": "Paradas, pedidos asignados y capacidad del viaje.",
     "titleFallback": "Viaje",
     "tripCancelled": "Viaje cancelado",
     "tripOption": "Viaje {{number}}"
@@ -122,7 +123,8 @@
       "origin": "Origen",
       "selectOrigin": "Selecciona un origen",
       "submit": "Crear corrida",
-      "submitting": "Creando..."
+      "submitting": "Creando...",
+      "subtitle": "Un origen y una fecha; los viajes se arman después."
     }
   },
   "title": "Planificación",
@@ -135,7 +137,9 @@
       "selectVehicle": "Selecciona un vehículo",
       "submitCreate": "Crear viaje",
       "submitVehicle": "Guardar vehículo",
+      "subtitle": "Un viaje puede crearse antes de decidir el vehículo.",
       "vehicle": "Vehículo",
+      "vehicleSubtitle": "El backend revalida la capacidad ya asignada al cambiarlo.",
       "vehicleTitle": "Vehículo del viaje {{number}}"
     }
   }

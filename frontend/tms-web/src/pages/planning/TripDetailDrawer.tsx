@@ -14,10 +14,10 @@ import {
 } from '../../shared/api/planningApi'
 import { describePlanningError } from '../../shared/api/problemMessages'
 import { useFormat } from '../../shared/i18n/format'
-import { CapacityBar, confirmDialog, Drawer, StatusBadge, type StatusTone } from '../../shared/ui/components'
+import { CapacityBar, confirmDialog, StatusBadge, type StatusTone, TmsDrawer } from '../../shared/ui/components'
 import { LoadingState } from '../../shared/ui/components/LoadingState'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
-import { TripVehicleModal } from './TripVehicleModal'
+import { TripVehicleDrawer } from './TripVehicleDrawer'
 
 const STATUS_TONE: Record<TripView['status'], StatusTone> = {
   DRAFT: 'info',
@@ -154,10 +154,14 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
   const stopsDirty = stopOrder.join('|') !== serverStopsKey
 
   return (
-    <Drawer
+    <TmsDrawer
       open
       title={detail ? t('card.title', { number: detail.trip.tripNumber }) : t('drawer.titleFallback')}
+      subtitle={t('drawer.subtitle')}
+      size="lg"
       onClose={onClose}
+      // Stops reordered but not yet saved are unsaved work like any edited field.
+      dirty={stopsDirty}
     >
       <div>
         {detail && (
@@ -322,7 +326,7 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
       </div>
 
       {showVehicleModal && detail && (
-        <TripVehicleModal
+        <TripVehicleDrawer
           companyId={companyId}
           trip={detail.trip}
           onClose={() => setShowVehicleModal(false)}
@@ -333,6 +337,6 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
           }}
         />
       )}
-    </Drawer>
+    </TmsDrawer>
   )
 }

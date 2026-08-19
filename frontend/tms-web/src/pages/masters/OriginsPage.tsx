@@ -24,7 +24,7 @@ import {
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
-import { OriginFormModal } from './OriginFormModal'
+import { OriginFormDrawer } from './OriginFormDrawer'
 
 const PAGE_SIZE = 25
 
@@ -160,6 +160,7 @@ export function OriginsPage() {
   return (
     <div>
       <PageHeader
+        icon="box-seam"
         title={t('origins.title')}
         description={t('origins.description')}
         actions={
@@ -234,6 +235,7 @@ export function OriginsPage() {
           <DataTable
             columns={columns}
             rows={pageData?.content ?? []}
+            total={pageData?.totalElements}
             rowKey={(origin) => origin.id}
             isLoading={originsQuery.isPending}
             error={originsQuery.isError ? describeApiError(originsQuery.error as ApiError) : null}
@@ -250,7 +252,7 @@ export function OriginsPage() {
       </div>
 
       {modal && (
-        <OriginFormModal
+        <OriginFormDrawer
           companyId={companyId}
           origin={modal.mode === 'edit' ? modal.origin : null}
           onClose={() => setModal(null)}

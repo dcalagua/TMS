@@ -76,6 +76,12 @@
     "noAccessTitle": "No company access",
     "select": "Select a company"
   },
+  "discardChanges": {
+    "cancel": "Keep editing",
+    "confirm": "Discard",
+    "text": "You have unsaved changes.",
+    "title": "Discard changes?"
+  },
   "fields": {
     "availability": "Availability",
     "axles": "Axles",
@@ -186,6 +192,10 @@
     "loading": "Loading...",
     "loadingRecords": "Loading records...",
     "noRecords": "No records found"
+  },
+  "table": {
+    "results_one": "result",
+    "results_other": "results"
   },
   "weekdays": {
     "friday": "Friday",

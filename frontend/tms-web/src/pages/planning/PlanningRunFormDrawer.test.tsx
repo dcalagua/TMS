@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../shared/api/httpClient'
 import type { PlanningRunDetailView } from '../../shared/api/planningApi'
-import { PlanningRunFormModal } from './PlanningRunFormModal'
+import { PlanningRunFormDrawer } from './PlanningRunFormDrawer'
 
 const planningApiMocks = vi.hoisted(() => ({ createPlanningRun: vi.fn() }))
 vi.mock('../../shared/api/planningApi', async () => {
@@ -26,7 +26,7 @@ function renderModal(onCreated = vi.fn(), onClose = vi.fn()) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <PlanningRunFormModal companyId="company-1" onClose={onClose} onCreated={onCreated} />
+      <PlanningRunFormDrawer companyId="company-1" onClose={onClose} onCreated={onCreated} />
     </QueryClientProvider>,
   )
   return { ...utils, onCreated, onClose }
@@ -36,7 +36,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('PlanningRunFormModal', () => {
+describe('PlanningRunFormDrawer', () => {
   it('submits the origin, planning date and trimmed notes, then reports the created run', async () => {
     originsApiMocks.fetchOrigins.mockResolvedValue(page([{ id: 'origin-1', code: 'ORIGIN-A', name: 'Origin A' }]))
     const created: PlanningRunDetailView = {

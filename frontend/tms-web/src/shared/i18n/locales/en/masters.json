@@ -8,7 +8,8 @@
     "form": {
       "create": "New destination",
       "edit": "Edit destination",
-      "noZone": "No zone"
+      "noZone": "No zone",
+      "subtitle": "A delivery point that orders are dispatched to."
     },
     "new": "New destination",
     "title": "Destinations"
@@ -29,6 +30,7 @@
       "leadTimeAria": "{{day}} lead time in days",
       "leadTimeDays": "Lead time (days)",
       "serviceDay": "Service day",
+      "subtitle": "A service calendar: weekly cadence, cutoff and lead time.",
       "weeklyCadence": "Weekly cadence"
     },
     "new": "New frequency",
@@ -42,7 +44,8 @@
     },
     "form": {
       "create": "New origin",
-      "edit": "Edit origin"
+      "edit": "Edit origin",
+      "subtitle": "A loading and dispatch point used to plan trips."
     },
     "new": "New origin",
     "title": "Origins"
@@ -68,7 +71,8 @@
       "removeStop": "Remove stop {{position}}",
       "selectDestination": "Select a destination to add",
       "selectOrigin": "Select an origin",
-      "stopsLabel": "Destination stops, in order"
+      "stopsLabel": "Destination stops, in order",
+      "subtitle": "A reusable planned corridor between an origin and its stops."
     },
     "new": "New route",
     "title": "Routes"
@@ -81,7 +85,8 @@
     },
     "form": {
       "create": "New zone",
-      "edit": "Edit zone"
+      "edit": "Edit zone",
+      "subtitle": "An operational area grouping origins, destinations and routes."
     },
     "new": "New zone",
     "title": "Zones"

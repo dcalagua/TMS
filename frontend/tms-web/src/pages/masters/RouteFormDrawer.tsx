@@ -18,7 +18,7 @@ import {
 import { describeApiError } from '../../shared/api/problemMessages'
 import { FormField } from '../../shared/ui/components/FormField'
 import { LoadingState } from '../../shared/ui/components/LoadingState'
-import { TmsModal } from '../../shared/ui/components/TmsModal'
+import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'route-form'
 
@@ -42,7 +42,7 @@ interface RouteFormValues {
   stops: { destinationId: string }[]
 }
 
-interface RouteFormModalProps {
+interface RouteFormDrawerProps {
   companyId: string
   /** `null` creates a new route; otherwise the modal loads and edits this route's full detail
    * (including its ordered stops) - the list row alone (`RouteView`) does not carry them, by
@@ -66,7 +66,7 @@ function withCurrentValue(options: SelectOption[], id: string | null, code: stri
   return [{ id, code: code ?? id, name: name ?? code ?? id }, ...options]
 }
 
-export function RouteFormModal({ companyId, routeId, onClose, onSaved }: RouteFormModalProps) {
+export function RouteFormDrawer({ companyId, routeId, onClose, onSaved }: RouteFormDrawerProps) {
   const { t } = useTranslation('masters')
   const { t: tc } = useTranslation('common')
 
@@ -80,7 +80,13 @@ export function RouteFormModal({ companyId, routeId, onClose, onSaved }: RouteFo
   // own loading state rather than flashing an empty form.
   if (routeId !== null && !routeQuery.data) {
     return (
-      <TmsModal open title={t('routes.form.edit')} size="lg" onClose={onClose}>
+      <TmsDrawer
+        open
+        title={t('routes.form.edit')}
+        subtitle={t('routes.form.subtitle')}
+        size="xl"
+        onClose={onClose}
+      >
         {routeQuery.isError ? (
           <div className="alert alert-danger py-2 small" role="alert">
             {describeApiError(routeQuery.error as ApiError)}
@@ -88,7 +94,7 @@ export function RouteFormModal({ companyId, routeId, onClose, onSaved }: RouteFo
         ) : (
           <LoadingState label={tc('loading.route')} />
         )}
-      </TmsModal>
+      </TmsDrawer>
     )
   }
 
@@ -161,7 +167,7 @@ function RouteForm({
     control,
     handleSubmit,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isDirty, isSubmitting },
   } = useForm<RouteFormValues>({
     defaultValues: {
       code: route?.code ?? '',
@@ -218,12 +224,15 @@ function RouteForm({
   }
 
   return (
-    <TmsModal
+    <TmsDrawer
       open
       title={isEdit ? t('routes.form.edit') : t('routes.form.create')}
-      size="lg"
+      subtitle={t('routes.form.subtitle')}
+      size="xl"
       onClose={onClose}
+      dirty={isDirty}
       closeOnEscape={!isSubmitting}
+      closeOnBackdrop={!isSubmitting}
       footer={
         <>
           <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
@@ -420,6 +429,6 @@ function RouteForm({
           </div>
         </fieldset>
       </form>
-    </TmsModal>
+    </TmsDrawer>
   )
 }

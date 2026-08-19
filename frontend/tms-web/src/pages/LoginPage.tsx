@@ -50,15 +50,8 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-vh-100 d-flex tms-min-w-0" style={{ backgroundColor: 'var(--tms-body-bg)' }}>
-      <aside
-        className="d-none d-lg-flex flex-column justify-content-between p-5 text-white"
-        style={{
-          width: '42%',
-          maxWidth: '34rem',
-          background: 'linear-gradient(160deg, var(--tms-sidebar-bg) 0%, #1b2b4d 55%, #1d4ed8 160%)',
-        }}
-      >
+    <div className="tms-login tms-min-w-0">
+      <aside className="tms-login-brand d-none d-lg-flex flex-column justify-content-between p-5">
         <div className="d-flex align-items-center gap-2">
           <span className="tms-brand-mark" aria-hidden="true">
             TMS
@@ -71,13 +64,13 @@ export function LoginPage() {
         <div>
           {/* Headings inherit `--bs-heading-color`, which is the dark body colour; on this
               navy panel that would fail contrast, so the colour is set explicitly. */}
-          <h2 className="fw-semibold mb-3 text-white" style={{ fontSize: '1.75rem', lineHeight: 1.25 }}>
+          <h2 className="tms-login-headline mb-3">
             {t('brand.headline')}
           </h2>
           <ul className="list-unstyled mb-0 d-grid gap-2 text-white-50">
             {(['brand.point1', 'brand.point2', 'brand.point3'] as const).map((key) => (
               <li key={key} className="d-flex align-items-start gap-2">
-                <i className="bi bi-check2-circle mt-1" style={{ color: 'var(--tms-sidebar-accent)' }} aria-hidden="true" />
+                <i className="bi bi-check2-circle tms-login-check mt-1" aria-hidden="true" />
                 <span>{t(key)}</span>
               </li>
             ))}
@@ -88,7 +81,7 @@ export function LoginPage() {
       </aside>
 
       <main className="flex-grow-1 d-flex align-items-center justify-content-center p-3 p-sm-4 tms-min-w-0">
-        <div className="w-100" style={{ maxWidth: 440 }}>
+        <div className="tms-login-form">
           <div className="d-flex align-items-center justify-content-between gap-2 mb-3">
             <span className="d-flex d-lg-none align-items-center gap-2 tms-brand">
               <span className="tms-brand-mark" aria-hidden="true">

@@ -51,9 +51,15 @@ for (const viewport of VIEWPORTS) {
 
       expect(await horizontalOverflow(page), `${form.path} at ${viewport.name}`).toBeLessThanOrEqual(0)
 
-      // The dialog itself must not be wider than the viewport either.
+      // The dialog itself must not be wider than the viewport either. A drawer that fills a
+      // phone screen measures the viewport width plus a sub-pixel rounding error, hence the 1px.
+      await dialog.evaluate(async (element) => {
+        await Promise.all(element.getAnimations().map((animation) => animation.finished))
+      })
       const box = await dialog.boundingBox()
-      expect(box?.width ?? 0, `${form.path} dialog width at ${viewport.name}`).toBeLessThanOrEqual(viewport.width)
+      expect(box?.width ?? 0, `${form.path} dialog width at ${viewport.name}`).toBeLessThanOrEqual(
+        viewport.width + 1,
+      )
 
       const save = dialog.getByRole('button', { name: 'Guardar' })
       await expect(save).toBeVisible()

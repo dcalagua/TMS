@@ -3,56 +3,56 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../shared/i18n'
 import { DEFAULT_LANGUAGE } from '../shared/i18n/config'
-import { CarrierFormModal } from './fleet/CarrierFormModal'
-import { VehicleTypeFormModal } from './fleet/VehicleTypeFormModal'
-import { FrequencyFormModal } from './masters/FrequencyFormModal'
-import { OriginFormModal } from './masters/OriginFormModal'
-import { ZoneFormModal } from './masters/ZoneFormModal'
+import { CarrierFormDrawer } from './fleet/CarrierFormDrawer'
+import { VehicleTypeFormDrawer } from './fleet/VehicleTypeFormDrawer'
+import { FrequencyFormDrawer } from './masters/FrequencyFormDrawer'
+import { OriginFormDrawer } from './masters/OriginFormDrawer'
+import { ZoneFormDrawer } from './masters/ZoneFormDrawer'
 
 /**
- * The dialog contract, asserted against the real form modals rather than against `TmsModal` in
- * isolation: every form that used to hand-build Bootstrap modal markup must now behave the same
- * way. Covered here are the five that need no async lookups; the others assert the same
- * contract in their own suites.
+ * The drawer contract, asserted against the real forms rather than against `TmsDrawer` in
+ * isolation: create, edit, detail and configure all open in the right-side panel, and every one
+ * of them behaves the same way. Covered here are the five that need no async lookups; the others
+ * assert the same contract in their own suites.
  */
 
-const DIALOGS = [
+const DRAWERS = [
   {
-    name: 'ZoneFormModal',
+    name: 'ZoneFormDrawer',
     render: (onClose: () => void) => (
-      <ZoneFormModal companyId="company-1" zone={null} onClose={onClose} onSaved={vi.fn()} />
+      <ZoneFormDrawer companyId="company-1" zone={null} onClose={onClose} onSaved={vi.fn()} />
     ),
     createTitle: 'Nueva zona',
     englishTitle: 'New zone',
   },
   {
-    name: 'OriginFormModal',
+    name: 'OriginFormDrawer',
     render: (onClose: () => void) => (
-      <OriginFormModal companyId="company-1" origin={null} onClose={onClose} onSaved={vi.fn()} />
+      <OriginFormDrawer companyId="company-1" origin={null} onClose={onClose} onSaved={vi.fn()} />
     ),
     createTitle: 'Nuevo origen',
     englishTitle: 'New origin',
   },
   {
-    name: 'FrequencyFormModal',
+    name: 'FrequencyFormDrawer',
     render: (onClose: () => void) => (
-      <FrequencyFormModal companyId="company-1" frequency={null} onClose={onClose} onSaved={vi.fn()} />
+      <FrequencyFormDrawer companyId="company-1" frequency={null} onClose={onClose} onSaved={vi.fn()} />
     ),
     createTitle: 'Nueva frecuencia',
     englishTitle: 'New frequency',
   },
   {
-    name: 'CarrierFormModal',
+    name: 'CarrierFormDrawer',
     render: (onClose: () => void) => (
-      <CarrierFormModal companyId="company-1" carrier={null} onClose={onClose} onSaved={vi.fn()} />
+      <CarrierFormDrawer companyId="company-1" carrier={null} onClose={onClose} onSaved={vi.fn()} />
     ),
     createTitle: 'Nuevo transportista',
     englishTitle: 'New carrier',
   },
   {
-    name: 'VehicleTypeFormModal',
+    name: 'VehicleTypeFormDrawer',
     render: (onClose: () => void) => (
-      <VehicleTypeFormModal companyId="company-1" vehicleType={null} onClose={onClose} onSaved={vi.fn()} />
+      <VehicleTypeFormDrawer companyId="company-1" vehicleType={null} onClose={onClose} onSaved={vi.fn()} />
     ),
     createTitle: 'Nuevo tipo de vehículo',
     englishTitle: 'New vehicle type',
@@ -64,13 +64,21 @@ afterEach(async () => {
   await i18n.changeLanguage(DEFAULT_LANGUAGE)
 })
 
-describe.each(DIALOGS)('$name dialog contract', (dialog) => {
-  it('opens as a modal dialog named by its title', () => {
+describe.each(DRAWERS)('$name drawer contract', (dialog) => {
+  it('opens as a right-side drawer named by its title', () => {
     render(dialog.render(vi.fn()))
 
     const element = screen.getByRole('dialog')
     expect(element).toHaveAttribute('aria-modal', 'true')
     expect(element).toHaveAccessibleName(dialog.createTitle)
+    // The panel, not a centred modal: this is the product-wide CRUD surface.
+    expect(element).toHaveClass('tms-drawer')
+  })
+
+  it('explains itself with a subtitle wired to aria-describedby', () => {
+    render(dialog.render(vi.fn()))
+
+    expect(screen.getByRole('dialog').getAttribute('aria-describedby')).not.toBeNull()
   })
 
   it('moves focus inside itself when it opens', async () => {
@@ -142,5 +150,12 @@ describe.each(DIALOGS)('$name dialog contract', (dialog) => {
 
     expect(container.querySelector('.modal.d-block')).toBeNull()
     expect(document.querySelector('.modal-backdrop')).toBeNull()
+  })
+
+  it('drives itself from React state rather than the Bootstrap data API', () => {
+    render(dialog.render(vi.fn()))
+
+    const element = screen.getByRole('dialog')
+    expect(element.querySelectorAll('[data-bs-dismiss], [data-bs-toggle], [data-bs-target]')).toHaveLength(0)
   })
 })

@@ -18,7 +18,7 @@ import {
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
-import { RouteFormModal } from './RouteFormModal'
+import { RouteFormDrawer } from './RouteFormDrawer'
 
 const PAGE_SIZE = 25
 
@@ -167,6 +167,7 @@ export function RoutesPage() {
   return (
     <div>
       <PageHeader
+        icon="signpost-split"
         title={t('routes.title')}
         description={t('routes.description')}
         actions={
@@ -259,6 +260,7 @@ export function RoutesPage() {
           <DataTable
             columns={columns}
             rows={pageData?.content ?? []}
+            total={pageData?.totalElements}
             rowKey={(route) => route.id}
             isLoading={routesQuery.isPending}
             error={routesQuery.isError ? describeApiError(routesQuery.error as ApiError) : null}
@@ -275,7 +277,7 @@ export function RoutesPage() {
       </div>
 
       {modal && (
-        <RouteFormModal
+        <RouteFormDrawer
           companyId={companyId}
           routeId={modal.mode === 'edit' ? modal.routeId : null}
           onClose={() => setModal(null)}

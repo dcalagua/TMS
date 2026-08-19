@@ -1,4 +1,4 @@
-import { expect, test, type ConsoleMessage, type Page } from '@playwright/test'
+import { expect, test, type ConsoleMessage, type Locator, type Page } from '@playwright/test'
 import { signIn, stubServices } from './support/app'
 import { stubPlanning } from './support/planning'
 
@@ -66,6 +66,13 @@ test('no console errors while walking every screen', async ({ page }) => {
   expect(errors, errors.join('\n')).toEqual([])
 })
 
+/** Lets a sliding panel finish travelling: a screenshot taken mid-animation shows it half off. */
+async function settled(target: Locator): Promise<void> {
+  await target.evaluate(async (element) => {
+    await Promise.all(element.getAnimations().map((animation) => animation.finished))
+  })
+}
+
 test('captures the review screenshots', async ({ page }) => {
   await stubServices(page)
 
@@ -110,6 +117,7 @@ test('captures the review screenshots', async ({ page }) => {
   await page.goto('/masters/destinations')
   await page.getByRole('button', { name: 'Nuevo destino' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
+  await settled(page.getByRole('dialog'))
   await page.screenshot({ path: `${SHOTS_DIR}/form-destination-desktop.png` })
   await page.keyboard.press('Escape')
 
@@ -117,6 +125,7 @@ test('captures the review screenshots', async ({ page }) => {
   await page.goto('/masters/destinations')
   await page.getByRole('button', { name: 'Nuevo destino' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
+  await settled(page.getByRole('dialog'))
   await page.screenshot({ path: `${SHOTS_DIR}/form-destination-mobile.png` })
 })
 

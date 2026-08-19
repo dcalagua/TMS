@@ -7,7 +7,8 @@
     },
     "form": {
       "create": "New carrier",
-      "edit": "Edit carrier"
+      "edit": "Edit carrier",
+      "subtitle": "A transport provider assigned to vehicles."
     },
     "new": "New carrier",
     "title": "Carriers"
@@ -22,6 +23,7 @@
       "create": "New vehicle type",
       "edit": "Edit vehicle type",
       "noBodyType": "None",
+      "subtitle": "Capacities and physical characteristics of a class of unit.",
       "temperatureControlled": "Temperature controlled",
       "temperatureOrder": "Minimum temperature must not be greater than maximum temperature."
     },
@@ -39,7 +41,8 @@
       "edit": "Edit vehicle",
       "noCarrier": "No carrier (owned fleet)",
       "overrideHelp": "Leave an override blank to use the vehicle type's default for that dimension.",
-      "selectType": "Select a type"
+      "selectType": "Select a type",
+      "subtitle": "A physical unit available to assign to trips."
     },
     "new": "New vehicle",
     "title": "Vehicles"

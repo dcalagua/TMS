@@ -86,6 +86,10 @@ test.describe('shell behaviour across breakpoints', () => {
 
     await page.getByRole('button', { name: 'Contraer el menú' }).click()
     await expect(sidebar).toHaveClass(/tms-sidebar-rail/)
+    // The width is animated, so measuring the moment the class lands reads the old width.
+    await sidebar.evaluate(async (element) => {
+      await Promise.all(element.getAnimations().map((animation) => animation.finished))
+    })
     const railed = (await sidebar.boundingBox())?.width ?? 0
     expect(railed).toBeLessThan(expanded)
 

@@ -21,7 +21,7 @@ import {
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
-import { FrequencyFormModal } from './FrequencyFormModal'
+import { FrequencyFormDrawer } from './FrequencyFormDrawer'
 
 const PAGE_SIZE = 25
 
@@ -160,6 +160,7 @@ export function FrequenciesPage() {
   return (
     <div>
       <PageHeader
+        icon="calendar-week"
         title={t('frequencies.title')}
         description={t('frequencies.description')}
         actions={
@@ -216,6 +217,7 @@ export function FrequenciesPage() {
           <DataTable
             columns={columns}
             rows={pageData?.content ?? []}
+            total={pageData?.totalElements}
             rowKey={(frequency) => frequency.id}
             isLoading={frequenciesQuery.isPending}
             error={frequenciesQuery.isError ? describeApiError(frequenciesQuery.error as ApiError) : null}
@@ -232,7 +234,7 @@ export function FrequenciesPage() {
       </div>
 
       {modal && (
-        <FrequencyFormModal
+        <FrequencyFormDrawer
           companyId={companyId}
           frequency={modal.mode === 'edit' ? modal.frequency : null}
           onClose={() => setModal(null)}

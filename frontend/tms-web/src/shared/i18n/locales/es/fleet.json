@@ -7,7 +7,8 @@
     },
     "form": {
       "create": "Nuevo transportista",
-      "edit": "Editar transportista"
+      "edit": "Editar transportista",
+      "subtitle": "Proveedor de transporte que se asigna a los vehículos."
     },
     "new": "Nuevo transportista",
     "title": "Transportistas"
@@ -22,6 +23,7 @@
       "create": "Nuevo tipo de vehículo",
       "edit": "Editar tipo de vehículo",
       "noBodyType": "Ninguno",
+      "subtitle": "Capacidades y características físicas de una clase de unidad.",
       "temperatureControlled": "Temperatura controlada",
       "temperatureOrder": "La temperatura mínima no puede ser mayor que la máxima."
     },
@@ -39,7 +41,8 @@
       "edit": "Editar vehículo",
       "noCarrier": "Sin transportista (flota propia)",
       "overrideHelp": "Deja un valor propio en blanco para usar el del tipo de vehículo.",
-      "selectType": "Selecciona un tipo"
+      "selectType": "Selecciona un tipo",
+      "subtitle": "Unidad física disponible para asignar a viajes."
     },
     "new": "Nuevo vehículo",
     "title": "Vehículos"

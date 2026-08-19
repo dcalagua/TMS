@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import type { ComponentProps } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RouteDetailView } from '../../shared/api/routesApi'
-import { RouteFormModal } from './RouteFormModal'
+import { RouteFormDrawer } from './RouteFormDrawer'
 
 const routesApiMocks = vi.hoisted(() => ({ fetchRoute: vi.fn(), createRoute: vi.fn(), updateRoute: vi.fn() }))
 vi.mock('../../shared/api/routesApi', async () => {
@@ -90,11 +90,11 @@ function mockLookups() {
   destinationsApiMocks.fetchDestinations.mockResolvedValue(page([DESTINATION_A, DESTINATION_B]))
 }
 
-function renderModal(props: Partial<ComponentProps<typeof RouteFormModal>> = {}) {
+function renderModal(props: Partial<ComponentProps<typeof RouteFormDrawer>> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
-      <RouteFormModal companyId="company-1" routeId={null} onClose={vi.fn()} onSaved={vi.fn()} {...props} />
+      <RouteFormDrawer companyId="company-1" routeId={null} onClose={vi.fn()} onSaved={vi.fn()} {...props} />
     </QueryClientProvider>,
   )
 }
@@ -103,7 +103,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('RouteFormModal', () => {
+describe('RouteFormDrawer', () => {
   it('rejects an empty submission without calling the API', async () => {
     mockLookups()
     const onSaved = vi.fn()

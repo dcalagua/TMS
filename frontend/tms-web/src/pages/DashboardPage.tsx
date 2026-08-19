@@ -41,6 +41,7 @@ export function DashboardPage() {
   return (
     <>
       <PageHeader
+        icon="speedometer2"
         title={t('welcome', { name: user?.email ?? '' })}
         description={selected ? t('subtitle', { company: selected.name }) : t('noCompany')}
         actions={apiBadge}

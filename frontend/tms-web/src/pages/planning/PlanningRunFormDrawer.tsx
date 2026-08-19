@@ -7,7 +7,7 @@ import { fetchOrigins } from '../../shared/api/originsApi'
 import { createPlanningRun, type PlanningRunDetailView, type PlanningRunRequest } from '../../shared/api/planningApi'
 import { applyApiFieldErrors } from '../../shared/api/formErrors'
 import { FormField } from '../../shared/ui/components/FormField'
-import { TmsModal } from '../../shared/ui/components/TmsModal'
+import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'planning-run-form'
 
@@ -17,7 +17,7 @@ interface PlanningRunFormValues {
   notes: string
 }
 
-interface PlanningRunFormModalProps {
+interface PlanningRunFormDrawerProps {
   companyId: string
   onClose: () => void
   onCreated: (run: PlanningRunDetailView) => void
@@ -28,7 +28,7 @@ const KNOWN_FIELDS = new Set<keyof PlanningRunFormValues>(['originId', 'planning
 /** Opens a new manual planning run. There is no edit form: a run's origin and date are fixed for
  * its lifetime (`docs/domain/PLANNING_MANUAL_V1.md` section 2) - only its trips and assignments
  * change, which the board (`PlanningBoardPage`) handles, not this modal. */
-export function PlanningRunFormModal({ companyId, onClose, onCreated }: PlanningRunFormModalProps) {
+export function PlanningRunFormDrawer({ companyId, onClose, onCreated }: PlanningRunFormDrawerProps) {
   const { t } = useTranslation('planning')
   const { t: tc } = useTranslation('common')
   const { t: tv } = useTranslation('validations')
@@ -44,7 +44,7 @@ export function PlanningRunFormModal({ companyId, onClose, onCreated }: Planning
     register,
     handleSubmit,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isDirty, isSubmitting },
   } = useForm<PlanningRunFormValues>({ defaultValues: { originId: '', planningDate: '', notes: '' } })
 
   async function onSubmit(values: PlanningRunFormValues) {
@@ -64,11 +64,15 @@ export function PlanningRunFormModal({ companyId, onClose, onCreated }: Planning
   }
 
   return (
-    <TmsModal
+    <TmsDrawer
       open
       title={t('run.form.create')}
+      subtitle={t('run.form.subtitle')}
+      size="md"
       onClose={onClose}
+      dirty={isDirty}
       closeOnEscape={!isSubmitting}
+      closeOnBackdrop={!isSubmitting}
       footer={
         <>
           <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
@@ -125,6 +129,6 @@ export function PlanningRunFormModal({ companyId, onClose, onCreated }: Planning
           />
         </FormField>
       </form>
-    </TmsModal>
+    </TmsDrawer>
   )
 }

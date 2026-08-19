@@ -13,7 +13,7 @@ import {
 } from '../../shared/api/originsApi'
 import { useEnumLabels } from '../../shared/i18n/enums'
 import { FormField } from '../../shared/ui/components/FormField'
-import { TmsModal } from '../../shared/ui/components/TmsModal'
+import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'origin-form'
 
@@ -31,7 +31,7 @@ interface OriginFormValues {
   externalReference: string
 }
 
-interface OriginFormModalProps {
+interface OriginFormDrawerProps {
   companyId: string
   /** `null` creates a new origin; otherwise the form edits this one. */
   origin: OriginView | null
@@ -59,7 +59,7 @@ function isValidTimeZone(value: string): boolean {
 /** Create and edit share one form: the fields and validation are identical (see `OriginRequest`).
  * Fields are grouped the way an operator thinks about them - what the origin *is*, where it is,
  * and how it links to other systems - rather than in the order the request object declares. */
-export function OriginFormModal({ companyId, origin, onClose, onSaved }: OriginFormModalProps) {
+export function OriginFormDrawer({ companyId, origin, onClose, onSaved }: OriginFormDrawerProps) {
   const { t } = useTranslation('masters')
   const { t: tc } = useTranslation('common')
   const { t: tv } = useTranslation('validations')
@@ -70,7 +70,7 @@ export function OriginFormModal({ companyId, origin, onClose, onSaved }: OriginF
     register,
     handleSubmit,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isDirty, isSubmitting },
   } = useForm<OriginFormValues>({
     defaultValues: {
       code: origin?.code ?? '',
@@ -130,12 +130,15 @@ export function OriginFormModal({ companyId, origin, onClose, onSaved }: OriginF
   }
 
   return (
-    <TmsModal
+    <TmsDrawer
       open
       title={isEdit ? t('origins.form.edit') : t('origins.form.create')}
+      subtitle={t('origins.form.subtitle')}
       size="lg"
       onClose={onClose}
+      dirty={isDirty}
       closeOnEscape={!isSubmitting}
+      closeOnBackdrop={!isSubmitting}
       footer={
         <>
           <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
@@ -270,6 +273,6 @@ export function OriginFormModal({ companyId, origin, onClose, onSaved }: OriginF
           </FormField>
         </fieldset>
       </form>
-    </TmsModal>
+    </TmsDrawer>
   )
 }

@@ -85,7 +85,7 @@ h6 {
   width: 1.75rem;
   height: 1.75rem;
   border-radius: var(--tms-radius-sm);
-  background: linear-gradient(140deg, var(--tms-primary), #3b82f6);
+  background: var(--tms-ink);
   color: var(--tms-on-primary);
   font-size: 0.75rem;
   font-weight: 700;
@@ -428,31 +428,31 @@ h6 {
 .tms-badge-neutral {
   background-color: var(--tms-neutral-subtle);
   color: var(--tms-neutral);
-  border-color: #cbd5e1;
+  border-color: var(--tms-neutral-border);
 }
 
 .tms-badge-success {
   background-color: var(--tms-success-subtle);
   color: var(--tms-success);
-  border-color: #bbf7d0;
+  border-color: var(--tms-success-border);
 }
 
 .tms-badge-warning {
   background-color: var(--tms-warning-subtle);
   color: var(--tms-warning);
-  border-color: #fde68a;
+  border-color: var(--tms-warning-border);
 }
 
 .tms-badge-danger {
   background-color: var(--tms-danger-subtle);
   color: var(--tms-danger);
-  border-color: #fecaca;
+  border-color: var(--tms-danger-border);
 }
 
 .tms-badge-info {
   background-color: var(--tms-info-subtle);
   color: var(--tms-info);
-  border-color: #a5f3fc;
+  border-color: var(--tms-info-border);
 }
 
 /* ---------------------------------------------------------------------------
@@ -547,7 +547,7 @@ h6 {
 .tms-overlay {
   position: fixed;
   inset: 0;
-  background-color: rgba(15, 23, 42, 0.45);
+  background-color: rgba(22, 24, 29, 0.38);
   z-index: 1050;
 }
 
@@ -627,17 +627,232 @@ h6 {
   }
 }
 
+/* ---------------------------------------------------------------------------
+   Right-side drawer
+   ---------------------------------------------------------------------------
+   The product's create/edit/detail surface. It slides in from the right and
+   leaves the list behind it visible, so an operator keeps the context they were
+   working in instead of having it replaced by a centred modal.
+   ------------------------------------------------------------------------- */
 .tms-drawer {
   position: fixed;
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(30rem, 100vw);
+  width: min(var(--tms-drawer-width, var(--tms-drawer-md)), 100vw);
   background-color: var(--tms-surface);
-  box-shadow: var(--tms-shadow-lg);
+  /* A shadow cast leftwards, plus one hairline: the panel reads as lifted off
+     the list rather than boxed in. */
+  box-shadow: var(--tms-shadow-drawer);
+  border-left: 1px solid var(--tms-border);
   z-index: 1055;
   display: flex;
   flex-direction: column;
+  animation: tms-drawer-in var(--tms-motion-drawer) var(--tms-easing);
+}
+
+.tms-drawer-size-sm {
+  --tms-drawer-width: var(--tms-drawer-sm);
+}
+
+.tms-drawer-size-md {
+  --tms-drawer-width: var(--tms-drawer-md);
+}
+
+.tms-drawer-size-lg {
+  --tms-drawer-width: var(--tms-drawer-lg);
+}
+
+.tms-drawer-size-xl {
+  --tms-drawer-width: var(--tms-drawer-xl);
+}
+
+@keyframes tms-drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes tms-drawer-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.tms-drawer-backdrop {
+  animation: tms-drawer-backdrop-in var(--tms-motion-drawer) var(--tms-easing);
+}
+
+.tms-drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--tms-border);
+  background-color: var(--tms-surface);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex: none;
+}
+
+.tms-drawer-title {
+  font-size: 1.0625rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.tms-drawer-subtitle {
+  font-size: 0.8125rem;
+  color: var(--tms-muted);
+  margin: 0.125rem 0 0;
+}
+
+/* The body is the only thing that scrolls: the page behind stays put and the
+   footer actions never leave the screen. */
+.tms-drawer-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.25rem;
+}
+
+/* Bootstrap's grid tiers are measured against the viewport, not against the panel the columns
+   actually live in, so a `col-sm-3` that is comfortable across a full-width page collapses to a
+   sliver inside a 520px drawer - narrow enough to clip "Cliente" down to "Clien". Inside anything
+   but the widest drawer, thirds and quarters become halves; the tiers below `sm` already stack,
+   so a phone is unaffected. */
+@media (min-width: 576px) {
+  .tms-drawer:not(.tms-drawer-size-xl) .tms-drawer-body .row > .col-sm-2,
+  .tms-drawer:not(.tms-drawer-size-xl) .tms-drawer-body .row > .col-sm-3,
+  .tms-drawer:not(.tms-drawer-size-xl) .tms-drawer-body .row > .col-sm-4,
+  .tms-drawer:not(.tms-drawer-size-xl) .tms-drawer-body .row > .col-sm-5 {
+    flex: 0 0 auto;
+    width: 50%;
+  }
+}
+
+.tms-drawer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.875rem 1.25rem;
+  border-top: 1px solid var(--tms-border);
+  background-color: var(--tms-surface-muted);
+  position: sticky;
+  bottom: 0;
+  flex: none;
+}
+
+/* On a phone the drawer is the screen: a 480px panel on a 390px viewport is
+   just a modal with extra steps. */
+@media (max-width: 575.98px) {
+  /* Pinned to both edges rather than sized at 100vw: `vw` includes the scrollbar, which
+     would push the panel a scrollbar's width off the left of the screen. */
+  .tms-drawer {
+    left: 0;
+    width: auto;
+    border-left: 0;
+  }
+
+  .tms-drawer-body,
+  .tms-drawer-header,
+  .tms-drawer-footer {
+    padding-inline: 1rem;
+  }
+
+  /* Full-width, comfortably tappable actions rather than two small buttons
+     crowded into a corner. */
+  .tms-drawer-footer > .btn {
+    flex: 1 1 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tms-drawer,
+  .tms-drawer-backdrop {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Login
+   ---------------------------------------------------------------------------
+   Two panels: a charcoal brand column that carries the product's identity, and
+   the form itself on the page ground. The column is monochrome by design - the
+   only colour in the whole screen is whatever the operator's own browser paints
+   on form controls.
+   ------------------------------------------------------------------------- */
+.tms-login {
+  min-height: 100vh;
+  display: flex;
+  background-color: var(--tms-body-bg);
+}
+
+.tms-login-brand {
+  width: 42%;
+  max-width: 34rem;
+  color: var(--tms-sidebar-text-strong);
+  background: linear-gradient(168deg, var(--tms-ink-hover) 0%, var(--tms-ink) 52%, var(--tms-ink-active) 100%);
+}
+
+.tms-login-headline {
+  font-size: 1.75rem;
+  line-height: 1.25;
+  font-weight: 600;
+  color: var(--tms-sidebar-text-strong);
+}
+
+.tms-login-check {
+  color: var(--tms-sidebar-accent);
+}
+
+.tms-login-form {
+  width: 100%;
+  max-width: 27.5rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Page header identity tile
+   ------------------------------------------------------------------------- */
+.tms-page-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--tms-radius-md);
+  background-color: var(--tms-ink);
+  color: var(--tms-on-ink);
+  font-size: 1.125rem;
+  flex: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Result count bar above a table
+   ------------------------------------------------------------------------- */
+.tms-result-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--tms-border);
+  font-size: 0.8125rem;
+}
+
+.tms-result-count {
+  font-weight: 650;
+  color: var(--tms-text);
 }
 
 /* ---------------------------------------------------------------------------
@@ -656,7 +871,12 @@ h6 {
 }
 
 .tms-skeleton {
-  background: linear-gradient(90deg, #e9eef5 25%, #f3f6fa 37%, #e9eef5 63%);
+  background: linear-gradient(
+    90deg,
+    var(--tms-skeleton-base) 25%,
+    var(--tms-skeleton-sheen) 37%,
+    var(--tms-skeleton-base) 63%
+  );
   background-size: 400% 100%;
   border-radius: var(--tms-radius-sm);
   animation: tms-skeleton-shimmer 1.4s ease infinite;

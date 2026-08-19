@@ -16,7 +16,7 @@ import {
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
-import { CarrierFormModal } from './CarrierFormModal'
+import { CarrierFormDrawer } from './CarrierFormDrawer'
 
 const PAGE_SIZE = 25
 
@@ -149,6 +149,7 @@ export function CarriersPage() {
   return (
     <div>
       <PageHeader
+        icon="building"
         title={t('carriers.title')}
         description={t('carriers.description')}
         actions={
@@ -205,6 +206,7 @@ export function CarriersPage() {
           <DataTable
             columns={columns}
             rows={pageData?.content ?? []}
+            total={pageData?.totalElements}
             rowKey={(carrier) => carrier.id}
             isLoading={carriersQuery.isPending}
             error={carriersQuery.isError ? describeApiError(carriersQuery.error as ApiError) : null}
@@ -221,7 +223,7 @@ export function CarriersPage() {
       </div>
 
       {modal && (
-        <CarrierFormModal
+        <CarrierFormDrawer
           companyId={companyId}
           carrier={modal.mode === 'edit' ? modal.carrier : null}
           onClose={() => setModal(null)}

@@ -76,7 +76,7 @@ test('removes an assigned order and returns it to the eligible pool', async ({ p
   await page.getByRole('button', { name: 'Abrir el viaje 1' }).click()
   const drawer = page.getByRole('dialog')
   await expect(drawer).toBeVisible()
-  await expect(drawer.getByText('Pedidos asignados')).toBeVisible()
+  await expect(drawer.getByRole('heading', { name: 'Pedidos asignados' })).toBeVisible()
   await expect(drawer.getByText('TO-00000001')).toBeVisible()
 
   await drawer.getByRole('button', { name: 'Quitar' }).click()

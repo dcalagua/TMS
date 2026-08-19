@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useFormat } from '../../i18n/format'
 import { EmptyState } from './EmptyState'
 import { ErrorState } from './ErrorState'
 import { SkeletonTable } from './Skeleton'
@@ -27,6 +28,11 @@ interface DataTableProps<T> {
   emptyAction?: ReactNode
   /** Caption for assistive technology; the table is otherwise unnamed. */
   caption?: string
+  /**
+   * Server-side total for the current filters. Shown as a persistent count above the table -
+   * unlike the pager, which hides itself when everything fits on one page.
+   */
+  total?: number
 }
 
 function columnClass<T>(column: DataTableColumn<T>): string | undefined {
@@ -55,8 +61,10 @@ export function DataTable<T>({
   emptyMessage,
   emptyAction,
   caption,
+  total,
 }: DataTableProps<T>) {
   const { t } = useTranslation('common')
+  const format = useFormat()
 
   if (error) {
     return (
@@ -87,6 +95,12 @@ export function DataTable<T>({
 
   return (
     <div className="tms-table-wrap">
+      {total !== undefined && (
+        <p className="tms-result-bar mb-0">
+          <span className="tms-result-count">{format.quantity(total)}</span>
+          <span className="text-body-secondary">{t('table.results', { count: total })}</span>
+        </p>
+      )}
       <div className="tms-table-scroll">
         <table className="table table-hover tms-table align-middle">
           {caption && <caption className="visually-hidden">{caption}</caption>}

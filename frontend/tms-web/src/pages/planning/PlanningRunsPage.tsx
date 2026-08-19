@@ -22,7 +22,7 @@ import {
   type DataTableColumn,
   type StatusTone,
 } from '../../shared/ui/components'
-import { PlanningRunFormModal } from './PlanningRunFormModal'
+import { PlanningRunFormDrawer } from './PlanningRunFormDrawer'
 
 const PAGE_SIZE = 20
 
@@ -122,6 +122,7 @@ export function PlanningRunsPage() {
   return (
     <div>
       <PageHeader
+        icon="calendar2-check"
         title={t('title')}
         description={t('description')}
         actions={
@@ -212,6 +213,7 @@ export function PlanningRunsPage() {
           <DataTable
             columns={columns}
             rows={pageData?.content ?? []}
+            total={pageData?.totalElements}
             rowKey={(run) => run.id}
             isLoading={runsQuery.isPending}
             error={runsQuery.isError ? describeApiError(runsQuery.error as ApiError) : null}
@@ -228,7 +230,7 @@ export function PlanningRunsPage() {
       </div>
 
       {showCreate && (
-        <PlanningRunFormModal
+        <PlanningRunFormDrawer
           companyId={companyId}
           onClose={() => setShowCreate(false)}
           onCreated={(run) => navigate(`/planning/${run.run.id}`)}

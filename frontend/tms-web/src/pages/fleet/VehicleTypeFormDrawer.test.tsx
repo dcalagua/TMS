@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { VehicleTypeView } from '../../shared/api/vehicleTypesApi'
-import { VehicleTypeFormModal } from './VehicleTypeFormModal'
+import { VehicleTypeFormDrawer } from './VehicleTypeFormDrawer'
 
 const vehicleTypesApiMocks = vi.hoisted(() => ({ createVehicleType: vi.fn(), updateVehicleType: vi.fn() }))
 vi.mock('../../shared/api/vehicleTypesApi', async () => {
@@ -39,10 +39,10 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('VehicleTypeFormModal', () => {
+describe('VehicleTypeFormDrawer', () => {
   it('rejects an empty submission without calling the API', async () => {
     const onSaved = vi.fn()
-    render(<VehicleTypeFormModal companyId="company-1" vehicleType={null} onClose={vi.fn()} onSaved={onSaved} />)
+    render(<VehicleTypeFormDrawer companyId="company-1" vehicleType={null} onClose={vi.fn()} onSaved={onSaved} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
@@ -55,7 +55,7 @@ describe('VehicleTypeFormModal', () => {
   })
 
   it('rejects zero or negative capacity values', async () => {
-    render(<VehicleTypeFormModal companyId="company-1" vehicleType={null} onClose={vi.fn()} onSaved={vi.fn()} />)
+    render(<VehicleTypeFormDrawer companyId="company-1" vehicleType={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'ZERO')
     await userEvent.type(screen.getByLabelText(/^nombre/i), 'Zero')
@@ -68,7 +68,7 @@ describe('VehicleTypeFormModal', () => {
   })
 
   it('rejects a temperature range without temperature controlled checked', async () => {
-    render(<VehicleTypeFormModal companyId="company-1" vehicleType={null} onClose={vi.fn()} onSaved={vi.fn()} />)
+    render(<VehicleTypeFormDrawer companyId="company-1" vehicleType={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'REEFER')
     await userEvent.type(screen.getByLabelText(/^nombre/i), 'Reefer')
@@ -84,7 +84,7 @@ describe('VehicleTypeFormModal', () => {
   it('creates a vehicle type with the entered values, including zero pallets', async () => {
     vehicleTypesApiMocks.createVehicleType.mockResolvedValue({ ...VEHICLE_TYPE, code: 'TANKER' })
     const onSaved = vi.fn()
-    render(<VehicleTypeFormModal companyId="company-1" vehicleType={null} onClose={vi.fn()} onSaved={onSaved} />)
+    render(<VehicleTypeFormDrawer companyId="company-1" vehicleType={null} onClose={vi.fn()} onSaved={onSaved} />)
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'tanker')
     await userEvent.type(screen.getByLabelText(/^nombre/i), 'Tanker')
@@ -106,7 +106,7 @@ describe('VehicleTypeFormModal', () => {
   it('pre-fills the form for an edit and calls updateVehicleType with the id', async () => {
     vehicleTypesApiMocks.updateVehicleType.mockResolvedValue(VEHICLE_TYPE)
     const onSaved = vi.fn()
-    render(<VehicleTypeFormModal companyId="company-1" vehicleType={VEHICLE_TYPE} onClose={vi.fn()} onSaved={onSaved} />)
+    render(<VehicleTypeFormDrawer companyId="company-1" vehicleType={VEHICLE_TYPE} onClose={vi.fn()} onSaved={onSaved} />)
 
     expect(screen.getByLabelText(/^código/i)).toHaveValue('TRUCK-10T')
     expect(screen.getByLabelText(/^peso máx/i)).toHaveValue('10000')
@@ -129,7 +129,7 @@ describe('VehicleTypeFormModal', () => {
     vehicleTypesApiMocks.createVehicleType.mockRejectedValue({
       fieldErrors: [{ field: 'code', message: "code 'DUP' already exists" }],
     })
-    render(<VehicleTypeFormModal companyId="company-1" vehicleType={null} onClose={vi.fn()} onSaved={vi.fn()} />)
+    render(<VehicleTypeFormDrawer companyId="company-1" vehicleType={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'DUP')
     await userEvent.type(screen.getByLabelText(/^nombre/i), 'Duplicate')
@@ -142,7 +142,7 @@ describe('VehicleTypeFormModal', () => {
 
   it('closes when Cancel is clicked', async () => {
     const onClose = vi.fn()
-    render(<VehicleTypeFormModal companyId="company-1" vehicleType={null} onClose={onClose} onSaved={vi.fn()} />)
+    render(<VehicleTypeFormDrawer companyId="company-1" vehicleType={null} onClose={onClose} onSaved={vi.fn()} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 

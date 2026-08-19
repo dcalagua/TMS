@@ -35,6 +35,12 @@ export interface DialogBehaviourOptions {
  * - the page behind stops scrolling while it is open.
  *
  * Returns the ref to attach to the dialog element.
+ *
+ * The setup runs once per open, not once per render of the caller: `onClose` and `closeOnEscape`
+ * are read through refs so a callback that changes identity - `TmsDrawer`'s dismiss handler does,
+ * the moment the form inside becomes dirty - cannot tear the effect down and re-run it. Re-running
+ * it would restore focus to the trigger and then push it back to the first field, which reads to
+ * the user as the cursor jumping out of the input after the first keystroke.
  */
 export function useDialogBehaviour({
   open,
@@ -43,6 +49,13 @@ export function useDialogBehaviour({
 }: DialogBehaviourOptions): RefObject<HTMLDivElement | null> {
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const previouslyFocused = useRef<HTMLElement | null>(null)
+  const onCloseRef = useRef(onClose)
+  const closeOnEscapeRef = useRef(closeOnEscape)
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+    closeOnEscapeRef.current = closeOnEscape
+  })
 
   useEffect(() => {
     if (!open) {
@@ -62,9 +75,9 @@ export function useDialogBehaviour({
     document.body.style.overflow = 'hidden'
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape' && closeOnEscape) {
+      if (event.key === 'Escape' && closeOnEscapeRef.current) {
         event.stopPropagation()
-        onClose()
+        onCloseRef.current()
         return
       }
 
@@ -107,7 +120,7 @@ export function useDialogBehaviour({
       }
       previouslyFocused.current?.focus?.()
     }
-  }, [open, onClose, closeOnEscape])
+  }, [open])
 
   return dialogRef
 }

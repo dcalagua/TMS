@@ -5,7 +5,7 @@ import { applyApiFieldErrors } from '../../shared/api/formErrors'
 import type { ApiError } from '../../shared/api/httpClient'
 import { createCarrier, updateCarrier, type CarrierRequest, type CarrierView } from '../../shared/api/carriersApi'
 import { FormField } from '../../shared/ui/components/FormField'
-import { TmsModal } from '../../shared/ui/components/TmsModal'
+import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'carrier-form'
 
@@ -22,7 +22,7 @@ interface CarrierFormValues {
   email: string
 }
 
-interface CarrierFormModalProps {
+interface CarrierFormDrawerProps {
   companyId: string
   /** `null` creates a new carrier; otherwise the form edits this one. */
   carrier: CarrierView | null
@@ -34,8 +34,8 @@ const KNOWN_FIELDS = new Set<keyof CarrierFormValues>([
   'code', 'businessName', 'taxIdType', 'taxIdValue', 'contactName', 'phone', 'email',
 ])
 
-/** Create and edit share one form; see `ZoneFormModal` (masters) for the same pattern. */
-export function CarrierFormModal({ companyId, carrier, onClose, onSaved }: CarrierFormModalProps) {
+/** Create and edit share one form; see `ZoneFormDrawer` (masters) for the same pattern. */
+export function CarrierFormDrawer({ companyId, carrier, onClose, onSaved }: CarrierFormDrawerProps) {
   const { t } = useTranslation('fleet')
   const { t: tc } = useTranslation('common')
   const { t: tv } = useTranslation('validations')
@@ -45,7 +45,7 @@ export function CarrierFormModal({ companyId, carrier, onClose, onSaved }: Carri
     register,
     handleSubmit,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isDirty, isSubmitting },
   } = useForm<CarrierFormValues>({
     defaultValues: {
       code: carrier?.code ?? '',
@@ -83,12 +83,15 @@ export function CarrierFormModal({ companyId, carrier, onClose, onSaved }: Carri
   }
 
   return (
-    <TmsModal
+    <TmsDrawer
       open
       title={isEdit ? t('carriers.form.edit') : t('carriers.form.create')}
-      size="lg"
+      subtitle={t('carriers.form.subtitle')}
+      size="md"
       onClose={onClose}
+      dirty={isDirty}
       closeOnEscape={!isSubmitting}
+      closeOnBackdrop={!isSubmitting}
       footer={
         <>
           <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
@@ -217,6 +220,6 @@ export function CarrierFormModal({ companyId, carrier, onClose, onSaved }: Carri
           </div>
         </fieldset>
       </form>
-    </TmsModal>
+    </TmsDrawer>
   )
 }

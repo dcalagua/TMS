@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CarrierView } from '../../shared/api/carriersApi'
-import { CarrierFormModal } from './CarrierFormModal'
+import { CarrierFormDrawer } from './CarrierFormDrawer'
 
 const carriersApiMocks = vi.hoisted(() => ({ createCarrier: vi.fn(), updateCarrier: vi.fn() }))
 vi.mock('../../shared/api/carriersApi', async () => {
@@ -28,10 +28,10 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('CarrierFormModal', () => {
+describe('CarrierFormDrawer', () => {
   it('rejects an empty submission without calling the API', async () => {
     const onSaved = vi.fn()
-    render(<CarrierFormModal companyId="company-1" carrier={null} onClose={vi.fn()} onSaved={onSaved} />)
+    render(<CarrierFormDrawer companyId="company-1" carrier={null} onClose={vi.fn()} onSaved={onSaved} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
@@ -45,7 +45,7 @@ describe('CarrierFormModal', () => {
   })
 
   it('rejects a code with characters outside the allowed shape', async () => {
-    render(<CarrierFormModal companyId="company-1" carrier={null} onClose={vi.fn()} onSaved={vi.fn()} />)
+    render(<CarrierFormDrawer companyId="company-1" carrier={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'has space')
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
@@ -57,7 +57,7 @@ describe('CarrierFormModal', () => {
   it('creates a carrier with the entered values and reports success', async () => {
     carriersApiMocks.createCarrier.mockResolvedValue({ ...CARRIER, code: 'BETA' })
     const onSaved = vi.fn()
-    render(<CarrierFormModal companyId="company-1" carrier={null} onClose={vi.fn()} onSaved={onSaved} />)
+    render(<CarrierFormDrawer companyId="company-1" carrier={null} onClose={vi.fn()} onSaved={onSaved} />)
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'beta')
     await userEvent.type(screen.getByLabelText(/^razón social/i), 'Beta Transport')
@@ -81,7 +81,7 @@ describe('CarrierFormModal', () => {
   it('pre-fills the form for an edit and calls updateCarrier with the carrier id', async () => {
     carriersApiMocks.updateCarrier.mockResolvedValue(CARRIER)
     const onSaved = vi.fn()
-    render(<CarrierFormModal companyId="company-1" carrier={CARRIER} onClose={vi.fn()} onSaved={onSaved} />)
+    render(<CarrierFormDrawer companyId="company-1" carrier={CARRIER} onClose={vi.fn()} onSaved={onSaved} />)
 
     expect(screen.getByLabelText(/^código/i)).toHaveValue('ACME')
     expect(screen.getByLabelText(/^razón social/i)).toHaveValue('Acme Transport S.A.')
@@ -105,7 +105,7 @@ describe('CarrierFormModal', () => {
     carriersApiMocks.createCarrier.mockRejectedValue({
       fieldErrors: [{ field: 'email', message: 'email is not a valid address.' }],
     })
-    render(<CarrierFormModal companyId="company-1" carrier={null} onClose={vi.fn()} onSaved={vi.fn()} />)
+    render(<CarrierFormDrawer companyId="company-1" carrier={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'DUP')
     await userEvent.type(screen.getByLabelText(/^razón social/i), 'Duplicate SA')
@@ -117,7 +117,7 @@ describe('CarrierFormModal', () => {
 
   it('closes when Cancel is clicked', async () => {
     const onClose = vi.fn()
-    render(<CarrierFormModal companyId="company-1" carrier={null} onClose={onClose} onSaved={vi.fn()} />)
+    render(<CarrierFormDrawer companyId="company-1" carrier={null} onClose={onClose} onSaved={vi.fn()} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 

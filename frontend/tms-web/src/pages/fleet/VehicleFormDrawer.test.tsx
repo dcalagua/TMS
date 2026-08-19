@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import type { ComponentProps } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { VehicleView } from '../../shared/api/vehiclesApi'
-import { VehicleFormModal } from './VehicleFormModal'
+import { VehicleFormDrawer } from './VehicleFormDrawer'
 
 const vehiclesApiMocks = vi.hoisted(() => ({ createVehicle: vi.fn(), updateVehicle: vi.fn() }))
 vi.mock('../../shared/api/vehiclesApi', async () => {
@@ -63,11 +63,11 @@ function vehicleTypesPage() {
   }
 }
 
-function renderModal(props: Partial<ComponentProps<typeof VehicleFormModal>> = {}) {
+function renderModal(props: Partial<ComponentProps<typeof VehicleFormDrawer>> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
-      <VehicleFormModal companyId="company-1" vehicle={null} onClose={vi.fn()} onSaved={vi.fn()} {...props} />
+      <VehicleFormDrawer companyId="company-1" vehicle={null} onClose={vi.fn()} onSaved={vi.fn()} {...props} />
     </QueryClientProvider>,
   )
 }
@@ -76,7 +76,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('VehicleFormModal', () => {
+describe('VehicleFormDrawer', () => {
   it('rejects an empty submission without calling the API', async () => {
     carriersApiMocks.fetchCarriers.mockResolvedValue(emptyPage())
     vehicleTypesApiMocks.fetchVehicleTypes.mockResolvedValue(emptyPage())

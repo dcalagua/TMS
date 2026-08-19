@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ZoneView } from '../../shared/api/zonesApi'
-import { ZoneFormModal } from './ZoneFormModal'
+import { ZoneFormDrawer } from './ZoneFormDrawer'
 
 const zonesApiMocks = vi.hoisted(() => ({ createZone: vi.fn(), updateZone: vi.fn() }))
 vi.mock('../../shared/api/zonesApi', async () => {
@@ -24,10 +24,10 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('ZoneFormModal', () => {
+describe('ZoneFormDrawer', () => {
   it('rejects an empty submission without calling the API', async () => {
     const onSaved = vi.fn()
-    render(<ZoneFormModal companyId="company-1" zone={null} onClose={vi.fn()} onSaved={onSaved} />)
+    render(<ZoneFormDrawer companyId="company-1" zone={null} onClose={vi.fn()} onSaved={onSaved} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
@@ -40,7 +40,7 @@ describe('ZoneFormModal', () => {
   })
 
   it('rejects a code with characters outside the allowed shape', async () => {
-    render(<ZoneFormModal companyId="company-1" zone={null} onClose={vi.fn()} onSaved={vi.fn()} />)
+    render(<ZoneFormDrawer companyId="company-1" zone={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'has space')
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
@@ -52,7 +52,7 @@ describe('ZoneFormModal', () => {
   it('creates a zone with the entered values and reports success', async () => {
     zonesApiMocks.createZone.mockResolvedValue({ ...ZONE, code: 'SOUTH-ZONE' })
     const onSaved = vi.fn()
-    render(<ZoneFormModal companyId="company-1" zone={null} onClose={vi.fn()} onSaved={onSaved} />)
+    render(<ZoneFormDrawer companyId="company-1" zone={null} onClose={vi.fn()} onSaved={onSaved} />)
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'south-zone')
     await userEvent.type(screen.getByLabelText(/^nombre/i), 'South Zone')
@@ -70,7 +70,7 @@ describe('ZoneFormModal', () => {
   it('pre-fills the form for an edit and calls updateZone with the zone id', async () => {
     zonesApiMocks.updateZone.mockResolvedValue(ZONE)
     const onSaved = vi.fn()
-    render(<ZoneFormModal companyId="company-1" zone={ZONE} onClose={vi.fn()} onSaved={onSaved} />)
+    render(<ZoneFormDrawer companyId="company-1" zone={ZONE} onClose={vi.fn()} onSaved={onSaved} />)
 
     expect(screen.getByLabelText(/^código/i)).toHaveValue('NORTH-ZONE')
     expect(screen.getByLabelText(/^nombre/i)).toHaveValue('North Zone')
@@ -93,7 +93,7 @@ describe('ZoneFormModal', () => {
     zonesApiMocks.createZone.mockRejectedValue({
       fieldErrors: [{ field: 'code', message: "code 'DUP' already exists" }],
     })
-    render(<ZoneFormModal companyId="company-1" zone={null} onClose={vi.fn()} onSaved={vi.fn()} />)
+    render(<ZoneFormDrawer companyId="company-1" zone={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'DUP')
     await userEvent.type(screen.getByLabelText(/^nombre/i), 'Duplicate')
@@ -104,7 +104,7 @@ describe('ZoneFormModal', () => {
 
   it('closes when Cancel is clicked', async () => {
     const onClose = vi.fn()
-    render(<ZoneFormModal companyId="company-1" zone={null} onClose={onClose} onSaved={vi.fn()} />)
+    render(<ZoneFormDrawer companyId="company-1" zone={null} onClose={onClose} onSaved={vi.fn()} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 

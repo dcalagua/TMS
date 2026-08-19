@@ -30,7 +30,7 @@ import {
   type DataTableColumn,
   type StatusTone,
 } from '../../shared/ui/components'
-import { OrderFormModal } from './OrderFormModal'
+import { OrderFormDrawer } from './OrderFormDrawer'
 
 const PAGE_SIZE = 25
 
@@ -286,6 +286,7 @@ export function OrdersPage() {
   return (
     <div>
       <PageHeader
+        icon="card-checklist"
         title={t('title')}
         description={t('description')}
         meta={
@@ -456,6 +457,7 @@ export function OrdersPage() {
       <DataTable
         columns={columns}
         rows={rows}
+        total={pageData?.totalElements}
         rowKey={(order) => order.id}
         isLoading={ordersQuery.isPending}
         error={ordersQuery.isError ? describeApiError(ordersQuery.error as ApiError) : null}
@@ -472,7 +474,7 @@ export function OrdersPage() {
       )}
 
       {modal && (
-        <OrderFormModal
+        <OrderFormDrawer
           companyId={companyId}
           orderId={modal.mode === 'edit' ? modal.orderId : null}
           onClose={() => setModal(null)}

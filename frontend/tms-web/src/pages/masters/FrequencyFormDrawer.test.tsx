@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { FrequencyView } from '../../shared/api/frequenciesApi'
-import { FrequencyFormModal } from './FrequencyFormModal'
+import { FrequencyFormDrawer } from './FrequencyFormDrawer'
 
 const frequenciesApiMocks = vi.hoisted(() => ({ createFrequency: vi.fn(), updateFrequency: vi.fn() }))
 vi.mock('../../shared/api/frequenciesApi', async () => {
@@ -29,10 +29,10 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('FrequencyFormModal', () => {
+describe('FrequencyFormDrawer', () => {
   it('rejects an empty submission without calling the API', async () => {
     const onSaved = vi.fn()
-    render(<FrequencyFormModal companyId="company-1" frequency={null} onClose={vi.fn()} onSaved={onSaved} />)
+    render(<FrequencyFormDrawer companyId="company-1" frequency={null} onClose={vi.fn()} onSaved={onSaved} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
@@ -43,7 +43,7 @@ describe('FrequencyFormModal', () => {
   })
 
   it('rejects a code with characters outside the allowed shape', async () => {
-    render(<FrequencyFormModal companyId="company-1" frequency={null} onClose={vi.fn()} onSaved={vi.fn()} />)
+    render(<FrequencyFormDrawer companyId="company-1" frequency={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'has space')
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
@@ -55,7 +55,7 @@ describe('FrequencyFormModal', () => {
   it('renders a fixed Monday-Sunday grid and sends all 7 rows, checked days enabled', async () => {
     frequenciesApiMocks.createFrequency.mockResolvedValue(FREQUENCY)
     const onSaved = vi.fn()
-    render(<FrequencyFormModal companyId="company-1" frequency={null} onClose={vi.fn()} onSaved={onSaved} />)
+    render(<FrequencyFormDrawer companyId="company-1" frequency={null} onClose={vi.fn()} onSaved={onSaved} />)
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'new-freq')
     await userEvent.type(screen.getByLabelText(/^nombre/i), 'New Frequency')
@@ -79,7 +79,7 @@ describe('FrequencyFormModal', () => {
   it('pre-fills the form for an edit: checked days and their cutoff/lead time', async () => {
     frequenciesApiMocks.updateFrequency.mockResolvedValue(FREQUENCY)
     const onSaved = vi.fn()
-    render(<FrequencyFormModal companyId="company-1" frequency={FREQUENCY} onClose={vi.fn()} onSaved={onSaved} />)
+    render(<FrequencyFormDrawer companyId="company-1" frequency={FREQUENCY} onClose={vi.fn()} onSaved={onSaved} />)
 
     expect(screen.getByLabelText(/^código/i)).toHaveValue('MON-WED-FRI')
     expect(screen.getByLabelText('Lunes')).toBeChecked()
@@ -103,7 +103,7 @@ describe('FrequencyFormModal', () => {
     frequenciesApiMocks.createFrequency.mockRejectedValue({
       fieldErrors: [{ field: 'code', message: "code 'DUP' already exists" }],
     })
-    render(<FrequencyFormModal companyId="company-1" frequency={null} onClose={vi.fn()} onSaved={vi.fn()} />)
+    render(<FrequencyFormDrawer companyId="company-1" frequency={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'DUP')
     await userEvent.type(screen.getByLabelText(/^nombre/i), 'Duplicate')
@@ -113,14 +113,14 @@ describe('FrequencyFormModal', () => {
   })
 
   it('shows the V1 placeholder note for date exceptions', () => {
-    render(<FrequencyFormModal companyId="company-1" frequency={null} onClose={vi.fn()} onSaved={vi.fn()} />)
+    render(<FrequencyFormDrawer companyId="company-1" frequency={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
     expect(screen.getByText(/todavía no tienen editor/i)).toBeInTheDocument()
   })
 
   it('closes when Cancel is clicked', async () => {
     const onClose = vi.fn()
-    render(<FrequencyFormModal companyId="company-1" frequency={null} onClose={onClose} onSaved={vi.fn()} />)
+    render(<FrequencyFormDrawer companyId="company-1" frequency={null} onClose={onClose} onSaved={vi.fn()} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 

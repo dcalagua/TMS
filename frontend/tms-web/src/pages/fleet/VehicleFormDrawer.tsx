@@ -16,7 +16,7 @@ import {
 } from '../../shared/api/vehiclesApi'
 import { useEnumLabels } from '../../shared/i18n/enums'
 import { FormField } from '../../shared/ui/components/FormField'
-import { TmsModal } from '../../shared/ui/components/TmsModal'
+import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'vehicle-form'
 
@@ -35,7 +35,7 @@ interface VehicleFormValues {
   availabilityStatus: VehicleAvailabilityStatus
 }
 
-interface VehicleFormModalProps {
+interface VehicleFormDrawerProps {
   companyId: string
   /** `null` creates a new vehicle; otherwise the form edits this one. */
   vehicle: VehicleView | null
@@ -49,11 +49,11 @@ const KNOWN_FIELDS = new Set<keyof VehicleFormValues>([
 ])
 
 /**
- * Create and edit share one form; see `DestinationFormModal` (masters) for the same
+ * Create and edit share one form; see `DestinationFormDrawer` (masters) for the same
  * "assigned value still shown after deactivation" pattern applied to `carrierId`/`vehicleTypeId`
  * here.
  */
-export function VehicleFormModal({ companyId, vehicle, onClose, onSaved }: VehicleFormModalProps) {
+export function VehicleFormDrawer({ companyId, vehicle, onClose, onSaved }: VehicleFormDrawerProps) {
   const { t } = useTranslation('fleet')
   const { t: tc } = useTranslation('common')
   const { t: tv } = useTranslation('validations')
@@ -77,7 +77,7 @@ export function VehicleFormModal({ companyId, vehicle, onClose, onSaved }: Vehic
     register,
     handleSubmit,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isDirty, isSubmitting },
   } = useForm<VehicleFormValues>({
     defaultValues: {
       code: vehicle?.code ?? '',
@@ -129,12 +129,15 @@ export function VehicleFormModal({ companyId, vehicle, onClose, onSaved }: Vehic
   }
 
   return (
-    <TmsModal
+    <TmsDrawer
       open
       title={isEdit ? t('vehicles.form.edit') : t('vehicles.form.create')}
+      subtitle={t('vehicles.form.subtitle')}
       size="lg"
       onClose={onClose}
+      dirty={isDirty}
       closeOnEscape={!isSubmitting}
+      closeOnBackdrop={!isSubmitting}
       footer={
         <>
           <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
@@ -310,6 +313,6 @@ export function VehicleFormModal({ companyId, vehicle, onClose, onSaved }: Vehic
           <p className="text-body-secondary small mb-0">{t('vehicles.form.overrideHelp')}</p>
         </fieldset>
       </form>
-    </TmsModal>
+    </TmsDrawer>
   )
 }

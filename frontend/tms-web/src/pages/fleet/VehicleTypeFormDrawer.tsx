@@ -13,7 +13,7 @@ import {
 } from '../../shared/api/vehicleTypesApi'
 import { useEnumLabels } from '../../shared/i18n/enums'
 import { FormField } from '../../shared/ui/components/FormField'
-import { TmsModal } from '../../shared/ui/components/TmsModal'
+import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'vehicle-type-form'
 
@@ -36,7 +36,7 @@ interface VehicleTypeFormValues {
   axles: string
 }
 
-interface VehicleTypeFormModalProps {
+interface VehicleTypeFormDrawerProps {
   companyId: string
   /** `null` creates a new vehicle type; otherwise the form edits this one. */
   vehicleType: VehicleTypeView | null
@@ -51,7 +51,7 @@ const KNOWN_FIELDS = new Set<keyof VehicleTypeFormValues>([
 
 /** Create and edit share one form. Fields are grouped as an operator specifies a unit class:
  * what it is, what it can carry, how big it is, and what it is restricted to. */
-export function VehicleTypeFormModal({ companyId, vehicleType, onClose, onSaved }: VehicleTypeFormModalProps) {
+export function VehicleTypeFormDrawer({ companyId, vehicleType, onClose, onSaved }: VehicleTypeFormDrawerProps) {
   const { t } = useTranslation('fleet')
   const { t: tc } = useTranslation('common')
   const { t: tv } = useTranslation('validations')
@@ -63,7 +63,7 @@ export function VehicleTypeFormModal({ companyId, vehicleType, onClose, onSaved 
     register,
     handleSubmit,
     setError,
-    formState: { errors, isSubmitting },
+    formState: { errors, isDirty, isSubmitting },
   } = useForm<VehicleTypeFormValues>({
     defaultValues: {
       code: vehicleType?.code ?? '',
@@ -138,12 +138,15 @@ export function VehicleTypeFormModal({ companyId, vehicleType, onClose, onSaved 
   }
 
   return (
-    <TmsModal
+    <TmsDrawer
       open
       title={isEdit ? t('vehicleTypes.form.edit') : t('vehicleTypes.form.create')}
+      subtitle={t('vehicleTypes.form.subtitle')}
       size="lg"
       onClose={onClose}
+      dirty={isDirty}
       closeOnEscape={!isSubmitting}
+      closeOnBackdrop={!isSubmitting}
       footer={
         <>
           <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
@@ -361,6 +364,6 @@ export function VehicleTypeFormModal({ companyId, vehicleType, onClose, onSaved 
           </div>
         </fieldset>
       </form>
-    </TmsModal>
+    </TmsDrawer>
   )
 }

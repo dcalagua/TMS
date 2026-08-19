@@ -8,7 +8,8 @@
     "form": {
       "create": "Nuevo destino",
       "edit": "Editar destino",
-      "noZone": "Sin zona"
+      "noZone": "Sin zona",
+      "subtitle": "Punto de entrega al que se despachan los pedidos."
     },
     "new": "Nuevo destino",
     "title": "Destinos"
@@ -29,6 +30,7 @@
       "leadTimeAria": "Anticipación en días de {{day}}",
       "leadTimeDays": "Anticipación (días)",
       "serviceDay": "Día de atención",
+      "subtitle": "Calendario de atención: cadencia semanal, corte y anticipación.",
       "weeklyCadence": "Cadencia semanal"
     },
     "new": "Nueva frecuencia",
@@ -42,7 +44,8 @@
     },
     "form": {
       "create": "Nuevo origen",
-      "edit": "Editar origen"
+      "edit": "Editar origen",
+      "subtitle": "Punto de carga y despacho usado para planificar viajes."
     },
     "new": "Nuevo origen",
     "title": "Orígenes"
@@ -68,7 +71,8 @@
       "removeStop": "Quitar la parada {{position}}",
       "selectDestination": "Selecciona un destino para agregar",
       "selectOrigin": "Selecciona un origen",
-      "stopsLabel": "Paradas de destino, en orden"
+      "stopsLabel": "Paradas de destino, en orden",
+      "subtitle": "Corredor planificado reutilizable entre un origen y sus destinos."
     },
     "new": "Nueva ruta",
     "title": "Rutas"
@@ -81,7 +85,8 @@
     },
     "form": {
       "create": "Nueva zona",
-      "edit": "Editar zona"
+      "edit": "Editar zona",
+      "subtitle": "Área operativa para agrupar orígenes, destinos y rutas."
     },
     "new": "Nueva zona",
     "title": "Zonas"

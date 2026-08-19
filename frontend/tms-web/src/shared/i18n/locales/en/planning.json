@@ -86,6 +86,7 @@
     "stopOrders_one": "{{count}} order",
     "stopOrders_other": "{{count}} orders",
     "stopSequence": "Stop sequence",
+    "subtitle": "Stops, assigned orders and trip capacity.",
     "titleFallback": "Trip",
     "tripCancelled": "Trip cancelled",
     "tripOption": "Trip {{number}}"
@@ -122,7 +123,8 @@
       "origin": "Origin",
       "selectOrigin": "Select an origin",
       "submit": "Create run",
-      "submitting": "Creating..."
+      "submitting": "Creating...",
+      "subtitle": "One origin and one date; trips are built afterwards."
     }
   },
   "title": "Planning",
@@ -135,7 +137,9 @@
       "selectVehicle": "Select a vehicle",
       "submitCreate": "Create trip",
       "submitVehicle": "Save vehicle",
+      "subtitle": "A trip can be created before the vehicle is decided.",
       "vehicle": "Vehicle",
+      "vehicleSubtitle": "The backend revalidates the load already assigned when it changes.",
       "vehicleTitle": "Trip {{number}} vehicle"
     }
   }

@@ -345,3 +345,161 @@ order, confirm and cancel, capacity recalculation and the backend's own capacity
 refusals shown verbatim. Drag and drop is out of scope by decision.
 
 Nothing was pushed.
+
+---
+
+## 15. Right-side drawers and the monochrome design system
+
+### 15.1 The UX rule, stated once
+
+TMS now has one answer to "where does this open?", and it is the same answer in every module:
+
+| Intent | Surface |
+| --- | --- |
+| Create, edit, view detail, configure | Right-side drawer (`TmsDrawer`) |
+| Confirm, destroy, discard, report something important | SweetAlert2 |
+| Complex workspace: planning board, dashboard, list screens | Full page |
+
+SweetAlert2 is deliberately *not* used for extensive CRUD forms, and the centred modal is gone:
+once every consumer had moved, `TmsModal` was deleted rather than left as a second way to open a
+dialog. `TmsDrawer` is the only dialog surface the product renders itself. The reasoning is
+operational rather than aesthetic. A planner editing an
+origin is reading the list of origins; a centred modal replaces that list with a floating card,
+while a panel anchored to the right keeps the context they were working in on screen.
+
+### 15.2 `TmsDrawer`
+
+One component, `src/shared/ui/components/TmsDrawer.tsx`, is the CRUD surface for the whole
+product. There is no per-module offcanvas.
+
+- Open/closed state is React state throughout. Bootstrap's `data-bs-dismiss`,
+  `data-bs-toggle` and `data-bs-target` data API is not used anywhere in a drawer - the drawer
+  contract suite asserts their absence. That data API is what once stopped the sidebar links
+  navigating, because its delegated handler calls `preventDefault()` on anchors.
+- Structure: sticky header (title, optional subtitle, close), a body that is the only thing
+  that scrolls (`overflow-y: auto; overscroll-behavior: contain`), sticky footer holding
+  Cancel and Save.
+- Widths come from tokens: `sm` 420px, `md` 520px, `lg` 660px, `xl` 820px. Below `sm` the panel
+  is pinned to both edges and takes the whole screen; its footer buttons go full width.
+- Focus trap, initial focus, Escape, focus restoration, body scroll lock, `aria-labelledby`,
+  `aria-describedby`, backdrop and keyboard cycling come from `useDialogBehaviour`, so that
+  behaviour is implemented and tested in one place.
+- Motion: 220ms right-to-left in, easing `cubic-bezier(0.32, 0.72, 0, 1)`, suppressed entirely
+  under `prefers-reduced-motion`.
+- Unsaved work is never discarded silently. When the form reports `isDirty`, dismissing by X,
+  Escape or backdrop asks through SweetAlert2 first; a clean form closes immediately, because a
+  confirmation nobody needs is friction.
+
+Two defects were found and fixed while building it, both proved by a test that fails against the
+previous code:
+
+1. `useDialogBehaviour` keyed its setup effect on the identity of `onClose`. The drawer's dismiss
+   handler changes identity the moment the form turns dirty, so the effect tore down and re-ran
+   on the first keystroke, restoring focus to the trigger and then pushing it to the first field.
+   Every field in the app would have swallowed all but the first character typed into it. The
+   callback is now read through a ref and the effect runs once per open.
+2. Bootstrap's grid tiers are measured against the viewport, not against the panel the columns
+   live in, so a `col-sm-3` that is comfortable across a full-width page collapsed to a sliver in
+   a 520px drawer - narrow enough to clip "Cliente" to "Clien". Inside anything but an `xl`
+   drawer, thirds through fifths are now halves, above the `sm` breakpoint only.
+
+### 15.3 Monochrome design system
+
+`src/styles/tokens.css` is the single source of colour; `src/styles/app.css` contains no
+hardcoded colour at all (`grep -cE '#[0-9a-fA-F]{3,6}'` returns 0). Bootstrap 5 remains the
+infrastructure and is re-themed through `--bs-*` custom properties rather than fought:
+`--bs-primary` is ink `#16181d`, so primary buttons are near-black, and `--bs-link-color` is the
+body text colour. Semantic colours are desaturated - success, warning, danger, info and neutral
+each with a `-subtle` fill and a `-border` - and exist only to carry meaning in badges and
+alerts. One accent, `--tms-accent`, is used for focus rings and nothing else.
+
+No Tailwind, MUI or Ant was introduced. SweetAlert2 keeps its Bootstrap button classes.
+
+### 15.4 Forms migrated
+
+Twelve CRUD forms, migrated and verified one file at a time, in the order given:
+
+| # | File | Module | Size |
+| --- | --- | --- | --- |
+| 1 | `masters/OriginFormDrawer.tsx` | Maestros | lg |
+| 2 | `masters/DestinationFormDrawer.tsx` | Maestros | lg |
+| 3 | `masters/ZoneFormDrawer.tsx` | Maestros | md |
+| 4 | `masters/FrequencyFormDrawer.tsx` | Maestros | lg |
+| 5 | `masters/RouteFormDrawer.tsx` | Maestros | xl |
+| 6 | `fleet/CarrierFormDrawer.tsx` | Flota | md |
+| 7 | `fleet/VehicleTypeFormDrawer.tsx` | Flota | lg |
+| 8 | `fleet/VehicleFormDrawer.tsx` | Flota | lg |
+| 9 | `orders/OrderFormDrawer.tsx` | Pedidos | xl |
+| 10 | `planning/PlanningRunFormDrawer.tsx` | Planificación | md |
+| 11 | `planning/CreateTripDrawer.tsx` | Planificación | md |
+| 12 | `planning/TripVehicleDrawer.tsx` | Planificación | md |
+
+`planning/TripDetailDrawer.tsx` moved from the earlier minimal `Drawer` to `TmsDrawer`; both
+that component and `TmsModal` were removed rather than left as second ways to do the same thing. Its
+`dirty` signal is the reordered-but-unsaved stop list.
+
+Each form keeps one component for create and edit, its React Hook Form validation, its TanStack
+Query mutations and invalidations, its permission checks and its API contract. Enum values sent
+to and received from the API are untouched; only their visual representation is translated.
+Saving closes the drawer and refreshes the table through query invalidation - `drawers.spec.ts`
+asserts that a marker set on `window` survives the save, so a `window.location.reload()` would
+fail the suite.
+
+### 15.5 List pattern
+
+Orígenes is the reference list screen; the pattern reached the other seven master and fleet
+lists plus Pedidos and Planificación through the shared components rather than by copying
+markup: `PageHeader` gained an identity tile (`icon`), and `DataTable` gained a persistent
+result count (`total`) that, unlike the pager, does not disappear when everything fits on one
+page.
+
+### 15.6 Gates
+
+```
+DESIGN_SYSTEM_MONOCHROME=PASS
+BOOTSTRAP_BASE_KEPT=PASS
+NO_TAILWIND_MUI_ANT=PASS
+HARDCODED_COLOURS_IN_CSS=0
+
+DRAWER_COMPONENT=PASS
+DRAWER_STRUCTURE=PASS
+DRAWER_SIZES=PASS
+DRAWER_ANIMATION=PASS
+DRAWER_ACCESSIBILITY=PASS
+DRAWER_DIRTY_GUARD=PASS
+DRAWER_STATE_NOT_DATA_API=PASS
+
+CRUD_FORMS_INVENTORIED=12
+CRUD_FORMS_MIGRATED=12/12
+MANUAL_CRUD_MODALS_REMAINING=0
+SWEETALERT_SCOPE=PASS
+NO_PAGE_RELOAD_ON_SAVE=PASS
+ENUM_VALUES_UNCHANGED=PASS
+
+LIST_PATTERN_REFERENCE=PASS
+LIST_PATTERN_APPLIED=8/8
+LOGIN_UI=PASS
+APP_SHELL_UI=PASS
+
+AUTH_FIRST_LOGIN=PASS
+SESSION_PERSISTENCE=PASS
+DESKTOP_NAVIGATION=PASS
+MOBILE_NAVIGATION=PASS
+I18N_ES=PASS
+I18N_EN=PASS
+
+RESPONSIVE_320_1920=PASS
+CONSOLE_ERRORS=0
+FRONTEND_TESTS=387
+E2E_TESTS=63
+TYPECHECK=PASS
+LINT=PASS
+BUILD=PASS
+P0=0
+P1=0
+```
+
+Responsive coverage is 320, 360, 390, 768, 1024, 1366, 1440 and 1920; no viewport scrolls the
+document sideways, and a drawer never measures wider than the layout viewport.
+
+Nothing was pushed.

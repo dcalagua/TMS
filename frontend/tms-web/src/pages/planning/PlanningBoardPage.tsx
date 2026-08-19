@@ -11,7 +11,7 @@ import { useFormat } from '../../shared/i18n/format'
 import { confirmDialog, EmptyState, ErrorState, PageHeader, StatusBadge, type StatusTone } from '../../shared/ui/components'
 import { LoadingState } from '../../shared/ui/components/LoadingState'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
-import { CreateTripModal } from './CreateTripModal'
+import { CreateTripDrawer } from './CreateTripDrawer'
 import { EligibleOrdersPanel } from './EligibleOrdersPanel'
 import { TripCard } from './TripCard'
 import { TripDetailDrawer } from './TripDetailDrawer'
@@ -153,6 +153,7 @@ export function PlanningBoardPage() {
       </Link>
 
       <PageHeader
+        icon="columns-gap"
         title={run.planNumber}
         meta={
           <>
@@ -227,7 +228,7 @@ export function PlanningBoardPage() {
       )}
 
       {showCreateTrip && (
-        <CreateTripModal
+        <CreateTripDrawer
           companyId={companyId}
           runId={run.id}
           runVersion={run.version}

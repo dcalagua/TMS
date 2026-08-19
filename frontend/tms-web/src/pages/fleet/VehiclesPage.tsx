@@ -27,7 +27,7 @@ import {
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
-import { VehicleFormModal } from './VehicleFormModal'
+import { VehicleFormDrawer } from './VehicleFormDrawer'
 
 const PAGE_SIZE = 25
 
@@ -216,6 +216,7 @@ export function VehiclesPage() {
   return (
     <div>
       <PageHeader
+        icon="truck"
         title={t('vehicles.title')}
         description={t('vehicles.description')}
         actions={
@@ -328,6 +329,7 @@ export function VehiclesPage() {
           <DataTable
             columns={columns}
             rows={pageData?.content ?? []}
+            total={pageData?.totalElements}
             rowKey={(vehicle) => vehicle.id}
             isLoading={vehiclesQuery.isPending}
             error={vehiclesQuery.isError ? describeApiError(vehiclesQuery.error as ApiError) : null}
@@ -344,7 +346,7 @@ export function VehiclesPage() {
       </div>
 
       {modal && (
-        <VehicleFormModal
+        <VehicleFormDrawer
           companyId={companyId}
           vehicle={modal.mode === 'edit' ? modal.vehicle : null}
           onClose={() => setModal(null)}

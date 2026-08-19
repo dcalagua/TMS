@@ -7,11 +7,11 @@ import { fetchVehicles } from '../../shared/api/vehiclesApi'
 import { updateTripVehicle, type TripDetailView, type TripVehicleRequest, type TripView } from '../../shared/api/planningApi'
 import { describePlanningError } from '../../shared/api/problemMessages'
 import { FormField } from '../../shared/ui/components/FormField'
-import { TmsModal } from '../../shared/ui/components/TmsModal'
+import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'trip-vehicle-form'
 
-interface TripVehicleModalProps {
+interface TripVehicleDrawerProps {
   companyId: string
   trip: TripView
   onClose: () => void
@@ -37,7 +37,7 @@ interface VehicleOption {
 }
 
 /** Prepends the trip's currently assigned vehicle if it fell out of the active-only list fetched
- * for the dropdown - the same pattern `OrderFormModal`/`RouteFormModal` use, and load-bearing
+ * for the dropdown - the same pattern `OrderFormDrawer`/`RouteFormDrawer` use, and load-bearing
  * here too: without it, react-hook-form's uncontrolled `defaultValue` is applied before the async
  * vehicle list resolves, so the select would silently reset to "Select a vehicle". */
 function withCurrentVehicle(options: VehicleOption[], trip: TripView): VehicleOption[] {
@@ -52,7 +52,7 @@ function withCurrentVehicle(options: VehicleOption[], trip: TripView): VehicleOp
  * `docs/domain/CAPACITY_MODEL.md`, "Where the checks fire". Sends the trip's `version` so a
  * vehicle change made from a board that has since been filled by someone else is refused rather
  * than silently applied. */
-export function TripVehicleModal({ companyId, trip, onClose, onUpdated }: TripVehicleModalProps) {
+export function TripVehicleDrawer({ companyId, trip, onClose, onUpdated }: TripVehicleDrawerProps) {
   const { t } = useTranslation('planning')
   const { t: tc } = useTranslation('common')
   const { t: tv } = useTranslation('validations')
@@ -67,7 +67,7 @@ export function TripVehicleModal({ companyId, trip, onClose, onUpdated }: TripVe
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors, isDirty, isSubmitting },
   } = useForm<TripVehicleFormValues>({
     defaultValues: {
       vehicleId: trip.vehicleId ?? '',
@@ -92,11 +92,15 @@ export function TripVehicleModal({ companyId, trip, onClose, onUpdated }: TripVe
   }
 
   return (
-    <TmsModal
+    <TmsDrawer
       open
       title={t('trip.form.vehicleTitle', { number: trip.tripNumber })}
+      subtitle={t('trip.form.vehicleSubtitle')}
+      size="md"
       onClose={onClose}
+      dirty={isDirty}
       closeOnEscape={!isSubmitting}
+      closeOnBackdrop={!isSubmitting}
       footer={
         <>
           <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
@@ -139,6 +143,6 @@ export function TripVehicleModal({ companyId, trip, onClose, onUpdated }: TripVe
           />
         </FormField>
       </form>
-    </TmsModal>
+    </TmsDrawer>
   )
 }

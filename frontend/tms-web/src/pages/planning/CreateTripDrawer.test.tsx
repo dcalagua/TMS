@@ -6,7 +6,7 @@ import { ApiError } from '../../shared/api/httpClient'
 import type { TripDetailView } from '../../shared/api/planningApi'
 import i18n from '../../shared/i18n'
 import { DEFAULT_LANGUAGE } from '../../shared/i18n/config'
-import { CreateTripModal } from './CreateTripModal'
+import { CreateTripDrawer } from './CreateTripDrawer'
 
 const planningApiMocks = vi.hoisted(() => ({ createTrip: vi.fn() }))
 vi.mock('../../shared/api/planningApi', async () => {
@@ -28,7 +28,7 @@ function renderModal(onCreated = vi.fn(), onClose = vi.fn()) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <CreateTripModal companyId="company-1" runId="run-1" runVersion={3} onClose={onClose} onCreated={onCreated} />
+      <CreateTripDrawer companyId="company-1" runId="run-1" runVersion={3} onClose={onClose} onCreated={onCreated} />
     </QueryClientProvider>,
   )
   return { ...utils, onCreated, onClose }
@@ -39,7 +39,7 @@ afterEach(async () => {
   await i18n.changeLanguage(DEFAULT_LANGUAGE)
 })
 
-describe('CreateTripModal', () => {
+describe('CreateTripDrawer', () => {
   it('creates a trip with no vehicle selected, sending the run version', async () => {
     vehiclesApiMocks.fetchVehicles.mockResolvedValue(page([]))
     const detail = { trip: { id: 'trip-1', tripNumber: 1 } } as unknown as TripDetailView

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import type { ComponentProps } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DestinationView } from '../../shared/api/destinationsApi'
-import { DestinationFormModal } from './DestinationFormModal'
+import { DestinationFormDrawer } from './DestinationFormDrawer'
 
 const destinationsApiMocks = vi.hoisted(() => ({ createDestination: vi.fn(), updateDestination: vi.fn() }))
 vi.mock('../../shared/api/destinationsApi', async () => {
@@ -46,11 +46,11 @@ function emptyZonesPage() {
   return { content: [], page: 0, size: 200, totalElements: 0 }
 }
 
-function renderModal(props: Partial<ComponentProps<typeof DestinationFormModal>> = {}) {
+function renderModal(props: Partial<ComponentProps<typeof DestinationFormDrawer>> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
-      <DestinationFormModal
+      <DestinationFormDrawer
         companyId="company-1"
         destination={null}
         onClose={vi.fn()}
@@ -65,7 +65,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('DestinationFormModal', () => {
+describe('DestinationFormDrawer', () => {
   it('rejects an empty submission without calling the API', async () => {
     zonesApiMocks.fetchZones.mockResolvedValue(emptyZonesPage())
     const onSaved = vi.fn()
