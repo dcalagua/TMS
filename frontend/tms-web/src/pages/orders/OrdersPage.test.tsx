@@ -117,7 +117,7 @@ describe('OrdersPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('No orders found')).toBeInTheDocument()
+    expect(await screen.findByText('Sin pedidos')).toBeInTheDocument()
   })
 
   it('shows an error state with a retry action when the request fails', async () => {
@@ -131,7 +131,7 @@ describe('OrdersPage', () => {
     expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
   })
 
-  it('lists orders with lane, totals, line count and status', async () => {
+  it('lists orders with origin, destination, totals, line count and status', async () => {
     mockCompany(true)
     mockLookups()
     ordersApiMocks.fetchOrders.mockResolvedValue(page([ORDER], { totalElements: 60, size: 25 }))
@@ -139,7 +139,9 @@ describe('OrdersPage', () => {
     renderPage()
 
     expect(await screen.findByText('TO-00000001')).toBeInTheDocument()
-    expect(screen.getByText('Origin A → Destination A')).toBeInTheDocument()
+    // Origin and destination are now separate columns rather than one "lane" cell.
+    expect(screen.getByText('Origin A')).toBeInTheDocument()
+    expect(screen.getByText('Destination A')).toBeInTheDocument()
     expect(screen.getByText('No listo', { selector: 'span' })).toBeInTheDocument()
     expect(screen.getByText(/Página 1 de 3/)).toBeInTheDocument()
   })
@@ -153,9 +155,7 @@ describe('OrdersPage', () => {
     await screen.findByText('TO-00000001')
 
     expect(screen.queryByRole('button', { name: 'Nuevo pedido' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Mark ready' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Abrir menú de acciones' })).not.toBeInTheDocument()
   })
 
   it('marks an order ready only after the confirmation dialog is accepted', async () => {
@@ -168,15 +168,17 @@ describe('OrdersPage', () => {
     renderPage()
     await screen.findByText('TO-00000001')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Mark ready' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Marcar listo' }))
     await waitFor(() => expect(alertMocks.confirmAction).toHaveBeenCalled())
     expect(ordersApiMocks.markOrderReadyForPlanning).not.toHaveBeenCalled()
 
     alertMocks.confirmAction.mockResolvedValueOnce(true)
-    await userEvent.click(screen.getByRole('button', { name: 'Mark ready' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Marcar listo' }))
 
     await waitFor(() => expect(ordersApiMocks.markOrderReadyForPlanning).toHaveBeenCalledWith('company-1', 'order-1'))
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Order marked ready for planning', 'TO-00000001')
+    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Pedido marcado como listo', 'TO-00000001')
   })
 
   it('cancels an order only after the confirmation dialog is accepted', async () => {
@@ -189,10 +191,11 @@ describe('OrdersPage', () => {
     renderPage()
     await screen.findByText('TO-00000001')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Cancelar pedido' }))
 
     await waitFor(() => expect(ordersApiMocks.cancelOrder).toHaveBeenCalledWith('company-1', 'order-1'))
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Order cancelled', 'TO-00000001')
+    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Pedido cancelado', 'TO-00000001')
   })
 
   it('does not offer mark-ready or cancel for a planned order, only view', async () => {
@@ -203,9 +206,10 @@ describe('OrdersPage', () => {
     renderPage()
     await screen.findByText('TO-00000001')
 
-    expect(screen.queryByRole('button', { name: 'Mark ready' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'View' })).toBeInTheDocument()
+    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
+    expect(screen.queryByRole('menuitem', { name: 'Marcar listo' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Cancelar pedido' })).not.toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Ver' })).toBeInTheDocument()
   })
 
   it('applies the order number filter to the query', async () => {
@@ -216,7 +220,7 @@ describe('OrdersPage', () => {
     renderPage()
     await screen.findByText('TO-00000001')
 
-    await userEvent.type(screen.getByLabelText(/order #/i), 'TO-1')
+    await userEvent.type(screen.getByLabelText(/^pedido$/i), 'TO-1')
     await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
 
     await waitFor(() =>

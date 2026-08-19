@@ -1,8 +1,30 @@
 {
+  "actions": {
+    "cancelOrder": "Cancelar pedido",
+    "markReady": "Marcar listo",
+    "view": "Ver"
+  },
   "description": "Pedidos de transporte: cabecera más líneas, con un ciclo de estados mínimo en V1 (no listo, listo para planificar, planificado o cancelado). Los totales siempre los calcula y controla el backend.",
+  "dialogs": {
+    "cancelError": "No se pudo cancelar el pedido",
+    "cancelText": "{{number}} quedará cancelado y ya no podrá editarse ni planificarse.",
+    "cancelTitle": "¿Cancelar el pedido?",
+    "cancelled": "Pedido cancelado",
+    "markReadyError": "No se pudo marcar el pedido como listo",
+    "markReadyText": "{{number}} será visible para planificación cuando tenga al menos una línea y un peso, volumen o cantidad de pallets conocidos.",
+    "markReadyTitle": "¿Marcar el pedido como listo para planificar?",
+    "markedReady": "Pedido marcado como listo"
+  },
   "empty": {
     "message": "Crea un pedido o ajusta los filtros.",
     "title": "Sin pedidos"
+  },
+  "filters": {
+    "allDestinations": "Todos los destinos",
+    "allPriorities": "Todas las prioridades",
+    "allStatuses": "Todos los estados",
+    "dateFrom": "Desde",
+    "dateTo": "Hasta"
   },
   "form": {
     "addLine": "Agregar línea",
@@ -34,5 +56,13 @@
     "uom": "UM"
   },
   "new": "Nuevo pedido",
+  "summary": {
+    "found_one": "{{count}} pedido encontrado",
+    "found_other": "{{count}} pedidos encontrados",
+    "pageNote": "Los totales corresponden solo a los pedidos de esta página.",
+    "pagePallets": "Pallets en esta página",
+    "pageVolume": "Volumen en esta página",
+    "pageWeight": "Peso en esta página"
+  },
   "title": "Pedidos"
 }

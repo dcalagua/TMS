@@ -36,7 +36,9 @@ export function Toolbar({ primary, filters, onApply, onReset, activeFilterCount 
             aria-controls={panelId}
           >
             <i className="bi bi-funnel" aria-hidden="true" />
-            <span>{t('actions.applyFilters')}</span>
+            {/* Not "apply filters": that is the submit button inside the panel, and two
+                controls with the same accessible name doing different things is a defect. */}
+            <span>{t('actions.filters')}</span>
             {activeFilterCount > 0 && <span className="badge text-bg-primary">{activeFilterCount}</span>}
           </button>
         )}

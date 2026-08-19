@@ -20,7 +20,9 @@ export function PageHeader({ title, description, meta, actions }: PageHeaderProp
         </div>
         {description && <p className="tms-page-subtitle">{description}</p>}
       </div>
-      {actions && <div className="d-flex align-items-center gap-2 flex-shrink-0">{actions}</div>}
+      {/* Wraps rather than refusing to shrink: three action buttons on a 320px screen must
+          fall onto a second line, not push the page into a horizontal scrollbar. */}
+      {actions && <div className="d-flex flex-wrap align-items-center gap-2">{actions}</div>}
     </div>
   )
 }

@@ -99,7 +99,7 @@ describe('PlanningBoardPage', () => {
 
     renderBoard()
 
-    expect(screen.getByText('Loading planning run...')).toBeInTheDocument()
+    expect(screen.getByText('Cargando la corrida de planificación...')).toBeInTheDocument()
   })
 
   it('shows an error state with retry when the run fails to load', async () => {
@@ -121,9 +121,9 @@ describe('PlanningBoardPage', () => {
     renderBoard()
 
     expect(await screen.findByText('PLN-1')).toBeInTheDocument()
-    expect(screen.getByText('Origin A · 2026-03-01')).toBeInTheDocument()
-    expect(screen.getByText('Trip 1')).toBeInTheDocument()
-    expect(screen.getByText('Eligible orders')).toBeInTheDocument()
+    expect(screen.getByText(/^Origin A ·/)).toBeInTheDocument()
+    expect(screen.getByText('Viaje 1')).toBeInTheDocument()
+    expect(screen.getByText('Pedidos elegibles')).toBeInTheDocument()
   })
 
   it('hides run and trip management actions for a caller without manage permissions', async () => {
@@ -135,9 +135,9 @@ describe('PlanningBoardPage', () => {
     renderBoard()
 
     await screen.findByText('PLN-1')
-    expect(screen.queryByRole('button', { name: 'New trip' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Confirm plan' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Cancel plan' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nuevo viaje' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirmar plan' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancelar plan' })).not.toBeInTheDocument()
   })
 
   it('confirms the plan only after the dialog is accepted, sending the run version', async () => {
@@ -151,10 +151,10 @@ describe('PlanningBoardPage', () => {
     await screen.findByText('PLN-1')
 
     alertMocks.confirmAction.mockResolvedValueOnce(true)
-    await userEvent.click(screen.getByRole('button', { name: 'Confirm plan' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar plan' }))
 
     await waitFor(() => expect(planningApiMocks.confirmPlanningRun).toHaveBeenCalledWith('company-1', 'run-1', { version: 2 }))
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Plan confirmed', 'PLN-1')
+    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Plan confirmado', 'PLN-1')
   })
 
   it('shows the backend refusal verbatim when confirmation fails an incomplete trip', async () => {
@@ -170,14 +170,14 @@ describe('PlanningBoardPage', () => {
     await screen.findByText('PLN-1')
 
     alertMocks.confirmAction.mockResolvedValueOnce(true)
-    await userEvent.click(screen.getByRole('button', { name: 'Confirm plan' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar plan' }))
 
     await waitFor(() =>
-      expect(alertMocks.notifyError).toHaveBeenCalledWith('Could not confirm the plan', 'Trip 1 has no vehicle assigned.'),
+      expect(alertMocks.notifyError).toHaveBeenCalledWith('No se pudo confirmar el plan', 'Trip 1 has no vehicle assigned.'),
     )
   })
 
-  it('does not offer New trip, Confirm plan or Cancel plan once the run is no longer a draft', async () => {
+  it('does not offer new trip, confirm or cancel once the run is no longer a draft', async () => {
     mockCompany()
     planningApiMocks.fetchPlanningRun.mockResolvedValue(board({ run: { ...board().run, status: 'CONFIRMED' } }))
     planningApiMocks.fetchEligibleOrders.mockResolvedValue(emptyPage())
@@ -186,9 +186,9 @@ describe('PlanningBoardPage', () => {
     renderBoard()
 
     await screen.findByText('PLN-1')
-    expect(screen.queryByRole('button', { name: 'New trip' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Confirm plan' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Cancel plan' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nuevo viaje' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirmar plan' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancelar plan' })).not.toBeInTheDocument()
   })
 
   it('navigates back to the run list', async () => {
@@ -199,7 +199,7 @@ describe('PlanningBoardPage', () => {
 
     renderBoard()
     await screen.findByText('PLN-1')
-    await userEvent.click(screen.getByRole('link', { name: '← Planning runs' }))
+    await userEvent.click(screen.getByRole('link', { name: /Corridas de planificación/ }))
 
     expect(await screen.findByText('Planning runs list')).toBeInTheDocument()
   })

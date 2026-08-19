@@ -1,5 +1,6 @@
 import { expect, test, type ConsoleMessage, type Page } from '@playwright/test'
 import { signIn, stubServices } from './support/app'
+import { stubPlanning } from './support/planning'
 
 const SHOTS_DIR = 'artifacts/ui-review'
 
@@ -117,4 +118,31 @@ test('captures the review screenshots', async ({ page }) => {
   await page.getByRole('button', { name: 'Nuevo destino' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await page.screenshot({ path: `${SHOTS_DIR}/form-destination-mobile.png` })
+})
+
+test('captures the planning board with a loaded trip', async ({ page }) => {
+  await stubServices(page)
+  await stubPlanning(page)
+  await signIn(page)
+
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/planning/run-1')
+  await expect(page.getByRole('heading', { level: 1, name: 'PLN-000001' })).toBeVisible()
+
+  // A board with an empty trip proves nothing about the capacity bars, so load one first.
+  await page.getByRole('button', { name: 'Nuevo viaje' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('option', { name: /VH-001/ })).toBeAttached()
+  await dialog.getByLabel('Vehículo').selectOption('veh-1')
+  await dialog.getByRole('button', { name: 'Crear viaje' }).click()
+  await expect(dialog).toBeHidden()
+  await page.getByRole('button', { name: 'Asignar' }).first().click()
+  await expect(page.getByRole('article').first().getByText('Cerca del límite')).toBeVisible()
+
+  await page.screenshot({ path: `${SHOTS_DIR}/planning-board-desktop.png`, fullPage: true })
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('button', { name: 'Viajes', exact: true }).click()
+  await expect(page.getByRole('article').first()).toBeVisible()
+  await page.screenshot({ path: `${SHOTS_DIR}/planning-board-mobile.png`, fullPage: true })
 })

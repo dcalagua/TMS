@@ -1,12 +1,14 @@
-import { useEnumLabels } from '../../shared/i18n/enums'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
 import type { ApiError } from '../../shared/api/httpClient'
 import { cancelPlanningRun, confirmPlanningRun, fetchPlanningRun } from '../../shared/api/planningApi'
 import { describeApiError, describePlanningError } from '../../shared/api/problemMessages'
 import { useCompany } from '../../shared/company/CompanyContext'
-import { confirmDialog, ErrorState, PageHeader, StatusBadge, type StatusTone } from '../../shared/ui/components'
+import { useEnumLabels } from '../../shared/i18n/enums'
+import { useFormat } from '../../shared/i18n/format'
+import { confirmDialog, EmptyState, ErrorState, PageHeader, StatusBadge, type StatusTone } from '../../shared/ui/components'
 import { LoadingState } from '../../shared/ui/components/LoadingState'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
 import { CreateTripModal } from './CreateTripModal'
@@ -20,6 +22,10 @@ const STATUS_TONE: Record<'DRAFT' | 'CONFIRMED' | 'CANCELLED', StatusTone> = {
   CANCELLED: 'danger',
 }
 
+/** Which half of the board a phone is showing. Two narrow columns side by side is unusable at
+ * 360px, so below `lg` the panels become tabs instead of shrinking. */
+type MobilePanel = 'orders' | 'trips'
+
 /**
  * The planning board (`docs/domain/PLANNING_MANUAL_V1.md`, "The flow" steps 3-8): one call opens
  * the run with every trip's capacity summary already attached
@@ -28,7 +34,9 @@ const STATUS_TONE: Record<'DRAFT' | 'CONFIRMED' | 'CANCELLED', StatusTone> = {
  * query rather than hand-merging partial responses into local state.
  */
 export function PlanningBoardPage() {
+  const { t } = useTranslation('planning')
   const enumLabels = useEnumLabels()
+  const format = useFormat()
   const { runId } = useParams<{ runId: string }>()
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
@@ -45,27 +53,34 @@ export function PlanningBoardPage() {
 
   const [openTripId, setOpenTripId] = useState<string | null>(null)
   const [showCreateTrip, setShowCreateTrip] = useState(false)
+  const [mobilePanel, setMobilePanel] = useState<MobilePanel>('orders')
 
+  /**
+   * Re-syncs both halves of the board. The eligible pool has to be invalidated too: taking an
+   * order off a trip - or moving it - returns it to that pool, and without this the left panel
+   * kept showing a stale list until the page was reloaded.
+   */
   function refreshBoard() {
     void queryClient.invalidateQueries({ queryKey })
+    void queryClient.invalidateQueries({ queryKey: ['eligible-orders', companyId, runId] })
   }
 
   async function confirmPlan() {
     if (!runQuery.data) return
     const { run } = runQuery.data
     const confirmed = await confirmDialog({
-      title: 'Confirm this plan?',
-      text: `Every trip in ${run.planNumber} will be revalidated and its capacity frozen. This cannot be undone.`,
-      confirmLabel: 'Confirm plan',
+      title: t('boardScreen.confirmTitle'),
+      text: t('boardScreen.confirmText', { number: run.planNumber }),
+      confirmLabel: t('boardScreen.confirmPlan'),
     })
     if (!confirmed) return
 
     try {
       await confirmPlanningRun(companyId, run.id, { version: run.version })
-      notifySuccess('Plan confirmed', run.planNumber)
+      notifySuccess(t('boardScreen.confirmed'), run.planNumber)
       refreshBoard()
     } catch (error) {
-      notifyError('Could not confirm the plan', describePlanningError(error as ApiError))
+      notifyError(t('boardScreen.confirmError'), describePlanningError(error as ApiError))
     }
   }
 
@@ -73,24 +88,24 @@ export function PlanningBoardPage() {
     if (!runQuery.data) return
     const { run } = runQuery.data
     const confirmed = await confirmDialog({
-      title: 'Cancel this plan?',
-      text: `${run.planNumber} will be discarded, every trip cancelled and every assigned order returned to the eligible pool.`,
-      confirmLabel: 'Cancel plan',
+      title: t('boardScreen.cancelTitle'),
+      text: t('boardScreen.cancelText', { number: run.planNumber }),
+      confirmLabel: t('boardScreen.cancelPlan'),
       dangerous: true,
     })
     if (!confirmed) return
 
     try {
       await cancelPlanningRun(companyId, run.id, { version: run.version })
-      notifySuccess('Plan cancelled', run.planNumber)
+      notifySuccess(t('boardScreen.cancelled'), run.planNumber)
       refreshBoard()
     } catch (error) {
-      notifyError('Could not cancel the plan', describePlanningError(error as ApiError))
+      notifyError(t('boardScreen.cancelError'), describePlanningError(error as ApiError))
     }
   }
 
   if (runQuery.isPending) {
-    return <LoadingState label="Loading planning run..." />
+    return <LoadingState label={t('boardScreen.loading')} />
   }
 
   if (runQuery.isError) {
@@ -105,29 +120,68 @@ export function PlanningBoardPage() {
   const { run, trips } = runQuery.data
   const isDraft = run.status === 'DRAFT'
 
+  const ordersPanel = (
+    <EligibleOrdersPanel
+      companyId={companyId}
+      run={run}
+      trips={trips}
+      canManage={isDraft && canManageTrips}
+      onAssigned={refreshBoard}
+    />
+  )
+
+  const tripsPanel =
+    trips.length === 0 ? (
+      <div className="tms-card">
+        <EmptyState icon="bi-truck" title={t('boardScreen.noTrips')} message={t('boardScreen.noTripsHint')} />
+      </div>
+    ) : (
+      <div className="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-3">
+        {trips.map((trip) => (
+          <div key={trip.id} className="col">
+            <TripCard trip={trip} onOpen={() => setOpenTripId(trip.id)} />
+          </div>
+        ))}
+      </div>
+    )
+
   return (
     <div>
-      <Link to="/planning" className="text-decoration-none small d-inline-block mb-1">
-        ← Planning runs
+      <Link to="/planning" className="text-decoration-none small d-inline-flex align-items-center gap-1 mb-2">
+        <i className="bi bi-arrow-left" aria-hidden="true" />
+        {t('boardScreen.backToRuns')}
       </Link>
+
       <PageHeader
         title={run.planNumber}
-        description={`${run.originName ?? run.originCode} · ${run.planningDate}`}
-        actions={
-          <div className="d-flex align-items-center gap-2">
+        meta={
+          <>
             <StatusBadge label={enumLabels.planningRunStatus(run.status)} tone={STATUS_TONE[run.status]} />
+            <span className="tms-badge tms-badge-neutral">
+              {t('boardScreen.tripsCount', { count: trips.length })}
+            </span>
+          </>
+        }
+        description={`${run.originName ?? run.originCode} · ${format.date(run.planningDate)}`}
+        actions={
+          <div className="d-flex flex-wrap align-items-center gap-2">
             {isDraft && canManageTrips && (
-              <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setShowCreateTrip(true)}>
-                New trip
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-2"
+                onClick={() => setShowCreateTrip(true)}
+              >
+                <i className="bi bi-plus-lg" aria-hidden="true" />
+                {t('boardScreen.newTrip')}
               </button>
             )}
             {isDraft && canManageRun && (
               <>
                 <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => void cancelPlan()}>
-                  Cancel plan
+                  {t('boardScreen.cancelPlan')}
                 </button>
                 <button type="button" className="btn btn-sm btn-primary" onClick={() => void confirmPlan()}>
-                  Confirm plan
+                  {t('boardScreen.confirmPlan')}
                 </button>
               </>
             )}
@@ -135,33 +189,29 @@ export function PlanningBoardPage() {
         }
       />
 
+      {/* Below `lg` the two panels become tabs; above it they are a split view. */}
+      <div className="btn-group w-100 mb-3 d-lg-none" role="group" aria-label={t('boardScreen.panels')}>
+        {(['orders', 'trips'] as const).map((panel) => (
+          <button
+            key={panel}
+            type="button"
+            className={`btn btn-sm ${mobilePanel === panel ? 'btn-secondary' : 'btn-outline-secondary'}`}
+            aria-pressed={mobilePanel === panel}
+            onClick={() => setMobilePanel(panel)}
+          >
+            {panel === 'orders' ? t('boardScreen.tabOrders') : t('boardScreen.tabTrips')}
+          </button>
+        ))}
+      </div>
+
       <div className="row g-3">
-        <div className="col-lg-4">
-          <EligibleOrdersPanel
-            companyId={companyId}
-            run={run}
-            trips={trips}
-            canManage={isDraft && canManageTrips}
-            onAssigned={refreshBoard}
-          />
+        <div className={`col-12 col-lg-4 ${mobilePanel === 'orders' ? '' : 'd-none d-lg-block'}`}>
+          <h2 className="tms-section-title mb-2 d-none d-lg-block">{t('board.orders')}</h2>
+          {ordersPanel}
         </div>
-        <div className="col-lg-8">
-          {trips.length === 0 ? (
-            <div className="card shadow-sm">
-              <div className="card-body text-center py-5 text-body-secondary">
-                <p className="mb-1 fw-semibold text-body">No trips yet</p>
-                <p className="small mb-0">Create a trip to start assigning orders.</p>
-              </div>
-            </div>
-          ) : (
-            <div className="row row-cols-1 row-cols-xl-2 g-3">
-              {trips.map((trip) => (
-                <div key={trip.id} className="col">
-                  <TripCard trip={trip} onOpen={() => setOpenTripId(trip.id)} />
-                </div>
-              ))}
-            </div>
-          )}
+        <div className={`col-12 col-lg-8 tms-min-w-0 ${mobilePanel === 'trips' ? '' : 'd-none d-lg-block'}`}>
+          <h2 className="tms-section-title mb-2 d-none d-lg-block">{t('board.trips')}</h2>
+          {tripsPanel}
         </div>
       </div>
 
@@ -184,11 +234,12 @@ export function PlanningBoardPage() {
           onClose={() => setShowCreateTrip(false)}
           onCreated={() => {
             setShowCreateTrip(false)
-            notifySuccess('Trip created')
+            notifySuccess(t('boardScreen.tripCreated'))
             refreshBoard()
           }}
         />
       )}
+
     </div>
   )
 }

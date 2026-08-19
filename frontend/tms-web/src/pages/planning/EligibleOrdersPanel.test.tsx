@@ -98,7 +98,7 @@ describe('EligibleOrdersPanel', () => {
 
     renderPanel()
 
-    expect(await screen.findByText('No eligible orders')).toBeInTheDocument()
+    expect(await screen.findByText('Sin pedidos elegibles')).toBeInTheDocument()
   })
 
   it('hides the assign control for a caller without manage permission', async () => {
@@ -108,7 +108,7 @@ describe('EligibleOrdersPanel', () => {
     renderPanel({ canManage: false })
 
     await screen.findByText('TO-1')
-    expect(screen.queryByRole('button', { name: 'Assign' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Asignar' })).not.toBeInTheDocument()
   })
 
   it('prompts to create a trip first when there are no open trips', async () => {
@@ -118,8 +118,8 @@ describe('EligibleOrdersPanel', () => {
     renderPanel({ trips: [] })
 
     await screen.findByText('TO-1')
-    expect(screen.getByText('Create a trip before assigning orders.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Assign' })).toBeDisabled()
+    expect(screen.getByText('Crea un viaje antes de asignar pedidos.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Asignar' })).toBeDisabled()
   })
 
   it('assigns an order to the selected trip and reports the updated trip detail', async () => {
@@ -130,7 +130,7 @@ describe('EligibleOrdersPanel', () => {
     const { onAssigned } = renderPanel()
 
     await screen.findByText('TO-1')
-    await userEvent.click(screen.getByRole('button', { name: 'Assign' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Asignar' }))
 
     await waitFor(() =>
       expect(planningApiMocks.assignOrderToTrip).toHaveBeenCalledWith('company-1', 'trip-1', { orderId: 'order-1' }),
@@ -148,11 +148,11 @@ describe('EligibleOrdersPanel', () => {
     renderPanel()
 
     await screen.findByText('TO-1')
-    await userEvent.click(screen.getByRole('button', { name: 'Assign' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Asignar' }))
 
     await waitFor(() =>
       expect(alertMocks.notifyError).toHaveBeenCalledWith(
-        'Could not assign order', 'Trip 1 would exceed capacity: weight 1200.00/1000.00 kg.',
+        'No se pudo asignar el pedido', 'Trip 1 would exceed capacity: weight 1200.00/1000.00 kg.',
       ),
     )
   })

@@ -1,6 +1,7 @@
 import { useEnumLabels } from '../../shared/i18n/enums'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import {
   cancelTrip,
@@ -12,7 +13,8 @@ import {
   type TripView,
 } from '../../shared/api/planningApi'
 import { describePlanningError } from '../../shared/api/problemMessages'
-import { CapacityBar, confirmDialog, StatusBadge, type StatusTone } from '../../shared/ui/components'
+import { useFormat } from '../../shared/i18n/format'
+import { CapacityBar, confirmDialog, Drawer, StatusBadge, type StatusTone } from '../../shared/ui/components'
 import { LoadingState } from '../../shared/ui/components/LoadingState'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
 import { TripVehicleModal } from './TripVehicleModal'
@@ -50,6 +52,9 @@ function moveItem<T>(items: T[], from: number, to: number): T[] {
  * section 8 point 4: every mutation returns the updated `TripDetailView`.
  */
 export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, onClose, onChanged }: TripDetailDrawerProps) {
+  const { t } = useTranslation('planning')
+  const { t: tc } = useTranslation('common')
+  const format = useFormat()
   const enumLabels = useEnumLabels()
   const queryClient = useQueryClient()
   const queryKey = ['trip', companyId, tripId]
@@ -90,9 +95,9 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
     try {
       const next = await removeOrderFromTrip(companyId, tripId, orderId)
       applyDetail(next)
-      notifySuccess('Order removed', `${orderNumber} returned to the eligible pool`)
+      notifySuccess(t('drawer.orderRemoved'), t('drawer.orderRemovedDetail', { number: orderNumber }))
     } catch (error) {
-      notifyError('Could not remove order', describePlanningError(error as ApiError))
+      notifyError(t('drawer.removeError'), describePlanningError(error as ApiError))
     } finally {
       setBusyOrderId(null)
     }
@@ -106,9 +111,9 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
     try {
       const next = await moveOrderToTrip(companyId, tripId, orderId, { targetTripId })
       applyDetail(next)
-      notifySuccess('Order moved', `${orderNumber} moved to another trip`)
+      notifySuccess(t('drawer.orderMoved'), t('drawer.orderMovedDetail', { number: orderNumber }))
     } catch (error) {
-      notifyError('Could not move order', describePlanningError(error as ApiError))
+      notifyError(t('drawer.moveError'), describePlanningError(error as ApiError))
     } finally {
       setBusyOrderId(null)
     }
@@ -119,9 +124,9 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
     try {
       const next = await reorderTripStops(companyId, tripId, { destinationIds: stopOrder })
       applyDetail(next)
-      notifySuccess('Stop order saved')
+      notifySuccess(t('drawer.stopOrderSaved'))
     } catch (error) {
-      notifyError('Could not save stop order', describePlanningError(error as ApiError))
+      notifyError(t('drawer.stopOrderError'), describePlanningError(error as ApiError))
     } finally {
       setSavingStops(false)
     }
@@ -130,9 +135,9 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
   async function cancelThisTrip() {
     if (!detail) return
     const confirmed = await confirmDialog({
-      title: 'Cancel trip?',
-      text: `Trip ${detail.trip.tripNumber} will be cancelled and every order on it returned to the eligible pool.`,
-      confirmLabel: 'Cancel trip',
+      title: t('drawer.cancelTripTitle'),
+      text: t('drawer.cancelTripText', { number: detail.trip.tripNumber }),
+      confirmLabel: t('drawer.cancelTrip'),
       dangerous: true,
     })
     if (!confirmed) return
@@ -140,43 +145,32 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
     try {
       const next = await cancelTrip(companyId, tripId, { version: detail.trip.version })
       applyDetail(next)
-      notifySuccess('Trip cancelled')
+      notifySuccess(t('drawer.tripCancelled'))
     } catch (error) {
-      notifyError('Could not cancel the trip', describePlanningError(error as ApiError))
+      notifyError(t('drawer.cancelTripError'), describePlanningError(error as ApiError))
     }
   }
 
   const stopsDirty = stopOrder.join('|') !== serverStopsKey
 
   return (
-    <div
-      className="offcanvas offcanvas-end show"
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      style={{ visibility: 'visible', width: 'min(720px, 100vw)' }}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') onClose()
-      }}
+    <Drawer
+      open
+      title={detail ? t('card.title', { number: detail.trip.tripNumber }) : t('drawer.titleFallback')}
+      onClose={onClose}
     >
-      <div className="offcanvas-header border-bottom">
-        <h5 className="offcanvas-title">
-          {detail ? `Trip ${detail.trip.tripNumber}` : 'Trip'}
-          {detail && (
-            <span className="ms-2">
-              <StatusBadge label={enumLabels.tripStatus(detail.trip.status)} tone={STATUS_TONE[detail.trip.status]} />
-            </span>
-          )}
-        </h5>
-        <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
-      </div>
-      <div className="offcanvas-body">
+      <div>
+        {detail && (
+          <p className="mb-3">
+            <StatusBadge label={enumLabels.tripStatus(detail.trip.status)} tone={STATUS_TONE[detail.trip.status]} />
+          </p>
+        )}
         {tripQuery.isError && (
           <div className="alert alert-danger py-2 small" role="alert">
             {describePlanningError(tripQuery.error as ApiError)}
           </div>
         )}
-        {!detail && !tripQuery.isError && <LoadingState label="Loading trip..." />}
+        {!detail && !tripQuery.isError && <LoadingState label={t('drawer.loading')} />}
 
         {detail && (
           <>
@@ -188,37 +182,37 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
                       <span className="fw-semibold">{detail.trip.vehicleCode}</span> · {detail.trip.vehicleLicensePlate}
                     </>
                   ) : (
-                    <span className="text-body-secondary fst-italic">No vehicle assigned</span>
+                    <span className="text-body-secondary fst-italic">{t('card.noVehicle')}</span>
                   )}
                 </p>
-                <p className="small text-body-secondary mb-0">{detail.trip.carrierName ?? 'No carrier'}</p>
+                <p className="small text-body-secondary mb-0">{detail.trip.carrierName ?? t('card.noCarrier')}</p>
               </div>
               {canManage && detail.trip.status === 'DRAFT' && (
                 <div className="btn-group btn-group-sm">
                   <button type="button" className="btn btn-outline-secondary" onClick={() => setShowVehicleModal(true)}>
-                    {detail.trip.vehicleId ? 'Change vehicle' : 'Assign vehicle'}
+                    {detail.trip.vehicleId ? t('drawer.changeVehicle') : t('drawer.assignVehicle')}
                   </button>
                   <button type="button" className="btn btn-outline-danger" onClick={() => void cancelThisTrip()}>
-                    Cancel trip
+                    {t('drawer.cancelTrip')}
                   </button>
                 </div>
               )}
             </div>
 
-            <CapacityBar label="Weight" unit="kg" dimension={detail.trip.capacity.weight} />
-            <CapacityBar label="Volume" unit="m³" dimension={detail.trip.capacity.volume} />
-            <CapacityBar label="Pallets" unit="plt" dimension={detail.trip.capacity.pallets} />
+            <CapacityBar kind="weight" dimension={detail.trip.capacity.weight} />
+            <CapacityBar kind="volume" dimension={detail.trip.capacity.volume} />
+            <CapacityBar kind="pallets" dimension={detail.trip.capacity.pallets} />
 
-            <h6 className="mt-4">Assigned orders</h6>
-            {detail.assignments.length === 0 && <p className="small text-body-secondary">No orders assigned yet.</p>}
+            <h3 className="tms-section-title mt-4 mb-2">{t('drawer.assignedOrders')}</h3>
+            {detail.assignments.length === 0 && <p className="small text-body-secondary">{t('drawer.noAssignedOrders')}</p>}
             {detail.assignments.length > 0 && (
               <div className="table-responsive mb-3">
                 <table className="table table-sm align-middle">
                   <thead>
                     <tr>
-                      <th scope="col">Order #</th>
-                      <th scope="col">Destination</th>
-                      <th scope="col">Weight/Volume/Pallets</th>
+                      <th scope="col">{tc('columns.orderNumber')}</th>
+                      <th scope="col">{tc('columns.destination')}</th>
+                      <th scope="col">{t('drawer.amounts')}</th>
                       {canManage && detail.trip.status === 'DRAFT' && <th scope="col" />}
                     </tr>
                   </thead>
@@ -228,7 +222,8 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
                         <td>{assignment.orderNumber}</td>
                         <td>{assignment.destinationName ?? assignment.destinationCode ?? '—'}</td>
                         <td className="small text-body-secondary">
-                          {assignment.assignedWeightKg} kg · {assignment.assignedVolumeM3} m³ · {assignment.assignedPallets} plt
+                          {format.weight(assignment.assignedWeightKg)} · {format.volume(assignment.assignedVolumeM3)} ·{' '}
+                          {format.decimal(assignment.assignedPallets)} {t('capacity.palletsUnit')}
                         </td>
                         {canManage && detail.trip.status === 'DRAFT' && (
                           <td>
@@ -236,17 +231,17 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
                               <select
                                 className="form-select form-select-sm"
                                 style={{ width: '10rem' }}
-                                aria-label={`Move ${assignment.orderNumber} to trip`}
+                                aria-label={t('drawer.moveAria', { number: assignment.orderNumber })}
                                 value={moveTargets[assignment.orderId] ?? targetTrips[0]?.id ?? ''}
                                 disabled={targetTrips.length === 0}
                                 onChange={(event) =>
                                   setMoveTargets({ ...moveTargets, [assignment.orderId]: event.target.value })
                                 }
                               >
-                                {targetTrips.length === 0 && <option value="">No other trips</option>}
+                                {targetTrips.length === 0 && <option value="">{t('drawer.noOtherTrips')}</option>}
                                 {targetTrips.map((trip) => (
                                   <option key={trip.id} value={trip.id}>
-                                    Trip {trip.tripNumber}
+                                    {t('drawer.tripOption', { number: trip.tripNumber })}
                                   </option>
                                 ))}
                               </select>
@@ -256,7 +251,7 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
                                 disabled={targetTrips.length === 0 || busyOrderId === assignment.orderId}
                                 onClick={() => void moveOrder(assignment.orderId, assignment.orderNumber)}
                               >
-                                Move
+                                {t('drawer.move')}
                               </button>
                               <button
                                 type="button"
@@ -264,7 +259,7 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
                                 disabled={busyOrderId === assignment.orderId}
                                 onClick={() => void removeOrder(assignment.orderId, assignment.orderNumber)}
                               >
-                                Remove
+                                {t('drawer.remove')}
                               </button>
                             </div>
                           </td>
@@ -276,8 +271,8 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
               </div>
             )}
 
-            <h6 className="mt-4">Stop sequence</h6>
-            {stopOrder.length === 0 && <p className="small text-body-secondary">No stops yet - assign an order first.</p>}
+            <h3 className="tms-section-title mt-4 mb-2">{t('drawer.stopSequence')}</h3>
+            {stopOrder.length === 0 && <p className="small text-body-secondary">{t('drawer.noStops')}</p>}
             {stopOrder.length > 0 && (
               <ol className="list-group list-group-numbered mb-2">
                 {stopOrder.map((destinationId, index) => {
@@ -338,6 +333,6 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
           }}
         />
       )}
-    </div>
+    </Drawer>
   )
 }

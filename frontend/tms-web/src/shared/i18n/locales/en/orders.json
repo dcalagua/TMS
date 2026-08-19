@@ -1,8 +1,30 @@
 {
+  "actions": {
+    "cancelOrder": "Cancel order",
+    "markReady": "Mark ready",
+    "view": "View"
+  },
   "description": "Transport orders: header plus lines, with a minimal V1 status lifecycle (not ready, ready for planning, planned or cancelled). Totals are always computed and owned by the backend.",
+  "dialogs": {
+    "cancelError": "Could not cancel the order",
+    "cancelText": "{{number}} will be cancelled and can no longer be edited or planned.",
+    "cancelTitle": "Cancel order?",
+    "cancelled": "Order cancelled",
+    "markReadyError": "Could not mark the order ready",
+    "markReadyText": "{{number}} becomes visible to planning once it has at least one line and a known weight, volume or pallet count.",
+    "markReadyTitle": "Mark order ready for planning?",
+    "markedReady": "Order marked ready for planning"
+  },
   "empty": {
     "message": "Create an order or adjust your filters.",
     "title": "No orders found"
+  },
+  "filters": {
+    "allDestinations": "All destinations",
+    "allPriorities": "All priorities",
+    "allStatuses": "All statuses",
+    "dateFrom": "From",
+    "dateTo": "To"
   },
   "form": {
     "addLine": "Add line",
@@ -34,5 +56,13 @@
     "uom": "UOM"
   },
   "new": "New order",
+  "summary": {
+    "found_one": "{{count}} order found",
+    "found_other": "{{count}} orders found",
+    "pageNote": "Totals cover only the orders shown on this page.",
+    "pagePallets": "Pallets on this page",
+    "pageVolume": "Volume on this page",
+    "pageWeight": "Weight on this page"
+  },
   "title": "Orders"
 }

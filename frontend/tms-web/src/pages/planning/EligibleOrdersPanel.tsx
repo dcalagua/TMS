@@ -1,6 +1,8 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
+import type { OrderPriority } from '../../shared/api/ordersApi'
 import { fetchDestinations } from '../../shared/api/destinationsApi'
 import {
   assignOrderToTrip,
@@ -11,10 +13,26 @@ import {
   type TripView,
 } from '../../shared/api/planningApi'
 import { describePlanningError } from '../../shared/api/problemMessages'
-import { DataTable, FilterBar, Pagination, type DataTableColumn } from '../../shared/ui/components'
+import { useEnumLabels } from '../../shared/i18n/enums'
+import { useFormat } from '../../shared/i18n/format'
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  Pagination,
+  StatusBadge,
+  type StatusTone,
+} from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
 
 const PAGE_SIZE = 10
+
+const PRIORITY_TONE: Record<OrderPriority, StatusTone> = {
+  LOW: 'neutral',
+  NORMAL: 'neutral',
+  HIGH: 'warning',
+  URGENT: 'danger',
+}
 
 interface EligibleOrdersPanelProps {
   companyId: string
@@ -30,8 +48,18 @@ interface EligibleOrdersPanelProps {
  * date are not editable filters here: eligibility requires an exact match on both
  * (`docs/domain/PLANNING_MANUAL_V1.md` section 5), so widening them would only list orders an
  * assign call would then refuse.
+ *
+ * Rendered as a compact list rather than a table. This panel is a third of the board on desktop
+ * and a full-width tab on a phone; a seven-column table in that width scrolls sideways and hides
+ * exactly the two things a planner scans for - the order number and its destination. Each row
+ * still carries everything the brief asks for: number, destination, priority, weight, volume and
+ * pallets, on two dense lines rather than in a card the size of a trip.
  */
 export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssigned }: EligibleOrdersPanelProps) {
+  const { t } = useTranslation('planning')
+  const { t: tc } = useTranslation('common')
+  const enumLabels = useEnumLabels()
+  const format = useFormat()
   const queryClient = useQueryClient()
   const [page, setPage] = useState(0)
   const [draftFilters, setDraftFilters] = useState({ destinationId: '', orderNumber: '' })
@@ -86,139 +114,160 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
     setAssigningOrderId(order.id)
     try {
       const detail = await assignOrderToTrip(companyId, targetTripId, { orderId: order.id })
-      notifySuccess('Order assigned', `${order.orderNumber} added to trip ${detail.trip.tripNumber}`)
-      onAssigned(detail)
+      notifySuccess(
+        t('eligible.assigned'),
+        t('eligible.assignedDetail', { number: order.orderNumber, trip: detail.trip.tripNumber }),
+      )
       refreshEligible()
+      onAssigned(detail)
     } catch (error) {
-      notifyError('Could not assign order', describePlanningError(error as ApiError))
+      notifyError(t('eligible.assignError'), describePlanningError(error as ApiError))
     } finally {
       setAssigningOrderId(null)
     }
   }
 
-  const columns: DataTableColumn<EligibleOrderView>[] = [
-    { key: 'orderNumber', header: 'Order #', render: (order) => <span className="fw-semibold">{order.orderNumber}</span> },
-    {
-      key: 'destination',
-      header: 'Destination',
-      render: (order) => order.destinationName ?? order.destinationCode ?? '—',
-    },
-    { key: 'customer', header: 'Customer', render: (order) => order.customerName ?? '—' },
-    {
-      key: 'window',
-      header: 'Window',
-      render: (order) =>
-        order.requestedWindowStart
-          ? `${order.requestedWindowStart.slice(0, 5)}–${order.requestedWindowEnd?.slice(0, 5) ?? '?'}`
-          : '—',
-    },
-    {
-      key: 'totals',
-      header: 'Totals',
-      render: (order) => (
-        <span className="small text-body-secondary">
-          {order.totalWeightKg} kg · {order.totalVolumeM3} m³ · {order.totalPallets} plt
-        </span>
-      ),
-    },
-  ]
+  const pageData = eligibleQuery.data
+  const rows = pageData?.content ?? []
 
-  if (canManage) {
-    columns.push({
-      key: 'assign',
-      header: '',
-      className: 'text-end',
-      render: (order) => (
-        <div className="input-group input-group-sm" style={{ minWidth: '14rem' }}>
+  return (
+    <div className="tms-card h-100 d-flex flex-column">
+      {/* No heading here: the board already labels this column, and repeating it would put the
+          same words on screen twice. The subtitle is the part that adds information. */}
+      <div className="p-3 border-bottom">
+        <p className="small text-body-secondary mb-0">
+          {t('eligible.subtitle', {
+            origin: run.originName ?? run.originCode,
+            date: format.date(run.planningDate),
+          })}
+        </p>
+      </div>
+
+      <form
+        className="p-3 border-bottom d-flex flex-wrap align-items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault()
+          applyFilters()
+        }}
+      >
+        <div className="tms-filter-field flex-grow-1">
+          <label htmlFor="eligible-order-number" className="tms-filter-label">
+            {tc('columns.orderNumber')}
+          </label>
+          <input
+            id="eligible-order-number"
+            className="form-control form-control-sm"
+            value={draftFilters.orderNumber}
+            onChange={(event) => setDraftFilters({ ...draftFilters, orderNumber: event.target.value })}
+          />
+        </div>
+        <div className="tms-filter-field flex-grow-1">
+          <label htmlFor="eligible-destination" className="tms-filter-label">
+            {tc('columns.destination')}
+          </label>
           <select
-            className="form-select"
-            aria-label={`Assign ${order.orderNumber} to trip`}
-            value={assignTargets[order.id] ?? draftTrips[0]?.id ?? ''}
-            disabled={draftTrips.length === 0}
-            onChange={(event) => setAssignTargets({ ...assignTargets, [order.id]: event.target.value })}
+            id="eligible-destination"
+            className="form-select form-select-sm"
+            value={draftFilters.destinationId}
+            onChange={(event) => setDraftFilters({ ...draftFilters, destinationId: event.target.value })}
           >
-            {draftTrips.length === 0 && <option value="">No open trips</option>}
-            {draftTrips.map((trip) => (
-              <option key={trip.id} value={trip.id}>
-                Trip {trip.tripNumber} — {trip.vehicleCode ?? 'no vehicle'}
+            <option value="">{t('eligible.allDestinations')}</option>
+            {destinations.map((destination) => (
+              <option key={destination.id} value={destination.id}>
+                {destination.name}
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            className="btn btn-outline-primary"
-            disabled={draftTrips.length === 0 || assigningOrderId === order.id}
-            onClick={() => void assign(order)}
-          >
-            {assigningOrderId === order.id ? 'Assigning...' : 'Assign'}
+        </div>
+        <div className="d-flex gap-2 ms-auto">
+          <button type="button" className="btn btn-sm btn-outline-secondary" onClick={resetFilters}>
+            {tc('actions.clear')}
+          </button>
+          <button type="submit" className="btn btn-sm btn-primary">
+            {tc('actions.applyFilters')}
           </button>
         </div>
-      ),
-    })
-  }
+      </form>
 
-  const pageData = eligibleQuery.data
-
-  return (
-    <div className="card shadow-sm h-100">
-      <div className="card-header bg-white">
-        <h2 className="h6 mb-0">Eligible orders</h2>
-        <p className="small text-body-secondary mb-0">
-          Ready for planning at {run.originName ?? run.originCode} on {run.planningDate}.
-        </p>
-      </div>
-      <div className="card-body p-2">
-        <FilterBar onSubmit={applyFilters} onReset={resetFilters}>
-          <div>
-            <label htmlFor="eligible-order-number" className="form-label small mb-1">
-              Order #
-            </label>
-            <input
-              id="eligible-order-number"
-              className="form-control form-control-sm"
-              value={draftFilters.orderNumber}
-              onChange={(event) => setDraftFilters({ ...draftFilters, orderNumber: event.target.value })}
-            />
-          </div>
-          <div>
-            <label htmlFor="eligible-destination" className="form-label small mb-1">
-              Destination
-            </label>
-            <select
-              id="eligible-destination"
-              className="form-select form-select-sm"
-              value={draftFilters.destinationId}
-              onChange={(event) => setDraftFilters({ ...draftFilters, destinationId: event.target.value })}
-            >
-              <option value="">All destinations</option>
-              {destinations.map((destination) => (
-                <option key={destination.id} value={destination.id}>
-                  {destination.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </FilterBar>
-
+      <div className="flex-grow-1">
         {canManage && draftTrips.length === 0 && (
-          <div className="alert alert-secondary small py-2 mb-2" role="note">
-            Create a trip before assigning orders.
+          <p className="alert alert-secondary small py-2 m-3 mb-0">{t('eligible.createTripFirst')}</p>
+        )}
+
+        {eligibleQuery.isPending && <LoadingState label={tc('states.loadingRecords')} />}
+
+        {eligibleQuery.isError && (
+          <div className="p-3">
+            <ErrorState
+              message={describePlanningError(eligibleQuery.error as ApiError)}
+              onRetry={() => void eligibleQuery.refetch()}
+            />
           </div>
         )}
 
-        <DataTable
-          columns={columns}
-          rows={pageData?.content ?? []}
-          rowKey={(order) => order.id}
-          isLoading={eligibleQuery.isPending}
-          error={eligibleQuery.isError ? describePlanningError(eligibleQuery.error as ApiError) : null}
-          onRetry={() => void eligibleQuery.refetch()}
-          emptyTitle="No eligible orders"
-          emptyMessage="Every ready order for this origin and date is already on a trip."
-        />
+        {!eligibleQuery.isPending && !eligibleQuery.isError && rows.length === 0 && (
+          <EmptyState icon="bi-inbox" title={t('eligible.emptyTitle')} message={t('eligible.emptyMessage')} />
+        )}
+
+        {rows.length > 0 && (
+          <ul className="list-unstyled mb-0">
+            {rows.map((order) => (
+              <li key={order.id} className="border-bottom px-3 py-2">
+                <div className="d-flex align-items-baseline justify-content-between gap-2">
+                  <span className="tms-code tms-cell-strong">{order.orderNumber}</span>
+                  <StatusBadge
+                    label={enumLabels.orderPriority(order.priority as OrderPriority)}
+                    tone={PRIORITY_TONE[order.priority as OrderPriority] ?? 'neutral'}
+                  />
+                </div>
+
+                <p className="mb-1 small tms-truncate" title={order.destinationName ?? undefined}>
+                  {order.destinationName ?? order.destinationCode ?? '—'}
+                  {order.customerName && <span className="text-body-secondary"> · {order.customerName}</span>}
+                </p>
+
+                <p className="mb-2 small text-body-secondary tms-code">
+                  {format.weight(order.totalWeightKg)} · {format.volume(order.totalVolumeM3)} ·{' '}
+                  {format.decimal(order.totalPallets)} {t('capacity.palletsUnit')}
+                </p>
+
+                {canManage && (
+                  <div className="input-group input-group-sm">
+                    <select
+                      className="form-select"
+                      aria-label={t('eligible.assignAria', { number: order.orderNumber })}
+                      value={assignTargets[order.id] ?? draftTrips[0]?.id ?? ''}
+                      disabled={draftTrips.length === 0}
+                      onChange={(event) => setAssignTargets({ ...assignTargets, [order.id]: event.target.value })}
+                    >
+                      {draftTrips.length === 0 && <option value="">{t('eligible.noOpenTrips')}</option>}
+                      {draftTrips.map((trip) => (
+                        <option key={trip.id} value={trip.id}>
+                          {t('eligible.tripOption', {
+                            number: trip.tripNumber,
+                            vehicle: trip.vehicleCode ?? t('eligible.noVehicle'),
+                          })}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn btn-outline-primary"
+                      disabled={draftTrips.length === 0 || assigningOrderId === order.id}
+                      onClick={() => void assign(order)}
+                    >
+                      {assigningOrderId === order.id ? t('eligible.assigning') : t('eligible.assign')}
+                    </button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
-      {pageData && (
-        <div className="card-footer">
+
+      {pageData && rows.length > 0 && (
+        <div className="p-3 border-top">
           <Pagination page={pageData} onPageChange={setPage} />
         </div>
       )}

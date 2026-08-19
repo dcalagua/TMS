@@ -104,7 +104,7 @@ describe('TripDetailDrawer', () => {
 
     renderDrawer()
 
-    expect(screen.getByText('Loading trip...')).toBeInTheDocument()
+    expect(screen.getByText('Cargando el viaje...')).toBeInTheDocument()
   })
 
   it('renders the vehicle, capacity bars and assignments once loaded', async () => {
@@ -124,10 +124,10 @@ describe('TripDetailDrawer', () => {
     renderDrawer({ canManage: false })
 
     await screen.findByText('TO-1')
-    expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Move' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Change vehicle' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Cancel trip' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Quitar' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Mover' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cambiar vehículo' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancelar viaje' })).not.toBeInTheDocument()
   })
 
   it('removes an order and applies the returned trip detail, notifying the board', async () => {
@@ -137,7 +137,7 @@ describe('TripDetailDrawer', () => {
     const { onChanged } = renderDrawer()
 
     await screen.findByText('TO-1')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Remove' })[0]!)
+    await userEvent.click(screen.getAllByRole('button', { name: 'Quitar' })[0]!)
 
     await waitFor(() => expect(planningApiMocks.removeOrderFromTrip).toHaveBeenCalledWith('company-1', 'trip-1', 'order-1'))
     expect(onChanged).toHaveBeenCalled()
@@ -151,7 +151,7 @@ describe('TripDetailDrawer', () => {
     renderDrawer()
 
     await screen.findByText('TO-1')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Move' })[0]!)
+    await userEvent.click(screen.getAllByRole('button', { name: 'Mover' })[0]!)
 
     await waitFor(() =>
       expect(planningApiMocks.moveOrderToTrip).toHaveBeenCalledWith('company-1', 'trip-1', 'order-1', { targetTripId: 'trip-2' }),
@@ -166,10 +166,10 @@ describe('TripDetailDrawer', () => {
     renderDrawer()
 
     await screen.findByText('TO-1')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Move' })[0]!)
+    await userEvent.click(screen.getAllByRole('button', { name: 'Mover' })[0]!)
 
     await waitFor(() =>
-      expect(alertMocks.notifyError).toHaveBeenCalledWith('Could not move order', 'Trip 2 would exceed capacity: pallets 12.00/10.00.'),
+      expect(alertMocks.notifyError).toHaveBeenCalledWith('No se pudo mover el pedido', 'Trip 2 would exceed capacity: pallets 12.00/10.00.'),
     )
     expect(screen.getByText('TO-1')).toBeInTheDocument()
   })
@@ -203,12 +203,12 @@ describe('TripDetailDrawer', () => {
     await screen.findByText('TO-1')
 
     alertMocks.confirmAction.mockResolvedValueOnce(false)
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel trip' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar viaje' }))
     await waitFor(() => expect(alertMocks.confirmAction).toHaveBeenCalled())
     expect(planningApiMocks.cancelTrip).not.toHaveBeenCalled()
 
     alertMocks.confirmAction.mockResolvedValueOnce(true)
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel trip' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar viaje' }))
 
     await waitFor(() => expect(planningApiMocks.cancelTrip).toHaveBeenCalledWith('company-1', 'trip-1', { version: 1 }))
   })
@@ -219,7 +219,7 @@ describe('TripDetailDrawer', () => {
     renderDrawer()
 
     await screen.findByText('TO-1')
-    await userEvent.click(screen.getByRole('button', { name: 'Change vehicle' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cambiar vehículo' }))
 
     expect(await screen.findByText('Vehículo del viaje 1')).toBeInTheDocument()
   })
