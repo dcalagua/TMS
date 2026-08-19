@@ -4,15 +4,18 @@ interface EmptyStateProps {
   title: string
   message?: string
   action?: ReactNode
-  icon?: ReactNode
+  /** Bootstrap Icons class, for example `bi-inbox`. */
+  icon?: string
 }
 
 /** Standard "nothing here yet" panel: an empty result set, an unselected company, or a
  * module that is not built yet. */
-export function EmptyState({ title, message, action, icon }: EmptyStateProps) {
+export function EmptyState({ title, message, action, icon = 'bi-inbox' }: EmptyStateProps) {
   return (
-    <div className="text-center py-5 text-body-secondary">
-      {icon && <div className="mb-2 fs-2">{icon}</div>}
+    <div className="tms-empty">
+      <div className="tms-empty-icon">
+        <i className={`bi ${icon}`} aria-hidden="true" />
+      </div>
       <p className="mb-1 fw-semibold text-body">{title}</p>
       {message && <p className="mb-3 small">{message}</p>}
       {action}

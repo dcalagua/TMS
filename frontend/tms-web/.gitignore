@@ -11,3 +11,8 @@ coverage
 .env
 .env.*
 !.env.example
+
+# Playwright output: traces, screenshots and reports are run artefacts, not sources.
+artifacts/
+/test-results/
+/playwright-report/

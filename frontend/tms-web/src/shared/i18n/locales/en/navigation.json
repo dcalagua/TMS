@@ -1,6 +1,8 @@
 {
   "close": "Close",
   "closeNavigation": "Close navigation",
+  "collapse": "Collapse the menu",
+  "expand": "Expand the menu",
   "groups": {
     "administration": "Administration",
     "fleet": "Fleet",

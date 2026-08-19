@@ -9,7 +9,7 @@ vi.mock('../company/CompanyContext', () => ({ useCompany: companyMocks.useCompan
 function renderSidebar() {
   return render(
     <MemoryRouter>
-      <Sidebar open={false} onRequestClose={() => {}} />
+      <Sidebar open={false} collapsed={false} onRequestClose={() => {}} />
     </MemoryRouter>,
   )
 }

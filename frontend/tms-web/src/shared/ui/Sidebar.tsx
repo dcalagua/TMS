@@ -1,17 +1,15 @@
 import { useTranslation } from 'react-i18next'
 import { NavLink } from 'react-router-dom'
 import { useCompany } from '../company/CompanyContext'
-import { NAV_GROUPS } from './navConfig'
+import { HOME_NAV, NAV_GROUPS, type NavLeaf } from './navConfig'
 
 export const SIDEBAR_ID = 'tms-sidebar'
-
-function navLinkClass({ isActive }: { isActive: boolean }): string {
-  return `nav-link text-white-50${isActive ? ' active text-white fw-semibold' : ''}`
-}
 
 export interface SidebarProps {
   /** Whether the mobile drawer is open. Ignored at `lg` and above, where the panel is static. */
   open: boolean
+  /** Whether the desktop panel is collapsed to an icon rail. */
+  collapsed: boolean
   onRequestClose: () => void
 }
 
@@ -29,7 +27,7 @@ export interface SidebarProps {
  * Group visibility is gated by capability as UX only; every route it links to still needs the
  * backend's own permission check to actually do anything.
  */
-export function Sidebar({ open, onRequestClose }: SidebarProps) {
+export function Sidebar({ open, collapsed, onRequestClose }: SidebarProps) {
   const { t } = useTranslation('navigation')
   const { hasCapability, status } = useCompany()
 
@@ -37,41 +35,55 @@ export function Sidebar({ open, onRequestClose }: SidebarProps) {
     (group) => !group.capability || status !== 'ready' || hasCapability(group.capability),
   )
 
+  function renderLink(item: NavLeaf, end = false) {
+    const label = t(item.labelKey)
+    return (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        end={end}
+        className={({ isActive }) => `tms-nav-link${isActive ? ' active' : ''}`}
+        // The rail hides the label visually, so the link keeps its name through `title`
+        // as well; screen readers still read the text, which stays in the DOM.
+        title={label}
+      >
+        <i className={`bi ${item.icon} tms-nav-icon`} aria-hidden="true" />
+        <span className="tms-nav-label tms-truncate">{label}</span>
+      </NavLink>
+    )
+  }
+
   return (
     <div
-      className={`offcanvas-lg offcanvas-start bg-dark text-white${open ? ' show' : ''}`}
+      className={`offcanvas-lg offcanvas-start tms-sidebar${open ? ' show' : ''}${collapsed ? ' tms-sidebar-rail' : ''}`}
       tabIndex={-1}
       id={SIDEBAR_ID}
       aria-labelledby="tms-sidebar-label"
-      style={{ width: 240 }}
     >
-      <div className="offcanvas-header d-lg-none">
-        <h2 className="offcanvas-title h6 mb-0" id="tms-sidebar-label">
+      <div className="offcanvas-header d-lg-none border-bottom" style={{ borderColor: 'var(--tms-sidebar-border)' }}>
+        <h2 className="offcanvas-title h6 mb-0 text-white" id="tms-sidebar-label">
           {t('menu')}
         </h2>
         <button
           type="button"
-          className="btn-close btn-close-white"
+          className="tms-icon-btn tms-icon-btn-inverse"
           onClick={onRequestClose}
           aria-label={t('close')}
-        />
+        >
+          <i className="bi bi-x-lg" aria-hidden="true" />
+        </button>
       </div>
-      <div className="offcanvas-body d-flex flex-column p-0">
-        <nav className="nav flex-column py-2" aria-label={t('mainNavigation')}>
-          <NavLink to="/" end className={navLinkClass}>
-            {t('home')}
-          </NavLink>
+
+      <div className="offcanvas-body tms-sidebar-body d-flex flex-column p-0 pb-3">
+        <nav className="d-flex flex-column pt-2" aria-label={t('mainNavigation')}>
+          {renderLink(HOME_NAV, true)}
 
           {visibleGroups.map((group) => (
-            <div key={group.labelKey} className="mt-3">
-              <div className="text-uppercase small text-white-50 px-3 mb-1" style={{ letterSpacing: '0.04em' }}>
-                {t(group.labelKey)}
-              </div>
-              {group.items.map((item) => (
-                <NavLink key={item.to} to={item.to} className={navLinkClass}>
-                  {t(item.labelKey)}
-                </NavLink>
-              ))}
+            <div key={group.labelKey}>
+              <p className="tms-nav-group-label">
+                <span className="tms-nav-group-label-text">{t(group.labelKey)}</span>
+              </p>
+              {group.items.map((item) => renderLink(item))}
             </div>
           ))}
         </nav>

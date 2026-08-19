@@ -1,6 +1,8 @@
 {
   "close": "Cerrar",
   "closeNavigation": "Cerrar navegación",
+  "collapse": "Contraer el menú",
+  "expand": "Expandir el menú",
   "groups": {
     "administration": "Administración",
     "fleet": "Flota",

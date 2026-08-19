@@ -1,15 +1,20 @@
 export type StatusTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info'
 
 const TONE_CLASS: Record<StatusTone, string> = {
-  neutral: 'text-bg-secondary',
-  success: 'text-bg-success',
-  warning: 'text-bg-warning',
-  danger: 'text-bg-danger',
-  info: 'text-bg-info',
+  neutral: 'tms-badge-neutral',
+  success: 'tms-badge-success',
+  warning: 'tms-badge-warning',
+  danger: 'tms-badge-danger',
+  info: 'tms-badge-info',
 }
 
-/** A small colored label for record status (active/inactive, order status, ...). Purely
- * presentational - it never decides what a user may do. */
+/**
+ * A small labelled marker for record status. Purely presentational - it never decides what a
+ * user may do.
+ *
+ * The tone is a colour *and* a dot, but the label is always present: status must never be
+ * conveyed by hue alone, which excludes colour-blind operators and anyone printing a screen.
+ */
 export function StatusBadge({ label, tone = 'neutral' }: { label: string; tone?: StatusTone }) {
-  return <span className={`badge rounded-pill ${TONE_CLASS[tone]}`}>{label}</span>
+  return <span className={`tms-badge ${TONE_CLASS[tone]}`}>{label}</span>
 }

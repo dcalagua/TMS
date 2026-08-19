@@ -20,8 +20,10 @@ describe('CompanySelector', () => {
     })
 
     render(<CompanySelector />)
-    await userEvent.click(screen.getByRole('button', { name: 'Acme Logistics' }))
-    await userEvent.click(screen.getByRole('button', { name: /Acme West/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Acme Logistics/ }))
+    // The entries are radio menu items: exactly one company is the active scope.
+    expect(screen.getByRole('menuitemradio', { name: /Acme Logistics/ })).toHaveAttribute('aria-checked', 'true')
+    await userEvent.click(screen.getByRole('menuitemradio', { name: /Acme West/ }))
 
     expect(selectCompany).toHaveBeenCalledWith('c2')
   })

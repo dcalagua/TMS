@@ -1,0 +1,731 @@
+/* TMS by EBIM - product styles built on top of Bootstrap.
+   =============================================================================
+   Every value here comes from `tokens.css`. This file only expresses what
+   Bootstrap utilities cannot: the application shell, operational table density,
+   the status vocabulary and the modal/drawer chrome. */
+
+/* ---------------------------------------------------------------------------
+   Base
+   ------------------------------------------------------------------------- */
+body {
+  background-color: var(--tms-body-bg);
+  color: var(--tms-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  letter-spacing: -0.011em;
+}
+
+/* Focus must be visible everywhere, including on dark chrome. Keyboard users
+   navigate this product all day; `:focus-visible` keeps it off mouse clicks. */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--tms-focus-ring);
+  border-radius: var(--tms-radius-sm);
+}
+
+.tms-sidebar :focus-visible {
+  box-shadow: var(--tms-focus-ring-inverse);
+}
+
+/* Bootstrap ships no min-width utility. A flex item defaults to `min-width: auto`,
+   which resolves against its content: one wide table then stretches the whole
+   shell and the page gains a horizontal scrollbar. */
+.tms-min-w-0 {
+  min-width: 0;
+}
+
+.tms-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   Application shell
+   ------------------------------------------------------------------------- */
+.tms-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--tms-body-bg);
+}
+
+.tms-topbar {
+  background-color: var(--tms-topbar-bg);
+  border-bottom: 1px solid var(--tms-topbar-border);
+  min-height: var(--tms-topbar-height);
+  position: sticky;
+  top: 0;
+  z-index: 1030;
+}
+
+.tms-brand {
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: var(--tms-text);
+  text-decoration: none;
+}
+
+.tms-brand-accent {
+  color: var(--tms-muted);
+  font-weight: 400;
+}
+
+.tms-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--tms-radius-sm);
+  background: linear-gradient(140deg, var(--tms-primary), #3b82f6);
+  color: var(--tms-on-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  flex: none;
+}
+
+.tms-sidebar {
+  background-color: var(--tms-sidebar-bg);
+  color: var(--tms-sidebar-text);
+  width: var(--tms-sidebar-width);
+  border-right: 1px solid var(--tms-sidebar-border);
+  transition: width 0.15s ease;
+}
+
+.tms-sidebar-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (min-width: 992px) {
+  .tms-sidebar {
+    position: sticky;
+    top: var(--tms-topbar-height);
+    height: calc(100vh - var(--tms-topbar-height));
+  }
+
+  .tms-sidebar.tms-sidebar-rail {
+    width: var(--tms-sidebar-rail-width);
+  }
+}
+
+.tms-nav-group-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tms-sidebar-muted);
+  padding: 0 0.875rem;
+  margin: 1.25rem 0 0.375rem;
+}
+
+.tms-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin: 0.0625rem 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--tms-radius-sm);
+  color: var(--tms-sidebar-text);
+  text-decoration: none;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  position: relative;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.tms-nav-link:hover {
+  background-color: var(--tms-sidebar-hover-bg);
+  color: var(--tms-sidebar-text-strong);
+}
+
+.tms-nav-link.active {
+  background-color: var(--tms-sidebar-active-bg);
+  color: var(--tms-sidebar-text-strong);
+  font-weight: 600;
+}
+
+/* A left marker rather than a colour-only cue: the active entry stays
+   identifiable without relying on hue. */
+.tms-nav-link.active::before {
+  content: '';
+  position: absolute;
+  left: -0.5rem;
+  top: 0.375rem;
+  bottom: 0.375rem;
+  width: 3px;
+  border-radius: 0 var(--tms-radius-pill) var(--tms-radius-pill) 0;
+  background-color: var(--tms-sidebar-accent);
+}
+
+.tms-nav-icon {
+  width: 1.125rem;
+  flex: none;
+  text-align: center;
+  font-size: 1rem;
+  opacity: 0.85;
+}
+
+.tms-nav-link.active .tms-nav-icon {
+  opacity: 1;
+  color: var(--tms-sidebar-accent);
+}
+
+/* Collapsed rail: icons only, labels removed from the layout but kept for
+   assistive technology through the link's `title`/`aria-label`. */
+.tms-sidebar-rail .tms-nav-label,
+.tms-sidebar-rail .tms-nav-group-label-text {
+  display: none;
+}
+
+.tms-sidebar-rail .tms-nav-link {
+  justify-content: center;
+  padding-inline: 0.5rem;
+}
+
+.tms-sidebar-rail .tms-nav-group-label {
+  padding: 0;
+  margin: 0.875rem 0.75rem 0.375rem;
+  border-top: 1px solid var(--tms-sidebar-border);
+}
+
+.tms-main {
+  background-color: var(--tms-body-bg);
+  min-width: 0;
+}
+
+.tms-content {
+  max-width: var(--tms-content-max-width);
+  padding: 1.25rem;
+}
+
+@media (max-width: 575.98px) {
+  .tms-content {
+    padding: 0.875rem;
+  }
+}
+
+.tms-footer {
+  border-top: 1px solid var(--tms-border);
+  background-color: var(--tms-surface);
+  color: var(--tms-muted);
+  font-size: 0.75rem;
+  padding: 0.375rem 1.25rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Panels and page structure
+   ------------------------------------------------------------------------- */
+.tms-card {
+  background-color: var(--tms-surface);
+  border: 1px solid var(--tms-border);
+  border-radius: var(--tms-radius-lg);
+  box-shadow: var(--tms-shadow-xs);
+}
+
+.tms-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid var(--tms-border);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.tms-card-body {
+  padding: 1rem;
+}
+
+.tms-page-title {
+  font-size: 1.375rem;
+  font-weight: 650;
+  margin: 0;
+}
+
+.tms-page-subtitle {
+  color: var(--tms-muted);
+  font-size: 0.8125rem;
+  margin: 0.125rem 0 0;
+  max-width: 72ch;
+}
+
+.tms-section-title {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--tms-muted);
+}
+
+/* ---------------------------------------------------------------------------
+   Toolbar and filters
+   ------------------------------------------------------------------------- */
+.tms-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  background-color: var(--tms-surface);
+  border: 1px solid var(--tms-border);
+  border-radius: var(--tms-radius-lg);
+  box-shadow: var(--tms-shadow-xs);
+}
+
+.tms-search {
+  position: relative;
+  flex: 1 1 15rem;
+  min-width: 0;
+  max-width: 22rem;
+}
+
+.tms-search .form-control {
+  padding-left: 2rem;
+}
+
+.tms-search-icon {
+  position: absolute;
+  left: 0.625rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--tms-muted);
+  pointer-events: none;
+  font-size: 0.875rem;
+}
+
+.tms-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+  min-width: 0;
+}
+
+.tms-filter-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--tms-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ---------------------------------------------------------------------------
+   Tables
+   ------------------------------------------------------------------------- */
+.tms-table-wrap {
+  background-color: var(--tms-surface);
+  border: 1px solid var(--tms-border);
+  border-radius: var(--tms-radius-lg);
+  box-shadow: var(--tms-shadow-xs);
+  overflow: hidden;
+}
+
+/* The scroll lives inside the panel, never on the page. */
+.tms-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tms-table {
+  margin: 0;
+  font-size: 0.875rem;
+  --bs-table-hover-bg: var(--tms-surface-hover);
+}
+
+.tms-table > thead > tr > th {
+  background-color: var(--tms-surface-muted);
+  border-bottom: 1px solid var(--tms-border);
+  color: var(--tms-text-secondary);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  padding: 0.5rem 0.75rem;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.tms-table > tbody > tr > td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--tms-border);
+  vertical-align: middle;
+}
+
+.tms-table > tbody > tr:last-child > td {
+  border-bottom: 0;
+}
+
+.tms-table .tms-cell-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.tms-table .tms-cell-actions {
+  text-align: right;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.tms-cell-strong {
+  font-weight: 600;
+  color: var(--tms-text);
+}
+
+.tms-cell-muted {
+  color: var(--tms-muted);
+  font-size: 0.8125rem;
+}
+
+.tms-code {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* ---------------------------------------------------------------------------
+   Status vocabulary
+   ------------------------------------------------------------------------- */
+.tms-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0.1875rem 0.5rem;
+  border-radius: var(--tms-radius-pill);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.1;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+/* A dot plus the label: the state never depends on colour alone. */
+.tms-badge::before {
+  content: '';
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background-color: currentcolor;
+  flex: none;
+}
+
+.tms-badge-neutral {
+  background-color: var(--tms-neutral-subtle);
+  color: var(--tms-neutral);
+  border-color: #cbd5e1;
+}
+
+.tms-badge-success {
+  background-color: var(--tms-success-subtle);
+  color: var(--tms-success);
+  border-color: #bbf7d0;
+}
+
+.tms-badge-warning {
+  background-color: var(--tms-warning-subtle);
+  color: var(--tms-warning);
+  border-color: #fde68a;
+}
+
+.tms-badge-danger {
+  background-color: var(--tms-danger-subtle);
+  color: var(--tms-danger);
+  border-color: #fecaca;
+}
+
+.tms-badge-info {
+  background-color: var(--tms-info-subtle);
+  color: var(--tms-info);
+  border-color: #a5f3fc;
+}
+
+/* ---------------------------------------------------------------------------
+   Buttons and icon buttons
+   ------------------------------------------------------------------------- */
+.btn {
+  --bs-btn-font-weight: 500;
+  border-radius: var(--tms-radius-sm);
+}
+
+.btn-primary {
+  --bs-btn-bg: var(--tms-primary);
+  --bs-btn-border-color: var(--tms-primary);
+  --bs-btn-hover-bg: var(--tms-primary-hover);
+  --bs-btn-hover-border-color: var(--tms-primary-hover);
+  --bs-btn-active-bg: var(--tms-primary-active);
+  --bs-btn-active-border-color: var(--tms-primary-active);
+}
+
+.tms-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--tms-radius-sm);
+  background-color: transparent;
+  color: var(--tms-text-secondary);
+  line-height: 1;
+}
+
+.tms-icon-btn:hover {
+  background-color: var(--tms-surface-hover);
+  color: var(--tms-text);
+}
+
+.tms-icon-btn-inverse {
+  color: var(--tms-sidebar-text);
+}
+
+.tms-icon-btn-inverse:hover {
+  background-color: var(--tms-sidebar-hover-bg);
+  color: var(--tms-sidebar-text-strong);
+}
+
+/* ---------------------------------------------------------------------------
+   Forms
+   ------------------------------------------------------------------------- */
+.form-control,
+.form-select {
+  border-color: var(--tms-border-strong);
+  border-radius: var(--tms-radius-sm);
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--tms-primary);
+  box-shadow: var(--tms-focus-ring);
+}
+
+.form-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--tms-text-secondary);
+  margin-bottom: 0.25rem;
+}
+
+.tms-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0 0 1.25rem;
+}
+
+.tms-fieldset-legend {
+  float: none;
+  width: auto;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--tms-muted);
+  padding-bottom: 0.375rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--tms-border);
+}
+
+/* ---------------------------------------------------------------------------
+   Modal and drawer chrome
+   ------------------------------------------------------------------------- */
+.tms-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.45);
+  z-index: 1050;
+}
+
+.tms-modal-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 1055;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  overflow-y: auto;
+}
+
+.tms-modal {
+  background-color: var(--tms-surface);
+  border-radius: var(--tms-radius-lg);
+  box-shadow: var(--tms-shadow-lg);
+  width: 100%;
+  max-width: 40rem;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 3rem);
+}
+
+.tms-modal-sm {
+  max-width: 28rem;
+}
+
+.tms-modal-lg {
+  max-width: 56rem;
+}
+
+.tms-modal-header,
+.tms-modal-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.125rem;
+  flex: none;
+}
+
+.tms-modal-header {
+  border-bottom: 1px solid var(--tms-border);
+  justify-content: space-between;
+}
+
+.tms-modal-footer {
+  border-top: 1px solid var(--tms-border);
+  justify-content: flex-end;
+  background-color: var(--tms-surface-muted);
+  border-radius: 0 0 var(--tms-radius-lg) var(--tms-radius-lg);
+}
+
+.tms-modal-body {
+  padding: 1.125rem;
+  overflow-y: auto;
+}
+
+/* A dialog that fills a phone screen beats a floating card the user must scroll
+   around inside a scrolling page. */
+@media (max-width: 575.98px) {
+  .tms-modal-shell {
+    padding: 0;
+  }
+
+  .tms-modal {
+    max-width: none;
+    min-height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+
+  .tms-modal-footer {
+    border-radius: 0;
+  }
+}
+
+.tms-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(30rem, 100vw);
+  background-color: var(--tms-surface);
+  box-shadow: var(--tms-shadow-lg);
+  z-index: 1055;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------------------------------------------------------------------------
+   Feedback states
+   ------------------------------------------------------------------------- */
+.tms-empty {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: var(--tms-muted);
+}
+
+.tms-empty-icon {
+  font-size: 1.75rem;
+  color: var(--tms-border-strong);
+  margin-bottom: 0.5rem;
+}
+
+.tms-skeleton {
+  background: linear-gradient(90deg, #e9eef5 25%, #f3f6fa 37%, #e9eef5 63%);
+  background-size: 400% 100%;
+  border-radius: var(--tms-radius-sm);
+  animation: tms-skeleton-shimmer 1.4s ease infinite;
+}
+
+@keyframes tms-skeleton-shimmer {
+  from {
+    background-position: 100% 50%;
+  }
+  to {
+    background-position: 0 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tms-skeleton {
+    animation: none;
+  }
+
+  .tms-sidebar {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Capacity bars
+   ------------------------------------------------------------------------- */
+.tms-capacity {
+  height: 0.375rem;
+  border-radius: var(--tms-radius-pill);
+  background-color: var(--tms-neutral-subtle);
+  overflow: hidden;
+}
+
+.tms-capacity-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.2s ease;
+}
+
+.tms-capacity-fill-success {
+  background-color: var(--tms-success);
+}
+
+.tms-capacity-fill-warning {
+  background-color: var(--tms-warning);
+}
+
+.tms-capacity-fill-danger {
+  background-color: var(--tms-danger);
+}
+
+.tms-capacity-fill-muted {
+  background-color: var(--tms-border-strong);
+}
+
+/* ---------------------------------------------------------------------------
+   SweetAlert2 - kept visually part of the product, not a third-party skin.
+   ------------------------------------------------------------------------- */
+.swal2-container {
+  z-index: 2000;
+}
+
+.swal2-popup {
+  border-radius: var(--tms-radius-lg);
+  font-family: var(--bs-body-font-family);
+}
+
+.swal2-title {
+  font-size: 1.125rem;
+  color: var(--tms-text);
+}
+
+.swal2-html-container {
+  font-size: 0.9375rem;
+  color: var(--tms-text-secondary);
+}

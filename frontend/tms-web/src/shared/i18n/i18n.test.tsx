@@ -173,7 +173,7 @@ describe('LanguageSwitcher', () => {
     return render(
       <MemoryRouter>
         <LanguageSwitcher />
-        <Sidebar open={false} onRequestClose={() => {}} />
+        <Sidebar open={false} collapsed={false} onRequestClose={() => {}} />
       </MemoryRouter>,
     )
   }
