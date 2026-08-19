@@ -175,7 +175,7 @@ export function DestinationFormDrawer({ companyId, destination, onClose, onSaved
         <fieldset className="tms-fieldset">
           <legend className="tms-fieldset-legend">{tc('sections.identification')}</legend>
           <div className="row">
-            <div className="col-12 col-sm-3">
+            <div className="col-12 col-sm-6">
               <FormField label={tc('columns.code')} htmlFor="destination-code" error={errors.code?.message} required>
                 <input
                   id="destination-code"
@@ -188,7 +188,7 @@ export function DestinationFormDrawer({ companyId, destination, onClose, onSaved
                 />
               </FormField>
             </div>
-            <div className="col-12 col-sm-5">
+            <div className="col-12 col-sm-6">
               <FormField label={tc('columns.name')} htmlFor="destination-name" error={errors.name?.message} required>
                 <input
                   id="destination-name"
@@ -229,7 +229,7 @@ export function DestinationFormDrawer({ companyId, destination, onClose, onSaved
         <fieldset className="tms-fieldset">
           <legend className="tms-fieldset-legend">{tc('sections.address')}</legend>
           <div className="row">
-            <div className="col-12 col-sm-7">
+            <div className="col-12 col-sm-6">
               <FormField label={tc('columns.address')} htmlFor="destination-address" error={errors.address?.message}>
                 <input
                   id="destination-address"
@@ -238,7 +238,7 @@ export function DestinationFormDrawer({ companyId, destination, onClose, onSaved
                 />
               </FormField>
             </div>
-            <div className="col-12 col-sm-5">
+            <div className="col-12 col-sm-6">
               <FormField
                 label={tc('fields.reference')}
                 htmlFor="destination-address-reference"
@@ -333,7 +333,7 @@ export function DestinationFormDrawer({ companyId, destination, onClose, onSaved
         <fieldset className="tms-fieldset mb-0">
           <legend className="tms-fieldset-legend">{tc('sections.operation')}</legend>
           <div className="row">
-            <div className="col-12 col-sm-4">
+            <div className="col-12 col-sm-6">
               <FormField
                 label={tc('fields.serviceTimeMinutes')}
                 htmlFor="destination-service-time"
@@ -352,7 +352,7 @@ export function DestinationFormDrawer({ companyId, destination, onClose, onSaved
                 />
               </FormField>
             </div>
-            <div className="col-12 col-sm-8">
+            <div className="col-12 col-sm-6">
               <FormField
                 label={tc('fields.externalReference')}
                 htmlFor="destination-external-reference"

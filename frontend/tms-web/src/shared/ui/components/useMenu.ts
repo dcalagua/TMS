@@ -1,4 +1,23 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type RefObject,
+} from 'react'
+
+/** Which edge of the panel lines up with which edge of the trigger. */
+export type MenuAlign = 'start' | 'end'
+
+export interface MenuOptions {
+  /** `end` right-aligns the panel with the trigger, which is what a row action menu wants. */
+  align?: MenuAlign
+  /** Which entries can take focus, so disabled ones are skipped. */
+  isEnabled?: (index: number) => boolean
+}
 
 export interface MenuBehaviour {
   open: boolean
@@ -6,9 +25,20 @@ export interface MenuBehaviour {
   close: (returnFocus?: boolean) => void
   containerRef: RefObject<HTMLDivElement | null>
   triggerRef: RefObject<HTMLButtonElement | null>
+  /**
+   * Attach to the floating panel. Required, not optional: the panel is portalled out of the
+   * container, so the outside-click test cannot find it by DOM ancestry any more.
+   */
+  menuRef: RefObject<HTMLDivElement | null>
+  /** Fixed-position style for the panel, recomputed while it is open. */
+  menuStyle: CSSProperties
   registerItem: (index: number) => (element: HTMLButtonElement | null) => void
   onKeyDown: (event: KeyboardEvent<HTMLElement>) => void
 }
+
+/** Breathing room between the panel and the trigger, and between the panel and the viewport. */
+const OFFSET = 4
+const VIEWPORT_MARGIN = 8
 
 /**
  * Keyboard and dismissal behaviour for a popup menu, shared by the row action menu, the
@@ -20,13 +50,20 @@ export interface MenuBehaviour {
  * Home/End jump to the ends, Escape closes and returns focus to the trigger, Tab closes, and a
  * click outside dismisses.
  *
+ * The panel is positioned against the trigger's viewport rectangle rather than laid out
+ * inside it, and the consumer renders it through a portal. That is what stops a table's own
+ * overflow containers from clipping it or counting it as scrollable content.
+ *
  * @param itemCount how many entries the menu renders
- * @param isEnabled which entries can take focus, so disabled ones are skipped
+ * @param options alignment and which entries can take focus
  */
-export function useMenu(itemCount: number, isEnabled: (index: number) => boolean = () => true): MenuBehaviour {
+export function useMenu(itemCount: number, options: MenuOptions = {}): MenuBehaviour {
+  const { align = 'end', isEnabled = () => true } = options
   const [open, setOpen] = useState(false)
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({ position: 'fixed', top: -9999, left: -9999 })
   const containerRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   // Held in a ref so the focus helpers stay referentially stable while still seeing the
@@ -69,7 +106,13 @@ export function useMenu(itemCount: number, isEnabled: (index: number) => boolean
     }
 
     function onPointerDown(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node
+      // The panel is portalled to the body, so `containerRef` alone would report a click on
+      // a menu entry as a click outside - closing the menu on mousedown, before the click
+      // ever reached the entry.
+      const inside =
+        containerRef.current?.contains(target) === true || menuRef.current?.contains(target) === true
+      if (!inside) {
         setOpen(false)
       }
     }
@@ -77,6 +120,51 @@ export function useMenu(itemCount: number, isEnabled: (index: number) => boolean
     document.addEventListener('mousedown', onPointerDown)
     return () => document.removeEventListener('mousedown', onPointerDown)
   }, [open])
+
+  useLayoutEffect(() => {
+    if (!open) {
+      return
+    }
+
+    function place() {
+      const trigger = triggerRef.current
+      const menu = menuRef.current
+      if (!trigger || !menu) {
+        return
+      }
+
+      const anchor = trigger.getBoundingClientRect()
+      const { offsetWidth: width, offsetHeight: height } = menu
+      const viewportWidth = document.documentElement.clientWidth
+      const viewportHeight = document.documentElement.clientHeight
+
+      // Below the trigger, unless the panel would run off the bottom and there is more room
+      // above - the last rows of a long table are exactly where this matters.
+      const below = anchor.bottom + OFFSET
+      const above = anchor.top - height - OFFSET
+      const fitsBelow = below + height <= viewportHeight - VIEWPORT_MARGIN
+      const top = fitsBelow || above < VIEWPORT_MARGIN ? below : above
+
+      const preferred = align === 'end' ? anchor.right - width : anchor.left
+      const left = Math.min(
+        Math.max(preferred, VIEWPORT_MARGIN),
+        Math.max(viewportWidth - width - VIEWPORT_MARGIN, VIEWPORT_MARGIN),
+      )
+
+      setMenuStyle({ position: 'fixed', top, left, maxHeight: viewportHeight - top - VIEWPORT_MARGIN })
+    }
+
+    place()
+
+    // `capture` so scrolling any ancestor - the table's own horizontal scroller included -
+    // keeps the panel attached to its trigger instead of leaving it stranded.
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [open, align])
 
   useEffect(() => {
     if (open) {
@@ -134,6 +222,8 @@ export function useMenu(itemCount: number, isEnabled: (index: number) => boolean
     close,
     containerRef,
     triggerRef,
+    menuRef,
+    menuStyle,
     registerItem,
     onKeyDown,
   }

@@ -1,4 +1,5 @@
 import { useId } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useCompany } from '../company/CompanyContext'
 import { useMenu } from './components/useMenu'
@@ -10,7 +11,8 @@ export function CompanySelector() {
   const { t } = useTranslation('common')
   const { status, companies, selected, selectCompany } = useCompany()
   const menuId = useId()
-  const { open, toggle, close, containerRef, triggerRef, registerItem, onKeyDown } = useMenu(companies.length)
+  const { open, toggle, close, containerRef, triggerRef, menuRef, menuStyle, registerItem, onKeyDown } =
+    useMenu(companies.length)
 
   if (status === 'idle') {
     return null
@@ -30,53 +32,55 @@ export function CompanySelector() {
   }
 
   return (
-    <div className="position-relative tms-min-w-0" ref={containerRef}>
+    <div className="tms-min-w-0" ref={containerRef}>
+      {/* A long company name must not push the language switch and user menu off a phone: the
+          control shrinks with its container and the name truncates instead. */}
       <button
         ref={triggerRef}
         type="button"
-        className="btn btn-sm btn-outline-secondary d-flex align-items-center gap-2 w-100"
+        className={`tms-topbar-control${open ? ' is-open' : ''}`}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={toggle}
-        // A long company name must not push the language switch and user menu off a phone:
-        // the button shrinks with its container and the name truncates instead.
-        style={{ maxWidth: '13rem' }}
       >
-        <i className="bi bi-building flex-shrink-0" aria-hidden="true" />
+        <i className="bi bi-buildings tms-topbar-control-icon" aria-hidden="true" />
         <span className="visually-hidden">{t('company.label')}: </span>
         <span className="tms-truncate">{selected?.name ?? t('company.select')}</span>
-        <i className="bi bi-chevron-down small flex-shrink-0 d-none d-sm-inline" aria-hidden="true" />
+        <i className="bi bi-chevron-down tms-topbar-control-caret" aria-hidden="true" />
       </button>
 
-      {open && (
-        <div
-          id={menuId}
-          role="menu"
-          tabIndex={-1}
-          className="dropdown-menu show shadow-sm"
-          style={{ position: 'absolute', right: 0, top: '100%', minWidth: '15rem', zIndex: 1040 }}
-          onKeyDown={onKeyDown}
-        >
-          {companies.map((company, index) => (
-            <button
-              key={company.id}
-              ref={registerItem(index)}
-              type="button"
-              role="menuitemradio"
-              aria-checked={company.id === selected?.id}
-              className={`dropdown-item${company.id === selected?.id ? ' active' : ''}`}
-              onClick={() => {
-                close(false)
-                selectCompany(company.id)
-              }}
-            >
-              <span className="d-block tms-truncate">{company.name}</span>
-              <span className="d-block small opacity-75 tms-truncate">{company.organization.name}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            id={menuId}
+            ref={menuRef}
+            role="menu"
+            tabIndex={-1}
+            className="tms-menu tms-menu-wide"
+            style={menuStyle}
+            onKeyDown={onKeyDown}
+          >
+            {companies.map((company, index) => (
+              <button
+                key={company.id}
+                ref={registerItem(index)}
+                type="button"
+                role="menuitemradio"
+                aria-checked={company.id === selected?.id}
+                className={`tms-menu-item tms-menu-item-stacked${company.id === selected?.id ? ' is-selected' : ''}`}
+                onClick={() => {
+                  close(false)
+                  selectCompany(company.id)
+                }}
+              >
+                <span className="tms-menu-item-title tms-truncate">{company.name}</span>
+                <span className="tms-menu-item-meta tms-truncate">{company.organization.name}</span>
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

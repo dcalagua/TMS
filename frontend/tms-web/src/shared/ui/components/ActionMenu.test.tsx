@@ -97,6 +97,74 @@ describe('ActionMenu', () => {
     expect(screen.getByRole('menuitem', { name: 'Eliminar' })).toHaveFocus()
   })
 
+  describe('escaping the table', () => {
+    // The defect this replaced: the panel was an absolutely positioned child of the cell, so
+    // `.tms-table-wrap` (overflow: hidden) clipped it and `.tms-table-scroll` (overflow-x:
+    // auto) counted it as content and grew a scrollbar. Both are properties of an overflow
+    // container and neither is answerable with z-index.
+    function renderInsideAnOverflowContainer() {
+      const onEdit = vi.fn()
+      const { container } = render(
+        <div className="tms-table-wrap" style={{ overflow: 'hidden' }}>
+          <div className="tms-table-scroll" style={{ overflowX: 'auto' }}>
+            <ActionMenu items={[{ key: 'edit', label: 'Editar', onSelect: onEdit }]} />
+          </div>
+        </div>,
+      )
+      return { onEdit, container }
+    }
+
+    it('renders the panel outside the clipping container, on the body', async () => {
+      const user = userEvent.setup()
+      const { container } = renderInsideAnOverflowContainer()
+
+      await user.click(screen.getByRole('button', { name: 'Abrir menú de acciones' }))
+
+      const menu = screen.getByRole('menu')
+      expect(container.querySelector('[role="menu"]')).toBeNull()
+      expect(menu.closest('.tms-table-scroll')).toBeNull()
+      expect(menu.parentElement).toBe(document.body)
+    })
+
+    it('still runs the action when the panel is portalled away from its trigger', async () => {
+      // The panel is no longer a DOM descendant of the trigger's container, so a dismissal
+      // check that only knows about the container treats a click on an entry as a click
+      // outside - closing on mousedown, before the click reaches the button.
+      const user = userEvent.setup()
+      const { onEdit } = renderInsideAnOverflowContainer()
+
+      await user.click(screen.getByRole('button', { name: 'Abrir menú de acciones' }))
+      await user.click(screen.getByRole('menuitem', { name: 'Editar' }))
+
+      expect(onEdit).toHaveBeenCalledTimes(1)
+    })
+
+    it('is positioned against the viewport rather than laid out in the row', async () => {
+      const user = userEvent.setup()
+      renderInsideAnOverflowContainer()
+
+      await user.click(screen.getByRole('button', { name: 'Abrir menú de acciones' }))
+
+      expect(screen.getByRole('menu')).toHaveStyle({ position: 'fixed' })
+    })
+
+    it('closes on a click elsewhere on the page', async () => {
+      const user = userEvent.setup()
+      render(
+        <>
+          <button type="button">Fuera</button>
+          <ActionMenu items={[{ key: 'edit', label: 'Editar', onSelect: vi.fn() }]} />
+        </>,
+      )
+
+      await user.click(screen.getByRole('button', { name: 'Abrir menú de acciones' }))
+      expect(screen.getByRole('menu')).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Fuera' }))
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
+    })
+  })
+
   it('marks the trigger as expanded only while the menu is open', async () => {
     const user = userEvent.setup()
     renderMenu()

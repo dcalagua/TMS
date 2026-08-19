@@ -292,22 +292,22 @@ function OrderForm({
           <fieldset className="tms-fieldset">
             <legend className="tms-fieldset-legend">{tc('sections.identification')}</legend>
             <div className="row">
-              <div className="col-12 col-sm-3">
+              <div className="col-12 col-sm-6">
                 <FormField label={tc('fields.externalSource')} htmlFor="order-external-source">
                   <input id="order-external-source" className="form-control" {...register('externalSource')} />
                 </FormField>
               </div>
-              <div className="col-12 col-sm-3">
+              <div className="col-12 col-sm-6">
                 <FormField label={tc('fields.externalReference')} htmlFor="order-external-reference">
                   <input id="order-external-reference" className="form-control" {...register('externalReference')} />
                 </FormField>
               </div>
-              <div className="col-12 col-sm-3">
+              <div className="col-12 col-sm-6">
                 <FormField label={tc('fields.customerName')} htmlFor="order-customer-name">
                   <input id="order-customer-name" className="form-control" {...register('customerName')} />
                 </FormField>
               </div>
-              <div className="col-12 col-sm-3">
+              <div className="col-12 col-sm-6">
                 <FormField label={tc('fields.customerReference')} htmlFor="order-customer-reference">
                   <input id="order-customer-reference" className="form-control" {...register('customerReference')} />
                 </FormField>
@@ -318,7 +318,7 @@ function OrderForm({
           <fieldset className="tms-fieldset">
             <legend className="tms-fieldset-legend">{tc('sections.operation')}</legend>
             <div className="row">
-              <div className="col-12 col-sm-3">
+              <div className="col-12 col-sm-6">
                 <FormField label={tc('columns.origin')} htmlFor="order-origin" error={errors.originId?.message} required>
                   <select
                     id="order-origin"
@@ -334,7 +334,7 @@ function OrderForm({
                   </select>
                 </FormField>
               </div>
-              <div className="col-12 col-sm-3">
+              <div className="col-12 col-sm-6">
                 <FormField
                   label={tc('fields.destination')}
                   htmlFor="order-destination"
