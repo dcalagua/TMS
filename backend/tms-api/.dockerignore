@@ -1,0 +1,9 @@
+# Anything the image build must not see. Keeps the build context small and keeps local
+# secrets and build output out of the layer cache entirely.
+target/
+.env
+.env.*
+!.env.example
+*.log
+.idea/
+.vscode/
