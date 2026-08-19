@@ -129,10 +129,10 @@ describe('CarriersPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Nuevo transportista' }))
     const dialog = screen.getByRole('dialog')
-    await userEvent.type(within(dialog).getByLabelText(/^code/i), 'BETA')
-    await userEvent.type(within(dialog).getByLabelText(/business name/i), 'Beta Transport')
-    await userEvent.type(within(dialog).getByLabelText(/tax id value/i), '20200000002')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await userEvent.type(within(dialog).getByLabelText(/^código/i), 'BETA')
+    await userEvent.type(within(dialog).getByLabelText(/^razón social/i), 'Beta Transport')
+    await userEvent.type(within(dialog).getByLabelText(/^número de documento/i), '20200000002')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(carriersApiMocks.createCarrier).toHaveBeenCalledWith('company-1', expect.objectContaining({ code: 'BETA' })),

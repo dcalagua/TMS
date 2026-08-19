@@ -33,11 +33,13 @@ describe('CarrierFormModal', () => {
     const onSaved = vi.fn()
     render(<CarrierFormModal companyId="company-1" carrier={null} onClose={vi.fn()} onSaved={onSaved} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Code is required')).toBeInTheDocument()
-    expect(screen.getByText('Business name is required')).toBeInTheDocument()
-    expect(screen.getByText('Tax id value is required')).toBeInTheDocument()
+    // Code, business name, tax id type and tax id value are all required.
+    expect(await screen.findAllByText('Este campo es obligatorio')).toHaveLength(3)
+    expect(screen.getByLabelText(/^código/i)).toHaveClass('is-invalid')
+    expect(screen.getByLabelText(/^razón social/i)).toHaveClass('is-invalid')
+    expect(screen.getByLabelText(/^número de documento/i)).toHaveClass('is-invalid')
     expect(carriersApiMocks.createCarrier).not.toHaveBeenCalled()
     expect(onSaved).not.toHaveBeenCalled()
   })
@@ -45,10 +47,10 @@ describe('CarrierFormModal', () => {
   it('rejects a code with characters outside the allowed shape', async () => {
     render(<CarrierFormModal companyId="company-1" carrier={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'has space')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'has space')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Letters, digits, underscore or hyphen only')).toBeInTheDocument()
+    expect(await screen.findByText('Solo letras, dígitos, guion bajo o guion')).toBeInTheDocument()
     expect(carriersApiMocks.createCarrier).not.toHaveBeenCalled()
   })
 
@@ -57,12 +59,12 @@ describe('CarrierFormModal', () => {
     const onSaved = vi.fn()
     render(<CarrierFormModal companyId="company-1" carrier={null} onClose={vi.fn()} onSaved={onSaved} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'beta')
-    await userEvent.type(screen.getByLabelText(/business name/i), 'Beta Transport')
-    await userEvent.clear(screen.getByLabelText(/tax id type/i))
-    await userEvent.type(screen.getByLabelText(/tax id type/i), 'RUC')
-    await userEvent.type(screen.getByLabelText(/tax id value/i), '20200000002')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'beta')
+    await userEvent.type(screen.getByLabelText(/^razón social/i), 'Beta Transport')
+    await userEvent.clear(screen.getByLabelText(/^tipo de documento/i))
+    await userEvent.type(screen.getByLabelText(/^tipo de documento/i), 'RUC')
+    await userEvent.type(screen.getByLabelText(/^número de documento/i), '20200000002')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(carriersApiMocks.createCarrier).toHaveBeenCalledWith(
@@ -81,13 +83,13 @@ describe('CarrierFormModal', () => {
     const onSaved = vi.fn()
     render(<CarrierFormModal companyId="company-1" carrier={CARRIER} onClose={vi.fn()} onSaved={onSaved} />)
 
-    expect(screen.getByLabelText(/^code/i)).toHaveValue('ACME')
-    expect(screen.getByLabelText(/business name/i)).toHaveValue('Acme Transport S.A.')
-    expect(screen.getByLabelText(/tax id value/i)).toHaveValue('20100000001')
+    expect(screen.getByLabelText(/^código/i)).toHaveValue('ACME')
+    expect(screen.getByLabelText(/^razón social/i)).toHaveValue('Acme Transport S.A.')
+    expect(screen.getByLabelText(/^número de documento/i)).toHaveValue('20100000001')
 
-    await userEvent.clear(screen.getByLabelText(/business name/i))
-    await userEvent.type(screen.getByLabelText(/business name/i), 'Acme Transport Renamed')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.clear(screen.getByLabelText(/^razón social/i))
+    await userEvent.type(screen.getByLabelText(/^razón social/i), 'Acme Transport Renamed')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(carriersApiMocks.updateCarrier).toHaveBeenCalledWith(
@@ -105,10 +107,10 @@ describe('CarrierFormModal', () => {
     })
     render(<CarrierFormModal companyId="company-1" carrier={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'DUP')
-    await userEvent.type(screen.getByLabelText(/business name/i), 'Duplicate SA')
-    await userEvent.type(screen.getByLabelText(/tax id value/i), '20100000099')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'DUP')
+    await userEvent.type(screen.getByLabelText(/^razón social/i), 'Duplicate SA')
+    await userEvent.type(screen.getByLabelText(/^número de documento/i), '20100000099')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     expect(await screen.findByText('email is not a valid address.')).toBeInTheDocument()
   })
@@ -117,7 +119,7 @@ describe('CarrierFormModal', () => {
     const onClose = vi.fn()
     render(<CarrierFormModal companyId="company-1" carrier={null} onClose={onClose} onSaved={vi.fn()} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 
     expect(onClose).toHaveBeenCalled()
   })

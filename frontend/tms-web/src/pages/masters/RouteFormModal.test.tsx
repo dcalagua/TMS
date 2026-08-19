@@ -109,11 +109,12 @@ describe('RouteFormModal', () => {
     const onSaved = vi.fn()
     renderModal({ onSaved })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Code is required')).toBeInTheDocument()
-    expect(screen.getByText('Name is required')).toBeInTheDocument()
-    expect(screen.getByText('Origin is required')).toBeInTheDocument()
+    // Code, name and origin are the three required fields.
+    expect(await screen.findAllByText('Este campo es obligatorio')).toHaveLength(3)
+    expect(screen.getByLabelText(/^código/i)).toHaveClass('is-invalid')
+    expect(screen.getByLabelText(/^origen/i)).toHaveClass('is-invalid')
     expect(routesApiMocks.createRoute).not.toHaveBeenCalled()
     expect(onSaved).not.toHaveBeenCalled()
   })
@@ -122,12 +123,12 @@ describe('RouteFormModal', () => {
     mockLookups()
     renderModal()
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'NO-STOPS')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'No Stops')
-    await userEvent.selectOptions(screen.getByLabelText(/^origin/i), 'origin-1')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'NO-STOPS')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'No Stops')
+    await userEvent.selectOptions(screen.getByLabelText(/^origen/i), 'origin-1')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Add at least one destination stop.')).toBeInTheDocument()
+    expect(await screen.findByText('Agrega al menos una parada de destino.')).toBeInTheDocument()
     expect(routesApiMocks.createRoute).not.toHaveBeenCalled()
   })
 
@@ -135,18 +136,18 @@ describe('RouteFormModal', () => {
     mockLookups()
     renderModal()
 
-    expect(await screen.findByText('No stops added yet.')).toBeInTheDocument()
+    expect(await screen.findByText('Aún no hay paradas.')).toBeInTheDocument()
     await screen.findByRole('option', { name: 'DEST-A — Destination A' })
 
-    await userEvent.selectOptions(screen.getByLabelText('Destination to add'), 'dest-1')
-    await userEvent.click(screen.getByRole('button', { name: 'Add stop' }))
+    await userEvent.selectOptions(screen.getByLabelText('Destino a agregar'), 'dest-1')
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar parada' }))
 
     expect(await screen.findByText('DEST-A — Destination A')).toBeInTheDocument()
     expect(screen.queryByText('No stops added yet.')).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove stop 1' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Quitar la parada 1' }))
     expect(screen.queryByRole('listitem')).not.toBeInTheDocument()
-    expect(screen.getByText('No stops added yet.')).toBeInTheDocument()
+    expect(screen.getByText('Aún no hay paradas.')).toBeInTheDocument()
   })
 
   it('reorders stops with the move up/down controls', async () => {
@@ -154,16 +155,16 @@ describe('RouteFormModal', () => {
     renderModal()
 
     await screen.findByRole('option', { name: 'DEST-B — Destination B' })
-    await userEvent.selectOptions(screen.getByLabelText('Destination to add'), 'dest-1')
-    await userEvent.click(screen.getByRole('button', { name: 'Add stop' }))
-    await userEvent.selectOptions(screen.getByLabelText('Destination to add'), 'dest-2')
-    await userEvent.click(screen.getByRole('button', { name: 'Add stop' }))
+    await userEvent.selectOptions(screen.getByLabelText('Destino a agregar'), 'dest-1')
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar parada' }))
+    await userEvent.selectOptions(screen.getByLabelText('Destino a agregar'), 'dest-2')
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar parada' }))
 
     const items = screen.getAllByRole('listitem')
     expect(items[0]).toHaveTextContent('DEST-A')
     expect(items[1]).toHaveTextContent('DEST-B')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Move stop 2 up' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Subir la parada 2' }))
 
     const reordered = screen.getAllByRole('listitem')
     expect(reordered[0]).toHaveTextContent('DEST-B')
@@ -176,14 +177,14 @@ describe('RouteFormModal', () => {
     const onSaved = vi.fn()
     renderModal({ onSaved })
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'new-route')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'New Route')
-    await userEvent.selectOptions(screen.getByLabelText(/^origin/i), 'origin-1')
-    await userEvent.selectOptions(await screen.findByLabelText('Destination to add'), 'dest-2')
-    await userEvent.click(screen.getByRole('button', { name: 'Add stop' }))
-    await userEvent.selectOptions(screen.getByLabelText('Destination to add'), 'dest-1')
-    await userEvent.click(screen.getByRole('button', { name: 'Add stop' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'new-route')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'New Route')
+    await userEvent.selectOptions(screen.getByLabelText(/^origen/i), 'origin-1')
+    await userEvent.selectOptions(await screen.findByLabelText('Destino a agregar'), 'dest-2')
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar parada' }))
+    await userEvent.selectOptions(screen.getByLabelText('Destino a agregar'), 'dest-1')
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar parada' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(routesApiMocks.createRoute).toHaveBeenCalledWith(
@@ -202,14 +203,14 @@ describe('RouteFormModal', () => {
     const onSaved = vi.fn()
     renderModal({ routeId: 'route-1', onSaved })
 
-    expect(screen.getByText('Loading route...')).toBeInTheDocument()
+    expect(screen.getByText('Cargando ruta...')).toBeInTheDocument()
 
-    expect(await screen.findByLabelText(/^code/i)).toHaveValue('NORTH-CORRIDOR')
-    expect(screen.getByLabelText(/^name/i)).toHaveValue('North Corridor')
+    expect(await screen.findByLabelText(/^código/i)).toHaveValue('NORTH-CORRIDOR')
+    expect(screen.getByLabelText(/^nombre/i)).toHaveValue('North Corridor')
     expect(screen.getByText('DEST-A — Destination A')).toBeInTheDocument()
     expect(screen.getByText('DEST-B — Destination B')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(routesApiMocks.updateRoute).toHaveBeenCalledWith(
@@ -239,12 +240,12 @@ describe('RouteFormModal', () => {
     })
     renderModal()
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'DUP')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'Duplicate')
-    await userEvent.selectOptions(screen.getByLabelText(/^origin/i), 'origin-1')
-    await userEvent.selectOptions(await screen.findByLabelText('Destination to add'), 'dest-1')
-    await userEvent.click(screen.getByRole('button', { name: 'Add stop' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'DUP')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'Duplicate')
+    await userEvent.selectOptions(screen.getByLabelText(/^origen/i), 'origin-1')
+    await userEvent.selectOptions(await screen.findByLabelText('Destino a agregar'), 'dest-1')
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar parada' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     expect(await screen.findByText("code 'DUP' already exists")).toBeInTheDocument()
   })
@@ -254,7 +255,7 @@ describe('RouteFormModal', () => {
     const onClose = vi.fn()
     renderModal({ onClose })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 
     expect(onClose).toHaveBeenCalled()
   })

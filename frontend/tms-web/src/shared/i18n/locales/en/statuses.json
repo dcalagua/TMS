@@ -1,7 +1,58 @@
 {
   "active": "Active",
   "available": "Available",
+  "destinationType": {
+    "BRANCH": "Branch",
+    "CUSTOMER": "Customer",
+    "DELIVERY_POINT": "Delivery point",
+    "DISTRIBUTION_CENTER": "Distribution center",
+    "HUB": "Hub",
+    "STORE": "Store"
+  },
   "inactive": "Inactive",
   "maintenance": "Maintenance",
-  "outOfService": "Out of service"
+  "orderPriority": {
+    "HIGH": "High",
+    "LOW": "Low",
+    "NORMAL": "Normal",
+    "URGENT": "Urgent"
+  },
+  "orderStatus": {
+    "CANCELLED": "Cancelled",
+    "NOT_READY": "Not ready",
+    "PLANNED": "Planned",
+    "READY_FOR_PLANNING": "Ready for planning"
+  },
+  "originType": {
+    "DISTRIBUTION_CENTER": "Distribution center",
+    "HUB": "Hub",
+    "OTHER": "Other",
+    "PLANT": "Plant",
+    "WAREHOUSE": "Warehouse"
+  },
+  "outOfService": "Out of service",
+  "planningRunStatus": {
+    "CANCELLED": "Cancelled",
+    "CONFIRMED": "Confirmed",
+    "DRAFT": "Draft"
+  },
+  "tripStatus": {
+    "CANCELLED": "Cancelled",
+    "CONFIRMED": "Confirmed",
+    "DRAFT": "Draft"
+  },
+  "vehicleAvailability": {
+    "AVAILABLE": "Available",
+    "IN_MAINTENANCE": "In maintenance",
+    "OUT_OF_SERVICE": "Out of service"
+  },
+  "vehicleBodyType": {
+    "CONTAINER": "Container",
+    "CURTAIN_SIDER": "Curtain sider",
+    "DRY_VAN": "Dry van",
+    "FLATBED": "Flatbed",
+    "OTHER": "Other",
+    "REFRIGERATED": "Refrigerated",
+    "TANKER": "Tanker"
+  }
 }

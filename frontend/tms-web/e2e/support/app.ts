@@ -21,6 +21,8 @@ export const TEST_COMPANY = {
   name: 'EBIM Logistics Peru',
   timeZone: 'America/Lima',
   organization: { id: '00000000-0000-0000-0000-0000000000e1', code: 'EBIM', name: 'EBIM Group' },
+  // Exactly the strings the screens check with `hasPermission`; an invented one silently
+  // hides the very controls a test is trying to click.
   permissions: [
     'masterdata.origin:manage',
     'masterdata.destination:manage',
@@ -28,10 +30,11 @@ export const TEST_COMPANY = {
     'masterdata.frequency:manage',
     'masterdata.route:manage',
     'fleet.carrier:manage',
-    'fleet.vehicletype:manage',
+    'fleet.vehicle_type:manage',
     'fleet.vehicle:manage',
     'orders.order:manage',
-    'planning.run:manage',
+    'planning.plan:manage',
+    'planning.trip:manage',
   ],
   capabilities: ['MASTER_DATA_VIEW', 'FLEET_VIEW', 'ORDERS_VIEW', 'PLANNING_VIEW', 'TRIPS_VIEW', 'IAM_VIEW'],
 }

@@ -15,7 +15,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  // All workers share one Vite dev server; past four they queue on it and slow tests start
+  // hitting their timeouts for reasons that have nothing to do with the product.
+  workers: process.env.CI ? 2 : 4,
   reporter: [['list'], ['html', { outputFolder: './artifacts/playwright-report', open: 'never' }]],
   timeout: 30_000,
   expect: { timeout: 7_000 },

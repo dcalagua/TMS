@@ -7,11 +7,11 @@ import {
   deactivateOrigin,
   fetchOrigins,
   ORIGIN_TYPES,
-  ORIGIN_TYPE_LABELS,
   type OriginType,
   type OriginView,
 } from '../../shared/api/originsApi'
 import { describeApiError } from '../../shared/api/problemMessages'
+import { useEnumLabels } from '../../shared/i18n/enums'
 import { useCompany } from '../../shared/company/CompanyContext'
 import {
   confirmDialog,
@@ -45,6 +45,7 @@ export function OriginsPage() {
   const { t } = useTranslation('masters')
   const { t: tc } = useTranslation('common')
   const { t: td } = useTranslation('dialogs')
+  const enumLabels = useEnumLabels()
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('masterdata.origin:manage')
@@ -115,7 +116,7 @@ export function OriginsPage() {
   const columns: DataTableColumn<OriginView>[] = [
     { key: 'code', header: tc('columns.code'), render: (origin) => <span className="fw-semibold">{origin.code}</span> },
     { key: 'name', header: tc('columns.name'), render: (origin) => origin.name },
-    { key: 'type', header: tc('columns.type'), render: (origin) => ORIGIN_TYPE_LABELS[origin.type] },
+    { key: 'type', header: tc('columns.type'), render: (origin) => enumLabels.originType(origin.type) },
     { key: 'address', header: tc('columns.address'), render: (origin) => origin.address ?? '—' },
     { key: 'timeZone', header: tc('columns.timeZone'), render: (origin) => origin.timeZone },
     {
@@ -206,7 +207,7 @@ export function OriginsPage() {
             <option value="">{tc('filters.allTypes')}</option>
             {ORIGIN_TYPES.map((type) => (
               <option key={type} value={type}>
-                {ORIGIN_TYPE_LABELS[type]}
+                {enumLabels.originType(type)}
               </option>
             ))}
           </select>

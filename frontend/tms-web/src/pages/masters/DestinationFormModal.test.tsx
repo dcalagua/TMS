@@ -71,10 +71,12 @@ describe('DestinationFormModal', () => {
     const onSaved = vi.fn()
     renderModal({ onSaved })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Code is required')).toBeInTheDocument()
-    expect(screen.getByText('Name is required')).toBeInTheDocument()
+    // Code and name are the two blank required fields; country and service time have defaults.
+    expect(await screen.findAllByText('Este campo es obligatorio')).toHaveLength(2)
+    expect(screen.getByLabelText(/^código/i)).toHaveClass('is-invalid')
+    expect(screen.getByLabelText(/^nombre/i)).toHaveClass('is-invalid')
     expect(destinationsApiMocks.createDestination).not.toHaveBeenCalled()
     expect(onSaved).not.toHaveBeenCalled()
   })
@@ -83,10 +85,10 @@ describe('DestinationFormModal', () => {
     zonesApiMocks.fetchZones.mockResolvedValue(emptyZonesPage())
     renderModal()
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'has space')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'has space')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Letters, digits, underscore or hyphen only')).toBeInTheDocument()
+    expect(await screen.findByText('Solo letras, dígitos, guion bajo o guion')).toBeInTheDocument()
     expect(destinationsApiMocks.createDestination).not.toHaveBeenCalled()
   })
 
@@ -94,12 +96,12 @@ describe('DestinationFormModal', () => {
     zonesApiMocks.fetchZones.mockResolvedValue(emptyZonesPage())
     renderModal()
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'PARTIAL')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'Partial')
-    await userEvent.type(screen.getByLabelText(/^latitude/i), '10.5')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'PARTIAL')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'Partial')
+    await userEvent.type(screen.getByLabelText(/^latitud/i), '10.5')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Provide both latitude and longitude, or leave both blank')).toBeInTheDocument()
+    expect(await screen.findByText('Indica latitud y longitud, o deja ambas en blanco')).toBeInTheDocument()
     expect(destinationsApiMocks.createDestination).not.toHaveBeenCalled()
   })
 
@@ -121,9 +123,9 @@ describe('DestinationFormModal', () => {
     const onSaved = vi.fn()
     renderModal({ onSaved })
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'south-store')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'South Store')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'south-store')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'South Store')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(destinationsApiMocks.createDestination).toHaveBeenCalledWith(
@@ -140,13 +142,13 @@ describe('DestinationFormModal', () => {
     const onSaved = vi.fn()
     renderModal({ destination: DESTINATION, onSaved })
 
-    expect(screen.getByLabelText(/^code/i)).toHaveValue('NORTH-STORE')
-    expect(screen.getByLabelText(/^name/i)).toHaveValue('North Store')
-    expect(screen.getByLabelText(/^district/i)).toHaveValue('Miraflores')
+    expect(screen.getByLabelText(/^código/i)).toHaveValue('NORTH-STORE')
+    expect(screen.getByLabelText(/^nombre/i)).toHaveValue('North Store')
+    expect(screen.getByLabelText(/^distrito/i)).toHaveValue('Miraflores')
 
-    await userEvent.clear(screen.getByLabelText(/^name/i))
-    await userEvent.type(screen.getByLabelText(/^name/i), 'North Store Renamed')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.clear(screen.getByLabelText(/^nombre/i))
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'North Store Renamed')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(destinationsApiMocks.updateDestination).toHaveBeenCalledWith(
@@ -165,9 +167,9 @@ describe('DestinationFormModal', () => {
     })
     renderModal()
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'DUP')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'Duplicate')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'DUP')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'Duplicate')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     expect(await screen.findByText("code 'DUP' already exists")).toBeInTheDocument()
   })
@@ -177,7 +179,7 @@ describe('DestinationFormModal', () => {
     const onClose = vi.fn()
     renderModal({ onClose })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 
     expect(onClose).toHaveBeenCalled()
   })

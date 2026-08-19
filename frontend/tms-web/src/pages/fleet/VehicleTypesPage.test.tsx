@@ -136,11 +136,11 @@ describe('VehicleTypesPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Nuevo tipo de vehículo' }))
     const dialog = screen.getByRole('dialog')
-    await userEvent.type(within(dialog).getByLabelText(/^code/i), 'TANKER')
-    await userEvent.type(within(dialog).getByLabelText(/^name/i), 'Tanker')
-    await userEvent.type(within(dialog).getByLabelText(/max weight/i), '15000')
-    await userEvent.type(within(dialog).getByLabelText(/max volume/i), '20')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await userEvent.type(within(dialog).getByLabelText(/^código/i), 'TANKER')
+    await userEvent.type(within(dialog).getByLabelText(/^nombre/i), 'Tanker')
+    await userEvent.type(within(dialog).getByLabelText(/^peso máx/i), '15000')
+    await userEvent.type(within(dialog).getByLabelText(/^volumen máx/i), '20')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(vehicleTypesApiMocks.createVehicleType).toHaveBeenCalledWith(

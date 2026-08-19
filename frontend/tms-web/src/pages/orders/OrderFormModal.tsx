@@ -1,13 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
+import { applyApiFieldErrors } from '../../shared/api/formErrors'
 import type { ApiError } from '../../shared/api/httpClient'
 import { fetchDestinations } from '../../shared/api/destinationsApi'
 import { fetchOrigins } from '../../shared/api/originsApi'
 import {
   ORDER_PRIORITIES,
-  ORDER_PRIORITY_LABELS,
-  ORDER_STATUS_LABELS,
   createOrder,
   fetchOrder,
   updateOrder,
@@ -16,9 +16,14 @@ import {
   type OrderRequest,
 } from '../../shared/api/ordersApi'
 import { describeApiError } from '../../shared/api/problemMessages'
+import { useEnumLabels } from '../../shared/i18n/enums'
+import { useFormat } from '../../shared/i18n/format'
 import { FormField } from '../../shared/ui/components/FormField'
 import { LoadingState } from '../../shared/ui/components/LoadingState'
 import { StatusBadge } from '../../shared/ui/components/StatusBadge'
+import { TmsModal } from '../../shared/ui/components/TmsModal'
+
+const FORM_ID = 'order-form'
 
 interface SelectOption {
   id: string
@@ -102,34 +107,28 @@ function previewTotals(lines: OrderLineFormValues[]) {
 }
 
 export function OrderFormModal({ companyId, orderId, onClose, onSaved }: OrderFormModalProps) {
+  const { t } = useTranslation('orders')
+  const { t: tc } = useTranslation('common')
+
   const orderQuery = useQuery({
     queryKey: ['order', companyId, orderId],
     queryFn: ({ signal }) => fetchOrder(companyId, orderId as string, signal),
     enabled: orderId !== null,
   })
 
+  // The editor cannot render before the order's lines arrive, so the dialog opens with its own
+  // loading state rather than flashing an empty form.
   if (orderId !== null && !orderQuery.data) {
     return (
-      <div className="modal d-block" tabIndex={-1} role="dialog" aria-modal="true">
-        <div className="modal-dialog modal-xl" role="document">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h5 className="modal-title">Order</h5>
-              <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
-            </div>
-            <div className="modal-body">
-              {orderQuery.isError ? (
-                <div className="alert alert-danger py-2 small" role="alert">
-                  {describeApiError(orderQuery.error as ApiError)}
-                </div>
-              ) : (
-                <LoadingState label="Loading order..." />
-              )}
-            </div>
+      <TmsModal open title={t('form.loadingTitle')} size="lg" onClose={onClose}>
+        {orderQuery.isError ? (
+          <div className="alert alert-danger py-2 small" role="alert">
+            {describeApiError(orderQuery.error as ApiError)}
           </div>
-        </div>
-        <div className="modal-backdrop show" />
-      </div>
+        ) : (
+          <LoadingState label={tc('loading.order')} />
+        )}
+      </TmsModal>
     )
   }
 
@@ -144,6 +143,11 @@ function OrderForm({
   onClose: () => void
   onSaved: () => void
 }) {
+  const { t } = useTranslation('orders')
+  const { t: tc } = useTranslation('common')
+  const { t: tv } = useTranslation('validations')
+  const enumLabels = useEnumLabels()
+  const format = useFormat()
   const isEdit = order !== null
   const isEditable = order === null || order.status === 'NOT_READY' || order.status === 'READY_FOR_PLANNING'
   const [formError, setFormError] = useState<string | null>(null)
@@ -234,285 +238,305 @@ function OrderForm({
       }
       onSaved()
     } catch (error) {
-      const apiError = error as ApiError
-      if (apiError.fieldErrors.length > 0) {
-        const unmatched: string[] = []
-        for (const fieldError of apiError.fieldErrors) {
-          if (KNOWN_FIELDS.has(fieldError.field as keyof OrderFormValues)) {
-            setError(fieldError.field as keyof OrderFormValues, { message: fieldError.message })
-          } else {
-            unmatched.push(fieldError.message)
-          }
-        }
-        setFormError(unmatched.length > 0 ? unmatched.join(' ') : 'Please correct the highlighted fields.')
-      } else {
-        setFormError(describeApiError(apiError))
-      }
+      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, tv('highlightedFields')))
     }
   }
 
+  const statusLabel = order ? enumLabels.orderStatus(order.status) : ''
+
   return (
-    <div
-      className="modal d-block"
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') onClose()
-      }}
+    <TmsModal
+      open
+      title={isEdit ? t('form.edit', { number: order.orderNumber }) : t('form.create')}
+      size="lg"
+      onClose={onClose}
+      closeOnEscape={!isSubmitting}
+      footer={
+        <>
+          <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
+            {tc('actions.cancel')}
+          </button>
+          {isEditable && (
+            <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={isSubmitting}>
+              {isSubmitting ? tc('actions.saving') : tc('actions.save')}
+            </button>
+          )}
+        </>
+      }
     >
-      <div className="modal-dialog modal-xl" role="document">
-        <div className="modal-content">
-          <form onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-            <div className="modal-header">
-              <h5 className="modal-title">
-                {isEdit ? `Order ${order.orderNumber}` : 'New order'}
-                {order && (
-                  <StatusBadge label={ORDER_STATUS_LABELS[order.status]} tone="info" />
-                )}
-              </h5>
-              <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
-            </div>
-            <div className="modal-body">
-              {!isEditable && (
-                <div className="alert alert-secondary small py-2" role="note">
-                  This order is {ORDER_STATUS_LABELS[order?.status ?? 'CANCELLED'].toLowerCase()} and can no longer be
-                  edited{order?.cancelReason ? ` (reason: ${order.cancelReason})` : ''}.
-                </div>
-              )}
-              {formError && (
-                <div className="alert alert-danger py-2 small" role="alert">
-                  {formError}
-                </div>
-              )}
-              <fieldset disabled={!isEditable}>
-                <div className="row">
-                  <div className="col-md-3">
-                    <FormField label="External source" htmlFor="order-external-source">
-                      <input id="order-external-source" className="form-control" {...register('externalSource')} />
-                    </FormField>
-                  </div>
-                  <div className="col-md-3">
-                    <FormField label="External reference" htmlFor="order-external-reference">
-                      <input id="order-external-reference" className="form-control" {...register('externalReference')} />
-                    </FormField>
-                  </div>
-                  <div className="col-md-3">
-                    <FormField label="Customer name" htmlFor="order-customer-name">
-                      <input id="order-customer-name" className="form-control" {...register('customerName')} />
-                    </FormField>
-                  </div>
-                  <div className="col-md-3">
-                    <FormField label="Customer reference" htmlFor="order-customer-reference">
-                      <input id="order-customer-reference" className="form-control" {...register('customerReference')} />
-                    </FormField>
-                  </div>
-                </div>
-                <div className="row">
-                  <div className="col-md-3">
-                    <FormField label="Origin" htmlFor="order-origin" error={errors.originId?.message} required>
-                      <select
-                        id="order-origin"
-                        className={`form-select${errors.originId ? ' is-invalid' : ''}`}
-                        {...register('originId', { required: 'Origin is required' })}
-                      >
-                        <option value="">Select an origin</option>
-                        {originOptions.map((origin) => (
-                          <option key={origin.id} value={origin.id}>
-                            {origin.name}
-                          </option>
-                        ))}
-                      </select>
-                    </FormField>
-                  </div>
-                  <div className="col-md-3">
-                    <FormField label="Destination" htmlFor="order-destination" error={errors.destinationId?.message} required>
-                      <select
-                        id="order-destination"
-                        className={`form-select${errors.destinationId ? ' is-invalid' : ''}`}
-                        {...register('destinationId', { required: 'Destination is required' })}
-                      >
-                        <option value="">Select a destination</option>
-                        {destinationOptions.map((destination) => (
-                          <option key={destination.id} value={destination.id}>
-                            {destination.name}
-                          </option>
-                        ))}
-                      </select>
-                    </FormField>
-                  </div>
-                  <div className="col-md-2">
-                    <FormField label="Service date" htmlFor="order-service-date" error={errors.serviceDate?.message} required>
-                      <input
-                        id="order-service-date"
-                        type="date"
-                        className={`form-control${errors.serviceDate ? ' is-invalid' : ''}`}
-                        {...register('serviceDate', { required: 'Service date is required' })}
-                      />
-                    </FormField>
-                  </div>
-                  <div className="col-md-2">
-                    <FormField label="Priority" htmlFor="order-priority" required>
-                      <select id="order-priority" className="form-select" {...register('priority')}>
-                        {ORDER_PRIORITIES.map((priority) => (
-                          <option key={priority} value={priority}>
-                            {ORDER_PRIORITY_LABELS[priority]}
-                          </option>
-                        ))}
-                      </select>
-                    </FormField>
-                  </div>
-                  <div className="col-md-1">
-                    <FormField label="Window from" htmlFor="order-window-start" error={errors.requestedWindowStart?.message}>
-                      <input
-                        id="order-window-start"
-                        type="time"
-                        className={`form-control${errors.requestedWindowStart ? ' is-invalid' : ''}`}
-                        {...register('requestedWindowStart')}
-                      />
-                    </FormField>
-                  </div>
-                  <div className="col-md-1">
-                    <FormField label="Window to" htmlFor="order-window-end" error={errors.requestedWindowEnd?.message}>
-                      <input
-                        id="order-window-end"
-                        type="time"
-                        className={`form-control${errors.requestedWindowEnd ? ' is-invalid' : ''}`}
-                        {...register('requestedWindowEnd')}
-                      />
-                    </FormField>
-                  </div>
-                </div>
+      <form id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
+        {order && (
+          <p className="mb-3">
+            <StatusBadge label={statusLabel} tone="info" />
+          </p>
+        )}
 
-                <label className="form-label mt-2">Lines</label>
-                {fields.length === 0 && <p className="text-body-secondary small">No lines added yet.</p>}
-                {fields.length > 0 && (
-                  <div className="table-responsive mb-2">
-                    <table className="table table-sm align-middle">
-                      <thead>
-                        <tr>
-                          <th scope="col">Material code</th>
-                          <th scope="col">Description</th>
-                          <th scope="col">Qty</th>
-                          <th scope="col">UOM</th>
-                          <th scope="col">Unit weight (kg)</th>
-                          <th scope="col">Unit volume (m³)</th>
-                          <th scope="col">Pallets</th>
-                          <th scope="col" />
+        {!isEditable && (
+          <p className="alert alert-secondary small py-2">
+            {order?.cancelReason
+              ? t('form.notEditableReason', { status: statusLabel, reason: order.cancelReason })
+              : t('form.notEditable', { status: statusLabel })}
+          </p>
+        )}
+
+        {formError && (
+          <div className="alert alert-danger py-2 small" role="alert">
+            {formError}
+          </div>
+        )}
+
+        <fieldset disabled={!isEditable} className="border-0 p-0 m-0">
+          <fieldset className="tms-fieldset">
+            <legend className="tms-fieldset-legend">{tc('sections.identification')}</legend>
+            <div className="row">
+              <div className="col-12 col-sm-3">
+                <FormField label={tc('fields.externalSource')} htmlFor="order-external-source">
+                  <input id="order-external-source" className="form-control" {...register('externalSource')} />
+                </FormField>
+              </div>
+              <div className="col-12 col-sm-3">
+                <FormField label={tc('fields.externalReference')} htmlFor="order-external-reference">
+                  <input id="order-external-reference" className="form-control" {...register('externalReference')} />
+                </FormField>
+              </div>
+              <div className="col-12 col-sm-3">
+                <FormField label={tc('fields.customerName')} htmlFor="order-customer-name">
+                  <input id="order-customer-name" className="form-control" {...register('customerName')} />
+                </FormField>
+              </div>
+              <div className="col-12 col-sm-3">
+                <FormField label={tc('fields.customerReference')} htmlFor="order-customer-reference">
+                  <input id="order-customer-reference" className="form-control" {...register('customerReference')} />
+                </FormField>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset className="tms-fieldset">
+            <legend className="tms-fieldset-legend">{tc('sections.operation')}</legend>
+            <div className="row">
+              <div className="col-12 col-sm-3">
+                <FormField label={tc('columns.origin')} htmlFor="order-origin" error={errors.originId?.message} required>
+                  <select
+                    id="order-origin"
+                    className={`form-select${errors.originId ? ' is-invalid' : ''}`}
+                    {...register('originId', { required: tv('required') })}
+                  >
+                    <option value="">{t('form.selectOrigin')}</option>
+                    {originOptions.map((origin) => (
+                      <option key={origin.id} value={origin.id}>
+                        {origin.name}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              </div>
+              <div className="col-12 col-sm-3">
+                <FormField
+                  label={tc('fields.destination')}
+                  htmlFor="order-destination"
+                  error={errors.destinationId?.message}
+                  required
+                >
+                  <select
+                    id="order-destination"
+                    className={`form-select${errors.destinationId ? ' is-invalid' : ''}`}
+                    {...register('destinationId', { required: tv('required') })}
+                  >
+                    <option value="">{t('form.selectDestination')}</option>
+                    {destinationOptions.map((destination) => (
+                      <option key={destination.id} value={destination.id}>
+                        {destination.name}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              </div>
+              <div className="col-6 col-sm-2">
+                <FormField
+                  label={tc('fields.serviceDate')}
+                  htmlFor="order-service-date"
+                  error={errors.serviceDate?.message}
+                  required
+                >
+                  <input
+                    id="order-service-date"
+                    type="date"
+                    className={`form-control${errors.serviceDate ? ' is-invalid' : ''}`}
+                    {...register('serviceDate', { required: tv('required') })}
+                  />
+                </FormField>
+              </div>
+              <div className="col-6 col-sm-2">
+                <FormField label={tc('fields.priority')} htmlFor="order-priority" required>
+                  <select id="order-priority" className="form-select" {...register('priority')}>
+                    {ORDER_PRIORITIES.map((priority) => (
+                      <option key={priority} value={priority}>
+                        {enumLabels.orderPriority(priority)}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              </div>
+              <div className="col-6 col-sm-1">
+                <FormField
+                  label={tc('fields.windowFrom')}
+                  htmlFor="order-window-start"
+                  error={errors.requestedWindowStart?.message}
+                >
+                  <input
+                    id="order-window-start"
+                    type="time"
+                    className={`form-control${errors.requestedWindowStart ? ' is-invalid' : ''}`}
+                    {...register('requestedWindowStart')}
+                  />
+                </FormField>
+              </div>
+              <div className="col-6 col-sm-1">
+                <FormField
+                  label={tc('fields.windowTo')}
+                  htmlFor="order-window-end"
+                  error={errors.requestedWindowEnd?.message}
+                >
+                  <input
+                    id="order-window-end"
+                    type="time"
+                    className={`form-control${errors.requestedWindowEnd ? ' is-invalid' : ''}`}
+                    {...register('requestedWindowEnd')}
+                  />
+                </FormField>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset className="tms-fieldset mb-0">
+            <legend className="tms-fieldset-legend">{t('form.lines')}</legend>
+
+            {fields.length === 0 && <p className="text-body-secondary small">{t('form.noLines')}</p>}
+            {fields.length > 0 && (
+              <div className="tms-table-scroll mb-2">
+                <table className="table table-sm align-middle">
+                  <thead>
+                    <tr>
+                      <th scope="col">{t('form.materialCode')}</th>
+                      <th scope="col">{tc('columns.description')}</th>
+                      <th scope="col">{t('form.quantity')}</th>
+                      <th scope="col">{t('form.uom')}</th>
+                      <th scope="col">{t('form.unitWeight')}</th>
+                      <th scope="col">{t('form.unitVolume')}</th>
+                      <th scope="col">{t('form.pallets')}</th>
+                      <th scope="col">
+                        <span className="visually-hidden">{tc('columns.actions')}</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fields.map((field, index) => {
+                      const position = index + 1
+                      return (
+                        <tr key={field.id}>
+                          <td style={{ minWidth: '9rem' }}>
+                            <input
+                              className="form-control form-control-sm"
+                              aria-label={t('form.ariaMaterialCode', { position })}
+                              {...register(`lines.${index}.materialCode`, { required: tv('required') })}
+                            />
+                          </td>
+                          <td style={{ minWidth: '12rem' }}>
+                            <input
+                              className="form-control form-control-sm"
+                              aria-label={t('form.ariaDescription', { position })}
+                              {...register(`lines.${index}.materialDescription`, { required: tv('required') })}
+                            />
+                          </td>
+                          <td style={{ minWidth: '6rem' }}>
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.001"
+                              className="form-control form-control-sm"
+                              aria-label={t('form.ariaQuantity', { position })}
+                              {...register(`lines.${index}.quantity`, {
+                                required: tv('required'),
+                                min: { value: 0.001, message: tv('positiveNumber') },
+                              })}
+                            />
+                          </td>
+                          <td style={{ minWidth: '6rem' }}>
+                            <input
+                              className="form-control form-control-sm"
+                              aria-label={t('form.ariaUom', { position })}
+                              {...register(`lines.${index}.uom`, { required: tv('required') })}
+                            />
+                          </td>
+                          <td style={{ minWidth: '7rem' }}>
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.001"
+                              className="form-control form-control-sm"
+                              aria-label={t('form.ariaUnitWeight', { position })}
+                              {...register(`lines.${index}.unitWeightKg`, {
+                                min: { value: 0.001, message: tv('positiveNumber') },
+                              })}
+                            />
+                          </td>
+                          <td style={{ minWidth: '7rem' }}>
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.0001"
+                              className="form-control form-control-sm"
+                              aria-label={t('form.ariaUnitVolume', { position })}
+                              {...register(`lines.${index}.unitVolumeM3`, {
+                                min: { value: 0.0001, message: tv('positiveNumber') },
+                              })}
+                            />
+                          </td>
+                          <td style={{ minWidth: '6rem' }}>
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              className="form-control form-control-sm"
+                              aria-label={t('form.ariaPallets', { position })}
+                              {...register(`lines.${index}.palletQuantity`, {
+                                min: { value: 0, message: tv('nonNegative') },
+                              })}
+                            />
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger"
+                              aria-label={t('form.removeLine', { position })}
+                              onClick={() => remove(index)}
+                            >
+                              {t('form.remove')}
+                            </button>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {fields.map((field, index) => (
-                          <tr key={field.id}>
-                            <td style={{ minWidth: '9rem' }}>
-                              <input
-                                className="form-control form-control-sm"
-                                aria-label={`Line ${index + 1} material code`}
-                                {...register(`lines.${index}.materialCode`, { required: 'Required' })}
-                              />
-                            </td>
-                            <td style={{ minWidth: '12rem' }}>
-                              <input
-                                className="form-control form-control-sm"
-                                aria-label={`Line ${index + 1} description`}
-                                {...register(`lines.${index}.materialDescription`, { required: 'Required' })}
-                              />
-                            </td>
-                            <td style={{ minWidth: '6rem' }}>
-                              <input
-                                type="number"
-                                min={0}
-                                step="0.001"
-                                className="form-control form-control-sm"
-                                aria-label={`Line ${index + 1} quantity`}
-                                {...register(`lines.${index}.quantity`, {
-                                  required: 'Required', min: { value: 0.001, message: 'Must be greater than zero' },
-                                })}
-                              />
-                            </td>
-                            <td style={{ minWidth: '6rem' }}>
-                              <input
-                                className="form-control form-control-sm"
-                                aria-label={`Line ${index + 1} unit of measure`}
-                                {...register(`lines.${index}.uom`, { required: 'Required' })}
-                              />
-                            </td>
-                            <td style={{ minWidth: '7rem' }}>
-                              <input
-                                type="number"
-                                min={0}
-                                step="0.001"
-                                className="form-control form-control-sm"
-                                aria-label={`Line ${index + 1} unit weight`}
-                                {...register(`lines.${index}.unitWeightKg`, {
-                                  min: { value: 0.001, message: 'Must be greater than zero' },
-                                })}
-                              />
-                            </td>
-                            <td style={{ minWidth: '7rem' }}>
-                              <input
-                                type="number"
-                                min={0}
-                                step="0.0001"
-                                className="form-control form-control-sm"
-                                aria-label={`Line ${index + 1} unit volume`}
-                                {...register(`lines.${index}.unitVolumeM3`, {
-                                  min: { value: 0.0001, message: 'Must be greater than zero' },
-                                })}
-                              />
-                            </td>
-                            <td style={{ minWidth: '6rem' }}>
-                              <input
-                                type="number"
-                                min={0}
-                                step="0.01"
-                                className="form-control form-control-sm"
-                                aria-label={`Line ${index + 1} pallet quantity`}
-                                {...register(`lines.${index}.palletQuantity`, {
-                                  min: { value: 0, message: 'Must be zero or greater' },
-                                })}
-                              />
-                            </td>
-                            <td>
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline-danger"
-                                aria-label={`Remove line ${index + 1}`}
-                                onClick={() => remove(index)}
-                              >
-                                Remove
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                <button type="button" className="btn btn-outline-primary btn-sm" onClick={() => append(BLANK_LINE)}>
-                  Add line
-                </button>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
-                <div className="alert alert-light border small mt-3 mb-0" role="note">
-                  Estimated totals (server-computed on save): <strong>{totals.weight.toFixed(3)} kg</strong> ·{' '}
-                  <strong>{totals.volume.toFixed(4)} m³</strong> · <strong>{totals.pallets.toFixed(2)} pallets</strong>
-                </div>
-              </fieldset>
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-outline-secondary" onClick={onClose}>
-                Cancel
-              </button>
-              {isEditable && (
-                <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                  {isSubmitting ? 'Saving...' : 'Save'}
-                </button>
-              )}
-            </div>
-          </form>
-        </div>
-      </div>
-      <div className="modal-backdrop show" />
-    </div>
+            <button type="button" className="btn btn-outline-primary btn-sm" onClick={() => append(BLANK_LINE)}>
+              {t('form.addLine')}
+            </button>
+
+            <p className="alert alert-light border small mt-3 mb-0">
+              {t('form.totalsLabel')}: <strong>{format.weight(totals.weight)}</strong> ·{' '}
+              <strong>{format.volume(totals.volume)}</strong> ·{' '}
+              <strong>
+                {format.decimal(totals.pallets)} {t('form.palletsUnit')}
+              </strong>
+            </p>
+          </fieldset>
+        </fieldset>
+      </form>
+    </TmsModal>
   )
 }

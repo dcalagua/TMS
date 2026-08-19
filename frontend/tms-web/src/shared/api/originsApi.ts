@@ -6,14 +6,6 @@ export type OriginType = 'WAREHOUSE' | 'DISTRIBUTION_CENTER' | 'PLANT' | 'HUB' |
 
 export const ORIGIN_TYPES: OriginType[] = ['WAREHOUSE', 'DISTRIBUTION_CENTER', 'PLANT', 'HUB', 'OTHER']
 
-export const ORIGIN_TYPE_LABELS: Record<OriginType, string> = {
-  WAREHOUSE: 'Warehouse',
-  DISTRIBUTION_CENTER: 'Distribution center',
-  PLANT: 'Plant',
-  HUB: 'Hub',
-  OTHER: 'Other',
-}
-
 /** Mirrors the backend's `OriginView` record. */
 export interface OriginView {
   id: string

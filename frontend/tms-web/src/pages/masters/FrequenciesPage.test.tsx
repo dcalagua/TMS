@@ -132,9 +132,9 @@ describe('FrequenciesPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Nueva frecuencia' }))
     const dialog = within(screen.getByRole('dialog'))
-    await userEvent.type(dialog.getByLabelText(/^code/i), 'NEW-FREQ')
-    await userEvent.type(dialog.getByLabelText(/^name/i), 'New Frequency')
-    await userEvent.click(dialog.getByRole('button', { name: 'Save' }))
+    await userEvent.type(dialog.getByLabelText(/^código/i), 'NEW-FREQ')
+    await userEvent.type(dialog.getByLabelText(/^nombre/i), 'New Frequency')
+    await userEvent.click(dialog.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(frequenciesApiMocks.createFrequency).toHaveBeenCalledWith(

@@ -65,6 +65,46 @@
     "noAccessTitle": "No company access",
     "select": "Select a company"
   },
+  "fields": {
+    "availability": "Availability",
+    "axles": "Axles",
+    "bodyType": "Body type",
+    "contactName": "Contact name",
+    "country": "Country",
+    "customerName": "Customer name",
+    "customerReference": "Customer reference",
+    "department": "Department",
+    "destination": "Destination",
+    "destinationToAdd": "Destination to add",
+    "district": "District",
+    "email": "Email",
+    "externalReference": "External reference",
+    "externalSource": "External source",
+    "frequency": "Frequency",
+    "heightM": "Height (m)",
+    "latitude": "Latitude",
+    "lengthM": "Length (m)",
+    "licensePlate": "License plate",
+    "longitude": "Longitude",
+    "maxTemperature": "Max temperature (°C)",
+    "minTemperature": "Min temperature (°C)",
+    "palletsOverride": "Pallets override",
+    "priority": "Priority",
+    "province": "Province",
+    "reference": "Reference",
+    "referenceDistanceKm": "Reference distance (km)",
+    "referenceDurationMin": "Reference duration (min)",
+    "serviceDate": "Service date",
+    "serviceTimeMinutes": "Service time (min)",
+    "taxIdType": "Tax id type",
+    "taxIdValue": "Tax id value",
+    "vehicleType": "Vehicle type",
+    "volumeOverride": "Volume override (m³)",
+    "weightOverride": "Weight override (kg)",
+    "widthM": "Width (m)",
+    "windowFrom": "Window from",
+    "windowTo": "Window to"
+  },
   "filters": {
     "allCarriers": "All carriers",
     "allOrigins": "All origins",
@@ -93,6 +133,10 @@
     "label": "Language",
     "spanish": "Spanish"
   },
+  "loading": {
+    "order": "Loading order...",
+    "route": "Loading route..."
+  },
   "notFound": {
     "back": "Back to home",
     "code": "404",
@@ -103,10 +147,42 @@
     "pageOf": "Page {{page}} of {{pages}}",
     "range": "{{from}}-{{to}} of {{total}}"
   },
+  "placeholders": {
+    "addressReference": "e.g. blue gate",
+    "externalReference": "Optional EWM or external system code",
+    "latitude": "-12.046374",
+    "longitude": "-77.042793",
+    "taxIdType": "RUC, DNI, ...",
+    "timeZone": "America/Lima",
+    "typeDefault": "Type default"
+  },
+  "sections": {
+    "address": "Address",
+    "assignment": "Assignment",
+    "capacities": "Capacities",
+    "contact": "Contact",
+    "dimensions": "Dimensions",
+    "identification": "Identification",
+    "lines": "Lines",
+    "location": "Geographic location",
+    "notes": "Notes",
+    "operation": "Operation",
+    "restrictions": "Restrictions",
+    "schedule": "Schedule"
+  },
   "states": {
     "errorTitle": "Something went wrong",
     "loading": "Loading...",
     "loadingRecords": "Loading records...",
     "noRecords": "No records found"
+  },
+  "weekdays": {
+    "friday": "Friday",
+    "monday": "Monday",
+    "saturday": "Saturday",
+    "sunday": "Sunday",
+    "thursday": "Thursday",
+    "tuesday": "Tuesday",
+    "wednesday": "Wednesday"
   }
 }

@@ -5,6 +5,10 @@
       "message": "Crea un transportista o ajusta los filtros.",
       "title": "Sin transportistas"
     },
+    "form": {
+      "create": "Nuevo transportista",
+      "edit": "Editar transportista"
+    },
     "new": "Nuevo transportista",
     "title": "Transportistas"
   },
@@ -14,6 +18,13 @@
       "message": "Crea un tipo de vehículo o ajusta los filtros.",
       "title": "Sin tipos de vehículo"
     },
+    "form": {
+      "create": "Nuevo tipo de vehículo",
+      "edit": "Editar tipo de vehículo",
+      "noBodyType": "Ninguno",
+      "temperatureControlled": "Temperatura controlada",
+      "temperatureOrder": "La temperatura mínima no puede ser mayor que la máxima."
+    },
     "new": "Nuevo tipo de vehículo",
     "title": "Tipos de vehículo"
   },
@@ -22,6 +33,13 @@
     "empty": {
       "message": "Crea un vehículo o ajusta los filtros.",
       "title": "Sin vehículos"
+    },
+    "form": {
+      "create": "Nuevo vehículo",
+      "edit": "Editar vehículo",
+      "noCarrier": "Sin transportista (flota propia)",
+      "overrideHelp": "Deja un valor propio en blanco para usar el del tipo de vehículo.",
+      "selectType": "Selecciona un tipo"
     },
     "new": "Nuevo vehículo",
     "title": "Vehículos"

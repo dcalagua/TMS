@@ -44,12 +44,12 @@ describe('VehicleTypeFormModal', () => {
     const onSaved = vi.fn()
     render(<VehicleTypeFormModal companyId="company-1" vehicleType={null} onClose={vi.fn()} onSaved={onSaved} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Code is required')).toBeInTheDocument()
-    expect(screen.getByText('Name is required')).toBeInTheDocument()
-    expect(screen.getByText('Max weight is required')).toBeInTheDocument()
-    expect(screen.getByText('Max volume is required')).toBeInTheDocument()
+    // Code, name, max weight and max volume are all required.
+    expect(await screen.findAllByText('Este campo es obligatorio')).toHaveLength(4)
+    expect(screen.getByLabelText(/^código/i)).toHaveClass('is-invalid')
+    expect(screen.getByLabelText(/^peso máx/i)).toHaveClass('is-invalid')
     expect(vehicleTypesApiMocks.createVehicleType).not.toHaveBeenCalled()
     expect(onSaved).not.toHaveBeenCalled()
   })
@@ -57,27 +57,27 @@ describe('VehicleTypeFormModal', () => {
   it('rejects zero or negative capacity values', async () => {
     render(<VehicleTypeFormModal companyId="company-1" vehicleType={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'ZERO')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'Zero')
-    await userEvent.type(screen.getByLabelText(/max weight/i), '0')
-    await userEvent.type(screen.getByLabelText(/max volume/i), '10')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'ZERO')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'Zero')
+    await userEvent.type(screen.getByLabelText(/^peso máx/i), '0')
+    await userEvent.type(screen.getByLabelText(/^volumen máx/i), '10')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Must be greater than zero')).toBeInTheDocument()
+    expect(await screen.findByText('Debe ser un número mayor que cero')).toBeInTheDocument()
     expect(vehicleTypesApiMocks.createVehicleType).not.toHaveBeenCalled()
   })
 
   it('rejects a temperature range without temperature controlled checked', async () => {
     render(<VehicleTypeFormModal companyId="company-1" vehicleType={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'REEFER')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'Reefer')
-    await userEvent.type(screen.getByLabelText(/max weight/i), '9000')
-    await userEvent.type(screen.getByLabelText(/max volume/i), '25')
-    await userEvent.type(screen.getByLabelText(/min temperature/i), '-18')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'REEFER')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'Reefer')
+    await userEvent.type(screen.getByLabelText(/^peso máx/i), '9000')
+    await userEvent.type(screen.getByLabelText(/^volumen máx/i), '25')
+    await userEvent.type(screen.getByLabelText(/^temperatura mín/i), '-18')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Only allowed when temperature controlled is checked')).toBeInTheDocument()
+    expect(await screen.findByText('Solo se permite si la unidad es de temperatura controlada')).toBeInTheDocument()
     expect(vehicleTypesApiMocks.createVehicleType).not.toHaveBeenCalled()
   })
 
@@ -86,13 +86,13 @@ describe('VehicleTypeFormModal', () => {
     const onSaved = vi.fn()
     render(<VehicleTypeFormModal companyId="company-1" vehicleType={null} onClose={vi.fn()} onSaved={onSaved} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'tanker')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'Tanker')
-    await userEvent.type(screen.getByLabelText(/max weight/i), '15000')
-    await userEvent.type(screen.getByLabelText(/max volume/i), '20')
-    await userEvent.clear(screen.getByLabelText(/max pallets/i))
-    await userEvent.type(screen.getByLabelText(/max pallets/i), '0')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'tanker')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'Tanker')
+    await userEvent.type(screen.getByLabelText(/^peso máx/i), '15000')
+    await userEvent.type(screen.getByLabelText(/^volumen máx/i), '20')
+    await userEvent.clear(screen.getByLabelText(/^pallets máx/i))
+    await userEvent.type(screen.getByLabelText(/^pallets máx/i), '0')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(vehicleTypesApiMocks.createVehicleType).toHaveBeenCalledWith(
@@ -108,12 +108,12 @@ describe('VehicleTypeFormModal', () => {
     const onSaved = vi.fn()
     render(<VehicleTypeFormModal companyId="company-1" vehicleType={VEHICLE_TYPE} onClose={vi.fn()} onSaved={onSaved} />)
 
-    expect(screen.getByLabelText(/^code/i)).toHaveValue('TRUCK-10T')
-    expect(screen.getByLabelText(/max weight/i)).toHaveValue('10000')
+    expect(screen.getByLabelText(/^código/i)).toHaveValue('TRUCK-10T')
+    expect(screen.getByLabelText(/^peso máx/i)).toHaveValue('10000')
 
-    await userEvent.clear(screen.getByLabelText(/^name/i))
-    await userEvent.type(screen.getByLabelText(/^name/i), 'Renamed truck')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.clear(screen.getByLabelText(/^nombre/i))
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'Renamed truck')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(vehicleTypesApiMocks.updateVehicleType).toHaveBeenCalledWith(
@@ -131,11 +131,11 @@ describe('VehicleTypeFormModal', () => {
     })
     render(<VehicleTypeFormModal companyId="company-1" vehicleType={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'DUP')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'Duplicate')
-    await userEvent.type(screen.getByLabelText(/max weight/i), '1000')
-    await userEvent.type(screen.getByLabelText(/max volume/i), '10')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'DUP')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'Duplicate')
+    await userEvent.type(screen.getByLabelText(/^peso máx/i), '1000')
+    await userEvent.type(screen.getByLabelText(/^volumen máx/i), '10')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     expect(await screen.findByText("code 'DUP' already exists")).toBeInTheDocument()
   })
@@ -144,7 +144,7 @@ describe('VehicleTypeFormModal', () => {
     const onClose = vi.fn()
     render(<VehicleTypeFormModal companyId="company-1" vehicleType={null} onClose={onClose} onSaved={vi.fn()} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 
     expect(onClose).toHaveBeenCalled()
   })

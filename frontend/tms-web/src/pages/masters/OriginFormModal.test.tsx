@@ -34,11 +34,12 @@ describe('OriginFormModal', () => {
     const onSaved = vi.fn()
     render(<OriginFormModal companyId="company-1" origin={null} onClose={vi.fn()} onSaved={onSaved} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Code is required')).toBeInTheDocument()
-    expect(screen.getByText('Name is required')).toBeInTheDocument()
-    expect(screen.getByText('Time zone is required')).toBeInTheDocument()
+    // Code, name and time zone are the three required fields; each reports under its own label.
+    await waitFor(() => expect(screen.getAllByText('Este campo es obligatorio')).toHaveLength(3))
+    expect(screen.getByLabelText(/^código/i)).toHaveClass('is-invalid')
+    expect(screen.getByLabelText(/^zona horaria/i)).toHaveClass('is-invalid')
     expect(originsApiMocks.createOrigin).not.toHaveBeenCalled()
     expect(onSaved).not.toHaveBeenCalled()
   })
@@ -46,35 +47,35 @@ describe('OriginFormModal', () => {
   it('rejects a code with characters outside the allowed shape', async () => {
     render(<OriginFormModal companyId="company-1" origin={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'has space')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'has space')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Letters, digits, underscore or hyphen only')).toBeInTheDocument()
+    expect(await screen.findByText('Solo letras, dígitos, guion bajo o guion')).toBeInTheDocument()
     expect(originsApiMocks.createOrigin).not.toHaveBeenCalled()
   })
 
   it('requires both latitude and longitude, or neither', async () => {
     render(<OriginFormModal companyId="company-1" origin={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'PARTIAL')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'Partial')
-    await userEvent.type(screen.getByLabelText(/^latitude/i), '10.5')
-    await userEvent.type(screen.getByLabelText(/^time zone/i), 'America/Lima')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'PARTIAL')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'Partial')
+    await userEvent.type(screen.getByLabelText(/^latitud/i), '10.5')
+    await userEvent.type(screen.getByLabelText(/^zona horaria/i), 'America/Lima')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Provide both latitude and longitude, or leave both blank')).toBeInTheDocument()
+    expect(await screen.findByText('Indica latitud y longitud, o deja ambas en blanco')).toBeInTheDocument()
     expect(originsApiMocks.createOrigin).not.toHaveBeenCalled()
   })
 
   it('rejects an unknown time zone identifier', async () => {
     render(<OriginFormModal companyId="company-1" origin={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'GOOD')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'Good')
-    await userEvent.type(screen.getByLabelText(/^time zone/i), 'Not/AZone')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'GOOD')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'Good')
+    await userEvent.type(screen.getByLabelText(/^zona horaria/i), 'Not/AZone')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText(/must be a valid IANA time zone/i)).toBeInTheDocument()
+    expect(await screen.findByText(/zona horaria IANA válida/i)).toBeInTheDocument()
     expect(originsApiMocks.createOrigin).not.toHaveBeenCalled()
   })
 
@@ -83,10 +84,10 @@ describe('OriginFormModal', () => {
     const onSaved = vi.fn()
     render(<OriginFormModal companyId="company-1" origin={null} onClose={vi.fn()} onSaved={onSaved} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'south-hub')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'South Hub')
-    await userEvent.type(screen.getByLabelText(/^time zone/i), 'America/Lima')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'south-hub')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'South Hub')
+    await userEvent.type(screen.getByLabelText(/^zona horaria/i), 'America/Lima')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(originsApiMocks.createOrigin).toHaveBeenCalledWith(
@@ -102,12 +103,12 @@ describe('OriginFormModal', () => {
     const onSaved = vi.fn()
     render(<OriginFormModal companyId="company-1" origin={ORIGIN} onClose={vi.fn()} onSaved={onSaved} />)
 
-    expect(screen.getByLabelText(/^code/i)).toHaveValue('NORTH-HUB')
-    expect(screen.getByLabelText(/^name/i)).toHaveValue('North Hub')
+    expect(screen.getByLabelText(/^código/i)).toHaveValue('NORTH-HUB')
+    expect(screen.getByLabelText(/^nombre/i)).toHaveValue('North Hub')
 
-    await userEvent.clear(screen.getByLabelText(/^name/i))
-    await userEvent.type(screen.getByLabelText(/^name/i), 'North Hub Renamed')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.clear(screen.getByLabelText(/^nombre/i))
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'North Hub Renamed')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(originsApiMocks.updateOrigin).toHaveBeenCalledWith(
@@ -125,10 +126,10 @@ describe('OriginFormModal', () => {
     })
     render(<OriginFormModal companyId="company-1" origin={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'DUP')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'Duplicate')
-    await userEvent.type(screen.getByLabelText(/^time zone/i), 'America/Lima')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'DUP')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'Duplicate')
+    await userEvent.type(screen.getByLabelText(/^zona horaria/i), 'America/Lima')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     expect(await screen.findByText("code 'DUP' already exists")).toBeInTheDocument()
   })
@@ -137,7 +138,7 @@ describe('OriginFormModal', () => {
     const onClose = vi.fn()
     render(<OriginFormModal companyId="company-1" origin={null} onClose={onClose} onSaved={vi.fn()} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 
     expect(onClose).toHaveBeenCalled()
   })

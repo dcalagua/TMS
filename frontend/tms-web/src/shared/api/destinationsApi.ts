@@ -8,15 +8,6 @@ export const DESTINATION_TYPES: DestinationType[] = [
   'CUSTOMER', 'STORE', 'BRANCH', 'HUB', 'DISTRIBUTION_CENTER', 'DELIVERY_POINT',
 ]
 
-export const DESTINATION_TYPE_LABELS: Record<DestinationType, string> = {
-  CUSTOMER: 'Customer',
-  STORE: 'Store',
-  BRANCH: 'Branch',
-  HUB: 'Hub',
-  DISTRIBUTION_CENTER: 'Distribution center',
-  DELIVERY_POINT: 'Delivery point',
-}
-
 /** Mirrors the backend's `DestinationView` record. */
 export interface DestinationView {
   id: string

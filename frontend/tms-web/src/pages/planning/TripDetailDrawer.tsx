@@ -1,3 +1,4 @@
+import { useEnumLabels } from '../../shared/i18n/enums'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import type { ApiError } from '../../shared/api/httpClient'
@@ -7,7 +8,6 @@ import {
   moveOrderToTrip,
   removeOrderFromTrip,
   reorderTripStops,
-  TRIP_STATUS_LABELS,
   type TripDetailView,
   type TripView,
 } from '../../shared/api/planningApi'
@@ -50,6 +50,7 @@ function moveItem<T>(items: T[], from: number, to: number): T[] {
  * section 8 point 4: every mutation returns the updated `TripDetailView`.
  */
 export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, onClose, onChanged }: TripDetailDrawerProps) {
+  const enumLabels = useEnumLabels()
   const queryClient = useQueryClient()
   const queryKey = ['trip', companyId, tripId]
 
@@ -163,7 +164,7 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
           {detail ? `Trip ${detail.trip.tripNumber}` : 'Trip'}
           {detail && (
             <span className="ms-2">
-              <StatusBadge label={TRIP_STATUS_LABELS[detail.trip.status]} tone={STATUS_TONE[detail.trip.status]} />
+              <StatusBadge label={enumLabels.tripStatus(detail.trip.status)} tone={STATUS_TONE[detail.trip.status]} />
             </span>
           )}
         </h5>

@@ -5,6 +5,10 @@
       "message": "Create a carrier or adjust your filters.",
       "title": "No carriers found"
     },
+    "form": {
+      "create": "New carrier",
+      "edit": "Edit carrier"
+    },
     "new": "New carrier",
     "title": "Carriers"
   },
@@ -14,6 +18,13 @@
       "message": "Create a vehicle type or adjust your filters.",
       "title": "No vehicle types found"
     },
+    "form": {
+      "create": "New vehicle type",
+      "edit": "Edit vehicle type",
+      "noBodyType": "None",
+      "temperatureControlled": "Temperature controlled",
+      "temperatureOrder": "Minimum temperature must not be greater than maximum temperature."
+    },
     "new": "New vehicle type",
     "title": "Vehicle types"
   },
@@ -22,6 +33,13 @@
     "empty": {
       "message": "Create a vehicle or adjust your filters.",
       "title": "No vehicles found"
+    },
+    "form": {
+      "create": "New vehicle",
+      "edit": "Edit vehicle",
+      "noCarrier": "No carrier (owned fleet)",
+      "overrideHelp": "Leave an override blank to use the vehicle type's default for that dimension.",
+      "selectType": "Select a type"
     },
     "new": "New vehicle",
     "title": "Vehicles"

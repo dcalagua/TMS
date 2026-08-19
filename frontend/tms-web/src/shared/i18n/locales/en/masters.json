@@ -5,6 +5,11 @@
       "message": "Create a destination or adjust your filters.",
       "title": "No destinations found"
     },
+    "form": {
+      "create": "New destination",
+      "edit": "Edit destination",
+      "noZone": "No zone"
+    },
     "new": "New destination",
     "title": "Destinations"
   },
@@ -13,6 +18,18 @@
     "empty": {
       "message": "Create a frequency or adjust your filters.",
       "title": "No frequencies found"
+    },
+    "form": {
+      "create": "New frequency",
+      "cutoffAria": "{{day}} cutoff time",
+      "cutoffTime": "Cutoff time",
+      "day": "Day",
+      "edit": "Edit frequency",
+      "exceptionsNote": "Date exceptions (extra pickups, blackouts) are supported by the backend but do not yet have an editor in this release. They are managed one date at a time through the frequency API and will get a dedicated screen in a later step.",
+      "leadTimeAria": "{{day}} lead time in days",
+      "leadTimeDays": "Lead time (days)",
+      "serviceDay": "Service day",
+      "weeklyCadence": "Weekly cadence"
     },
     "new": "New frequency",
     "title": "Frequencies"
@@ -23,6 +40,10 @@
       "message": "Create an origin or adjust your filters.",
       "title": "No origins found"
     },
+    "form": {
+      "create": "New origin",
+      "edit": "Edit origin"
+    },
     "new": "New origin",
     "title": "Origins"
   },
@@ -32,6 +53,23 @@
       "message": "Create a route or adjust your filters.",
       "title": "No routes found"
     },
+    "form": {
+      "addStop": "Add stop",
+      "atLeastOneStop": "Add at least one destination stop.",
+      "create": "New route",
+      "edit": "Edit route",
+      "moveDown": "Move stop {{position}} down",
+      "moveUp": "Move stop {{position}} up",
+      "noFrequency": "No frequency",
+      "noStops": "No stops added yet.",
+      "noZone": "No zone",
+      "note": "A Master Route is a reusable planned corridor, not a calculated Trip route: it has no live position or optimizer output, just an origin and an ordered list of stops a planner sets up once.",
+      "remove": "Remove",
+      "removeStop": "Remove stop {{position}}",
+      "selectDestination": "Select a destination to add",
+      "selectOrigin": "Select an origin",
+      "stopsLabel": "Destination stops, in order"
+    },
     "new": "New route",
     "title": "Routes"
   },
@@ -40,6 +78,10 @@
     "empty": {
       "message": "Create a zone or adjust your filters.",
       "title": "No zones found"
+    },
+    "form": {
+      "create": "New zone",
+      "edit": "Edit zone"
     },
     "new": "New zone",
     "title": "Zones"

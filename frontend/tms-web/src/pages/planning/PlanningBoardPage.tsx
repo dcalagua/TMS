@@ -1,8 +1,9 @@
+import { useEnumLabels } from '../../shared/i18n/enums'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import type { ApiError } from '../../shared/api/httpClient'
-import { cancelPlanningRun, confirmPlanningRun, fetchPlanningRun, PLANNING_RUN_STATUS_LABELS } from '../../shared/api/planningApi'
+import { cancelPlanningRun, confirmPlanningRun, fetchPlanningRun } from '../../shared/api/planningApi'
 import { describeApiError, describePlanningError } from '../../shared/api/problemMessages'
 import { useCompany } from '../../shared/company/CompanyContext'
 import { confirmDialog, ErrorState, PageHeader, StatusBadge, type StatusTone } from '../../shared/ui/components'
@@ -27,6 +28,7 @@ const STATUS_TONE: Record<'DRAFT' | 'CONFIRMED' | 'CANCELLED', StatusTone> = {
  * query rather than hand-merging partial responses into local state.
  */
 export function PlanningBoardPage() {
+  const enumLabels = useEnumLabels()
   const { runId } = useParams<{ runId: string }>()
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
@@ -113,7 +115,7 @@ export function PlanningBoardPage() {
         description={`${run.originName ?? run.originCode} · ${run.planningDate}`}
         actions={
           <div className="d-flex align-items-center gap-2">
-            <StatusBadge label={PLANNING_RUN_STATUS_LABELS[run.status]} tone={STATUS_TONE[run.status]} />
+            <StatusBadge label={enumLabels.planningRunStatus(run.status)} tone={STATUS_TONE[run.status]} />
             {isDraft && canManageTrips && (
               <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setShowCreateTrip(true)}>
                 New trip

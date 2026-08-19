@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../shared/api/httpClient'
 import type { TripDetailView, TripView } from '../../shared/api/planningApi'
+import i18n from '../../shared/i18n'
+import { DEFAULT_LANGUAGE } from '../../shared/i18n/config'
 import { TripVehicleModal } from './TripVehicleModal'
 
 const planningApiMocks = vi.hoisted(() => ({ updateTripVehicle: vi.fn() }))
@@ -48,8 +50,9 @@ function renderModal(tripFixture: TripView, onUpdated = vi.fn(), onClose = vi.fn
   return { ...utils, onUpdated, onClose }
 }
 
-afterEach(() => {
+afterEach(async () => {
   vi.clearAllMocks()
+  await i18n.changeLanguage(DEFAULT_LANGUAGE)
 })
 
 describe('TripVehicleModal', () => {
@@ -60,8 +63,8 @@ describe('TripVehicleModal', () => {
     const { onUpdated } = renderModal(trip())
 
     await screen.findByRole('option', { name: 'VH-1 — ABC-123' })
-    await userEvent.selectOptions(screen.getByLabelText(/^Vehicle/), 'vehicle-1')
-    await userEvent.click(screen.getByRole('button', { name: 'Save vehicle' }))
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /^Vehículo/ }), 'vehicle-1')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar vehículo' }))
 
     await waitFor(() =>
       expect(planningApiMocks.updateTripVehicle).toHaveBeenCalledWith('company-1', 'trip-1', {
@@ -81,7 +84,7 @@ describe('TripVehicleModal', () => {
     renderModal(trip({ vehicleId: 'vehicle-2', vehicleCode: 'VH-2' }))
 
     await screen.findByRole('option', { name: 'VH-2 — XYZ-999' })
-    expect(screen.getByLabelText(/^Vehicle/)).toHaveValue('vehicle-2')
+    expect(screen.getByRole('combobox', { name: /^Vehículo/ })).toHaveValue('vehicle-2')
   })
 
   it('shows the backend refusal verbatim when a downgrade no longer fits the current load', async () => {
@@ -92,10 +95,41 @@ describe('TripVehicleModal', () => {
     const { onUpdated } = renderModal(trip())
 
     await screen.findByRole('option', { name: 'VH-1 — ABC-123' })
-    await userEvent.selectOptions(screen.getByLabelText(/^Vehicle/), 'vehicle-1')
-    await userEvent.click(screen.getByRole('button', { name: 'Save vehicle' }))
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /^Vehículo/ }), 'vehicle-1')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar vehículo' }))
 
     expect(await screen.findByText('Trip 1 would exceed capacity: weight 1200.00/1000.00 kg.')).toBeInTheDocument()
     expect(onUpdated).not.toHaveBeenCalled()
+  })
+
+  it('is a modal dialog named after the trip it is changing', async () => {
+    vehiclesApiMocks.fetchVehicles.mockResolvedValue(page([]))
+    renderModal(trip())
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(dialog).toHaveAccessibleName('Vehiculo del viaje 1'.replace('Vehiculo', 'Vehículo'))
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true))
+  })
+
+  it('closes on Escape and from the cancel button', async () => {
+    vehiclesApiMocks.fetchVehicles.mockResolvedValue(page([]))
+    const { onClose } = renderModal(trip())
+    await screen.findByRole('dialog')
+
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(onClose).toHaveBeenCalledTimes(2)
+  })
+
+  it('renders in English when the language is switched', async () => {
+    await i18n.changeLanguage('en')
+    vehiclesApiMocks.fetchVehicles.mockResolvedValue(page([]))
+    renderModal(trip())
+
+    expect(await screen.findByRole('button', { name: 'Save vehicle' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Select a vehicle' })).toBeInTheDocument()
   })
 })

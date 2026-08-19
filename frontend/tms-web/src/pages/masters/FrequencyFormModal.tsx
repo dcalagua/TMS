@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
+import { applyApiFieldErrors } from '../../shared/api/formErrors'
 import type { ApiError } from '../../shared/api/httpClient'
 import {
   createFrequency,
@@ -7,8 +9,14 @@ import {
   type FrequencyRequest,
   type FrequencyView,
 } from '../../shared/api/frequenciesApi'
-import { describeApiError } from '../../shared/api/problemMessages'
+import type { CommonKey } from '../../shared/i18n/keys'
 import { FormField } from '../../shared/ui/components/FormField'
+import { TmsModal } from '../../shared/ui/components/TmsModal'
+
+const FORM_ID = 'frequency-form'
+
+/** Matches the backend's `code` constraint; kept next to the field it validates. */
+const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/
 
 interface WeeklyRuleFormValue {
   enabled: boolean
@@ -32,12 +40,22 @@ interface FrequencyFormModalProps {
   onSaved: () => void
 }
 
-const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+/** Index 0 is Monday, matching `dayOfWeek` 1 in the request. Keys, not text: the grid must
+ * follow the UI language like everything else. */
+const DAY_KEYS: CommonKey[] = [
+  'weekdays.monday',
+  'weekdays.tuesday',
+  'weekdays.wednesday',
+  'weekdays.thursday',
+  'weekdays.friday',
+  'weekdays.saturday',
+  'weekdays.sunday',
+]
 
 const KNOWN_TOP_LEVEL_FIELDS = new Set<keyof FrequencyFormValues>(['code', 'name', 'description'])
 
 function buildDefaultWeeklyRules(frequency: FrequencyView | null): WeeklyRuleFormValue[] {
-  return DAY_LABELS.map((_, index) => {
+  return DAY_KEYS.map((_unused, index) => {
     const dayOfWeek = index + 1
     const existing = frequency?.weeklyRules.find((rule) => rule.dayOfWeek === dayOfWeek)
     return {
@@ -51,6 +69,9 @@ function buildDefaultWeeklyRules(frequency: FrequencyView | null): WeeklyRuleFor
 /** Create and edit share one form. The weekly grid always renders all 7 days and sends all 7
  * rows on submit - see `FrequencyRequest`'s doc comment for why that is not a partial update. */
 export function FrequencyFormModal({ companyId, frequency, onClose, onSaved }: FrequencyFormModalProps) {
+  const { t } = useTranslation('masters')
+  const { t: tc } = useTranslation('common')
+  const { t: tv } = useTranslation('validations')
   const isEdit = frequency !== null
   const [formError, setFormError] = useState<string | null>(null)
   const {
@@ -89,152 +110,137 @@ export function FrequencyFormModal({ companyId, frequency, onClose, onSaved }: F
       }
       onSaved()
     } catch (error) {
-      const apiError = error as ApiError
-      if (apiError.fieldErrors.length > 0) {
-        const unmatched: string[] = []
-        for (const fieldError of apiError.fieldErrors) {
-          if (KNOWN_TOP_LEVEL_FIELDS.has(fieldError.field as keyof FrequencyFormValues)) {
-            setError(fieldError.field as keyof FrequencyFormValues, { message: fieldError.message })
-          } else {
-            unmatched.push(fieldError.message)
-          }
-        }
-        setFormError(unmatched.length > 0 ? unmatched.join(' ') : 'Please correct the highlighted fields.')
-      } else {
-        setFormError(describeApiError(apiError))
-      }
+      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_TOP_LEVEL_FIELDS, setError, tv('highlightedFields')))
     }
   }
 
   return (
-    <div
-      className="modal d-block"
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') onClose()
-      }}
+    <TmsModal
+      open
+      title={isEdit ? t('frequencies.form.edit') : t('frequencies.form.create')}
+      size="lg"
+      onClose={onClose}
+      closeOnEscape={!isSubmitting}
+      footer={
+        <>
+          <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
+            {tc('actions.cancel')}
+          </button>
+          <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={isSubmitting}>
+            {isSubmitting ? tc('actions.saving') : tc('actions.save')}
+          </button>
+        </>
+      }
     >
-      <div className="modal-dialog modal-lg" role="document">
-        <div className="modal-content">
-          <form onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-            <div className="modal-header">
-              <h5 className="modal-title">{isEdit ? 'Edit frequency' : 'New frequency'}</h5>
-              <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
+      <form id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
+        {formError && (
+          <div className="alert alert-danger py-2 small" role="alert">
+            {formError}
+          </div>
+        )}
+
+        <fieldset className="tms-fieldset">
+          <legend className="tms-fieldset-legend">{tc('sections.identification')}</legend>
+          <div className="row">
+            <div className="col-12 col-sm-4">
+              <FormField label={tc('columns.code')} htmlFor="frequency-code" error={errors.code?.message} required>
+                <input
+                  id="frequency-code"
+                  className={`form-control${errors.code ? ' is-invalid' : ''}`}
+                  {...register('code', {
+                    required: tv('required'),
+                    maxLength: { value: 32, message: tv('maxLength', { count: 32 }) },
+                    pattern: { value: CODE_PATTERN, message: tv('codePattern') },
+                  })}
+                />
+              </FormField>
             </div>
-            <div className="modal-body">
-              {formError && (
-                <div className="alert alert-danger py-2 small" role="alert">
-                  {formError}
-                </div>
-              )}
-              <div className="row">
-                <div className="col-md-4">
-                  <FormField label="Code" htmlFor="frequency-code" error={errors.code?.message} required>
-                    <input
-                      id="frequency-code"
-                      className={`form-control${errors.code ? ' is-invalid' : ''}`}
-                      {...register('code', {
-                        required: 'Code is required',
-                        maxLength: { value: 32, message: 'Must be 32 characters or fewer' },
-                        pattern: {
-                          value: /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/,
-                          message: 'Letters, digits, underscore or hyphen only',
-                        },
-                      })}
-                    />
-                  </FormField>
-                </div>
-                <div className="col-md-8">
-                  <FormField label="Name" htmlFor="frequency-name" error={errors.name?.message} required>
-                    <input
-                      id="frequency-name"
-                      className={`form-control${errors.name ? ' is-invalid' : ''}`}
-                      {...register('name', {
-                        required: 'Name is required',
-                        maxLength: { value: 200, message: 'Must be 200 characters or fewer' },
-                      })}
-                    />
-                  </FormField>
-                </div>
-              </div>
-              <FormField label="Description" htmlFor="frequency-description" error={errors.description?.message}>
+            <div className="col-12 col-sm-8">
+              <FormField label={tc('columns.name')} htmlFor="frequency-name" error={errors.name?.message} required>
+                <input
+                  id="frequency-name"
+                  className={`form-control${errors.name ? ' is-invalid' : ''}`}
+                  {...register('name', {
+                    required: tv('required'),
+                    maxLength: { value: 200, message: tv('maxLength', { count: 200 }) },
+                  })}
+                />
+              </FormField>
+            </div>
+            <div className="col-12">
+              <FormField
+                label={tc('columns.description')}
+                htmlFor="frequency-description"
+                error={errors.description?.message}
+              >
                 <input
                   id="frequency-description"
                   className={`form-control${errors.description ? ' is-invalid' : ''}`}
-                  {...register('description', { maxLength: { value: 1000, message: 'Must be 1000 characters or fewer' } })}
+                  {...register('description', { maxLength: { value: 1000, message: tv('maxLength', { count: 1000 }) } })}
                 />
               </FormField>
+            </div>
+          </div>
+        </fieldset>
 
-              <label className="form-label mt-2">Weekly cadence</label>
-              <div className="table-responsive">
-                <table className="table table-sm align-middle mb-2">
-                  <thead>
-                    <tr>
-                      <th scope="col">Day</th>
-                      <th scope="col">Service day</th>
-                      <th scope="col">Cutoff time</th>
-                      <th scope="col">Lead time (days)</th>
+        <fieldset className="tms-fieldset mb-0">
+          <legend className="tms-fieldset-legend">{t('frequencies.form.weeklyCadence')}</legend>
+
+          <div className="tms-table-scroll">
+            <table className="table table-sm align-middle mb-2">
+              <thead>
+                <tr>
+                  <th scope="col">{t('frequencies.form.day')}</th>
+                  <th scope="col">{t('frequencies.form.serviceDay')}</th>
+                  <th scope="col">{t('frequencies.form.cutoffTime')}</th>
+                  <th scope="col">{t('frequencies.form.leadTimeDays')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {DAY_KEYS.map((dayKey, index) => {
+                  const day = tc(dayKey)
+                  return (
+                    <tr key={dayKey}>
+                      <td>
+                        <label htmlFor={`frequency-day-${index}-enabled`}>{day}</label>
+                      </td>
+                      <td>
+                        <input
+                          id={`frequency-day-${index}-enabled`}
+                          type="checkbox"
+                          className="form-check-input"
+                          {...register(`weeklyRules.${index}.enabled`)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          aria-label={t('frequencies.form.cutoffAria', { day })}
+                          type="time"
+                          className="form-control form-control-sm"
+                          {...register(`weeklyRules.${index}.cutoffTime`)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          aria-label={t('frequencies.form.leadTimeAria', { day })}
+                          type="number"
+                          min={0}
+                          className="form-control form-control-sm"
+                          {...register(`weeklyRules.${index}.leadTimeDays`, {
+                            min: { value: 0, message: tv('nonNegative') },
+                          })}
+                        />
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {DAY_LABELS.map((label, index) => (
-                      <tr key={label}>
-                        <td>
-                          <label htmlFor={`frequency-day-${index}-enabled`}>{label}</label>
-                        </td>
-                        <td>
-                          <input
-                            id={`frequency-day-${index}-enabled`}
-                            type="checkbox"
-                            className="form-check-input"
-                            {...register(`weeklyRules.${index}.enabled`)}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            aria-label={`${label} cutoff time`}
-                            type="time"
-                            className="form-control form-control-sm"
-                            {...register(`weeklyRules.${index}.cutoffTime`)}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            aria-label={`${label} lead time in days`}
-                            type="number"
-                            min={0}
-                            className="form-control form-control-sm"
-                            {...register(`weeklyRules.${index}.leadTimeDays`, {
-                              min: { value: 0, message: 'must be zero or greater' },
-                            })}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
 
-              <div className="alert alert-secondary small mb-0" role="note">
-                Date exceptions (extra pickups, blackouts) are supported by the backend but do
-                not yet have an editor in this release. They are managed one date at a time
-                through the frequency API and will get a dedicated screen in a later step.
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-outline-secondary" onClick={onClose}>
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-      <div className="modal-backdrop show" />
-    </div>
+          <p className="alert alert-secondary small mb-0">{t('frequencies.form.exceptionsNote')}</p>
+        </fieldset>
+      </form>
+    </TmsModal>
   )
 }

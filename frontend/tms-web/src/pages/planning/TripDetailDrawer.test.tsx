@@ -221,6 +221,6 @@ describe('TripDetailDrawer', () => {
     await screen.findByText('TO-1')
     await userEvent.click(screen.getByRole('button', { name: 'Change vehicle' }))
 
-    expect(await screen.findByText('Trip 1 vehicle')).toBeInTheDocument()
+    expect(await screen.findByText('Vehículo del viaje 1')).toBeInTheDocument()
   })
 })

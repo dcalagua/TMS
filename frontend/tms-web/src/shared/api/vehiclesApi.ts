@@ -8,12 +8,6 @@ export const VEHICLE_AVAILABILITY_STATUSES: VehicleAvailabilityStatus[] = [
   'AVAILABLE', 'IN_MAINTENANCE', 'OUT_OF_SERVICE',
 ]
 
-export const VEHICLE_AVAILABILITY_STATUS_LABELS: Record<VehicleAvailabilityStatus, string> = {
-  AVAILABLE: 'Available',
-  IN_MAINTENANCE: 'In maintenance',
-  OUT_OF_SERVICE: 'Out of service',
-}
-
 /**
  * Mirrors the backend's `VehicleView` record. `effective*` fields are already resolved
  * server-side by `EffectiveCapacityResolver` (vehicle override first, otherwise the vehicle

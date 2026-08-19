@@ -65,6 +65,46 @@
     "noAccessTitle": "Sin acceso a compañías",
     "select": "Selecciona una compañía"
   },
+  "fields": {
+    "availability": "Disponibilidad",
+    "axles": "Ejes",
+    "bodyType": "Tipo de carrocería",
+    "contactName": "Nombre de contacto",
+    "country": "País",
+    "customerName": "Nombre del cliente",
+    "customerReference": "Referencia del cliente",
+    "department": "Departamento",
+    "destination": "Destino",
+    "destinationToAdd": "Destino a agregar",
+    "district": "Distrito",
+    "email": "Correo electrónico",
+    "externalReference": "Referencia externa",
+    "externalSource": "Sistema de origen",
+    "frequency": "Frecuencia",
+    "heightM": "Alto (m)",
+    "latitude": "Latitud",
+    "lengthM": "Largo (m)",
+    "licensePlate": "Placa",
+    "longitude": "Longitud",
+    "maxTemperature": "Temperatura máx. (°C)",
+    "minTemperature": "Temperatura mín. (°C)",
+    "palletsOverride": "Pallets propios",
+    "priority": "Prioridad",
+    "province": "Provincia",
+    "reference": "Referencia",
+    "referenceDistanceKm": "Distancia de referencia (km)",
+    "referenceDurationMin": "Duración de referencia (min)",
+    "serviceDate": "Fecha de servicio",
+    "serviceTimeMinutes": "Tiempo de atención (min)",
+    "taxIdType": "Tipo de documento",
+    "taxIdValue": "Número de documento",
+    "vehicleType": "Tipo de vehículo",
+    "volumeOverride": "Volumen propio (m³)",
+    "weightOverride": "Peso propio (kg)",
+    "widthM": "Ancho (m)",
+    "windowFrom": "Ventana desde",
+    "windowTo": "Ventana hasta"
+  },
   "filters": {
     "allCarriers": "Todos los transportistas",
     "allOrigins": "Todos los orígenes",
@@ -93,6 +133,10 @@
     "label": "Idioma",
     "spanish": "Español"
   },
+  "loading": {
+    "order": "Cargando pedido...",
+    "route": "Cargando ruta..."
+  },
   "notFound": {
     "back": "Volver al inicio",
     "code": "404",
@@ -103,10 +147,42 @@
     "pageOf": "Página {{page}} de {{pages}}",
     "range": "{{from}}-{{to}} de {{total}}"
   },
+  "placeholders": {
+    "addressReference": "p. ej. portón azul",
+    "externalReference": "Código opcional de EWM u otro sistema",
+    "latitude": "-12.046374",
+    "longitude": "-77.042793",
+    "taxIdType": "RUC, DNI, ...",
+    "timeZone": "America/Lima",
+    "typeDefault": "Valor del tipo"
+  },
+  "sections": {
+    "address": "Dirección",
+    "assignment": "Asignación",
+    "capacities": "Capacidades",
+    "contact": "Contacto",
+    "dimensions": "Dimensiones",
+    "identification": "Identificación",
+    "lines": "Líneas",
+    "location": "Ubicación geográfica",
+    "notes": "Notas",
+    "operation": "Operación",
+    "restrictions": "Restricciones",
+    "schedule": "Programación"
+  },
   "states": {
     "errorTitle": "Algo salió mal",
     "loading": "Cargando...",
     "loadingRecords": "Cargando registros...",
     "noRecords": "Sin resultados"
+  },
+  "weekdays": {
+    "friday": "Viernes",
+    "monday": "Lunes",
+    "saturday": "Sábado",
+    "sunday": "Domingo",
+    "thursday": "Jueves",
+    "tuesday": "Martes",
+    "wednesday": "Miércoles"
   }
 }

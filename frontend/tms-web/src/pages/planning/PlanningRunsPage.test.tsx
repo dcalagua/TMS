@@ -120,7 +120,7 @@ describe('PlanningRunsPage', () => {
 
     expect(await screen.findByText('PLN-00000001')).toBeInTheDocument()
     expect(screen.getByText('Origin A')).toBeInTheDocument()
-    expect(screen.getByText('Draft', { selector: 'span' })).toBeInTheDocument()
+    expect(screen.getByText('Borrador', { selector: 'span' })).toBeInTheDocument()
   })
 
   it('hides the New run action for a caller without planning.plan:manage', async () => {
@@ -155,9 +155,9 @@ describe('PlanningRunsPage', () => {
     renderPage()
     await userEvent.click(await screen.findByRole('button', { name: 'Nueva corrida' }))
     const dialog = screen.getByRole('dialog')
-    await userEvent.selectOptions(within(dialog).getByLabelText(/origin/i), 'origin-1')
-    await userEvent.type(within(dialog).getByLabelText(/planning date/i), '2026-03-01')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create run' }))
+    await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: /^Origen/ }), 'origin-1')
+    await userEvent.type(within(dialog).getByLabelText(/^Fecha de planificaci/i), '2026-03-01')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Crear corrida' }))
 
     await waitFor(() =>
       expect(planningApiMocks.createPlanningRun).toHaveBeenCalledWith('company-1', {

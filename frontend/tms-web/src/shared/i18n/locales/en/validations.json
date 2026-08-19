@@ -1,8 +1,18 @@
 {
+  "codePattern": "Letters, digits, underscore or hyphen only",
+  "highlightedFields": "Please correct the highlighted fields.",
   "invalidEmail": "Enter a valid email address",
   "invalidNumber": "Enter a valid number",
+  "latLongPair": "Provide both latitude and longitude, or leave both blank",
   "maxLength": "Must be at most {{count}} characters",
+  "min": "Must be at least {{min}}",
   "minLength": "Must be at least {{count}} characters",
+  "nonNegative": "Must be zero or greater",
+  "number": "Must be a number",
+  "platePattern": "4 to 12 characters: letters, digits or hyphen",
   "positiveNumber": "Must be a number greater than zero",
-  "required": "This field is required"
+  "range": "Must be between {{min}} and {{max}}",
+  "required": "This field is required",
+  "temperatureOnlyWhenControlled": "Only allowed when the unit is temperature controlled",
+  "timeZone": "Must be a valid IANA time zone, for example America/Lima"
 }

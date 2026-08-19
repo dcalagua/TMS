@@ -93,11 +93,11 @@ describe('OrderFormModal', () => {
     const onSaved = vi.fn()
     renderModal({ onSaved })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Origin is required')).toBeInTheDocument()
-    expect(screen.getByText('Destination is required')).toBeInTheDocument()
-    expect(screen.getByText('Service date is required')).toBeInTheDocument()
+    expect(await screen.findAllByText('Este campo es obligatorio')).not.toHaveLength(0)
+    // Origin, destination and service date are the three required header fields.
+    expect(screen.getAllByText('Este campo es obligatorio')).toHaveLength(3)
     expect(ordersApiMocks.createOrder).not.toHaveBeenCalled()
     expect(onSaved).not.toHaveBeenCalled()
   })
@@ -108,13 +108,13 @@ describe('OrderFormModal', () => {
     const onSaved = vi.fn()
     renderModal({ onSaved })
 
-    expect(screen.getByText(/Estimated totals/)).toHaveTextContent('0.000 kg')
+    expect(screen.getByText(/Totales estimados/)).toHaveTextContent('0 kg')
 
     await screen.findByRole('option', { name: 'Origin A' })
-    await userEvent.selectOptions(screen.getByLabelText(/^origin/i), 'origin-1')
-    await userEvent.selectOptions(screen.getByLabelText(/^destination/i), 'dest-1')
-    await userEvent.type(screen.getByLabelText(/service date/i), '2026-03-01')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.selectOptions(screen.getByLabelText(/^origen/i), 'origin-1')
+    await userEvent.selectOptions(screen.getByLabelText(/^destino/i), 'dest-1')
+    await userEvent.type(screen.getByLabelText(/^fecha de servicio/i), '2026-03-01')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(ordersApiMocks.createOrder).toHaveBeenCalledWith(
@@ -131,20 +131,20 @@ describe('OrderFormModal', () => {
     renderModal()
 
     await screen.findByRole('option', { name: 'Origin A' })
-    await userEvent.selectOptions(screen.getByLabelText(/^origin/i), 'origin-1')
-    await userEvent.selectOptions(screen.getByLabelText(/^destination/i), 'dest-1')
-    await userEvent.type(screen.getByLabelText(/service date/i), '2026-03-01')
+    await userEvent.selectOptions(screen.getByLabelText(/^origen/i), 'origin-1')
+    await userEvent.selectOptions(screen.getByLabelText(/^destino/i), 'dest-1')
+    await userEvent.type(screen.getByLabelText(/^fecha de servicio/i), '2026-03-01')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Add line' }))
-    await userEvent.type(screen.getByLabelText('Line 1 material code'), 'SKU-1')
-    await userEvent.type(screen.getByLabelText('Line 1 description'), 'Widget')
-    await userEvent.clear(screen.getByLabelText('Line 1 quantity'))
-    await userEvent.type(screen.getByLabelText('Line 1 quantity'), '2')
-    await userEvent.type(screen.getByLabelText('Line 1 unit weight'), '10')
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar línea' }))
+    await userEvent.type(screen.getByLabelText('Código de material de la línea 1'), 'SKU-1')
+    await userEvent.type(screen.getByLabelText('Descripción de la línea 1'), 'Widget')
+    await userEvent.clear(screen.getByLabelText('Cantidad de la línea 1'))
+    await userEvent.type(screen.getByLabelText('Cantidad de la línea 1'), '2')
+    await userEvent.type(screen.getByLabelText('Peso unitario de la línea 1'), '10')
 
-    expect(await screen.findByText(/20\.000 kg/)).toBeInTheDocument()
+    expect(await screen.findByText(/20 kg/)).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(ordersApiMocks.createOrder).toHaveBeenCalledWith(
@@ -160,12 +160,12 @@ describe('OrderFormModal', () => {
     mockLookups()
     renderModal()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Add line' }))
-    expect(screen.getByLabelText('Line 1 material code')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar línea' }))
+    expect(screen.getByLabelText('Código de material de la línea 1')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove line 1' }))
-    expect(screen.queryByLabelText('Line 1 material code')).not.toBeInTheDocument()
-    expect(screen.getByText('No lines added yet.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Quitar la línea 1' }))
+    expect(screen.queryByLabelText('Código de material de la línea 1')).not.toBeInTheDocument()
+    expect(screen.getByText('Aún no hay líneas.')).toBeInTheDocument()
   })
 
   it('loads and pre-fills an existing order, and calls updateOrder with the order id and current version', async () => {
@@ -175,12 +175,12 @@ describe('OrderFormModal', () => {
     const onSaved = vi.fn()
     renderModal({ orderId: 'order-1', onSaved })
 
-    expect(screen.getByText('Loading order...')).toBeInTheDocument()
+    expect(screen.getByText('Cargando pedido...')).toBeInTheDocument()
 
-    expect(await screen.findByLabelText(/service date/i)).toHaveValue('2026-03-01')
-    expect(screen.getByLabelText('Line 1 material code')).toHaveValue('SKU-1')
+    expect(await screen.findByLabelText(/^fecha de servicio/i)).toHaveValue('2026-03-01')
+    expect(screen.getByLabelText('Código de material de la línea 1')).toHaveValue('SKU-1')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(ordersApiMocks.updateOrder).toHaveBeenCalledWith(
@@ -196,8 +196,8 @@ describe('OrderFormModal', () => {
     renderModal({ orderId: 'order-1' })
 
     expect(await screen.findByText(/customer request/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
-    expect(screen.getByLabelText(/service date/i)).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Guardar' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/^fecha de servicio/i)).toBeDisabled()
   })
 
   it('maps a backend field error onto the matching input', async () => {
@@ -208,10 +208,10 @@ describe('OrderFormModal', () => {
     renderModal()
 
     await screen.findByRole('option', { name: 'Origin A' })
-    await userEvent.selectOptions(screen.getByLabelText(/^origin/i), 'origin-1')
-    await userEvent.selectOptions(screen.getByLabelText(/^destination/i), 'dest-1')
-    await userEvent.type(screen.getByLabelText(/service date/i), '2026-03-01')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.selectOptions(screen.getByLabelText(/^origen/i), 'origin-1')
+    await userEvent.selectOptions(screen.getByLabelText(/^destino/i), 'dest-1')
+    await userEvent.type(screen.getByLabelText(/^fecha de servicio/i), '2026-03-01')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     expect(await screen.findByText('originId does not reference an active origin in this company.')).toBeInTheDocument()
   })
@@ -221,7 +221,7 @@ describe('OrderFormModal', () => {
     const onClose = vi.fn()
     renderModal({ onClose })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 
     expect(onClose).toHaveBeenCalled()
   })

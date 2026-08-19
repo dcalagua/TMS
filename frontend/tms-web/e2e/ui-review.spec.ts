@@ -35,6 +35,9 @@ function collectConsoleErrors(page: Page): string[] {
   return errors
 }
 
+// Both tests walk every screen in the product; the default 30s is not enough for that.
+test.describe.configure({ timeout: 120_000 })
+
 const SCREENS = [
   { path: '/', heading: /^Hola,/ },
   { path: '/masters/origins', heading: 'Orígenes' },
@@ -98,4 +101,20 @@ test('captures the review screenshots', async ({ page }) => {
   await page.getByRole('button', { name: 'Abrir o cerrar la navegación' }).click()
   await expect(page.locator('#tms-sidebar')).toBeVisible()
   await page.screenshot({ path: `${SHOTS_DIR}/navigation-drawer-mobile.png` })
+  await page.keyboard.press('Escape')
+
+  // One form dialog at each end of the range: the fieldset grouping on a wide screen, and the
+  // full-screen sheet on a phone.
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/masters/destinations')
+  await page.getByRole('button', { name: 'Nuevo destino' }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.screenshot({ path: `${SHOTS_DIR}/form-destination-desktop.png` })
+  await page.keyboard.press('Escape')
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/masters/destinations')
+  await page.getByRole('button', { name: 'Nuevo destino' }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.screenshot({ path: `${SHOTS_DIR}/form-destination-mobile.png` })
 })

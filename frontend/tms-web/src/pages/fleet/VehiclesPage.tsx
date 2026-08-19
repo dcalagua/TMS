@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import { describeApiError } from '../../shared/api/problemMessages'
+import { useEnumLabels } from '../../shared/i18n/enums'
 import { useCompany } from '../../shared/company/CompanyContext'
 import { fetchCarriers } from '../../shared/api/carriersApi'
 import { fetchVehicleTypes } from '../../shared/api/vehicleTypesApi'
@@ -10,7 +11,6 @@ import {
   activateVehicle,
   deactivateVehicle,
   fetchVehicles,
-  VEHICLE_AVAILABILITY_STATUS_LABELS,
   VEHICLE_AVAILABILITY_STATUSES,
   type VehicleAvailabilityStatus,
   type VehicleView,
@@ -58,6 +58,7 @@ export function VehiclesPage() {
   const { t } = useTranslation('fleet')
   const { t: tc } = useTranslation('common')
   const { t: td } = useTranslation('dialogs')
+  const enumLabels = useEnumLabels()
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('fleet.vehicle:manage')
@@ -169,7 +170,7 @@ export function VehiclesPage() {
       header: tc('columns.availability'),
       render: (vehicle) => (
         <StatusBadge
-          label={VEHICLE_AVAILABILITY_STATUS_LABELS[vehicle.availabilityStatus]}
+          label={enumLabels.vehicleAvailability(vehicle.availabilityStatus)}
           tone={AVAILABILITY_TONE[vehicle.availabilityStatus]}
         />
       ),
@@ -240,7 +241,7 @@ export function VehiclesPage() {
         </div>
         <div>
           <label htmlFor="vehicle-filter-plate" className="form-label small mb-1">
-            License plate
+            {tc('fields.licensePlate')}
           </label>
           <input
             id="vehicle-filter-plate"
@@ -300,7 +301,7 @@ export function VehiclesPage() {
             <option value="">All</option>
             {VEHICLE_AVAILABILITY_STATUSES.map((status) => (
               <option key={status} value={status}>
-                {VEHICLE_AVAILABILITY_STATUS_LABELS[status]}
+                {enumLabels.vehicleAvailability(status)}
               </option>
             ))}
           </select>

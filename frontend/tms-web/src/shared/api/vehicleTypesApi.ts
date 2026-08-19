@@ -8,16 +8,6 @@ export const VEHICLE_BODY_TYPES: VehicleBodyType[] = [
   'DRY_VAN', 'REFRIGERATED', 'FLATBED', 'TANKER', 'CONTAINER', 'CURTAIN_SIDER', 'OTHER',
 ]
 
-export const VEHICLE_BODY_TYPE_LABELS: Record<VehicleBodyType, string> = {
-  DRY_VAN: 'Dry van',
-  REFRIGERATED: 'Refrigerated',
-  FLATBED: 'Flatbed',
-  TANKER: 'Tanker',
-  CONTAINER: 'Container',
-  CURTAIN_SIDER: 'Curtain sider',
-  OTHER: 'Other',
-}
-
 /** Mirrors the backend's `VehicleTypeView` record. Units are explicit in every field name - never mixed. */
 export interface VehicleTypeView {
   id: string

@@ -1,8 +1,18 @@
 {
+  "codePattern": "Solo letras, dígitos, guion bajo o guion",
+  "highlightedFields": "Corrige los campos marcados.",
   "invalidEmail": "Ingresa un correo electrónico válido",
   "invalidNumber": "Ingresa un número válido",
+  "latLongPair": "Indica latitud y longitud, o deja ambas en blanco",
   "maxLength": "No puede superar los {{count}} caracteres",
+  "min": "Debe ser al menos {{min}}",
   "minLength": "Debe tener al menos {{count}} caracteres",
+  "nonNegative": "Debe ser cero o mayor",
+  "number": "Debe ser un número",
+  "platePattern": "De 4 a 12 caracteres: letras, dígitos o guion",
   "positiveNumber": "Debe ser un número mayor que cero",
-  "required": "Este campo es obligatorio"
+  "range": "Debe estar entre {{min}} y {{max}}",
+  "required": "Este campo es obligatorio",
+  "temperatureOnlyWhenControlled": "Solo se permite si la unidad es de temperatura controlada",
+  "timeZone": "Debe ser una zona horaria IANA válida, por ejemplo America/Lima"
 }

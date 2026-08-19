@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../shared/api/httpClient'
 import type { TripDetailView } from '../../shared/api/planningApi'
+import i18n from '../../shared/i18n'
+import { DEFAULT_LANGUAGE } from '../../shared/i18n/config'
 import { CreateTripModal } from './CreateTripModal'
 
 const planningApiMocks = vi.hoisted(() => ({ createTrip: vi.fn() }))
@@ -32,8 +34,9 @@ function renderModal(onCreated = vi.fn(), onClose = vi.fn()) {
   return { ...utils, onCreated, onClose }
 }
 
-afterEach(() => {
+afterEach(async () => {
   vi.clearAllMocks()
+  await i18n.changeLanguage(DEFAULT_LANGUAGE)
 })
 
 describe('CreateTripModal', () => {
@@ -43,7 +46,7 @@ describe('CreateTripModal', () => {
     planningApiMocks.createTrip.mockResolvedValue(detail)
     const { onCreated } = renderModal()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Create trip' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Crear viaje' }))
 
     await waitFor(() =>
       expect(planningApiMocks.createTrip).toHaveBeenCalledWith('company-1', 'run-1', {
@@ -61,8 +64,8 @@ describe('CreateTripModal', () => {
     renderModal()
 
     await screen.findByRole('option', { name: 'VH-1 — ABC-123' })
-    await userEvent.selectOptions(screen.getByLabelText('Vehicle'), 'vehicle-1')
-    await userEvent.click(screen.getByRole('button', { name: 'Create trip' }))
+    await userEvent.selectOptions(screen.getByLabelText('Vehículo'), 'vehicle-1')
+    await userEvent.click(screen.getByRole('button', { name: 'Crear viaje' }))
 
     await waitFor(() =>
       expect(planningApiMocks.createTrip).toHaveBeenCalledWith(
@@ -78,11 +81,50 @@ describe('CreateTripModal', () => {
     )
     const { onCreated } = renderModal()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Create trip' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Crear viaje' }))
 
     expect(
       await screen.findByText('This planning run was changed by someone else since it was loaded. Reload and try again.'),
     ).toBeInTheDocument()
     expect(onCreated).not.toHaveBeenCalled()
+  })
+
+  it('is a modal dialog named by its title, with focus inside it', async () => {
+    vehiclesApiMocks.fetchVehicles.mockResolvedValue(page([]))
+    renderModal()
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(dialog).toHaveAccessibleName('Nuevo viaje')
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true))
+  })
+
+  it('closes on Escape', async () => {
+    vehiclesApiMocks.fetchVehicles.mockResolvedValue(page([]))
+    const { onClose } = renderModal()
+    await screen.findByRole('dialog')
+
+    await userEvent.keyboard('{Escape}')
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes from the cancel button', async () => {
+    vehiclesApiMocks.fetchVehicles.mockResolvedValue(page([]))
+    const { onClose } = renderModal()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancelar' }))
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders in English when the language is switched', async () => {
+    await i18n.changeLanguage('en')
+    vehiclesApiMocks.fetchVehicles.mockResolvedValue(page([]))
+    renderModal()
+
+    expect(await screen.findByRole('button', { name: 'Create trip' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Vehicle')).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Decide later' })).toBeInTheDocument()
   })
 })

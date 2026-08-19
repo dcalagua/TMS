@@ -6,23 +6,13 @@ export type PlanningRunStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED'
 
 export const PLANNING_RUN_STATUSES: PlanningRunStatus[] = ['DRAFT', 'CONFIRMED', 'CANCELLED']
 
-export const PLANNING_RUN_STATUS_LABELS: Record<PlanningRunStatus, string> = {
-  DRAFT: 'Draft',
-  CONFIRMED: 'Confirmed',
-  CANCELLED: 'Cancelled',
-}
-
 /** Mirrors the backend's `PlanningMode` enum. Only `MANUAL` is reachable in V1. */
 export type PlanningMode = 'MANUAL' | 'AUTOMATIC'
 
 /** Mirrors the backend's `TripStatus` enum (`planning/domain/TripStatus.java`). */
 export type TripStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED'
 
-export const TRIP_STATUS_LABELS: Record<TripStatus, string> = {
-  DRAFT: 'Draft',
-  CONFIRMED: 'Confirmed',
-  CANCELLED: 'Cancelled',
-}
+export const TRIP_STATUSES: TripStatus[] = ['DRAFT', 'CONFIRMED', 'CANCELLED']
 
 /** Mirrors the backend's `CapacitySource` enum: where a trip's limits came from. */
 export type CapacitySource = 'LIVE' | 'SNAPSHOT' | 'NONE'

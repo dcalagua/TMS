@@ -153,9 +153,9 @@ describe('DestinationsPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Nuevo destino' }))
     const dialog = within(screen.getByRole('dialog'))
-    await userEvent.type(dialog.getByLabelText(/^code/i), 'NEW-DEST')
-    await userEvent.type(dialog.getByLabelText(/^name/i), 'New Destination')
-    await userEvent.click(dialog.getByRole('button', { name: 'Save' }))
+    await userEvent.type(dialog.getByLabelText(/^código/i), 'NEW-DEST')
+    await userEvent.type(dialog.getByLabelText(/^nombre/i), 'New Destination')
+    await userEvent.click(dialog.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(destinationsApiMocks.createDestination).toHaveBeenCalledWith(

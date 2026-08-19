@@ -9,5 +9,29 @@
     "title": "No planning runs found"
   },
   "new": "New run",
-  "title": "Planning"
+  "run": {
+    "form": {
+      "create": "New planning run",
+      "date": "Planning date",
+      "notes": "Notes",
+      "origin": "Origin",
+      "selectOrigin": "Select an origin",
+      "submit": "Create run",
+      "submitting": "Creating..."
+    }
+  },
+  "title": "Planning",
+  "trip": {
+    "form": {
+      "create": "New trip",
+      "creating": "Creating...",
+      "decideLater": "Decide later",
+      "departure": "Planned departure",
+      "selectVehicle": "Select a vehicle",
+      "submitCreate": "Create trip",
+      "submitVehicle": "Save vehicle",
+      "vehicle": "Vehicle",
+      "vehicleTitle": "Trip {{number}} vehicle"
+    }
+  }
 }

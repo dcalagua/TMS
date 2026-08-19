@@ -1,17 +1,24 @@
 import { useState } from 'react'
 import { useForm, type Validate } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
+import { applyApiFieldErrors } from '../../shared/api/formErrors'
 import type { ApiError } from '../../shared/api/httpClient'
 import {
   createOrigin,
-  ORIGIN_TYPE_LABELS,
   ORIGIN_TYPES,
   updateOrigin,
   type OriginRequest,
   type OriginType,
   type OriginView,
 } from '../../shared/api/originsApi'
-import { describeApiError } from '../../shared/api/problemMessages'
+import { useEnumLabels } from '../../shared/i18n/enums'
 import { FormField } from '../../shared/ui/components/FormField'
+import { TmsModal } from '../../shared/ui/components/TmsModal'
+
+const FORM_ID = 'origin-form'
+
+/** Matches the backend's `code` constraint; kept next to the field it validates. */
+const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/
 
 interface OriginFormValues {
   code: string
@@ -49,8 +56,14 @@ function isValidTimeZone(value: string): boolean {
   }
 }
 
-/** Create and edit share one form: the fields and validation are identical (see `OriginRequest`). */
+/** Create and edit share one form: the fields and validation are identical (see `OriginRequest`).
+ * Fields are grouped the way an operator thinks about them - what the origin *is*, where it is,
+ * and how it links to other systems - rather than in the order the request object declares. */
 export function OriginFormModal({ companyId, origin, onClose, onSaved }: OriginFormModalProps) {
+  const { t } = useTranslation('masters')
+  const { t: tc } = useTranslation('common')
+  const { t: tv } = useTranslation('validations')
+  const enumLabels = useEnumLabels()
   const isEdit = origin !== null
   const [formError, setFormError] = useState<string | null>(null)
   const {
@@ -73,21 +86,21 @@ export function OriginFormModal({ companyId, origin, onClose, onSaved }: OriginF
 
   const validateLatitude: Validate<string, OriginFormValues> = (value, formValues) => {
     if (value.trim() === '') {
-      return formValues.longitude.trim() === '' || 'Provide both latitude and longitude, or leave both blank'
+      return formValues.longitude.trim() === '' || tv('latLongPair')
     }
     const parsed = Number(value)
-    if (Number.isNaN(parsed)) return 'Must be a number'
-    if (parsed < -90 || parsed > 90) return 'Must be between -90 and 90'
+    if (Number.isNaN(parsed)) return tv('number')
+    if (parsed < -90 || parsed > 90) return tv('range', { min: -90, max: 90 })
     return true
   }
 
   const validateLongitude: Validate<string, OriginFormValues> = (value, formValues) => {
     if (value.trim() === '') {
-      return formValues.latitude.trim() === '' || 'Provide both latitude and longitude, or leave both blank'
+      return formValues.latitude.trim() === '' || tv('latLongPair')
     }
     const parsed = Number(value)
-    if (Number.isNaN(parsed)) return 'Must be a number'
-    if (parsed < -180 || parsed > 180) return 'Must be between -180 and 180'
+    if (Number.isNaN(parsed)) return tv('number')
+    if (parsed < -180 || parsed > 180) return tv('range', { min: -180, max: 180 })
     return true
   }
 
@@ -112,164 +125,151 @@ export function OriginFormModal({ companyId, origin, onClose, onSaved }: OriginF
       }
       onSaved()
     } catch (error) {
-      const apiError = error as ApiError
-      if (apiError.fieldErrors.length > 0) {
-        const unmatched: string[] = []
-        for (const fieldError of apiError.fieldErrors) {
-          if (KNOWN_FIELDS.has(fieldError.field as keyof OriginFormValues)) {
-            setError(fieldError.field as keyof OriginFormValues, { message: fieldError.message })
-          } else {
-            unmatched.push(fieldError.message)
-          }
-        }
-        setFormError(unmatched.length > 0 ? unmatched.join(' ') : 'Please correct the highlighted fields.')
-      } else {
-        setFormError(describeApiError(apiError))
-      }
+      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, tv('highlightedFields')))
     }
   }
 
   return (
-    <div
-      className="modal d-block"
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') onClose()
-      }}
+    <TmsModal
+      open
+      title={isEdit ? t('origins.form.edit') : t('origins.form.create')}
+      size="lg"
+      onClose={onClose}
+      closeOnEscape={!isSubmitting}
+      footer={
+        <>
+          <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
+            {tc('actions.cancel')}
+          </button>
+          <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={isSubmitting}>
+            {isSubmitting ? tc('actions.saving') : tc('actions.save')}
+          </button>
+        </>
+      }
     >
-      <div className="modal-dialog modal-lg" role="document">
-        <div className="modal-content">
-          <form onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-            <div className="modal-header">
-              <h5 className="modal-title">{isEdit ? 'Edit origin' : 'New origin'}</h5>
-              <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
-            </div>
-            <div className="modal-body">
-              {formError && (
-                <div className="alert alert-danger py-2 small" role="alert">
-                  {formError}
-                </div>
-              )}
-              <div className="row">
-                <div className="col-md-4">
-                  <FormField label="Code" htmlFor="origin-code" error={errors.code?.message} required>
-                    <input
-                      id="origin-code"
-                      className={`form-control${errors.code ? ' is-invalid' : ''}`}
-                      {...register('code', {
-                        required: 'Code is required',
-                        maxLength: { value: 32, message: 'Must be 32 characters or fewer' },
-                        pattern: {
-                          value: /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/,
-                          message: 'Letters, digits, underscore or hyphen only',
-                        },
-                      })}
-                    />
-                  </FormField>
-                </div>
-                <div className="col-md-8">
-                  <FormField label="Name" htmlFor="origin-name" error={errors.name?.message} required>
-                    <input
-                      id="origin-name"
-                      className={`form-control${errors.name ? ' is-invalid' : ''}`}
-                      {...register('name', {
-                        required: 'Name is required',
-                        maxLength: { value: 200, message: 'Must be 200 characters or fewer' },
-                      })}
-                    />
-                  </FormField>
-                </div>
-              </div>
-              <div className="row">
-                <div className="col-md-4">
-                  <FormField label="Type" htmlFor="origin-type" error={errors.type?.message} required>
-                    <select id="origin-type" className="form-select" {...register('type', { required: true })}>
-                      {ORIGIN_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {ORIGIN_TYPE_LABELS[type]}
-                        </option>
-                      ))}
-                    </select>
-                  </FormField>
-                </div>
-                <div className="col-md-8">
-                  <FormField label="Address" htmlFor="origin-address" error={errors.address?.message}>
-                    <input
-                      id="origin-address"
-                      className={`form-control${errors.address ? ' is-invalid' : ''}`}
-                      {...register('address', { maxLength: { value: 500, message: 'Must be 500 characters or fewer' } })}
-                    />
-                  </FormField>
-                </div>
-              </div>
-              <div className="row">
-                <div className="col-md-3">
-                  <FormField label="Latitude" htmlFor="origin-latitude" error={errors.latitude?.message}>
-                    <input
-                      id="origin-latitude"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="-12.046374"
-                      className={`form-control${errors.latitude ? ' is-invalid' : ''}`}
-                      {...register('latitude', { validate: validateLatitude })}
-                    />
-                  </FormField>
-                </div>
-                <div className="col-md-3">
-                  <FormField label="Longitude" htmlFor="origin-longitude" error={errors.longitude?.message}>
-                    <input
-                      id="origin-longitude"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="-77.042793"
-                      className={`form-control${errors.longitude ? ' is-invalid' : ''}`}
-                      {...register('longitude', { validate: validateLongitude })}
-                    />
-                  </FormField>
-                </div>
-                <div className="col-md-6">
-                  <FormField label="Time zone" htmlFor="origin-timezone" error={errors.timeZone?.message} required>
-                    <input
-                      id="origin-timezone"
-                      list="tms-time-zones"
-                      placeholder="America/Lima"
-                      className={`form-control${errors.timeZone ? ' is-invalid' : ''}`}
-                      {...register('timeZone', {
-                        required: 'Time zone is required',
-                        validate: (value) => isValidTimeZone(value.trim()) || 'Must be a valid IANA time zone, e.g. America/Lima',
-                      })}
-                    />
-                    <datalist id="tms-time-zones">
-                      {TIME_ZONES.map((zone) => (
-                        <option key={zone} value={zone} />
-                      ))}
-                    </datalist>
-                  </FormField>
-                </div>
-              </div>
-              <FormField label="External reference" htmlFor="origin-external-reference" error={errors.externalReference?.message}>
+      <form id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
+        {formError && (
+          <div className="alert alert-danger py-2 small" role="alert">
+            {formError}
+          </div>
+        )}
+
+        <fieldset className="tms-fieldset">
+          <legend className="tms-fieldset-legend">{tc('sections.identification')}</legend>
+          <div className="row">
+            <div className="col-12 col-sm-4">
+              <FormField label={tc('columns.code')} htmlFor="origin-code" error={errors.code?.message} required>
                 <input
-                  id="origin-external-reference"
-                  className={`form-control${errors.externalReference ? ' is-invalid' : ''}`}
-                  placeholder="Optional EWM or external system code"
-                  {...register('externalReference', { maxLength: { value: 100, message: 'Must be 100 characters or fewer' } })}
+                  id="origin-code"
+                  className={`form-control${errors.code ? ' is-invalid' : ''}`}
+                  {...register('code', {
+                    required: tv('required'),
+                    maxLength: { value: 32, message: tv('maxLength', { count: 32 }) },
+                    pattern: { value: CODE_PATTERN, message: tv('codePattern') },
+                  })}
                 />
               </FormField>
             </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-outline-secondary" onClick={onClose}>
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save'}
-              </button>
+            <div className="col-12 col-sm-8">
+              <FormField label={tc('columns.name')} htmlFor="origin-name" error={errors.name?.message} required>
+                <input
+                  id="origin-name"
+                  className={`form-control${errors.name ? ' is-invalid' : ''}`}
+                  {...register('name', {
+                    required: tv('required'),
+                    maxLength: { value: 200, message: tv('maxLength', { count: 200 }) },
+                  })}
+                />
+              </FormField>
             </div>
-          </form>
-        </div>
-      </div>
-      <div className="modal-backdrop show" />
-    </div>
+            <div className="col-12 col-sm-4">
+              <FormField label={tc('columns.type')} htmlFor="origin-type" error={errors.type?.message} required>
+                <select id="origin-type" className="form-select" {...register('type', { required: true })}>
+                  {ORIGIN_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {enumLabels.originType(type)}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset className="tms-fieldset">
+          <legend className="tms-fieldset-legend">{tc('sections.location')}</legend>
+          <div className="row">
+            <div className="col-12">
+              <FormField label={tc('columns.address')} htmlFor="origin-address" error={errors.address?.message}>
+                <input
+                  id="origin-address"
+                  className={`form-control${errors.address ? ' is-invalid' : ''}`}
+                  {...register('address', { maxLength: { value: 500, message: tv('maxLength', { count: 500 }) } })}
+                />
+              </FormField>
+            </div>
+            <div className="col-6 col-sm-3">
+              <FormField label={tc('fields.latitude')} htmlFor="origin-latitude" error={errors.latitude?.message}>
+                <input
+                  id="origin-latitude"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder={tc('placeholders.latitude')}
+                  className={`form-control${errors.latitude ? ' is-invalid' : ''}`}
+                  {...register('latitude', { validate: validateLatitude })}
+                />
+              </FormField>
+            </div>
+            <div className="col-6 col-sm-3">
+              <FormField label={tc('fields.longitude')} htmlFor="origin-longitude" error={errors.longitude?.message}>
+                <input
+                  id="origin-longitude"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder={tc('placeholders.longitude')}
+                  className={`form-control${errors.longitude ? ' is-invalid' : ''}`}
+                  {...register('longitude', { validate: validateLongitude })}
+                />
+              </FormField>
+            </div>
+            <div className="col-12 col-sm-6">
+              <FormField label={tc('columns.timeZone')} htmlFor="origin-timezone" error={errors.timeZone?.message} required>
+                <input
+                  id="origin-timezone"
+                  list="tms-time-zones"
+                  placeholder={tc('placeholders.timeZone')}
+                  className={`form-control${errors.timeZone ? ' is-invalid' : ''}`}
+                  {...register('timeZone', {
+                    required: tv('required'),
+                    validate: (value) => isValidTimeZone(value.trim()) || tv('timeZone'),
+                  })}
+                />
+                <datalist id="tms-time-zones">
+                  {TIME_ZONES.map((zone) => (
+                    <option key={zone} value={zone} />
+                  ))}
+                </datalist>
+              </FormField>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset className="tms-fieldset mb-0">
+          <legend className="tms-fieldset-legend">{tc('sections.operation')}</legend>
+          <FormField
+            label={tc('fields.externalReference')}
+            htmlFor="origin-external-reference"
+            error={errors.externalReference?.message}
+          >
+            <input
+              id="origin-external-reference"
+              className={`form-control${errors.externalReference ? ' is-invalid' : ''}`}
+              placeholder={tc('placeholders.externalReference')}
+              {...register('externalReference', { maxLength: { value: 100, message: tv('maxLength', { count: 100 }) } })}
+            />
+          </FormField>
+        </fieldset>
+      </form>
+    </TmsModal>
   )
 }

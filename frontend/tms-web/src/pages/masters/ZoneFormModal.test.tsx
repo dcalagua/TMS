@@ -29,10 +29,12 @@ describe('ZoneFormModal', () => {
     const onSaved = vi.fn()
     render(<ZoneFormModal companyId="company-1" zone={null} onClose={vi.fn()} onSaved={onSaved} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Code is required')).toBeInTheDocument()
-    expect(screen.getByText('Name is required')).toBeInTheDocument()
+    // Both required fields report inline, each under its own label.
+    await waitFor(() => expect(screen.getAllByText('Este campo es obligatorio')).toHaveLength(2))
+    expect(screen.getByLabelText(/^código/i)).toHaveClass('is-invalid')
+    expect(screen.getByLabelText(/^nombre/i)).toHaveClass('is-invalid')
     expect(zonesApiMocks.createZone).not.toHaveBeenCalled()
     expect(onSaved).not.toHaveBeenCalled()
   })
@@ -40,10 +42,10 @@ describe('ZoneFormModal', () => {
   it('rejects a code with characters outside the allowed shape', async () => {
     render(<ZoneFormModal companyId="company-1" zone={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'has space')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'has space')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Letters, digits, underscore or hyphen only')).toBeInTheDocument()
+    expect(await screen.findByText('Solo letras, dígitos, guion bajo o guion')).toBeInTheDocument()
     expect(zonesApiMocks.createZone).not.toHaveBeenCalled()
   })
 
@@ -52,9 +54,9 @@ describe('ZoneFormModal', () => {
     const onSaved = vi.fn()
     render(<ZoneFormModal companyId="company-1" zone={null} onClose={vi.fn()} onSaved={onSaved} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'south-zone')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'South Zone')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'south-zone')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'South Zone')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(zonesApiMocks.createZone).toHaveBeenCalledWith(
@@ -70,12 +72,12 @@ describe('ZoneFormModal', () => {
     const onSaved = vi.fn()
     render(<ZoneFormModal companyId="company-1" zone={ZONE} onClose={vi.fn()} onSaved={onSaved} />)
 
-    expect(screen.getByLabelText(/^code/i)).toHaveValue('NORTH-ZONE')
-    expect(screen.getByLabelText(/^name/i)).toHaveValue('North Zone')
+    expect(screen.getByLabelText(/^código/i)).toHaveValue('NORTH-ZONE')
+    expect(screen.getByLabelText(/^nombre/i)).toHaveValue('North Zone')
 
-    await userEvent.clear(screen.getByLabelText(/^name/i))
-    await userEvent.type(screen.getByLabelText(/^name/i), 'North Zone Renamed')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.clear(screen.getByLabelText(/^nombre/i))
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'North Zone Renamed')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(zonesApiMocks.updateZone).toHaveBeenCalledWith(
@@ -93,9 +95,9 @@ describe('ZoneFormModal', () => {
     })
     render(<ZoneFormModal companyId="company-1" zone={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'DUP')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'Duplicate')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'DUP')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'Duplicate')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     expect(await screen.findByText("code 'DUP' already exists")).toBeInTheDocument()
   })
@@ -104,7 +106,7 @@ describe('ZoneFormModal', () => {
     const onClose = vi.fn()
     render(<ZoneFormModal companyId="company-1" zone={null} onClose={onClose} onSaved={vi.fn()} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 
     expect(onClose).toHaveBeenCalled()
   })

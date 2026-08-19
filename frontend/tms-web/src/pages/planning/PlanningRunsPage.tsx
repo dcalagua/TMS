@@ -1,3 +1,4 @@
+import { useEnumLabels } from '../../shared/i18n/enums'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -7,7 +8,6 @@ import { fetchOrigins } from '../../shared/api/originsApi'
 import {
   fetchPlanningRuns,
   PLANNING_RUN_STATUSES,
-  PLANNING_RUN_STATUS_LABELS,
   type PlanningRunStatus,
   type PlanningRunView,
 } from '../../shared/api/planningApi'
@@ -47,6 +47,7 @@ const DEFAULT_FILTERS: AppliedFilters = { planNumber: '', originId: '', planning
  * never edited from here - only listed, filtered and created. */
 export function PlanningRunsPage() {
   const { t } = useTranslation('planning')
+  const enumLabels = useEnumLabels()
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('planning.plan:manage')
@@ -100,7 +101,7 @@ export function PlanningRunsPage() {
     {
       key: 'status',
       header: 'Status',
-      render: (run) => <StatusBadge label={PLANNING_RUN_STATUS_LABELS[run.status]} tone={STATUS_TONE[run.status]} />,
+      render: (run) => <StatusBadge label={enumLabels.planningRunStatus(run.status)} tone={STATUS_TONE[run.status]} />,
     },
     { key: 'trips', header: 'Trips', className: 'text-end', render: (run) => run.tripCount },
     { key: 'orders', header: 'Orders assigned', className: 'text-end', render: (run) => run.assignedOrderCount },
@@ -199,7 +200,7 @@ export function PlanningRunsPage() {
             <option value="">All statuses</option>
             {PLANNING_RUN_STATUSES.map((status) => (
               <option key={status} value={status}>
-                {PLANNING_RUN_STATUS_LABELS[status]}
+                {enumLabels.planningRunStatus(status)}
               </option>
             ))}
           </select>

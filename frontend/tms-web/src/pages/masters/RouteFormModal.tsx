@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { useFieldArray, useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
+import { applyApiFieldErrors } from '../../shared/api/formErrors'
 import type { ApiError } from '../../shared/api/httpClient'
 import { fetchOrigins } from '../../shared/api/originsApi'
 import { fetchZones } from '../../shared/api/zonesApi'
@@ -16,6 +18,12 @@ import {
 import { describeApiError } from '../../shared/api/problemMessages'
 import { FormField } from '../../shared/ui/components/FormField'
 import { LoadingState } from '../../shared/ui/components/LoadingState'
+import { TmsModal } from '../../shared/ui/components/TmsModal'
+
+const FORM_ID = 'route-form'
+
+/** Matches the backend's `code` constraint; kept next to the field it validates. */
+const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/
 
 interface SelectOption {
   id: string
@@ -59,34 +67,28 @@ function withCurrentValue(options: SelectOption[], id: string | null, code: stri
 }
 
 export function RouteFormModal({ companyId, routeId, onClose, onSaved }: RouteFormModalProps) {
+  const { t } = useTranslation('masters')
+  const { t: tc } = useTranslation('common')
+
   const routeQuery = useQuery({
     queryKey: ['route', companyId, routeId],
     queryFn: ({ signal }) => fetchRoute(companyId, routeId as string, signal),
     enabled: routeId !== null,
   })
 
+  // The edit form cannot render before the route's stops arrive, so the dialog opens with its
+  // own loading state rather than flashing an empty form.
   if (routeId !== null && !routeQuery.data) {
     return (
-      <div className="modal d-block" tabIndex={-1} role="dialog" aria-modal="true">
-        <div className="modal-dialog modal-lg" role="document">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h5 className="modal-title">Edit route</h5>
-              <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
-            </div>
-            <div className="modal-body">
-              {routeQuery.isError ? (
-                <div className="alert alert-danger py-2 small" role="alert">
-                  {describeApiError(routeQuery.error as ApiError)}
-                </div>
-              ) : (
-                <LoadingState label="Loading route..." />
-              )}
-            </div>
+      <TmsModal open title={t('routes.form.edit')} size="lg" onClose={onClose}>
+        {routeQuery.isError ? (
+          <div className="alert alert-danger py-2 small" role="alert">
+            {describeApiError(routeQuery.error as ApiError)}
           </div>
-        </div>
-        <div className="modal-backdrop show" />
-      </div>
+        ) : (
+          <LoadingState label={tc('loading.route')} />
+        )}
+      </TmsModal>
     )
   }
 
@@ -101,6 +103,9 @@ function RouteForm({
   onClose: () => void
   onSaved: () => void
 }) {
+  const { t } = useTranslation('masters')
+  const { t: tc } = useTranslation('common')
+  const { t: tv } = useTranslation('validations')
   const isEdit = route !== null
   const [formError, setFormError] = useState<string | null>(null)
   const [stopToAdd, setStopToAdd] = useState('')
@@ -184,7 +189,7 @@ function RouteForm({
   async function onSubmit(values: RouteFormValues) {
     setFormError(null)
     if (values.stops.length === 0) {
-      setFormError('Add at least one destination stop.')
+      setFormError(t('routes.form.atLeastOneStop'))
       return
     }
 
@@ -208,234 +213,213 @@ function RouteForm({
       }
       onSaved()
     } catch (error) {
-      const apiError = error as ApiError
-      if (apiError.fieldErrors.length > 0) {
-        const unmatched: string[] = []
-        for (const fieldError of apiError.fieldErrors) {
-          if (KNOWN_FIELDS.has(fieldError.field as keyof RouteFormValues)) {
-            setError(fieldError.field as keyof RouteFormValues, { message: fieldError.message })
-          } else {
-            unmatched.push(fieldError.message)
-          }
-        }
-        setFormError(unmatched.length > 0 ? unmatched.join(' ') : 'Please correct the highlighted fields.')
-      } else {
-        setFormError(describeApiError(apiError))
-      }
+      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, tv('highlightedFields')))
     }
   }
 
   return (
-    <div
-      className="modal d-block"
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') onClose()
-      }}
+    <TmsModal
+      open
+      title={isEdit ? t('routes.form.edit') : t('routes.form.create')}
+      size="lg"
+      onClose={onClose}
+      closeOnEscape={!isSubmitting}
+      footer={
+        <>
+          <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
+            {tc('actions.cancel')}
+          </button>
+          <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={isSubmitting}>
+            {isSubmitting ? tc('actions.saving') : tc('actions.save')}
+          </button>
+        </>
+      }
     >
-      <div className="modal-dialog modal-lg" role="document">
-        <div className="modal-content">
-          <form onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-            <div className="modal-header">
-              <h5 className="modal-title">{isEdit ? 'Edit route' : 'New route'}</h5>
-              <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
-            </div>
-            <div className="modal-body">
-              <div className="alert alert-secondary small py-2" role="note">
-                A Master Route is a reusable planned corridor, not a calculated Trip route: it has
-                no live position or optimizer output, just an origin and an ordered list of stops
-                a planner sets up once.
-              </div>
-              {formError && (
-                <div className="alert alert-danger py-2 small" role="alert">
-                  {formError}
-                </div>
-              )}
-              <div className="row">
-                <div className="col-md-3">
-                  <FormField label="Code" htmlFor="route-code" error={errors.code?.message} required>
-                    <input
-                      id="route-code"
-                      className={`form-control${errors.code ? ' is-invalid' : ''}`}
-                      {...register('code', {
-                        required: 'Code is required',
-                        maxLength: { value: 32, message: 'Must be 32 characters or fewer' },
-                        pattern: {
-                          value: /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/,
-                          message: 'Letters, digits, underscore or hyphen only',
-                        },
-                      })}
-                    />
-                  </FormField>
-                </div>
-                <div className="col-md-9">
-                  <FormField label="Name" htmlFor="route-name" error={errors.name?.message} required>
-                    <input
-                      id="route-name"
-                      className={`form-control${errors.name ? ' is-invalid' : ''}`}
-                      {...register('name', {
-                        required: 'Name is required',
-                        maxLength: { value: 200, message: 'Must be 200 characters or fewer' },
-                      })}
-                    />
-                  </FormField>
-                </div>
-              </div>
-              <div className="row">
-                <div className="col-md-4">
-                  <FormField label="Origin" htmlFor="route-origin" error={errors.originId?.message} required>
-                    <select
-                      id="route-origin"
-                      className={`form-select${errors.originId ? ' is-invalid' : ''}`}
-                      {...register('originId', { required: 'Origin is required' })}
-                    >
-                      <option value="">Select an origin</option>
-                      {originOptions.map((origin) => (
-                        <option key={origin.id} value={origin.id}>
-                          {origin.name}
-                        </option>
-                      ))}
-                    </select>
-                  </FormField>
-                </div>
-                <div className="col-md-4">
-                  <FormField label="Zone" htmlFor="route-zone" error={errors.zoneId?.message}>
-                    <select id="route-zone" className="form-select" {...register('zoneId')}>
-                      <option value="">No zone</option>
-                      {zoneOptions.map((zone) => (
-                        <option key={zone.id} value={zone.id}>
-                          {zone.name}
-                        </option>
-                      ))}
-                    </select>
-                  </FormField>
-                </div>
-                <div className="col-md-4">
-                  <FormField label="Frequency" htmlFor="route-frequency" error={errors.frequencyId?.message}>
-                    <select id="route-frequency" className="form-select" {...register('frequencyId')}>
-                      <option value="">No frequency</option>
-                      {frequencyOptions.map((frequency) => (
-                        <option key={frequency.id} value={frequency.id}>
-                          {frequency.name}
-                        </option>
-                      ))}
-                    </select>
-                  </FormField>
-                </div>
-              </div>
-              <div className="row">
-                <div className="col-md-6">
-                  <FormField
-                    label="Reference distance (km)"
-                    htmlFor="route-distance"
-                    error={errors.referenceDistanceKm?.message}
-                  >
-                    <input
-                      id="route-distance"
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      className={`form-control${errors.referenceDistanceKm ? ' is-invalid' : ''}`}
-                      {...register('referenceDistanceKm', { min: { value: 0, message: 'Must be zero or greater' } })}
-                    />
-                  </FormField>
-                </div>
-                <div className="col-md-6">
-                  <FormField
-                    label="Reference duration (min)"
-                    htmlFor="route-duration"
-                    error={errors.referenceDurationMinutes?.message}
-                  >
-                    <input
-                      id="route-duration"
-                      type="number"
-                      min={0}
-                      className={`form-control${errors.referenceDurationMinutes ? ' is-invalid' : ''}`}
-                      {...register('referenceDurationMinutes', {
-                        min: { value: 0, message: 'Must be zero or greater' },
-                      })}
-                    />
-                  </FormField>
-                </div>
-              </div>
+      <form id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
+        <p className="alert alert-secondary small py-2">{t('routes.form.note')}</p>
 
-              <label className="form-label mt-2">Destination stops, in order</label>
-              {fields.length === 0 && <p className="text-body-secondary small">No stops added yet.</p>}
-              {fields.length > 0 && (
-                <ol className="list-group list-group-numbered mb-2">
-                  {fields.map((field, index) => {
-                    const destination = destinationLookup.get(field.destinationId)
-                    return (
-                      <li key={field.id} className="list-group-item d-flex justify-content-between align-items-center">
-                        <span>
-                          {destination ? `${destination.code} — ${destination.name}` : field.destinationId}
-                        </span>
-                        <div className="btn-group btn-group-sm">
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary"
-                            aria-label={`Move stop ${index + 1} up`}
-                            disabled={index === 0}
-                            onClick={() => move(index, index - 1)}
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary"
-                            aria-label={`Move stop ${index + 1} down`}
-                            disabled={index === fields.length - 1}
-                            onClick={() => move(index, index + 1)}
-                          >
-                            ↓
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-outline-danger"
-                            aria-label={`Remove stop ${index + 1}`}
-                            onClick={() => remove(index)}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </li>
-                    )
+        {formError && (
+          <div className="alert alert-danger py-2 small" role="alert">
+            {formError}
+          </div>
+        )}
+
+        <fieldset className="tms-fieldset">
+          <legend className="tms-fieldset-legend">{tc('sections.identification')}</legend>
+          <div className="row">
+            <div className="col-12 col-sm-3">
+              <FormField label={tc('columns.code')} htmlFor="route-code" error={errors.code?.message} required>
+                <input
+                  id="route-code"
+                  className={`form-control${errors.code ? ' is-invalid' : ''}`}
+                  {...register('code', {
+                    required: tv('required'),
+                    maxLength: { value: 32, message: tv('maxLength', { count: 32 }) },
+                    pattern: { value: CODE_PATTERN, message: tv('codePattern') },
                   })}
-                </ol>
-              )}
-              <div className="input-group input-group-sm">
+                />
+              </FormField>
+            </div>
+            <div className="col-12 col-sm-9">
+              <FormField label={tc('columns.name')} htmlFor="route-name" error={errors.name?.message} required>
+                <input
+                  id="route-name"
+                  className={`form-control${errors.name ? ' is-invalid' : ''}`}
+                  {...register('name', {
+                    required: tv('required'),
+                    maxLength: { value: 200, message: tv('maxLength', { count: 200 }) },
+                  })}
+                />
+              </FormField>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset className="tms-fieldset">
+          <legend className="tms-fieldset-legend">{tc('sections.operation')}</legend>
+          <div className="row">
+            <div className="col-12 col-sm-4">
+              <FormField label={tc('columns.origin')} htmlFor="route-origin" error={errors.originId?.message} required>
                 <select
-                  className="form-select"
-                  aria-label="Destination to add"
-                  value={stopToAdd}
-                  onChange={(event) => setStopToAdd(event.target.value)}
+                  id="route-origin"
+                  className={`form-select${errors.originId ? ' is-invalid' : ''}`}
+                  {...register('originId', { required: tv('required') })}
                 >
-                  <option value="">Select a destination to add</option>
-                  {addableDestinations.map((destination) => (
-                    <option key={destination.id} value={destination.id}>
-                      {destination.code} — {destination.name}
+                  <option value="">{t('routes.form.selectOrigin')}</option>
+                  {originOptions.map((origin) => (
+                    <option key={origin.id} value={origin.id}>
+                      {origin.name}
                     </option>
                   ))}
                 </select>
-                <button type="button" className="btn btn-outline-primary" onClick={addStop} disabled={stopToAdd === ''}>
-                  Add stop
-                </button>
-              </div>
+              </FormField>
             </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-outline-secondary" onClick={onClose}>
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save'}
-              </button>
+            <div className="col-12 col-sm-4">
+              <FormField label={tc('columns.zone')} htmlFor="route-zone" error={errors.zoneId?.message}>
+                <select id="route-zone" className="form-select" {...register('zoneId')}>
+                  <option value="">{t('routes.form.noZone')}</option>
+                  {zoneOptions.map((zone) => (
+                    <option key={zone.id} value={zone.id}>
+                      {zone.name}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
             </div>
-          </form>
-        </div>
-      </div>
-      <div className="modal-backdrop show" />
-    </div>
+            <div className="col-12 col-sm-4">
+              <FormField label={tc('fields.frequency')} htmlFor="route-frequency" error={errors.frequencyId?.message}>
+                <select id="route-frequency" className="form-select" {...register('frequencyId')}>
+                  <option value="">{t('routes.form.noFrequency')}</option>
+                  {frequencyOptions.map((frequency) => (
+                    <option key={frequency.id} value={frequency.id}>
+                      {frequency.name}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </div>
+            <div className="col-6">
+              <FormField
+                label={tc('fields.referenceDistanceKm')}
+                htmlFor="route-distance"
+                error={errors.referenceDistanceKm?.message}
+              >
+                <input
+                  id="route-distance"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  className={`form-control${errors.referenceDistanceKm ? ' is-invalid' : ''}`}
+                  {...register('referenceDistanceKm', { min: { value: 0, message: tv('nonNegative') } })}
+                />
+              </FormField>
+            </div>
+            <div className="col-6">
+              <FormField
+                label={tc('fields.referenceDurationMin')}
+                htmlFor="route-duration"
+                error={errors.referenceDurationMinutes?.message}
+              >
+                <input
+                  id="route-duration"
+                  type="number"
+                  min={0}
+                  className={`form-control${errors.referenceDurationMinutes ? ' is-invalid' : ''}`}
+                  {...register('referenceDurationMinutes', { min: { value: 0, message: tv('nonNegative') } })}
+                />
+              </FormField>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset className="tms-fieldset mb-0">
+          <legend className="tms-fieldset-legend">{t('routes.form.stopsLabel')}</legend>
+
+          {fields.length === 0 && <p className="text-body-secondary small">{t('routes.form.noStops')}</p>}
+          {fields.length > 0 && (
+            <ol className="list-group list-group-numbered mb-2">
+              {fields.map((field, index) => {
+                const destination = destinationLookup.get(field.destinationId)
+                const position = index + 1
+                return (
+                  <li key={field.id} className="list-group-item d-flex justify-content-between align-items-center gap-2">
+                    <span className="tms-min-w-0 tms-truncate">
+                      {destination ? `${destination.code} — ${destination.name}` : field.destinationId}
+                    </span>
+                    <span className="btn-group btn-group-sm flex-shrink-0">
+                      <button
+                        type="button"
+                        className="btn btn-outline-secondary"
+                        aria-label={t('routes.form.moveUp', { position })}
+                        disabled={index === 0}
+                        onClick={() => move(index, index - 1)}
+                      >
+                        <i className="bi bi-arrow-up" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline-secondary"
+                        aria-label={t('routes.form.moveDown', { position })}
+                        disabled={index === fields.length - 1}
+                        onClick={() => move(index, index + 1)}
+                      >
+                        <i className="bi bi-arrow-down" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline-danger"
+                        aria-label={t('routes.form.removeStop', { position })}
+                        onClick={() => remove(index)}
+                      >
+                        {t('routes.form.remove')}
+                      </button>
+                    </span>
+                  </li>
+                )
+              })}
+            </ol>
+          )}
+
+          <div className="input-group input-group-sm">
+            <select
+              className="form-select"
+              aria-label={tc('fields.destinationToAdd')}
+              value={stopToAdd}
+              onChange={(event) => setStopToAdd(event.target.value)}
+            >
+              <option value="">{t('routes.form.selectDestination')}</option>
+              {addableDestinations.map((destination) => (
+                <option key={destination.id} value={destination.id}>
+                  {destination.code} — {destination.name}
+                </option>
+              ))}
+            </select>
+            <button type="button" className="btn btn-outline-primary" onClick={addStop} disabled={stopToAdd === ''}>
+              {t('routes.form.addStop')}
+            </button>
+          </div>
+        </fieldset>
+      </form>
+    </TmsModal>
   )
 }

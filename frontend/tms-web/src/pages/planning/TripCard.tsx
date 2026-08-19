@@ -1,6 +1,7 @@
+import { useEnumLabels } from '../../shared/i18n/enums'
 import { CapacityBar } from '../../shared/ui/components/CapacityBar'
 import { StatusBadge, type StatusTone } from '../../shared/ui/components/StatusBadge'
-import { TRIP_STATUS_LABELS, type TripStatus, type TripView } from '../../shared/api/planningApi'
+import { type TripStatus, type TripView } from '../../shared/api/planningApi'
 
 const STATUS_TONE: Record<TripStatus, StatusTone> = {
   DRAFT: 'info',
@@ -17,11 +18,12 @@ interface TripCardProps {
  * bars the step brief asks every card to show, rendered exactly as the backend computed them
  * (`TripCapacityView`) - see `CapacityBar`. Opens `TripDetailDrawer` for assignments and stops. */
 export function TripCard({ trip, onOpen }: TripCardProps) {
+  const enumLabels = useEnumLabels()
   return (
     <div className="card shadow-sm h-100">
       <div className="card-header bg-white d-flex justify-content-between align-items-center">
         <span className="fw-semibold">Trip {trip.tripNumber}</span>
-        <StatusBadge label={TRIP_STATUS_LABELS[trip.status]} tone={STATUS_TONE[trip.status]} />
+        <StatusBadge label={enumLabels.tripStatus(trip.status)} tone={STATUS_TONE[trip.status]} />
       </div>
       <div className="card-body">
         <p className="mb-1">

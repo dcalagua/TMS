@@ -52,10 +52,10 @@ describe('PlanningRunFormModal', () => {
     const { onCreated } = renderModal()
 
     await screen.findByRole('option', { name: 'Origin A' })
-    await userEvent.selectOptions(screen.getByLabelText(/origin/i), 'origin-1')
-    await userEvent.type(screen.getByLabelText(/planning date/i), '2026-03-01')
-    await userEvent.type(screen.getByLabelText(/notes/i), '  Priority run  ')
-    await userEvent.click(screen.getByRole('button', { name: 'Create run' }))
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /^Origen/ }), 'origin-1')
+    await userEvent.type(screen.getByLabelText(/^Fecha de planificaci/i), '2026-03-01')
+    await userEvent.type(screen.getByLabelText(/^Notas/i), '  Priority run  ')
+    await userEvent.click(screen.getByRole('button', { name: 'Crear corrida' }))
 
     await waitFor(() =>
       expect(planningApiMocks.createPlanningRun).toHaveBeenCalledWith('company-1', {
@@ -73,9 +73,9 @@ describe('PlanningRunFormModal', () => {
     const { onCreated } = renderModal()
 
     await screen.findByRole('option', { name: 'Origin A' })
-    await userEvent.selectOptions(screen.getByLabelText(/origin/i), 'origin-1')
-    await userEvent.type(screen.getByLabelText(/planning date/i), '2026-03-01')
-    await userEvent.click(screen.getByRole('button', { name: 'Create run' }))
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /^Origen/ }), 'origin-1')
+    await userEvent.type(screen.getByLabelText(/^Fecha de planificaci/i), '2026-03-01')
+    await userEvent.click(screen.getByRole('button', { name: 'Crear corrida' }))
 
     expect(await screen.findByText('Este cambio entra en conflicto con otra actualización. Recarga e inténtalo de nuevo.')).toBeInTheDocument()
     expect(onCreated).not.toHaveBeenCalled()
@@ -85,7 +85,7 @@ describe('PlanningRunFormModal', () => {
     originsApiMocks.fetchOrigins.mockResolvedValue(page([]))
     const { onClose } = renderModal()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancelar' }))
 
     expect(onClose).toHaveBeenCalled()
   })

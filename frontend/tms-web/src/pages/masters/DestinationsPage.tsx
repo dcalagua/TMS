@@ -5,7 +5,6 @@ import type { ApiError } from '../../shared/api/httpClient'
 import {
   activateDestination,
   deactivateDestination,
-  DESTINATION_TYPE_LABELS,
   DESTINATION_TYPES,
   fetchDestinations,
   type DestinationType,
@@ -13,6 +12,7 @@ import {
 } from '../../shared/api/destinationsApi'
 import { fetchZones } from '../../shared/api/zonesApi'
 import { describeApiError } from '../../shared/api/problemMessages'
+import { useEnumLabels } from '../../shared/i18n/enums'
 import { useCompany } from '../../shared/company/CompanyContext'
 import {
   confirmDialog,
@@ -47,6 +47,7 @@ export function DestinationsPage() {
   const { t } = useTranslation('masters')
   const { t: tc } = useTranslation('common')
   const { t: td } = useTranslation('dialogs')
+  const enumLabels = useEnumLabels()
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('masterdata.destination:manage')
@@ -125,7 +126,7 @@ export function DestinationsPage() {
   const columns: DataTableColumn<DestinationView>[] = [
     { key: 'code', header: tc('columns.code'), render: (destination) => <span className="fw-semibold">{destination.code}</span> },
     { key: 'name', header: tc('columns.name'), render: (destination) => destination.name },
-    { key: 'type', header: tc('columns.type'), render: (destination) => DESTINATION_TYPE_LABELS[destination.type] },
+    { key: 'type', header: tc('columns.type'), render: (destination) => enumLabels.destinationType(destination.type) },
     { key: 'zone', header: tc('columns.zone'), render: (destination) => destination.zoneName ?? '—' },
     {
       key: 'locality',
@@ -221,7 +222,7 @@ export function DestinationsPage() {
             <option value="">{tc('filters.allTypes')}</option>
             {DESTINATION_TYPES.map((type) => (
               <option key={type} value={type}>
-                {DESTINATION_TYPE_LABELS[type]}
+                {enumLabels.destinationType(type)}
               </option>
             ))}
           </select>

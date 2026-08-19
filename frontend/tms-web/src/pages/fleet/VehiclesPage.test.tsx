@@ -138,7 +138,7 @@ describe('VehiclesPage', () => {
     expect(screen.getByText('Carrier One SA')).toBeInTheDocument()
     expect(screen.getByText('10 ton truck')).toBeInTheDocument()
     expect(screen.getByText(/10000 kg/)).toBeInTheDocument()
-    expect(screen.getByText('Available', { selector: 'span' })).toBeInTheDocument()
+    expect(screen.getByText('Disponible', { selector: 'span' })).toBeInTheDocument()
     expect(screen.getByText(/Página 1 de 3/)).toBeInTheDocument()
   })
 
@@ -194,7 +194,7 @@ describe('VehiclesPage', () => {
     renderPage()
     await screen.findByText('ABC-123')
 
-    await userEvent.type(screen.getByLabelText(/license plate/i), 'abc')
+    await userEvent.type(screen.getByLabelText(/^placa/i), 'abc')
     await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
 
     await waitFor(() =>

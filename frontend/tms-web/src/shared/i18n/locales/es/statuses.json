@@ -1,7 +1,58 @@
 {
   "active": "Activo",
   "available": "Disponible",
+  "destinationType": {
+    "BRANCH": "Sucursal",
+    "CUSTOMER": "Cliente",
+    "DELIVERY_POINT": "Punto de entrega",
+    "DISTRIBUTION_CENTER": "Centro de distribución",
+    "HUB": "Hub",
+    "STORE": "Tienda"
+  },
   "inactive": "Inactivo",
   "maintenance": "Mantenimiento",
-  "outOfService": "Fuera de servicio"
+  "orderPriority": {
+    "HIGH": "Alta",
+    "LOW": "Baja",
+    "NORMAL": "Normal",
+    "URGENT": "Urgente"
+  },
+  "orderStatus": {
+    "CANCELLED": "Cancelado",
+    "NOT_READY": "No listo",
+    "PLANNED": "Planificado",
+    "READY_FOR_PLANNING": "Listo para planificar"
+  },
+  "originType": {
+    "DISTRIBUTION_CENTER": "Centro de distribución",
+    "HUB": "Hub",
+    "OTHER": "Otro",
+    "PLANT": "Planta",
+    "WAREHOUSE": "Almacén"
+  },
+  "outOfService": "Fuera de servicio",
+  "planningRunStatus": {
+    "CANCELLED": "Cancelada",
+    "CONFIRMED": "Confirmada",
+    "DRAFT": "Borrador"
+  },
+  "tripStatus": {
+    "CANCELLED": "Cancelado",
+    "CONFIRMED": "Confirmado",
+    "DRAFT": "Borrador"
+  },
+  "vehicleAvailability": {
+    "AVAILABLE": "Disponible",
+    "IN_MAINTENANCE": "En mantenimiento",
+    "OUT_OF_SERVICE": "Fuera de servicio"
+  },
+  "vehicleBodyType": {
+    "CONTAINER": "Portacontenedor",
+    "CURTAIN_SIDER": "Cortina lateral",
+    "DRY_VAN": "Furgón seco",
+    "FLATBED": "Plataforma",
+    "OTHER": "Otro",
+    "REFRIGERATED": "Refrigerado",
+    "TANKER": "Cisterna"
+  }
 }

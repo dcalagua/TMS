@@ -131,10 +131,10 @@ describe('OriginsPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Nuevo origen' }))
     const dialog = within(screen.getByRole('dialog'))
-    await userEvent.type(dialog.getByLabelText(/^code/i), 'NEW-ORIGIN')
-    await userEvent.type(dialog.getByLabelText(/^name/i), 'New Origin')
-    await userEvent.type(dialog.getByLabelText(/^time zone/i), 'America/Lima')
-    await userEvent.click(dialog.getByRole('button', { name: 'Save' }))
+    await userEvent.type(dialog.getByLabelText(/^código/i), 'NEW-ORIGIN')
+    await userEvent.type(dialog.getByLabelText(/^nombre/i), 'New Origin')
+    await userEvent.type(dialog.getByLabelText(/^zona horaria/i), 'America/Lima')
+    await userEvent.click(dialog.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() => expect(originsApiMocks.createOrigin).toHaveBeenCalledWith('company-1', expect.objectContaining({ code: 'NEW-ORIGIN' })))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())

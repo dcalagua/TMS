@@ -1,3 +1,4 @@
+import { useEnumLabels } from '../../shared/i18n/enums'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -6,9 +7,7 @@ import { fetchDestinations } from '../../shared/api/destinationsApi'
 import { fetchOrigins } from '../../shared/api/originsApi'
 import {
   ORDER_PRIORITIES,
-  ORDER_PRIORITY_LABELS,
   ORDER_STATUSES,
-  ORDER_STATUS_LABELS,
   cancelOrder,
   fetchOrders,
   markOrderReadyForPlanning,
@@ -65,6 +64,7 @@ type ModalState = { mode: 'create' } | { mode: 'edit'; orderId: string } | null
 
 export function OrdersPage() {
   const { t } = useTranslation('orders')
+  const enumLabels = useEnumLabels()
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('orders.order:manage')
@@ -174,7 +174,7 @@ export function OrdersPage() {
     {
       key: 'priority',
       header: 'Priority',
-      render: (order) => <StatusBadge label={ORDER_PRIORITY_LABELS[order.priority]} tone={PRIORITY_TONE[order.priority]} />,
+      render: (order) => <StatusBadge label={enumLabels.orderPriority(order.priority)} tone={PRIORITY_TONE[order.priority]} />,
     },
     {
       key: 'totals',
@@ -189,7 +189,7 @@ export function OrdersPage() {
     {
       key: 'status',
       header: 'Status',
-      render: (order) => <StatusBadge label={ORDER_STATUS_LABELS[order.status]} tone={STATUS_TONE[order.status]} />,
+      render: (order) => <StatusBadge label={enumLabels.orderStatus(order.status)} tone={STATUS_TONE[order.status]} />,
     },
   ]
 
@@ -327,7 +327,7 @@ export function OrdersPage() {
             <option value="">All statuses</option>
             {ORDER_STATUSES.map((status) => (
               <option key={status} value={status}>
-                {ORDER_STATUS_LABELS[status]}
+                {enumLabels.orderStatus(status)}
               </option>
             ))}
           </select>
@@ -345,7 +345,7 @@ export function OrdersPage() {
             <option value="">All priorities</option>
             {ORDER_PRIORITIES.map((priority) => (
               <option key={priority} value={priority}>
-                {ORDER_PRIORITY_LABELS[priority]}
+                {enumLabels.orderPriority(priority)}
               </option>
             ))}
           </select>

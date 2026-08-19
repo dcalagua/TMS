@@ -9,5 +9,29 @@
     "title": "Sin corridas"
   },
   "new": "Nueva corrida",
-  "title": "Planificación"
+  "run": {
+    "form": {
+      "create": "Nueva corrida de planificación",
+      "date": "Fecha de planificación",
+      "notes": "Notas",
+      "origin": "Origen",
+      "selectOrigin": "Selecciona un origen",
+      "submit": "Crear corrida",
+      "submitting": "Creando..."
+    }
+  },
+  "title": "Planificación",
+  "trip": {
+    "form": {
+      "create": "Nuevo viaje",
+      "creating": "Creando...",
+      "decideLater": "Decidir más tarde",
+      "departure": "Salida planificada",
+      "selectVehicle": "Selecciona un vehículo",
+      "submitCreate": "Crear viaje",
+      "submitVehicle": "Guardar vehículo",
+      "vehicle": "Vehículo",
+      "vehicleTitle": "Vehículo del viaje {{number}}"
+    }
+  }
 }

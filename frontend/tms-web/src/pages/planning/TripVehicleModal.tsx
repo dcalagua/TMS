@@ -1,11 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import { fetchVehicles } from '../../shared/api/vehiclesApi'
 import { updateTripVehicle, type TripDetailView, type TripVehicleRequest, type TripView } from '../../shared/api/planningApi'
 import { describePlanningError } from '../../shared/api/problemMessages'
 import { FormField } from '../../shared/ui/components/FormField'
+import { TmsModal } from '../../shared/ui/components/TmsModal'
+
+const FORM_ID = 'trip-vehicle-form'
 
 interface TripVehicleModalProps {
   companyId: string
@@ -49,6 +53,9 @@ function withCurrentVehicle(options: VehicleOption[], trip: TripView): VehicleOp
  * vehicle change made from a board that has since been filled by someone else is refused rather
  * than silently applied. */
 export function TripVehicleModal({ companyId, trip, onClose, onUpdated }: TripVehicleModalProps) {
+  const { t } = useTranslation('planning')
+  const { t: tc } = useTranslation('common')
+  const { t: tv } = useTranslation('validations')
   const [formError, setFormError] = useState<string | null>(null)
 
   const vehiclesQuery = useQuery({
@@ -85,63 +92,53 @@ export function TripVehicleModal({ companyId, trip, onClose, onUpdated }: TripVe
   }
 
   return (
-    <div
-      className="modal d-block"
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') onClose()
-      }}
+    <TmsModal
+      open
+      title={t('trip.form.vehicleTitle', { number: trip.tripNumber })}
+      onClose={onClose}
+      closeOnEscape={!isSubmitting}
+      footer={
+        <>
+          <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
+            {tc('actions.cancel')}
+          </button>
+          <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={isSubmitting}>
+            {isSubmitting ? tc('actions.saving') : t('trip.form.submitVehicle')}
+          </button>
+        </>
+      }
     >
-      <div className="modal-dialog" role="document">
-        <div className="modal-content">
-          <form onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-            <div className="modal-header">
-              <h5 className="modal-title">Trip {trip.tripNumber} vehicle</h5>
-              <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
-            </div>
-            <div className="modal-body">
-              {formError && (
-                <div className="alert alert-danger py-2 small" role="alert">
-                  {formError}
-                </div>
-              )}
-              <FormField label="Vehicle" htmlFor="trip-vehicle-select" error={errors.vehicleId?.message} required>
-                <select
-                  id="trip-vehicle-select"
-                  className={`form-select${errors.vehicleId ? ' is-invalid' : ''}`}
-                  {...register('vehicleId', { required: 'Vehicle is required' })}
-                >
-                  <option value="">Select a vehicle</option>
-                  {vehicles.map((vehicle) => (
-                    <option key={vehicle.id} value={vehicle.id}>
-                      {vehicle.code} — {vehicle.licensePlate}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-              <FormField label="Planned departure" htmlFor="trip-vehicle-departure">
-                <input
-                  id="trip-vehicle-departure"
-                  type="datetime-local"
-                  className="form-control"
-                  {...register('plannedDepartureAt')}
-                />
-              </FormField>
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-outline-secondary" onClick={onClose}>
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save vehicle'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-      <div className="modal-backdrop show" />
-    </div>
+      <form id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
+        {formError && (
+          <div className="alert alert-danger py-2 small" role="alert">
+            {formError}
+          </div>
+        )}
+
+        <FormField label={t('trip.form.vehicle')} htmlFor="trip-vehicle-select" error={errors.vehicleId?.message} required>
+          <select
+            id="trip-vehicle-select"
+            className={`form-select${errors.vehicleId ? ' is-invalid' : ''}`}
+            {...register('vehicleId', { required: tv('required') })}
+          >
+            <option value="">{t('trip.form.selectVehicle')}</option>
+            {vehicles.map((vehicle) => (
+              <option key={vehicle.id} value={vehicle.id}>
+                {vehicle.code} — {vehicle.licensePlate}
+              </option>
+            ))}
+          </select>
+        </FormField>
+
+        <FormField label={t('trip.form.departure')} htmlFor="trip-vehicle-departure">
+          <input
+            id="trip-vehicle-departure"
+            type="datetime-local"
+            className="form-control"
+            {...register('plannedDepartureAt')}
+          />
+        </FormField>
+      </form>
+    </TmsModal>
   )
 }

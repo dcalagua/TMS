@@ -1,9 +1,16 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
+import { applyApiFieldErrors } from '../../shared/api/formErrors'
 import type { ApiError } from '../../shared/api/httpClient'
-import { describeApiError } from '../../shared/api/problemMessages'
 import { createCarrier, updateCarrier, type CarrierRequest, type CarrierView } from '../../shared/api/carriersApi'
 import { FormField } from '../../shared/ui/components/FormField'
+import { TmsModal } from '../../shared/ui/components/TmsModal'
+
+const FORM_ID = 'carrier-form'
+
+/** Matches the backend's `code` constraint; kept next to the field it validates. */
+const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/
 
 interface CarrierFormValues {
   code: string
@@ -29,6 +36,9 @@ const KNOWN_FIELDS = new Set<keyof CarrierFormValues>([
 
 /** Create and edit share one form; see `ZoneFormModal` (masters) for the same pattern. */
 export function CarrierFormModal({ companyId, carrier, onClose, onSaved }: CarrierFormModalProps) {
+  const { t } = useTranslation('fleet')
+  const { t: tc } = useTranslation('common')
+  const { t: tv } = useTranslation('validations')
   const isEdit = carrier !== null
   const [formError, setFormError] = useState<string | null>(null)
   const {
@@ -68,146 +78,145 @@ export function CarrierFormModal({ companyId, carrier, onClose, onSaved }: Carri
       }
       onSaved()
     } catch (error) {
-      const apiError = error as ApiError
-      if (apiError.fieldErrors.length > 0) {
-        const unmatched: string[] = []
-        for (const fieldError of apiError.fieldErrors) {
-          if (KNOWN_FIELDS.has(fieldError.field as keyof CarrierFormValues)) {
-            setError(fieldError.field as keyof CarrierFormValues, { message: fieldError.message })
-          } else {
-            unmatched.push(fieldError.message)
-          }
-        }
-        setFormError(unmatched.length > 0 ? unmatched.join(' ') : 'Please correct the highlighted fields.')
-      } else {
-        setFormError(describeApiError(apiError))
-      }
+      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, tv('highlightedFields')))
     }
   }
 
   return (
-    <div
-      className="modal d-block"
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') onClose()
-      }}
+    <TmsModal
+      open
+      title={isEdit ? t('carriers.form.edit') : t('carriers.form.create')}
+      size="lg"
+      onClose={onClose}
+      closeOnEscape={!isSubmitting}
+      footer={
+        <>
+          <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
+            {tc('actions.cancel')}
+          </button>
+          <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={isSubmitting}>
+            {isSubmitting ? tc('actions.saving') : tc('actions.save')}
+          </button>
+        </>
+      }
     >
-      <div className="modal-dialog modal-lg" role="document">
-        <div className="modal-content">
-          <form onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-            <div className="modal-header">
-              <h5 className="modal-title">{isEdit ? 'Edit carrier' : 'New carrier'}</h5>
-              <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
+      <form id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
+        {formError && (
+          <div className="alert alert-danger py-2 small" role="alert">
+            {formError}
+          </div>
+        )}
+
+        <fieldset className="tms-fieldset">
+          <legend className="tms-fieldset-legend">{tc('sections.identification')}</legend>
+          <div className="row">
+            <div className="col-12 col-sm-4">
+              <FormField label={tc('columns.code')} htmlFor="carrier-code" error={errors.code?.message} required>
+                <input
+                  id="carrier-code"
+                  className={`form-control${errors.code ? ' is-invalid' : ''}`}
+                  {...register('code', {
+                    required: tv('required'),
+                    maxLength: { value: 32, message: tv('maxLength', { count: 32 }) },
+                    pattern: { value: CODE_PATTERN, message: tv('codePattern') },
+                  })}
+                />
+              </FormField>
             </div>
-            <div className="modal-body">
-              {formError && (
-                <div className="alert alert-danger py-2 small" role="alert">
-                  {formError}
-                </div>
-              )}
-              <div className="row">
-                <div className="col-md-3">
-                  <FormField label="Code" htmlFor="carrier-code" error={errors.code?.message} required>
-                    <input
-                      id="carrier-code"
-                      className={`form-control${errors.code ? ' is-invalid' : ''}`}
-                      {...register('code', {
-                        required: 'Code is required',
-                        maxLength: { value: 32, message: 'Must be 32 characters or fewer' },
-                        pattern: {
-                          value: /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/,
-                          message: 'Letters, digits, underscore or hyphen only',
-                        },
-                      })}
-                    />
-                  </FormField>
-                </div>
-                <div className="col-md-9">
-                  <FormField label="Business name" htmlFor="carrier-business-name" error={errors.businessName?.message} required>
-                    <input
-                      id="carrier-business-name"
-                      className={`form-control${errors.businessName ? ' is-invalid' : ''}`}
-                      {...register('businessName', {
-                        required: 'Business name is required',
-                        maxLength: { value: 200, message: 'Must be 200 characters or fewer' },
-                      })}
-                    />
-                  </FormField>
-                </div>
-              </div>
-              <div className="row">
-                <div className="col-md-3">
-                  <FormField label="Tax id type" htmlFor="carrier-tax-id-type" error={errors.taxIdType?.message} required>
-                    <input
-                      id="carrier-tax-id-type"
-                      placeholder="RUC, DNI, ..."
-                      className={`form-control${errors.taxIdType ? ' is-invalid' : ''}`}
-                      {...register('taxIdType', {
-                        required: 'Tax id type is required',
-                        maxLength: { value: 32, message: 'Must be 32 characters or fewer' },
-                      })}
-                    />
-                  </FormField>
-                </div>
-                <div className="col-md-4">
-                  <FormField label="Tax id value" htmlFor="carrier-tax-id-value" error={errors.taxIdValue?.message} required>
-                    <input
-                      id="carrier-tax-id-value"
-                      className={`form-control${errors.taxIdValue ? ' is-invalid' : ''}`}
-                      {...register('taxIdValue', {
-                        required: 'Tax id value is required',
-                        maxLength: { value: 64, message: 'Must be 64 characters or fewer' },
-                      })}
-                    />
-                  </FormField>
-                </div>
-                <div className="col-md-5">
-                  <FormField label="Contact name" htmlFor="carrier-contact-name" error={errors.contactName?.message}>
-                    <input
-                      id="carrier-contact-name"
-                      className={`form-control${errors.contactName ? ' is-invalid' : ''}`}
-                      {...register('contactName', { maxLength: { value: 200, message: 'Must be 200 characters or fewer' } })}
-                    />
-                  </FormField>
-                </div>
-              </div>
-              <div className="row">
-                <div className="col-md-4">
-                  <FormField label="Phone" htmlFor="carrier-phone" error={errors.phone?.message}>
-                    <input
-                      id="carrier-phone"
-                      className={`form-control${errors.phone ? ' is-invalid' : ''}`}
-                      {...register('phone', { maxLength: { value: 32, message: 'Must be 32 characters or fewer' } })}
-                    />
-                  </FormField>
-                </div>
-                <div className="col-md-8">
-                  <FormField label="Email" htmlFor="carrier-email" error={errors.email?.message}>
-                    <input
-                      id="carrier-email"
-                      type="email"
-                      className={`form-control${errors.email ? ' is-invalid' : ''}`}
-                      {...register('email', { maxLength: { value: 200, message: 'Must be 200 characters or fewer' } })}
-                    />
-                  </FormField>
-                </div>
-              </div>
+            <div className="col-12 col-sm-8">
+              <FormField
+                label={tc('columns.businessName')}
+                htmlFor="carrier-business-name"
+                error={errors.businessName?.message}
+                required
+              >
+                <input
+                  id="carrier-business-name"
+                  className={`form-control${errors.businessName ? ' is-invalid' : ''}`}
+                  {...register('businessName', {
+                    required: tv('required'),
+                    maxLength: { value: 200, message: tv('maxLength', { count: 200 }) },
+                  })}
+                />
+              </FormField>
             </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-outline-secondary" onClick={onClose}>
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save'}
-              </button>
+            <div className="col-12 col-sm-4">
+              <FormField
+                label={tc('fields.taxIdType')}
+                htmlFor="carrier-tax-id-type"
+                error={errors.taxIdType?.message}
+                required
+              >
+                <input
+                  id="carrier-tax-id-type"
+                  placeholder={tc('placeholders.taxIdType')}
+                  className={`form-control${errors.taxIdType ? ' is-invalid' : ''}`}
+                  {...register('taxIdType', {
+                    required: tv('required'),
+                    maxLength: { value: 32, message: tv('maxLength', { count: 32 }) },
+                  })}
+                />
+              </FormField>
             </div>
-          </form>
-        </div>
-      </div>
-      <div className="modal-backdrop show" />
-    </div>
+            <div className="col-12 col-sm-8">
+              <FormField
+                label={tc('fields.taxIdValue')}
+                htmlFor="carrier-tax-id-value"
+                error={errors.taxIdValue?.message}
+                required
+              >
+                <input
+                  id="carrier-tax-id-value"
+                  className={`form-control${errors.taxIdValue ? ' is-invalid' : ''}`}
+                  {...register('taxIdValue', {
+                    required: tv('required'),
+                    maxLength: { value: 64, message: tv('maxLength', { count: 64 }) },
+                  })}
+                />
+              </FormField>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset className="tms-fieldset mb-0">
+          <legend className="tms-fieldset-legend">{tc('sections.contact')}</legend>
+          <div className="row">
+            <div className="col-12 col-sm-5">
+              <FormField
+                label={tc('fields.contactName')}
+                htmlFor="carrier-contact-name"
+                error={errors.contactName?.message}
+              >
+                <input
+                  id="carrier-contact-name"
+                  className={`form-control${errors.contactName ? ' is-invalid' : ''}`}
+                  {...register('contactName', { maxLength: { value: 200, message: tv('maxLength', { count: 200 }) } })}
+                />
+              </FormField>
+            </div>
+            <div className="col-12 col-sm-3">
+              <FormField label={tc('columns.phone')} htmlFor="carrier-phone" error={errors.phone?.message}>
+                <input
+                  id="carrier-phone"
+                  type="tel"
+                  className={`form-control${errors.phone ? ' is-invalid' : ''}`}
+                  {...register('phone', { maxLength: { value: 32, message: tv('maxLength', { count: 32 }) } })}
+                />
+              </FormField>
+            </div>
+            <div className="col-12 col-sm-4">
+              <FormField label={tc('fields.email')} htmlFor="carrier-email" error={errors.email?.message}>
+                <input
+                  id="carrier-email"
+                  type="email"
+                  className={`form-control${errors.email ? ' is-invalid' : ''}`}
+                  {...register('email', { maxLength: { value: 200, message: tv('maxLength', { count: 200 }) } })}
+                />
+              </FormField>
+            </div>
+          </div>
+        </fieldset>
+      </form>
+    </TmsModal>
   )
 }

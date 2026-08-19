@@ -140,7 +140,7 @@ describe('OrdersPage', () => {
 
     expect(await screen.findByText('TO-00000001')).toBeInTheDocument()
     expect(screen.getByText('Origin A → Destination A')).toBeInTheDocument()
-    expect(screen.getByText('Not ready', { selector: 'span' })).toBeInTheDocument()
+    expect(screen.getByText('No listo', { selector: 'span' })).toBeInTheDocument()
     expect(screen.getByText(/Página 1 de 3/)).toBeInTheDocument()
   })
 

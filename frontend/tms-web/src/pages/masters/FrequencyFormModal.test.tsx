@@ -34,10 +34,10 @@ describe('FrequencyFormModal', () => {
     const onSaved = vi.fn()
     render(<FrequencyFormModal companyId="company-1" frequency={null} onClose={vi.fn()} onSaved={onSaved} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Code is required')).toBeInTheDocument()
-    expect(screen.getByText('Name is required')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByText('Este campo es obligatorio')).toHaveLength(2))
+    expect(screen.getByLabelText(/^código/i)).toHaveClass('is-invalid')
     expect(frequenciesApiMocks.createFrequency).not.toHaveBeenCalled()
     expect(onSaved).not.toHaveBeenCalled()
   })
@@ -45,10 +45,10 @@ describe('FrequencyFormModal', () => {
   it('rejects a code with characters outside the allowed shape', async () => {
     render(<FrequencyFormModal companyId="company-1" frequency={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'has space')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'has space')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Letters, digits, underscore or hyphen only')).toBeInTheDocument()
+    expect(await screen.findByText('Solo letras, dígitos, guion bajo o guion')).toBeInTheDocument()
     expect(frequenciesApiMocks.createFrequency).not.toHaveBeenCalled()
   })
 
@@ -57,15 +57,15 @@ describe('FrequencyFormModal', () => {
     const onSaved = vi.fn()
     render(<FrequencyFormModal companyId="company-1" frequency={null} onClose={vi.fn()} onSaved={onSaved} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'new-freq')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'New Frequency')
+    await userEvent.type(screen.getByLabelText(/^código/i), 'new-freq')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'New Frequency')
 
-    await userEvent.click(screen.getByLabelText('Monday'))
-    await userEvent.click(screen.getByLabelText('Wednesday'))
-    fireEvent.change(screen.getByLabelText(/Monday cutoff time/i), { target: { value: '14:00' } })
-    await userEvent.type(screen.getByLabelText(/Monday lead time in days/i), '2')
+    await userEvent.click(screen.getByLabelText('Lunes'))
+    await userEvent.click(screen.getByLabelText('Miércoles'))
+    fireEvent.change(screen.getByLabelText(/Hora de corte de Lunes/i), { target: { value: '14:00' } })
+    await userEvent.type(screen.getByLabelText(/Anticipación en días de Lunes/i), '2')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() => expect(frequenciesApiMocks.createFrequency).toHaveBeenCalled())
     const request = frequenciesApiMocks.createFrequency.mock.calls[0]?.[1]
@@ -81,13 +81,13 @@ describe('FrequencyFormModal', () => {
     const onSaved = vi.fn()
     render(<FrequencyFormModal companyId="company-1" frequency={FREQUENCY} onClose={vi.fn()} onSaved={onSaved} />)
 
-    expect(screen.getByLabelText(/^code/i)).toHaveValue('MON-WED-FRI')
-    expect(screen.getByLabelText('Monday')).toBeChecked()
-    expect(screen.getByLabelText('Wednesday')).toBeChecked()
-    expect(screen.getByLabelText('Tuesday')).not.toBeChecked()
-    expect(screen.getByLabelText(/Monday cutoff time/i)).toHaveValue('10:00')
+    expect(screen.getByLabelText(/^código/i)).toHaveValue('MON-WED-FRI')
+    expect(screen.getByLabelText('Lunes')).toBeChecked()
+    expect(screen.getByLabelText('Miércoles')).toBeChecked()
+    expect(screen.getByLabelText('Martes')).not.toBeChecked()
+    expect(screen.getByLabelText(/Hora de corte de Lunes/i)).toHaveValue('10:00')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(frequenciesApiMocks.updateFrequency).toHaveBeenCalledWith(
@@ -105,9 +105,9 @@ describe('FrequencyFormModal', () => {
     })
     render(<FrequencyFormModal companyId="company-1" frequency={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'DUP')
-    await userEvent.type(screen.getByLabelText(/^name/i), 'Duplicate')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'DUP')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'Duplicate')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     expect(await screen.findByText("code 'DUP' already exists")).toBeInTheDocument()
   })
@@ -115,14 +115,14 @@ describe('FrequencyFormModal', () => {
   it('shows the V1 placeholder note for date exceptions', () => {
     render(<FrequencyFormModal companyId="company-1" frequency={null} onClose={vi.fn()} onSaved={vi.fn()} />)
 
-    expect(screen.getByRole('note')).toHaveTextContent(/do not yet have an editor/i)
+    expect(screen.getByText(/todavía no tienen editor/i)).toBeInTheDocument()
   })
 
   it('closes when Cancel is clicked', async () => {
     const onClose = vi.fn()
     render(<FrequencyFormModal companyId="company-1" frequency={null} onClose={onClose} onSaved={vi.fn()} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 
     expect(onClose).toHaveBeenCalled()
   })

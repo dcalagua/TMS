@@ -83,11 +83,12 @@ describe('VehicleFormModal', () => {
     const onSaved = vi.fn()
     renderModal({ onSaved })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Code is required')).toBeInTheDocument()
-    expect(screen.getByText('License plate is required')).toBeInTheDocument()
-    expect(screen.getByText('Vehicle type is required')).toBeInTheDocument()
+    // Code, licence plate and vehicle type are the three required fields.
+    expect(await screen.findAllByText('Este campo es obligatorio')).toHaveLength(3)
+    expect(screen.getByLabelText(/^código/i)).toHaveClass('is-invalid')
+    expect(screen.getByLabelText(/^placa/i)).toHaveClass('is-invalid')
     expect(vehiclesApiMocks.createVehicle).not.toHaveBeenCalled()
     expect(onSaved).not.toHaveBeenCalled()
   })
@@ -97,11 +98,11 @@ describe('VehicleFormModal', () => {
     vehicleTypesApiMocks.fetchVehicleTypes.mockResolvedValue(vehicleTypesPage())
     renderModal()
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'TRUCK-1')
-    await userEvent.type(screen.getByLabelText(/license plate/i), 'ab')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'TRUCK-1')
+    await userEvent.type(screen.getByLabelText(/^placa/i), 'ab')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('4-12 characters: letters, digits or hyphen')).toBeInTheDocument()
+    expect(await screen.findByText('De 4 a 12 caracteres: letras, dígitos o guion')).toBeInTheDocument()
     expect(vehiclesApiMocks.createVehicle).not.toHaveBeenCalled()
   })
 
@@ -124,10 +125,10 @@ describe('VehicleFormModal', () => {
     const onSaved = vi.fn()
     renderModal({ onSaved })
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'truck-2')
-    await userEvent.type(screen.getByLabelText(/license plate/i), 'xyz-999')
-    await userEvent.selectOptions(await screen.findByLabelText(/vehicle type/i), 'type-1')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'truck-2')
+    await userEvent.type(screen.getByLabelText(/^placa/i), 'xyz-999')
+    await userEvent.selectOptions(await screen.findByLabelText(/^tipo de vehículo/i), 'type-1')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(vehiclesApiMocks.createVehicle).toHaveBeenCalledWith(
@@ -148,11 +149,11 @@ describe('VehicleFormModal', () => {
     vehiclesApiMocks.createVehicle.mockResolvedValue(VEHICLE)
     renderModal()
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'truck-3')
-    await userEvent.type(screen.getByLabelText(/license plate/i), 'ovr-001')
-    await userEvent.selectOptions(await screen.findByLabelText(/vehicle type/i), 'type-1')
-    await userEvent.type(screen.getByLabelText(/weight override/i), '9500')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'truck-3')
+    await userEvent.type(screen.getByLabelText(/^placa/i), 'ovr-001')
+    await userEvent.selectOptions(await screen.findByLabelText(/^tipo de vehículo/i), 'type-1')
+    await userEvent.type(screen.getByLabelText(/^peso propio/i), '9500')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(vehiclesApiMocks.createVehicle).toHaveBeenCalledWith(
@@ -168,12 +169,12 @@ describe('VehicleFormModal', () => {
     const onSaved = vi.fn()
     renderModal({ vehicle: VEHICLE, onSaved })
 
-    expect(screen.getByLabelText(/^code/i)).toHaveValue('TRUCK-1')
-    expect(screen.getByLabelText(/license plate/i)).toHaveValue('ABC-123')
+    expect(screen.getByLabelText(/^código/i)).toHaveValue('TRUCK-1')
+    expect(screen.getByLabelText(/^placa/i)).toHaveValue('ABC-123')
     expect(await screen.findByRole('option', { name: /TYPE-1/ })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /Carrier One SA|CARRIER-1/ })).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(vehiclesApiMocks.updateVehicle).toHaveBeenCalledWith(
@@ -191,10 +192,10 @@ describe('VehicleFormModal', () => {
     })
     renderModal()
 
-    await userEvent.type(screen.getByLabelText(/^code/i), 'DUP')
-    await userEvent.type(screen.getByLabelText(/license plate/i), 'dup-001')
-    await userEvent.selectOptions(await screen.findByLabelText(/vehicle type/i), 'type-1')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.type(screen.getByLabelText(/^código/i), 'DUP')
+    await userEvent.type(screen.getByLabelText(/^placa/i), 'dup-001')
+    await userEvent.selectOptions(await screen.findByLabelText(/^tipo de vehículo/i), 'type-1')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     expect(await screen.findByText("license plate 'DUP-001' already exists")).toBeInTheDocument()
   })
@@ -205,7 +206,7 @@ describe('VehicleFormModal', () => {
     const onClose = vi.fn()
     renderModal({ onClose })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 
     expect(onClose).toHaveBeenCalled()
   })

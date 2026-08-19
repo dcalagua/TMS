@@ -7,24 +7,10 @@ export type OrderStatus = 'NOT_READY' | 'READY_FOR_PLANNING' | 'PLANNED' | 'CANC
 
 export const ORDER_STATUSES: OrderStatus[] = ['NOT_READY', 'READY_FOR_PLANNING', 'PLANNED', 'CANCELLED']
 
-export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  NOT_READY: 'Not ready',
-  READY_FOR_PLANNING: 'Ready for planning',
-  PLANNED: 'Planned',
-  CANCELLED: 'Cancelled',
-}
-
 /** Mirrors the backend's `OrderPriority` enum (`orders/domain/OrderPriority.java`). */
 export type OrderPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT'
 
 export const ORDER_PRIORITIES: OrderPriority[] = ['LOW', 'NORMAL', 'HIGH', 'URGENT']
-
-export const ORDER_PRIORITY_LABELS: Record<OrderPriority, string> = {
-  LOW: 'Low',
-  NORMAL: 'Normal',
-  HIGH: 'High',
-  URGENT: 'Urgent',
-}
 
 /** Mirrors the backend's `OrderView` record - the list-row shape (a line count, not the lines). */
 export interface OrderView {
