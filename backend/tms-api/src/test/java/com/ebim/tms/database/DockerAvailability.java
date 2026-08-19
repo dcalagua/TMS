@@ -12,17 +12,17 @@ import org.testcontainers.DockerClientFactory;
  *
  * <p>Used through {@code @EnabledIf("com.ebim.tms.database.DockerAvailability#isAvailable")}.
  */
-final class DockerAvailability {
+public final class DockerAvailability {
 
-    static final String CONDITION = "com.ebim.tms.database.DockerAvailability#isAvailable";
+    public static final String CONDITION = "com.ebim.tms.database.DockerAvailability#isAvailable";
 
-    static final String DISABLED_REASON =
+    public static final String DISABLED_REASON =
             "Docker daemon is not available: disposable PostgreSQL could not be started. "
                     + "This test verifies migrations and is not a substitute for one - start Docker and rerun.";
 
     private DockerAvailability() {}
 
-    static boolean isAvailable() {
+    public static boolean isAvailable() {
         try {
             return DockerClientFactory.instance().isDockerAvailable();
         } catch (RuntimeException | LinkageError probeFailed) {

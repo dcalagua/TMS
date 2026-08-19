@@ -20,6 +20,18 @@ tms:
   api:
     base-path: /api/v1
     application-name: TMS by EBIM
+  security:
+    jwt:
+      # Placeholders so the real decoder bean can be built. NimbusJwtDecoder fetches the JWK
+      # set lazily, on the first token it decodes, so nothing here ever performs a network
+      # call - and `.invalid` is a reserved TLD that cannot resolve even if something tried.
+      # Tests that decode a token supply their own locally generated key (TestJwts); the
+      # filter chain, the converter and the claim validators under test are the production ones.
+      issuer-uri: https://tms-test.invalid/auth/v1
+      jwk-set-uri: https://tms-test.invalid/auth/v1/.well-known/jwks.json
+      audiences: authenticated
+    cors:
+      allowed-origins: http://localhost:5173
 
 logging:
   level:

@@ -21,6 +21,18 @@ spring:
   flyway:
     enabled: ${TMS_FLYWAY_ENABLED:true}
 
+tms:
+  security:
+    jwt:
+      # The local Supabase stack (`supabase start`) publishes its JWKS here. These are local
+      # container coordinates, not credentials. If your project signs with the legacy shared
+      # secret rather than an asymmetric key, switch it to asymmetric signing keys in Studio:
+      # TMS verifies published public keys only and has no setting for a shared secret.
+      issuer-uri: ${TMS_SUPABASE_JWT_ISSUER_URI:http://127.0.0.1:54321/auth/v1}
+      jwk-set-uri: ${TMS_SUPABASE_JWKS_URI:http://127.0.0.1:54321/auth/v1/.well-known/jwks.json}
+    cors:
+      allowed-origins: ${TMS_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
 management:
   endpoint:
     health:

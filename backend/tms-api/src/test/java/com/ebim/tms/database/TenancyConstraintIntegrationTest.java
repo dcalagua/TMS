@@ -194,26 +194,28 @@ class TenancyConstraintIntegrationTest {
     }
 
     @Test
-    @DisplayName("the authorization catalogue is seeded exactly as the migration declares")
+    @DisplayName("the authorization catalogue is seeded exactly as the migrations declare")
     void referenceDataIsPresent() throws SQLException {
+        // V3 seeded 29 permissions; V5 completed the catalogue with planning.plan:read,
+        // planning.plan:manage and monitoring.transport:read (Step 03 authorization model).
         assertThat(count("SELECT count(*) FROM tms.role")).isEqualTo(4);
-        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(29);
+        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(32);
         assertThat(count("SELECT count(*) FROM tms.permission WHERE code = resource || ':' || action"))
-                .isEqualTo(29);
+                .isEqualTo(32);
 
-        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(81);
+        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(92);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'ORGANIZATION_ADMIN'"))
-                .isEqualTo(29);
+                .isEqualTo(32);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'COMPANY_ADMIN'"))
-                .isEqualTo(28);
+                .isEqualTo(31);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'PLANNER'"))
-                .isEqualTo(13);
+                .isEqualTo(16);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'VIEWER'"))
-                .isEqualTo(11);
+                .isEqualTo(13);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id"
                 + " JOIN tms.permission p ON p.id = rp.permission_id"
@@ -225,6 +227,9 @@ class TenancyConstraintIntegrationTest {
                 + " WHERE r.code = 'VIEWER' AND p.action <> 'read'"))
                 .isZero();
         assertThat(count("SELECT count(*) FROM tms.permission WHERE resource = 'audit.log' AND action = 'manage'"))
+                .isZero();
+        assertThat(count("SELECT count(*) FROM tms.permission"
+                + " WHERE resource = 'monitoring.transport' AND action = 'manage'"))
                 .isZero();
     }
 

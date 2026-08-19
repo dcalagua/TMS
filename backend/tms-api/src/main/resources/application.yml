@@ -54,14 +54,19 @@ management:
   endpoints:
     web:
       exposure:
+        # Only liveness/readiness and build identification. Nothing that lists beans,
+        # configuration properties, environment variables or the HTTP mappings.
         include: health,info
   endpoint:
     health:
+      # Component details (database URL, disk paths, vendor versions) are never rendered to
+      # a caller. The probe answer is UP or DOWN, which is all a load balancer needs.
       show-details: never
       probes:
         enabled: true
   info:
     env:
+      # Would publish every `info.*` property, which is exactly how a secret escapes.
       enabled: false
 
 springdoc:
@@ -76,8 +81,27 @@ tms:
   api:
     base-path: /api/v1
     application-name: TMS by EBIM
+    # OpenAPI/Swagger UI without authentication. Overridden to false in prod.
+    public-documentation: true
+  security:
+    jwt:
+      # Supabase Auth coordinates. No default: a deployment that does not set these fails at
+      # startup with an explicit message (SupabaseJwtDecoders), because the alternative -
+      # starting with token verification disabled - must not be reachable by omission.
+      # There is no signing secret setting; signatures are verified against the published JWKS.
+      issuer-uri: ${TMS_SUPABASE_JWT_ISSUER_URI:}
+      jwk-set-uri: ${TMS_SUPABASE_JWKS_URI:}
+      audiences: ${TMS_SUPABASE_JWT_AUDIENCES:authenticated}
+      clock-skew: 30s
+    cors:
+      # Empty by default: no cross-origin browser call is allowed until origins are listed.
+      allowed-origins: ${TMS_CORS_ALLOWED_ORIGINS:}
 
 logging:
+  # The correlation id is on every line, so a request can be followed across log entries and
+  # matched to the `correlationId` in the error document the caller received.
+  pattern:
+    level: "%5p [%X{correlationId:-no-correlation-id}]"
   level:
     root: INFO
     com.ebim.tms: INFO

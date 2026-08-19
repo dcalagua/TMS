@@ -23,7 +23,7 @@ import org.testcontainers.utility.DockerImageName;
  * <p>No test may ever point at a shared or remote database. The connection coordinates come
  * from the container and from nowhere else.
  */
-final class PostgresTestDatabase {
+public final class PostgresTestDatabase {
 
     /** Overridable for CI mirrors: {@code -Dtms.test.postgres.image=...}. Must support PostGIS. */
     private static final String IMAGE_PROPERTY = "tms.test.postgres.image";
@@ -38,7 +38,7 @@ final class PostgresTestDatabase {
 
     private PostgresTestDatabase() {}
 
-    static PostgreSQLContainer<?> container() {
+    public static PostgreSQLContainer<?> container() {
         PostgreSQLContainer<?> running = container;
         if (running == null) {
             synchronized (PostgresTestDatabase.class) {
@@ -59,7 +59,7 @@ final class PostgresTestDatabase {
     }
 
     /** Creates an empty database inside the container and returns its JDBC URL. */
-    static String createEmptyDatabase(String databaseName) {
+    public static String createEmptyDatabase(String databaseName) {
         PostgreSQLContainer<?> postgres = container();
         try (Connection admin = connect(jdbcUrl(ADMIN_DATABASE));
                 Statement statement = admin.createStatement()) {
@@ -71,7 +71,7 @@ final class PostgresTestDatabase {
         return jdbcUrl(databaseName, postgres);
     }
 
-    static String jdbcUrl(String databaseName) {
+    public static String jdbcUrl(String databaseName) {
         return jdbcUrl(databaseName, container());
     }
 
@@ -80,15 +80,15 @@ final class PostgresTestDatabase {
                 + postgres.getMappedPort(PostgreSQLContainer.POSTGRESQL_PORT) + "/" + databaseName;
     }
 
-    static String username() {
+    public static String username() {
         return USERNAME;
     }
 
-    static String password() {
+    public static String password() {
         return PASSWORD;
     }
 
-    static Connection connect(String jdbcUrl) throws SQLException {
+    public static Connection connect(String jdbcUrl) throws SQLException {
         return DriverManager.getConnection(jdbcUrl, USERNAME, PASSWORD);
     }
 
@@ -96,7 +96,7 @@ final class PostgresTestDatabase {
      * Flyway configured exactly like the application (same locations, same schema, clean
      * disabled), so what the tests exercise is what production runs.
      */
-    static Flyway flyway(String jdbcUrl) {
+    public static Flyway flyway(String jdbcUrl) {
         return Flyway.configure()
                 .dataSource(jdbcUrl, USERNAME, PASSWORD)
                 .locations("classpath:db/migration")
@@ -110,7 +110,7 @@ final class PostgresTestDatabase {
     }
 
     /** Creates an empty database and applies the whole migration history to it. */
-    static String createMigratedDatabase(String databaseName) {
+    public static String createMigratedDatabase(String databaseName) {
         String jdbcUrl = createEmptyDatabase(databaseName);
         flyway(jdbcUrl).migrate();
         return jdbcUrl;

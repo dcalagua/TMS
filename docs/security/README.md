@@ -19,4 +19,8 @@ Non-negotiable rules:
 | Document | Status |
 |---|---|
 | [`RLS_STRATEGY.md`](RLS_STRATEGY.md) | Step 02. Database-level exposure decision: the `tms` schema is backend-only, `anon`/`authenticated`/`PUBLIC` hold no privilege, RLS is enabled on every table with no policy, and why that is deliberate rather than incomplete |
-| `SECURITY_BASELINE.md` | Step 03. Filter chain, Supabase JWT validation, tenancy resolution, role model and the negative tests that prove cross-tenant access is refused |
+| [`SECURITY_BASELINE.md`](SECURITY_BASELINE.md) | Step 03. The request pipeline, Supabase JWT validation and fail-safe startup, identity and tenancy resolution, what each failure answers and why, data-exposure posture, and the tests that prove cross-tenant access is refused |
+| [`AUTHORIZATION_MODEL.md`](AUTHORIZATION_MODEL.md) | Step 03. The permission catalogue, the four system roles, capability names for the UI, and how effective permissions are resolved inside one selected company |
+
+The wire-level contract - base path, the `X-Company-Id` company scope header, RFC 9457 error
+codes, paging - is in [`../api/API_CONVENTIONS.md`](../api/API_CONVENTIONS.md).

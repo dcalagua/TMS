@@ -17,6 +17,23 @@ spring:
 server:
   forward-headers-strategy: framework
 
+tms:
+  api:
+    # The full API surface is not published to anonymous callers in a deployment: the
+    # documentation endpoints fall through to `anyRequest().authenticated()`.
+    #
+    # springdoc itself stays enabled rather than switched off, because an operator with a
+    # token still needs to read the contract of what is deployed. That is a deliberate answer
+    # to springdoc's own "disable it in production" warning, not an oversight - the exposure
+    # is closed by authentication, which is testable (DocumentationExposureTest) and does not
+    # remove a legitimate operational capability.
+    public-documentation: false
+
+# `prod` also switches on the stricter JWT rules in SupabaseJwtDecoders: the issuer and JWKS
+# URIs must be https and must not resolve to a loopback address, so a local development
+# configuration that reaches a deployment fails at startup instead of trusting a local key
+# server.
+
 logging:
   level:
     root: WARN

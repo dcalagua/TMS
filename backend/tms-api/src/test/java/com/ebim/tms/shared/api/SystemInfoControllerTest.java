@@ -7,9 +7,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.ebim.tms.shared.config.ApplicationConfig;
 import com.ebim.tms.shared.security.PublicApiPaths;
 import com.ebim.tms.shared.security.SecurityConfig;
+import com.ebim.tms.shared.security.SecurityTestConfiguration;
+import com.ebim.tms.shared.security.TmsAccessDeniedHandler;
+import com.ebim.tms.shared.security.TmsAuthenticationEntryPoint;
+import com.ebim.tms.shared.security.TmsJwtAuthenticationConverter;
+import com.ebim.tms.shared.security.TmsSecurityProperties;
+import com.ebim.tms.shared.web.WebConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
@@ -20,7 +27,19 @@ import org.springframework.test.web.servlet.MockMvc;
  * baseline security chain denies everything else by default.
  */
 @WebMvcTest(SystemInfoController.class)
-@Import({ApplicationConfig.class, SecurityConfig.class, PublicApiPaths.class})
+@Import({
+    ApplicationConfig.class,
+    SecurityConfig.class,
+    PublicApiPaths.class,
+    TmsJwtAuthenticationConverter.class,
+    TmsAuthenticationEntryPoint.class,
+    TmsAccessDeniedHandler.class,
+    ApiExceptionResponder.class,
+    ApiExceptionHandler.class,
+    WebConfig.class,
+    SecurityTestConfiguration.class
+})
+@EnableConfigurationProperties(TmsSecurityProperties.class)
 @ActiveProfiles("test")
 class SystemInfoControllerTest {
 

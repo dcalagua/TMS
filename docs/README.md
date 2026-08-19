@@ -4,6 +4,7 @@
 |---|---|
 | `architecture/` | Architecture of record, ownership matrix and ADRs. **Read before changing schema, security or module boundaries.** |
 | `database/` | Schema notes, tenancy model and migration conventions |
+| `api/` | HTTP contract: base path, company scope header, error format, paging |
 | `security/` | Security baseline, authentication and authorization model |
 | `overnight/` | Step-by-step reports produced by the unattended build sequence |
 
@@ -24,3 +25,10 @@ silently diverging.
 7. [`database/DATA_MODEL.md`](database/DATA_MODEL.md) - schema of record and the tenancy design.
 8. [`database/MIGRATION_STRATEGY.md`](database/MIGRATION_STRATEGY.md) - how migrations are written, tested and replayed.
 9. [`security/RLS_STRATEGY.md`](security/RLS_STRATEGY.md) - database-level exposure decision and RLS posture.
+10. [`security/SECURITY_BASELINE.md`](security/SECURITY_BASELINE.md) - the backend security model: JWT validation, identity and tenancy resolution, what is refused and with which answer.
+11. [`security/AUTHORIZATION_MODEL.md`](security/AUTHORIZATION_MODEL.md) - permissions, roles, capabilities and how scope is resolved.
+
+## API
+
+12. [`api/API_CONVENTIONS.md`](api/API_CONVENTIONS.md) - the HTTP contract: `/api/v1`, the
+    `X-Company-Id` company scope header, RFC 9457 errors, paging and sorting.

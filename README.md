@@ -88,10 +88,16 @@ Docker daemon. The scripts warn when Docker is unavailable rather than silently 
 | Endpoint | Auth | Purpose |
 |---|---|---|
 | `GET /api/v1/system/info` | public | Service identity and liveness |
-| `GET /actuator/health` | public | Health probe |
-| `GET /actuator/info` | public | Build information |
-| `GET /v3/api-docs`, `/swagger-ui.html` | public | OpenAPI contract and explorer |
+| `GET /actuator/health` | public | Health probe (no component details) |
+| `GET /api/v1/me` | authenticated | Profile, selectable companies, permissions per company |
+| `GET /api/v1/companies/current` | authenticated + `X-Company-Id` + `iam.company:read` | The company the request operates in |
+| `GET /actuator/info` | authenticated | Build information |
+| `GET /v3/api-docs`, `/swagger-ui.html` | public outside production | OpenAPI contract and explorer |
 | everything else | authenticated | Business endpoints, denied by default |
+
+Company-scoped endpoints take the company from the `X-Company-Id` header and validate it
+against the caller's active memberships server-side. Errors are RFC 9457
+`application/problem+json` documents. See [`docs/api/API_CONVENTIONS.md`](docs/api/API_CONVENTIONS.md).
 
 ## Working agreements
 
