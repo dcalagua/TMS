@@ -123,6 +123,7 @@
     "windowTo": "Ventana hasta"
   },
   "filters": {
+    "allAvailability": "Toda disponibilidad",
     "allCarriers": "Todos los transportistas",
     "allOrigins": "Todos los orígenes",
     "allTypes": "Todos los tipos",

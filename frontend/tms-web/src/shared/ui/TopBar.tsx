@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next'
+import { Breadcrumb } from './Breadcrumb'
 import { CompanySelector } from './CompanySelector'
 import { LanguageSwitcher } from './LanguageSwitcher'
+import { NavSearch } from './NavSearch'
 import { SIDEBAR_ID } from './Sidebar'
 import { UserMenu } from './UserMenu'
 import { IconButton } from './components/IconButton'
@@ -13,12 +15,18 @@ export interface TopBarProps {
   onToggleCollapsed: () => void
 }
 
-/** Top bar: brand, navigation toggles, company scope, language and the user menu. */
+/**
+ * Top bar: two intentional halves rather than a row of controls pushed to one end.
+ *
+ * On the left, where the user is; on the right, who they are and what scope they are working
+ * in. The product name is deliberately absent - the sidebar carries it, and repeating it here
+ * spent the only part of the bar with room to say something the user does not already know.
+ */
 export function TopBar({ navOpen, onToggleNav, collapsed, onToggleCollapsed }: TopBarProps) {
   const { t } = useTranslation(['navigation', 'common'])
 
   return (
-    <header className="tms-topbar d-flex align-items-center gap-2 px-3">
+    <header className="tms-topbar">
       <IconButton
         icon="bi-list"
         label={t('toggle')}
@@ -37,20 +45,17 @@ export function TopBar({ navOpen, onToggleNav, collapsed, onToggleCollapsed }: T
         aria-expanded={!collapsed}
       />
 
-      <span className="tms-brand d-flex align-items-center gap-2 me-auto flex-shrink-0">
-        <span className="tms-brand-mark" aria-hidden="true">
-          TMS
-        </span>
-        <span className="d-none d-sm-inline">
-          TMS <span className="tms-brand-accent">by EBIM</span>
-        </span>
-      </span>
+      <Breadcrumb />
+
+      <NavSearch />
 
       {/* `tms-min-w-0` is what lets the company name actually truncate: without it this flex
           item sizes to its content and pushes the language switch off a narrow phone. */}
-      <div className="d-flex align-items-center gap-2 tms-min-w-0">
+      <div className="tms-topbar-actions tms-min-w-0">
         <CompanySelector />
+        <span className="tms-topbar-divider d-none d-sm-block" aria-hidden="true" />
         <LanguageSwitcher />
+        <span className="tms-topbar-divider d-none d-sm-block" aria-hidden="true" />
         <UserMenu />
       </div>
     </header>

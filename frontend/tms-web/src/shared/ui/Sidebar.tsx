@@ -17,6 +17,12 @@ export interface SidebarProps {
  * Responsive sidebar navigation. `.offcanvas-lg` makes this a static column at the `lg`
  * breakpoint and a slide-in drawer below it - one markup, no separate mobile component.
  *
+ * The column runs the full height of the window and carries the brand block at its top: product
+ * name, ownership, and the company the session is scoped to. That block is what makes the
+ * navigation read as the structural spine of the application rather than as a menu parked
+ * beneath a header, and it puts the active tenant where the user is already looking when they
+ * ask themselves "which company am I in?".
+ *
  * The drawer is driven by React state rather than by Bootstrap's `data-bs-*` data API. The
  * data API attaches a delegated click handler on `document` that calls `preventDefault()` on
  * any anchor carrying `data-bs-dismiss`, and it manages instances in a registry belonging to
@@ -29,7 +35,7 @@ export interface SidebarProps {
  */
 export function Sidebar({ open, collapsed, onRequestClose }: SidebarProps) {
   const { t } = useTranslation('navigation')
-  const { hasCapability, status } = useCompany()
+  const { hasCapability, status, selected } = useCompany()
 
   const visibleGroups = NAV_GROUPS.filter(
     (group) => !group.capability || status !== 'ready' || hasCapability(group.capability),
@@ -63,13 +69,27 @@ export function Sidebar({ open, collapsed, onRequestClose }: SidebarProps) {
       id={SIDEBAR_ID}
       aria-labelledby="tms-sidebar-label"
     >
-      <div className="offcanvas-header d-lg-none border-bottom" style={{ borderColor: 'var(--tms-sidebar-border)' }}>
-        <h2 className="offcanvas-title h6 mb-0 text-white" id="tms-sidebar-label">
+      {/* Desktop brand block. Below `lg` the offcanvas header below takes its place, because a
+          drawer needs a close control there more than it needs the wordmark twice. */}
+      <div className="tms-sidebar-brand d-none d-lg-flex">
+        <span className="tms-brand-mark" aria-hidden="true">
+          TMS
+        </span>
+        <span className="tms-sidebar-brand-text">
+          <span className="tms-sidebar-brand-name">
+            TMS <span className="tms-brand-accent">by EBIM</span>
+          </span>
+          {selected && <span className="tms-sidebar-brand-tenant">{selected.name}</span>}
+        </span>
+      </div>
+
+      <div className="offcanvas-header tms-sidebar-brand d-lg-none">
+        <h2 className="tms-sidebar-brand-name mb-0" id="tms-sidebar-label">
           {t('menu')}
         </h2>
         <button
           type="button"
-          className="tms-icon-btn tms-icon-btn-inverse"
+          className="tms-icon-btn tms-icon-btn-inverse ms-auto"
           onClick={onRequestClose}
           aria-label={t('close')}
         >

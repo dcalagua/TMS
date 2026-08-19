@@ -127,7 +127,8 @@ export function PlanningRunsPage() {
         description={t('description')}
         actions={
           canManage && (
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>
+            <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setShowCreate(true)}>
+              <i className="bi bi-plus-lg" aria-hidden="true" />
               {t('new')}
             </button>
           )
@@ -208,26 +209,18 @@ export function PlanningRunsPage() {
         </div>
       </FilterBar>
 
-      <div className="card shadow-sm">
-        <div className="card-body p-0">
-          <DataTable
-            columns={columns}
-            rows={pageData?.content ?? []}
-            total={pageData?.totalElements}
-            rowKey={(run) => run.id}
-            isLoading={runsQuery.isPending}
-            error={runsQuery.isError ? describeApiError(runsQuery.error as ApiError) : null}
-            onRetry={() => void runsQuery.refetch()}
-            emptyTitle="No planning runs found"
-            emptyMessage="Open a run for an origin and a planning date to start assigning orders to trips."
-          />
-        </div>
-        {pageData && (
-          <div className="card-footer">
-            <Pagination page={pageData} onPageChange={setPage} />
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        rows={pageData?.content ?? []}
+        total={pageData?.totalElements}
+        rowKey={(run) => run.id}
+        isLoading={runsQuery.isPending}
+        error={runsQuery.isError ? describeApiError(runsQuery.error as ApiError) : null}
+        onRetry={() => void runsQuery.refetch()}
+        emptyTitle="No planning runs found"
+        emptyMessage="Open a run for an origin and a planning date to start assigning orders to trips."
+        footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
+      />
 
       {showCreate && (
         <PlanningRunFormDrawer

@@ -1,4 +1,5 @@
 {
+  "breadcrumb": "Ruta de navegación",
   "close": "Cerrar",
   "closeNavigation": "Cerrar navegación",
   "collapse": "Contraer el menú",
@@ -28,5 +29,11 @@
   },
   "mainNavigation": "Navegación principal",
   "menu": "Menú",
+  "search": {
+    "empty": "Sin coincidencias",
+    "label": "Buscar una pantalla",
+    "placeholder": "Ir a una pantalla...",
+    "results": "Pantallas encontradas"
+  },
   "toggle": "Abrir o cerrar la navegación"
 }

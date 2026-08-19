@@ -150,7 +150,8 @@ export function ZonesPage() {
         description={t('zones.description')}
         actions={
           canManage && (
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
+            <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setModal({ mode: 'create' })}>
+              <i className="bi bi-plus-lg" aria-hidden="true" />
               {t('zones.new')}
             </button>
           )
@@ -197,26 +198,18 @@ export function ZonesPage() {
         </div>
       </FilterBar>
 
-      <div className="card shadow-sm">
-        <div className="card-body p-0">
-          <DataTable
-            columns={columns}
-            rows={pageData?.content ?? []}
-            total={pageData?.totalElements}
-            rowKey={(zone) => zone.id}
-            isLoading={zonesQuery.isPending}
-            error={zonesQuery.isError ? describeApiError(zonesQuery.error as ApiError) : null}
-            onRetry={() => void zonesQuery.refetch()}
-            emptyTitle={t('zones.empty.title')}
-            emptyMessage={t('zones.empty.message')}
-          />
-        </div>
-        {pageData && (
-          <div className="card-footer">
-            <Pagination page={pageData} onPageChange={setPage} />
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        rows={pageData?.content ?? []}
+        total={pageData?.totalElements}
+        rowKey={(zone) => zone.id}
+        isLoading={zonesQuery.isPending}
+        error={zonesQuery.isError ? describeApiError(zonesQuery.error as ApiError) : null}
+        onRetry={() => void zonesQuery.refetch()}
+        emptyTitle={t('zones.empty.title')}
+        emptyMessage={t('zones.empty.message')}
+        footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
+      />
 
       {modal && (
         <ZoneFormDrawer

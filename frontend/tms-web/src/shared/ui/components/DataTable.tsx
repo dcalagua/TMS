@@ -33,6 +33,12 @@ interface DataTableProps<T> {
    * unlike the pager, which hides itself when everything fits on one page.
    */
   total?: number
+  /**
+   * Rendered on the panel's own footer strip, below the last row. The pager belongs here rather
+   * than in a card wrapped around this one: a panel inside a panel doubles the border and the
+   * radius, which is what made the old list screens read as boxes stacked on a grey field.
+   */
+  footer?: ReactNode
 }
 
 function columnClass<T>(column: DataTableColumn<T>): string | undefined {
@@ -62,6 +68,7 @@ export function DataTable<T>({
   emptyAction,
   caption,
   total,
+  footer,
 }: DataTableProps<T>) {
   const { t } = useTranslation('common')
   const format = useFormat()
@@ -98,7 +105,7 @@ export function DataTable<T>({
       {total !== undefined && (
         <p className="tms-result-bar mb-0">
           <span className="tms-result-count">{format.quantity(total)}</span>
-          <span className="text-body-secondary">{t('table.results', { count: total })}</span>
+          <span>{t('table.results', { count: total })}</span>
         </p>
       )}
       <div className="tms-table-scroll">
@@ -126,6 +133,7 @@ export function DataTable<T>({
           </tbody>
         </table>
       </div>
+      {footer && <div className="tms-table-foot">{footer}</div>}
     </div>
   )
 }

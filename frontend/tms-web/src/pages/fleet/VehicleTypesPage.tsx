@@ -159,7 +159,8 @@ export function VehicleTypesPage() {
         description={t('vehicleTypes.description')}
         actions={
           canManage && (
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
+            <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setModal({ mode: 'create' })}>
+              <i className="bi bi-plus-lg" aria-hidden="true" />
               {t('vehicleTypes.new')}
             </button>
           )
@@ -206,26 +207,18 @@ export function VehicleTypesPage() {
         </div>
       </FilterBar>
 
-      <div className="card shadow-sm">
-        <div className="card-body p-0">
-          <DataTable
-            columns={columns}
-            rows={pageData?.content ?? []}
-            total={pageData?.totalElements}
-            rowKey={(type) => type.id}
-            isLoading={vehicleTypesQuery.isPending}
-            error={vehicleTypesQuery.isError ? describeApiError(vehicleTypesQuery.error as ApiError) : null}
-            onRetry={() => void vehicleTypesQuery.refetch()}
-            emptyTitle={t('vehicleTypes.empty.title')}
-            emptyMessage={t('vehicleTypes.empty.message')}
-          />
-        </div>
-        {pageData && (
-          <div className="card-footer">
-            <Pagination page={pageData} onPageChange={setPage} />
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        rows={pageData?.content ?? []}
+        total={pageData?.totalElements}
+        rowKey={(type) => type.id}
+        isLoading={vehicleTypesQuery.isPending}
+        error={vehicleTypesQuery.isError ? describeApiError(vehicleTypesQuery.error as ApiError) : null}
+        onRetry={() => void vehicleTypesQuery.refetch()}
+        emptyTitle={t('vehicleTypes.empty.title')}
+        emptyMessage={t('vehicleTypes.empty.message')}
+        footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
+      />
 
       {modal && (
         <VehicleTypeFormDrawer

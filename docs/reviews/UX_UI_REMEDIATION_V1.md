@@ -503,3 +503,137 @@ Responsive coverage is 320, 360, 390, 768, 1024, 1366, 1440 and 1920; no viewpor
 document sideways, and a drawer never measures wider than the layout viewport.
 
 Nothing was pushed.
+
+---
+
+## 16. Visual reset: login, shell and the list pattern
+
+The drawers of section 15 were adopted onto screens that still looked like Bootstrap defaults.
+This section is the composition work: what was wrong was not the palette but the layout.
+
+### 16.1 What was actually broken
+
+Three structural faults, not cosmetic ones:
+
+1. **`.tms-content` capped its width without centring it.** `max-width: 1560px` with no
+   `margin-inline: auto` means the work crowds against the sidebar and every pixel of the
+   remainder piles up on the right. On a 2500px monitor that is a band of dead grey roughly
+   580px wide down one side of every screen - the "empty canvas" the review called out.
+2. **The top bar spanned the full width above the sidebar.** The navigation therefore started
+   below a header and had nowhere to carry the brand, so it read as a menu parked under a bar
+   rather than as the spine of the application.
+3. **The table was a panel inside a panel.** `DataTable` already renders a bordered, rounded
+   surface; every list screen wrapped it in a Bootstrap card and hung the pager in that card's
+   footer. Two borders, two radii, and a pager that looked bolted on.
+
+### 16.2 Shell
+
+The sidebar now runs the full height of the window and carries a brand block - product name,
+ownership, and the company the session is scoped to - above the navigation. The top bar belongs
+to the content column and is composed as three zones instead of a row of controls shoved to one
+end:
+
+- left: a breadcrumb derived from `navConfig`, so it cannot drift out of sync with the menu;
+- centre: `NavSearch`, which jumps to a screen by name;
+- right: company scope, language and account, separated by hairline dividers.
+
+`NavSearch` is navigation, not data search. With twenty-odd screens behind six groups, a planner
+who wants Frecuencias should not have to remember it lives under Maestros. It reads the same
+config the sidebar renders and applies the same capability gating, so it can never offer a screen
+the menu is hiding - there is a test for exactly that. Promising a global data search in the
+chrome and then only matching screen names would have been worse than not offering one.
+
+The active navigation entry is a filled pill. The 3px sliver that used to sit beside it was drawn
+half outside the link's own box and, against the panel edge, read as a rendering artefact; weight
+and contrast carry the state without it.
+
+### 16.3 Login
+
+Rebuilt as a single centred card holding two panels, rather than a full-bleed split. A split that
+runs edge to edge gives the brand a column it cannot fill and strands the form in the middle of a
+large empty field. A contained card holds its proportions on a 1280px laptop and a 2560px monitor
+alike, and reads as an object placed on the page rather than as two coloured halves of it.
+
+The brand panel carries real content: a logo lockup, a kicker, a headline, a lead paragraph, three
+named capabilities with a line of explanation each, a trust line and the suite footer. The copy is
+new in both languages. The language switch sits outside the card, because it belongs to the visit
+rather than to the form. Below `lg` the brand panel is dropped rather than stacked - on a phone it
+would only push the fields under the fold.
+
+### 16.4 List pattern
+
+One composed screen instead of three stacked cards:
+
+- **`PageHeader`** - identity tile, title at 1.5rem, one line of description, actions grouped on
+  the right. The create action carries a `+`, so the screen's primary move is identifiable
+  without reading the label.
+- **`FilterBar`** - one strip. Fields share a baseline and an equal share of the row, capped at
+  16rem so the last field on a wrapped row does not stretch into a 540px input holding the word
+  "Activos". Actions sit at the end behind a divider, and take the full width once they wrap.
+- **`DataTable`** - the pager moved into the panel's own footer strip and the outer card is gone,
+  on all ten list screens. Row rhythm went to 0.6875rem/1rem: tall enough to scan a column of
+  forty codes, tight enough that twenty rows fit on a laptop. Headers are small-caps on the
+  recessed surface tone.
+- **`EmptyState`** - a framed mark, a heading in body colour, one line saying what to do, and the
+  control that does it. A small grey glyph adrift in a tall blank box read as a page that failed
+  to load, which is the wrong message for a list filtered down to nothing.
+
+### 16.5 Defects found and fixed during the visual pass
+
+Each of these was visible only once the screens were rendered and looked at:
+
+- `filters.allAvailability` did not exist: the vehicles availability filter rendered the literal
+  string `All`, untranslated, in Spanish.
+- `Pagination` renders nothing while everything fits on one page, so the new footer strip drew an
+  empty 40px band under the last row. `.tms-table-foot:empty { display: none }`.
+- "Aplicar filtros" wrapped onto two lines inside its own button as soon as the strip ran short.
+- The field width cap applied to `.tms-filterbar > div`, which also matched the action group and
+  stopped it filling the row on a phone.
+- A hover rule was written for a `.tms-row-actions` element no screen renders. Removed rather
+  than left as dead CSS.
+
+### 16.6 Honest assessment
+
+Against the questions the brief asks:
+
+- The login is presentable in front of a customer.
+- The list screens have real hierarchy, density and identity; the table no longer reads as a
+  Bootstrap default.
+- The sidebar is solid and the top bar is composed rather than improvised.
+- Dead space is gone at the structural level. A list holding two rows still has empty space below
+  it, which is a property of two rows, not of the layout.
+
+**Still weak, and not addressed here: the dashboard.** Its "quick access" panel is the sidebar
+repeated as a column of buttons, and it occupies most of the screen. Making it genuinely useful
+means operational figures - orders awaiting planning, trips out today, capacity in use - and none
+of those are exposed by the backend today. Inventing them would be worse than leaving the screen
+plain, so it is recorded here as open rather than quietly dressed up. It is the next screen worth
+the work.
+
+### 16.7 Gates
+
+```
+VISUAL_RESET=PASS
+LOGIN_REDESIGN=PASS
+APP_SHELL_REDESIGN=PASS
+LIST_PATTERN_REDESIGN=PASS
+DRAWER_PATTERN=PASS
+MONOCHROME_THEME=PASS
+RESPONSIVE=PASS
+AUTH_SAFE=PASS
+NAVIGATION_SAFE=PASS
+I18N_SAFE=PASS
+CONSOLE_ERRORS=0
+FRONTEND_TESTS=401
+E2E_TESTS=64
+TYPECHECK=PASS
+LINT=PASS
+BUILD=PASS
+P0=0
+P1=0
+P2=1
+```
+
+The single P2 is the dashboard described in 16.6.
+
+Nothing was pushed.

@@ -154,7 +154,8 @@ export function CarriersPage() {
         description={t('carriers.description')}
         actions={
           canManage && (
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
+            <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setModal({ mode: 'create' })}>
+              <i className="bi bi-plus-lg" aria-hidden="true" />
               {t('carriers.new')}
             </button>
           )
@@ -201,26 +202,18 @@ export function CarriersPage() {
         </div>
       </FilterBar>
 
-      <div className="card shadow-sm">
-        <div className="card-body p-0">
-          <DataTable
-            columns={columns}
-            rows={pageData?.content ?? []}
-            total={pageData?.totalElements}
-            rowKey={(carrier) => carrier.id}
-            isLoading={carriersQuery.isPending}
-            error={carriersQuery.isError ? describeApiError(carriersQuery.error as ApiError) : null}
-            onRetry={() => void carriersQuery.refetch()}
-            emptyTitle={t('carriers.empty.title')}
-            emptyMessage={t('carriers.empty.message')}
-          />
-        </div>
-        {pageData && (
-          <div className="card-footer">
-            <Pagination page={pageData} onPageChange={setPage} />
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        rows={pageData?.content ?? []}
+        total={pageData?.totalElements}
+        rowKey={(carrier) => carrier.id}
+        isLoading={carriersQuery.isPending}
+        error={carriersQuery.isError ? describeApiError(carriersQuery.error as ApiError) : null}
+        onRetry={() => void carriersQuery.refetch()}
+        emptyTitle={t('carriers.empty.title')}
+        emptyMessage={t('carriers.empty.message')}
+        footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
+      />
 
       {modal && (
         <CarrierFormDrawer

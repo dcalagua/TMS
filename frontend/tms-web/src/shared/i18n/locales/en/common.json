@@ -123,6 +123,7 @@
     "windowTo": "Window to"
   },
   "filters": {
+    "allAvailability": "Any availability",
     "allCarriers": "All carriers",
     "allOrigins": "All origins",
     "allTypes": "All types",

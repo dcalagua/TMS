@@ -221,7 +221,8 @@ export function VehiclesPage() {
         description={t('vehicles.description')}
         actions={
           canManage && (
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
+            <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setModal({ mode: 'create' })}>
+              <i className="bi bi-plus-lg" aria-hidden="true" />
               {t('vehicles.new')}
             </button>
           )
@@ -299,7 +300,7 @@ export function VehiclesPage() {
               setDraftFilters({ ...draftFilters, availabilityStatus: event.target.value as VehicleAvailabilityStatus | '' })
             }
           >
-            <option value="">All</option>
+            <option value="">{tc('filters.allAvailability')}</option>
             {VEHICLE_AVAILABILITY_STATUSES.map((status) => (
               <option key={status} value={status}>
                 {enumLabels.vehicleAvailability(status)}
@@ -324,26 +325,18 @@ export function VehiclesPage() {
         </div>
       </FilterBar>
 
-      <div className="card shadow-sm">
-        <div className="card-body p-0">
-          <DataTable
-            columns={columns}
-            rows={pageData?.content ?? []}
-            total={pageData?.totalElements}
-            rowKey={(vehicle) => vehicle.id}
-            isLoading={vehiclesQuery.isPending}
-            error={vehiclesQuery.isError ? describeApiError(vehiclesQuery.error as ApiError) : null}
-            onRetry={() => void vehiclesQuery.refetch()}
-            emptyTitle={t('vehicles.empty.title')}
-            emptyMessage={t('vehicles.empty.message')}
-          />
-        </div>
-        {pageData && (
-          <div className="card-footer">
-            <Pagination page={pageData} onPageChange={setPage} />
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        rows={pageData?.content ?? []}
+        total={pageData?.totalElements}
+        rowKey={(vehicle) => vehicle.id}
+        isLoading={vehiclesQuery.isPending}
+        error={vehiclesQuery.isError ? describeApiError(vehiclesQuery.error as ApiError) : null}
+        onRetry={() => void vehiclesQuery.refetch()}
+        emptyTitle={t('vehicles.empty.title')}
+        emptyMessage={t('vehicles.empty.message')}
+        footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
+      />
 
       {modal && (
         <VehicleFormDrawer

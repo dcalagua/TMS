@@ -180,7 +180,8 @@ export function DestinationsPage() {
         description={t('destinations.description')}
         actions={
           canManage && (
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
+            <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setModal({ mode: 'create' })}>
+              <i className="bi bi-plus-lg" aria-hidden="true" />
               {t('destinations.new')}
             </button>
           )
@@ -263,26 +264,18 @@ export function DestinationsPage() {
         </div>
       </FilterBar>
 
-      <div className="card shadow-sm">
-        <div className="card-body p-0">
-          <DataTable
-            columns={columns}
-            rows={pageData?.content ?? []}
-            total={pageData?.totalElements}
-            rowKey={(destination) => destination.id}
-            isLoading={destinationsQuery.isPending}
-            error={destinationsQuery.isError ? describeApiError(destinationsQuery.error as ApiError) : null}
-            onRetry={() => void destinationsQuery.refetch()}
-            emptyTitle={t('destinations.empty.title')}
-            emptyMessage={t('destinations.empty.message')}
-          />
-        </div>
-        {pageData && (
-          <div className="card-footer">
-            <Pagination page={pageData} onPageChange={setPage} />
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        rows={pageData?.content ?? []}
+        total={pageData?.totalElements}
+        rowKey={(destination) => destination.id}
+        isLoading={destinationsQuery.isPending}
+        error={destinationsQuery.isError ? describeApiError(destinationsQuery.error as ApiError) : null}
+        onRetry={() => void destinationsQuery.refetch()}
+        emptyTitle={t('destinations.empty.title')}
+        emptyMessage={t('destinations.empty.message')}
+        footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
+      />
 
       {modal && (
         <DestinationFormDrawer

@@ -165,7 +165,8 @@ export function OriginsPage() {
         description={t('origins.description')}
         actions={
           canManage && (
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
+            <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setModal({ mode: 'create' })}>
+              <i className="bi bi-plus-lg" aria-hidden="true" />
               {t('origins.new')}
             </button>
           )
@@ -230,26 +231,18 @@ export function OriginsPage() {
         </div>
       </FilterBar>
 
-      <div className="card shadow-sm">
-        <div className="card-body p-0">
-          <DataTable
-            columns={columns}
-            rows={pageData?.content ?? []}
-            total={pageData?.totalElements}
-            rowKey={(origin) => origin.id}
-            isLoading={originsQuery.isPending}
-            error={originsQuery.isError ? describeApiError(originsQuery.error as ApiError) : null}
-            onRetry={() => void originsQuery.refetch()}
-            emptyTitle={t('origins.empty.title')}
-            emptyMessage={t('origins.empty.message')}
-          />
-        </div>
-        {pageData && (
-          <div className="card-footer">
-            <Pagination page={pageData} onPageChange={setPage} />
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        rows={pageData?.content ?? []}
+        total={pageData?.totalElements}
+        rowKey={(origin) => origin.id}
+        isLoading={originsQuery.isPending}
+        error={originsQuery.isError ? describeApiError(originsQuery.error as ApiError) : null}
+        onRetry={() => void originsQuery.refetch()}
+        emptyTitle={t('origins.empty.title')}
+        emptyMessage={t('origins.empty.message')}
+        footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
+      />
 
       {modal && (
         <OriginFormDrawer

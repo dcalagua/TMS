@@ -1,4 +1,5 @@
 {
+  "breadcrumb": "Breadcrumb",
   "close": "Close",
   "closeNavigation": "Close navigation",
   "collapse": "Collapse the menu",
@@ -28,5 +29,11 @@
   },
   "mainNavigation": "Main navigation",
   "menu": "Menu",
+  "search": {
+    "empty": "No matches",
+    "label": "Search for a screen",
+    "placeholder": "Go to a screen...",
+    "results": "Screens found"
+  },
   "toggle": "Toggle navigation"
 }

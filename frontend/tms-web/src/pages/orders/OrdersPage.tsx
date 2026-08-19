@@ -465,13 +465,8 @@ export function OrdersPage() {
         emptyTitle={t('empty.title')}
         emptyMessage={t('empty.message')}
         caption={t('title')}
+        footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
       />
-
-      {pageData && (
-        <div className="mt-3">
-          <Pagination page={pageData} onPageChange={setPage} />
-        </div>
-      )}
 
       {modal && (
         <OrderFormDrawer

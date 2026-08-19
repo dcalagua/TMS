@@ -49,26 +49,198 @@ h6 {
 
 /* ---------------------------------------------------------------------------
    Application shell
+   ---------------------------------------------------------------------------
+   A full-height navigation column on the left, and everything else in a column
+   to its right: top bar, then the routed content. The sidebar reaching the top
+   of the window is what makes the shell read as a structure rather than as a
+   header with a menu stuck underneath it - the dark column anchors the whole
+   left edge and gives the brand somewhere to live.
    ------------------------------------------------------------------------- */
 .tms-shell {
   min-height: 100vh;
   display: flex;
-  flex-direction: column;
   background-color: var(--tms-body-bg);
 }
 
+.tms-shell-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ---- Top bar ------------------------------------------------------------ */
 .tms-topbar {
   background-color: var(--tms-topbar-bg);
   border-bottom: 1px solid var(--tms-topbar-border);
-  min-height: var(--tms-topbar-height);
+  height: var(--tms-topbar-height);
   position: sticky;
   top: 0;
   z-index: 1030;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-inline: 1rem;
 }
 
+/* Where the user is, in the words of the navigation itself. It replaces the
+   duplicated product name the top bar used to carry - the sidebar already says
+   what the product is, so repeating it three inches away wasted the one part of
+   the bar with room to say something useful. */
+.tms-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+  font-size: var(--tms-font-base);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tms-breadcrumb-item {
+  color: var(--tms-muted);
+  white-space: nowrap;
+}
+
+.tms-breadcrumb-item:last-child {
+  color: var(--tms-text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tms-breadcrumb-sep {
+  color: var(--tms-border-strong);
+  font-size: 0.625rem;
+}
+
+/* ---- Screen search ------------------------------------------------------
+   Navigation, not data search: twenty screens behind six groups is enough that
+   knowing the name of one should be faster than remembering which group holds
+   it. Centred, because the bar reads as balanced only when its middle carries
+   something. */
+.tms-navsearch {
+  position: relative;
+  flex: 1 1 auto;
+  max-width: 24rem;
+  margin-inline: auto;
+  display: none;
+}
+
+@media (min-width: 992px) {
+  .tms-navsearch {
+    display: block;
+  }
+}
+
+.tms-navsearch-icon {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--tms-muted);
+  font-size: var(--tms-font-md);
+  pointer-events: none;
+}
+
+.tms-navsearch-input {
+  width: 100%;
+  height: 2.125rem;
+  padding: 0 0.75rem 0 2.25rem;
+  font-size: var(--tms-font-base);
+  color: var(--tms-text);
+  background-color: var(--tms-surface-alt);
+  border: 1px solid var(--tms-border);
+  border-radius: var(--tms-radius-md);
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.tms-navsearch-input:hover {
+  background-color: var(--tms-surface);
+}
+
+.tms-navsearch-input:focus {
+  outline: none;
+  background-color: var(--tms-surface);
+  border-color: var(--tms-border-strong);
+  box-shadow: var(--tms-focus-ring);
+}
+
+.tms-navsearch-list {
+  position: absolute;
+  top: calc(100% + 0.375rem);
+  left: 0;
+  right: 0;
+  z-index: 1040;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background-color: var(--tms-surface);
+  border: 1px solid var(--tms-border);
+  border-radius: var(--tms-radius-md);
+  box-shadow: var(--tms-shadow-md);
+}
+
+.tms-navsearch-option {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.4375rem 0.625rem;
+  border: 0;
+  border-radius: var(--tms-radius-sm);
+  background: none;
+  color: var(--tms-text);
+  font-size: var(--tms-font-md);
+  text-align: left;
+}
+
+.tms-navsearch-option.active {
+  background-color: var(--tms-surface-alt);
+}
+
+.tms-navsearch-option > .bi {
+  color: var(--tms-muted);
+  flex: none;
+}
+
+.tms-navsearch-group {
+  margin-left: auto;
+  font-size: var(--tms-font-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tms-muted);
+  flex: none;
+}
+
+.tms-navsearch-empty {
+  padding: 0.5rem 0.625rem;
+  font-size: var(--tms-font-base);
+  color: var(--tms-muted);
+}
+
+/* The identity cluster: company scope, language, account. Grouped and separated
+   from the left half so the bar reads as two intentional halves. */
+.tms-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.tms-topbar-divider {
+  width: 1px;
+  height: 1.5rem;
+  background-color: var(--tms-border);
+  flex: none;
+}
+
+/* ---- Brand -------------------------------------------------------------- */
 .tms-brand {
   font-weight: 650;
-  letter-spacing: -0.015em;
+  letter-spacing: var(--tms-tracking-tight);
   color: var(--tms-text);
   text-decoration: none;
 }
@@ -87,35 +259,34 @@ h6 {
   border-radius: var(--tms-radius-sm);
   background: var(--tms-ink);
   color: var(--tms-on-primary);
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   flex: none;
 }
 
+/* ---- Sidebar ------------------------------------------------------------ */
 /* `!important` here is not a specificity shortcut: at the `lg` breakpoint Bootstrap's own
    `.offcanvas-lg` rule declares `background-color: transparent !important` and zeroes the
-   border, which stripped the navy off the desktop column and left light slate text on a light
-   background - a contrast failure, not a cosmetic one. This is the documented way to opt a
-   responsive offcanvas out of that rule. */
+   border, which stripped the charcoal off the desktop column and left light slate text on a
+   light background - a contrast failure, not a cosmetic one. This is the documented way to opt
+   a responsive offcanvas out of that rule. */
 .tms-sidebar {
   background-color: var(--tms-sidebar-bg) !important;
   color: var(--tms-sidebar-text);
   width: var(--tms-sidebar-width);
   border-right: 1px solid var(--tms-sidebar-border) !important;
-  transition: width 0.15s ease;
-}
-
-.tms-sidebar-body {
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  transition: width 0.16s var(--tms-easing);
 }
 
 @media (min-width: 992px) {
   .tms-sidebar {
     position: sticky;
-    top: var(--tms-topbar-height);
-    height: calc(100vh - var(--tms-topbar-height));
+    top: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    flex: none;
   }
 
   .tms-sidebar.tms-sidebar-rail {
@@ -123,26 +294,90 @@ h6 {
   }
 }
 
-.tms-nav-group-label {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+/* The brand block: product, ownership and the tenant the session is scoped to,
+   stacked at the top of the column the way a desktop application titles itself. */
+.tms-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  height: var(--tms-topbar-height);
+  padding-inline: 1rem;
+  border-bottom: 1px solid var(--tms-sidebar-border);
+  flex: none;
+  overflow: hidden;
+}
+
+.tms-sidebar-brand-text {
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.tms-sidebar-brand-name {
+  display: block;
+  font-size: var(--tms-font-md);
+  font-weight: 650;
+  letter-spacing: var(--tms-tracking-tight);
+  color: var(--tms-sidebar-text-strong);
+  white-space: nowrap;
+}
+
+.tms-sidebar-brand-name .tms-brand-accent {
+  color: var(--tms-sidebar-muted);
+}
+
+.tms-sidebar-brand-tenant {
+  display: block;
+  font-size: var(--tms-font-xs);
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--tms-sidebar-muted);
-  padding: 0 0.875rem;
-  margin: 1.25rem 0 0.375rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tms-sidebar-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  flex: 1 1 auto;
+}
+
+/* A thin, dark scrollbar: the default light one cuts a bright stripe down the
+   charcoal column every time the navigation overflows. */
+.tms-sidebar-body {
+  scrollbar-width: thin;
+  scrollbar-color: var(--tms-sidebar-active-bg) transparent;
+}
+
+.tms-sidebar-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tms-sidebar-body::-webkit-scrollbar-thumb {
+  background-color: var(--tms-sidebar-active-bg);
+  border-radius: var(--tms-radius-pill);
+}
+
+.tms-nav-group-label {
+  font-size: var(--tms-font-xs);
+  font-weight: 600;
+  letter-spacing: var(--tms-tracking-wide);
+  text-transform: uppercase;
+  color: var(--tms-sidebar-muted);
+  padding: 0 1rem;
+  margin: 1.125rem 0 0.375rem;
 }
 
 .tms-nav-link {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  margin: 0.0625rem 0.5rem;
-  padding: 0.5rem 0.625rem;
-  border-radius: var(--tms-radius-sm);
+  gap: 0.75rem;
+  margin: 0.0625rem 0.625rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--tms-radius-md);
   color: var(--tms-sidebar-text);
   text-decoration: none;
-  font-size: 0.875rem;
+  font-size: var(--tms-font-md);
   line-height: 1.25rem;
   position: relative;
   transition: background-color 0.12s ease, color 0.12s ease;
@@ -159,37 +394,30 @@ h6 {
   font-weight: 600;
 }
 
-/* A left marker rather than a colour-only cue: the active entry stays
-   identifiable without relying on hue. */
-.tms-nav-link.active::before {
-  content: '';
-  position: absolute;
-  left: -0.5rem;
-  top: 0.375rem;
-  bottom: 0.375rem;
-  width: 3px;
-  border-radius: 0 var(--tms-radius-pill) var(--tms-radius-pill) 0;
-  background-color: var(--tms-sidebar-accent);
-}
-
 .tms-nav-icon {
   width: 1.125rem;
   flex: none;
   text-align: center;
   font-size: 1rem;
-  opacity: 0.85;
+  opacity: 0.75;
 }
 
+.tms-nav-link:hover .tms-nav-icon,
 .tms-nav-link.active .tms-nav-icon {
   opacity: 1;
-  color: var(--tms-sidebar-accent);
 }
 
 /* Collapsed rail: icons only, labels removed from the layout but kept for
-   assistive technology through the link's `title`/`aria-label`. */
+   assistive technology through the link's `title`. */
 .tms-sidebar-rail .tms-nav-label,
-.tms-sidebar-rail .tms-nav-group-label-text {
+.tms-sidebar-rail .tms-nav-group-label-text,
+.tms-sidebar-rail .tms-sidebar-brand-text {
   display: none;
+}
+
+.tms-sidebar-rail .tms-sidebar-brand {
+  justify-content: center;
+  padding-inline: 0.5rem;
 }
 
 .tms-sidebar-rail .tms-nav-link {
@@ -203,14 +431,19 @@ h6 {
   border-top: 1px solid var(--tms-sidebar-border);
 }
 
+/* ---- Content ------------------------------------------------------------ */
 .tms-main {
   background-color: var(--tms-body-bg);
   min-width: 0;
+  flex: 1 1 auto;
 }
 
+/* Capped and centred. Capping alone is what left a wide monitor with a wide
+   band of empty ground on one side of the work. */
 .tms-content {
   max-width: var(--tms-content-max-width);
-  padding: 1.25rem;
+  margin-inline: auto;
+  padding: var(--tms-content-gutter);
 }
 
 @media (max-width: 575.98px) {
@@ -252,17 +485,37 @@ h6 {
   padding: 1rem;
 }
 
+.tms-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.125rem;
+}
+
 .tms-page-title {
-  font-size: 1.375rem;
+  font-size: var(--tms-font-2xl);
   font-weight: 650;
+  letter-spacing: var(--tms-tracking-tight);
+  line-height: 1.2;
   margin: 0;
 }
 
 .tms-page-subtitle {
   color: var(--tms-muted);
-  font-size: 0.8125rem;
-  margin: 0.125rem 0 0;
+  font-size: var(--tms-font-base);
+  margin: 0.1875rem 0 0;
   max-width: 72ch;
+}
+
+/* Actions wrap rather than refusing to shrink: three buttons on a 320px screen
+   must fall onto a second line, not push the page into a horizontal scrollbar. */
+.tms-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .tms-section-title {
@@ -325,6 +578,73 @@ h6 {
 }
 
 /* ---------------------------------------------------------------------------
+   Filter strip
+   ---------------------------------------------------------------------------
+   One bar, not a card full of loose inputs. The fields share a baseline, the
+   actions are pushed to the end behind a divider, and the whole thing sits at
+   the same radius and border weight as the table below it so the two read as
+   parts of one screen.
+   ------------------------------------------------------------------------- */
+.tms-filterbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  padding: 0.875rem 1rem;
+  margin-bottom: 1rem;
+  background-color: var(--tms-surface);
+  border: 1px solid var(--tms-border);
+  border-radius: var(--tms-radius-lg);
+  box-shadow: var(--tms-shadow-xs);
+}
+
+/* Each field claims a share of the row and a floor, so four filters spread
+   evenly instead of collapsing to the width of their placeholder text. */
+/* `:not(.tms-filterbar-actions)` matters: the action group is a direct child div
+   too, and the field cap was shrinking it to 16rem, which stopped it filling the
+   row once it wrapped onto a line of its own. */
+.tms-filterbar > div:not(.tms-filterbar-actions) {
+  flex: 1 1 11rem;
+  min-width: 9rem;
+  max-width: 16rem;
+}
+
+.tms-filterbar label {
+  display: block;
+  font-size: var(--tms-font-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tms-muted);
+  margin-bottom: 0.3125rem;
+}
+
+.tms-filterbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  margin-left: auto;
+  padding-left: 1rem;
+  border-left: 1px solid var(--tms-border);
+  flex: none;
+}
+
+@media (max-width: 767.98px) {
+  /* The divider reads as an accident once the actions have wrapped onto their
+     own line. */
+  .tms-filterbar-actions {
+    border-left: 0;
+    padding-left: 0;
+    width: 100%;
+  }
+
+  .tms-filterbar-actions > .btn {
+    flex: 1 1 0;
+  }
+}
+
+/* ---------------------------------------------------------------------------
    Tables
    ------------------------------------------------------------------------- */
 .tms-table-wrap {
@@ -343,30 +663,33 @@ h6 {
 
 .tms-table {
   margin: 0;
-  font-size: 0.875rem;
-  --bs-table-hover-bg: var(--tms-surface-hover);
+  font-size: var(--tms-font-md);
+  --bs-table-hover-bg: var(--tms-surface-alt);
 }
 
 .tms-table > thead > tr > th {
-  background-color: var(--tms-surface-muted);
+  background-color: var(--tms-surface-alt);
   border-bottom: 1px solid var(--tms-border);
-  color: var(--tms-text-secondary);
-  font-size: 0.6875rem;
+  color: var(--tms-muted);
+  font-size: var(--tms-font-xs);
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
-  padding: 0.5rem 0.75rem;
+  padding: 0.625rem 1rem;
   position: sticky;
   top: 0;
   z-index: 1;
 }
 
+/* Row rhythm: tall enough to scan a column of forty codes without the eye
+   slipping a line, tight enough that twenty rows fit on a laptop screen. */
 .tms-table > tbody > tr > td {
-  padding: 0.5rem 0.75rem;
+  padding: 0.6875rem 1rem;
   border-bottom: 1px solid var(--tms-border);
   vertical-align: middle;
 }
+
 
 .tms-table > tbody > tr:last-child > td {
   border-bottom: 0;
@@ -787,38 +1110,222 @@ h6 {
 /* ---------------------------------------------------------------------------
    Login
    ---------------------------------------------------------------------------
-   Two panels: a charcoal brand column that carries the product's identity, and
-   the form itself on the page ground. The column is monochrome by design - the
-   only colour in the whole screen is whatever the operator's own browser paints
-   on form controls.
+   One centred card holding two panels. A full-bleed split gives the brand a
+   column it cannot fill and leaves the form adrift in the middle of a large
+   empty field; a card with a fixed maximum size keeps its proportions on a
+   1280px laptop and a 2560px monitor alike.
    ------------------------------------------------------------------------- */
 .tms-login {
   min-height: 100vh;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
   background-color: var(--tms-body-bg);
+  /* A barely-there vignette so the card has something to sit on rather than
+     floating in flat grey. */
+  background-image: radial-gradient(120% 90% at 50% 0%, #ffffff 0%, var(--tms-body-bg) 55%);
 }
 
+.tms-login-utility {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.5rem;
+}
+
+.tms-login-card {
+  display: grid;
+  grid-template-columns: 1fr;
+  width: 100%;
+  max-width: 24rem;
+  background-color: var(--tms-surface);
+  border: 1px solid var(--tms-border);
+  border-radius: var(--tms-radius-xl);
+  box-shadow: var(--tms-shadow-lg);
+  overflow: hidden;
+}
+
+@media (min-width: 992px) {
+  .tms-login-card {
+    /* The brand panel is the wider half: it carries five blocks of content, the
+       form carries two fields. */
+    grid-template-columns: 1.05fr 0.95fr;
+    max-width: 62rem;
+  }
+}
+
+/* ---- Brand panel -------------------------------------------------------- */
 .tms-login-brand {
-  width: 42%;
-  max-width: 34rem;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 2.5rem;
+  color: var(--tms-sidebar-text);
+  background: linear-gradient(155deg, var(--tms-ink-hover) 0%, var(--tms-ink) 55%, #0b0d10 100%);
+}
+
+.tms-login-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--tms-radius-md);
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   color: var(--tms-sidebar-text-strong);
-  background: linear-gradient(168deg, var(--tms-ink-hover) 0%, var(--tms-ink) 52%, var(--tms-ink-active) 100%);
+  font-size: var(--tms-font-sm);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.tms-login-wordmark {
+  font-size: var(--tms-font-xl);
+  font-weight: 650;
+  letter-spacing: var(--tms-tracking-tight);
+  color: var(--tms-sidebar-text-strong);
+  margin: 0.875rem 0 0.125rem;
+}
+
+.tms-login-wordmark span {
+  font-weight: 400;
+  color: var(--tms-sidebar-muted);
+}
+
+.tms-login-kicker {
+  font-size: var(--tms-font-xs);
+  font-weight: 600;
+  letter-spacing: var(--tms-tracking-wide);
+  text-transform: uppercase;
+  color: var(--tms-sidebar-muted);
+  margin: 0;
 }
 
 .tms-login-headline {
-  font-size: 1.75rem;
-  line-height: 1.25;
+  font-size: var(--tms-font-2xl);
+  line-height: 1.2;
+  font-weight: 650;
+  letter-spacing: var(--tms-tracking-tight);
+  color: var(--tms-sidebar-text-strong);
+  margin: 0 0 0.75rem;
+}
+
+.tms-login-lead {
+  font-size: var(--tms-font-md);
+  line-height: 1.55;
+  color: var(--tms-sidebar-text);
+  margin: 0 0 1.75rem;
+  max-width: 30rem;
+}
+
+.tms-login-features {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1.125rem;
+}
+
+.tms-login-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+}
+
+.tms-login-feature-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.125rem;
+  height: 2.125rem;
+  flex: none;
+  border-radius: var(--tms-radius-md);
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--tms-sidebar-text-strong);
+  font-size: var(--tms-font-lg);
+}
+
+.tms-login-feature-title {
+  display: block;
+  font-size: var(--tms-font-md);
   font-weight: 600;
   color: var(--tms-sidebar-text-strong);
+  line-height: 1.35;
 }
 
-.tms-login-check {
-  color: var(--tms-sidebar-accent);
+.tms-login-feature-text {
+  display: block;
+  font-size: var(--tms-font-base);
+  color: var(--tms-sidebar-muted);
+  line-height: 1.45;
 }
 
-.tms-login-form {
-  width: 100%;
-  max-width: 27.5rem;
+.tms-login-brand-foot {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 1.125rem;
+}
+
+.tms-login-trust {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--tms-font-base);
+  color: var(--tms-sidebar-text);
+  margin: 0 0 0.375rem;
+}
+
+.tms-login-suite {
+  font-size: var(--tms-font-xs);
+  letter-spacing: 0.04em;
+  color: var(--tms-sidebar-muted);
+  margin: 0;
+}
+
+/* ---- Form panel --------------------------------------------------------- */
+.tms-login-panel {
+  padding: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background-color: var(--tms-surface);
+}
+
+@media (max-width: 575.98px) {
+  .tms-login {
+    padding: 1rem;
+  }
+
+  .tms-login-panel {
+    padding: 1.75rem 1.25rem;
+  }
+}
+
+.tms-login-panel-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.tms-login-title {
+  font-size: var(--tms-font-xl);
+  font-weight: 650;
+  letter-spacing: var(--tms-tracking-tight);
+  margin: 0 0 0.25rem;
+}
+
+.tms-login-subtitle {
+  font-size: var(--tms-font-md);
+  color: var(--tms-muted);
+  margin: 0 0 1.75rem;
+}
+
+.tms-login-help {
+  font-size: var(--tms-font-base);
+  color: var(--tms-muted);
+  text-align: center;
+  margin: 1.5rem 0 0;
 }
 
 /* ---------------------------------------------------------------------------
@@ -838,36 +1345,88 @@ h6 {
 }
 
 /* ---------------------------------------------------------------------------
-   Result count bar above a table
+   Result strip and table footer
+   ---------------------------------------------------------------------------
+   Both belong to the table panel rather than floating beside it: the count sits
+   on the panel's own recessed tone above the header row, the pager on the same
+   tone below the last row. A pager parked outside the panel is what made the
+   old screens read as unrelated boxes on a grey field.
    ------------------------------------------------------------------------- */
 .tms-result-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0.5rem;
-  padding: 0.625rem 0.875rem;
+  padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--tms-border);
-  font-size: 0.8125rem;
+  font-size: var(--tms-font-base);
+  color: var(--tms-muted);
 }
 
 .tms-result-count {
   font-weight: 650;
+  font-size: var(--tms-font-md);
   color: var(--tms-text);
+}
+
+.tms-table-foot {
+  padding: 0.625rem 1rem;
+  border-top: 1px solid var(--tms-border);
+  background-color: var(--tms-surface-alt);
+}
+
+/* The pager renders nothing while every row fits on one page. Without this the
+   strip still draws its border and padding, leaving an empty band under the last
+   row that reads as a rendering fault. */
+.tms-table-foot:empty {
+  display: none;
 }
 
 /* ---------------------------------------------------------------------------
    Feedback states
    ------------------------------------------------------------------------- */
+/* An empty result is still a composed panel: a framed mark, a heading in body
+   colour, one line explaining what to do, and the action that does it. The old
+   version was a small grey glyph adrift in a tall blank box, which made a
+   filtered-to-nothing list look like a failure to load. */
 .tms-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
-  padding: 2.5rem 1rem;
+  padding: 3rem 1.5rem;
   color: var(--tms-muted);
 }
 
 .tms-empty-icon {
-  font-size: 1.75rem;
-  color: var(--tms-border-strong);
-  margin-bottom: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.875rem;
+  border-radius: var(--tms-radius-lg);
+  background-color: var(--tms-surface-alt);
+  border: 1px solid var(--tms-border);
+  color: var(--tms-text-secondary);
+  font-size: var(--tms-font-xl);
+}
+
+.tms-empty-title {
+  font-size: var(--tms-font-lg);
+  font-weight: 650;
+  color: var(--tms-text);
+  margin: 0 0 0.25rem;
+}
+
+.tms-empty-message {
+  font-size: var(--tms-font-md);
+  margin: 0;
+  max-width: 42ch;
+}
+
+.tms-empty-action {
+  margin-top: 1.25rem;
 }
 
 .tms-skeleton {

@@ -15,8 +15,12 @@ function readCollapsedPreference(): boolean {
 }
 
 /**
- * Application shell: top bar, side navigation and the routed content area. Rendered only for
- * signed-in users - `ProtectedRoute` guards the routes that mount it.
+ * Application shell: a full-height navigation column, and a content column holding the top bar
+ * and the routed screen. Rendered only for signed-in users - `ProtectedRoute` guards the routes
+ * that mount it.
+ *
+ * The sidebar reaching the top of the window, rather than starting below a full-width header,
+ * is what lets it carry the brand and read as the spine of the product.
  *
  * Two independent navigation states live here because both the top bar and the sidebar need
  * them: `navOpen` is the mobile drawer, `collapsed` is the desktop icon rail. Closing the
@@ -73,29 +77,29 @@ export function AppLayout() {
 
   return (
     <div className="tms-shell">
-      <TopBar
-        navOpen={navOpen}
-        onToggleNav={() => setNavOpen((open) => !open)}
-        collapsed={collapsed}
-        onToggleCollapsed={toggleCollapsed}
-      />
+      <Sidebar open={navOpen} collapsed={collapsed} onRequestClose={closeNav} />
 
-      <div className="d-flex flex-grow-1 tms-min-w-0">
-        <Sidebar open={navOpen} collapsed={collapsed} onRequestClose={closeNav} />
+      {navOpen && (
+        <button
+          type="button"
+          className="offcanvas-backdrop fade show d-lg-none border-0 p-0"
+          onClick={closeNav}
+          aria-label={t('closeNavigation')}
+        />
+      )}
 
-        {navOpen && (
-          <button
-            type="button"
-            className="offcanvas-backdrop fade show d-lg-none border-0 p-0"
-            onClick={closeNav}
-            aria-label={t('closeNavigation')}
-          />
-        )}
+      {/* `tms-min-w-0` is what stops a wide table from stretching this flex item past the
+          viewport; without it the column resolves against the content's intrinsic width and
+          the whole page gains a horizontal scrollbar. */}
+      <div className="tms-shell-main tms-min-w-0">
+        <TopBar
+          navOpen={navOpen}
+          onToggleNav={() => setNavOpen((open) => !open)}
+          collapsed={collapsed}
+          onToggleCollapsed={toggleCollapsed}
+        />
 
-        {/* `tms-min-w-0` is what stops a wide table from stretching this flex item past the
-            viewport; without it `flex-grow-1` resolves against the content's intrinsic width
-            and the whole page gains a horizontal scrollbar. */}
-        <main className="flex-grow-1 tms-main tms-min-w-0">
+        <main className="tms-main tms-min-w-0">
           <div className="tms-content">
             <Outlet />
           </div>

@@ -32,9 +32,14 @@
   --tms-primary-border-subtle: #d9dce1;
   --tms-on-primary: var(--tms-on-ink);
 
-  /* ---- Surfaces ---------------------------------------------------------- */
-  --tms-body-bg: #f4f5f7;
+  /* ---- Surfaces ----------------------------------------------------------
+     Three tiers, and no more: the page ground, the panels that sit on it, and a
+     recessed tone for table headers, footers and filter strips. A fourth would
+     stop reading as a hierarchy and start reading as inconsistency. */
+  --tms-body-bg: #f2f3f5;
+  --tms-bg: var(--tms-body-bg);
   --tms-surface: #ffffff;
+  --tms-surface-alt: #f7f8fa;
   --tms-surface-muted: #fafbfc;
   /* Placeholder shimmer: two neutral greys, never a tinted one. */
   --tms-skeleton-base: #eceef1;
@@ -47,20 +52,24 @@
   --tms-text: #16181d;
   --tms-text-secondary: #4c525b;
   --tms-muted: #757b85;
+  --tms-text-muted: var(--tms-muted);
   --tms-text-inverse: #f7f8f9;
 
   /* ---- Navigation shell --------------------------------------------------
      Charcoal, not navy: the sidebar is chrome, and a coloured chrome competes
      with the status colours in the content it frames. */
-  --tms-sidebar-bg: #16181d;
-  --tms-sidebar-bg-elevated: #1d2026;
-  --tms-sidebar-text: #b9bdc5;
+  --tms-sidebar-bg: #131519;
+  --tms-sidebar-bg-elevated: #1a1d22;
+  --tms-sidebar-text: #a8adb6;
   --tms-sidebar-text-strong: #ffffff;
-  --tms-sidebar-muted: #767c86;
-  --tms-sidebar-hover-bg: #22252c;
-  --tms-sidebar-active-bg: #2a2e36;
+  --tms-sidebar-muted: #6b717b;
+  --tms-sidebar-hover-bg: #1e2127;
+  /* The active entry is a filled pill, light enough to read as selected at a
+     glance across a list of twenty links without shouting. */
+  --tms-sidebar-active-bg: #2c313a;
+  --tms-sidebar-active: var(--tms-sidebar-active-bg);
   --tms-sidebar-accent: #ffffff;
-  --tms-sidebar-border: #282c34;
+  --tms-sidebar-border: #23262c;
   --tms-topbar-bg: #ffffff;
   --tms-topbar-border: #e6e8ec;
 
@@ -88,9 +97,11 @@
   --tms-accent: #3b6ea5;
 
   /* ---- Shape ------------------------------------------------------------- */
+  --tms-radius-xs: 0.25rem;
   --tms-radius-sm: 0.375rem;
   --tms-radius-md: 0.5rem;
   --tms-radius-lg: 0.75rem;
+  --tms-radius-xl: 1rem;
   --tms-radius-pill: 999px;
 
   /* ---- Elevation ---------------------------------------------------------
@@ -102,11 +113,29 @@
   --tms-shadow-lg: 0 16px 40px rgba(22, 24, 29, 0.16);
   --tms-shadow-drawer: -18px 0 48px rgba(22, 24, 29, 0.14);
 
-  /* ---- Layout ------------------------------------------------------------ */
-  --tms-sidebar-width: 244px;
-  --tms-sidebar-rail-width: 64px;
-  --tms-topbar-height: 56px;
-  --tms-content-max-width: 1680px;
+  /* ---- Layout ------------------------------------------------------------
+     The content column is capped and centred. Capping without centring is what
+     leaves a wide monitor with several hundred pixels of dead ground down the
+     right-hand side while the work crowds against the sidebar. */
+  --tms-sidebar-width: 260px;
+  --tms-sidebar-rail-width: 68px;
+  --tms-topbar-height: 60px;
+  --tms-content-max-width: 1560px;
+  --tms-content-gutter: 1.5rem;
+
+  /* ---- Type ---------------------------------------------------------------
+     One scale, so a page title, a section title and a table header are related
+     sizes rather than whatever each screen happened to pick. */
+  --tms-font-xs: 0.6875rem;
+  --tms-font-sm: 0.75rem;
+  --tms-font-base: 0.8125rem;
+  --tms-font-md: 0.875rem;
+  --tms-font-lg: 1rem;
+  --tms-font-xl: 1.25rem;
+  --tms-font-2xl: 1.5rem;
+  --tms-font-3xl: 2rem;
+  --tms-tracking-wide: 0.08em;
+  --tms-tracking-tight: -0.015em;
 
   /* ---- Drawer widths ----------------------------------------------------- */
   --tms-drawer-sm: 420px;

@@ -1,5 +1,6 @@
 import { expect, test, type ConsoleMessage, type Locator, type Page } from '@playwright/test'
 import { signIn, stubServices } from './support/app'
+import { stubOrigins } from './support/masters'
 import { stubPlanning } from './support/planning'
 
 const SHOTS_DIR = 'artifacts/ui-review'
@@ -127,6 +128,24 @@ test('captures the review screenshots', async ({ page }) => {
   await expect(page.getByRole('dialog')).toBeVisible()
   await settled(page.getByRole('dialog'))
   await page.screenshot({ path: `${SHOTS_DIR}/form-destination-mobile.png` })
+})
+
+/* The list pattern is only judgeable with rows in it: an empty table shows the panel, the
+   filter strip and the empty state, but says nothing about density, row rhythm or how the
+   count strip and the pager sit against the data. */
+test('captures a populated list screen', async ({ page }) => {
+  await stubServices(page)
+  await stubOrigins(page)
+  await signIn(page)
+
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/masters/origins')
+  await expect(page.getByText('LIM-CD1')).toBeVisible()
+  await page.screenshot({ path: `${SHOTS_DIR}/masters-origins-populated-desktop.png`, fullPage: true })
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.getByText('LIM-CD1')).toBeVisible()
+  await page.screenshot({ path: `${SHOTS_DIR}/masters-origins-populated-mobile.png`, fullPage: true })
 })
 
 test('captures the planning board with a loaded trip', async ({ page }) => {

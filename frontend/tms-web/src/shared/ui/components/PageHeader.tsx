@@ -10,13 +10,18 @@ interface PageHeaderProps {
   actions?: ReactNode
 }
 
-/** Consistent page title row used at the top of every screen: a title, optional description
- * text, optional inline context, and right-aligned actions. */
+/**
+ * The title row every screen opens with: an identity tile, the title, one line of description,
+ * optional inline context, and the screen's actions on the right.
+ *
+ * The tile is decorative and marked `aria-hidden`: the heading already names the page, so
+ * announcing an icon would only add noise. What it buys is a fixed visual anchor at the top
+ * left of every screen, which is what makes eight different lists feel like one product.
+ */
 export function PageHeader({ title, icon, description, meta, actions }: PageHeaderProps) {
   return (
-    <div className="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+    <div className="tms-page-head">
       <div className="d-flex align-items-start gap-3 tms-min-w-0">
-        {/* Decorative: the heading already names the page, so the tile must not be announced. */}
         {icon && (
           <span className="tms-page-tile" aria-hidden="true">
             <i className={`bi bi-${icon}`} />
@@ -30,9 +35,7 @@ export function PageHeader({ title, icon, description, meta, actions }: PageHead
           {description && <p className="tms-page-subtitle">{description}</p>}
         </div>
       </div>
-      {/* Wraps rather than refusing to shrink: three action buttons on a 320px screen must
-          fall onto a second line, not push the page into a horizontal scrollbar. */}
-      {actions && <div className="d-flex flex-wrap align-items-center gap-2">{actions}</div>}
+      {actions && <div className="tms-page-actions">{actions}</div>}
     </div>
   )
 }
