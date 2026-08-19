@@ -307,9 +307,10 @@ public class TransportOrder {
     }
 
     /**
-     * Reserved for a future Planning module (step 10) to call once it assigns this order to a
-     * trip - no endpoint in this step reaches it, per the brief's "do not pretend dispatch
-     * integration exists yet".
+     * Called by {@code OrderPlanningService.markPlanned} (step 10) once planning creates an
+     * assignment for this order; releasing it back to the pool reuses {@link
+     * #markReadyForPlanning}. Legality of either transition is that service's concern, not this
+     * entity's - see {@code docs/domain/PLANNING_MANUAL_V1.md}, "Order lifecycle interaction".
      */
     public void markPlanned(UUID actorId) {
         this.status = OrderStatus.PLANNED;

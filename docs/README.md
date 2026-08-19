@@ -5,6 +5,7 @@
 | `architecture/` | Architecture of record, ownership matrix and ADRs. **Read before changing schema, security or module boundaries.** |
 | `database/` | Schema notes, tenancy model and migration conventions |
 | `api/` | HTTP contract: base path, company scope header, error format, paging |
+| `domain/` | Business contracts per module: lifecycles, planning rules, capacity semantics |
 | `security/` | Security baseline, authentication and authorization model |
 | `overnight/` | Step-by-step reports produced by the unattended build sequence |
 
@@ -32,3 +33,13 @@ silently diverging.
 
 12. [`api/API_CONVENTIONS.md`](api/API_CONVENTIONS.md) - the HTTP contract: `/api/v1`, the
     `X-Company-Id` company scope header, RFC 9457 errors, paging and sorting.
+
+## Domain contracts
+
+13. [`domain/ORDER_LIFECYCLE_V1.md`](domain/ORDER_LIFECYCLE_V1.md) - the four order states, what
+    each transition requires and who may trigger it.
+14. [`domain/PLANNING_MANUAL_V1.md`](domain/PLANNING_MANUAL_V1.md) - manual planning: runs, trips,
+    stops, the order-to-trip assignment aggregate, eligibility, concurrency and state rules.
+15. [`domain/CAPACITY_MODEL.md`](domain/CAPACITY_MODEL.md) - how weight/volume/pallet utilisation
+    is computed, when it is live and when it is frozen, and why a null limit and a zero limit are
+    different answers.

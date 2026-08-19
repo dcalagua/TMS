@@ -248,12 +248,13 @@ history, and are verified by `LocalSeedIntegrationTest`.
 |---|---|
 | `FlywayMigrationIntegrationTest` | the history applies to an empty database, validates, is idempotent, replays deterministically, and PostGIS is present |
 | `TenancyConstraintIntegrationTest` | company code scoping, cross-organization membership refusal, membership uniqueness, RESTRICT deletes, cascade limits, email/code normalization, `updated_at` trigger, seeded catalogue |
-| `SchemaExposureIntegrationTest` | RLS enabled on every table (including `origin`/`zone` since V6, `destination`/`frequency`/`frequency_weekly_rule`/`frequency_exception` since V7, `route`/`route_stop` since V8, and `carrier`/`vehicle_type`/`vehicle` since V9), no policies, not forced, PUBLIC and Supabase API roles denied, nothing published in `public` |
+| `SchemaExposureIntegrationTest` | RLS enabled on every table (including `origin`/`zone` since V6, `destination`/`frequency`/`frequency_weekly_rule`/`frequency_exception` since V7, `route`/`route_stop` since V8, and `carrier`/`vehicle_type`/`vehicle` since V9, `transport_order`/`transport_order_line` since V10, and `planning_run`/`trip`/`trip_stop`/`trip_order_assignment` since V11), no policies, not forced, PUBLIC and Supabase API roles denied, nothing published in `public` |
 | `MasterDataConstraintIntegrationTest` | origin/zone code uniqueness is per-company, not installation-wide; FK to a real company; code normalization; the latitude/longitude pair and range checks; the generated `location` column reflects a valid pair and is `NULL` when coordinates are absent; `origin_type` is restricted to the catalogue; defaults and actor columns |
 | `MasterDataDestinationFrequencyConstraintIntegrationTest` | the same class of proof as above, extended to V7: destination/frequency code uniqueness per company; destination coordinate pair/range checks and generated `location`; `destination_type` and nonnegative `service_time_minutes`; a destination's `zone_id` must belong to its own company even though the two FK columns are separate; weekly rule `day_of_week` range and per-frequency uniqueness and nonnegative `lead_time_days`; weekly rules and exceptions cascade-delete with their frequency; exception date uniqueness and non-blank note |
 | `MasterDataRouteConstraintIntegrationTest` | the same class of proof, extended to V8: route code uniqueness per company; a route's origin/zone/frequency must belong to its own company even though the FK columns are separate; nonnegative reference distance/duration; a route stop's destination and company must both match its route; positive sequence; a destination cannot appear twice on one route; stops cascade-delete with their route; **the `DEFERRABLE INITIALLY DEFERRED` sequence constraint** - a two-stop in-place swap survives `COMMIT`, and a genuine unresolved duplicate still fails, just at `COMMIT` instead of at the statement |
 | `FleetConstraintIntegrationTest` | the same class of proof, extended to V9: carrier/vehicle-type/vehicle code uniqueness per company; carrier tax-id pair uniqueness and normalization; carrier email normalization/shape when present; vehicle-type `max_weight_kg`/`max_volume_m3` strictly positive and `max_pallets` nonnegative-including-zero; optional dimensions positive when present; `body_type` restricted to the catalogue; the temperature-range coherence rule (requires `temperature_controlled`, `min <= max`); vehicle license-plate normalization/shape and per-company uniqueness; a vehicle's carrier and vehicle type must both belong to the vehicle's own company even though the FK columns are separate; override capacities positive/nonnegative when present; `availability_status` restricted to the catalogue; defaults and actor columns |
 | `OrderConstraintIntegrationTest` | the same class of proof, extended to V10: `order_number` uniqueness is global (section 12.1) while the external-reference pair is per-company and partial (section 12.2); a reference with no source is rejected; an order's origin/destination must belong to its own company even though the FK columns are separate; time-window pair/order checks; `priority`/`status` restricted to their catalogues; `cancel_reason` requires `status = CANCELLED`; totals nonnegative; a line's quantity strictly positive, `uom` normalized, unit weight/volume positive when present, line number unique per order; lines cascade-delete with their order; defaults and actor columns |
+| `PlanningConstraintIntegrationTest` | the same class of proof, extended to V11: an order has at most one **open whole-order assignment** across every trip, a closed one frees it again and both rows survive, and a `whole_order = false` allocation is deliberately outside the index (section 14.4); two concurrent transactions assigning the same order - the second blocks until the first commits, then fails; an assignment's trip and order must belong to its own company; the removal stamp is coherent in both directions; a `CONFIRMED` trip must carry a vehicle, a departure and its frozen capacity while a draft may carry none of them (section 14.5); a trip's vehicle must be its own company's; trip numbers unique per run; one open draft run per company/origin/date, freed by confirming or cancelling; `plan_number` globally unique; a run's origin must be its own company's; a stop's destination must be its own company's; one stop per destination; **the `DEFERRABLE` stop-sequence constraint** - an in-place reorder survives `COMMIT` while a genuine duplicate still fails at it; stops cascade-delete with their trip and a service window must be a real window |
 | `ApplicationDatabaseStartupIntegrationTest` | the real Spring context boots with datasource + JPA + Flyway against PostgreSQL |
 | `LocalSeedIntegrationTest` | the local seed still matches the schema and carries no credential |
 | `MigrationConventionTest` | naming, contiguous versions, no destructive DDL, no `auth`/`storage` DDL, no tenant data in migrations, no `supabase/migrations` |
@@ -934,9 +935,147 @@ orders themselves).
     `@Version` alone only catches two transactions racing to flush at the same instant, not a
     client submitting a stale form. See section 12.4.
 
+12. An invariant that spans two rows of the same table - "at most one open X per Y" - is
+    expressed as a **partial unique index** over exactly the shape the current version writes,
+    plus a service-level pre-check that exists only to produce a readable message. The index is
+    what actually holds under concurrency; the pre-check is what makes the common case friendly.
+    Scope the `WHERE` clause so it constrains today's shape without foreclosing tomorrow's - see
+    section 14.4 (`uq_trip_order_assignment_open_whole_order`), which excludes closed history rows
+    so a reassignment is legal and excludes partial allocations so a future split is not blocked.
+    A partial index cannot be `DEFERRABLE`, so a transaction that supersedes such a row must close
+    the old one and flush before inserting the new one (rule 8's problem, solved by statement
+    order instead).
+13. A row that is superseded is **closed, not overwritten or deleted**: a status column plus
+    `*_at`/`*_by`/`*_reason` stamps, and every query that means "what is in force now" filters on
+    the status (with a partial index on it, so history never slows the hot path). See section 14.3
+    (`trip_order_assignment`) - the concrete form of section 3.5's "deletes never erase history"
+    for a table whose rows are replaced rather than deactivated.
+
 V6 (Step 05) is the first migration to follow rules 1-5 against a real business table; V7
 (Step 06) is the first to need rule 6. V8 (Step 07) is the first to need rules 7-8. V9
 (Step 08) is the first to need rule 9 explicitly, though it was implicit in every prior
 company-scoped unique constraint. V10 (Step 09) is the first to need rule 9's documented
-exception and the first to need rules 10-11. Step 10 onward should match this shape rather
-than reinvent it.
+exception and the first to need rules 10-11. V11 (Step 10) is the first to need rules 12-13,
+and reuses 6-11 unchanged; its own model is section 14, which follows this section so that the
+rule numbering stays stable for the references that already point at it. Step 11 onward should
+match this shape rather than reinvent it.
+
+## 14. Manual planning: runs, trips, stops and assignments (Step 10, migration V11)
+
+Four tables, all following section 13's rules 1-11 unchanged, plus the two new rules (12-13) that
+V11 is the first to need. The domain contract is `docs/domain/PLANNING_MANUAL_V1.md`; the capacity
+rules are `docs/domain/CAPACITY_MODEL.md`.
+
+```mermaid
+erDiagram
+    COMPANY      ||--o{ PLANNING_RUN : "scopes"
+    ORIGIN       ||--o{ PLANNING_RUN : "departs from"
+    PLANNING_RUN ||--o{ TRIP : "contains"
+    VEHICLE      ||--o{ TRIP : "runs (nullable while draft)"
+    CARRIER      ||--o{ TRIP : "operates (nullable)"
+    TRIP         ||--o{ TRIP_STOP : "visits"
+    DESTINATION  ||--o{ TRIP_STOP : "is stopped at"
+    TRIP         ||--o{ TRIP_ORDER_ASSIGNMENT : "carries"
+    TRANSPORT_ORDER ||--o{ TRIP_ORDER_ASSIGNMENT : "is planned through"
+```
+
+### 14.1 A trip inherits its run's origin instead of repeating it
+
+`tms.trip` has no `origin_id`. Every trip of a run departs from that run's origin, so the step
+brief's "company/origin consistency" is structural: there is no second copy that could disagree.
+Its `company_id` *is* denormalized from the run, because rule 7 requires it - a trip references
+`tms.vehicle` and `tms.carrier`, both company-scoped, and needs its own `company_id` to carry
+rule 6's composite foreign keys into them.
+
+### 14.2 A planning run stores no counters
+
+`planning_run` has no `trip_count`, no `order_count` and no totals. Section 12.3 documents why an
+order's header totals are safe to persist - the backend is the sole writer of the lines they
+summarise, and both change in one transaction. A run's counts fail that test: they change through a
+*different* aggregate (assignments on trips) on nearly every request, so a stored counter would buy
+one query per page and cost a permanent drift risk. `TripRepository.countByPlanningRunIds` and
+`TripOrderAssignmentRepository.countByPlanningRunIds` return them in one grouped query per page.
+
+### 14.3 The assignment aggregate, and why not `transport_order.trip_id`
+
+`tms.trip_order_assignment` is an explicit aggregate rather than a foreign key on the order,
+because a `trip_id` column could not do three things (full reasoning in
+`docs/domain/PLANNING_MANUAL_V1.md` section 3):
+
+1. **Carry allocated quantities.** `assigned_weight_kg`/`assigned_volume_m3`/`assigned_pallets` are
+   snapshotted from the order header at assignment time, and the capacity service sums *these*,
+   never the order. A future partial assignment is therefore a second row with smaller numbers and
+   `whole_order = false`, with no change to any capacity code and no schema migration of existing
+   rows. The optional `trip_order_line_allocation` table is deliberately not created in V1: it
+   would have no writer. It hangs off `trip_order_assignment.id` + `transport_order_line.id` when
+   line-level allocation actually arrives.
+2. **Keep history** (rule 13). Removal sets `status = 'REMOVED'` with `removed_at`/`removed_by`/
+   `removal_reason`; a move closes the source row and opens a new one. Both survive.
+3. **Express the concurrency invariant in the database** - see 14.4.
+
+### 14.4 The open-assignment invariant is a partial unique index
+
+```sql
+CREATE UNIQUE INDEX uq_trip_order_assignment_open_whole_order
+    ON tms.trip_order_assignment (order_id)
+    WHERE status = 'ACTIVE' AND whole_order;
+```
+
+Java takes the *trip's* row lock (`SELECT ... FOR UPDATE`) before every mutation, which serialises
+two planners filling the same truck. It cannot serialise two planners assigning the same order to
+*different* trips - a lock on trip A says nothing about trip B - so that case is refused here, by
+the database, and surfaces as a 409. The index is partial in both directions on purpose: closed
+rows are outside it (a reassignment is legal) and `whole_order = false` rows are outside it (a
+future split is not blocked by the invariant that guards V1). This is rule 12's first use.
+
+Because a partial index cannot be `DEFERRABLE`, a move must close the source row and flush before
+inserting the target row - `TripAssignmentService.close` calls `saveAndFlush` for exactly that
+reason. V10 met the same Hibernate flush-ordering trap and solved it by deferring the constraint;
+here the fix is the statement order.
+
+### 14.5 Capacity is live while draft and frozen at confirmation
+
+`trip.snapshot_max_weight_kg`/`_volume_m3`/`_pallets` and `capacity_snapshot_at` are `NULL` while
+the trip is a draft (capacity resolves live from the vehicle, so a fleet correction is picked up
+immediately) and are written at confirmation (so a later fleet edit cannot rewrite what a confirmed
+plan was validated against). Two CHECK constraints make the two states unambiguous from the row
+alone: `ck_trip_confirmed_is_complete` (a confirmed trip has a vehicle, a departure and all three
+values) and `ck_trip_snapshot_requires_confirmed` (nothing else has any of them). Full reasoning,
+including the null-versus-zero limit semantics, in `docs/domain/CAPACITY_MODEL.md`.
+
+### 14.6 `trip_stop` is a planning-instance stop, not a master route stop
+
+`tms.trip_stop` and `tms.route_stop` share a shape and nothing else: a route stop belongs to a
+reusable corridor and carries no date, a trip stop belongs to one dated trip and carries the
+service-window envelope of the orders assigned there. Neither references the other, and a V1 trip
+is not required to follow any master route. Stops are maintained by the backend from the trip's
+active assignments (append a new destination, drop one whose last order left, preserve the
+planner's ordering), which is why `uq_trip_stop_trip_sequence` *and*
+`uq_trip_stop_trip_destination` are both `DEFERRABLE INITIALLY DEFERRED` - rule 8's reorder case
+plus V10's delete-and-recreate flush-ordering case.
+
+### 14.7 `tms.vehicle` gained the composite-FK target it never needed before
+
+V9 gave `carrier` and `vehicle_type` their `UNIQUE (id, company_id)` because vehicles referenced
+them. Nothing referenced `tms.vehicle` until now, so V11 adds `uq_vehicle_id_company` in an
+additive `ALTER TABLE` - applied migrations stay immutable (rule: never edit V9).
+
+### 14.8 Indexes added by V11
+
+| Index | Purpose |
+|---|---|
+| `uq_planning_run_number` | `plan_number` is globally unique, section 12.1's documented exception to rule 9 (nobody types or guesses a sequence value) |
+| `uq_planning_run_open_scope` (partial) | one *open draft* run per company/origin/planning date; confirming or cancelling frees the scope for a re-plan |
+| `ix_planning_run_company`, `ix_planning_run_company_date`, `ix_planning_run_company_status` | the board's list filters, always composed with the company scope |
+| `ix_planning_run_origin` | "runs from this depot" |
+| `uq_planning_run_id_company`, `uq_trip_id_company` | composite-FK targets for the tables below (rule 6) |
+| `uq_trip_run_number` | one trip number per run; not deferrable, because a trip number is not reorderable |
+| `ix_trip_company`, `ix_trip_planning_run` | the board: "the trips of this run" |
+| `ix_trip_vehicle`, `ix_trip_carrier` (partial) | "where is this vehicle/carrier planned?", skipping the rows with none |
+| `uq_trip_stop_trip_sequence`, `uq_trip_stop_trip_destination` (both `DEFERRABLE`) | one position and one visit per destination per trip - see 14.6 |
+| `ix_trip_stop_trip`, `ix_trip_stop_destination` | "the stops of this trip", "where is this destination served?" |
+| `uq_trip_order_assignment_open_whole_order` (partial) | the concurrency invariant - see 14.4 |
+| `ix_trip_order_assignment_trip_active` (partial) | the hot path: what is currently on this trip. Partial, so history never grows what capacity scans |
+| `ix_trip_order_assignment_order` (full) | the audit path: everywhere this order has been planned, closed rows included |
+| `ix_trip_order_assignment_company` | company-scoped reads |
+| `uq_vehicle_id_company` (on `tms.vehicle`) | see 14.7 |

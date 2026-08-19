@@ -1,0 +1,61 @@
+package com.ebim.tms.shared.reference;
+
+import com.ebim.tms.shared.api.PageQuery;
+import com.ebim.tms.shared.api.PageResponse;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * The one way {@code planning} reads orders and moves them through the two planning-owned states
+ * of the order lifecycle, without depending on {@code com.ebim.tms.orders} (rule 10 in
+ * {@code docs/database/DATA_MODEL.md} section 13 - the pattern {@link OriginLookupPort}
+ * established).
+ *
+ * <p>Unlike {@code OriginLookupPort}, this port has a write side, so its implementation is not a
+ * repository translation in {@code orders.infrastructure} but a use case in
+ * {@code orders.application} ({@code OrderPlanningService}): the legality of
+ * {@code READY_FOR_PLANNING → PLANNED} is an order rule and stays in the module that owns the
+ * lifecycle. Every method here participates in the caller's transaction, which is what makes
+ * "move an order between trips" atomic across both modules.
+ */
+public interface OrderPlanningPort {
+
+    /**
+     * The eligible-order search: orders that may still be assigned - company-scoped, paginated,
+     * and never returning lines. An order is assignable only while it is
+     * {@code READY_FOR_PLANNING}; assignment moves it to {@code PLANNED}, so this method never
+     * returns an order that is already on a trip.
+     */
+    PageResponse<PlannableOrder> searchAssignable(PlannableOrderQuery query, PageQuery pageQuery);
+
+    /**
+     * Resolves one order for a <em>new</em> assignment, refusing one that belongs to another
+     * company or is not {@code READY_FOR_PLANNING} - the write-side counterpart of
+     * {@link OriginLookupPort#findActiveInCompany}.
+     */
+    Optional<PlannableOrder> findAssignable(UUID orderId, UUID companyId);
+
+    /**
+     * Resolves every id in {@code ids} that belongs to {@code companyId}, whatever its status, in
+     * one batched call - for read-only display of orders already assigned to a trip, never for
+     * validating a new assignment. One call per page, not one per row.
+     */
+    Map<UUID, PlannableOrder> findAllInCompany(Set<UUID> ids, UUID companyId);
+
+    /**
+     * {@code READY_FOR_PLANNING → PLANNED}, called by planning when an assignment is created.
+     * Refuses any other source status, so a double assignment cannot slip through even if the
+     * assignment invariant were ever weakened.
+     */
+    void markPlanned(UUID orderId, UUID companyId);
+
+    /**
+     * {@code PLANNED → READY_FOR_PLANNING}, called when an assignment is closed and the order
+     * returns to the pool. This is the "unassign" semantics {@code OrderService.cancel}'s
+     * message ("unassign it from its trip first") deferred to planning - see
+     * {@code docs/overnight/09_ORDERS.md} section 8, point 2.
+     */
+    void releaseFromPlanning(UUID orderId, UUID companyId);
+}

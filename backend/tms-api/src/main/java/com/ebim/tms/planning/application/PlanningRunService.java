@@ -1,0 +1,334 @@
+package com.ebim.tms.planning.application;
+
+import com.ebim.tms.planning.domain.AssignmentStatus;
+import com.ebim.tms.planning.domain.PlanningRun;
+import com.ebim.tms.planning.domain.PlanningRunStatus;
+import com.ebim.tms.planning.domain.Trip;
+import com.ebim.tms.planning.domain.TripStatus;
+import com.ebim.tms.planning.infrastructure.PlanningRunRepository;
+import com.ebim.tms.planning.infrastructure.PlanningRunSpecifications;
+import com.ebim.tms.planning.infrastructure.TripOrderAssignmentRepository;
+import com.ebim.tms.planning.infrastructure.TripRepository;
+import com.ebim.tms.shared.api.ConflictException;
+import com.ebim.tms.shared.api.InvalidRequestException;
+import com.ebim.tms.shared.api.PageQuery;
+import com.ebim.tms.shared.api.PageResponse;
+import com.ebim.tms.shared.api.ResourceNotFoundException;
+import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.reference.DestinationLookupPort;
+import com.ebim.tms.shared.reference.MasterReference;
+import com.ebim.tms.shared.reference.OrderPlanningPort;
+import com.ebim.tms.shared.reference.OriginLookupPort;
+import com.ebim.tms.shared.reference.PlannableOrder;
+import com.ebim.tms.shared.reference.PlannableOrderQuery;
+import com.ebim.tms.shared.reference.VehicleCapacityReference;
+import com.ebim.tms.shared.reference.VehicleLookupPort;
+import com.ebim.tms.shared.security.CompanyScope;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Planning run use cases: find the orders waiting to be planned, open a run for a company/origin/
+ * date, read the board, confirm the plan or discard it.
+ *
+ * <p>Confirmation is the only place a plan becomes binding, and it revalidates everything from
+ * scratch rather than trusting what the board looked like when the planner last loaded it: each
+ * trip must still have an active vehicle, a departure time, at least one order and a load that
+ * fits - and the capacity it is validated against is then frozen onto the trip (see
+ * {@code docs/domain/CAPACITY_MODEL.md}).
+ */
+@Service
+public class PlanningRunService {
+
+    private static final Set<String> SORTABLE_PROPERTIES =
+            Set.of("planNumber", "planningDate", "status", "createdAt", "updatedAt");
+
+    private final PlanningRunRepository planningRunRepository;
+    private final TripRepository tripRepository;
+    private final TripOrderAssignmentRepository assignmentRepository;
+    private final TripAssignmentService assignments;
+    private final OriginLookupPort originLookupPort;
+    private final DestinationLookupPort destinationLookupPort;
+    private final OrderPlanningPort orderPlanningPort;
+    private final VehicleLookupPort vehicleLookupPort;
+    private final PlanningCapacityService capacityService;
+    private final TripViewAssembler assembler;
+    private final AuditActorProvider auditActorProvider;
+
+    public PlanningRunService(PlanningRunRepository planningRunRepository, TripRepository tripRepository,
+            TripOrderAssignmentRepository assignmentRepository, TripAssignmentService assignments,
+            OriginLookupPort originLookupPort, DestinationLookupPort destinationLookupPort,
+            OrderPlanningPort orderPlanningPort, VehicleLookupPort vehicleLookupPort,
+            PlanningCapacityService capacityService, TripViewAssembler assembler,
+            AuditActorProvider auditActorProvider) {
+        this.planningRunRepository = planningRunRepository;
+        this.tripRepository = tripRepository;
+        this.assignmentRepository = assignmentRepository;
+        this.assignments = assignments;
+        this.originLookupPort = originLookupPort;
+        this.destinationLookupPort = destinationLookupPort;
+        this.orderPlanningPort = orderPlanningPort;
+        this.vehicleLookupPort = vehicleLookupPort;
+        this.capacityService = capacityService;
+        this.assembler = assembler;
+        this.auditActorProvider = auditActorProvider;
+    }
+
+    /**
+     * The orders a planner may still put on a trip: {@code READY_FOR_PLANNING}, in this company,
+     * paginated, with destinations resolved in one batched lookup and no order lines anywhere
+     * near the response.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<EligibleOrderView> eligibleOrders(
+            CompanyScope scope, EligibleOrderFilter filter, PageQuery pageQuery) {
+        PlannableOrderQuery query = new PlannableOrderQuery(scope.companyId(), filter.originId(),
+                filter.destinationId(), filter.serviceDate(), filter.orderNumber());
+        PageResponse<PlannableOrder> page = orderPlanningPort.searchAssignable(query, pageQuery);
+
+        Map<UUID, MasterReference> destinations = destinationLookupPort.findAllInCompany(
+                page.content().stream().map(PlannableOrder::destinationId).collect(Collectors.toSet()),
+                scope.companyId());
+        List<EligibleOrderView> content = page.content().stream()
+                .map(order -> EligibleOrderView.from(order, destinations.get(order.destinationId())))
+                .toList();
+        return new PageResponse<>(content, page.page(), page.size(), page.totalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<PlanningRunView> list(CompanyScope scope, PlanningRunFilter filter, PageQuery pageQuery) {
+        var specification = PlanningRunSpecifications.matching(scope.companyId(), filter.planNumber(),
+                filter.originId(), filter.planningDateFrom(), filter.planningDateTo(), filter.status());
+        Page<PlanningRun> page = planningRunRepository.findAll(specification, toPageable(pageQuery));
+        List<PlanningRun> runs = page.getContent();
+
+        Map<UUID, MasterReference> origins = originLookupPort.findAllInCompany(
+                runs.stream().map(PlanningRun::originId).collect(Collectors.toSet()), scope.companyId());
+        List<UUID> runIds = runs.stream().map(PlanningRun::id).toList();
+        Map<UUID, Long> tripCounts = tripCounts(runIds);
+        Map<UUID, Long> orderCounts = assignedOrderCounts(runIds);
+
+        List<PlanningRunView> content = runs.stream()
+                .map(run -> PlanningRunView.from(run, origins.get(run.originId()),
+                        tripCounts.getOrDefault(run.id(), 0L), orderCounts.getOrDefault(run.id(), 0L)))
+                .toList();
+        return new PageResponse<>(content, pageQuery.pageNumber(), pageQuery.pageSize(), page.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public PlanningRunDetailView get(CompanyScope scope, UUID id) {
+        return toDetail(scope, find(scope, id));
+    }
+
+    @Transactional
+    public PlanningRunDetailView create(CompanyScope scope, PlanningRunRequest request) {
+        MasterReference origin = originLookupPort.findActiveInCompany(request.originId(), scope.companyId())
+                .orElseThrow(() -> new InvalidRequestException(
+                        "originId does not reference an active origin in this company."));
+        if (planningRunRepository.existsByCompanyIdAndOriginIdAndPlanningDateAndStatus(
+                scope.companyId(), request.originId(), request.planningDate(), PlanningRunStatus.DRAFT)) {
+            throw openRunConflict(origin, request);
+        }
+
+        UUID actorId = auditActorProvider.requireAppUserId();
+        PlanningRun run = new PlanningRun(scope.companyId(), generatePlanNumber(), request.originId(),
+                request.planningDate(), blankToNull(request.notes()), actorId);
+        return toDetail(scope, saveOrConflict(run, origin, request));
+    }
+
+    /**
+     * Confirms the plan. Everything is revalidated here rather than assumed from the board the
+     * planner was looking at, because minutes may have passed and a vehicle may have gone into
+     * maintenance in the meantime. Each trip is locked while it is checked, so a concurrent
+     * assignment cannot slip in between the check and the freeze.
+     */
+    @Transactional
+    public PlanningRunDetailView confirm(CompanyScope scope, UUID id, PlanningActionRequest request) {
+        PlanningRun run = requireDraft(find(scope, id));
+        requireCurrentVersion(run, request.version());
+
+        List<Trip> plannedTrips = tripRepository.findByPlanningRunIdOrderByTripNumberAsc(run.id()).stream()
+                .filter(trip -> trip.status() != TripStatus.CANCELLED)
+                .toList();
+        if (plannedTrips.isEmpty()) {
+            throw new ConflictException(
+                    "Planning run " + run.planNumber() + " has no trips to confirm.");
+        }
+
+        UUID actorId = auditActorProvider.requireAppUserId();
+        for (Trip unlocked : plannedTrips) {
+            Trip trip = tripRepository.findByIdAndCompanyIdForUpdate(unlocked.id(), scope.companyId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Trip not found."));
+            confirmTrip(scope, run, trip, actorId);
+        }
+
+        run.confirm(actorId);
+        return toDetail(scope, save(run));
+    }
+
+    /**
+     * Discards a draft plan: every trip is cancelled and every order on it returns to the eligible
+     * pool, so nothing is left stranded in {@code PLANNED} with no trip to run it.
+     */
+    @Transactional
+    public PlanningRunDetailView cancel(CompanyScope scope, UUID id, PlanningActionRequest request) {
+        PlanningRun run = requireDraft(find(scope, id));
+        requireCurrentVersion(run, request.version());
+
+        UUID actorId = auditActorProvider.requireAppUserId();
+        String reason = blankToNull(request.reason());
+        for (Trip unlocked : tripRepository.findByPlanningRunIdOrderByTripNumberAsc(run.id())) {
+            if (unlocked.status() == TripStatus.CANCELLED) {
+                continue;
+            }
+            Trip trip = tripRepository.findByIdAndCompanyIdForUpdate(unlocked.id(), scope.companyId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Trip not found."));
+            assignments.releaseAll(trip, reason == null ? "Planning run cancelled" : reason, actorId);
+            trip.cancel(reason, actorId);
+            tripRepository.saveAndFlush(trip);
+        }
+
+        run.cancel(reason, actorId);
+        return toDetail(scope, save(run));
+    }
+
+    private void confirmTrip(CompanyScope scope, PlanningRun run, Trip trip, UUID actorId) {
+        String label = "Trip " + trip.tripNumber() + " of planning run " + run.planNumber();
+        if (trip.vehicleId() == null) {
+            throw new ConflictException(label + " has no vehicle assigned.");
+        }
+        if (trip.plannedDepartureAt() == null) {
+            throw new ConflictException(label + " has no planned departure date and time.");
+        }
+        VehicleCapacityReference vehicle = vehicleLookupPort.findAssignable(trip.vehicleId(), scope.companyId())
+                .orElseThrow(() -> new ConflictException(
+                        label + " is assigned a vehicle that is no longer active and available."));
+
+        CapacityLoad load = assignments.currentLoad(trip.id());
+        if (load.orderCount() == 0) {
+            throw new ConflictException(label + " has no orders assigned.");
+        }
+        capacityService.requireWithinCapacity(label + " cannot be confirmed", CapacityLimits.of(vehicle), load);
+
+        // Idempotent, and the reason a confirmed trip's stop list always matches its assignments:
+        // re-synchronised here rather than trusted to have stayed in step.
+        assignments.refreshStops(trip, scope.companyId(), actorId);
+        trip.confirm(vehicle.maxWeightKg(), vehicle.maxVolumeM3(), vehicle.maxPallets(), actorId);
+        tripRepository.saveAndFlush(trip);
+    }
+
+    private PlanningRunDetailView toDetail(CompanyScope scope, PlanningRun run) {
+        List<Trip> trips = tripRepository.findByPlanningRunIdOrderByTripNumberAsc(run.id());
+        List<TripView> tripViews = assembler.toViews(trips, scope.companyId());
+        MasterReference origin = originLookupPort.findAllInCompany(Set.of(run.originId()), scope.companyId())
+                .get(run.originId());
+        long tripCount = tripViews.stream().filter(view -> view.status() != TripStatus.CANCELLED).count();
+        long orderCount = tripViews.stream()
+                .filter(view -> view.status() != TripStatus.CANCELLED)
+                .mapToLong(TripView::orderCount)
+                .sum();
+        return new PlanningRunDetailView(PlanningRunView.from(run, origin, tripCount, orderCount), tripViews);
+    }
+
+    private Map<UUID, Long> tripCounts(List<UUID> runIds) {
+        Map<UUID, Long> counts = new HashMap<>();
+        if (runIds.isEmpty()) {
+            return counts;
+        }
+        for (TripRepository.TripCount count : tripRepository.countByPlanningRunIds(runIds, TripStatus.CANCELLED)) {
+            counts.put(count.getRunId(), count.getTripCount());
+        }
+        return counts;
+    }
+
+    private Map<UUID, Long> assignedOrderCounts(List<UUID> runIds) {
+        Map<UUID, Long> counts = new HashMap<>();
+        if (runIds.isEmpty()) {
+            return counts;
+        }
+        for (TripOrderAssignmentRepository.RunOrderCount count
+                : assignmentRepository.countByPlanningRunIds(runIds, AssignmentStatus.ACTIVE)) {
+            counts.put(count.getRunId(), count.getOrderCount());
+        }
+        return counts;
+    }
+
+    private PlanningRun find(CompanyScope scope, UUID id) {
+        return planningRunRepository.findByIdAndCompanyId(id, scope.companyId())
+                .orElseThrow(() -> new ResourceNotFoundException("Planning run not found."));
+    }
+
+    private static PlanningRun requireDraft(PlanningRun run) {
+        if (!run.isDraft()) {
+            throw new ConflictException("Planning run " + run.planNumber() + " is " + run.status()
+                    + " and can no longer be modified.");
+        }
+        return run;
+    }
+
+    private static void requireCurrentVersion(PlanningRun run, Long requested) {
+        if (requested == null) {
+            throw new InvalidRequestException("version is required to modify a planning run.");
+        }
+        if (requested != run.version()) {
+            throw new ConflictException(
+                    "This planning run was changed by someone else since it was loaded. Reload and try again.");
+        }
+    }
+
+    private String generatePlanNumber() {
+        return "PL-" + String.format(Locale.ROOT, "%08d", planningRunRepository.nextPlanNumberValue());
+    }
+
+    private PlanningRun saveOrConflict(PlanningRun run, MasterReference origin, PlanningRunRequest request) {
+        try {
+            return planningRunRepository.saveAndFlush(run);
+        } catch (DataIntegrityViolationException raced) {
+            // uq_planning_run_open_scope: another planner opened the same origin/date first.
+            throw openRunConflict(origin, request);
+        }
+    }
+
+    private PlanningRun save(PlanningRun run) {
+        try {
+            return planningRunRepository.saveAndFlush(run);
+        } catch (ObjectOptimisticLockingFailureException raced) {
+            throw new ConflictException(
+                    "This planning run was changed by someone else since it was loaded. Reload and try again.");
+        }
+    }
+
+    private static ConflictException openRunConflict(MasterReference origin, PlanningRunRequest request) {
+        return new ConflictException("An open planning run already exists for origin "
+                + (origin == null ? "" : origin.code() + " ") + "on " + request.planningDate()
+                + ". Confirm or cancel it before opening another.");
+    }
+
+    private static String blankToNull(String value) {
+        return (value == null || value.isBlank()) ? null : value.trim();
+    }
+
+    private static Pageable toPageable(PageQuery pageQuery) {
+        List<PageQuery.SortTerm> terms = pageQuery.sortTerms(SORTABLE_PROPERTIES);
+        Sort sort = terms.isEmpty()
+                ? Sort.by(Sort.Direction.DESC, "planningDate")
+                : Sort.by(terms.stream()
+                        .map(term -> new Sort.Order(
+                                term.descending() ? Sort.Direction.DESC : Sort.Direction.ASC, term.property()))
+                        .toList());
+        return PageRequest.of(pageQuery.pageNumber(), pageQuery.pageSize(), sort);
+    }
+}
