@@ -16,6 +16,7 @@ import {
   FilterBar,
   PageHeader,
   Pagination,
+  ActionMenu,
   ActiveBadge,
   type DataTableColumn,
 } from '../../shared/ui/components'
@@ -45,6 +46,8 @@ type ModalState = { mode: 'create' } | { mode: 'edit'; frequency: FrequencyView 
 
 export function FrequenciesPage() {
   const { t } = useTranslation('masters')
+  const { t: tc } = useTranslation('common')
+  const { t: td } = useTranslation('dialogs')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('masterdata.frequency:manage')
@@ -88,11 +91,11 @@ export function FrequenciesPage() {
 
   async function toggleActive(frequency: FrequencyView) {
     const confirmed = await confirmDialog({
-      title: frequency.active ? 'Deactivate frequency?' : 'Activate frequency?',
-      text: frequency.active
-        ? `${frequency.name} will no longer be selectable for new planning.`
-        : `${frequency.name} will become selectable again.`,
-      confirmLabel: frequency.active ? 'Deactivate' : 'Activate',
+      title: frequency.active
+        ? td('deactivate.title', { name: frequency.name })
+        : td('activate.title', { name: frequency.name }),
+      text: frequency.active ? td('deactivate.text') : td('activate.text'),
+      confirmLabel: frequency.active ? tc('actions.deactivate') : tc('actions.activate'),
       dangerous: frequency.active,
     })
     if (!confirmed) return
@@ -100,25 +103,25 @@ export function FrequenciesPage() {
     try {
       if (frequency.active) {
         await deactivateFrequency(companyId, frequency.id)
-        notifySuccess('Frequency deactivated', frequency.name)
+        notifySuccess(td('deactivated'), frequency.name)
       } else {
         await activateFrequency(companyId, frequency.id)
-        notifySuccess('Frequency activated', frequency.name)
+        notifySuccess(td('activated'), frequency.name)
       }
       refresh()
     } catch (error) {
-      notifyError('Could not update the frequency', describeApiError(error as ApiError))
+      notifyError(td('errorTitle'), describeApiError(error as ApiError))
     }
   }
 
   const columns: DataTableColumn<FrequencyView>[] = [
-    { key: 'code', header: 'Code', render: (frequency) => <span className="fw-semibold">{frequency.code}</span> },
-    { key: 'name', header: 'Name', render: (frequency) => frequency.name },
-    { key: 'days', header: 'Days', render: (frequency) => summarizeDays(frequency) },
-    { key: 'description', header: 'Description', render: (frequency) => frequency.description ?? '—' },
+    { key: 'code', header: tc('columns.code'), render: (frequency) => <span className="fw-semibold">{frequency.code}</span> },
+    { key: 'name', header: tc('columns.name'), render: (frequency) => frequency.name },
+    { key: 'days', header: tc('columns.days'), render: (frequency) => summarizeDays(frequency) },
+    { key: 'description', header: tc('columns.description'), render: (frequency) => frequency.description ?? '—' },
     {
       key: 'active',
-      header: 'Status',
+      header: tc('columns.status'),
       render: (frequency) => (
         <ActiveBadge active={frequency.active} />
       ),
@@ -128,25 +131,26 @@ export function FrequenciesPage() {
   if (canManage) {
     columns.push({
       key: 'actions',
-      header: '',
-      className: 'text-end',
+      header: tc('columns.actions'),
+      actions: true,
       render: (frequency) => (
-        <div className="btn-group btn-group-sm">
-          <button
-            type="button"
-            className="btn btn-outline-secondary"
-            onClick={() => setModal({ mode: 'edit', frequency })}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            className={`btn btn-outline-${frequency.active ? 'danger' : 'success'}`}
-            onClick={() => void toggleActive(frequency)}
-          >
-            {frequency.active ? 'Deactivate' : 'Activate'}
-          </button>
-        </div>
+        <ActionMenu
+          items={[
+            {
+              key: 'edit',
+              label: tc('actions.edit'),
+              icon: 'bi-pencil',
+              onSelect: () => setModal({ mode: 'edit', frequency }),
+            },
+            {
+              key: 'active',
+              label: frequency.active ? tc('actions.deactivate') : tc('actions.activate'),
+              icon: frequency.active ? 'bi-slash-circle' : 'bi-check-circle',
+              dangerous: frequency.active,
+              onSelect: () => void toggleActive(frequency),
+            },
+          ]}
+        />
       ),
     })
   }
@@ -170,7 +174,7 @@ export function FrequenciesPage() {
       <FilterBar onSubmit={applyFilters} onReset={resetFilters}>
         <div>
           <label htmlFor="filter-code" className="form-label small mb-1">
-            Code
+            {tc('columns.code')}
           </label>
           <input
             id="filter-code"
@@ -181,7 +185,7 @@ export function FrequenciesPage() {
         </div>
         <div>
           <label htmlFor="filter-name" className="form-label small mb-1">
-            Name
+            {tc('columns.name')}
           </label>
           <input
             id="filter-name"
@@ -192,7 +196,7 @@ export function FrequenciesPage() {
         </div>
         <div>
           <label htmlFor="filter-active" className="form-label small mb-1">
-            Status
+            {tc('columns.status')}
           </label>
           <select
             id="filter-active"
@@ -200,9 +204,9 @@ export function FrequenciesPage() {
             value={draftFilters.active}
             onChange={(event) => setDraftFilters({ ...draftFilters, active: event.target.value as ActiveFilter })}
           >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="all">All</option>
+            <option value="active">{tc('filters.statusActive')}</option>
+            <option value="inactive">{tc('filters.statusInactive')}</option>
+            <option value="all">{tc('filters.statusAll')}</option>
           </select>
         </div>
       </FilterBar>
@@ -216,8 +220,8 @@ export function FrequenciesPage() {
             isLoading={frequenciesQuery.isPending}
             error={frequenciesQuery.isError ? describeApiError(frequenciesQuery.error as ApiError) : null}
             onRetry={() => void frequenciesQuery.refetch()}
-            emptyTitle="No frequencies found"
-            emptyMessage="Create a frequency or adjust your filters."
+            emptyTitle={t('frequencies.empty.title')}
+            emptyMessage={t('frequencies.empty.message')}
           />
         </div>
         {pageData && (
@@ -234,7 +238,7 @@ export function FrequenciesPage() {
           onClose={() => setModal(null)}
           onSaved={() => {
             setModal(null)
-            notifySuccess(modal.mode === 'edit' ? 'Frequency updated' : 'Frequency created')
+            notifySuccess(modal.mode === 'edit' ? td('updated') : td('created'))
             refresh()
           }}
         />

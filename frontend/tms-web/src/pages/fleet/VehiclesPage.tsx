@@ -21,6 +21,7 @@ import {
   FilterBar,
   PageHeader,
   Pagination,
+  ActionMenu,
   ActiveBadge,
   StatusBadge,
   type DataTableColumn,
@@ -55,6 +56,8 @@ const AVAILABILITY_TONE: Record<VehicleAvailabilityStatus, 'success' | 'warning'
 
 export function VehiclesPage() {
   const { t } = useTranslation('fleet')
+  const { t: tc } = useTranslation('common')
+  const { t: td } = useTranslation('dialogs')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('fleet.vehicle:manage')
@@ -115,11 +118,11 @@ export function VehiclesPage() {
 
   async function toggleActive(vehicle: VehicleView) {
     const confirmed = await confirmDialog({
-      title: vehicle.active ? 'Deactivate vehicle?' : 'Activate vehicle?',
-      text: vehicle.active
-        ? `${vehicle.licensePlate} will no longer be selectable for new planning.`
-        : `${vehicle.licensePlate} will become selectable again.`,
-      confirmLabel: vehicle.active ? 'Deactivate' : 'Activate',
+      title: vehicle.active
+        ? td('deactivate.title', { name: vehicle.licensePlate })
+        : td('activate.title', { name: vehicle.licensePlate }),
+      text: vehicle.active ? td('deactivate.text') : td('activate.text'),
+      confirmLabel: vehicle.active ? tc('actions.deactivate') : tc('actions.activate'),
       dangerous: vehicle.active,
     })
     if (!confirmed) return
@@ -127,21 +130,21 @@ export function VehiclesPage() {
     try {
       if (vehicle.active) {
         await deactivateVehicle(companyId, vehicle.id)
-        notifySuccess('Vehicle deactivated', vehicle.licensePlate)
+        notifySuccess(td('deactivated'), vehicle.licensePlate)
       } else {
         await activateVehicle(companyId, vehicle.id)
-        notifySuccess('Vehicle activated', vehicle.licensePlate)
+        notifySuccess(td('activated'), vehicle.licensePlate)
       }
       refresh()
     } catch (error) {
-      notifyError('Could not update the vehicle', describeApiError(error as ApiError))
+      notifyError(td('errorTitle'), describeApiError(error as ApiError))
     }
   }
 
   const columns: DataTableColumn<VehicleView>[] = [
     {
       key: 'plate',
-      header: 'Plate / code',
+      header: tc('columns.plateCode'),
       render: (vehicle) => (
         <div>
           <div className="fw-semibold">{vehicle.licensePlate}</div>
@@ -149,8 +152,8 @@ export function VehiclesPage() {
         </div>
       ),
     },
-    { key: 'carrier', header: 'Carrier', render: (vehicle) => vehicle.carrierBusinessName ?? 'Owned fleet' },
-    { key: 'type', header: 'Type', render: (vehicle) => vehicle.vehicleTypeName ?? '—' },
+    { key: 'carrier', header: tc('columns.carrier'), render: (vehicle) => vehicle.carrierBusinessName ?? 'Owned fleet' },
+    { key: 'type', header: tc('columns.type'), render: (vehicle) => vehicle.vehicleTypeName ?? '—' },
     {
       key: 'capacity',
       header: 'Effective capacity',
@@ -163,7 +166,7 @@ export function VehiclesPage() {
     },
     {
       key: 'availability',
-      header: 'Availability',
+      header: tc('columns.availability'),
       render: (vehicle) => (
         <StatusBadge
           label={VEHICLE_AVAILABILITY_STATUS_LABELS[vehicle.availabilityStatus]}
@@ -173,7 +176,7 @@ export function VehiclesPage() {
     },
     {
       key: 'active',
-      header: 'Status',
+      header: tc('columns.status'),
       render: (vehicle) => (
         <ActiveBadge active={vehicle.active} />
       ),
@@ -183,25 +186,26 @@ export function VehiclesPage() {
   if (canManage) {
     columns.push({
       key: 'actions',
-      header: '',
-      className: 'text-end',
+      header: tc('columns.actions'),
+      actions: true,
       render: (vehicle) => (
-        <div className="btn-group btn-group-sm">
-          <button
-            type="button"
-            className="btn btn-outline-secondary"
-            onClick={() => setModal({ mode: 'edit', vehicle })}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            className={`btn btn-outline-${vehicle.active ? 'danger' : 'success'}`}
-            onClick={() => void toggleActive(vehicle)}
-          >
-            {vehicle.active ? 'Deactivate' : 'Activate'}
-          </button>
-        </div>
+        <ActionMenu
+          items={[
+            {
+              key: 'edit',
+              label: tc('actions.edit'),
+              icon: 'bi-pencil',
+              onSelect: () => setModal({ mode: 'edit', vehicle }),
+            },
+            {
+              key: 'active',
+              label: vehicle.active ? tc('actions.deactivate') : tc('actions.activate'),
+              icon: vehicle.active ? 'bi-slash-circle' : 'bi-check-circle',
+              dangerous: vehicle.active,
+              onSelect: () => void toggleActive(vehicle),
+            },
+          ]}
+        />
       ),
     })
   }
@@ -225,7 +229,7 @@ export function VehiclesPage() {
       <FilterBar onSubmit={applyFilters} onReset={resetFilters}>
         <div>
           <label htmlFor="vehicle-filter-code" className="form-label small mb-1">
-            Code
+            {tc('columns.code')}
           </label>
           <input
             id="vehicle-filter-code"
@@ -247,7 +251,7 @@ export function VehiclesPage() {
         </div>
         <div>
           <label htmlFor="vehicle-filter-carrier" className="form-label small mb-1">
-            Carrier
+            {tc('columns.carrier')}
           </label>
           <select
             id="vehicle-filter-carrier"
@@ -255,7 +259,7 @@ export function VehiclesPage() {
             value={draftFilters.carrierId}
             onChange={(event) => setDraftFilters({ ...draftFilters, carrierId: event.target.value })}
           >
-            <option value="">All carriers</option>
+            <option value="">{tc('filters.allCarriers')}</option>
             {carriers.map((carrier) => (
               <option key={carrier.id} value={carrier.id}>
                 {carrier.businessName}
@@ -265,7 +269,7 @@ export function VehiclesPage() {
         </div>
         <div>
           <label htmlFor="vehicle-filter-type" className="form-label small mb-1">
-            Type
+            {tc('columns.type')}
           </label>
           <select
             id="vehicle-filter-type"
@@ -273,7 +277,7 @@ export function VehiclesPage() {
             value={draftFilters.vehicleTypeId}
             onChange={(event) => setDraftFilters({ ...draftFilters, vehicleTypeId: event.target.value })}
           >
-            <option value="">All types</option>
+            <option value="">{tc('filters.allTypes')}</option>
             {vehicleTypes.map((type) => (
               <option key={type.id} value={type.id}>
                 {type.name}
@@ -283,7 +287,7 @@ export function VehiclesPage() {
         </div>
         <div>
           <label htmlFor="vehicle-filter-availability" className="form-label small mb-1">
-            Availability
+            {tc('columns.availability')}
           </label>
           <select
             id="vehicle-filter-availability"
@@ -303,7 +307,7 @@ export function VehiclesPage() {
         </div>
         <div>
           <label htmlFor="vehicle-filter-active" className="form-label small mb-1">
-            Status
+            {tc('columns.status')}
           </label>
           <select
             id="vehicle-filter-active"
@@ -311,9 +315,9 @@ export function VehiclesPage() {
             value={draftFilters.active}
             onChange={(event) => setDraftFilters({ ...draftFilters, active: event.target.value as ActiveFilter })}
           >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="all">All</option>
+            <option value="active">{tc('filters.statusActive')}</option>
+            <option value="inactive">{tc('filters.statusInactive')}</option>
+            <option value="all">{tc('filters.statusAll')}</option>
           </select>
         </div>
       </FilterBar>
@@ -327,8 +331,8 @@ export function VehiclesPage() {
             isLoading={vehiclesQuery.isPending}
             error={vehiclesQuery.isError ? describeApiError(vehiclesQuery.error as ApiError) : null}
             onRetry={() => void vehiclesQuery.refetch()}
-            emptyTitle="No vehicles found"
-            emptyMessage="Create a vehicle or adjust your filters."
+            emptyTitle={t('vehicles.empty.title')}
+            emptyMessage={t('vehicles.empty.message')}
           />
         </div>
         {pageData && (
@@ -345,7 +349,7 @@ export function VehiclesPage() {
           onClose={() => setModal(null)}
           onSaved={() => {
             setModal(null)
-            notifySuccess(modal.mode === 'edit' ? 'Vehicle updated' : 'Vehicle created')
+            notifySuccess(modal.mode === 'edit' ? td('updated') : td('created'))
             refresh()
           }}
         />

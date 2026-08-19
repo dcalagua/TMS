@@ -11,6 +11,7 @@ import {
   FilterBar,
   PageHeader,
   Pagination,
+  ActionMenu,
   ActiveBadge,
   type DataTableColumn,
 } from '../../shared/ui/components'
@@ -33,6 +34,8 @@ type ModalState = { mode: 'create' } | { mode: 'edit'; zone: ZoneView } | null
 
 export function ZonesPage() {
   const { t } = useTranslation('masters')
+  const { t: tc } = useTranslation('common')
+  const { t: td } = useTranslation('dialogs')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('masterdata.zone:manage')
@@ -76,11 +79,11 @@ export function ZonesPage() {
 
   async function toggleActive(zone: ZoneView) {
     const confirmed = await confirmDialog({
-      title: zone.active ? 'Deactivate zone?' : 'Activate zone?',
-      text: zone.active
-        ? `${zone.name} will no longer be selectable for new planning.`
-        : `${zone.name} will become selectable again.`,
-      confirmLabel: zone.active ? 'Deactivate' : 'Activate',
+      title: zone.active
+        ? td('deactivate.title', { name: zone.name })
+        : td('activate.title', { name: zone.name }),
+      text: zone.active ? td('deactivate.text') : td('activate.text'),
+      confirmLabel: zone.active ? tc('actions.deactivate') : tc('actions.activate'),
       dangerous: zone.active,
     })
     if (!confirmed) return
@@ -88,24 +91,24 @@ export function ZonesPage() {
     try {
       if (zone.active) {
         await deactivateZone(companyId, zone.id)
-        notifySuccess('Zone deactivated', zone.name)
+        notifySuccess(td('deactivated'), zone.name)
       } else {
         await activateZone(companyId, zone.id)
-        notifySuccess('Zone activated', zone.name)
+        notifySuccess(td('activated'), zone.name)
       }
       refresh()
     } catch (error) {
-      notifyError('Could not update the zone', describeApiError(error as ApiError))
+      notifyError(td('errorTitle'), describeApiError(error as ApiError))
     }
   }
 
   const columns: DataTableColumn<ZoneView>[] = [
-    { key: 'code', header: 'Code', render: (zone) => <span className="fw-semibold">{zone.code}</span> },
-    { key: 'name', header: 'Name', render: (zone) => zone.name },
-    { key: 'description', header: 'Description', render: (zone) => zone.description ?? '—' },
+    { key: 'code', header: tc('columns.code'), render: (zone) => <span className="fw-semibold">{zone.code}</span> },
+    { key: 'name', header: tc('columns.name'), render: (zone) => zone.name },
+    { key: 'description', header: tc('columns.description'), render: (zone) => zone.description ?? '—' },
     {
       key: 'active',
-      header: 'Status',
+      header: tc('columns.status'),
       render: (zone) => <ActiveBadge active={zone.active} />,
     },
   ]
@@ -113,21 +116,26 @@ export function ZonesPage() {
   if (canManage) {
     columns.push({
       key: 'actions',
-      header: '',
-      className: 'text-end',
+      header: tc('columns.actions'),
+      actions: true,
       render: (zone) => (
-        <div className="btn-group btn-group-sm">
-          <button type="button" className="btn btn-outline-secondary" onClick={() => setModal({ mode: 'edit', zone })}>
-            Edit
-          </button>
-          <button
-            type="button"
-            className={`btn btn-outline-${zone.active ? 'danger' : 'success'}`}
-            onClick={() => void toggleActive(zone)}
-          >
-            {zone.active ? 'Deactivate' : 'Activate'}
-          </button>
-        </div>
+        <ActionMenu
+          items={[
+            {
+              key: 'edit',
+              label: tc('actions.edit'),
+              icon: 'bi-pencil',
+              onSelect: () => setModal({ mode: 'edit', zone }),
+            },
+            {
+              key: 'active',
+              label: zone.active ? tc('actions.deactivate') : tc('actions.activate'),
+              icon: zone.active ? 'bi-slash-circle' : 'bi-check-circle',
+              dangerous: zone.active,
+              onSelect: () => void toggleActive(zone),
+            },
+          ]}
+        />
       ),
     })
   }
@@ -151,7 +159,7 @@ export function ZonesPage() {
       <FilterBar onSubmit={applyFilters} onReset={resetFilters}>
         <div>
           <label htmlFor="zone-filter-code" className="form-label small mb-1">
-            Code
+            {tc('columns.code')}
           </label>
           <input
             id="zone-filter-code"
@@ -162,7 +170,7 @@ export function ZonesPage() {
         </div>
         <div>
           <label htmlFor="zone-filter-name" className="form-label small mb-1">
-            Name
+            {tc('columns.name')}
           </label>
           <input
             id="zone-filter-name"
@@ -173,7 +181,7 @@ export function ZonesPage() {
         </div>
         <div>
           <label htmlFor="zone-filter-active" className="form-label small mb-1">
-            Status
+            {tc('columns.status')}
           </label>
           <select
             id="zone-filter-active"
@@ -181,9 +189,9 @@ export function ZonesPage() {
             value={draftFilters.active}
             onChange={(event) => setDraftFilters({ ...draftFilters, active: event.target.value as ActiveFilter })}
           >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="all">All</option>
+            <option value="active">{tc('filters.statusActive')}</option>
+            <option value="inactive">{tc('filters.statusInactive')}</option>
+            <option value="all">{tc('filters.statusAll')}</option>
           </select>
         </div>
       </FilterBar>
@@ -197,8 +205,8 @@ export function ZonesPage() {
             isLoading={zonesQuery.isPending}
             error={zonesQuery.isError ? describeApiError(zonesQuery.error as ApiError) : null}
             onRetry={() => void zonesQuery.refetch()}
-            emptyTitle="No zones found"
-            emptyMessage="Create a zone or adjust your filters."
+            emptyTitle={t('zones.empty.title')}
+            emptyMessage={t('zones.empty.message')}
           />
         </div>
         {pageData && (
@@ -215,7 +223,7 @@ export function ZonesPage() {
           onClose={() => setModal(null)}
           onSaved={() => {
             setModal(null)
-            notifySuccess(modal.mode === 'edit' ? 'Zone updated' : 'Zone created')
+            notifySuccess(modal.mode === 'edit' ? td('updated') : td('created'))
             refresh()
           }}
         />

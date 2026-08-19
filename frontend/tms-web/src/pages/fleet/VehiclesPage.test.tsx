@@ -111,7 +111,7 @@ describe('VehiclesPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('No vehicles found')).toBeInTheDocument()
+    expect(await screen.findByText('Sin vehículos')).toBeInTheDocument()
   })
 
   it('shows an error state with a retry action when the request fails', async () => {
@@ -164,7 +164,7 @@ describe('VehiclesPage', () => {
     await screen.findByText('ABC-123')
 
     expect(screen.queryByRole('button', { name: 'Nuevo vehículo' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Abrir menú de acciones' })).not.toBeInTheDocument()
   })
 
   it('deactivates a vehicle only after the confirmation dialog is accepted', async () => {
@@ -178,10 +178,11 @@ describe('VehiclesPage', () => {
     renderPage()
     await screen.findByText('ABC-123')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Desactivar' }))
 
     await waitFor(() => expect(vehiclesApiMocks.deactivateVehicle).toHaveBeenCalledWith('company-1', 'vehicle-1'))
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Vehicle deactivated', 'ABC-123')
+    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Registro desactivado', 'ABC-123')
   })
 
   it('applies the license plate filter to the query', async () => {

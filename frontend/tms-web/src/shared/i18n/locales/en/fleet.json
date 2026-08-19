@@ -1,16 +1,28 @@
 {
   "carriers": {
     "description": "Transport providers used by vehicles, third-party or the company's own fleet operator.",
+    "empty": {
+      "message": "Create a carrier or adjust your filters.",
+      "title": "No carriers found"
+    },
     "new": "New carrier",
     "title": "Carriers"
   },
   "vehicleTypes": {
     "description": "Default capacities and physical characteristics for a class of vehicle.",
+    "empty": {
+      "message": "Create a vehicle type or adjust your filters.",
+      "title": "No vehicle types found"
+    },
     "new": "New vehicle type",
     "title": "Vehicle types"
   },
   "vehicles": {
     "description": "Physical vehicles, their carrier and type assignment and effective capacity. GPS/telematics tracking is not part of this screen.",
+    "empty": {
+      "message": "Create a vehicle or adjust your filters.",
+      "title": "No vehicles found"
+    },
     "new": "New vehicle",
     "title": "Vehicles"
   }

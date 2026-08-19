@@ -78,7 +78,7 @@ describe('ZonesPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('No zones found')).toBeInTheDocument()
+    expect(await screen.findByText('Sin zonas')).toBeInTheDocument()
   })
 
   it('shows an error state with a retry action when the request fails', async () => {
@@ -113,8 +113,7 @@ describe('ZonesPage', () => {
     await screen.findByText('NORTH-ZONE')
 
     expect(screen.queryByRole('button', { name: 'Nueva zona' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Abrir menú de acciones' })).not.toBeInTheDocument()
   })
 
   it('creates a zone through the modal and refreshes the list', async () => {
@@ -123,7 +122,7 @@ describe('ZonesPage', () => {
     zonesApiMocks.createZone.mockResolvedValue({ ...ZONE, code: 'NEW-ZONE' })
 
     renderPage()
-    await screen.findByText('No zones found')
+    await screen.findByText('Sin zonas')
 
     await userEvent.click(screen.getByRole('button', { name: 'Nueva zona' }))
     const dialog = within(screen.getByRole('dialog'))
@@ -133,7 +132,7 @@ describe('ZonesPage', () => {
 
     await waitFor(() => expect(zonesApiMocks.createZone).toHaveBeenCalledWith('company-1', expect.objectContaining({ code: 'NEW-ZONE' })))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Zone created')
+    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Registro creado')
   })
 
   it('deactivates a zone only after the confirmation dialog is accepted', async () => {
@@ -145,15 +144,17 @@ describe('ZonesPage', () => {
     renderPage()
     await screen.findByText('NORTH-ZONE')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Desactivar' }))
     await waitFor(() => expect(alertMocks.confirmAction).toHaveBeenCalled())
     expect(zonesApiMocks.deactivateZone).not.toHaveBeenCalled()
 
     alertMocks.confirmAction.mockResolvedValueOnce(true)
-    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Desactivar' }))
 
     await waitFor(() => expect(zonesApiMocks.deactivateZone).toHaveBeenCalledWith('company-1', 'zone-1'))
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Zone deactivated', 'North Zone')
+    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Registro desactivado', 'North Zone')
   })
 
   it('applies the code filter to the query', async () => {
@@ -163,7 +164,7 @@ describe('ZonesPage', () => {
     renderPage()
     await screen.findByText('NORTH-ZONE')
 
-    await userEvent.type(screen.getByLabelText(/^code$/i), 'north')
+    await userEvent.type(screen.getByLabelText(/^código$/i), 'north')
     await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
 
     await waitFor(() =>

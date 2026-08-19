@@ -103,7 +103,7 @@ describe('RoutesPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('No routes found')).toBeInTheDocument()
+    expect(await screen.findByText('Sin rutas')).toBeInTheDocument()
   })
 
   it('shows an error state with a retry action when the request fails', async () => {
@@ -154,8 +154,7 @@ describe('RoutesPage', () => {
     await screen.findByText('NORTH-CORRIDOR')
 
     expect(screen.queryByRole('button', { name: 'Nueva ruta' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Abrir menú de acciones' })).not.toBeInTheDocument()
   })
 
   it('deactivates a route only after the confirmation dialog is accepted', async () => {
@@ -169,15 +168,17 @@ describe('RoutesPage', () => {
     renderPage()
     await screen.findByText('NORTH-CORRIDOR')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Desactivar' }))
     await waitFor(() => expect(alertMocks.confirmAction).toHaveBeenCalled())
     expect(routesApiMocks.deactivateRoute).not.toHaveBeenCalled()
 
     alertMocks.confirmAction.mockResolvedValueOnce(true)
-    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Desactivar' }))
 
     await waitFor(() => expect(routesApiMocks.deactivateRoute).toHaveBeenCalledWith('company-1', 'route-1'))
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Route deactivated', 'North Corridor')
+    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Registro desactivado', 'North Corridor')
   })
 
   it('applies the code filter to the query', async () => {
@@ -189,7 +190,7 @@ describe('RoutesPage', () => {
     renderPage()
     await screen.findByText('NORTH-CORRIDOR')
 
-    await userEvent.type(screen.getByLabelText(/^code$/i), 'north')
+    await userEvent.type(screen.getByLabelText(/^código$/i), 'north')
     await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
 
     await waitFor(() =>

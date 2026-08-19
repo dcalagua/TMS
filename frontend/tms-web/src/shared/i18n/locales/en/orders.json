@@ -1,5 +1,9 @@
 {
   "description": "Transport orders: header plus lines, with a minimal V1 status lifecycle (not ready, ready for planning, planned or cancelled). Totals are always computed and owned by the backend.",
+  "empty": {
+    "message": "Create an order or adjust your filters.",
+    "title": "No orders found"
+  },
   "new": "New order",
   "title": "Orders"
 }

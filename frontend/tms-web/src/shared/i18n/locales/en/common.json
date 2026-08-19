@@ -25,6 +25,32 @@
     "name": "TMS by EBIM",
     "tagline": "Transport Management System"
   },
+  "columns": {
+    "actions": "Actions",
+    "address": "Address",
+    "availability": "Availability",
+    "businessName": "Business name",
+    "carrier": "Carrier",
+    "code": "Code",
+    "contact": "Contact",
+    "days": "Days",
+    "description": "Description",
+    "districtProvince": "District / Province",
+    "maxPallets": "Max pallets",
+    "maxVolume": "Max volume (m³)",
+    "maxWeight": "Max weight (kg)",
+    "name": "Name",
+    "origin": "Origin",
+    "phone": "Phone",
+    "plateCode": "Plate / code",
+    "serviceMinutes": "Service (min)",
+    "status": "Status",
+    "stops": "Stops",
+    "taxId": "Tax id",
+    "timeZone": "Time zone",
+    "type": "Type",
+    "zone": "Zone"
+  },
   "comingSoon": {
     "message": "{{module}} will be available in an upcoming release.",
     "title": "Coming soon"
@@ -38,6 +64,15 @@
     "noAccessMessage": "Your account has no active company membership. Contact an administrator.",
     "noAccessTitle": "No company access",
     "select": "Select a company"
+  },
+  "filters": {
+    "allCarriers": "All carriers",
+    "allOrigins": "All origins",
+    "allTypes": "All types",
+    "allZones": "All zones",
+    "statusActive": "Active",
+    "statusAll": "All",
+    "statusInactive": "Inactive"
   },
   "labels": {
     "actions": "Actions",

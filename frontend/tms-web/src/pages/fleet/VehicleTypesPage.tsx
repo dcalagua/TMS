@@ -16,6 +16,7 @@ import {
   FilterBar,
   PageHeader,
   Pagination,
+  ActionMenu,
   ActiveBadge,
   type DataTableColumn,
 } from '../../shared/ui/components'
@@ -38,6 +39,8 @@ type ModalState = { mode: 'create' } | { mode: 'edit'; vehicleType: VehicleTypeV
 
 export function VehicleTypesPage() {
   const { t } = useTranslation('fleet')
+  const { t: tc } = useTranslation('common')
+  const { t: td } = useTranslation('dialogs')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('fleet.vehicle_type:manage')
@@ -81,11 +84,11 @@ export function VehicleTypesPage() {
 
   async function toggleActive(vehicleType: VehicleTypeView) {
     const confirmed = await confirmDialog({
-      title: vehicleType.active ? 'Deactivate vehicle type?' : 'Activate vehicle type?',
-      text: vehicleType.active
-        ? `${vehicleType.name} will no longer be selectable for new vehicles.`
-        : `${vehicleType.name} will become selectable again.`,
-      confirmLabel: vehicleType.active ? 'Deactivate' : 'Activate',
+      title: vehicleType.active
+        ? td('deactivate.title', { name: vehicleType.name })
+        : td('activate.title', { name: vehicleType.name }),
+      text: vehicleType.active ? td('deactivate.text') : td('activate.text'),
+      confirmLabel: vehicleType.active ? tc('actions.deactivate') : tc('actions.activate'),
       dangerous: vehicleType.active,
     })
     if (!confirmed) return
@@ -93,26 +96,26 @@ export function VehicleTypesPage() {
     try {
       if (vehicleType.active) {
         await deactivateVehicleType(companyId, vehicleType.id)
-        notifySuccess('Vehicle type deactivated', vehicleType.name)
+        notifySuccess(td('deactivated'), vehicleType.name)
       } else {
         await activateVehicleType(companyId, vehicleType.id)
-        notifySuccess('Vehicle type activated', vehicleType.name)
+        notifySuccess(td('activated'), vehicleType.name)
       }
       refresh()
     } catch (error) {
-      notifyError('Could not update the vehicle type', describeApiError(error as ApiError))
+      notifyError(td('errorTitle'), describeApiError(error as ApiError))
     }
   }
 
   const columns: DataTableColumn<VehicleTypeView>[] = [
-    { key: 'code', header: 'Code', render: (type) => <span className="fw-semibold">{type.code}</span> },
-    { key: 'name', header: 'Name', render: (type) => type.name },
-    { key: 'maxWeight', header: 'Max weight (kg)', render: (type) => type.maxWeightKg },
-    { key: 'maxVolume', header: 'Max volume (m³)', render: (type) => type.maxVolumeM3 },
-    { key: 'maxPallets', header: 'Max pallets', render: (type) => type.maxPallets },
+    { key: 'code', header: tc('columns.code'), render: (type) => <span className="fw-semibold">{type.code}</span> },
+    { key: 'name', header: tc('columns.name'), render: (type) => type.name },
+    { key: 'maxWeight', header: tc('columns.maxWeight'), render: (type) => type.maxWeightKg },
+    { key: 'maxVolume', header: tc('columns.maxVolume'), render: (type) => type.maxVolumeM3 },
+    { key: 'maxPallets', header: tc('columns.maxPallets'), render: (type) => type.maxPallets },
     {
       key: 'active',
-      header: 'Status',
+      header: tc('columns.status'),
       render: (type) => (
         <ActiveBadge active={type.active} />
       ),
@@ -122,25 +125,26 @@ export function VehicleTypesPage() {
   if (canManage) {
     columns.push({
       key: 'actions',
-      header: '',
-      className: 'text-end',
+      header: tc('columns.actions'),
+      actions: true,
       render: (type) => (
-        <div className="btn-group btn-group-sm">
-          <button
-            type="button"
-            className="btn btn-outline-secondary"
-            onClick={() => setModal({ mode: 'edit', vehicleType: type })}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            className={`btn btn-outline-${type.active ? 'danger' : 'success'}`}
-            onClick={() => void toggleActive(type)}
-          >
-            {type.active ? 'Deactivate' : 'Activate'}
-          </button>
-        </div>
+        <ActionMenu
+          items={[
+            {
+              key: 'edit',
+              label: tc('actions.edit'),
+              icon: 'bi-pencil',
+              onSelect: () => setModal({ mode: 'edit', vehicleType: type }),
+            },
+            {
+              key: 'active',
+              label: type.active ? tc('actions.deactivate') : tc('actions.activate'),
+              icon: type.active ? 'bi-slash-circle' : 'bi-check-circle',
+              dangerous: type.active,
+              onSelect: () => void toggleActive(type),
+            },
+          ]}
+        />
       ),
     })
   }
@@ -164,7 +168,7 @@ export function VehicleTypesPage() {
       <FilterBar onSubmit={applyFilters} onReset={resetFilters}>
         <div>
           <label htmlFor="vehicle-type-filter-code" className="form-label small mb-1">
-            Code
+            {tc('columns.code')}
           </label>
           <input
             id="vehicle-type-filter-code"
@@ -175,7 +179,7 @@ export function VehicleTypesPage() {
         </div>
         <div>
           <label htmlFor="vehicle-type-filter-name" className="form-label small mb-1">
-            Name
+            {tc('columns.name')}
           </label>
           <input
             id="vehicle-type-filter-name"
@@ -186,7 +190,7 @@ export function VehicleTypesPage() {
         </div>
         <div>
           <label htmlFor="vehicle-type-filter-active" className="form-label small mb-1">
-            Status
+            {tc('columns.status')}
           </label>
           <select
             id="vehicle-type-filter-active"
@@ -194,9 +198,9 @@ export function VehicleTypesPage() {
             value={draftFilters.active}
             onChange={(event) => setDraftFilters({ ...draftFilters, active: event.target.value as ActiveFilter })}
           >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="all">All</option>
+            <option value="active">{tc('filters.statusActive')}</option>
+            <option value="inactive">{tc('filters.statusInactive')}</option>
+            <option value="all">{tc('filters.statusAll')}</option>
           </select>
         </div>
       </FilterBar>
@@ -210,8 +214,8 @@ export function VehicleTypesPage() {
             isLoading={vehicleTypesQuery.isPending}
             error={vehicleTypesQuery.isError ? describeApiError(vehicleTypesQuery.error as ApiError) : null}
             onRetry={() => void vehicleTypesQuery.refetch()}
-            emptyTitle="No vehicle types found"
-            emptyMessage="Create a vehicle type or adjust your filters."
+            emptyTitle={t('vehicleTypes.empty.title')}
+            emptyMessage={t('vehicleTypes.empty.message')}
           />
         </div>
         {pageData && (
@@ -228,7 +232,7 @@ export function VehicleTypesPage() {
           onClose={() => setModal(null)}
           onSaved={() => {
             setModal(null)
-            notifySuccess(modal.mode === 'edit' ? 'Vehicle type updated' : 'Vehicle type created')
+            notifySuccess(modal.mode === 'edit' ? td('updated') : td('created'))
             refresh()
           }}
         />

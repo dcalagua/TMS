@@ -25,6 +25,32 @@
     "name": "TMS by EBIM",
     "tagline": "Sistema de Gestión de Transporte"
   },
+  "columns": {
+    "actions": "Acciones",
+    "address": "Dirección",
+    "availability": "Disponibilidad",
+    "businessName": "Razón social",
+    "carrier": "Transportista",
+    "code": "Código",
+    "contact": "Contacto",
+    "days": "Días",
+    "description": "Descripción",
+    "districtProvince": "Distrito / Provincia",
+    "maxPallets": "Pallets máx.",
+    "maxVolume": "Volumen máx. (m³)",
+    "maxWeight": "Peso máx. (kg)",
+    "name": "Nombre",
+    "origin": "Origen",
+    "phone": "Teléfono",
+    "plateCode": "Placa / código",
+    "serviceMinutes": "Servicio (min)",
+    "status": "Estado",
+    "stops": "Paradas",
+    "taxId": "RUC",
+    "timeZone": "Zona horaria",
+    "type": "Tipo",
+    "zone": "Zona"
+  },
   "comingSoon": {
     "message": "{{module}} estará disponible en una próxima versión.",
     "title": "Próximamente"
@@ -38,6 +64,15 @@
     "noAccessMessage": "Tu cuenta no tiene una membresía activa en ninguna compañía. Contacta a un administrador.",
     "noAccessTitle": "Sin acceso a compañías",
     "select": "Selecciona una compañía"
+  },
+  "filters": {
+    "allCarriers": "Todos los transportistas",
+    "allOrigins": "Todos los orígenes",
+    "allTypes": "Todos los tipos",
+    "allZones": "Todas las zonas",
+    "statusActive": "Activos",
+    "statusAll": "Todos",
+    "statusInactive": "Inactivos"
   },
   "labels": {
     "actions": "Acciones",

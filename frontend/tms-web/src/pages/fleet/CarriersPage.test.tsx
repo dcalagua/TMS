@@ -82,7 +82,7 @@ describe('CarriersPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('No carriers found')).toBeInTheDocument()
+    expect(await screen.findByText('Sin transportistas')).toBeInTheDocument()
   })
 
   it('shows an error state with a retry action when the request fails', async () => {
@@ -116,8 +116,7 @@ describe('CarriersPage', () => {
     await screen.findByText('ACME')
 
     expect(screen.queryByRole('button', { name: 'Nuevo transportista' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Abrir menú de acciones' })).not.toBeInTheDocument()
   })
 
   it('creates a carrier through the modal and refreshes the list', async () => {
@@ -126,7 +125,7 @@ describe('CarriersPage', () => {
     carriersApiMocks.createCarrier.mockResolvedValue({ ...CARRIER, code: 'BETA' })
 
     renderPage()
-    await screen.findByText('No carriers found')
+    await screen.findByText('Sin transportistas')
 
     await userEvent.click(screen.getByRole('button', { name: 'Nuevo transportista' }))
     const dialog = screen.getByRole('dialog')
@@ -139,7 +138,7 @@ describe('CarriersPage', () => {
       expect(carriersApiMocks.createCarrier).toHaveBeenCalledWith('company-1', expect.objectContaining({ code: 'BETA' })),
     )
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Carrier created')
+    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Registro creado')
   })
 
   it('deactivates a carrier only after the confirmation dialog is accepted', async () => {
@@ -151,15 +150,17 @@ describe('CarriersPage', () => {
     renderPage()
     await screen.findByText('ACME')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Desactivar' }))
     await waitFor(() => expect(alertMocks.confirmAction).toHaveBeenCalled())
     expect(carriersApiMocks.deactivateCarrier).not.toHaveBeenCalled()
 
     alertMocks.confirmAction.mockResolvedValueOnce(true)
-    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Desactivar' }))
 
     await waitFor(() => expect(carriersApiMocks.deactivateCarrier).toHaveBeenCalledWith('company-1', 'carrier-1'))
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Carrier deactivated', 'Acme Transport S.A.')
+    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Registro desactivado', 'Acme Transport S.A.')
   })
 
   it('applies the code filter to the query', async () => {
@@ -169,7 +170,7 @@ describe('CarriersPage', () => {
     renderPage()
     await screen.findByText('ACME')
 
-    await userEvent.type(screen.getByLabelText(/^code$/i), 'acm')
+    await userEvent.type(screen.getByLabelText(/^código$/i), 'acm')
     await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
 
     await waitFor(() =>

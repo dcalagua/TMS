@@ -84,7 +84,7 @@ describe('FrequenciesPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('No frequencies found')).toBeInTheDocument()
+    expect(await screen.findByText('Sin frecuencias')).toBeInTheDocument()
   })
 
   it('shows an error state with a retry action when the request fails', async () => {
@@ -119,8 +119,7 @@ describe('FrequenciesPage', () => {
     await screen.findByText('MON-WED-FRI')
 
     expect(screen.queryByRole('button', { name: 'Nueva frecuencia' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Abrir menú de acciones' })).not.toBeInTheDocument()
   })
 
   it('creates a frequency through the modal and refreshes the list', async () => {
@@ -129,7 +128,7 @@ describe('FrequenciesPage', () => {
     frequenciesApiMocks.createFrequency.mockResolvedValue({ ...FREQUENCY, code: 'NEW-FREQ' })
 
     renderPage()
-    await screen.findByText('No frequencies found')
+    await screen.findByText('Sin frecuencias')
 
     await userEvent.click(screen.getByRole('button', { name: 'Nueva frecuencia' }))
     const dialog = within(screen.getByRole('dialog'))
@@ -144,7 +143,7 @@ describe('FrequenciesPage', () => {
       ),
     )
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Frequency created')
+    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Registro creado')
   })
 
   it('deactivates a frequency only after the confirmation dialog is accepted', async () => {
@@ -156,17 +155,19 @@ describe('FrequenciesPage', () => {
     renderPage()
     await screen.findByText('MON-WED-FRI')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Desactivar' }))
     await waitFor(() => expect(alertMocks.confirmAction).toHaveBeenCalled())
     expect(frequenciesApiMocks.deactivateFrequency).not.toHaveBeenCalled()
 
     alertMocks.confirmAction.mockResolvedValueOnce(true)
-    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Desactivar' }))
 
     await waitFor(() =>
       expect(frequenciesApiMocks.deactivateFrequency).toHaveBeenCalledWith('company-1', 'frequency-1'),
     )
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Frequency deactivated', 'Monday Wednesday Friday')
+    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Registro desactivado', 'Monday Wednesday Friday')
   })
 
   it('applies the code filter to the query', async () => {
@@ -176,7 +177,7 @@ describe('FrequenciesPage', () => {
     renderPage()
     await screen.findByText('MON-WED-FRI')
 
-    await userEvent.type(screen.getByLabelText(/^code$/i), 'mon')
+    await userEvent.type(screen.getByLabelText(/^código$/i), 'mon')
     await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
 
     await waitFor(() =>

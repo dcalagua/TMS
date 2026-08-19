@@ -89,7 +89,7 @@ describe('VehicleTypesPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('No vehicle types found')).toBeInTheDocument()
+    expect(await screen.findByText('Sin tipos de vehículo')).toBeInTheDocument()
   })
 
   it('shows an error state with a retry action when the request fails', async () => {
@@ -123,7 +123,7 @@ describe('VehicleTypesPage', () => {
     await screen.findByText('TRUCK-10T')
 
     expect(screen.queryByRole('button', { name: 'Nuevo tipo de vehículo' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Abrir menú de acciones' })).not.toBeInTheDocument()
   })
 
   it('creates a vehicle type through the modal and refreshes the list', async () => {
@@ -132,7 +132,7 @@ describe('VehicleTypesPage', () => {
     vehicleTypesApiMocks.createVehicleType.mockResolvedValue({ ...VEHICLE_TYPE, code: 'TANKER' })
 
     renderPage()
-    await screen.findByText('No vehicle types found')
+    await screen.findByText('Sin tipos de vehículo')
 
     await userEvent.click(screen.getByRole('button', { name: 'Nuevo tipo de vehículo' }))
     const dialog = screen.getByRole('dialog')
@@ -148,7 +148,7 @@ describe('VehicleTypesPage', () => {
       ),
     )
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Vehicle type created')
+    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Registro creado')
   })
 
   it('deactivates a vehicle type only after the confirmation dialog is accepted', async () => {
@@ -160,9 +160,10 @@ describe('VehicleTypesPage', () => {
     renderPage()
     await screen.findByText('TRUCK-10T')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Desactivar' }))
 
     await waitFor(() => expect(vehicleTypesApiMocks.deactivateVehicleType).toHaveBeenCalledWith('company-1', 'type-1'))
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Vehicle type deactivated', '10 ton truck')
+    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Registro desactivado', '10 ton truck')
   })
 })

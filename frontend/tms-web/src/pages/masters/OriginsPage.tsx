@@ -19,6 +19,7 @@ import {
   FilterBar,
   PageHeader,
   Pagination,
+  ActionMenu,
   ActiveBadge,
   type DataTableColumn,
 } from '../../shared/ui/components'
@@ -42,6 +43,8 @@ type ModalState = { mode: 'create' } | { mode: 'edit'; origin: OriginView } | nu
 
 export function OriginsPage() {
   const { t } = useTranslation('masters')
+  const { t: tc } = useTranslation('common')
+  const { t: td } = useTranslation('dialogs')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('masterdata.origin:manage')
@@ -86,11 +89,11 @@ export function OriginsPage() {
 
   async function toggleActive(origin: OriginView) {
     const confirmed = await confirmDialog({
-      title: origin.active ? 'Deactivate origin?' : 'Activate origin?',
-      text: origin.active
-        ? `${origin.name} will no longer be selectable for new planning.`
-        : `${origin.name} will become selectable again.`,
-      confirmLabel: origin.active ? 'Deactivate' : 'Activate',
+      title: origin.active
+        ? td('deactivate.title', { name: origin.name })
+        : td('activate.title', { name: origin.name }),
+      text: origin.active ? td('deactivate.text') : td('activate.text'),
+      confirmLabel: origin.active ? tc('actions.deactivate') : tc('actions.activate'),
       dangerous: origin.active,
     })
     if (!confirmed) return
@@ -98,26 +101,26 @@ export function OriginsPage() {
     try {
       if (origin.active) {
         await deactivateOrigin(companyId, origin.id)
-        notifySuccess('Origin deactivated', origin.name)
+        notifySuccess(td('deactivated'), origin.name)
       } else {
         await activateOrigin(companyId, origin.id)
-        notifySuccess('Origin activated', origin.name)
+        notifySuccess(td('activated'), origin.name)
       }
       refresh()
     } catch (error) {
-      notifyError('Could not update the origin', describeApiError(error as ApiError))
+      notifyError(td('errorTitle'), describeApiError(error as ApiError))
     }
   }
 
   const columns: DataTableColumn<OriginView>[] = [
-    { key: 'code', header: 'Code', render: (origin) => <span className="fw-semibold">{origin.code}</span> },
-    { key: 'name', header: 'Name', render: (origin) => origin.name },
-    { key: 'type', header: 'Type', render: (origin) => ORIGIN_TYPE_LABELS[origin.type] },
-    { key: 'address', header: 'Address', render: (origin) => origin.address ?? '—' },
-    { key: 'timeZone', header: 'Time zone', render: (origin) => origin.timeZone },
+    { key: 'code', header: tc('columns.code'), render: (origin) => <span className="fw-semibold">{origin.code}</span> },
+    { key: 'name', header: tc('columns.name'), render: (origin) => origin.name },
+    { key: 'type', header: tc('columns.type'), render: (origin) => ORIGIN_TYPE_LABELS[origin.type] },
+    { key: 'address', header: tc('columns.address'), render: (origin) => origin.address ?? '—' },
+    { key: 'timeZone', header: tc('columns.timeZone'), render: (origin) => origin.timeZone },
     {
       key: 'active',
-      header: 'Status',
+      header: tc('columns.status'),
       render: (origin) => (
         <ActiveBadge active={origin.active} />
       ),
@@ -127,21 +130,26 @@ export function OriginsPage() {
   if (canManage) {
     columns.push({
       key: 'actions',
-      header: '',
-      className: 'text-end',
+      header: tc('columns.actions'),
+      actions: true,
       render: (origin) => (
-        <div className="btn-group btn-group-sm">
-          <button type="button" className="btn btn-outline-secondary" onClick={() => setModal({ mode: 'edit', origin })}>
-            Edit
-          </button>
-          <button
-            type="button"
-            className={`btn btn-outline-${origin.active ? 'danger' : 'success'}`}
-            onClick={() => void toggleActive(origin)}
-          >
-            {origin.active ? 'Deactivate' : 'Activate'}
-          </button>
-        </div>
+        <ActionMenu
+          items={[
+            {
+              key: 'edit',
+              label: tc('actions.edit'),
+              icon: 'bi-pencil',
+              onSelect: () => setModal({ mode: 'edit', origin }),
+            },
+            {
+              key: 'active',
+              label: origin.active ? tc('actions.deactivate') : tc('actions.activate'),
+              icon: origin.active ? 'bi-slash-circle' : 'bi-check-circle',
+              dangerous: origin.active,
+              onSelect: () => void toggleActive(origin),
+            },
+          ]}
+        />
       ),
     })
   }
@@ -165,7 +173,7 @@ export function OriginsPage() {
       <FilterBar onSubmit={applyFilters} onReset={resetFilters}>
         <div>
           <label htmlFor="filter-code" className="form-label small mb-1">
-            Code
+            {tc('columns.code')}
           </label>
           <input
             id="filter-code"
@@ -176,7 +184,7 @@ export function OriginsPage() {
         </div>
         <div>
           <label htmlFor="filter-name" className="form-label small mb-1">
-            Name
+            {tc('columns.name')}
           </label>
           <input
             id="filter-name"
@@ -187,7 +195,7 @@ export function OriginsPage() {
         </div>
         <div>
           <label htmlFor="filter-type" className="form-label small mb-1">
-            Type
+            {tc('columns.type')}
           </label>
           <select
             id="filter-type"
@@ -195,7 +203,7 @@ export function OriginsPage() {
             value={draftFilters.type}
             onChange={(event) => setDraftFilters({ ...draftFilters, type: event.target.value as OriginType | '' })}
           >
-            <option value="">All types</option>
+            <option value="">{tc('filters.allTypes')}</option>
             {ORIGIN_TYPES.map((type) => (
               <option key={type} value={type}>
                 {ORIGIN_TYPE_LABELS[type]}
@@ -205,7 +213,7 @@ export function OriginsPage() {
         </div>
         <div>
           <label htmlFor="filter-active" className="form-label small mb-1">
-            Status
+            {tc('columns.status')}
           </label>
           <select
             id="filter-active"
@@ -213,9 +221,9 @@ export function OriginsPage() {
             value={draftFilters.active}
             onChange={(event) => setDraftFilters({ ...draftFilters, active: event.target.value as ActiveFilter })}
           >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="all">All</option>
+            <option value="active">{tc('filters.statusActive')}</option>
+            <option value="inactive">{tc('filters.statusInactive')}</option>
+            <option value="all">{tc('filters.statusAll')}</option>
           </select>
         </div>
       </FilterBar>
@@ -229,8 +237,8 @@ export function OriginsPage() {
             isLoading={originsQuery.isPending}
             error={originsQuery.isError ? describeApiError(originsQuery.error as ApiError) : null}
             onRetry={() => void originsQuery.refetch()}
-            emptyTitle="No origins found"
-            emptyMessage="Create an origin or adjust your filters."
+            emptyTitle={t('origins.empty.title')}
+            emptyMessage={t('origins.empty.message')}
           />
         </div>
         {pageData && (
@@ -247,7 +255,7 @@ export function OriginsPage() {
           onClose={() => setModal(null)}
           onSaved={() => {
             setModal(null)
-            notifySuccess(modal.mode === 'edit' ? 'Origin updated' : 'Origin created')
+            notifySuccess(modal.mode === 'edit' ? td('updated') : td('created'))
             refresh()
           }}
         />

@@ -1,26 +1,46 @@
 {
   "destinations": {
     "description": "Puntos de entrega y servicio usados para planificar y armar viajes.",
+    "empty": {
+      "message": "Crea un destino o ajusta los filtros.",
+      "title": "Sin destinos"
+    },
     "new": "Nuevo destino",
     "title": "Destinos"
   },
   "frequencies": {
     "description": "Calendarios de entrega: cadencia semanal, corte y reglas de anticipación.",
+    "empty": {
+      "message": "Crea una frecuencia o ajusta los filtros.",
+      "title": "Sin frecuencias"
+    },
     "new": "Nueva frecuencia",
     "title": "Frecuencias"
   },
   "origins": {
     "description": "Puntos de carga y despacho usados para planificar y armar viajes.",
+    "empty": {
+      "message": "Crea un origen o ajusta los filtros.",
+      "title": "Sin orígenes"
+    },
     "new": "Nuevo origen",
     "title": "Orígenes"
   },
   "routes": {
     "description": "Ruta maestra: un corredor planificado reutilizable (un origen más una lista ordenada de destinos) que el planificador configura una vez y reutiliza. Es distinta de la ruta calculada de un viaje, que aún no existe y se producirá por despacho a partir de pedidos y capacidad reales.",
+    "empty": {
+      "message": "Crea una ruta o ajusta los filtros.",
+      "title": "Sin rutas"
+    },
     "new": "Nueva ruta",
     "title": "Rutas"
   },
   "zones": {
     "description": "Áreas operativas con nombre usadas para agrupar orígenes, destinos y rutas.",
+    "empty": {
+      "message": "Crea una zona o ajusta los filtros.",
+      "title": "Sin zonas"
+    },
     "new": "Nueva zona",
     "title": "Zonas"
   }

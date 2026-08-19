@@ -11,6 +11,7 @@ import {
   FilterBar,
   PageHeader,
   Pagination,
+  ActionMenu,
   ActiveBadge,
   type DataTableColumn,
 } from '../../shared/ui/components'
@@ -33,6 +34,8 @@ type ModalState = { mode: 'create' } | { mode: 'edit'; carrier: CarrierView } | 
 
 export function CarriersPage() {
   const { t } = useTranslation('fleet')
+  const { t: tc } = useTranslation('common')
+  const { t: td } = useTranslation('dialogs')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('fleet.carrier:manage')
@@ -76,11 +79,11 @@ export function CarriersPage() {
 
   async function toggleActive(carrier: CarrierView) {
     const confirmed = await confirmDialog({
-      title: carrier.active ? 'Deactivate carrier?' : 'Activate carrier?',
-      text: carrier.active
-        ? `${carrier.businessName} will no longer be assignable to new vehicles.`
-        : `${carrier.businessName} will become assignable again.`,
-      confirmLabel: carrier.active ? 'Deactivate' : 'Activate',
+      title: carrier.active
+        ? td('deactivate.title', { name: carrier.businessName })
+        : td('activate.title', { name: carrier.businessName }),
+      text: carrier.active ? td('deactivate.text') : td('activate.text'),
+      confirmLabel: carrier.active ? tc('actions.deactivate') : tc('actions.activate'),
       dangerous: carrier.active,
     })
     if (!confirmed) return
@@ -88,26 +91,26 @@ export function CarriersPage() {
     try {
       if (carrier.active) {
         await deactivateCarrier(companyId, carrier.id)
-        notifySuccess('Carrier deactivated', carrier.businessName)
+        notifySuccess(td('deactivated'), carrier.businessName)
       } else {
         await activateCarrier(companyId, carrier.id)
-        notifySuccess('Carrier activated', carrier.businessName)
+        notifySuccess(td('activated'), carrier.businessName)
       }
       refresh()
     } catch (error) {
-      notifyError('Could not update the carrier', describeApiError(error as ApiError))
+      notifyError(td('errorTitle'), describeApiError(error as ApiError))
     }
   }
 
   const columns: DataTableColumn<CarrierView>[] = [
-    { key: 'code', header: 'Code', render: (carrier) => <span className="fw-semibold">{carrier.code}</span> },
-    { key: 'businessName', header: 'Business name', render: (carrier) => carrier.businessName },
-    { key: 'taxId', header: 'Tax id', render: (carrier) => `${carrier.taxIdType} ${carrier.taxIdValue}` },
-    { key: 'contactName', header: 'Contact', render: (carrier) => carrier.contactName ?? '—' },
-    { key: 'phone', header: 'Phone', render: (carrier) => carrier.phone ?? '—' },
+    { key: 'code', header: tc('columns.code'), render: (carrier) => <span className="fw-semibold">{carrier.code}</span> },
+    { key: 'businessName', header: tc('columns.businessName'), render: (carrier) => carrier.businessName },
+    { key: 'taxId', header: tc('columns.taxId'), render: (carrier) => `${carrier.taxIdType} ${carrier.taxIdValue}` },
+    { key: 'contactName', header: tc('columns.contact'), render: (carrier) => carrier.contactName ?? '—' },
+    { key: 'phone', header: tc('columns.phone'), render: (carrier) => carrier.phone ?? '—' },
     {
       key: 'active',
-      header: 'Status',
+      header: tc('columns.status'),
       render: (carrier) => (
         <ActiveBadge active={carrier.active} />
       ),
@@ -117,25 +120,26 @@ export function CarriersPage() {
   if (canManage) {
     columns.push({
       key: 'actions',
-      header: '',
-      className: 'text-end',
+      header: tc('columns.actions'),
+      actions: true,
       render: (carrier) => (
-        <div className="btn-group btn-group-sm">
-          <button
-            type="button"
-            className="btn btn-outline-secondary"
-            onClick={() => setModal({ mode: 'edit', carrier })}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            className={`btn btn-outline-${carrier.active ? 'danger' : 'success'}`}
-            onClick={() => void toggleActive(carrier)}
-          >
-            {carrier.active ? 'Deactivate' : 'Activate'}
-          </button>
-        </div>
+        <ActionMenu
+          items={[
+            {
+              key: 'edit',
+              label: tc('actions.edit'),
+              icon: 'bi-pencil',
+              onSelect: () => setModal({ mode: 'edit', carrier }),
+            },
+            {
+              key: 'active',
+              label: carrier.active ? tc('actions.deactivate') : tc('actions.activate'),
+              icon: carrier.active ? 'bi-slash-circle' : 'bi-check-circle',
+              dangerous: carrier.active,
+              onSelect: () => void toggleActive(carrier),
+            },
+          ]}
+        />
       ),
     })
   }
@@ -159,7 +163,7 @@ export function CarriersPage() {
       <FilterBar onSubmit={applyFilters} onReset={resetFilters}>
         <div>
           <label htmlFor="carrier-filter-code" className="form-label small mb-1">
-            Code
+            {tc('columns.code')}
           </label>
           <input
             id="carrier-filter-code"
@@ -170,7 +174,7 @@ export function CarriersPage() {
         </div>
         <div>
           <label htmlFor="carrier-filter-business-name" className="form-label small mb-1">
-            Business name
+            {tc('columns.businessName')}
           </label>
           <input
             id="carrier-filter-business-name"
@@ -181,7 +185,7 @@ export function CarriersPage() {
         </div>
         <div>
           <label htmlFor="carrier-filter-active" className="form-label small mb-1">
-            Status
+            {tc('columns.status')}
           </label>
           <select
             id="carrier-filter-active"
@@ -189,9 +193,9 @@ export function CarriersPage() {
             value={draftFilters.active}
             onChange={(event) => setDraftFilters({ ...draftFilters, active: event.target.value as ActiveFilter })}
           >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="all">All</option>
+            <option value="active">{tc('filters.statusActive')}</option>
+            <option value="inactive">{tc('filters.statusInactive')}</option>
+            <option value="all">{tc('filters.statusAll')}</option>
           </select>
         </div>
       </FilterBar>
@@ -205,8 +209,8 @@ export function CarriersPage() {
             isLoading={carriersQuery.isPending}
             error={carriersQuery.isError ? describeApiError(carriersQuery.error as ApiError) : null}
             onRetry={() => void carriersQuery.refetch()}
-            emptyTitle="No carriers found"
-            emptyMessage="Create a carrier or adjust your filters."
+            emptyTitle={t('carriers.empty.title')}
+            emptyMessage={t('carriers.empty.message')}
           />
         </div>
         {pageData && (
@@ -223,7 +227,7 @@ export function CarriersPage() {
           onClose={() => setModal(null)}
           onSaved={() => {
             setModal(null)
-            notifySuccess(modal.mode === 'edit' ? 'Carrier updated' : 'Carrier created')
+            notifySuccess(modal.mode === 'edit' ? td('updated') : td('created'))
             refresh()
           }}
         />

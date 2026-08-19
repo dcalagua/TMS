@@ -4,6 +4,10 @@
     "trips": "Trips"
   },
   "description": "Manual planning runs: one origin, one planning date. Open a run to create trips, assign orders and confirm the plan.",
+  "empty": {
+    "message": "Create a run or adjust your filters.",
+    "title": "No planning runs found"
+  },
   "new": "New run",
   "title": "Planning"
 }

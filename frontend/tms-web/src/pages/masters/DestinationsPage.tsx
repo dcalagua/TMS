@@ -20,6 +20,7 @@ import {
   FilterBar,
   PageHeader,
   Pagination,
+  ActionMenu,
   ActiveBadge,
   type DataTableColumn,
 } from '../../shared/ui/components'
@@ -44,6 +45,8 @@ type ModalState = { mode: 'create' } | { mode: 'edit'; destination: DestinationV
 
 export function DestinationsPage() {
   const { t } = useTranslation('masters')
+  const { t: tc } = useTranslation('common')
+  const { t: td } = useTranslation('dialogs')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('masterdata.destination:manage')
@@ -96,11 +99,11 @@ export function DestinationsPage() {
 
   async function toggleActive(destination: DestinationView) {
     const confirmed = await confirmDialog({
-      title: destination.active ? 'Deactivate destination?' : 'Activate destination?',
-      text: destination.active
-        ? `${destination.name} will no longer be selectable for new planning.`
-        : `${destination.name} will become selectable again.`,
-      confirmLabel: destination.active ? 'Deactivate' : 'Activate',
+      title: destination.active
+        ? td('deactivate.title', { name: destination.name })
+        : td('activate.title', { name: destination.name }),
+      text: destination.active ? td('deactivate.text') : td('activate.text'),
+      confirmLabel: destination.active ? tc('actions.deactivate') : tc('actions.activate'),
       dangerous: destination.active,
     })
     if (!confirmed) return
@@ -108,31 +111,31 @@ export function DestinationsPage() {
     try {
       if (destination.active) {
         await deactivateDestination(companyId, destination.id)
-        notifySuccess('Destination deactivated', destination.name)
+        notifySuccess(td('deactivated'), destination.name)
       } else {
         await activateDestination(companyId, destination.id)
-        notifySuccess('Destination activated', destination.name)
+        notifySuccess(td('activated'), destination.name)
       }
       refresh()
     } catch (error) {
-      notifyError('Could not update the destination', describeApiError(error as ApiError))
+      notifyError(td('errorTitle'), describeApiError(error as ApiError))
     }
   }
 
   const columns: DataTableColumn<DestinationView>[] = [
-    { key: 'code', header: 'Code', render: (destination) => <span className="fw-semibold">{destination.code}</span> },
-    { key: 'name', header: 'Name', render: (destination) => destination.name },
-    { key: 'type', header: 'Type', render: (destination) => DESTINATION_TYPE_LABELS[destination.type] },
-    { key: 'zone', header: 'Zone', render: (destination) => destination.zoneName ?? '—' },
+    { key: 'code', header: tc('columns.code'), render: (destination) => <span className="fw-semibold">{destination.code}</span> },
+    { key: 'name', header: tc('columns.name'), render: (destination) => destination.name },
+    { key: 'type', header: tc('columns.type'), render: (destination) => DESTINATION_TYPE_LABELS[destination.type] },
+    { key: 'zone', header: tc('columns.zone'), render: (destination) => destination.zoneName ?? '—' },
     {
       key: 'locality',
-      header: 'District / Province',
+      header: tc('columns.districtProvince'),
       render: (destination) => [destination.district, destination.province].filter(Boolean).join(' / ') || '—',
     },
-    { key: 'serviceTime', header: 'Service (min)', render: (destination) => destination.serviceTimeMinutes },
+    { key: 'serviceTime', header: tc('columns.serviceMinutes'), render: (destination) => destination.serviceTimeMinutes },
     {
       key: 'active',
-      header: 'Status',
+      header: tc('columns.status'),
       render: (destination) => (
         <ActiveBadge active={destination.active} />
       ),
@@ -142,25 +145,26 @@ export function DestinationsPage() {
   if (canManage) {
     columns.push({
       key: 'actions',
-      header: '',
-      className: 'text-end',
+      header: tc('columns.actions'),
+      actions: true,
       render: (destination) => (
-        <div className="btn-group btn-group-sm">
-          <button
-            type="button"
-            className="btn btn-outline-secondary"
-            onClick={() => setModal({ mode: 'edit', destination })}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            className={`btn btn-outline-${destination.active ? 'danger' : 'success'}`}
-            onClick={() => void toggleActive(destination)}
-          >
-            {destination.active ? 'Deactivate' : 'Activate'}
-          </button>
-        </div>
+        <ActionMenu
+          items={[
+            {
+              key: 'edit',
+              label: tc('actions.edit'),
+              icon: 'bi-pencil',
+              onSelect: () => setModal({ mode: 'edit', destination }),
+            },
+            {
+              key: 'active',
+              label: destination.active ? tc('actions.deactivate') : tc('actions.activate'),
+              icon: destination.active ? 'bi-slash-circle' : 'bi-check-circle',
+              dangerous: destination.active,
+              onSelect: () => void toggleActive(destination),
+            },
+          ]}
+        />
       ),
     })
   }
@@ -184,7 +188,7 @@ export function DestinationsPage() {
       <FilterBar onSubmit={applyFilters} onReset={resetFilters}>
         <div>
           <label htmlFor="filter-code" className="form-label small mb-1">
-            Code
+            {tc('columns.code')}
           </label>
           <input
             id="filter-code"
@@ -195,7 +199,7 @@ export function DestinationsPage() {
         </div>
         <div>
           <label htmlFor="filter-name" className="form-label small mb-1">
-            Name
+            {tc('columns.name')}
           </label>
           <input
             id="filter-name"
@@ -206,7 +210,7 @@ export function DestinationsPage() {
         </div>
         <div>
           <label htmlFor="filter-type" className="form-label small mb-1">
-            Type
+            {tc('columns.type')}
           </label>
           <select
             id="filter-type"
@@ -214,7 +218,7 @@ export function DestinationsPage() {
             value={draftFilters.type}
             onChange={(event) => setDraftFilters({ ...draftFilters, type: event.target.value as DestinationType | '' })}
           >
-            <option value="">All types</option>
+            <option value="">{tc('filters.allTypes')}</option>
             {DESTINATION_TYPES.map((type) => (
               <option key={type} value={type}>
                 {DESTINATION_TYPE_LABELS[type]}
@@ -224,7 +228,7 @@ export function DestinationsPage() {
         </div>
         <div>
           <label htmlFor="filter-zone" className="form-label small mb-1">
-            Zone
+            {tc('columns.zone')}
           </label>
           <select
             id="filter-zone"
@@ -232,7 +236,7 @@ export function DestinationsPage() {
             value={draftFilters.zoneId}
             onChange={(event) => setDraftFilters({ ...draftFilters, zoneId: event.target.value })}
           >
-            <option value="">All zones</option>
+            <option value="">{tc('filters.allZones')}</option>
             {zones.map((zone) => (
               <option key={zone.id} value={zone.id}>
                 {zone.name}
@@ -242,7 +246,7 @@ export function DestinationsPage() {
         </div>
         <div>
           <label htmlFor="filter-active" className="form-label small mb-1">
-            Status
+            {tc('columns.status')}
           </label>
           <select
             id="filter-active"
@@ -250,9 +254,9 @@ export function DestinationsPage() {
             value={draftFilters.active}
             onChange={(event) => setDraftFilters({ ...draftFilters, active: event.target.value as ActiveFilter })}
           >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="all">All</option>
+            <option value="active">{tc('filters.statusActive')}</option>
+            <option value="inactive">{tc('filters.statusInactive')}</option>
+            <option value="all">{tc('filters.statusAll')}</option>
           </select>
         </div>
       </FilterBar>
@@ -266,8 +270,8 @@ export function DestinationsPage() {
             isLoading={destinationsQuery.isPending}
             error={destinationsQuery.isError ? describeApiError(destinationsQuery.error as ApiError) : null}
             onRetry={() => void destinationsQuery.refetch()}
-            emptyTitle="No destinations found"
-            emptyMessage="Create a destination or adjust your filters."
+            emptyTitle={t('destinations.empty.title')}
+            emptyMessage={t('destinations.empty.message')}
           />
         </div>
         {pageData && (
@@ -284,7 +288,7 @@ export function DestinationsPage() {
           onClose={() => setModal(null)}
           onSaved={() => {
             setModal(null)
-            notifySuccess(modal.mode === 'edit' ? 'Destination updated' : 'Destination created')
+            notifySuccess(modal.mode === 'edit' ? td('updated') : td('created'))
             refresh()
           }}
         />

@@ -1,26 +1,46 @@
 {
   "destinations": {
     "description": "Delivery and service points used to plan and build trips.",
+    "empty": {
+      "message": "Create a destination or adjust your filters.",
+      "title": "No destinations found"
+    },
     "new": "New destination",
     "title": "Destinations"
   },
   "frequencies": {
     "description": "Delivery schedules: weekly cadence, cutoff and lead-time rules.",
+    "empty": {
+      "message": "Create a frequency or adjust your filters.",
+      "title": "No frequencies found"
+    },
     "new": "New frequency",
     "title": "Frequencies"
   },
   "origins": {
     "description": "Loading and dispatch points used to plan and build trips.",
+    "empty": {
+      "message": "Create an origin or adjust your filters.",
+      "title": "No origins found"
+    },
     "new": "New origin",
     "title": "Origins"
   },
   "routes": {
     "description": "Master Route: a reusable planned corridor (an origin plus an ordered list of destination stops) that a planner sets up once and reuses. This is distinct from a Trip's calculated route, which does not exist yet and will be produced per shipment from live orders and capacity.",
+    "empty": {
+      "message": "Create a route or adjust your filters.",
+      "title": "No routes found"
+    },
     "new": "New route",
     "title": "Routes"
   },
   "zones": {
     "description": "Named operational areas used to group origins, destinations and routes.",
+    "empty": {
+      "message": "Create a zone or adjust your filters.",
+      "title": "No zones found"
+    },
     "new": "New zone",
     "title": "Zones"
   }

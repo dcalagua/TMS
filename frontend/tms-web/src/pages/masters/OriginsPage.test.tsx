@@ -83,7 +83,7 @@ describe('OriginsPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('No origins found')).toBeInTheDocument()
+    expect(await screen.findByText('Sin orígenes')).toBeInTheDocument()
   })
 
   it('shows an error state with a retry action when the request fails', async () => {
@@ -118,8 +118,7 @@ describe('OriginsPage', () => {
     await screen.findByText('NORTH-HUB')
 
     expect(screen.queryByRole('button', { name: 'Nuevo origen' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Abrir menú de acciones' })).not.toBeInTheDocument()
   })
 
   it('creates an origin through the modal and refreshes the list', async () => {
@@ -128,7 +127,7 @@ describe('OriginsPage', () => {
     originsApiMocks.createOrigin.mockResolvedValue({ ...ORIGIN, code: 'NEW-ORIGIN' })
 
     renderPage()
-    await screen.findByText('No origins found')
+    await screen.findByText('Sin orígenes')
 
     await userEvent.click(screen.getByRole('button', { name: 'Nuevo origen' }))
     const dialog = within(screen.getByRole('dialog'))
@@ -139,7 +138,7 @@ describe('OriginsPage', () => {
 
     await waitFor(() => expect(originsApiMocks.createOrigin).toHaveBeenCalledWith('company-1', expect.objectContaining({ code: 'NEW-ORIGIN' })))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Origin created')
+    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Registro creado')
   })
 
   it('deactivates an origin only after the confirmation dialog is accepted', async () => {
@@ -151,15 +150,17 @@ describe('OriginsPage', () => {
     renderPage()
     await screen.findByText('NORTH-HUB')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Desactivar' }))
     await waitFor(() => expect(alertMocks.confirmAction).toHaveBeenCalled())
     expect(originsApiMocks.deactivateOrigin).not.toHaveBeenCalled()
 
     alertMocks.confirmAction.mockResolvedValueOnce(true)
-    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Desactivar' }))
 
     await waitFor(() => expect(originsApiMocks.deactivateOrigin).toHaveBeenCalledWith('company-1', 'origin-1'))
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Origin deactivated', 'North Hub')
+    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Registro desactivado', 'North Hub')
   })
 
   it('applies the code filter to the query', async () => {
@@ -169,7 +170,7 @@ describe('OriginsPage', () => {
     renderPage()
     await screen.findByText('NORTH-HUB')
 
-    await userEvent.type(screen.getByLabelText(/^code$/i), 'north')
+    await userEvent.type(screen.getByLabelText(/^código$/i), 'north')
     await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
 
     await waitFor(() =>
