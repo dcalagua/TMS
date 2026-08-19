@@ -11,6 +11,8 @@ import java.net.URI;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -133,6 +135,44 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             ObjectOptimisticLockingFailureException failure, WebRequest request) {
         return respond(ApiProblems.of(ProblemType.CONFLICT,
                 "This record was changed by someone else since it was loaded. Reload and try again."), request);
+    }
+
+    /**
+     * The database refused a write that got past its service-level pre-check: a unique index or a
+     * check constraint fired. Services that can name the offending value catch this around their
+     * own {@code saveAndFlush} and rethrow a specific {@link ConflictException} (see
+     * {@code OrderService.saveOrConflict}, {@code TripAssignmentService.open}); this handler is the
+     * backstop for a violation that only surfaces at the transaction's own commit-time flush, so
+     * such a race answers 409 rather than 500.
+     *
+     * <p>The detail is generic on purpose. The exception's message carries the constraint name and
+     * often the offending values, which is schema information a caller has no business reading -
+     * it goes to the log with the correlation id instead.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ProblemDetail> handleDataIntegrityViolation(
+            DataIntegrityViolationException failure, WebRequest request) {
+        log.warn("Constraint violation [correlationId={}] on {}", CorrelationId.current().orElse("-"),
+                describe(request), failure);
+        return respond(ApiProblems.of(ProblemType.CONFLICT,
+                "This change conflicts with an existing record. Reload and try again."), request);
+    }
+
+    /**
+     * A row lock could not be taken: the deadlock detector chose this transaction as the victim, or
+     * a lock wait timed out. Planning takes {@code SELECT ... FOR UPDATE} on trips
+     * ({@code TripRepository.findByIdAndCompanyIdForUpdate}), and while every caller locks in
+     * ascending trip-id order to prevent it, a lock failure is still a concurrency outcome and not
+     * a server fault - the caller's correct reaction is to reload and retry, which is exactly what
+     * a 409 tells them.
+     */
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ResponseEntity<ProblemDetail> handlePessimisticLockingFailure(
+            PessimisticLockingFailureException failure, WebRequest request) {
+        log.warn("Lock acquisition failed [correlationId={}] on {}", CorrelationId.current().orElse("-"),
+                describe(request), failure);
+        return respond(ApiProblems.of(ProblemType.CONFLICT,
+                "Another user is editing this plan right now. Reload and try again."), request);
     }
 
     /** Bean Validation on a {@code @Validated} service or on query parameters. */

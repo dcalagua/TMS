@@ -6,7 +6,8 @@
 | `database/` | Schema notes, tenancy model and migration conventions |
 | `api/` | HTTP contract: base path, company scope header, error format, paging |
 | `domain/` | Business contracts per module: lifecycles, planning rules, capacity semantics |
-| `security/` | Security baseline, authentication and authorization model |
+| `security/` | Security baseline, authentication and authorization model, and the review record |
+| `performance/` | Measured query-shape and query-count baseline against the design target |
 | `overnight/` | Step-by-step reports produced by the unattended build sequence |
 
 ## Start here
@@ -43,3 +44,10 @@ silently diverging.
 15. [`domain/CAPACITY_MODEL.md`](domain/CAPACITY_MODEL.md) - how weight/volume/pallet utilisation
     is computed, when it is live and when it is frozen, and why a null limit and a zero limit are
     different answers.
+
+## Review records
+
+16. [`security/SECURITY_REVIEW.md`](security/SECURITY_REVIEW.md) - what was checked in the Step 12
+    security review, what was found and fixed, and the gaps deliberately left open.
+17. [`performance/PERFORMANCE_BASELINE.md`](performance/PERFORMANCE_BASELINE.md) - measured query
+    shape and query count against 10,000+ orders/day, and the accepted scale ceilings.

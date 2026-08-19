@@ -6,6 +6,7 @@ import com.ebim.tms.planning.domain.TripOrderAssignment;
 import com.ebim.tms.planning.domain.TripStatus;
 import com.ebim.tms.planning.domain.TripStop;
 import com.ebim.tms.planning.infrastructure.TripOrderAssignmentRepository;
+import com.ebim.tms.planning.infrastructure.TripStopRepository;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
@@ -35,15 +36,18 @@ import org.springframework.stereotype.Service;
 public class TripViewAssembler {
 
     private final TripOrderAssignmentRepository assignmentRepository;
+    private final TripStopRepository tripStopRepository;
     private final VehicleLookupPort vehicleLookupPort;
     private final DestinationLookupPort destinationLookupPort;
     private final OrderPlanningPort orderPlanningPort;
     private final PlanningCapacityService capacityService;
 
-    public TripViewAssembler(TripOrderAssignmentRepository assignmentRepository, VehicleLookupPort vehicleLookupPort,
+    public TripViewAssembler(TripOrderAssignmentRepository assignmentRepository,
+            TripStopRepository tripStopRepository, VehicleLookupPort vehicleLookupPort,
             DestinationLookupPort destinationLookupPort, OrderPlanningPort orderPlanningPort,
             PlanningCapacityService capacityService) {
         this.assignmentRepository = assignmentRepository;
+        this.tripStopRepository = tripStopRepository;
         this.vehicleLookupPort = vehicleLookupPort;
         this.destinationLookupPort = destinationLookupPort;
         this.orderPlanningPort = orderPlanningPort;
@@ -57,7 +61,12 @@ public class TripViewAssembler {
         }
         Map<UUID, CapacityLoad> loads = loadsOf(trips);
         Map<UUID, VehicleCapacityReference> vehicles = vehiclesOf(trips, companyId);
-        return trips.stream().map(trip -> toView(trip, loads.getOrDefault(trip.id(), CapacityLoad.EMPTY), vehicles))
+        // Counted in one grouped query rather than read from trip.stops(): that collection is
+        // lazy, so asking a board of 300 trips how many stops each has would issue 300 selects.
+        Map<UUID, Long> stopCounts = stopCountsOf(trips);
+        return trips.stream()
+                .map(trip -> toView(trip, loads.getOrDefault(trip.id(), CapacityLoad.EMPTY), vehicles,
+                        stopCounts.getOrDefault(trip.id(), 0L)))
                 .toList();
     }
 
@@ -75,7 +84,9 @@ public class TripViewAssembler {
 
         CapacityLoad load = CapacityLoad.of(
                 assignmentRepository.loadByTripId(trip.id(), AssignmentStatus.ACTIVE));
-        TripView view = toView(trip, load, vehiclesOf(List.of(trip), companyId));
+        // One trip: its stops are already being rendered below, so counting them in memory
+        // costs nothing extra - unlike the board above, this is not an N+1.
+        TripView view = toView(trip, load, vehiclesOf(List.of(trip), companyId), trip.stops().size());
 
         List<TripAssignmentView> assignmentViews = assignments.stream()
                 .map(assignment -> toAssignmentView(assignment, orders.get(assignment.orderId()), destinations))
@@ -127,13 +138,23 @@ public class TripViewAssembler {
         return loads;
     }
 
-    private TripView toView(Trip trip, CapacityLoad load, Map<UUID, VehicleCapacityReference> vehicles) {
+    private TripView toView(Trip trip, CapacityLoad load, Map<UUID, VehicleCapacityReference> vehicles,
+            long stopCount) {
         VehicleCapacityReference vehicle = trip.vehicleId() == null ? null : vehicles.get(trip.vehicleId());
         return new TripView(trip.id(), trip.planningRunId(), trip.tripNumber(), trip.status(), trip.vehicleId(),
                 vehicle == null ? null : vehicle.code(), vehicle == null ? null : vehicle.licensePlate(),
                 trip.carrierId(), vehicle == null ? null : vehicle.carrierName(), trip.plannedDepartureAt(),
-                summarize(trip, load, vehicles), trip.stops().size(), load.orderCount(), trip.version(),
+                summarize(trip, load, vehicles), (int) stopCount, load.orderCount(), trip.version(),
                 trip.createdAt(), trip.updatedAt());
+    }
+
+    private Map<UUID, Long> stopCountsOf(List<Trip> trips) {
+        Map<UUID, Long> counts = new HashMap<>();
+        for (TripStopRepository.TripStopCount count
+                : tripStopRepository.countByTripIds(trips.stream().map(Trip::id).toList())) {
+            counts.put(count.getTripId(), count.getStopCount());
+        }
+        return counts;
     }
 
     private static TripAssignmentView toAssignmentView(

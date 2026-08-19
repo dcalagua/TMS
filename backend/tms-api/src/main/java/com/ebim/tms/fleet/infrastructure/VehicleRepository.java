@@ -1,6 +1,8 @@
 package com.ebim.tms.fleet.infrastructure;
 
 import com.ebim.tms.fleet.domain.Vehicle;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -10,6 +12,14 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 public interface VehicleRepository extends JpaRepository<Vehicle, UUID>, JpaSpecificationExecutor<Vehicle> {
 
     Optional<Vehicle> findByIdAndCompanyId(UUID id, UUID companyId);
+
+    /**
+     * The batched sibling of {@link #findByIdAndCompanyId}, for resolving a page's worth of
+     * references in one query. The company predicate is in the query rather than applied to the
+     * result in Java: a row of another tenant must never be loaded at all, not merely discarded
+     * after loading.
+     */
+    List<Vehicle> findByIdInAndCompanyId(Collection<UUID> ids, UUID companyId);
 
     boolean existsByCompanyIdAndCode(UUID companyId, String code);
 

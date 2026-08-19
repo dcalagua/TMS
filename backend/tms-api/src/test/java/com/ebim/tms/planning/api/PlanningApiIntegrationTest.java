@@ -13,6 +13,7 @@ import com.ebim.tms.database.PostgresTestDatabase;
 import com.ebim.tms.shared.api.ApiHeaders;
 import com.ebim.tms.shared.security.TestJwts;
 import com.jayway.jsonpath.JsonPath;
+import jakarta.persistence.EntityManagerFactory;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
@@ -24,6 +25,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -85,6 +88,9 @@ class PlanningApiIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
 
     private String adminToken;
     private String viewerToken;
@@ -720,6 +726,94 @@ class PlanningApiIntegrationTest {
                                 """.formatted(vehicle("STALE-2", "10000", "40", 20))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("changed by someone else")));
+    }
+
+    @Test
+    @DisplayName("the board costs the same number of queries whatever the fleet size (no N+1 on stops)")
+    void boardQueryCountDoesNotGrowWithTheNumberOfTrips() throws Exception {
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        boolean wasEnabled = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        try {
+            long oneTrip = statementsToRenderBoard(1);
+            long fiveTrips = statementsToRenderBoard(5);
+
+            // Every per-trip fact the board shows - load, capacity, vehicle, stop count - is
+            // resolved by a grouped or batched query, so four extra trips must cost nothing.
+            // Before TripViewAssembler counted stops in one query, each extra trip triggered the
+            // lazy Trip.stops() collection and cost exactly one more statement.
+            assertThat(fiveTrips)
+                    .as("rendering a board of 5 trips took %d statements against %d for a board of 1: "
+                            + "the per-trip cost is back", fiveTrips, oneTrip)
+                    .isEqualTo(oneTrip);
+        } finally {
+            statistics.setStatisticsEnabled(wasEnabled);
+        }
+    }
+
+    /**
+     * Opens a run with {@code tripCount} trips, each carrying one order (so each has a stop), and
+     * returns the number of JDBC statements the single board read costs.
+     */
+    private long statementsToRenderBoard(int tripCount) throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        for (int i = 0; i < tripCount; i++) {
+            String trip = newTrip(run, vehicle("BOARD" + tripCount + "-" + i, "20000", "80", 40));
+            assign(trip, order(COMPANY_A, originA, destinationA1, date, "100", "1", "1", "READY_FOR_PLANNING"))
+                    .andExpect(status().isOk());
+        }
+
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        statistics.clear();
+        mockMvc.perform(asAdmin(get(PLANNING + "/runs/" + run.id()), COMPANY_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trips.length()").value(tripCount))
+                .andExpect(jsonPath("$.trips[0].stopCount").value(1));
+        return statistics.getPrepareStatementCount();
+    }
+
+    @Test
+    @DisplayName("confirming a run while an order is moved between its trips never fails with a server error")
+    void confirmDoesNotDeadlockAgainstAConcurrentMove() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String tripOne = newTrip(run, vehicle("LOCK-1", "20000", "80", 40));
+        String tripTwo = newTrip(run, vehicle("LOCK-2", "20000", "80", 40));
+        String moving = order(COMPANY_A, originA, destinationA1, date, "100", "1", "1", "READY_FOR_PLANNING");
+        assign(tripOne, moving).andExpect(status().isOk());
+        assign(tripTwo, order(COMPANY_A, originA, destinationA2, date, "100", "1", "1", "READY_FOR_PLANNING"))
+                .andExpect(status().isOk());
+
+        // Confirm walks the run's trips; the move walks two of them. Both take the same row locks,
+        // and before both were ordered by trip id one of the two orders was by trip number - the
+        // classic ABBA deadlock, which PostgreSQL resolves by killing a transaction and which
+        // reached the caller as a 500. Either request may legitimately lose to the other with a
+        // 409 or a 404; neither may ever be a server error.
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            CyclicBarrier barrier = new CyclicBarrier(2);
+            Future<Integer> confirming = pool.submit(() -> {
+                barrier.await(15, TimeUnit.SECONDS);
+                return mockMvc.perform(asAdmin(post(PLANNING + "/runs/" + run.id() + "/confirm"), COMPANY_A)
+                                .contentType(MediaType.APPLICATION_JSON).content("{\"version\":0}"))
+                        .andReturn().getResponse().getStatus();
+            });
+            Future<Integer> moving2 = pool.submit(() -> {
+                barrier.await(15, TimeUnit.SECONDS);
+                return mockMvc.perform(asAdmin(
+                                post(TRIPS + "/" + tripOne + "/assignments/" + moving + "/move"), COMPANY_A)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"targetTripId\":\"" + tripTwo + "\"}"))
+                        .andReturn().getResponse().getStatus();
+            });
+
+            assertThat(List.of(confirming.get(30, TimeUnit.SECONDS), moving2.get(30, TimeUnit.SECONDS)))
+                    .as("a lock conflict must surface as a conflict, never as a server error")
+                    .allSatisfy(statusCode -> assertThat(statusCode).isLessThan(500));
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     // --- helpers ------------------------------------------------------------------

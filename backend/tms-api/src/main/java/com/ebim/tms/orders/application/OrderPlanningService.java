@@ -88,10 +88,8 @@ public class OrderPlanningService implements OrderPlanningPort {
         if (ids.isEmpty()) {
             return byId;
         }
-        for (TransportOrder order : transportOrderRepository.findAllById(ids)) {
-            if (order.companyId().equals(companyId)) {
-                byId.put(order.id(), toPlannable(order));
-            }
+        for (TransportOrder order : transportOrderRepository.findByIdInAndCompanyId(ids, companyId)) {
+            byId.put(order.id(), toPlannable(order));
         }
         return byId;
     }

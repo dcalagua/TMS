@@ -36,10 +36,8 @@ class OriginLookupAdapter implements OriginLookupPort {
         if (ids.isEmpty()) {
             return byId;
         }
-        for (Origin origin : originRepository.findAllById(ids)) {
-            if (origin.companyId().equals(companyId)) {
-                byId.put(origin.id(), toReference(origin));
-            }
+        for (Origin origin : originRepository.findByIdInAndCompanyId(ids, companyId)) {
+            byId.put(origin.id(), toReference(origin));
         }
         return byId;
     }

@@ -10,6 +10,7 @@ import com.ebim.tms.fleet.infrastructure.VehicleTypeRepository;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -66,22 +67,20 @@ public class VehicleLookupService implements VehicleLookupPort {
             return byId;
         }
 
-        var vehicles = vehicleRepository.findAllById(ids).stream()
-                .filter(vehicle -> vehicle.companyId().equals(companyId))
-                .toList();
+        List<Vehicle> vehicles = vehicleRepository.findByIdInAndCompanyId(ids, companyId);
         if (vehicles.isEmpty()) {
             return byId;
         }
 
         Map<UUID, VehicleType> types = vehicleTypeRepository
-                .findAllById(vehicles.stream().map(Vehicle::vehicleTypeId).collect(Collectors.toSet())).stream()
+                .findByIdInAndCompanyId(vehicles.stream().map(Vehicle::vehicleTypeId).collect(Collectors.toSet()),
+                        companyId).stream()
                 .collect(Collectors.toMap(VehicleType::id, type -> type));
         Set<UUID> carrierIds =
                 vehicles.stream().map(Vehicle::carrierId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<UUID, String> carrierNames = carrierIds.isEmpty()
                 ? Map.of()
-                : carrierRepository.findAllById(carrierIds).stream()
-                        .filter(carrier -> carrier.companyId().equals(companyId))
+                : carrierRepository.findByIdInAndCompanyId(carrierIds, companyId).stream()
                         .collect(Collectors.toMap(Carrier::id, Carrier::businessName));
 
         for (Vehicle vehicle : vehicles) {

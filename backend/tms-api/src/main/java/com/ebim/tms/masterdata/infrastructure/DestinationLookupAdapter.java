@@ -33,10 +33,8 @@ class DestinationLookupAdapter implements DestinationLookupPort {
         if (ids.isEmpty()) {
             return byId;
         }
-        for (Destination destination : destinationRepository.findAllById(ids)) {
-            if (destination.companyId().equals(companyId)) {
-                byId.put(destination.id(), toReference(destination));
-            }
+        for (Destination destination : destinationRepository.findByIdInAndCompanyId(ids, companyId)) {
+            byId.put(destination.id(), toReference(destination));
         }
         return byId;
     }

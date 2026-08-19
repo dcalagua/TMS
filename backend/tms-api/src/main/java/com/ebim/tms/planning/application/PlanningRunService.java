@@ -25,6 +25,7 @@ import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -169,10 +170,13 @@ public class PlanningRunService {
         }
 
         UUID actorId = auditActorProvider.requireAppUserId();
+        // Locked by trip id, then validated in trip-number order: the lock order has to be the
+        // same one TripService.moveOrder uses, or a confirm and a concurrent move between two
+        // trips of this run would each hold the lock the other is waiting for. The error message
+        // a planner reads still follows the trip numbers they see on the board.
+        Map<UUID, Trip> locked = lockTrips(scope, plannedTrips);
         for (Trip unlocked : plannedTrips) {
-            Trip trip = tripRepository.findByIdAndCompanyIdForUpdate(unlocked.id(), scope.companyId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Trip not found."));
-            confirmTrip(scope, run, trip, actorId);
+            confirmTrip(scope, run, locked.get(unlocked.id()), actorId);
         }
 
         run.confirm(actorId);
@@ -190,12 +194,12 @@ public class PlanningRunService {
 
         UUID actorId = auditActorProvider.requireAppUserId();
         String reason = blankToNull(request.reason());
-        for (Trip unlocked : tripRepository.findByPlanningRunIdOrderByTripNumberAsc(run.id())) {
-            if (unlocked.status() == TripStatus.CANCELLED) {
-                continue;
-            }
-            Trip trip = tripRepository.findByIdAndCompanyIdForUpdate(unlocked.id(), scope.companyId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Trip not found."));
+        List<Trip> openTrips = tripRepository.findByPlanningRunIdOrderByTripNumberAsc(run.id()).stream()
+                .filter(trip -> trip.status() != TripStatus.CANCELLED)
+                .toList();
+        Map<UUID, Trip> locked = lockTrips(scope, openTrips);
+        for (Trip unlocked : openTrips) {
+            Trip trip = locked.get(unlocked.id());
             assignments.releaseAll(trip, reason == null ? "Planning run cancelled" : reason, actorId);
             trip.cancel(reason, actorId);
             tripRepository.saveAndFlush(trip);
@@ -203,6 +207,26 @@ public class PlanningRunService {
 
         run.cancel(reason, actorId);
         return toDetail(scope, save(run));
+    }
+
+    /**
+     * Takes the row lock of every given trip, always in ascending trip-id order.
+     *
+     * <p>The order is the contract, not an implementation detail: {@code TripService.moveOrder}
+     * locks its two trips by id for the same reason, and a run-wide operation that locked by trip
+     * number instead would produce the classic ABBA deadlock against a concurrent move between
+     * the same two trips. See {@code TripRepository.findByIdAndCompanyIdForUpdate} and
+     * {@code docs/domain/PLANNING_MANUAL_V1.md}, "Concurrency".
+     *
+     * @return the locked, managed trips by id, so callers can still iterate in whatever order
+     *     their user-facing messages need
+     */
+    private Map<UUID, Trip> lockTrips(CompanyScope scope, List<Trip> trips) {
+        Map<UUID, Trip> locked = new LinkedHashMap<>();
+        trips.stream().map(Trip::id).sorted().forEach(tripId ->
+                locked.put(tripId, tripRepository.findByIdAndCompanyIdForUpdate(tripId, scope.companyId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Trip not found."))));
+        return locked;
     }
 
     private void confirmTrip(CompanyScope scope, PlanningRun run, Trip trip, UUID actorId) {
