@@ -143,7 +143,13 @@ export function CarrierFormDrawer({ companyId, carrier, onClose, onSaved }: Carr
                 />
               </FormField>
             </div>
-            <div className="col-12 col-sm-4">
+          </div>
+        </fieldset>
+
+        <fieldset className="tms-fieldset">
+          <legend className="tms-fieldset-legend">{tc('sections.document')}</legend>
+          <div className="row">
+            <div className="col-12 col-sm-5">
               <FormField
                 label={tc('fields.taxIdType')}
                 htmlFor="carrier-tax-id-type"
@@ -161,7 +167,7 @@ export function CarrierFormDrawer({ companyId, carrier, onClose, onSaved }: Carr
                 />
               </FormField>
             </div>
-            <div className="col-12 col-sm-8">
+            <div className="col-12 col-sm-7">
               <FormField
                 label={tc('fields.taxIdValue')}
                 htmlFor="carrier-tax-id-value"
@@ -184,7 +190,7 @@ export function CarrierFormDrawer({ companyId, carrier, onClose, onSaved }: Carr
         <fieldset className="tms-fieldset mb-0">
           <legend className="tms-fieldset-legend">{tc('sections.contact')}</legend>
           <div className="row">
-            <div className="col-12 col-sm-5">
+            <div className="col-12 col-sm-12">
               <FormField
                 label={tc('fields.contactName')}
                 htmlFor="carrier-contact-name"
@@ -197,7 +203,7 @@ export function CarrierFormDrawer({ companyId, carrier, onClose, onSaved }: Carr
                 />
               </FormField>
             </div>
-            <div className="col-12 col-sm-3">
+            <div className="col-12 col-sm-5">
               <FormField label={tc('columns.phone')} htmlFor="carrier-phone" error={errors.phone?.message}>
                 <input
                   id="carrier-phone"
@@ -207,7 +213,7 @@ export function CarrierFormDrawer({ companyId, carrier, onClose, onSaved }: Carr
                 />
               </FormField>
             </div>
-            <div className="col-12 col-sm-4">
+            <div className="col-12 col-sm-7">
               <FormField label={tc('fields.email')} htmlFor="carrier-email" error={errors.email?.message}>
                 <input
                   id="carrier-email"

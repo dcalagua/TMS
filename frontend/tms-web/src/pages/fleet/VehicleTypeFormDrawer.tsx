@@ -168,7 +168,7 @@ export function VehicleTypeFormDrawer({ companyId, vehicleType, onClose, onSaved
         <fieldset className="tms-fieldset">
           <legend className="tms-fieldset-legend">{tc('sections.identification')}</legend>
           <div className="row">
-            <div className="col-12 col-sm-3">
+            <div className="col-12 col-sm-6">
               <FormField label={tc('columns.code')} htmlFor="vehicle-type-code" error={errors.code?.message} required>
                 <input
                   id="vehicle-type-code"
@@ -181,7 +181,7 @@ export function VehicleTypeFormDrawer({ companyId, vehicleType, onClose, onSaved
                 />
               </FormField>
             </div>
-            <div className="col-12 col-sm-6">
+            <div className="col-12 col-sm-12">
               <FormField label={tc('columns.name')} htmlFor="vehicle-type-name" error={errors.name?.message} required>
                 <input
                   id="vehicle-type-name"
@@ -193,7 +193,7 @@ export function VehicleTypeFormDrawer({ companyId, vehicleType, onClose, onSaved
                 />
               </FormField>
             </div>
-            <div className="col-12 col-sm-3">
+            <div className="col-12 col-sm-6">
               <FormField label={tc('fields.bodyType')} htmlFor="vehicle-type-body-type" error={errors.bodyType?.message}>
                 <select id="vehicle-type-body-type" className="form-select" {...register('bodyType')}>
                   <option value="">{t('vehicleTypes.form.noBodyType')}</option>
