@@ -11,6 +11,8 @@ import { RoutesPage } from '../pages/masters/RoutesPage'
 import { ZonesPage } from '../pages/masters/ZonesPage'
 import { NotFoundPage } from '../pages/NotFoundPage'
 import { OrdersPage } from '../pages/orders/OrdersPage'
+import { PlanningBoardPage } from '../pages/planning/PlanningBoardPage'
+import { PlanningRunsPage } from '../pages/planning/PlanningRunsPage'
 import { PlaceholderPage } from '../pages/PlaceholderPage'
 import { ProtectedRoute } from '../shared/auth/ProtectedRoute'
 import { RequireCompany } from '../shared/company/RequireCompany'
@@ -38,7 +40,8 @@ export const router = createBrowserRouter([
               { path: 'fleet/vehicle-types', element: <VehicleTypesPage /> },
               { path: 'fleet/vehicles', element: <VehiclesPage /> },
               { path: 'orders', element: <OrdersPage /> },
-              { path: 'planning', element: <PlaceholderPage title="Planning" /> },
+              { path: 'planning', element: <PlanningRunsPage /> },
+              { path: 'planning/:runId', element: <PlanningBoardPage /> },
               { path: 'trips', element: <PlaceholderPage title="Trips" /> },
               { path: 'admin/security', element: <PlaceholderPage title="Security" /> },
             ],

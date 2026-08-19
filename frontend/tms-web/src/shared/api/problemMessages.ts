@@ -40,3 +40,19 @@ export function isAuthProblem(error: ApiError): boolean {
 export function isCompanyScopeStale(error: ApiError): boolean {
   return error.code === 'company-scope-forbidden'
 }
+
+/**
+ * Prefers the backend's own `detail` over the generic per-code copy, for the one family of
+ * screens where that is the documented contract: planning's `conflict`/`malformed-request`
+ * refusals are written server-side to be shown to a planner verbatim - capacity failures name
+ * every dimension that failed, eligibility failures name the origin/date mismatch
+ * (`docs/domain/CAPACITY_MODEL.md`, "The frontend is never trusted";
+ * `docs/domain/PLANNING_MANUAL_V1.md` section 5). Every other screen keeps using
+ * `describeApiError` so `detail` wording changes cannot silently alter their copy.
+ */
+export function describePlanningError(error: ApiError): string {
+  if ((error.code === 'conflict' || error.code === 'malformed-request') && error.problem?.detail) {
+    return error.problem.detail
+  }
+  return describeApiError(error)
+}
