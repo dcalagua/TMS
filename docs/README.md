@@ -54,3 +54,8 @@ silently diverging.
 18. [`overnight/TEST_EVIDENCE.md`](overnight/TEST_EVIDENCE.md) - the Step 13 verification record:
     exact commands, test counts, migration replay, the eleven-step API smoke flow, tenant
     isolation, repository hygiene, and what was blocked and why.
+19. [`overnight/FINAL_REPORT.md`](overnight/FINAL_REPORT.md) - the Step 14 audit and morning
+    handoff: what exists, what is scaffold, the module inventory, the data model, the security
+    posture, the test and Git evidence, the P0-P3 findings and the recommended next work.
+20. [`overnight/NEXT_STEPS.md`](overnight/NEXT_STEPS.md) - the short actionable roadmap with an
+    acceptance gate per item.
