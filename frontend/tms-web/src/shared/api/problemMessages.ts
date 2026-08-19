@@ -1,4 +1,4 @@
-import type { ApiError, ProblemCode } from './httpClient'
+import { isAuthFailureResponse, type ApiError, type ProblemCode } from './httpClient'
 
 /**
  * User-facing text for each backend `code` (`docs/api/API_CONVENTIONS.md` section 4.1).
@@ -31,9 +31,10 @@ export function describeApiError(error: ApiError): string {
   return FALLBACK_MESSAGE
 }
 
-/** True for the two codes that mean "the bearer token is no good any more". */
+/** True for the two codes that mean "the bearer token is no good any more". Delegates to
+ * `httpClient` so the UI and the retry logic cannot disagree about what an auth failure is. */
 export function isAuthProblem(error: ApiError): boolean {
-  return error.status === 401 || error.code === 'unauthenticated' || error.code === 'invalid-token'
+  return isAuthFailureResponse(error.status, error.code)
 }
 
 /** True for the one code that means "re-fetch `/me`, the company selection is stale". */

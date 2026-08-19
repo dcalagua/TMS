@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, apiRequest, onApiResponseError, setAuthTokenProvider } from './httpClient'
+import {
+  ApiError,
+  apiRequest,
+  onApiResponseError,
+  resetAuthRefreshState,
+  setAuthRefreshHandler,
+  setAuthTokenProvider,
+} from './httpClient'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -27,6 +34,8 @@ function problemResponse(overrides: Record<string, unknown> = {}, status = 403):
 afterEach(() => {
   vi.restoreAllMocks()
   setAuthTokenProvider(() => null)
+  setAuthRefreshHandler(() => Promise.resolve(null))
+  resetAuthRefreshState()
 })
 
 describe('apiRequest', () => {
@@ -103,5 +112,99 @@ describe('apiRequest', () => {
     expect(handler).toHaveBeenCalledTimes(1)
     expect(handler.mock.calls[0]?.[0]).toMatchObject({ code: 'unauthenticated' })
     unsubscribe()
+  })
+})
+
+describe('authentication recovery', () => {
+  it('replays a 401 once with the refreshed token and returns the retried result', async () => {
+    setAuthTokenProvider(() => 'stale-token')
+    setAuthRefreshHandler(() => Promise.resolve('renewed-token'))
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      const headers = (init?.headers ?? {}) as Record<string, string>
+      return headers.Authorization === 'Bearer renewed-token'
+        ? jsonResponse({ recovered: true })
+        : jsonResponse({ code: 'unauthenticated' }, 401)
+    })
+
+    await expect(apiRequest('/orders')).resolves.toEqual({ recovered: true })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('gives up after one retry so a permanently rejecting backend cannot cause a loop', async () => {
+    setAuthTokenProvider(() => 'stale-token')
+    setAuthRefreshHandler(() => Promise.resolve('renewed-token'))
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => jsonResponse({ code: 'invalid-token' }, 401))
+    const handler = vi.fn()
+    const unsubscribe = onApiResponseError(handler)
+
+    await expect(apiRequest('/orders')).rejects.toMatchObject({ code: 'invalid-token' })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(handler).toHaveBeenCalledTimes(1)
+    unsubscribe()
+  })
+
+  it('reports nothing to error handlers when the retry succeeds', async () => {
+    setAuthTokenProvider(() => 'stale-token')
+    setAuthRefreshHandler(() => Promise.resolve('renewed-token'))
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      const headers = (init?.headers ?? {}) as Record<string, string>
+      return headers.Authorization === 'Bearer renewed-token' ? jsonResponse({}) : jsonResponse({ code: 'unauthenticated' }, 401)
+    })
+    const handler = vi.fn()
+    const unsubscribe = onApiResponseError(handler)
+
+    await apiRequest('/orders')
+
+    expect(handler).not.toHaveBeenCalled()
+    unsubscribe()
+  })
+
+  it('refreshes once for many requests failing together, not once per request', async () => {
+    setAuthTokenProvider(() => 'stale-token')
+    const refresh = vi.fn(() => Promise.resolve('renewed-token'))
+    setAuthRefreshHandler(refresh)
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      const headers = (init?.headers ?? {}) as Record<string, string>
+      return headers.Authorization === 'Bearer renewed-token' ? jsonResponse({}) : jsonResponse({ code: 'unauthenticated' }, 401)
+    })
+
+    await Promise.all([apiRequest('/a'), apiRequest('/b'), apiRequest('/c')])
+
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not retry when the refresh cannot produce a different token', async () => {
+    setAuthTokenProvider(() => 'stale-token')
+    setAuthRefreshHandler(() => Promise.resolve('stale-token'))
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => jsonResponse({ code: 'unauthenticated' }, 401))
+
+    await expect(apiRequest('/orders')).rejects.toBeInstanceOf(ApiError)
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('never retries a failure that is not an authentication failure', async () => {
+    setAuthTokenProvider(() => 'token')
+    const refresh = vi.fn(() => Promise.resolve('renewed-token'))
+    setAuthRefreshHandler(refresh)
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => problemResponse({}, 403))
+
+    await expect(apiRequest('/orders')).rejects.toMatchObject({ status: 403 })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a refresh that throws as an unrecoverable failure instead of propagating it', async () => {
+    setAuthTokenProvider(() => 'stale-token')
+    setAuthRefreshHandler(() => Promise.reject(new Error('network down')))
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse({ code: 'unauthenticated' }, 401))
+
+    await expect(apiRequest('/orders')).rejects.toMatchObject({ code: 'unauthenticated' })
   })
 })

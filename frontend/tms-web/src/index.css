@@ -10,6 +10,13 @@ body {
   font-size: 0.9375rem;
 }
 
+/* Bootstrap ships no min-width utility. A flex item defaults to `min-width: auto`, which
+   resolves against its content: one wide table then stretches the whole shell and the page
+   gains a horizontal scrollbar. Every flex item that wraps scrollable content needs this. */
+.tms-min-w-0 {
+  min-width: 0;
+}
+
 /* Dense operational tables: many rows must stay readable on one screen. */
 .table-dense > :not(caption) > * > * {
   padding: 0.35rem 0.5rem;

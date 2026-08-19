@@ -2,17 +2,23 @@ import { CompanySelector } from './CompanySelector'
 import { SIDEBAR_ID } from './Sidebar'
 import { UserMenu } from './UserMenu'
 
+export interface TopBarProps {
+  /** Reflects the mobile drawer state so the toggle can expose `aria-expanded` honestly. */
+  navOpen: boolean
+  onToggleNav: () => void
+}
+
 /** Fixed top bar: brand, mobile sidebar toggle, company selector, user menu. */
-export function TopBar() {
+export function TopBar({ navOpen, onToggleNav }: TopBarProps) {
   return (
     <nav className="navbar navbar-dark bg-dark border-bottom border-secondary-subtle">
       <div className="container-fluid gap-2">
         <button
           type="button"
           className="btn btn-outline-light d-lg-none"
-          data-bs-toggle="offcanvas"
-          data-bs-target={`#${SIDEBAR_ID}`}
+          onClick={onToggleNav}
           aria-controls={SIDEBAR_ID}
+          aria-expanded={navOpen}
           aria-label="Toggle navigation"
         >
           <span className="navbar-toggler-icon" />

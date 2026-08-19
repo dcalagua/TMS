@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, type RouteObject } from 'react-router-dom'
 import { DashboardPage } from '../pages/DashboardPage'
 import { CarriersPage } from '../pages/fleet/CarriersPage'
 import { VehicleTypesPage } from '../pages/fleet/VehicleTypesPage'
@@ -18,7 +18,10 @@ import { ProtectedRoute } from '../shared/auth/ProtectedRoute'
 import { RequireCompany } from '../shared/company/RequireCompany'
 import { AppLayout } from '../shared/ui/AppLayout'
 
-export const router = createBrowserRouter([
+/** The route table, separate from the browser router so tests can mount the very same routes
+ * under a memory router. A navigation test that asserts against a hand-written copy of the
+ * route table proves nothing about the app's real one. */
+export const appRoutes: RouteObject[] = [
   { path: '/login', element: <LoginPage /> },
   {
     path: '/',
@@ -51,4 +54,6 @@ export const router = createBrowserRouter([
       },
     ],
   },
-])
+]
+
+export const router = createBrowserRouter(appRoutes)

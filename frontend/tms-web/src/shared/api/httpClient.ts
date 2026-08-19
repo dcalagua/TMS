@@ -65,10 +65,20 @@ export class ApiError extends Error {
   }
 }
 
+/** The two `code` values meaning "this bearer token is not accepted any more". A bare 401
+ * counts too: it is what the backend answers when no `Authorization` header arrived at all. */
+const AUTH_FAILURE_CODES: ReadonlySet<string> = new Set(['unauthenticated', 'invalid-token'])
+
+/** Shared by the retry logic here and by `problemMessages.isAuthProblem`, so "is this an
+ * authentication failure?" has exactly one definition in the app. */
+export function isAuthFailureResponse(status: number, code: string | null): boolean {
+  return status === 401 || (code !== null && AUTH_FAILURE_CODES.has(code))
+}
+
 /**
- * Supplies the bearer token for outgoing requests. `AuthContext` registers the Supabase
- * Auth session here; until a session exists requests go out unauthenticated and the
- * backend answers 401, which is the correct behaviour.
+ * Supplies the bearer token for outgoing requests. `AuthContext` registers a synchronous
+ * reader over the session it currently holds; until a session exists requests go out
+ * unauthenticated and the backend answers 401, which is the correct behaviour.
  */
 type TokenProvider = () => Promise<string | null> | string | null
 
@@ -79,9 +89,48 @@ export function setAuthTokenProvider(provider: TokenProvider): void {
 }
 
 /**
+ * Attempts to obtain a fresh access token for a request the backend just rejected, resolving
+ * to `null` when the session genuinely cannot be recovered. Registered by `AuthContext`; the
+ * default refuses, so an app that never registers one simply never retries.
+ */
+type AuthRefreshHandler = () => Promise<string | null>
+
+let authRefreshHandler: AuthRefreshHandler = () => Promise.resolve(null)
+
+export function setAuthRefreshHandler(handler: AuthRefreshHandler): void {
+  authRefreshHandler = handler
+}
+
+let inFlightRefresh: Promise<string | null> | null = null
+
+/**
+ * Single-flight refresh. Several screens failing with 401 at the same instant must produce one
+ * refresh, not one each - otherwise a page with six queries fires six refreshes and the later
+ * ones invalidate the token the earlier ones just obtained.
+ */
+function refreshAuthOnce(): Promise<string | null> {
+  inFlightRefresh ??= Promise.resolve()
+    .then(() => authRefreshHandler())
+    .catch(() => null)
+    .finally(() => {
+      inFlightRefresh = null
+    })
+  return inFlightRefresh
+}
+
+/** Test seam: drops any in-flight refresh so one test cannot leak state into the next. */
+export function resetAuthRefreshState(): void {
+  inFlightRefresh = null
+}
+
+/**
  * Central reaction to a failed response, registered by the auth/company layers instead of
  * being handled ad hoc at every call site. Handlers must not issue new requests synchronously
  * from within the callback - that is how a 401 handler causes an infinite refresh loop.
+ *
+ * An authentication failure reaches here only after the single refresh+retry below has already
+ * failed, so a handler that signs the user out can trust the session is really unrecoverable
+ * rather than merely stale.
  */
 type ResponseErrorHandler = (error: ApiError) => void
 
@@ -90,6 +139,12 @@ const responseErrorHandlers = new Set<ResponseErrorHandler>()
 export function onApiResponseError(handler: ResponseErrorHandler): () => void {
   responseErrorHandlers.add(handler)
   return () => responseErrorHandlers.delete(handler)
+}
+
+function reportResponseError(error: ApiError): void {
+  for (const handler of responseErrorHandlers) {
+    handler(error)
+  }
 }
 
 function generateCorrelationId(): string {
@@ -128,10 +183,14 @@ async function parseBody(response: Response): Promise<unknown> {
   return contentType.includes('json') ? response.json() : response.text()
 }
 
-/** Performs a JSON request against the TMS backend. */
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+interface Attempt {
+  ok: boolean
+  payload: unknown
+  error: ApiError | null
+}
+
+async function sendRequest(path: string, options: RequestOptions, token: string | null): Promise<Attempt> {
   const { method = 'GET', body, signal, query, companyId } = options
-  const token = await tokenProvider()
   const correlationId = generateCorrelationId()
 
   const headers: Record<string, string> = {
@@ -157,19 +216,52 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   const payload = await parseBody(response)
 
-  if (!response.ok) {
-    const problem = isProblemDetails(payload) ? payload : null
-    const error = new ApiError(
-      response.status,
-      problem,
-      response.headers.get(CORRELATION_ID_HEADER) ?? correlationId,
-      `${method} ${path} failed with ${response.status}`,
-    )
-    for (const handler of responseErrorHandlers) {
-      handler(error)
-    }
-    throw error
+  if (response.ok) {
+    return { ok: true, payload, error: null }
   }
 
-  return payload as T
+  const problem = isProblemDetails(payload) ? payload : null
+  const error = new ApiError(
+    response.status,
+    problem,
+    response.headers.get(CORRELATION_ID_HEADER) ?? correlationId,
+    `${method} ${path} failed with ${response.status}`,
+  )
+  return { ok: false, payload, error }
+}
+
+/**
+ * Performs a JSON request against the TMS backend.
+ *
+ * An authentication failure gets exactly one recovery attempt: refresh the session, and replay
+ * the request once if that produced a different token. There is no second retry and no retry
+ * for any other status, so a backend that keeps answering 401 costs one extra request in
+ * total rather than looping.
+ */
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const token = (await tokenProvider()) ?? null
+  const attempt = await sendRequest(path, options, token)
+
+  if (attempt.ok) {
+    return attempt.payload as T
+  }
+
+  const error = attempt.error as ApiError
+
+  if (isAuthFailureResponse(error.status, error.code) && options.signal?.aborted !== true) {
+    const refreshedToken = await refreshAuthOnce()
+
+    if (refreshedToken !== null && refreshedToken !== token) {
+      const retry = await sendRequest(path, options, refreshedToken)
+      if (retry.ok) {
+        return retry.payload as T
+      }
+      const retryError = retry.error as ApiError
+      reportResponseError(retryError)
+      throw retryError
+    }
+  }
+
+  reportResponseError(error)
+  throw error
 }
