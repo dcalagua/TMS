@@ -1,18 +1,16 @@
--- TMS by EBIM - LOCAL DEVELOPMENT AUTH USERS. NOT A MIGRATION. LOCAL STACK ONLY.
+-- TMS by EBIM - DEMO AUTH ACCOUNTS. NOT A MIGRATION.
 --
 -- ===========================================================================================
---  DO NOT RUN THIS AGAINST A HOSTED OR SHARED DATABASE.
+--  DISPOSABLE ENVIRONMENTS ONLY: a local stack, or a demo/QA project holding demo data.
+--  NEVER against production.
 --
---  It writes accounts whose password is committed to this repository in plain text. That is
---  acceptable for a disposable local stack listening on 127.0.0.1 and nowhere else. On a
---  hosted project the same statements publish three known-password accounts to the internet.
---  For a deployment, create users through the Supabase Admin API or Studio instead, and then
---  run only the final section of this file to link them.
+--  The password is supplied on the command line, never stored in this file, so the repository
+--  does not carry a working credential for any hosted environment.
 -- ===========================================================================================
 --
 -- Companion to `local_dev_seed.sql`, which creates the organization, companies, app users,
 -- memberships and roles. That file leaves `tms.app_user.auth_user_id` NULL. This one creates
--- the matching Supabase Auth accounts and fills that column in.
+-- the missing Supabase Auth accounts and fills that column in.
 --
 -- Filling it in is not optional. `PrincipalResolutionService` resolves the caller strictly by
 -- `WHERE auth_user_id = :authUserId` (JdbcIdentityRepository) - there is no fallback by email
@@ -21,23 +19,37 @@
 -- but not provisioned". The header comment in `local_dev_seed.sql` still suggests otherwise;
 -- it predates the implementation.
 --
--- Order:
---     1. supabase start
---     2. backend migrations (Flyway, via the application or `mvnw flyway:migrate`)
---     3. psql -f supabase/seeds/local_dev_seed.sql
---     4. psql -f supabase/seeds/local_dev_auth_users.sql      <- this file
+-- Additive by design: an account that already exists is left exactly as it is, password
+-- included. That is what makes the file safe to run against an environment somebody else is
+-- already signing in to. To rotate an existing account's password, do it deliberately:
+--
+--     UPDATE auth.users
+--        SET encrypted_password = extensions.crypt('<new>', extensions.gen_salt('bf')),
+--            updated_at = now()
+--      WHERE email = '<address>';
 --
 -- Apply with:
---     psql "postgresql://postgres:postgres@localhost:54322/postgres" \
---          -f supabase/seeds/local_dev_auth_users.sql
+--     psql "<connection string>" -v demo_password='<password>' -f supabase/seeds/demo_auth_users.sql
 --
--- Re-runnable: every statement is guarded, and the password is re-applied on each run so the
--- file stays the single source of truth for what these accounts accept.
+-- Against a local stack the connection string is:
+--     postgresql://postgres:postgres@localhost:54322/postgres
 --
--- Accounts created (password for all three: Demo2026!):
+-- Order on a fresh environment:
+--     1. supabase start          (local only)
+--     2. Flyway migrations
+--     3. psql -f supabase/seeds/local_dev_seed.sql
+--     4. this file
+--
+-- Accounts, matching local_dev_seed.sql:
 --     admin@demo.local          ORGANIZATION_ADMIN, organization-wide
 --     planner.lima@demo.local   PLANNER,  scoped to DEMO-LIMA
 --     viewer@demo.local         VIEWER,   scoped to DEMO-LIMA
+
+\if :{?demo_password}
+\else
+\echo 'ERROR: pass the password explicitly, e.g. -v demo_password=''...'''
+\quit 1
+\endif
 
 BEGIN;
 
@@ -46,8 +58,9 @@ BEGIN;
 -- between a Supabase stack and a plain PostgreSQL one.
 SET LOCAL search_path = public, extensions, pg_catalog;
 
--- Fixed UUIDs rather than gen_random_uuid(): re-running the file must not orphan the previous
--- accounts, and the values are readable in a JWT `sub` claim while debugging.
+-- Fixed UUIDs rather than gen_random_uuid(): re-running must not orphan the previous accounts,
+-- and the values are readable in a JWT `sub` claim while debugging. They are only used for
+-- accounts this file actually creates.
 CREATE TEMP TABLE demo_auth_user (
     id uuid PRIMARY KEY,
     email text NOT NULL,
@@ -60,10 +73,14 @@ INSERT INTO demo_auth_user (id, email, full_name) VALUES
     ('00000000-0000-4000-a000-000000000003', 'viewer@demo.local',       'Demo Viewer');
 
 -- ---------------------------------------------------------------------------------------------
--- 1. auth.users
+-- 1. auth.users - only the ones that do not exist yet
 -- ---------------------------------------------------------------------------------------------
--- `email_confirmed_at` is set so sign-in works without going through the mail flow: the local
--- stack captures mail in Inbucket, and a confirmation round trip adds nothing to a seed.
+-- `email_confirmed_at` is set so sign-in works without a mail round trip, which adds nothing
+-- to a seeded demo account.
+--
+-- The NOT EXISTS guard is on email, not on id: GoTrue's own unique index is on the address, so
+-- an ON CONFLICT (id) clause would not catch an account that was created through Studio or the
+-- Admin API and therefore carries a different id.
 INSERT INTO auth.users (
     instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
@@ -75,7 +92,7 @@ SELECT
     'authenticated',
     'authenticated',
     d.email,
-    crypt('Demo2026!', gen_salt('bf')),
+    crypt(:'demo_password', gen_salt('bf')),
     now(),
     jsonb_build_object('provider', 'email', 'providers', jsonb_build_array('email')),
     jsonb_build_object('full_name', d.full_name),
@@ -83,40 +100,41 @@ SELECT
     now(),
     '', '', '', ''
 FROM demo_auth_user d
-ON CONFLICT (id) DO UPDATE SET
-    encrypted_password = EXCLUDED.encrypted_password,
-    email_confirmed_at = COALESCE(auth.users.email_confirmed_at, EXCLUDED.email_confirmed_at),
-    raw_user_meta_data = EXCLUDED.raw_user_meta_data,
-    updated_at = now();
+WHERE NOT EXISTS (
+    SELECT 1 FROM auth.users a WHERE lower(a.email) = d.email
+);
 
 -- ---------------------------------------------------------------------------------------------
 -- 2. auth.identities
 -- ---------------------------------------------------------------------------------------------
 -- GoTrue looks the password login up through the identity row, not only through auth.users.
--- Without this, the account exists but "Invalid login credentials" comes back on every attempt.
+-- Without this the account exists but every attempt answers "Invalid login credentials".
 -- `provider_id` equals the user id for the email provider.
+--
+-- Driven from auth.users rather than from the temp table, so an account created elsewhere that
+-- is somehow missing its identity row gets one too.
 INSERT INTO auth.identities (
     provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at
 )
 SELECT
-    d.id::text,
-    d.id,
-    jsonb_build_object('sub', d.id::text, 'email', d.email, 'email_verified', true),
+    a.id::text,
+    a.id,
+    jsonb_build_object('sub', a.id::text, 'email', a.email, 'email_verified', true),
     'email',
     NULL,
     now(),
     now()
-FROM demo_auth_user d
-ON CONFLICT (provider_id, provider) DO UPDATE SET
-    identity_data = EXCLUDED.identity_data,
-    updated_at = now();
+FROM auth.users a
+JOIN demo_auth_user d ON d.email = lower(a.email)
+WHERE NOT EXISTS (
+    SELECT 1 FROM auth.identities i WHERE i.user_id = a.id AND i.provider = 'email'
+);
 
 -- ---------------------------------------------------------------------------------------------
 -- 3. Link them to the TMS identities
 -- ---------------------------------------------------------------------------------------------
--- The step that makes the API work at all. Run this section on its own after creating users
--- through Studio or the Admin API on a hosted project - it matches on email and needs nothing
--- from the two sections above.
+-- The step that makes the API work at all. Safe to run on its own after creating users through
+-- Studio or the Admin API: it matches on email and needs nothing from the sections above.
 UPDATE tms.app_user u
 SET auth_user_id = a.id,
     updated_at = now()
@@ -126,7 +144,7 @@ WHERE lower(a.email) = u.email
 
 COMMIT;
 
--- Verification - every row must show a non-null auth_user_id and at least one role:
+-- Verification - every row must show linked = t and at least one role:
 --   SELECT u.email,
 --          u.auth_user_id IS NOT NULL AS linked,
 --          coalesce(c.code, '<organization-wide>') AS company,

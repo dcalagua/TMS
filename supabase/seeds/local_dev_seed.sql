@@ -13,10 +13,16 @@
 --          -f supabase/seeds/local_dev_seed.sql
 --
 -- Contents: one organization, two companies, three users and their memberships. No
--- passwords, no keys, no production-like identifiers. The Supabase Auth users themselves are
--- created in Studio or with the CLI; paste the resulting auth.users UUIDs into the
--- auth_user_id column below (or leave them NULL and let the backend map them at first login,
--- which is what Step 03 implements).
+-- passwords, no keys, no production-like identifiers.
+--
+-- This file leaves auth_user_id NULL. Something has to fill it in before the API works:
+-- PrincipalResolutionService resolves the caller strictly by `WHERE auth_user_id = :authUserId`
+-- (JdbcIdentityRepository), with no fallback by email and no auto-provisioning at first login.
+-- Left NULL, Supabase still issues a valid token and sign-in appears to succeed, and then every
+-- API call fails as "authenticated but not provisioned".
+--
+-- Run `demo_auth_users.sql` after this file: it creates the missing Supabase Auth accounts and
+-- links them. Its section 3 also stands alone if the accounts were made in Studio instead.
 --
 -- Re-runnable: every statement is guarded with ON CONFLICT DO NOTHING.
 
