@@ -248,8 +248,9 @@ history, and are verified by `LocalSeedIntegrationTest`.
 |---|---|
 | `FlywayMigrationIntegrationTest` | the history applies to an empty database, validates, is idempotent, replays deterministically, and PostGIS is present |
 | `TenancyConstraintIntegrationTest` | company code scoping, cross-organization membership refusal, membership uniqueness, RESTRICT deletes, cascade limits, email/code normalization, `updated_at` trigger, seeded catalogue |
-| `SchemaExposureIntegrationTest` | RLS enabled on every table (including `origin`/`zone` since V6), no policies, not forced, PUBLIC and Supabase API roles denied, nothing published in `public` |
+| `SchemaExposureIntegrationTest` | RLS enabled on every table (including `origin`/`zone` since V6 and `destination`/`frequency`/`frequency_weekly_rule`/`frequency_exception` since V7), no policies, not forced, PUBLIC and Supabase API roles denied, nothing published in `public` |
 | `MasterDataConstraintIntegrationTest` | origin/zone code uniqueness is per-company, not installation-wide; FK to a real company; code normalization; the latitude/longitude pair and range checks; the generated `location` column reflects a valid pair and is `NULL` when coordinates are absent; `origin_type` is restricted to the catalogue; defaults and actor columns |
+| `MasterDataDestinationFrequencyConstraintIntegrationTest` | the same class of proof as above, extended to V7: destination/frequency code uniqueness per company; destination coordinate pair/range checks and generated `location`; `destination_type` and nonnegative `service_time_minutes`; a destination's `zone_id` must belong to its own company even though the two FK columns are separate; weekly rule `day_of_week` range and per-frequency uniqueness and nonnegative `lead_time_days`; weekly rules and exceptions cascade-delete with their frequency; exception date uniqueness and non-blank note |
 | `ApplicationDatabaseStartupIntegrationTest` | the real Spring context boots with datasource + JPA + Flyway against PostgreSQL |
 | `LocalSeedIntegrationTest` | the local seed still matches the schema and carries no credential |
 | `MigrationConventionTest` | naming, contiguous versions, no destructive DDL, no `auth`/`storage` DDL, no tenant data in migrations, no `supabase/migrations` |
@@ -258,7 +259,10 @@ The origin/zone vertical slice itself (controller through repository, company sc
 permissions) is proven end to end by
 `backend/tms-api/src/test/java/com/ebim/tms/masterdata/api/OriginZoneApiIntegrationTest.java`
 rather than repeated in the database-level test above - see
-`docs/overnight/05_ORIGINS_ZONES.md` section 4 for that coverage.
+`docs/overnight/05_ORIGINS_ZONES.md` section 4 for that coverage. The destination/frequency
+slice (Step 06) is proven the same way by
+`backend/tms-api/src/test/java/com/ebim/tms/masterdata/api/DestinationFrequencyApiIntegrationTest.java`
+- see `docs/overnight/06_DESTINATIONS_FREQUENCIES.md` section 3 for that coverage.
 
 ## 7. Master data: origins and zones (Step 05, migration V6)
 
@@ -340,16 +344,150 @@ without changing its shape or breaking existing rows, exactly like `location` wa
 | `ix_origin_company`, `ix_zone_company` | the hot path: "list mine", company-scoped queries lead with `company_id` |
 | `ix_origin_location` (GiST) | future spatial queries against `location`; not yet queried in V1, maintained from day one |
 
-## 8. Rules for the next migrations
+## 8. Master data: destinations and frequencies (Step 06, migration V7)
+
+Follows V6's shape unchanged (section 9 below): `company_id NOT NULL` with an FK and a
+leading index, actor columns, RLS enabled in this same migration, normalized-code `CHECK`s.
+
+```mermaid
+erDiagram
+    COMPANY  ||--o{ DESTINATION : "scopes"
+    COMPANY  ||--o{ FREQUENCY   : "scopes"
+    ZONE     ||--o{ DESTINATION : "optionally groups"
+    FREQUENCY ||--o{ FREQUENCY_WEEKLY_RULE : "owns"
+    FREQUENCY ||--o{ FREQUENCY_EXCEPTION   : "owns"
+
+    DESTINATION {
+        uuid id PK
+        uuid company_id FK
+        text code "unique per company, ^[A-Z0-9][A-Z0-9_-]{0,31}$"
+        text name
+        text destination_type "CUSTOMER | STORE | BRANCH | HUB | DISTRIBUTION_CENTER | DELIVERY_POINT"
+        text address
+        text address_reference "landmark/access note"
+        text district
+        text province
+        text department
+        text country "default PE, not blank"
+        numeric latitude "9,6 - both present or both absent with longitude"
+        numeric longitude "9,6"
+        geography location "GENERATED ALWAYS, Point/4326, GiST indexed"
+        uuid zone_id "optional, composite FK guarantees same company as zone"
+        integer service_time_minutes "nonnegative, default 0"
+        text external_reference "optional EWM/external code, never a FK"
+        bool active
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+        uuid updated_by FK
+    }
+    FREQUENCY {
+        uuid id PK
+        uuid company_id FK
+        text code "unique per company"
+        text name
+        text description
+        bool active
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+        uuid updated_by FK
+    }
+    FREQUENCY_WEEKLY_RULE {
+        uuid id PK
+        uuid frequency_id FK "cascades from frequency, no own company_id"
+        smallint day_of_week "1=Monday..7=Sunday, unique per frequency"
+        bool enabled
+        time cutoff_time
+        integer lead_time_days "nonnegative"
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+        uuid updated_by FK
+    }
+    FREQUENCY_EXCEPTION {
+        uuid id PK
+        uuid frequency_id FK "cascades from frequency, no own company_id"
+        date exception_date "unique per frequency"
+        bool service_override "true = extra service date, false = blackout"
+        text note
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+        uuid updated_by FK
+    }
+```
+
+### 8.1 `destination.zone_id` reuses the composite-FK idiom, not a new one
+
+A destination's zone must belong to the destination's own company. Rather than trusting
+application code alone, migration V7 adds `tms.zone.uq_zone_id_company UNIQUE (id,
+company_id)` and a composite FK `fk_destination_zone_company FOREIGN KEY (zone_id,
+company_id) REFERENCES tms.zone (id, company_id)` - the exact pattern `tms.membership` (V2)
+uses for `company_id`/`organization_id`. `MATCH SIMPLE` (the default) means the FK is
+satisfied whenever `zone_id IS NULL`, so an optional zone stays optional. Java (`
+DestinationService.requireZoneInScope`) is still the primary check - it is what turns a
+mismatch into a clean 400 instead of a raw constraint violation - the database constraint is
+defense in depth for the same reason RLS is (architecture section 4.2).
+
+### 8.2 Frequency is a header plus two owned child collections, not hardcoded booleans
+
+The step brief is explicit that five or seven boolean columns on `frequency` would not be
+future-friendly. `frequency_weekly_rule` carries the Monday-Sunday cadence (one row per
+configured day, `enabled` plus optional `cutoff_time`/`lead_time_days`) and
+`frequency_exception` carries date-specific overrides (an extra pickup or a blackout) -
+completely separate concerns that can each evolve without touching the other or the header.
+Both children cascade from `frequency` and carry no `company_id` of their own, the same shape
+`tms.membership_role` uses as a pure child of `tms.membership` (V2): "the row has no meaning
+without its parent."
+
+`FrequencyService.update` replaces the whole weekly-rule set inside the same transaction as
+the header update (`Frequency.replaceWeeklyRules`, diff by `day_of_week`: update a day
+present in both the request and the database, add a new day, and let Hibernate's
+`orphanRemoval` delete a day the request no longer includes) - so a rule can never be left
+half-replaced or orphaned. Exceptions are not diffed as a set: each is created or deleted
+individually through its own sub-resource (`POST`/`DELETE
+/masterdata/frequencies/{id}/exceptions`), because a calendar override is an independent fact
+about one date, not a slot in a fixed weekly grid.
+
+### 8.3 A destination-frequency association table was deliberately not added
+
+The "Frequency model" brief recommends an explicit destination-frequency association (rather
+than a rigid single FK) so multiple schedules can be modeled later. V7 does not add that
+table: neither the Destinations nor the Frequencies frontend section of the brief asks for an
+assignment screen, and nothing in Orders/Planning (not built yet) has a concrete requirement
+for it. Building the join table now, with no reachable API and no screen, would be exactly
+the speculative complexity the repository instructions ask to avoid - the same judgment V6
+already made for zone geometry ("no geometry in V1... a future migration can add it without
+changing this shape"). When Orders/Planning defines what "which frequency serves this
+destination" needs to look like, add the table then; `destination`/`frequency` are already
+shaped so a later join table can reference both without any change to either.
+
+### 8.4 Indexes added by V7
+
+| Index | Purpose |
+|---|---|
+| `uq_destination_company_code`, `uq_frequency_company_code` | codes unique per company, free to repeat across companies (ADR-003) |
+| `ix_destination_company`, `ix_frequency_company` | the hot path: "list mine", company-scoped queries lead with `company_id` |
+| `ix_destination_zone` (partial, `zone_id IS NOT NULL`) | "destinations in this zone" without indexing the common no-zone case |
+| `ix_destination_location` (GiST) | future spatial queries against `location`, matching `ix_origin_location` (V6) |
+| `ix_frequency_weekly_rule_frequency`, `ix_frequency_exception_frequency` | "rules/exceptions of this frequency", the only way either child table is ever queried |
+| `uq_zone_id_company` (on `tms.zone`) | composite-FK target for `destination.zone_id`, see section 8.1 |
+
+## 9. Rules for the next migrations
 
 1. Business tables carry `company_id NOT NULL` with an FK to `tms.company` and an index
-   that leads with it. Never both scope columns without a documented reason.
+   that leads with it. Never both scope columns without a documented reason - a pure child
+   of another business table (no meaning without its parent, like `membership_role` or
+   `frequency_weekly_rule`) is the one documented exception.
 2. New tables get `created_at`, `updated_at`, the `set_updated_at` trigger, and actor
    columns when a real actor exists.
 3. New tables are added to the `ENABLE ROW LEVEL SECURITY` list in the same migration.
 4. Spatial columns follow `docs/database/MIGRATION_STRATEGY.md` section on PostGIS.
 5. Every vertical slice adds a cross-tenant isolation test (ADR-003 compliance rule).
+6. A foreign key from one company-scoped table into another (like `destination.zone_id`)
+   gets the composite-FK tenant guarantee from section 8.1, not just a same-column FK.
 
-V6 (Step 05) is the first migration to follow all five rules against a real business table;
-Step 06 onward (destinations, frequencies, routes) should match its shape rather than
-reinvent it.
+V6 (Step 05) is the first migration to follow rules 1-5 against a real business table; V7
+(Step 06) is the first to need rule 6. Step 07 onward (routes, fleet) should match this
+shape rather than reinvent it.

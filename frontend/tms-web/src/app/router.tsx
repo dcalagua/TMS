@@ -1,6 +1,8 @@
 import { createBrowserRouter } from 'react-router-dom'
 import { DashboardPage } from '../pages/DashboardPage'
 import { LoginPage } from '../pages/LoginPage'
+import { DestinationsPage } from '../pages/masters/DestinationsPage'
+import { FrequenciesPage } from '../pages/masters/FrequenciesPage'
 import { OriginsPage } from '../pages/masters/OriginsPage'
 import { ZonesPage } from '../pages/masters/ZonesPage'
 import { NotFoundPage } from '../pages/NotFoundPage'
@@ -23,9 +25,9 @@ export const router = createBrowserRouter([
             element: <RequireCompany />,
             children: [
               { path: 'masters/origins', element: <OriginsPage /> },
-              { path: 'masters/destinations', element: <PlaceholderPage title="Destinations" /> },
+              { path: 'masters/destinations', element: <DestinationsPage /> },
               { path: 'masters/zones', element: <ZonesPage /> },
-              { path: 'masters/frequencies', element: <PlaceholderPage title="Frequencies" /> },
+              { path: 'masters/frequencies', element: <FrequenciesPage /> },
               { path: 'masters/routes', element: <PlaceholderPage title="Routes" /> },
               { path: 'fleet/carriers', element: <PlaceholderPage title="Carriers" /> },
               { path: 'fleet/vehicle-types', element: <PlaceholderPage title="Vehicle types" /> },
