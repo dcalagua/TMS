@@ -64,9 +64,11 @@
   --tms-sidebar-text-strong: #ffffff;
   --tms-sidebar-muted: #6b717b;
   --tms-sidebar-hover-bg: #1e2127;
-  /* The active entry is a filled pill, light enough to read as selected at a
-     glance across a list of twenty links without shouting. */
-  --tms-sidebar-active-bg: #2c313a;
+  /* The active entry inverts the column instead of tinting it. A slightly lighter
+     grey on grey is the one contrast a user cannot resolve at a glance, and the
+     navigation is the control they look at most. */
+  --tms-sidebar-active-bg: #f2f3f5;
+  --tms-sidebar-active-text: #16181d;
   --tms-sidebar-active: var(--tms-sidebar-active-bg);
   --tms-sidebar-accent: #ffffff;
   --tms-sidebar-border: #23262c;
@@ -92,9 +94,13 @@
   --tms-neutral-subtle: #f0f1f3;
   --tms-neutral-border: #dcdfe4;
 
-  /* The single discreet accent, used for nothing but focus and the active nav
-     marker. It never fills a surface. */
-  --tms-accent: #3b6ea5;
+  /* The system carries no hue at all. What used to be a blue accent lived on the
+     focus ring, which means it appeared on every field an operator touched - the
+     most frequently rendered state in a data-entry application, and therefore the
+     interface's real colour rather than an accent. Focus is now expressed with
+     ink: a darkened border plus a soft graphite halo, which reads as deliberate at
+     any size and leaves the semantic colours as the only hues on screen. */
+  --tms-accent: var(--tms-ink);
 
   /* ---- Shape ------------------------------------------------------------- */
   --tms-radius-xs: 0.25rem;
@@ -148,7 +154,7 @@
   --tms-easing: cubic-bezier(0.32, 0.72, 0, 1);
 
   /* ---- Focus ------------------------------------------------------------- */
-  --tms-focus-ring: 0 0 0 3px rgba(59, 110, 165, 0.35);
+  --tms-focus-ring: 0 0 0 3px rgba(22, 24, 29, 0.14);
   --tms-focus-ring-inverse: 0 0 0 3px rgba(255, 255, 255, 0.45);
 }
 

@@ -637,3 +637,155 @@ P2=1
 The single P2 is the dashboard described in 16.6.
 
 Nothing was pushed.
+
+---
+
+## 17. Visual polish: overlays, chrome, form order and the last of the blue
+
+A refinement pass over section 16, not a redesign. Five defects, each fixed at the layer it
+belongs to rather than per screen.
+
+### 17.1 Row action menus: a structural fault, not a z-index one
+
+The `...` menu opened clipped and pushed a scrollbar into the table. The cause was that the
+panel was an absolutely positioned child of the cell, and a table row lives inside two overflow
+containers: `.tms-table-wrap` (`overflow: hidden`) clipped it, and `.tms-table-scroll`
+(`overflow-x: auto`) counted it as content and grew the scrollable area to fit it. An overflow
+container clips regardless of stacking order, so no z-index value could have fixed either half.
+
+Setting `overflow: visible` would have traded the defect for a worse one - horizontal
+containment of wide tables is load-bearing and has its own end-to-end test.
+
+The panel now leaves the table's flow entirely: `useMenu` positions it against the trigger's
+viewport rectangle and the consumers render it through a portal on the body. It flips above the
+trigger when the space below runs out (the last rows of a long list), clamps to the viewport,
+and follows its trigger on scroll and resize - the scroll listener is registered with `capture`
+so the table's own horizontal scroller counts too.
+
+One subtlety came with the portal: the dismissal check tested DOM ancestry against the trigger's
+container, and the panel is no longer inside it. Every click on a menu entry read as a click
+outside, closing the menu on `mousedown` before the click reached the button. `useMenu` now
+tests the panel as well. There is a test for that specific failure, and it fails against the
+previous code.
+
+The same treatment went to the company switcher and the account menu: one shared defect, one
+shared fix.
+
+### 17.2 Top bar
+
+Search moved to the left, next to the navigation toggles. Centring it made the bar look
+symmetric and the one interactive element the hardest to find.
+
+The company switcher and the account button were `.btn-outline-secondary` - a control sized and
+weighted for a form, and in a 60px bar two of them read as stray form fields. Both are now
+design-system controls sharing one height, one border and one hover with the search field and
+the ES|EN pair beside them, so the right-hand cluster reads as one group.
+
+Fixed while checking it at 390px: the cluster **overlapped** rather than shrinking. The company
+control had a `max-width` but no permission to shrink, so the language and account controls were
+laid out on top of it. It now truncates, and the breadcrumb - which repeats the page title
+directly beneath it - is hidden below `md`, which is the space the cluster needed.
+
+### 17.3 Sidebar
+
+The selected entry was a slightly lighter grey on grey: the one contrast a user cannot resolve
+at a glance, on the control they look at most. It now inverts the column - a near-white pill
+with dark text - which is also the non-colour cue, since it survives greyscale and does not
+depend on telling two dark tones apart.
+
+Groups are separated by a hairline rather than by more whitespace; eight groups spaced by gaps
+alone read as one long list and pushed the last entries under the fold on a laptop. The brand
+block sits one step lighter than the column so it reads as a header, icons are centred in a
+fixed box so the labels share a left edge, and the scrollbar is dark instead of inheriting the
+new near-white active tone.
+
+### 17.4 Drawer forms
+
+Bootstrap's grid tiers measure against the viewport, not against the panel the columns are in,
+so a `col-sm-3` collapsed to a sliver inside a 520px drawer while the `col-sm-12` beside it
+stayed full width. Section 16 forced narrow tiers to 50%, which fixed the sliver and broke the
+pairings the forms had declared.
+
+Inside a drawer the row is now a real twelve-column grid measured against the panel. Every form
+keeps the spans it declares, the gutters are uniform, and nothing wraps raggedly.
+
+On top of that, the width vocabulary was reduced. A 520-660px panel does not have twelve
+meaningful widths; "3 of 12" beside "5 of 12" is arbitrary precision that leaves rows unfilled.
+Fields are now halves, thirds or the whole row, and every row adds up to twelve - applied to
+Orígenes, Destinos, Tipos de vehículo and Pedidos.
+
+Carrier is the brief's worked example and was regrouped: the tax document was sitting inside
+IDENTIFICACIÓN, making that section a bag of four unrelated fields. It is now its own DOCUMENTO
+section, and the contact name takes a full row above the two ways of reaching that person.
+
+Sections are divided by a rule rather than by a gap, `FormField` gained an optional `help` slot
+so label → control → help is a visible hierarchy, and every control that is not explicitly `-sm`
+or `-lg` shares one height.
+
+### 17.5 The last of the blue
+
+Remapping `--bs-primary` never reached these: Bootstrap 5.3 compiles literal hexes into
+`.btn-outline-primary`, `.form-check-input:checked`, `.pagination`, `.list-group`, `.progress`
+and the focus rules. The list was produced by parsing `bootstrap.css` for the palette hexes and
+keeping the selectors this application actually renders. `.btn-outline-primary` alone appears on
+six real controls.
+
+The larger one was the product's own accent. `--tms-accent` was a blue, and it lived on the
+focus ring - which means it appeared on every field an operator touched, the most frequently
+rendered state in a data-entry application. That is not an accent, it is the interface's colour.
+Focus is now ink: a darkened border and a soft graphite halo.
+
+This is verified rather than asserted. `e2e/monochrome.spec.ts` walks the list screens, an open
+row menu, a drawer with a focused field, the sign-in screen and the open company switcher, reads
+every computed colour, and fails on any whose blue channel dominates the others by more than 40.
+Bootstrap's #0d6efd clears that by 143; the product's own slate `--tms-info` sits at 13, so the
+threshold separates framework blue from a neutral that merely leans cool. The test was confirmed
+to fail against the previous focus ring.
+
+### 17.6 Honest assessment
+
+- Row menus open as clean overlays, no clipping, no scrollbar, correct placement including a
+  flip near the bottom of the viewport. Covered by four new tests.
+- The top bar is composed and its controls share one scale. The mobile overlap it was hiding is
+  gone.
+- The sidebar has weight, and the selected entry is now the brightest thing in the column.
+- Drawer forms read in sections with an even grid.
+- No framework blue survives anywhere the test walks.
+
+Not addressed, and still open:
+
+- **The dashboard** (carried from 16.6): its quick-access panel is the sidebar repeated as
+  buttons. Still blocked on operational figures the backend does not expose.
+- **Frecuencias, Rutas and Zonas** kept their existing field widths. They read acceptably and
+  none showed a ragged row, but they did not get the same deliberate regrouping Transportistas
+  did, so the width vocabulary is normalised in four of the eight master forms rather than all
+  eight.
+
+### 17.7 Gates
+
+```
+TABLE_ACTION_OVERLAY=PASS
+TOPBAR_POLISH=PASS
+SIDEBAR_POLISH=PASS
+ACTIVE_MENU_HIGHLIGHT=PASS
+DRAWER_FORM_LAYOUT=PASS
+BLUE_RESIDUE_REMOVED=PASS
+VISUAL_CONSISTENCY=PASS
+RESPONSIVE=PASS
+AUTH_SAFE=PASS
+NAVIGATION_SAFE=PASS
+I18N_SAFE=PASS
+CONSOLE_ERRORS=0
+FRONTEND_TESTS=405
+E2E_TESTS=66
+TYPECHECK=PASS
+LINT=PASS
+BUILD=PASS
+P0=0
+P1=0
+P2=2
+```
+
+The two P2s are the dashboard and the three master forms listed in 17.6.
+
+Nothing was pushed.

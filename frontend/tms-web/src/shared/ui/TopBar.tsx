@@ -18,9 +18,14 @@ export interface TopBarProps {
 /**
  * Top bar: two intentional halves rather than a row of controls pushed to one end.
  *
- * On the left, where the user is; on the right, who they are and what scope they are working
- * in. The product name is deliberately absent - the sidebar carries it, and repeating it here
- * spent the only part of the bar with room to say something the user does not already know.
+ * On the left the two things an operator acts on - the screen search and where they currently
+ * are; on the right, who they are and what scope they are working in. The product name is
+ * deliberately absent: the sidebar carries it, and repeating it here spent the only part of the
+ * bar with room to say something the user does not already know.
+ *
+ * Search leads the left-hand group because it is a control, not a label. Putting it in the
+ * centre gave the bar a symmetric look and made the one interactive element the hardest to
+ * find.
  */
 export function TopBar({ navOpen, onToggleNav, collapsed, onToggleCollapsed }: TopBarProps) {
   const { t } = useTranslation(['navigation', 'common'])
@@ -45,17 +50,17 @@ export function TopBar({ navOpen, onToggleNav, collapsed, onToggleCollapsed }: T
         aria-expanded={!collapsed}
       />
 
-      <Breadcrumb />
-
       <NavSearch />
+
+      <span className="tms-topbar-divider d-none d-lg-block" aria-hidden="true" />
+
+      <Breadcrumb />
 
       {/* `tms-min-w-0` is what lets the company name actually truncate: without it this flex
           item sizes to its content and pushes the language switch off a narrow phone. */}
       <div className="tms-topbar-actions tms-min-w-0">
         <CompanySelector />
-        <span className="tms-topbar-divider d-none d-sm-block" aria-hidden="true" />
         <LanguageSwitcher />
-        <span className="tms-topbar-divider d-none d-sm-block" aria-hidden="true" />
         <UserMenu />
       </div>
     </header>

@@ -122,6 +122,21 @@ test('captures the review screenshots', async ({ page }) => {
   await page.screenshot({ path: `${SHOTS_DIR}/form-destination-desktop.png` })
   await page.keyboard.press('Escape')
 
+  // The carrier form is the one the polish brief used as its worked example of grouping.
+  await page.goto('/fleet/carriers')
+  await page.getByRole('button', { name: 'Nuevo transportista' }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await settled(page.getByRole('dialog'))
+  await page.screenshot({ path: `${SHOTS_DIR}/form-carrier-desktop.png` })
+  await page.keyboard.press('Escape')
+
+  await page.goto('/fleet/vehicles')
+  await page.getByRole('button', { name: 'Nuevo vehículo' }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await settled(page.getByRole('dialog'))
+  await page.screenshot({ path: `${SHOTS_DIR}/form-vehicle-desktop.png` })
+  await page.keyboard.press('Escape')
+
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/masters/destinations')
   await page.getByRole('button', { name: 'Nuevo destino' }).click()
@@ -142,6 +157,14 @@ test('captures a populated list screen', async ({ page }) => {
   await page.goto('/masters/origins')
   await expect(page.getByText('LIM-CD1')).toBeVisible()
   await page.screenshot({ path: `${SHOTS_DIR}/masters-origins-populated-desktop.png`, fullPage: true })
+
+  // With the row menu open: the panel is portalled out of the table, so this is also the
+  // check that it lands in the right place rather than behind the panel edge.
+  await page.getByRole('button', { name: 'Abrir menú de acciones' }).first().click()
+  await expect(page.getByRole('menu')).toBeVisible()
+  await settled(page.getByRole('menu'))
+  await page.screenshot({ path: `${SHOTS_DIR}/masters-origins-row-menu-desktop.png` })
+  await page.keyboard.press('Escape')
 
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(page.getByText('LIM-CD1')).toBeVisible()

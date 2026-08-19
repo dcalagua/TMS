@@ -160,7 +160,7 @@ export function OriginFormDrawer({ companyId, origin, onClose, onSaved }: Origin
         <fieldset className="tms-fieldset">
           <legend className="tms-fieldset-legend">{tc('sections.identification')}</legend>
           <div className="row">
-            <div className="col-12 col-sm-4">
+            <div className="col-12 col-sm-6">
               <FormField label={tc('columns.code')} htmlFor="origin-code" error={errors.code?.message} required>
                 <input
                   id="origin-code"
@@ -173,7 +173,7 @@ export function OriginFormDrawer({ companyId, origin, onClose, onSaved }: Origin
                 />
               </FormField>
             </div>
-            <div className="col-12 col-sm-8">
+            <div className="col-12 col-sm-6">
               <FormField label={tc('columns.name')} htmlFor="origin-name" error={errors.name?.message} required>
                 <input
                   id="origin-name"
@@ -185,7 +185,7 @@ export function OriginFormDrawer({ companyId, origin, onClose, onSaved }: Origin
                 />
               </FormField>
             </div>
-            <div className="col-12 col-sm-4">
+            <div className="col-12 col-sm-6">
               <FormField label={tc('columns.type')} htmlFor="origin-type" error={errors.type?.message} required>
                 <select id="origin-type" className="form-select" {...register('type', { required: true })}>
                   {ORIGIN_TYPES.map((type) => (

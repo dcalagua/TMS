@@ -1,0 +1,36 @@
+# AWS Amplify Hosting - build specification.
+#
+# This repository is a monorepo (backend/tms-api + frontend/tms-web), so the build uses the
+# `applications` form: Amplify enters `appRoot` before running the phases below, and every path
+# in this file is relative to that directory.
+#
+# The Amplify console must also be told the same root: App settings -> Build settings ->
+# "Monorepo app root directory" = frontend/tms-web (env var AMPLIFY_MONOREPO_APP_ROOT).
+#
+# VITE_* values are compiled into the bundle at build time, not read at runtime, so changing one
+# in the console requires a new build ("Redeploy this version" is enough), never just a restart.
+version: 1
+applications:
+  - appRoot: frontend/tms-web
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            # Vite 8 and TypeScript 6 need a modern Node; the default Amplify image may still be
+            # on 18/20. nvm ships in the Amazon Linux 2023 build image.
+            - nvm install 22
+            - nvm use 22
+            - node -v
+            - npm ci
+        build:
+          commands:
+            # `npm run build` is `tsc -b && vite build`: the type check gates the bundle.
+            - npm run build
+      artifacts:
+        baseDirectory: dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+          - ~/.npm/**/*
