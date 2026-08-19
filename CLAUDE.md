@@ -1,0 +1,91 @@
+# TMS by EBIM - Repository Instructions
+
+## Product
+
+This repository is TMS by EBIM. TMS is independent from EWM by EBIM and must integrate later only through APIs/events/contracts, never by sharing internal tables.
+
+## Stack
+
+- Database/platform: Supabase/PostgreSQL, PostGIS, RLS, Supabase Auth where applicable.
+- Backend: Java 21 + Spring Boot.
+- Frontend: React + TypeScript + Bootstrap + SweetAlert2.
+
+## Mandatory architecture
+
+Business operations flow through:
+
+    React -> Spring Boot -> PostgreSQL/Supabase
+
+Direct frontend Supabase usage is limited to explicitly approved cases; V1 uses it for authentication only.
+
+## Ownership
+
+Supabase owns platform capabilities: PostgreSQL, PostGIS, Auth, RLS defense in depth, later Storage/Realtime when justified.
+
+Java owns business rules: authorization, tenancy, masters, orders, planning, capacity, concurrency, integrations, jobs, audit use cases and future optimization.
+
+Flyway is the canonical owner of application schema migrations. Do not duplicate application DDL in Supabase migrations.
+
+## Review flow
+
+For every functional module inspect and validate:
+
+    UI -> API client -> Controller -> Service/Use Case -> Repository -> DB -> Security -> Tests
+
+Include RPC/Edge Function explicitly if one is ever introduced.
+
+## Git safety
+
+Never run destructive Git commands. Never force push. Never push unless a human explicitly requests it. Do not stage the overnight pack.
+
+## Database safety
+
+Never mutate a shared/remote database without explicit human authorization. Tests use Testcontainers or disposable local infrastructure. Applied migrations are immutable.
+
+## Security
+
+Do not trust frontend hiding as authorization. Validate Supabase JWT in Spring Security. Resolve App User and Membership server-side. Enforce organization/company ownership in services and repository queries. Use RLS as defense in depth, not as a substitute for backend authorization.
+
+Never print secrets or read real `.env` secret files. Use `.env.example` with placeholders.
+
+## Frontend style
+
+Use Bootstrap as the visual base and SweetAlert2 for confirmations/critical feedback. Avoid MUI as the primary library. Build reusable enterprise components and responsive dense screens.
+
+## Scale target
+
+Design sensibly for 10,000+ orders/day, 100-300 vehicles, multiple companies/warehouses and concurrent users without premature distributed-system complexity.
+
+## Product principle
+
+Simple now + correctly separable + scalable later.
+
+## Repository layout
+
+    frontend/tms-web      React + TypeScript + Vite + Bootstrap + SweetAlert2
+    backend/tms-api       Java 21 + Spring Boot + Flyway (canonical application DDL)
+    supabase              Local Supabase platform config; no duplicate application DDL
+    docs                  Architecture, ADRs, database, security, overnight reports
+    scripts               Local developer/CI helper scripts
+
+## Architecture references
+
+Authoritative documents live under `docs/architecture/`:
+
+- `TMS_ARCHITECTURE_V1.md` - the V1 architecture of record.
+- `OWNERSHIP_MATRIX.md` - per-concern ownership between React, Java and Supabase.
+- `ADR-001-layered-architecture.md` - React -> Spring Boot -> PostgreSQL decision.
+- `ADR-002-migration-ownership-flyway.md` - Flyway as the single application-schema migration owner.
+- `ADR-003-multitenancy-company-scope.md` - Organization/Company tenancy and Company scoping.
+
+Read these before changing schema, security or module boundaries. If an implementation must deviate, add a new ADR instead of silently diverging.
+
+## Local environment notes
+
+- Maven is not installed globally; use the Maven wrapper (`./mvnw`) committed with the backend.
+- `JAVA_HOME` is not exported in the shell profile; Java 21 is on `PATH`. Set `JAVA_HOME` if a tool requires it.
+- The Docker daemon may be stopped. Testcontainers-based integration tests require Docker Desktop to be running; when it is unavailable, document it as an environment blocker instead of claiming tests passed.
+
+## Deferred by decision (do not introduce early)
+
+OR-Tools/route optimization, GPS/telematics, EWM integration, ERP integration, Kafka/microservices/event sourcing, Supabase Realtime, Storage, and live map tracking. Add them only when a concrete requirement and an ADR justify them.
