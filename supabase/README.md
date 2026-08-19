@@ -40,6 +40,8 @@ recreated or altered by Flyway.
 | `realtime.enabled` | `false` | Explicitly deferred capability |
 | `storage.enabled` | `false` | Explicitly deferred capability |
 | `edge_runtime.enabled` | `false` | V1 has no Edge Functions; business logic lives in Spring Boot |
+| `db.seed.enabled` | `false` | The schema is created by Flyway, not by the CLI, so a reset-time seed would hit tables that do not exist yet |
+| `api.schemas` | `["public", "graphql_public"]` | Application tables live in the `tms` schema, which is therefore **not** served by the Data API |
 
 ## Starting the local stack
 
@@ -75,12 +77,32 @@ The Supabase CLI creates an **empty** application schema. Flyway fills it:
 
     # or run migrations without starting the API:
     ./mvnw flyway:migrate -Dflyway.url=jdbc:postgresql://localhost:54322/postgres \
-                          -Dflyway.user=postgres -Dflyway.password=postgres
+                          -Dflyway.user=postgres -Dflyway.password=postgres \
+                          -Dflyway.schemas=tms -Dflyway.defaultSchema=tms
 
 The backend reads its connection settings from the environment (`TMS_DB_URL`,
 `TMS_DB_USERNAME`, `TMS_DB_PASSWORD`); see `backend/tms-api/.env.example`.
 
-Migrations are added from Step 02 onwards. Until then the directory is empty on purpose.
+### Where the tables land
+
+Application objects are created in the **`tms` schema**, never in `public`. Since the Data
+API exposes only `public` and `graphql_public`, business tables have no HTTP surface at all.
+On top of that, `anon`, `authenticated` and `service_role` are revoked from the schema and
+Row Level Security is enabled on every table with no policy, so any accidental exposure
+denies rather than leaks. See `docs/security/RLS_STRATEGY.md` and `docs/database/DATA_MODEL.md`.
+
+## Local development data
+
+`supabase/seeds/local_dev_seed.sql` creates one demo organization, two companies, three
+users and their memberships. It is **not** a migration and is **not** run by
+`supabase db reset` (`db.seed.enabled = false`): apply it by hand after Flyway has created
+the schema.
+
+    psql "postgresql://postgres:postgres@localhost:54322/postgres" \
+         -f supabase/seeds/local_dev_seed.sql
+
+It contains no password and no key; the Supabase Auth users are created in Studio or with
+the CLI, and the backend maps them to `tms.app_user` at first sign-in (Step 03).
 
 ## Frontend usage boundary
 

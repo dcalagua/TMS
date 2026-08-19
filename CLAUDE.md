@@ -77,6 +77,11 @@ Authoritative documents live under `docs/architecture/`:
 - `ADR-001-layered-architecture.md` - React -> Spring Boot -> PostgreSQL decision.
 - `ADR-002-migration-ownership-flyway.md` - Flyway as the single application-schema migration owner.
 - `ADR-003-multitenancy-company-scope.md` - Organization/Company tenancy and Company scoping.
+- `ADR-004-application-schema-and-database-exposure.md` - application objects live in the
+  `tms` schema; the Supabase Data API does not see them; RLS is enabled with no policies.
+
+Database and security detail lives in `docs/database/DATA_MODEL.md`,
+`docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.
 
 Read these before changing schema, security or module boundaries. If an implementation must deviate, add a new ADR instead of silently diverging.
 

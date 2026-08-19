@@ -27,7 +27,10 @@ run_stage "frontend build"     npm --prefix "$FRONTEND_DIR" run build
 run_stage "backend verify"     "$BACKEND_DIR/mvnw" -B -f "$BACKEND_DIR/pom.xml" clean verify
 
 if ! docker info >/dev/null 2>&1; then
-  warn "Docker daemon is not running: Testcontainers integration tests were not executed."
+  warn "The docker CLI could not reach a daemon."
+  warn "Testcontainers may still have found one (it probes other socket paths); check the"
+  warn "surefire output for skipped *IntegrationTest classes. If they were skipped, start"
+  warn "Docker Desktop or select the right context with 'docker context use <name>'."
 fi
 
 echo

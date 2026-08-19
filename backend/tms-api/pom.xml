@@ -22,7 +22,27 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <springdoc.version>3.0.3</springdoc.version>
         <archunit.version>1.5.0</archunit.version>
+        <!--
+          Latest 1.x. Testcontainers 2.0.x exists but changes API surface, and this repository
+          cannot execute container tests on every machine (Docker is not always running), so a
+          version whose API is exercised by the committed tests is preferred. Upgrading is a
+          deliberate task for a run that can actually start containers.
+        -->
+        <testcontainers.version>1.21.4</testcontainers.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Spring Boot 4 does not manage Testcontainers, so the BOM is imported explicitly. -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- Web + validation: the only business entry point (React -> Spring Boot). -->
@@ -97,6 +117,21 @@
             <groupId>com.tngtech.archunit</groupId>
             <artifactId>archunit-junit5</artifactId>
             <version>${archunit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!--
+          Disposable PostgreSQL for database integration tests (Step 02). Versions come from
+          the Spring Boot BOM. Tests never connect to a shared or remote database; the image
+          is postgis/postgis so the PostGIS extension created by V1 is exercised for real.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

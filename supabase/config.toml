@@ -82,8 +82,12 @@ enabled = false
 schema_paths = []
 
 [db.seed]
-# If enabled, seeds the database after migrations during a db reset.
-enabled = true
+# Disabled on purpose. `supabase db reset` cannot seed TMS data: the schema is created by
+# Flyway (ADR-002), which runs from the backend and not from the Supabase CLI, so a seed
+# executed during a reset would hit tables that do not exist yet.
+# The local fixture lives in supabase/seeds/local_dev_seed.sql and is applied by hand AFTER
+# the migrations - see supabase/README.md.
+enabled = false
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
 sql_paths = ["./seed.sql"]

@@ -14,6 +14,9 @@ Non-negotiable rules:
 - secrets live only in untracked local env files; this repository contains `.env.example`
   placeholders only.
 
-`SECURITY_BASELINE.md` is produced by Step 03 (backend security foundation) and will
-document the filter chain, the tenancy resolution flow, the role model and the negative
-tests that prove cross-tenant access is refused.
+## Documents
+
+| Document | Status |
+|---|---|
+| [`RLS_STRATEGY.md`](RLS_STRATEGY.md) | Step 02. Database-level exposure decision: the `tms` schema is backend-only, `anon`/`authenticated`/`PUBLIC` hold no privilege, RLS is enabled on every table with no policy, and why that is deliberate rather than incomplete |
+| `SECURITY_BASELINE.md` | Step 03. Filter chain, Supabase JWT validation, tenancy resolution, role model and the negative tests that prove cross-tenant access is refused |
