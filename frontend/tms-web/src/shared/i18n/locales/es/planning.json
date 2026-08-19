@@ -1,0 +1,9 @@
+{
+  "board": {
+    "orders": "Pedidos elegibles",
+    "trips": "Viajes"
+  },
+  "description": "Corridas de planificación manual: un origen y una fecha de planificación. Abre una corrida para crear viajes, asignar pedidos y confirmar el plan.",
+  "new": "Nueva corrida",
+  "title": "Planificación"
+}

@@ -1,0 +1,26 @@
+{
+  "activate": {
+    "confirm": "Activar",
+    "text": "Volverá a estar disponible para la operación.",
+    "title": "¿Activar {{name}}?"
+  },
+  "activated": "Registro activado",
+  "companyChanged": {
+    "text": "Tu selección ya no es válida. Elige una compañía nuevamente.",
+    "title": "Cambió tu acceso de compañía"
+  },
+  "confirm": {
+    "cancel": "Cancelar",
+    "confirm": "Confirmar"
+  },
+  "created": "Registro creado",
+  "deactivate": {
+    "confirm": "Desactivar",
+    "text": "Dejará de estar disponible para nuevas operaciones.",
+    "title": "¿Desactivar {{name}}?"
+  },
+  "deactivated": "Registro desactivado",
+  "errorTitle": "No se pudo completar la acción",
+  "saved": "Cambios guardados",
+  "updated": "Registro actualizado"
+}

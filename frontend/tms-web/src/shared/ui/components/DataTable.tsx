@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { EmptyState } from './EmptyState'
 import { ErrorState } from './ErrorState'
 import { LoadingState } from './LoadingState'
@@ -31,11 +32,13 @@ export function DataTable<T>({
   isLoading = false,
   error = null,
   onRetry,
-  emptyTitle = 'No records found',
+  emptyTitle,
   emptyMessage,
 }: DataTableProps<T>) {
+  const { t } = useTranslation('common')
+
   if (isLoading) {
-    return <LoadingState label="Loading records..." />
+    return <LoadingState label={t('states.loadingRecords')} />
   }
 
   if (error) {
@@ -43,7 +46,7 @@ export function DataTable<T>({
   }
 
   if (rows.length === 0) {
-    return <EmptyState title={emptyTitle} message={emptyMessage} />
+    return <EmptyState title={emptyTitle ?? t('states.noRecords')} message={emptyMessage} />
   }
 
   return (

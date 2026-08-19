@@ -1,0 +1,8 @@
+{
+  "invalidEmail": "Ingresa un correo electrónico válido",
+  "invalidNumber": "Ingresa un número válido",
+  "maxLength": "No puede superar los {{count}} caracteres",
+  "minLength": "Debe tener al menos {{count}} caracteres",
+  "positiveNumber": "Debe ser un número mayor que cero",
+  "required": "Este campo es obligatorio"
+}

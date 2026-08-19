@@ -92,7 +92,7 @@ describe('RoutesPage', () => {
 
     renderPage()
 
-    expect(screen.getByText('Loading records...')).toBeInTheDocument()
+    expect(screen.getByText('Cargando registros...')).toBeInTheDocument()
   })
 
   it('shows an empty state when the company has no routes yet', async () => {
@@ -114,8 +114,8 @@ describe('RoutesPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('Something went wrong on our side. Please try again.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(await screen.findByText('Ocurrió un error de nuestro lado. Vuelve a intentarlo.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
   })
 
   it('lists routes with origin, zone and stop count, and shows pagination once there is more than one page', async () => {
@@ -130,7 +130,7 @@ describe('RoutesPage', () => {
     expect(screen.getByText('Origin A')).toBeInTheDocument()
     expect(screen.getByText('Zone A')).toBeInTheDocument()
     expect(screen.getByText('3')).toBeInTheDocument()
-    expect(screen.getByText(/Page 1 of 3/)).toBeInTheDocument()
+    expect(screen.getByText(/Página 1 de 3/)).toBeInTheDocument()
   })
 
   it('distinguishes a Master Route from a future calculated Trip route in its description', async () => {
@@ -141,7 +141,7 @@ describe('RoutesPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText(/distinct from a Trip's calculated route/i)).toBeInTheDocument()
+    expect(await screen.findByText(/distinta de la ruta calculada de un viaje/i)).toBeInTheDocument()
   })
 
   it('hides create and manage actions for a caller without masterdata.route:manage', async () => {
@@ -153,7 +153,7 @@ describe('RoutesPage', () => {
     renderPage()
     await screen.findByText('NORTH-CORRIDOR')
 
-    expect(screen.queryByRole('button', { name: 'New route' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nueva ruta' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
   })
@@ -190,7 +190,7 @@ describe('RoutesPage', () => {
     await screen.findByText('NORTH-CORRIDOR')
 
     await userEvent.type(screen.getByLabelText(/^code$/i), 'north')
-    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
 
     await waitFor(() =>
       expect(routesApiMocks.fetchRoutes).toHaveBeenLastCalledWith(expect.objectContaining({ code: 'north' })),

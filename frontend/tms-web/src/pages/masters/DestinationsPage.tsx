@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import {
   activateDestination,
@@ -19,7 +20,7 @@ import {
   FilterBar,
   PageHeader,
   Pagination,
-  StatusBadge,
+  ActiveBadge,
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
@@ -42,6 +43,7 @@ const DEFAULT_FILTERS: AppliedFilters = { code: '', name: '', type: '', zoneId: 
 type ModalState = { mode: 'create' } | { mode: 'edit'; destination: DestinationView } | null
 
 export function DestinationsPage() {
+  const { t } = useTranslation('masters')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('masterdata.destination:manage')
@@ -132,7 +134,7 @@ export function DestinationsPage() {
       key: 'active',
       header: 'Status',
       render: (destination) => (
-        <StatusBadge label={destination.active ? 'Active' : 'Inactive'} tone={destination.active ? 'success' : 'neutral'} />
+        <ActiveBadge active={destination.active} />
       ),
     },
   ]
@@ -168,12 +170,12 @@ export function DestinationsPage() {
   return (
     <div>
       <PageHeader
-        title="Destinations"
-        description="Delivery and service points used to plan and build trips."
+        title={t('destinations.title')}
+        description={t('destinations.description')}
         actions={
           canManage && (
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
-              New destination
+              {t('destinations.new')}
             </button>
           )
         }

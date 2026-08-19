@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import type { ApiError } from '../../shared/api/httpClient'
 import { fetchOrigins } from '../../shared/api/originsApi'
@@ -45,6 +46,7 @@ const DEFAULT_FILTERS: AppliedFilters = { planNumber: '', originId: '', planning
  * everything that happens inside it (`docs/domain/PLANNING_MANUAL_V1.md`, "The flow"). Runs are
  * never edited from here - only listed, filtered and created. */
 export function PlanningRunsPage() {
+  const { t } = useTranslation('planning')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('planning.plan:manage')
@@ -119,13 +121,12 @@ export function PlanningRunsPage() {
   return (
     <div>
       <PageHeader
-        title="Planning"
-        description="Manual planning runs: one origin, one planning date. Open a run to create trips, assign
-          orders and confirm the plan."
+        title={t('title')}
+        description={t('description')}
         actions={
           canManage && (
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>
-              New run
+              {t('new')}
             </button>
           )
         }

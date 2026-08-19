@@ -90,7 +90,7 @@ describe('DestinationsPage', () => {
 
     renderPage()
 
-    expect(screen.getByText('Loading records...')).toBeInTheDocument()
+    expect(screen.getByText('Cargando registros...')).toBeInTheDocument()
   })
 
   it('shows an empty state when the company has no destinations yet', async () => {
@@ -112,8 +112,8 @@ describe('DestinationsPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('Something went wrong on our side. Please try again.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(await screen.findByText('Ocurrió un error de nuestro lado. Vuelve a intentarlo.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
   })
 
   it('lists destinations returned by the backend and shows pagination once there is more than one page', async () => {
@@ -126,7 +126,7 @@ describe('DestinationsPage', () => {
     expect(await screen.findByText('NORTH-STORE')).toBeInTheDocument()
     expect(screen.getByText('Zone A')).toBeInTheDocument()
     expect(screen.getByText('Miraflores / Lima')).toBeInTheDocument()
-    expect(screen.getByText(/Page 1 of 3/)).toBeInTheDocument()
+    expect(screen.getByText(/Página 1 de 3/)).toBeInTheDocument()
   })
 
   it('hides create and manage actions for a caller without masterdata.destination:manage', async () => {
@@ -138,7 +138,7 @@ describe('DestinationsPage', () => {
 
     await screen.findByText('NORTH-STORE')
 
-    expect(screen.queryByRole('button', { name: 'New destination' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nuevo destino' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
   })
@@ -152,7 +152,7 @@ describe('DestinationsPage', () => {
     renderPage()
     await screen.findByText('No destinations found')
 
-    await userEvent.click(screen.getByRole('button', { name: 'New destination' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Nuevo destino' }))
     const dialog = within(screen.getByRole('dialog'))
     await userEvent.type(dialog.getByLabelText(/^code/i), 'NEW-DEST')
     await userEvent.type(dialog.getByLabelText(/^name/i), 'New Destination')
@@ -200,7 +200,7 @@ describe('DestinationsPage', () => {
     await screen.findByText('NORTH-STORE')
 
     await userEvent.type(screen.getByLabelText(/^code$/i), 'north')
-    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
 
     await waitFor(() =>
       expect(destinationsApiMocks.fetchDestinations).toHaveBeenLastCalledWith(

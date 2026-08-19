@@ -74,7 +74,7 @@ describe('OriginsPage', () => {
 
     renderPage()
 
-    expect(screen.getByText('Loading records...')).toBeInTheDocument()
+    expect(screen.getByText('Cargando registros...')).toBeInTheDocument()
   })
 
   it('shows an empty state when the company has no origins yet', async () => {
@@ -94,8 +94,8 @@ describe('OriginsPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('Something went wrong on our side. Please try again.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(await screen.findByText('Ocurrió un error de nuestro lado. Vuelve a intentarlo.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
   })
 
   it('lists origins returned by the backend and shows pagination once there is more than one page', async () => {
@@ -106,7 +106,7 @@ describe('OriginsPage', () => {
 
     expect(await screen.findByText('NORTH-HUB')).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'Hub' })).toBeInTheDocument()
-    expect(screen.getByText(/Page 1 of 3/)).toBeInTheDocument()
+    expect(screen.getByText(/Página 1 de 3/)).toBeInTheDocument()
   })
 
   it('hides create and manage actions for a caller without masterdata.origin:manage', async () => {
@@ -117,7 +117,7 @@ describe('OriginsPage', () => {
 
     await screen.findByText('NORTH-HUB')
 
-    expect(screen.queryByRole('button', { name: 'New origin' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nuevo origen' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
   })
@@ -130,7 +130,7 @@ describe('OriginsPage', () => {
     renderPage()
     await screen.findByText('No origins found')
 
-    await userEvent.click(screen.getByRole('button', { name: 'New origin' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Nuevo origen' }))
     const dialog = within(screen.getByRole('dialog'))
     await userEvent.type(dialog.getByLabelText(/^code/i), 'NEW-ORIGIN')
     await userEvent.type(dialog.getByLabelText(/^name/i), 'New Origin')
@@ -170,7 +170,7 @@ describe('OriginsPage', () => {
     await screen.findByText('NORTH-HUB')
 
     await userEvent.type(screen.getByLabelText(/^code$/i), 'north')
-    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
 
     await waitFor(() =>
       expect(originsApiMocks.fetchOrigins).toHaveBeenLastCalledWith(expect.objectContaining({ code: 'north' })),

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { NavLink } from 'react-router-dom'
 import { useCompany } from '../company/CompanyContext'
 import { NAV_GROUPS } from './navConfig'
@@ -29,6 +30,7 @@ export interface SidebarProps {
  * backend's own permission check to actually do anything.
  */
 export function Sidebar({ open, onRequestClose }: SidebarProps) {
+  const { t } = useTranslation('navigation')
   const { hasCapability, status } = useCompany()
 
   const visibleGroups = NAV_GROUPS.filter(
@@ -45,24 +47,29 @@ export function Sidebar({ open, onRequestClose }: SidebarProps) {
     >
       <div className="offcanvas-header d-lg-none">
         <h2 className="offcanvas-title h6 mb-0" id="tms-sidebar-label">
-          Menu
+          {t('menu')}
         </h2>
-        <button type="button" className="btn-close btn-close-white" onClick={onRequestClose} aria-label="Close" />
+        <button
+          type="button"
+          className="btn-close btn-close-white"
+          onClick={onRequestClose}
+          aria-label={t('close')}
+        />
       </div>
       <div className="offcanvas-body d-flex flex-column p-0">
-        <nav className="nav flex-column py-2" aria-label="Main navigation">
+        <nav className="nav flex-column py-2" aria-label={t('mainNavigation')}>
           <NavLink to="/" end className={navLinkClass}>
-            Dashboard
+            {t('home')}
           </NavLink>
 
           {visibleGroups.map((group) => (
-            <div key={group.label} className="mt-3">
+            <div key={group.labelKey} className="mt-3">
               <div className="text-uppercase small text-white-50 px-3 mb-1" style={{ letterSpacing: '0.04em' }}>
-                {group.label}
+                {t(group.labelKey)}
               </div>
               {group.items.map((item) => (
                 <NavLink key={item.to} to={item.to} className={navLinkClass}>
-                  {item.label}
+                  {t(item.labelKey)}
                 </NavLink>
               ))}
             </div>

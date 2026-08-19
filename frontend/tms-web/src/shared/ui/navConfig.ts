@@ -1,10 +1,14 @@
+import type { NavigationKey } from '../i18n/keys'
+
 export interface NavLeaf {
   to: string
-  label: string
+  /** Key inside the `navigation` namespace. The menu never carries display text itself, so a
+   * language switch cannot leave part of the navigation in the previous language. */
+  labelKey: NavigationKey
 }
 
 export interface NavGroup {
-  label: string
+  labelKey: NavigationKey
   /** Backend capability name (`shared/security/Capability` in tms-api) that gates visibility.
    * `undefined` means always visible. Hiding is UX only - the backend re-checks every call. */
   capability?: string
@@ -16,43 +20,43 @@ export interface NavGroup {
  * just not implemented. */
 export const NAV_GROUPS: NavGroup[] = [
   {
-    label: 'Master Data',
+    labelKey: 'groups.masters',
     capability: 'MASTER_DATA_VIEW',
     items: [
-      { to: '/masters/origins', label: 'Origins' },
-      { to: '/masters/destinations', label: 'Destinations' },
-      { to: '/masters/zones', label: 'Zones' },
-      { to: '/masters/frequencies', label: 'Frequencies' },
-      { to: '/masters/routes', label: 'Routes' },
+      { to: '/masters/origins', labelKey: 'items.origins' },
+      { to: '/masters/destinations', labelKey: 'items.destinations' },
+      { to: '/masters/zones', labelKey: 'items.zones' },
+      { to: '/masters/frequencies', labelKey: 'items.frequencies' },
+      { to: '/masters/routes', labelKey: 'items.routes' },
     ],
   },
   {
-    label: 'Fleet',
+    labelKey: 'groups.fleet',
     capability: 'FLEET_VIEW',
     items: [
-      { to: '/fleet/carriers', label: 'Carriers' },
-      { to: '/fleet/vehicle-types', label: 'Vehicle types' },
-      { to: '/fleet/vehicles', label: 'Vehicles' },
+      { to: '/fleet/carriers', labelKey: 'items.carriers' },
+      { to: '/fleet/vehicle-types', labelKey: 'items.vehicleTypes' },
+      { to: '/fleet/vehicles', labelKey: 'items.vehicles' },
     ],
   },
   {
-    label: 'Orders',
+    labelKey: 'groups.orders',
     capability: 'ORDERS_VIEW',
-    items: [{ to: '/orders', label: 'Orders' }],
+    items: [{ to: '/orders', labelKey: 'items.orders' }],
   },
   {
-    label: 'Planning',
+    labelKey: 'groups.planning',
     capability: 'PLANNING_VIEW',
-    items: [{ to: '/planning', label: 'Planning' }],
+    items: [{ to: '/planning', labelKey: 'items.planning' }],
   },
   {
-    label: 'Trips',
+    labelKey: 'groups.trips',
     capability: 'TRIPS_VIEW',
-    items: [{ to: '/trips', label: 'Trips' }],
+    items: [{ to: '/trips', labelKey: 'items.trips' }],
   },
   {
-    label: 'Administration',
+    labelKey: 'groups.administration',
     capability: 'IAM_VIEW',
-    items: [{ to: '/admin/security', label: 'Security' }],
+    items: [{ to: '/admin/security', labelKey: 'items.security' }],
   },
 ]

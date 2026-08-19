@@ -69,7 +69,7 @@ describe('ZonesPage', () => {
 
     renderPage()
 
-    expect(screen.getByText('Loading records...')).toBeInTheDocument()
+    expect(screen.getByText('Cargando registros...')).toBeInTheDocument()
   })
 
   it('shows an empty state when the company has no zones yet', async () => {
@@ -89,8 +89,8 @@ describe('ZonesPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('Something went wrong on our side. Please try again.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(await screen.findByText('Ocurrió un error de nuestro lado. Vuelve a intentarlo.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
   })
 
   it('lists zones returned by the backend and shows pagination once there is more than one page', async () => {
@@ -101,7 +101,7 @@ describe('ZonesPage', () => {
 
     expect(await screen.findByText('NORTH-ZONE')).toBeInTheDocument()
     expect(screen.getByText('Northern operational area')).toBeInTheDocument()
-    expect(screen.getByText(/Page 1 of 3/)).toBeInTheDocument()
+    expect(screen.getByText(/Página 1 de 3/)).toBeInTheDocument()
   })
 
   it('hides create and manage actions for a caller without masterdata.zone:manage', async () => {
@@ -112,7 +112,7 @@ describe('ZonesPage', () => {
 
     await screen.findByText('NORTH-ZONE')
 
-    expect(screen.queryByRole('button', { name: 'New zone' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nueva zona' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
   })
@@ -125,7 +125,7 @@ describe('ZonesPage', () => {
     renderPage()
     await screen.findByText('No zones found')
 
-    await userEvent.click(screen.getByRole('button', { name: 'New zone' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Nueva zona' }))
     const dialog = within(screen.getByRole('dialog'))
     await userEvent.type(dialog.getByLabelText(/^code/i), 'NEW-ZONE')
     await userEvent.type(dialog.getByLabelText(/^name/i), 'New Zone')
@@ -164,7 +164,7 @@ describe('ZonesPage', () => {
     await screen.findByText('NORTH-ZONE')
 
     await userEvent.type(screen.getByLabelText(/^code$/i), 'north')
-    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
 
     await waitFor(() =>
       expect(zonesApiMocks.fetchZones).toHaveBeenLastCalledWith(expect.objectContaining({ code: 'north' })),

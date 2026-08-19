@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import { describeApiError } from '../../shared/api/problemMessages'
 import { useCompany } from '../../shared/company/CompanyContext'
@@ -15,7 +16,7 @@ import {
   FilterBar,
   PageHeader,
   Pagination,
-  StatusBadge,
+  ActiveBadge,
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
@@ -36,6 +37,7 @@ const DEFAULT_FILTERS: AppliedFilters = { code: '', name: '', active: 'active' }
 type ModalState = { mode: 'create' } | { mode: 'edit'; vehicleType: VehicleTypeView } | null
 
 export function VehicleTypesPage() {
+  const { t } = useTranslation('fleet')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('fleet.vehicle_type:manage')
@@ -112,7 +114,7 @@ export function VehicleTypesPage() {
       key: 'active',
       header: 'Status',
       render: (type) => (
-        <StatusBadge label={type.active ? 'Active' : 'Inactive'} tone={type.active ? 'success' : 'neutral'} />
+        <ActiveBadge active={type.active} />
       ),
     },
   ]
@@ -148,12 +150,12 @@ export function VehicleTypesPage() {
   return (
     <div>
       <PageHeader
-        title="Vehicle types"
-        description="Default capacities and physical characteristics for a class of vehicle."
+        title={t('vehicleTypes.title')}
+        description={t('vehicleTypes.description')}
         actions={
           canManage && (
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
-              New vehicle type
+              {t('vehicleTypes.new')}
             </button>
           )
         }

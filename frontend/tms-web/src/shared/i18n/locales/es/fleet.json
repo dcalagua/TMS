@@ -1,0 +1,17 @@
+{
+  "carriers": {
+    "description": "Proveedores de transporte usados por los vehículos, terceros o la flota propia de la compañía.",
+    "new": "Nuevo transportista",
+    "title": "Transportistas"
+  },
+  "vehicleTypes": {
+    "description": "Capacidades por defecto y características físicas de una clase de vehículo.",
+    "new": "Nuevo tipo de vehículo",
+    "title": "Tipos de vehículo"
+  },
+  "vehicles": {
+    "description": "Vehículos físicos, su asignación de transportista y tipo, y su capacidad efectiva. El seguimiento GPS/telemetría no forma parte de esta pantalla.",
+    "new": "Nuevo vehículo",
+    "title": "Vehículos"
+  }
+}

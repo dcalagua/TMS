@@ -1,0 +1,30 @@
+{
+  "close": "Close",
+  "closeNavigation": "Close navigation",
+  "groups": {
+    "administration": "Administration",
+    "fleet": "Fleet",
+    "masters": "Master data",
+    "orders": "Orders",
+    "planning": "Planning",
+    "trips": "Trips"
+  },
+  "home": "Home",
+  "items": {
+    "carriers": "Carriers",
+    "destinations": "Destinations",
+    "frequencies": "Frequencies",
+    "orders": "Orders",
+    "origins": "Origins",
+    "planning": "Planning",
+    "routes": "Routes",
+    "security": "Security",
+    "trips": "Trips",
+    "vehicleTypes": "Vehicle types",
+    "vehicles": "Vehicles",
+    "zones": "Zones"
+  },
+  "mainNavigation": "Main navigation",
+  "menu": "Menu",
+  "toggle": "Toggle navigation"
+}

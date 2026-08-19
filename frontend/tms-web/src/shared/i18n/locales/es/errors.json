@@ -1,0 +1,17 @@
+{
+  "codes": {
+    "access-denied": "No tienes permiso para realizar esta acción.",
+    "company-scope-forbidden": "Ya no tienes acceso a esa compañía. Elige otra.",
+    "company-scope-invalid": "La compañía seleccionada no es válida. Elige una compañía e inténtalo de nuevo.",
+    "company-scope-required": "No hay una compañía seleccionada. Elige una compañía e inténtalo de nuevo.",
+    "conflict": "Este cambio entra en conflicto con otra actualización. Recarga e inténtalo de nuevo.",
+    "internal-error": "Ocurrió un error de nuestro lado. Vuelve a intentarlo.",
+    "invalid-token": "Tu sesión ya no es válida. Vuelve a iniciar sesión.",
+    "malformed-request": "No se pudo procesar la solicitud.",
+    "principal-not-provisioned": "Tu cuenta aún no está dada de alta en TMS. Contacta a un administrador para solicitar acceso.",
+    "resource-not-found": "No se encontró el elemento solicitado.",
+    "unauthenticated": "Tu sesión expiró. Vuelve a iniciar sesión.",
+    "validation-failed": "Hay campos que debes corregir."
+  },
+  "fallback": "Algo salió mal. Vuelve a intentarlo."
+}

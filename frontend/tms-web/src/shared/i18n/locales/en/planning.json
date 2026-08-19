@@ -1,0 +1,9 @@
+{
+  "board": {
+    "orders": "Eligible orders",
+    "trips": "Trips"
+  },
+  "description": "Manual planning runs: one origin, one planning date. Open a run to create trips, assign orders and confirm the plan.",
+  "new": "New run",
+  "title": "Planning"
+}

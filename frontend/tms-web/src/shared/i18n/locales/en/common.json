@@ -1,0 +1,77 @@
+{
+  "actions": {
+    "activate": "Activate",
+    "apply": "Apply",
+    "applyFilters": "Apply filters",
+    "cancel": "Cancel",
+    "clear": "Clear",
+    "close": "Close",
+    "confirm": "Confirm",
+    "deactivate": "Deactivate",
+    "delete": "Delete",
+    "edit": "Edit",
+    "new": "New",
+    "next": "Next",
+    "openMenu": "Open actions menu",
+    "previous": "Previous",
+    "reset": "Reset",
+    "retry": "Retry",
+    "save": "Save",
+    "saving": "Saving...",
+    "search": "Search",
+    "tryAgain": "Try again"
+  },
+  "brand": {
+    "name": "TMS by EBIM",
+    "tagline": "Transport Management System"
+  },
+  "comingSoon": {
+    "message": "{{module}} will be available in an upcoming release.",
+    "title": "Coming soon"
+  },
+  "company": {
+    "label": "Company",
+    "loadError": "Could not load your companies.",
+    "loading": "Loading companies...",
+    "loadingYours": "Loading your companies...",
+    "noAccess": "No company access",
+    "noAccessMessage": "Your account has no active company membership. Contact an administrator.",
+    "noAccessTitle": "No company access",
+    "select": "Select a company"
+  },
+  "labels": {
+    "actions": "Actions",
+    "all": "All",
+    "loading": "Loading",
+    "no": "No",
+    "noResults": "No results",
+    "notAvailable": "n/a",
+    "reference": "Reference",
+    "required": "required",
+    "status": "Status",
+    "yes": "Yes"
+  },
+  "language": {
+    "en": "EN",
+    "english": "English",
+    "es": "ES",
+    "label": "Language",
+    "spanish": "Spanish"
+  },
+  "notFound": {
+    "back": "Back to home",
+    "code": "404",
+    "message": "This screen does not exist."
+  },
+  "pagination": {
+    "label": "Pagination",
+    "pageOf": "Page {{page}} of {{pages}}",
+    "range": "{{from}}-{{to}} of {{total}}"
+  },
+  "states": {
+    "errorTitle": "Something went wrong",
+    "loading": "Loading...",
+    "loadingRecords": "Loading records...",
+    "noRecords": "No records found"
+  }
+}

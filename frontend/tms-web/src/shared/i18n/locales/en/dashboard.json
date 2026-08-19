@@ -1,0 +1,18 @@
+{
+  "apiChecking": "Checking the TMS API...",
+  "apiReachable": "Operational",
+  "apiStatus": "API status",
+  "apiUnreachable": "TMS API unreachable",
+  "apiUnreachableHint": "Start the backend, then reload this page.",
+  "company": "Company",
+  "email": "Email",
+  "noCompany": "No company selected",
+  "organization": "Organization",
+  "quickAccess": "Quick access",
+  "quickAccessEmpty": "Your account has no modules enabled in this company yet.",
+  "signedInAs": "Signed in as",
+  "subtitle": "Here is the state of your operation at {{company}}.",
+  "timeZone": "Time zone",
+  "title": "Home",
+  "welcome": "Hello, {{name}}"
+}

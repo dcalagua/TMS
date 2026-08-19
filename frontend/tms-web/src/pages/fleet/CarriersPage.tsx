@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import { activateCarrier, deactivateCarrier, fetchCarriers, type CarrierView } from '../../shared/api/carriersApi'
 import { describeApiError } from '../../shared/api/problemMessages'
@@ -10,7 +11,7 @@ import {
   FilterBar,
   PageHeader,
   Pagination,
-  StatusBadge,
+  ActiveBadge,
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
@@ -31,6 +32,7 @@ const DEFAULT_FILTERS: AppliedFilters = { code: '', businessName: '', active: 'a
 type ModalState = { mode: 'create' } | { mode: 'edit'; carrier: CarrierView } | null
 
 export function CarriersPage() {
+  const { t } = useTranslation('fleet')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('fleet.carrier:manage')
@@ -107,7 +109,7 @@ export function CarriersPage() {
       key: 'active',
       header: 'Status',
       render: (carrier) => (
-        <StatusBadge label={carrier.active ? 'Active' : 'Inactive'} tone={carrier.active ? 'success' : 'neutral'} />
+        <ActiveBadge active={carrier.active} />
       ),
     },
   ]
@@ -143,12 +145,12 @@ export function CarriersPage() {
   return (
     <div>
       <PageHeader
-        title="Carriers"
-        description="Transport providers used by vehicles, third-party or the company's own fleet operator."
+        title={t('carriers.title')}
+        description={t('carriers.description')}
         actions={
           canManage && (
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
-              New carrier
+              {t('carriers.new')}
             </button>
           )
         }

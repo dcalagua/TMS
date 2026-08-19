@@ -1,0 +1,17 @@
+{
+  "codes": {
+    "access-denied": "You do not have permission to do this.",
+    "company-scope-forbidden": "You no longer have access to that company. Choose another one.",
+    "company-scope-invalid": "The selected company is invalid. Choose a company and try again.",
+    "company-scope-required": "No company is selected. Choose a company and try again.",
+    "conflict": "This change conflicts with another update. Reload and try again.",
+    "internal-error": "Something went wrong on our side. Please try again.",
+    "invalid-token": "Your session is no longer valid. Please sign in again.",
+    "malformed-request": "The request could not be processed.",
+    "principal-not-provisioned": "Your account is not set up in TMS yet. Contact an administrator to request access.",
+    "resource-not-found": "The requested item could not be found.",
+    "unauthenticated": "Your session has expired. Please sign in again.",
+    "validation-failed": "Some fields need to be corrected."
+  },
+  "fallback": "Something went wrong. Please try again."
+}

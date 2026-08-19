@@ -1,0 +1,27 @@
+{
+  "destinations": {
+    "description": "Delivery and service points used to plan and build trips.",
+    "new": "New destination",
+    "title": "Destinations"
+  },
+  "frequencies": {
+    "description": "Delivery schedules: weekly cadence, cutoff and lead-time rules.",
+    "new": "New frequency",
+    "title": "Frequencies"
+  },
+  "origins": {
+    "description": "Loading and dispatch points used to plan and build trips.",
+    "new": "New origin",
+    "title": "Origins"
+  },
+  "routes": {
+    "description": "Master Route: a reusable planned corridor (an origin plus an ordered list of destination stops) that a planner sets up once and reuses. This is distinct from a Trip's calculated route, which does not exist yet and will be produced per shipment from live orders and capacity.",
+    "new": "New route",
+    "title": "Routes"
+  },
+  "zones": {
+    "description": "Named operational areas used to group origins, destinations and routes.",
+    "new": "New zone",
+    "title": "Zones"
+  }
+}

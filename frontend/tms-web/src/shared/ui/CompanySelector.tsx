@@ -1,8 +1,10 @@
+import { useTranslation } from 'react-i18next'
 import { useCompany } from '../company/CompanyContext'
 
 /** Company switcher, built only from what `GET /api/v1/me` returned - the UI cannot offer a
  * company the backend did not list. */
 export function CompanySelector() {
+  const { t } = useTranslation('common')
   const { status, companies, selected, selectCompany } = useCompany()
 
   if (status === 'idle') {
@@ -10,11 +12,11 @@ export function CompanySelector() {
   }
 
   if (status === 'loading') {
-    return <span className="small text-white-50">Loading companies...</span>
+    return <span className="small text-white-50">{t('company.loading')}</span>
   }
 
   if (status === 'error' || companies.length === 0) {
-    return <span className="small text-warning">No company access</span>
+    return <span className="small text-warning">{t('company.noAccess')}</span>
   }
 
   return (
@@ -25,7 +27,7 @@ export function CompanySelector() {
         data-bs-toggle="dropdown"
         aria-expanded="false"
       >
-        {selected?.name ?? 'Select company'}
+        {selected?.name ?? t('company.select')}
       </button>
       <ul className="dropdown-menu dropdown-menu-end">
         {companies.map((company) => (

@@ -80,7 +80,7 @@ describe('VehicleTypesPage', () => {
 
     renderPage()
 
-    expect(screen.getByText('Loading records...')).toBeInTheDocument()
+    expect(screen.getByText('Cargando registros...')).toBeInTheDocument()
   })
 
   it('shows an empty state when the company has no vehicle types yet', async () => {
@@ -100,7 +100,7 @@ describe('VehicleTypesPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('Something went wrong on our side. Please try again.')).toBeInTheDocument()
+    expect(await screen.findByText('Ocurrió un error de nuestro lado. Vuelve a intentarlo.')).toBeInTheDocument()
   })
 
   it('lists vehicle types returned by the backend', async () => {
@@ -111,7 +111,7 @@ describe('VehicleTypesPage', () => {
 
     expect(await screen.findByText('TRUCK-10T')).toBeInTheDocument()
     expect(screen.getByText('10 ton truck')).toBeInTheDocument()
-    expect(screen.getByText(/Page 1 of 3/)).toBeInTheDocument()
+    expect(screen.getByText(/Página 1 de 3/)).toBeInTheDocument()
   })
 
   it('hides create and manage actions for a caller without fleet.vehicle_type:manage', async () => {
@@ -122,7 +122,7 @@ describe('VehicleTypesPage', () => {
 
     await screen.findByText('TRUCK-10T')
 
-    expect(screen.queryByRole('button', { name: 'New vehicle type' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nuevo tipo de vehículo' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
 
@@ -134,7 +134,7 @@ describe('VehicleTypesPage', () => {
     renderPage()
     await screen.findByText('No vehicle types found')
 
-    await userEvent.click(screen.getByRole('button', { name: 'New vehicle type' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Nuevo tipo de vehículo' }))
     const dialog = screen.getByRole('dialog')
     await userEvent.type(within(dialog).getByLabelText(/^code/i), 'TANKER')
     await userEvent.type(within(dialog).getByLabelText(/^name/i), 'Tanker')

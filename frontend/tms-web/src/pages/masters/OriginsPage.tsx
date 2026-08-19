@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import {
   activateOrigin,
@@ -18,7 +19,7 @@ import {
   FilterBar,
   PageHeader,
   Pagination,
-  StatusBadge,
+  ActiveBadge,
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
@@ -40,6 +41,7 @@ const DEFAULT_FILTERS: AppliedFilters = { code: '', name: '', type: '', active: 
 type ModalState = { mode: 'create' } | { mode: 'edit'; origin: OriginView } | null
 
 export function OriginsPage() {
+  const { t } = useTranslation('masters')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('masterdata.origin:manage')
@@ -117,7 +119,7 @@ export function OriginsPage() {
       key: 'active',
       header: 'Status',
       render: (origin) => (
-        <StatusBadge label={origin.active ? 'Active' : 'Inactive'} tone={origin.active ? 'success' : 'neutral'} />
+        <ActiveBadge active={origin.active} />
       ),
     },
   ]
@@ -149,12 +151,12 @@ export function OriginsPage() {
   return (
     <div>
       <PageHeader
-        title="Origins"
-        description="Loading and dispatch points used to plan and build trips."
+        title={t('origins.title')}
+        description={t('origins.description')}
         actions={
           canManage && (
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
-              New origin
+              {t('origins.new')}
             </button>
           )
         }

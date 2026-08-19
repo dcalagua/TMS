@@ -31,7 +31,7 @@ describe('CompanySelector', () => {
 
     render(<CompanySelector />)
 
-    expect(screen.getByText('No company access')).toBeInTheDocument()
+    expect(screen.getByText('Sin acceso a compañías')).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 })

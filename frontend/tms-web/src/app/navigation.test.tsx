@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -46,20 +46,21 @@ vi.mock('../shared/company/CompanyContext', () => ({
 
 /** Every sidebar entry, with the URL it must reach and the `h1` its screen renders. */
 const NAV_TARGETS = [
-  { link: 'Dashboard', path: '/', heading: 'Dashboard' },
-  { link: 'Origins', path: '/masters/origins', heading: 'Origins' },
-  { link: 'Destinations', path: '/masters/destinations', heading: 'Destinations' },
-  { link: 'Zones', path: '/masters/zones', heading: 'Zones' },
-  { link: 'Frequencies', path: '/masters/frequencies', heading: 'Frequencies' },
-  { link: 'Routes', path: '/masters/routes', heading: 'Routes' },
-  { link: 'Carriers', path: '/fleet/carriers', heading: 'Carriers' },
-  { link: 'Vehicle types', path: '/fleet/vehicle-types', heading: 'Vehicle types' },
-  { link: 'Vehicles', path: '/fleet/vehicles', heading: 'Vehicles' },
-  { link: 'Orders', path: '/orders', heading: 'Orders' },
-  { link: 'Planning', path: '/planning', heading: 'Planning' },
-  { link: 'Trips', path: '/trips', heading: 'Trips' },
-  { link: 'Security', path: '/admin/security', heading: 'Security' },
-] as const
+  // The dashboard greets the signed-in user rather than repeating the menu label.
+  { link: 'Inicio', path: '/', heading: /^Hola,/ },
+  { link: 'Orígenes', path: '/masters/origins', heading: 'Orígenes' },
+  { link: 'Destinos', path: '/masters/destinations', heading: 'Destinos' },
+  { link: 'Zonas', path: '/masters/zones', heading: 'Zonas' },
+  { link: 'Frecuencias', path: '/masters/frequencies', heading: 'Frecuencias' },
+  { link: 'Rutas', path: '/masters/routes', heading: 'Rutas' },
+  { link: 'Transportistas', path: '/fleet/carriers', heading: 'Transportistas' },
+  { link: 'Tipos de vehículo', path: '/fleet/vehicle-types', heading: 'Tipos de vehículo' },
+  { link: 'Vehículos', path: '/fleet/vehicles', heading: 'Vehículos' },
+  { link: 'Pedidos', path: '/orders', heading: 'Pedidos' },
+  { link: 'Planificación', path: '/planning', heading: 'Planificación' },
+  { link: 'Viajes', path: '/trips', heading: 'Viajes' },
+  { link: 'Seguridad', path: '/admin/security', heading: 'Seguridad' },
+]
 
 function json(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
@@ -106,6 +107,12 @@ function sidebarPanel(): HTMLElement {
   return panel
 }
 
+/** Scoped to the sidebar: the dashboard also renders quick-access links with the same names,
+ * and this suite is about the menu. */
+function navLink(name: string): HTMLElement {
+  return within(sidebarPanel()).getByRole('link', { name })
+}
+
 beforeEach(() => {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => stubBackend(input))
 })
@@ -120,7 +127,7 @@ describe('sidebar navigation', () => {
     // Start somewhere else so that clicking Dashboard is a real navigation too.
     const router = renderApp(target.path === '/' ? '/orders' : '/')
 
-    await user.click(await screen.findByRole('link', { name: target.link }))
+    await user.click(navLink(target.link))
 
     await waitFor(() => expect(router.state.location.pathname).toBe(target.path))
     expect(await screen.findByRole('heading', { level: 1, name: target.heading })).toBeInTheDocument()
@@ -130,9 +137,9 @@ describe('sidebar navigation', () => {
     const user = userEvent.setup()
     renderApp('/')
 
-    await user.click(await screen.findByRole('link', { name: 'Vehicles' }))
+    await user.click(navLink('Vehículos'))
 
-    const active = await screen.findByRole('link', { name: 'Vehicles' })
+    const active = navLink('Vehículos')
     expect(active).toHaveAttribute('aria-current', 'page')
   })
 
@@ -140,23 +147,23 @@ describe('sidebar navigation', () => {
     const user = userEvent.setup()
     const router = renderApp('/')
 
-    await user.click(await screen.findByRole('link', { name: 'Zones' }))
+    await user.click(navLink('Zonas'))
     await waitFor(() => expect(router.state.location.pathname).toBe('/masters/zones'))
 
     await router.navigate(-1)
     await waitFor(() => expect(router.state.location.pathname).toBe('/'))
-    expect(await screen.findByRole('heading', { level: 1, name: 'Dashboard' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: /^Hola,/ })).toBeInTheDocument()
 
     await router.navigate(1)
     await waitFor(() => expect(router.state.location.pathname).toBe('/masters/zones'))
-    expect(await screen.findByRole('heading', { level: 1, name: 'Zones' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Zonas' })).toBeInTheDocument()
   })
 
   it('renders the right screen when a URL is opened directly, not only when reached by a click', async () => {
     const router = renderApp('/fleet/vehicle-types')
 
     expect(router.state.location.pathname).toBe('/fleet/vehicle-types')
-    expect(await screen.findByRole('heading', { level: 1, name: 'Vehicle types' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Tipos de vehículo' })).toBeInTheDocument()
   })
 })
 
@@ -165,7 +172,7 @@ describe('mobile offcanvas navigation', () => {
     const user = userEvent.setup()
     renderApp('/')
 
-    const toggle = screen.getByRole('button', { name: 'Toggle navigation' })
+    const toggle = screen.getByRole('button', { name: 'Abrir o cerrar la navegación' })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
 
     await user.click(toggle)
@@ -178,13 +185,13 @@ describe('mobile offcanvas navigation', () => {
     const user = userEvent.setup()
     const router = renderApp('/')
 
-    await user.click(screen.getByRole('button', { name: 'Toggle navigation' }))
+    await user.click(screen.getByRole('button', { name: 'Abrir o cerrar la navegación' }))
     expect(sidebarPanel()).toHaveClass('show')
 
-    await user.click(await screen.findByRole('link', { name: 'Destinations' }))
+    await user.click(navLink('Destinos'))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/masters/destinations'))
-    expect(await screen.findByRole('heading', { level: 1, name: 'Destinations' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Destinos' })).toBeInTheDocument()
     await waitFor(() => expect(sidebarPanel()).not.toHaveClass('show'))
   })
 
@@ -192,7 +199,7 @@ describe('mobile offcanvas navigation', () => {
     const user = userEvent.setup()
     const router = renderApp('/orders')
 
-    await user.click(screen.getByRole('button', { name: 'Toggle navigation' }))
+    await user.click(screen.getByRole('button', { name: 'Abrir o cerrar la navegación' }))
     expect(sidebarPanel()).toHaveClass('show')
 
     await user.keyboard('{Escape}')
@@ -205,8 +212,8 @@ describe('mobile offcanvas navigation', () => {
     const user = userEvent.setup()
     renderApp('/')
 
-    await user.click(screen.getByRole('button', { name: 'Toggle navigation' }))
-    await user.click(screen.getByRole('button', { name: 'Close navigation' }))
+    await user.click(screen.getByRole('button', { name: 'Abrir o cerrar la navegación' }))
+    await user.click(screen.getByRole('button', { name: 'Cerrar navegación' }))
 
     await waitFor(() => expect(sidebarPanel()).not.toHaveClass('show'))
   })
@@ -215,11 +222,11 @@ describe('mobile offcanvas navigation', () => {
     const user = userEvent.setup()
     const router = renderApp('/')
 
-    const link = await screen.findByRole('link', { name: 'Carriers' })
+    const link = navLink('Transportistas')
     link.focus()
     await user.keyboard('{Enter}')
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/fleet/carriers'))
-    expect(await screen.findByRole('heading', { level: 1, name: 'Carriers' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Transportistas' })).toBeInTheDocument()
   })
 })

@@ -1,0 +1,77 @@
+{
+  "actions": {
+    "activate": "Activar",
+    "apply": "Aplicar",
+    "applyFilters": "Aplicar filtros",
+    "cancel": "Cancelar",
+    "clear": "Limpiar",
+    "close": "Cerrar",
+    "confirm": "Confirmar",
+    "deactivate": "Desactivar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "new": "Nuevo",
+    "next": "Siguiente",
+    "openMenu": "Abrir menú de acciones",
+    "previous": "Anterior",
+    "reset": "Limpiar",
+    "retry": "Reintentar",
+    "save": "Guardar",
+    "saving": "Guardando...",
+    "search": "Buscar",
+    "tryAgain": "Reintentar"
+  },
+  "brand": {
+    "name": "TMS by EBIM",
+    "tagline": "Sistema de Gestión de Transporte"
+  },
+  "comingSoon": {
+    "message": "{{module}} estará disponible en una próxima versión.",
+    "title": "Próximamente"
+  },
+  "company": {
+    "label": "Compañía",
+    "loadError": "No se pudieron cargar tus compañías.",
+    "loading": "Cargando compañías...",
+    "loadingYours": "Cargando tus compañías...",
+    "noAccess": "Sin acceso a compañías",
+    "noAccessMessage": "Tu cuenta no tiene una membresía activa en ninguna compañía. Contacta a un administrador.",
+    "noAccessTitle": "Sin acceso a compañías",
+    "select": "Selecciona una compañía"
+  },
+  "labels": {
+    "actions": "Acciones",
+    "all": "Todos",
+    "loading": "Cargando",
+    "no": "No",
+    "noResults": "Sin resultados",
+    "notAvailable": "n/d",
+    "reference": "Referencia",
+    "required": "obligatorio",
+    "status": "Estado",
+    "yes": "Sí"
+  },
+  "language": {
+    "en": "EN",
+    "english": "Inglés",
+    "es": "ES",
+    "label": "Idioma",
+    "spanish": "Español"
+  },
+  "notFound": {
+    "back": "Volver al inicio",
+    "code": "404",
+    "message": "Esta pantalla no existe."
+  },
+  "pagination": {
+    "label": "Paginación",
+    "pageOf": "Página {{page}} de {{pages}}",
+    "range": "{{from}}-{{to}} de {{total}}"
+  },
+  "states": {
+    "errorTitle": "Algo salió mal",
+    "loading": "Cargando...",
+    "loadingRecords": "Cargando registros...",
+    "noRecords": "Sin resultados"
+  }
+}

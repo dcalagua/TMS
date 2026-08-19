@@ -24,9 +24,9 @@ describe('LoginPage', () => {
     authMocks.useAuth.mockReturnValue({ status: 'signedOut', signIn })
 
     renderLogin()
-    await userEvent.type(screen.getByLabelText('Email', { exact: false }), 'driver@ebim.test')
-    await userEvent.type(screen.getByLabelText('Password', { exact: false }), 'correct-horse')
-    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    await userEvent.type(screen.getByLabelText('Correo', { exact: false }), 'driver@ebim.test')
+    await userEvent.type(screen.getByLabelText(/^Contrase/), 'correct-horse')
+    await userEvent.click(screen.getByRole('button', { name: 'Ingresar' }))
 
     expect(signIn).toHaveBeenCalledWith('driver@ebim.test', 'correct-horse')
   })
@@ -36,9 +36,9 @@ describe('LoginPage', () => {
     authMocks.useAuth.mockReturnValue({ status: 'signedOut', signIn })
 
     renderLogin()
-    await userEvent.type(screen.getByLabelText('Email', { exact: false }), 'driver@ebim.test')
-    await userEvent.type(screen.getByLabelText('Password', { exact: false }), 'wrong-password')
-    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    await userEvent.type(screen.getByLabelText('Correo', { exact: false }), 'driver@ebim.test')
+    await userEvent.type(screen.getByLabelText(/^Contrase/), 'wrong-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Ingresar' }))
 
     expect(await screen.findByText('Invalid login credentials')).toBeInTheDocument()
     expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()

@@ -100,7 +100,7 @@ describe('VehiclesPage', () => {
 
     renderPage()
 
-    expect(screen.getByText('Loading records...')).toBeInTheDocument()
+    expect(screen.getByText('Cargando registros...')).toBeInTheDocument()
   })
 
   it('shows an empty state when the company has no vehicles yet', async () => {
@@ -122,7 +122,7 @@ describe('VehiclesPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('Something went wrong on our side. Please try again.')).toBeInTheDocument()
+    expect(await screen.findByText('Ocurrió un error de nuestro lado. Vuelve a intentarlo.')).toBeInTheDocument()
   })
 
   it('lists vehicles with plate/code, carrier, type, effective capacity and availability', async () => {
@@ -139,7 +139,7 @@ describe('VehiclesPage', () => {
     expect(screen.getByText('10 ton truck')).toBeInTheDocument()
     expect(screen.getByText(/10000 kg/)).toBeInTheDocument()
     expect(screen.getByText('Available', { selector: 'span' })).toBeInTheDocument()
-    expect(screen.getByText(/Page 1 of 3/)).toBeInTheDocument()
+    expect(screen.getByText(/Página 1 de 3/)).toBeInTheDocument()
   })
 
   it('shows owned fleet when a vehicle has no carrier', async () => {
@@ -163,7 +163,7 @@ describe('VehiclesPage', () => {
 
     await screen.findByText('ABC-123')
 
-    expect(screen.queryByRole('button', { name: 'New vehicle' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nuevo vehículo' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
 
@@ -194,7 +194,7 @@ describe('VehiclesPage', () => {
     await screen.findByText('ABC-123')
 
     await userEvent.type(screen.getByLabelText(/license plate/i), 'abc')
-    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
 
     await waitFor(() =>
       expect(vehiclesApiMocks.fetchVehicles).toHaveBeenLastCalledWith(expect.objectContaining({ licensePlate: 'abc' })),

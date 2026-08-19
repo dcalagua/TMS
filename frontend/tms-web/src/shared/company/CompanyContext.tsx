@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import i18n from '../i18n'
 import { onApiResponseError, type ApiError } from '../api/httpClient'
 import { fetchMe, type CompanyAccessView, type MeView } from '../api/meApi'
 import { describeApiError, isCompanyScopeStale } from '../api/problemMessages'
@@ -78,7 +79,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       if (!isCompanyScopeStale(error)) {
         return
       }
-      notifyError('Company access changed', 'Your selection is no longer valid. Choose a company again.')
+      notifyError(i18n.t('companyChanged.title', { ns: 'dialogs' }), i18n.t('companyChanged.text', { ns: 'dialogs' }))
       setSelectedId(null)
       storeCompanyId(null)
       void queryClient.invalidateQueries({ queryKey: ['me'] })

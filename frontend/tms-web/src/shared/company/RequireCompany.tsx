@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Outlet } from 'react-router-dom'
 import { EmptyState } from '../ui/components/EmptyState'
 import { ErrorState } from '../ui/components/ErrorState'
@@ -10,23 +11,19 @@ import { useCompany } from './CompanyContext'
  * still independently validated by `CompanyScopeFilter` on the backend for every request.
  */
 export function RequireCompany() {
+  const { t } = useTranslation('common')
   const { status, companies, selected, errorMessage, refetch } = useCompany()
 
   if (status === 'idle' || status === 'loading') {
-    return <LoadingState label="Loading your companies..." />
+    return <LoadingState label={t('company.loadingYours')} />
   }
 
   if (status === 'error') {
-    return <ErrorState message={errorMessage ?? 'Could not load your companies.'} onRetry={refetch} />
+    return <ErrorState message={errorMessage ?? t('company.loadError')} onRetry={refetch} />
   }
 
   if (companies.length === 0 || !selected) {
-    return (
-      <EmptyState
-        title="No company access"
-        message="Your account has no active company membership. Contact an administrator."
-      />
-    )
+    return <EmptyState title={t('company.noAccessTitle')} message={t('company.noAccessMessage')} />
   }
 
   return <Outlet />

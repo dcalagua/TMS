@@ -1,3 +1,4 @@
+export { ActiveBadge } from './ActiveBadge'
 export { CapacityBar } from './CapacityBar'
 export { type ConfirmDialogOptions, confirmDialog } from './ConfirmDialog'
 export { DataTable, type DataTableColumn } from './DataTable'

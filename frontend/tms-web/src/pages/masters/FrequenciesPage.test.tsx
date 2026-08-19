@@ -75,7 +75,7 @@ describe('FrequenciesPage', () => {
 
     renderPage()
 
-    expect(screen.getByText('Loading records...')).toBeInTheDocument()
+    expect(screen.getByText('Cargando registros...')).toBeInTheDocument()
   })
 
   it('shows an empty state when the company has no frequencies yet', async () => {
@@ -95,8 +95,8 @@ describe('FrequenciesPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('Something went wrong on our side. Please try again.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(await screen.findByText('Ocurrió un error de nuestro lado. Vuelve a intentarlo.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
   })
 
   it('lists frequencies and summarizes their enabled weekly days', async () => {
@@ -107,7 +107,7 @@ describe('FrequenciesPage', () => {
 
     expect(await screen.findByText('MON-WED-FRI')).toBeInTheDocument()
     expect(screen.getByText('Mon, Wed, Fri')).toBeInTheDocument()
-    expect(screen.getByText(/Page 1 of 3/)).toBeInTheDocument()
+    expect(screen.getByText(/Página 1 de 3/)).toBeInTheDocument()
   })
 
   it('hides create and manage actions for a caller without masterdata.frequency:manage', async () => {
@@ -118,7 +118,7 @@ describe('FrequenciesPage', () => {
 
     await screen.findByText('MON-WED-FRI')
 
-    expect(screen.queryByRole('button', { name: 'New frequency' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nueva frecuencia' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
   })
@@ -131,7 +131,7 @@ describe('FrequenciesPage', () => {
     renderPage()
     await screen.findByText('No frequencies found')
 
-    await userEvent.click(screen.getByRole('button', { name: 'New frequency' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Nueva frecuencia' }))
     const dialog = within(screen.getByRole('dialog'))
     await userEvent.type(dialog.getByLabelText(/^code/i), 'NEW-FREQ')
     await userEvent.type(dialog.getByLabelText(/^name/i), 'New Frequency')
@@ -177,7 +177,7 @@ describe('FrequenciesPage', () => {
     await screen.findByText('MON-WED-FRI')
 
     await userEvent.type(screen.getByLabelText(/^code$/i), 'mon')
-    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
 
     await waitFor(() =>
       expect(frequenciesApiMocks.fetchFrequencies).toHaveBeenLastCalledWith(expect.objectContaining({ code: 'mon' })),

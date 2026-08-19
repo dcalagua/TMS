@@ -73,7 +73,7 @@ describe('CarriersPage', () => {
 
     renderPage()
 
-    expect(screen.getByText('Loading records...')).toBeInTheDocument()
+    expect(screen.getByText('Cargando registros...')).toBeInTheDocument()
   })
 
   it('shows an empty state when the company has no carriers yet', async () => {
@@ -91,8 +91,8 @@ describe('CarriersPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('Something went wrong on our side. Please try again.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(await screen.findByText('Ocurrió un error de nuestro lado. Vuelve a intentarlo.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
   })
 
   it('lists carriers returned by the backend', async () => {
@@ -104,7 +104,7 @@ describe('CarriersPage', () => {
     expect(await screen.findByText('ACME')).toBeInTheDocument()
     expect(screen.getByText('Acme Transport S.A.')).toBeInTheDocument()
     expect(screen.getByText('RUC 20100000001')).toBeInTheDocument()
-    expect(screen.getByText(/Page 1 of 3/)).toBeInTheDocument()
+    expect(screen.getByText(/Página 1 de 3/)).toBeInTheDocument()
   })
 
   it('hides create and manage actions for a caller without fleet.carrier:manage', async () => {
@@ -115,7 +115,7 @@ describe('CarriersPage', () => {
 
     await screen.findByText('ACME')
 
-    expect(screen.queryByRole('button', { name: 'New carrier' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nuevo transportista' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
   })
@@ -128,7 +128,7 @@ describe('CarriersPage', () => {
     renderPage()
     await screen.findByText('No carriers found')
 
-    await userEvent.click(screen.getByRole('button', { name: 'New carrier' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Nuevo transportista' }))
     const dialog = screen.getByRole('dialog')
     await userEvent.type(within(dialog).getByLabelText(/^code/i), 'BETA')
     await userEvent.type(within(dialog).getByLabelText(/business name/i), 'Beta Transport')
@@ -170,7 +170,7 @@ describe('CarriersPage', () => {
     await screen.findByText('ACME')
 
     await userEvent.type(screen.getByLabelText(/^code$/i), 'acm')
-    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
 
     await waitFor(() =>
       expect(carriersApiMocks.fetchCarriers).toHaveBeenLastCalledWith(expect.objectContaining({ code: 'acm' })),

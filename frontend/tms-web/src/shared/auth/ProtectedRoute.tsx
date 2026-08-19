@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { LoadingState } from '../ui/components/LoadingState'
 import { useAuth } from './AuthContext'
@@ -6,11 +7,12 @@ import { useAuth } from './AuthContext'
  * real authority on every request regardless - this only avoids flashing screens that will
  * fail with 401. */
 export function ProtectedRoute() {
+  const { t } = useTranslation('auth')
   const { status } = useAuth()
   const location = useLocation()
 
   if (status === 'loading') {
-    return <LoadingState label="Checking your session..." />
+    return <LoadingState label={t('session.checking')} />
   }
 
   if (status === 'signedOut') {

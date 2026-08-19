@@ -20,7 +20,7 @@ describe('Sidebar', () => {
 
     renderSidebar()
 
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Inicio' })).toBeInTheDocument()
   })
 
   it('hides a module group once the selected company is known to lack its capability', () => {
@@ -31,9 +31,9 @@ describe('Sidebar', () => {
 
     renderSidebar()
 
-    expect(screen.queryByText('Master Data')).not.toBeInTheDocument()
-    expect(screen.getByText('Fleet')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Carriers' })).toBeInTheDocument()
+    expect(screen.queryByText('Maestros')).not.toBeInTheDocument()
+    expect(screen.getByText('Flota')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Transportistas' })).toBeInTheDocument()
   })
 
   it('shows every group while the company is still loading, instead of flickering empty then full', () => {
@@ -41,8 +41,8 @@ describe('Sidebar', () => {
 
     renderSidebar()
 
-    expect(screen.getByText('Master Data')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Orders' })).toBeInTheDocument()
-    expect(screen.getByText('Administration')).toBeInTheDocument()
+    expect(screen.getByText('Maestros')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Pedidos' })).toBeInTheDocument()
+    expect(screen.getByText('Administración')).toBeInTheDocument()
   })
 })

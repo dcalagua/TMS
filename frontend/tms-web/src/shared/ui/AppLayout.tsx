@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
@@ -11,6 +12,7 @@ import { TopBar } from './TopBar'
  * Back/Forward and programmatic navigation with one rule; at `lg` and above the class it
  * toggles is inert, so desktop is unaffected. */
 export function AppLayout() {
+  const { t } = useTranslation(['common', 'navigation'])
   const [navOpen, setNavOpen] = useState(false)
   const { pathname } = useLocation()
 
@@ -52,7 +54,7 @@ export function AppLayout() {
             type="button"
             className="offcanvas-backdrop fade show d-lg-none border-0 p-0"
             onClick={closeNav}
-            aria-label="Close navigation"
+            aria-label={t('closeNavigation', { ns: 'navigation' })}
           />
         )}
 
@@ -68,8 +70,8 @@ export function AppLayout() {
 
       <footer className="border-top py-2">
         <div className="container-fluid small text-body-secondary d-flex justify-content-between">
-          <span>TMS by EBIM</span>
-          <span>Transport Management System</span>
+          <span>{t('brand.name', { ns: 'common' })}</span>
+          <span>{t('brand.tagline', { ns: 'common' })}</span>
         </div>
       </footer>
     </div>

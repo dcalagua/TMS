@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import { activateRoute, deactivateRoute, fetchRoutes, type RouteView } from '../../shared/api/routesApi'
 import { fetchOrigins } from '../../shared/api/originsApi'
@@ -12,7 +13,7 @@ import {
   FilterBar,
   PageHeader,
   Pagination,
-  StatusBadge,
+  ActiveBadge,
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
@@ -35,6 +36,7 @@ const DEFAULT_FILTERS: AppliedFilters = { code: '', name: '', originId: '', zone
 type ModalState = { mode: 'create' } | { mode: 'edit'; routeId: string } | null
 
 export function RoutesPage() {
+  const { t } = useTranslation('masters')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('masterdata.route:manage')
@@ -126,7 +128,7 @@ export function RoutesPage() {
     {
       key: 'active',
       header: 'Status',
-      render: (route) => <StatusBadge label={route.active ? 'Active' : 'Inactive'} tone={route.active ? 'success' : 'neutral'} />,
+      render: (route) => <ActiveBadge active={route.active} />,
     },
   ]
 
@@ -161,14 +163,12 @@ export function RoutesPage() {
   return (
     <div>
       <PageHeader
-        title="Routes"
-        description="Master Route: a reusable planned corridor (origin plus an ordered list of destination
-          stops) that a planner sets up once and reuses. This is distinct from a Trip's calculated route,
-          which does not exist yet and will be produced per shipment from live orders and capacity."
+        title={t('routes.title')}
+        description={t('routes.description')}
         actions={
           canManage && (
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
-              New route
+              {t('routes.new')}
             </button>
           )
         }

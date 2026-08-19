@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import { describeApiError } from '../../shared/api/problemMessages'
 import { useCompany } from '../../shared/company/CompanyContext'
@@ -20,6 +21,7 @@ import {
   FilterBar,
   PageHeader,
   Pagination,
+  ActiveBadge,
   StatusBadge,
   type DataTableColumn,
 } from '../../shared/ui/components'
@@ -52,6 +54,7 @@ const AVAILABILITY_TONE: Record<VehicleAvailabilityStatus, 'success' | 'warning'
 }
 
 export function VehiclesPage() {
+  const { t } = useTranslation('fleet')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('fleet.vehicle:manage')
@@ -172,7 +175,7 @@ export function VehiclesPage() {
       key: 'active',
       header: 'Status',
       render: (vehicle) => (
-        <StatusBadge label={vehicle.active ? 'Active' : 'Inactive'} tone={vehicle.active ? 'success' : 'neutral'} />
+        <ActiveBadge active={vehicle.active} />
       ),
     },
   ]
@@ -208,12 +211,12 @@ export function VehiclesPage() {
   return (
     <div>
       <PageHeader
-        title="Vehicles"
-        description="Physical vehicles, their carrier/type assignment and effective capacity. GPS/telematics tracking is not part of this screen."
+        title={t('vehicles.title')}
+        description={t('vehicles.description')}
         actions={
           canManage && (
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
-              New vehicle
+              {t('vehicles.new')}
             </button>
           )
         }

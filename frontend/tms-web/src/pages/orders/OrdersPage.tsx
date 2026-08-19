@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import { fetchDestinations } from '../../shared/api/destinationsApi'
 import { fetchOrigins } from '../../shared/api/originsApi'
@@ -63,6 +64,7 @@ const DEFAULT_FILTERS: AppliedFilters = {
 type ModalState = { mode: 'create' } | { mode: 'edit'; orderId: string } | null
 
 export function OrdersPage() {
+  const { t } = useTranslation('orders')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('orders.order:manage')
@@ -229,13 +231,12 @@ export function OrdersPage() {
   return (
     <div>
       <PageHeader
-        title="Orders"
-        description="Transport orders: header plus lines, with a minimal V1 status lifecycle (not ready →
-          ready for planning → planned, or cancelled). Totals are always computed and owned by the backend."
+        title={t('title')}
+        description={t('description')}
         actions={
           canManage && (
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
-              New order
+              {t('new')}
             </button>
           )
         }

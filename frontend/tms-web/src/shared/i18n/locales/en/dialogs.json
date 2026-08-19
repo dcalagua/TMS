@@ -1,0 +1,26 @@
+{
+  "activate": {
+    "confirm": "Activate",
+    "text": "It becomes available to the operation again.",
+    "title": "Activate {{name}}?"
+  },
+  "activated": "Record activated",
+  "companyChanged": {
+    "text": "Your selection is no longer valid. Choose a company again.",
+    "title": "Company access changed"
+  },
+  "confirm": {
+    "cancel": "Cancel",
+    "confirm": "Confirm"
+  },
+  "created": "Record created",
+  "deactivate": {
+    "confirm": "Deactivate",
+    "text": "It stops being available for new operations.",
+    "title": "Deactivate {{name}}?"
+  },
+  "deactivated": "Record deactivated",
+  "errorTitle": "The action could not be completed",
+  "saved": "Changes saved",
+  "updated": "Record updated"
+}

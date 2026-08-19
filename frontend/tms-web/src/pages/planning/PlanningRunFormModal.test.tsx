@@ -77,7 +77,7 @@ describe('PlanningRunFormModal', () => {
     await userEvent.type(screen.getByLabelText(/planning date/i), '2026-03-01')
     await userEvent.click(screen.getByRole('button', { name: 'Create run' }))
 
-    expect(await screen.findByText('This change conflicts with another update. Reload and try again.')).toBeInTheDocument()
+    expect(await screen.findByText('Este cambio entra en conflicto con otra actualización. Recarga e inténtalo de nuevo.')).toBeInTheDocument()
     expect(onCreated).not.toHaveBeenCalled()
   })
 

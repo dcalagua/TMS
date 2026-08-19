@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import { describeApiError } from '../../shared/api/problemMessages'
 import { useCompany } from '../../shared/company/CompanyContext'
@@ -10,7 +11,7 @@ import {
   FilterBar,
   PageHeader,
   Pagination,
-  StatusBadge,
+  ActiveBadge,
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
@@ -31,6 +32,7 @@ const DEFAULT_FILTERS: AppliedFilters = { code: '', name: '', active: 'active' }
 type ModalState = { mode: 'create' } | { mode: 'edit'; zone: ZoneView } | null
 
 export function ZonesPage() {
+  const { t } = useTranslation('masters')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('masterdata.zone:manage')
@@ -104,7 +106,7 @@ export function ZonesPage() {
     {
       key: 'active',
       header: 'Status',
-      render: (zone) => <StatusBadge label={zone.active ? 'Active' : 'Inactive'} tone={zone.active ? 'success' : 'neutral'} />,
+      render: (zone) => <ActiveBadge active={zone.active} />,
     },
   ]
 
@@ -135,12 +137,12 @@ export function ZonesPage() {
   return (
     <div>
       <PageHeader
-        title="Zones"
-        description="Named operational areas used to group origins, destinations and routes."
+        title={t('zones.title')}
+        description={t('zones.description')}
         actions={
           canManage && (
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
-              New zone
+              {t('zones.new')}
             </button>
           )
         }

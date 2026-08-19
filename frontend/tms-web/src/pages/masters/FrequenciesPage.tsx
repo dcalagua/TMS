@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import {
   activateFrequency,
@@ -15,7 +16,7 @@ import {
   FilterBar,
   PageHeader,
   Pagination,
-  StatusBadge,
+  ActiveBadge,
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
@@ -43,6 +44,7 @@ const DEFAULT_FILTERS: AppliedFilters = { code: '', name: '', active: 'active' }
 type ModalState = { mode: 'create' } | { mode: 'edit'; frequency: FrequencyView } | null
 
 export function FrequenciesPage() {
+  const { t } = useTranslation('masters')
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('masterdata.frequency:manage')
@@ -118,7 +120,7 @@ export function FrequenciesPage() {
       key: 'active',
       header: 'Status',
       render: (frequency) => (
-        <StatusBadge label={frequency.active ? 'Active' : 'Inactive'} tone={frequency.active ? 'success' : 'neutral'} />
+        <ActiveBadge active={frequency.active} />
       ),
     },
   ]
@@ -154,12 +156,12 @@ export function FrequenciesPage() {
   return (
     <div>
       <PageHeader
-        title="Frequencies"
-        description="Delivery schedules: weekly cadence, cutoff and lead-time rules."
+        title={t('frequencies.title')}
+        description={t('frequencies.description')}
         actions={
           canManage && (
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
-              New frequency
+              {t('frequencies.new')}
             </button>
           )
         }

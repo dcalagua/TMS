@@ -107,7 +107,7 @@ describe('OrdersPage', () => {
 
     renderPage()
 
-    expect(screen.getByText('Loading records...')).toBeInTheDocument()
+    expect(screen.getByText('Cargando registros...')).toBeInTheDocument()
   })
 
   it('shows an empty state when the company has no orders yet', async () => {
@@ -127,8 +127,8 @@ describe('OrdersPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('Something went wrong on our side. Please try again.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(await screen.findByText('Ocurrió un error de nuestro lado. Vuelve a intentarlo.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
   })
 
   it('lists orders with lane, totals, line count and status', async () => {
@@ -141,7 +141,7 @@ describe('OrdersPage', () => {
     expect(await screen.findByText('TO-00000001')).toBeInTheDocument()
     expect(screen.getByText('Origin A → Destination A')).toBeInTheDocument()
     expect(screen.getByText('Not ready', { selector: 'span' })).toBeInTheDocument()
-    expect(screen.getByText(/Page 1 of 3/)).toBeInTheDocument()
+    expect(screen.getByText(/Página 1 de 3/)).toBeInTheDocument()
   })
 
   it('hides create and manage actions for a caller without orders.order:manage', async () => {
@@ -152,7 +152,7 @@ describe('OrdersPage', () => {
     renderPage()
     await screen.findByText('TO-00000001')
 
-    expect(screen.queryByRole('button', { name: 'New order' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nuevo pedido' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Mark ready' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
@@ -217,7 +217,7 @@ describe('OrdersPage', () => {
     await screen.findByText('TO-00000001')
 
     await userEvent.type(screen.getByLabelText(/order #/i), 'TO-1')
-    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
 
     await waitFor(() =>
       expect(ordersApiMocks.fetchOrders).toHaveBeenLastCalledWith(expect.objectContaining({ orderNumber: 'TO-1' })),

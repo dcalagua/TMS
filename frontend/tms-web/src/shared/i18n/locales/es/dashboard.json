@@ -1,0 +1,18 @@
+{
+  "apiChecking": "Comprobando la API de TMS...",
+  "apiReachable": "Operativa",
+  "apiStatus": "Estado de la API",
+  "apiUnreachable": "API de TMS no disponible",
+  "apiUnreachableHint": "Inicia el backend y vuelve a cargar la página.",
+  "company": "Compañía",
+  "email": "Correo electrónico",
+  "noCompany": "Sin compañía seleccionada",
+  "organization": "Organización",
+  "quickAccess": "Accesos rápidos",
+  "quickAccessEmpty": "Tu cuenta aún no tiene módulos habilitados en esta compañía.",
+  "signedInAs": "Sesión iniciada como",
+  "subtitle": "Este es el estado de tu operación en {{company}}.",
+  "timeZone": "Zona horaria",
+  "title": "Inicio",
+  "welcome": "Hola, {{name}}"
+}

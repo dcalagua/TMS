@@ -1,0 +1,5 @@
+{
+  "description": "Pedidos de transporte: cabecera más líneas, con un ciclo de estados mínimo en V1 (no listo, listo para planificar, planificado o cancelado). Los totales siempre los calcula y controla el backend.",
+  "new": "Nuevo pedido",
+  "title": "Pedidos"
+}

@@ -1,34 +1,39 @@
+import i18n from '../i18n'
 import { isAuthFailureResponse, type ApiError, type ProblemCode } from './httpClient'
 
 /**
  * User-facing text for each backend `code` (`docs/api/API_CONVENTIONS.md` section 4.1).
- * Screens must not build their own copy from `detail` - it is prose meant for logs and may
- * be reworded without notice.
+ *
+ * The branch is always on `code`, never on `detail`: `detail` is prose meant for logs, it is
+ * written in one language only, and it may be reworded without notice. Each code maps to a key
+ * in the `errors` namespace, so both languages stay in step and a missing translation is a
+ * build failure rather than an English sentence in a Spanish screen.
  */
-const MESSAGES: Record<ProblemCode, string> = {
-  unauthenticated: 'Your session has expired. Please sign in again.',
-  'invalid-token': 'Your session is no longer valid. Please sign in again.',
-  'principal-not-provisioned':
-    'Your account is not set up in TMS yet. Contact an administrator to request access.',
-  'company-scope-required': 'No company is selected. Choose a company and try again.',
-  'company-scope-invalid': 'The selected company is invalid. Choose a company and try again.',
-  'company-scope-forbidden': 'You no longer have access to that company. Choose another one.',
-  'access-denied': 'You do not have permission to do this.',
-  'validation-failed': 'Some fields need to be corrected.',
-  'malformed-request': 'The request could not be processed.',
-  'resource-not-found': 'The requested item could not be found.',
-  conflict: 'This change conflicts with another update. Reload and try again.',
-  'internal-error': 'Something went wrong on our side. Please try again.',
-}
+const KNOWN_CODES: readonly ProblemCode[] = [
+  'unauthenticated',
+  'invalid-token',
+  'principal-not-provisioned',
+  'company-scope-required',
+  'company-scope-invalid',
+  'company-scope-forbidden',
+  'access-denied',
+  'validation-failed',
+  'malformed-request',
+  'resource-not-found',
+  'conflict',
+  'internal-error',
+]
 
-const FALLBACK_MESSAGE = 'Something went wrong. Please try again.'
+function knownCode(code: string | null): code is ProblemCode {
+  return code !== null && (KNOWN_CODES as readonly string[]).includes(code)
+}
 
 /** Friendly, code-driven text for an {@link ApiError} - never `error.message`/`detail` directly. */
 export function describeApiError(error: ApiError): string {
-  if (error.code && error.code in MESSAGES) {
-    return MESSAGES[error.code as ProblemCode]
+  if (knownCode(error.code)) {
+    return i18n.t(`codes.${error.code}`, { ns: 'errors' })
   }
-  return FALLBACK_MESSAGE
+  return i18n.t('fallback', { ns: 'errors' })
 }
 
 /** True for the two codes that mean "the bearer token is no good any more". Delegates to

@@ -44,7 +44,7 @@ describe('RequireCompany', () => {
 
     renderGuarded()
 
-    expect(screen.getByText('No company access')).toBeInTheDocument()
+    expect(screen.getByText('Sin acceso a compañías')).toBeInTheDocument()
     expect(screen.queryByText('Origins screen')).not.toBeInTheDocument()
   })
 
@@ -54,13 +54,13 @@ describe('RequireCompany', () => {
       status: 'error',
       companies: [],
       selected: null,
-      errorMessage: 'Something went wrong on our side. Please try again.',
+      errorMessage: 'Ocurrió un error de nuestro lado. Vuelve a intentarlo.',
       refetch,
     })
 
     renderGuarded()
 
-    expect(screen.getByText('Something went wrong on our side. Please try again.')).toBeInTheDocument()
+    expect(screen.getByText('Ocurrió un error de nuestro lado. Vuelve a intentarlo.')).toBeInTheDocument()
     expect(screen.queryByText('Origins screen')).not.toBeInTheDocument()
   })
 })

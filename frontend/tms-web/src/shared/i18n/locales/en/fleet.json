@@ -1,0 +1,17 @@
+{
+  "carriers": {
+    "description": "Transport providers used by vehicles, third-party or the company's own fleet operator.",
+    "new": "New carrier",
+    "title": "Carriers"
+  },
+  "vehicleTypes": {
+    "description": "Default capacities and physical characteristics for a class of vehicle.",
+    "new": "New vehicle type",
+    "title": "Vehicle types"
+  },
+  "vehicles": {
+    "description": "Physical vehicles, their carrier and type assignment and effective capacity. GPS/telematics tracking is not part of this screen.",
+    "new": "New vehicle",
+    "title": "Vehicles"
+  }
+}

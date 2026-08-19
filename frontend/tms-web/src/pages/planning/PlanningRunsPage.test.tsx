@@ -87,7 +87,7 @@ describe('PlanningRunsPage', () => {
 
     renderPage()
 
-    expect(screen.getByText('Loading records...')).toBeInTheDocument()
+    expect(screen.getByText('Cargando registros...')).toBeInTheDocument()
   })
 
   it('shows an empty state when the company has no planning runs yet', async () => {
@@ -107,8 +107,8 @@ describe('PlanningRunsPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('Something went wrong on our side. Please try again.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(await screen.findByText('Ocurrió un error de nuestro lado. Vuelve a intentarlo.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
   })
 
   it('lists runs with origin, status and counts', async () => {
@@ -131,7 +131,7 @@ describe('PlanningRunsPage', () => {
     renderPage()
     await screen.findByText('PLN-00000001')
 
-    expect(screen.queryByRole('button', { name: 'New run' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nueva corrida' })).not.toBeInTheDocument()
   })
 
   it('navigates to the board when Open is clicked', async () => {
@@ -153,7 +153,7 @@ describe('PlanningRunsPage', () => {
     planningApiMocks.createPlanningRun.mockResolvedValue(created)
 
     renderPage()
-    await userEvent.click(await screen.findByRole('button', { name: 'New run' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Nueva corrida' }))
     const dialog = screen.getByRole('dialog')
     await userEvent.selectOptions(within(dialog).getByLabelText(/origin/i), 'origin-1')
     await userEvent.type(within(dialog).getByLabelText(/planning date/i), '2026-03-01')

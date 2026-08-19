@@ -1,0 +1,30 @@
+{
+  "close": "Cerrar",
+  "closeNavigation": "Cerrar navegación",
+  "groups": {
+    "administration": "Administración",
+    "fleet": "Flota",
+    "masters": "Maestros",
+    "orders": "Pedidos",
+    "planning": "Planificación",
+    "trips": "Viajes"
+  },
+  "home": "Inicio",
+  "items": {
+    "carriers": "Transportistas",
+    "destinations": "Destinos",
+    "frequencies": "Frecuencias",
+    "orders": "Pedidos",
+    "origins": "Orígenes",
+    "planning": "Planificación",
+    "routes": "Rutas",
+    "security": "Seguridad",
+    "trips": "Viajes",
+    "vehicleTypes": "Tipos de vehículo",
+    "vehicles": "Vehículos",
+    "zones": "Zonas"
+  },
+  "mainNavigation": "Navegación principal",
+  "menu": "Menú",
+  "toggle": "Abrir o cerrar la navegación"
+}
