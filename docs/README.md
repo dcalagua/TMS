@@ -51,3 +51,6 @@ silently diverging.
     security review, what was found and fixed, and the gaps deliberately left open.
 17. [`performance/PERFORMANCE_BASELINE.md`](performance/PERFORMANCE_BASELINE.md) - measured query
     shape and query count against 10,000+ orders/day, and the accepted scale ceilings.
+18. [`overnight/TEST_EVIDENCE.md`](overnight/TEST_EVIDENCE.md) - the Step 13 verification record:
+    exact commands, test counts, migration replay, the eleven-step API smoke flow, tenant
+    isolation, repository hygiene, and what was blocked and why.
