@@ -73,11 +73,18 @@ class LayeringTest {
                             + "scoping a matter of reading one directory")
                     .allowEmptyShould(true);
 
+    /**
+     * Deliberately checks for {@code @RestController} rather than "resides in a package named
+     * {@code api}": {@code shared.api} holds cross-cutting contract types
+     * ({@code PageQuery}, {@code PageResponse}, the {@code *Exception} classes) that a use
+     * case is expected to depend on, same as every other module. Only the controller layer
+     * itself - the thing a use case must stay independent of - is off limits.
+     */
     @ArchTest
     static final ArchRule use_cases_must_not_depend_on_the_web_layer =
             noClasses()
                     .that().resideInAPackage("..application..")
-                    .should().dependOnClassesThat().resideInAPackage("..api..")
+                    .should().dependOnClassesThat().areAnnotatedWith(RestController.class)
                     .because("a use case must stay callable from a job or an integration, "
                             + "not only from a controller")
                     .allowEmptyShould(true);

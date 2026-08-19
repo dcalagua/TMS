@@ -1,6 +1,8 @@
 import { createBrowserRouter } from 'react-router-dom'
 import { DashboardPage } from '../pages/DashboardPage'
 import { LoginPage } from '../pages/LoginPage'
+import { OriginsPage } from '../pages/masters/OriginsPage'
+import { ZonesPage } from '../pages/masters/ZonesPage'
 import { NotFoundPage } from '../pages/NotFoundPage'
 import { PlaceholderPage } from '../pages/PlaceholderPage'
 import { ProtectedRoute } from '../shared/auth/ProtectedRoute'
@@ -20,9 +22,9 @@ export const router = createBrowserRouter([
           {
             element: <RequireCompany />,
             children: [
-              { path: 'masters/origins', element: <PlaceholderPage title="Origins" /> },
+              { path: 'masters/origins', element: <OriginsPage /> },
               { path: 'masters/destinations', element: <PlaceholderPage title="Destinations" /> },
-              { path: 'masters/zones', element: <PlaceholderPage title="Zones" /> },
+              { path: 'masters/zones', element: <ZonesPage /> },
               { path: 'masters/frequencies', element: <PlaceholderPage title="Frequencies" /> },
               { path: 'masters/routes', element: <PlaceholderPage title="Routes" /> },
               { path: 'fleet/carriers', element: <PlaceholderPage title="Carriers" /> },

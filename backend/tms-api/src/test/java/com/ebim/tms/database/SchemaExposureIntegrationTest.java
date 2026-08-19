@@ -33,7 +33,7 @@ class SchemaExposureIntegrationTest {
 
     private static final List<String> APPLICATION_TABLES = List.of(
             "app_user", "organization", "company", "role", "permission",
-            "role_permission", "membership", "membership_role");
+            "role_permission", "membership", "membership_role", "origin", "zone");
 
     private static String jdbcUrl;
 
@@ -140,7 +140,8 @@ class SchemaExposureIntegrationTest {
                 SELECT table_name FROM information_schema.tables
                 WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
                   AND table_name IN ('app_user','organization','company','role','permission',
-                                     'role_permission','membership','membership_role')
+                                     'role_permission','membership','membership_role',
+                                     'origin','zone')
                 ORDER BY 1
                 """)).isEmpty();
     }

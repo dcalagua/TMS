@@ -114,6 +114,11 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return respond(ApiProblems.of(ProblemType.RESOURCE_NOT_FOUND, failure.getMessage()), request);
     }
 
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ProblemDetail> handleConflict(ConflictException failure, WebRequest request) {
+        return respond(ApiProblems.of(ProblemType.CONFLICT, failure.getMessage()), request);
+    }
+
     /** Bean Validation on a {@code @Validated} service or on query parameters. */
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ProblemDetail> handleConstraintViolation(

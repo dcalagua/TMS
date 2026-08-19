@@ -1,8 +1,8 @@
-# TMS by EBIM - data model (V1 identity and tenancy baseline)
+# TMS by EBIM - data model (V1 identity, tenancy and master data)
 
 Owner: Flyway migrations under `backend/tms-api/src/main/resources/db/migration` (ADR-002).
-Scope of this document: everything the baseline creates. Business masters, orders and
-planning arrive in Steps 05-11 and extend this model without changing its rules.
+Scope of this document: the identity/tenancy baseline (V1-V5) plus the master data tables
+Step 05 onwards adds on top of it, without changing its rules.
 
 ## 1. Where the schema lives
 
@@ -10,7 +10,7 @@ planning arrive in Steps 05-11 and extend this model without changing its rules.
 |---|---|---|
 | Application tables | schema `tms` | `supabase/config.toml` exposes only `public` and `graphql_public` through the Data API, so a separate schema removes the HTTP surface entirely |
 | Flyway history | `tms.flyway_schema_history` | one history, next to the objects it describes |
-| PostGIS | extension in `public` | shared platform capability, prepared for the generated location columns of Steps 05/06 |
+| PostGIS | extension in `public` | shared platform capability; V6 (Step 05) is the first migration that uses it, for `tms.origin.location` |
 | Supabase `auth`, `storage` | untouched | Supabase-managed; Flyway never creates or alters them |
 
 Consequences for the backend: `spring.flyway.default-schema=tms` and
@@ -248,12 +248,99 @@ history, and are verified by `LocalSeedIntegrationTest`.
 |---|---|
 | `FlywayMigrationIntegrationTest` | the history applies to an empty database, validates, is idempotent, replays deterministically, and PostGIS is present |
 | `TenancyConstraintIntegrationTest` | company code scoping, cross-organization membership refusal, membership uniqueness, RESTRICT deletes, cascade limits, email/code normalization, `updated_at` trigger, seeded catalogue |
-| `SchemaExposureIntegrationTest` | RLS enabled on every table, no policies, not forced, PUBLIC and Supabase API roles denied, nothing published in `public` |
+| `SchemaExposureIntegrationTest` | RLS enabled on every table (including `origin`/`zone` since V6), no policies, not forced, PUBLIC and Supabase API roles denied, nothing published in `public` |
+| `MasterDataConstraintIntegrationTest` | origin/zone code uniqueness is per-company, not installation-wide; FK to a real company; code normalization; the latitude/longitude pair and range checks; the generated `location` column reflects a valid pair and is `NULL` when coordinates are absent; `origin_type` is restricted to the catalogue; defaults and actor columns |
 | `ApplicationDatabaseStartupIntegrationTest` | the real Spring context boots with datasource + JPA + Flyway against PostgreSQL |
 | `LocalSeedIntegrationTest` | the local seed still matches the schema and carries no credential |
 | `MigrationConventionTest` | naming, contiguous versions, no destructive DDL, no `auth`/`storage` DDL, no tenant data in migrations, no `supabase/migrations` |
 
-## 7. Rules for the next migrations
+The origin/zone vertical slice itself (controller through repository, company scoping,
+permissions) is proven end to end by
+`backend/tms-api/src/test/java/com/ebim/tms/masterdata/api/OriginZoneApiIntegrationTest.java`
+rather than repeated in the database-level test above - see
+`docs/overnight/05_ORIGINS_ZONES.md` section 4 for that coverage.
+
+## 7. Master data: origins and zones (Step 05, migration V6)
+
+The first business masters built on top of the V1-V5 baseline, following every rule section 8
+sets for the migrations after it unchanged: `company_id NOT NULL` with an FK to `tms.company` and an index
+leading with it, `created_at`/`updated_at` plus the `set_updated_at` trigger, actor columns
+(a real actor - the authenticated caller - exists for both tables), RLS enabled in the same
+migration, and a normalized-code `CHECK` rather than convention alone.
+
+```mermaid
+erDiagram
+    COMPANY ||--o{ ORIGIN : "scopes"
+    COMPANY ||--o{ ZONE : "scopes"
+
+    ORIGIN {
+        uuid id PK
+        uuid company_id FK
+        text code "unique per company, ^[A-Z0-9][A-Z0-9_-]{0,31}$"
+        text name
+        text origin_type "WAREHOUSE | DISTRIBUTION_CENTER | PLANT | HUB | OTHER"
+        text address
+        numeric latitude "9,6 - both present or both absent with longitude"
+        numeric longitude "9,6"
+        geography location "GENERATED ALWAYS, Point/4326, GiST indexed"
+        text time_zone "IANA id, checked non-blank; Java validates the value"
+        text external_reference "optional EWM/external code, never a FK"
+        bool active
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+        uuid updated_by FK
+    }
+    ZONE {
+        uuid id PK
+        uuid company_id FK
+        text code "unique per company"
+        text name
+        text description
+        bool active
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+        uuid updated_by FK
+    }
+```
+
+### 7.1 `location` is generated, not written
+
+`tms.origin.location` is `GENERATED ALWAYS AS (ST_SetSRID(ST_MakePoint(longitude, latitude),
+4326)::geography) STORED`. Neither JPA nor the API ever populate it: `Origin` (the entity)
+does not map the column at all, so create/update stay ordinary numeric-column CRUD
+(architecture section 8's requirement) while the database derives the spatial value for a
+future nearest-origin/within-radius query. `ST_MakePoint` propagates `NULL`, so an origin
+with no coordinates simply has a `NULL` location - no `CASE` needed, and
+`ck_origin_coordinates_pair` guarantees latitude/longitude are never half-set. `ix_origin_location`
+is a GiST index maintained on every write starting now, so a later step's spatial query does
+not need a second migration to add one retroactively.
+
+### 7.2 `external_reference` is the EWM boundary, not a foreign key
+
+Per the repository's independence rule (no shared internal tables or cross-product FKs
+between TMS and EWM), `origin.external_reference` is a free-text optional column - a place to
+record a future EWM warehouse id or similar - never a foreign key into another product's
+schema. Nothing reads or validates it against an external system in V1.
+
+### 7.3 Zones stay attribute-only in V1
+
+`tms.zone` intentionally carries no geometry: code, name, optional description, active,
+audit. The step brief asked for zone geofencing to be *possible* later without forcing
+polygons in now; a future migration can add a nullable geometry column to this same table
+without changing its shape or breaking existing rows, exactly like `location` was added to
+`origin` without touching `organization`/`company`.
+
+### 7.4 Indexes added by V6
+
+| Index | Purpose |
+|---|---|
+| `uq_origin_company_code`, `uq_zone_company_code` | codes unique per company, free to repeat across companies (ADR-003) |
+| `ix_origin_company`, `ix_zone_company` | the hot path: "list mine", company-scoped queries lead with `company_id` |
+| `ix_origin_location` (GiST) | future spatial queries against `location`; not yet queried in V1, maintained from day one |
+
+## 8. Rules for the next migrations
 
 1. Business tables carry `company_id NOT NULL` with an FK to `tms.company` and an index
    that leads with it. Never both scope columns without a documented reason.
@@ -262,3 +349,7 @@ history, and are verified by `LocalSeedIntegrationTest`.
 3. New tables are added to the `ENABLE ROW LEVEL SECURITY` list in the same migration.
 4. Spatial columns follow `docs/database/MIGRATION_STRATEGY.md` section on PostGIS.
 5. Every vertical slice adds a cross-tenant isolation test (ADR-003 compliance rule).
+
+V6 (Step 05) is the first migration to follow all five rules against a real business table;
+Step 06 onward (destinations, frequencies, routes) should match its shape rather than
+reinvent it.
