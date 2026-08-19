@@ -1,0 +1,6 @@
+Flyway migration home for TMS application DDL.
+
+This directory is the single canonical location for application schema migrations
+(ADR-002). Versioned files V<n>__<description>.sql are added from Step 02 onwards.
+Applied migrations are immutable: never edit one, always add a new version.
+Supabase must not carry a parallel migration history for these same tables.

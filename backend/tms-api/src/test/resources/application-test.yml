@@ -1,0 +1,27 @@
+# Test profile.
+#
+# Tests must never reach a shared or remote database. Slice tests (web/security layer)
+# run without any datasource at all; from Step 02 onwards, tests that need PostgreSQL use
+# Testcontainers, which supplies its own throwaway datasource properties.
+
+spring:
+  flyway:
+    enabled: false
+  jpa:
+    open-in-view: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+tms:
+  api:
+    base-path: /api/v1
+    application-name: TMS by EBIM
+
+logging:
+  level:
+    root: WARN
+    com.ebim.tms: DEBUG

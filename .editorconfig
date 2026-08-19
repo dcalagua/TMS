@@ -1,0 +1,33 @@
+# TMS by EBIM - shared editor configuration
+# Docs: https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+[*.java]
+indent_size = 4
+
+[*.{xml,pom}]
+indent_size = 2
+
+[*.{md,markdown}]
+trim_trailing_whitespace = false
+
+[*.{sql,ddl}]
+indent_size = 2
+
+[Makefile]
+indent_style = tab
+
+[*.{bat,cmd}]
+end_of_line = crlf
+
+[mvnw.cmd]
+end_of_line = crlf

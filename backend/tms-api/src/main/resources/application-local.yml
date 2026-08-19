@@ -1,0 +1,32 @@
+# Local development profile.
+#
+# Defaults point at the local Supabase stack started with `supabase start`
+# (see supabase/README.md). Those are the CLI's well-known local development
+# coordinates on a throwaway container - they are not, and must never become,
+# credentials of a shared or remote database. Override everything through the
+# environment (see .env.example).
+
+spring:
+  datasource:
+    url: ${TMS_DB_URL:jdbc:postgresql://localhost:54322/postgres}
+    username: ${TMS_DB_USERNAME:postgres}
+    password: ${TMS_DB_PASSWORD:postgres}
+    hikari:
+      maximum-pool-size: ${TMS_DB_POOL_MAX:10}
+      minimum-idle: 2
+      pool-name: tms-local-pool
+  jpa:
+    properties:
+      hibernate.format_sql: true
+  flyway:
+    enabled: ${TMS_FLYWAY_ENABLED:true}
+
+management:
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    com.ebim.tms: DEBUG
+    org.flywaydb: INFO

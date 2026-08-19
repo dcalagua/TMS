@@ -1,0 +1,73 @@
+# TMS by EBIM - common backend configuration.
+# Profile-specific overrides live in application-<profile>.yml.
+# No credential ever has a production-usable default here.
+
+spring:
+  application:
+    name: tms-api
+  profiles:
+    # Safe local development is the default when SPRING_PROFILES_ACTIVE is not set.
+    default: local
+  main:
+    banner-mode: off
+  jpa:
+    # Never keep a database session open for view rendering in a stateless JSON API.
+    open-in-view: false
+    hibernate:
+      # Flyway owns the schema (ADR-002). Hibernate never creates or alters it.
+      ddl-auto: none
+    properties:
+      hibernate.jdbc.time_zone: UTC
+      hibernate.jdbc.batch_size: 50
+      hibernate.order_inserts: true
+      hibernate.order_updates: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # An existing non-empty schema must be migrated deliberately, never baselined silently.
+    baseline-on-migrate: false
+    validate-on-migrate: true
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${TMS_API_PORT:8080}
+  shutdown: graceful
+  error:
+    # Do not leak internals to clients.
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: false
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+
+tms:
+  api:
+    base-path: /api/v1
+    application-name: TMS by EBIM
+
+logging:
+  level:
+    root: INFO
+    com.ebim.tms: INFO

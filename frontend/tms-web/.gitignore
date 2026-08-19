@@ -1,0 +1,13 @@
+# Frontend-local ignores. Repository-wide rules live in the root .gitignore.
+node_modules
+dist
+dist-ssr
+coverage
+*.local
+*.tsbuildinfo
+.eslintcache
+
+# Local env files. `.env.example` stays tracked.
+.env
+.env.*
+!.env.example

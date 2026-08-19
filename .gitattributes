@@ -1,0 +1,44 @@
+# TMS by EBIM - normalize line endings so macOS/Linux/Windows agree.
+* text=auto eol=lf
+
+# Windows-only scripts must keep CRLF.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+mvnw.cmd text eol=crlf
+
+# Unix scripts must keep LF.
+*.sh   text eol=lf
+mvnw   text eol=lf
+
+# Explicit text types.
+*.java     text diff=java
+*.sql      text
+*.md       text diff=markdown
+*.json     text
+*.yml      text
+*.yaml     text
+*.xml      text
+*.ts       text
+*.tsx      text
+*.js       text
+*.jsx      text
+*.css      text
+*.html     text diff=html
+*.toml     text
+
+# Binary assets - never diff or normalize.
+*.png      binary
+*.jpg      binary
+*.jpeg     binary
+*.gif      binary
+*.ico      binary
+*.svg      text
+*.woff     binary
+*.woff2    binary
+*.ttf      binary
+*.pdf      binary
+*.zip      binary
+*.jar      binary
+
+# Generated lock files: keep them tracked, keep diffs collapsed in reviews.
+package-lock.json linguist-generated=true -diff

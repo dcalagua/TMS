@@ -1,0 +1,23 @@
+# Production/staging profile: every value comes from the environment.
+# There are no fallbacks on purpose - a missing variable must fail fast at startup
+# instead of silently starting against the wrong database.
+
+spring:
+  datasource:
+    url: ${TMS_DB_URL}
+    username: ${TMS_DB_USERNAME}
+    password: ${TMS_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: ${TMS_DB_POOL_MAX:20}
+      minimum-idle: ${TMS_DB_POOL_MIN:5}
+      pool-name: tms-pool
+  flyway:
+    enabled: true
+
+server:
+  forward-headers-strategy: framework
+
+logging:
+  level:
+    root: WARN
+    com.ebim.tms: INFO

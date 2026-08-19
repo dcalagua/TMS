@@ -1,0 +1,21 @@
+/* TMS by EBIM - global styles.
+   Bootstrap is the visual base; this file only holds the few operational-density
+   adjustments that Bootstrap utilities cannot express. */
+
+:root {
+  --tms-content-max-width: 1600px;
+}
+
+body {
+  font-size: 0.9375rem;
+}
+
+/* Dense operational tables: many rows must stay readable on one screen. */
+.table-dense > :not(caption) > * > * {
+  padding: 0.35rem 0.5rem;
+}
+
+/* SweetAlert2 must sit above Bootstrap modals and offcanvas panels. */
+.swal2-container {
+  z-index: 2000;
+}
