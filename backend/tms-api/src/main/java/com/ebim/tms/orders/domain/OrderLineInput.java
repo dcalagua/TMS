@@ -1,0 +1,21 @@
+package com.ebim.tms.orders.domain;
+
+import java.math.BigDecimal;
+
+/**
+ * The domain-level shape of one order line, used by {@link TransportOrder#applyLines} and
+ * {@link TransportOrderLine}. Deliberately not the same type as
+ * {@code com.ebim.tms.orders.application.OrderRequest.OrderLineRequest}: the domain must not
+ * depend on the application layer's Bean Validation-annotated request DTO, so
+ * {@code OrderService} maps one to the other, the same layering every other module keeps
+ * between its {@code *Request} record and its entity constructor arguments.
+ */
+public record OrderLineInput(
+        String materialCode,
+        String materialDescription,
+        BigDecimal quantity,
+        String uom,
+        BigDecimal unitWeightKg,
+        BigDecimal unitVolumeM3,
+        BigDecimal palletQuantity) {
+}

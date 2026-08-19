@@ -16,6 +16,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
@@ -117,6 +118,21 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ProblemDetail> handleConflict(ConflictException failure, WebRequest request) {
         return respond(ApiProblems.of(ProblemType.CONFLICT, failure.getMessage()), request);
+    }
+
+    /**
+     * A {@code @Version} check failed: someone else changed the row between this request's read
+     * and its write. Services that mutate a versioned entity (Orders, the first module to use
+     * one - see {@code TransportOrder}) are expected to catch this around their own explicit
+     * {@code saveAndFlush} call and rethrow {@link ConflictException} with a caller-specific
+     * message; this handler is the backstop for a flush that happens elsewhere (e.g. at the
+     * transaction's own commit-time flush) so a versioned write never surfaces as a 500.
+     */
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ProblemDetail> handleOptimisticLockingFailure(
+            ObjectOptimisticLockingFailureException failure, WebRequest request) {
+        return respond(ApiProblems.of(ProblemType.CONFLICT,
+                "This record was changed by someone else since it was loaded. Reload and try again."), request);
     }
 
     /** Bean Validation on a {@code @Validated} service or on query parameters. */

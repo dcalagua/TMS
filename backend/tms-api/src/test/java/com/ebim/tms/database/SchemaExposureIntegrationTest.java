@@ -35,7 +35,8 @@ class SchemaExposureIntegrationTest {
             "app_user", "organization", "company", "role", "permission",
             "role_permission", "membership", "membership_role", "origin", "zone",
             "destination", "frequency", "frequency_weekly_rule", "frequency_exception",
-            "route", "route_stop", "carrier", "vehicle_type", "vehicle");
+            "route", "route_stop", "carrier", "vehicle_type", "vehicle",
+            "transport_order", "transport_order_line");
 
     private static String jdbcUrl;
 
@@ -145,7 +146,8 @@ class SchemaExposureIntegrationTest {
                                      'role_permission','membership','membership_role',
                                      'origin','zone','destination','frequency',
                                      'frequency_weekly_rule','frequency_exception',
-                                     'route','route_stop','carrier','vehicle_type','vehicle')
+                                     'route','route_stop','carrier','vehicle_type','vehicle',
+                                     'transport_order','transport_order_line')
                 ORDER BY 1
                 """)).isEmpty();
     }

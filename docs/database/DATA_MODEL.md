@@ -253,6 +253,7 @@ history, and are verified by `LocalSeedIntegrationTest`.
 | `MasterDataDestinationFrequencyConstraintIntegrationTest` | the same class of proof as above, extended to V7: destination/frequency code uniqueness per company; destination coordinate pair/range checks and generated `location`; `destination_type` and nonnegative `service_time_minutes`; a destination's `zone_id` must belong to its own company even though the two FK columns are separate; weekly rule `day_of_week` range and per-frequency uniqueness and nonnegative `lead_time_days`; weekly rules and exceptions cascade-delete with their frequency; exception date uniqueness and non-blank note |
 | `MasterDataRouteConstraintIntegrationTest` | the same class of proof, extended to V8: route code uniqueness per company; a route's origin/zone/frequency must belong to its own company even though the FK columns are separate; nonnegative reference distance/duration; a route stop's destination and company must both match its route; positive sequence; a destination cannot appear twice on one route; stops cascade-delete with their route; **the `DEFERRABLE INITIALLY DEFERRED` sequence constraint** - a two-stop in-place swap survives `COMMIT`, and a genuine unresolved duplicate still fails, just at `COMMIT` instead of at the statement |
 | `FleetConstraintIntegrationTest` | the same class of proof, extended to V9: carrier/vehicle-type/vehicle code uniqueness per company; carrier tax-id pair uniqueness and normalization; carrier email normalization/shape when present; vehicle-type `max_weight_kg`/`max_volume_m3` strictly positive and `max_pallets` nonnegative-including-zero; optional dimensions positive when present; `body_type` restricted to the catalogue; the temperature-range coherence rule (requires `temperature_controlled`, `min <= max`); vehicle license-plate normalization/shape and per-company uniqueness; a vehicle's carrier and vehicle type must both belong to the vehicle's own company even though the FK columns are separate; override capacities positive/nonnegative when present; `availability_status` restricted to the catalogue; defaults and actor columns |
+| `OrderConstraintIntegrationTest` | the same class of proof, extended to V10: `order_number` uniqueness is global (section 12.1) while the external-reference pair is per-company and partial (section 12.2); a reference with no source is rejected; an order's origin/destination must belong to its own company even though the FK columns are separate; time-window pair/order checks; `priority`/`status` restricted to their catalogues; `cancel_reason` requires `status = CANCELLED`; totals nonnegative; a line's quantity strictly positive, `uom` normalized, unit weight/volume positive when present, line number unique per order; lines cascade-delete with their order; defaults and actor columns |
 | `ApplicationDatabaseStartupIntegrationTest` | the real Spring context boots with datasource + JPA + Flyway against PostgreSQL |
 | `LocalSeedIntegrationTest` | the local seed still matches the schema and carries no credential |
 | `MigrationConventionTest` | naming, contiguous versions, no destructive DDL, no `auth`/`storage` DDL, no tenant data in migrations, no `supabase/migrations` |
@@ -269,7 +270,9 @@ slice (Step 07) is proven the same way by
 `backend/tms-api/src/test/java/com/ebim/tms/masterdata/api/RouteApiIntegrationTest.java` - see
 `docs/overnight/07_ROUTES.md` section 5 for that coverage. The fleet slice (Step 08) is proven
 the same way by `backend/tms-api/src/test/java/com/ebim/tms/fleet/api/FleetApiIntegrationTest.java`
-- see `docs/overnight/08_FLEET.md` section 5 for that coverage.
+- see `docs/overnight/08_FLEET.md` section 5 for that coverage. The orders slice (Step 09) is
+proven the same way by `backend/tms-api/src/test/java/com/ebim/tms/orders/api/OrderApiIntegrationTest.java`
+- see `docs/overnight/09_ORDERS.md` for that coverage.
 
 ## 7. Master data: origins and zones (Step 05, migration V6)
 
@@ -742,7 +745,156 @@ the same rule.
 | `ix_vehicle_type` | "vehicles of this type", the list filter and the capacity-resolution lookup |
 | `uq_carrier_id_company` (on `tms.carrier`), `uq_vehicle_type_id_company` (on `tms.vehicle_type`) | composite-FK targets `vehicle.carrier_id`/`vehicle.vehicle_type_id` need |
 
-## 11. Rules for the next migrations
+## 12. Orders (Step 09, migration V10)
+
+Follows V6-V9's shape unchanged (section 13 below): `company_id NOT NULL` with an FK and a
+leading index, actor columns, RLS enabled in this same migration, the composite-FK tenant
+guarantee (rule 6) for `tms.transport_order`'s references into `tms.origin` and
+`tms.destination`. Table names avoid the reserved word `ORDER`: `tms.transport_order` /
+`tms.transport_order_line`, per the step brief's own suggestion. The full status lifecycle is
+documented in `docs/domain/ORDER_LIFECYCLE_V1.md`, not repeated here.
+
+```mermaid
+erDiagram
+    COMPANY     ||--o{ TRANSPORT_ORDER      : "scopes"
+    ORIGIN      ||--o{ TRANSPORT_ORDER      : "ships from"
+    DESTINATION ||--o{ TRANSPORT_ORDER      : "ships to"
+    TRANSPORT_ORDER ||--o{ TRANSPORT_ORDER_LINE : "owns"
+
+    TRANSPORT_ORDER {
+        uuid id PK
+        uuid company_id FK
+        text order_number "system-generated, globally unique - see 12.1"
+        text external_source "optional, pairs with external_reference"
+        text external_reference "optional idempotency key - see 12.2"
+        uuid origin_id FK "mandatory, composite-FK tenant guarantee"
+        uuid destination_id FK "mandatory, composite-FK tenant guarantee"
+        text customer_name "optional, free text - not a CRM FK"
+        text customer_reference "optional, free text"
+        date service_date "required"
+        text priority "LOW | NORMAL | HIGH | URGENT"
+        time requested_window_start "optional - both or neither with end"
+        time requested_window_end "optional"
+        text status "NOT_READY | READY_FOR_PLANNING | PLANNED | CANCELLED"
+        text cancel_reason "optional, requires status = CANCELLED"
+        numeric total_weight_kg "14,3 - transactional snapshot, see 12.3"
+        numeric total_volume_m3 "14,4 - transactional snapshot"
+        numeric total_pallets "12,2 - transactional snapshot"
+        bigint version "optimistic lock - see 12.4"
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+        uuid updated_by FK
+    }
+    TRANSPORT_ORDER_LINE {
+        uuid id PK
+        uuid order_id FK "cascades from transport_order, no own company_id"
+        integer line_number "1-based, contiguous, server-assigned"
+        text material_code "snapshot, not a product-master FK"
+        text material_description "snapshot"
+        numeric quantity "12,3 - strictly positive"
+        text uom "normalized upper, free text - see 12.5"
+        numeric unit_weight_kg "10,3 - optional, positive when present"
+        numeric unit_volume_m3 "10,4 - optional, positive when present"
+        numeric line_weight_kg "14,3 - computed snapshot, quantity * unit_weight_kg"
+        numeric line_volume_m3 "14,4 - computed snapshot"
+        numeric pallet_quantity "10,2 - optional, direct input, not derived"
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+        uuid updated_by FK
+    }
+```
+
+### 12.1 `order_number` is the one uniqueness rule that is deliberately *not* company-scoped
+
+Rule 9 (section 13) requires uniqueness to scope to `company_id`, even for a real-world-unique
+value, because a global constraint on a value a *user chooses* lets one company probe whether
+another company has registered a specific value. `order_number` is different in kind: it is
+generated once, by the backend, from `tms.transport_order_number_seq`
+(`OrderService.generateOrderNumber`, formatted `TO-00000001`) - nobody ever supplies or guesses
+one to "attempt" a collision, so a global `UNIQUE (order_number)` carries none of rule 9's
+cross-tenant leak risk. It is intentionally an exception to rule 9, not a violation of it.
+
+### 12.2 The external-reference idempotency pair
+
+`external_source`/`external_reference` model "this order was already created by that upstream
+system, for that external id" - the step brief's idempotency/external-reference uniqueness
+strategy. Both are optional (a manually created order has neither), but
+`ck_transport_order_external_pair_complete` forbids a reference with no source, so
+`uq_transport_order_external UNIQUE (company_id, external_source, external_reference) WHERE
+external_reference IS NOT NULL` can never be defeated by two different-but-both-NULL sources -
+the same reasoning `carrier`'s `tax_id_type`/`tax_id_value` pair (section 10.1) needed, applied
+to a nullable pair instead of a mandatory one. V1 treats this as a uniqueness guard
+(`OrderService.create` rejects a duplicate pair with 409, `ConflictException`), not a
+return-prior-result idempotent replay cache - the same "add the fuller behaviour only when a
+concrete integration needs it" judgment section 8.3 made for a destination-frequency
+association table.
+
+### 12.3 Header totals are a documented transactional snapshot, not a live aggregate
+
+Planning (step 10, not built yet) needs fast, stable weight/volume/pallet totals per order to
+check capacity against a vehicle without summing lines on every read. `total_weight_kg`/
+`total_volume_m3`/`total_pallets` are safe to persist as a snapshot only because exactly one
+thing ever writes `transport_order_line`: `TransportOrder.applyLines`, called from inside the
+same transaction and the same method that recomputes all three totals from the line set it just
+wrote (`TransportOrder.recomputeTotals`). There is no code path - no controller, no job, no raw
+repository call - that changes a line without also updating the header snapshot in the same
+flush; `OrderApiIntegrationTest` proves recomputation directly (add a line, remove a line,
+change a quantity - the header always matches the sum). If a second
+writer of order lines is ever introduced (a future EDI importer that bypasses `OrderService`,
+for instance), it must call the same recomputation path - the snapshot is not safe against a
+second, uncoordinated writer.
+
+### 12.4 `version` is the first optimistic-locking column in the schema
+
+The step brief asks for "optimistic locking/versioning where concurrent edits matter" - the
+first module in this repository where two people plausibly edit the same row through separate
+HTTP round trips. `OrderRequest.version` is required on update and is compared explicitly by
+`OrderService.requireCurrentVersion` against the persisted order's version *before* any change
+is applied, which is what actually catches the realistic case (a client editing a stale copy
+loaded before someone else's change landed) - JPA's own `@Version` check over this column
+(`jakarta.persistence.Version` on `TransportOrder.version`) is kept as a second, narrower
+backstop for two transactions racing to flush at the same instant, which the explicit check
+alone would not catch. Both paths translate to the same `ConflictException`
+(`OrderService.saveOrConflict`, `ApiExceptionHandler.handleOptimisticLockingFailure`). A future
+module that needs the same guarantee should follow this two-layer shape rather than relying on
+`@Version` alone.
+
+### 12.5 `uom` is free text, matching `carrier.tax_id_type`'s reasoning
+
+Unit-of-measure vocabularies vary by ERP/customer (`EA`, `KG`, `BOX`, `PAL`, ...); a fixed
+`CHECK ... IN (...)` catalogue would hardcode one system's vocabulary the same way a fixed
+tax-id-type catalogue would have (section 10.1). `uom` is normalized (`upper(btrim(uom))`) but
+not restricted to a fixed set.
+
+### 12.6 `orders` resolves origin/destination through a port, not through `masterdata` directly
+
+`ModuleBoundaryTest` forbids any business module from depending on another (`orders` must not
+import `com.ebim.tms.masterdata`), but a transport order genuinely needs to validate and display
+a `masterdata`-owned origin and destination. `com.ebim.tms.shared.reference` defines two small
+ports (`OriginLookupPort`, `DestinationLookupPort`) that carry no `masterdata` type; `masterdata`
+provides the only implementation (`OriginLookupAdapter`, `DestinationLookupAdapter`,
+`masterdata.infrastructure`), and `orders.application.OrderService` depends only on the port
+interfaces. This is the "explicit API" `ModuleBoundaryTest`'s own rule message points to - see
+that test and `ArchitectureTest` for the enforcement, and rule 10 (section 13) for the pattern
+generalized for the next module that needs it (Planning, referencing fleet vehicles/carriers and
+orders themselves).
+
+### 12.7 Indexes added by V10
+
+| Index | Purpose |
+|---|---|
+| `uq_transport_order_number` | `order_number` is globally unique - see 12.1 |
+| `uq_transport_order_external` (partial) | the idempotency pair - see 12.2 |
+| `ix_transport_order_company` | the hot path: "list mine", company-scoped queries lead with `company_id` |
+| `ix_transport_order_company_status`, `ix_transport_order_company_service_date` | the list screen's status/date filters, composed with the company scope that always applies |
+| `ix_transport_order_origin`, `ix_transport_order_destination` | the list screen's origin/destination filters |
+| `uq_transport_order_id_company` (on `tms.transport_order`) | composite-FK target for a future Planning trip-assignment table (rule 6) |
+| `ix_transport_order_line_order` | "lines of this order", the only way `transport_order_line` is ever queried |
+| `uq_transport_order_line_order_line_number` | one line number per order |
+
+## 13. Rules for the next migrations
 
 1. Business tables carry `company_id NOT NULL` with an FK to `tms.company` and an index
    that leads with it. Never both scope columns without a documented reason - a pure child
@@ -766,10 +918,25 @@ the same rule.
 9. A uniqueness rule always scopes to `company_id`, even for a column that describes a
    real-world-unique thing (a license plate, a legal tax id) - never installation-wide. A
    global constraint would leak cross-tenant existence information through a conflict
-   response; see section 10.2.
+   response; see section 10.2. The one documented exception is a value nobody chooses or
+   guesses, like a system-generated sequential number - see section 12.1.
+10. A business module that needs to resolve a row owned by another business module (not a
+    pure lookup value like an enum) does so through a small port interface in
+    `com.ebim.tms.shared.reference` (or a similarly-scoped `shared` subpackage), implemented
+    by an adapter inside the owning module - never by importing the owning module's
+    repository or entity directly. See section 12.6 (`OriginLookupPort`/
+    `DestinationLookupPort`) - the pattern to reuse when Planning (step 10) needs to resolve
+    fleet vehicles/carriers or orders.
+11. A table whose rows are plausibly edited by two different HTTP requests in separate round
+    trips (not just raced within one) gets a `bigint version` column
+    (`jakarta.persistence.Version`) plus an explicit "does the request's version match the
+    persisted version" check in the service *before* any field is changed - relying on JPA's
+    `@Version` alone only catches two transactions racing to flush at the same instant, not a
+    client submitting a stale form. See section 12.4.
 
 V6 (Step 05) is the first migration to follow rules 1-5 against a real business table; V7
 (Step 06) is the first to need rule 6. V8 (Step 07) is the first to need rules 7-8. V9
 (Step 08) is the first to need rule 9 explicitly, though it was implicit in every prior
-company-scoped unique constraint. Step 09 onward should match this shape rather than reinvent
-it.
+company-scoped unique constraint. V10 (Step 09) is the first to need rule 9's documented
+exception and the first to need rules 10-11. Step 10 onward should match this shape rather
+than reinvent it.
