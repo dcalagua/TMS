@@ -248,9 +248,10 @@ history, and are verified by `LocalSeedIntegrationTest`.
 |---|---|
 | `FlywayMigrationIntegrationTest` | the history applies to an empty database, validates, is idempotent, replays deterministically, and PostGIS is present |
 | `TenancyConstraintIntegrationTest` | company code scoping, cross-organization membership refusal, membership uniqueness, RESTRICT deletes, cascade limits, email/code normalization, `updated_at` trigger, seeded catalogue |
-| `SchemaExposureIntegrationTest` | RLS enabled on every table (including `origin`/`zone` since V6 and `destination`/`frequency`/`frequency_weekly_rule`/`frequency_exception` since V7), no policies, not forced, PUBLIC and Supabase API roles denied, nothing published in `public` |
+| `SchemaExposureIntegrationTest` | RLS enabled on every table (including `origin`/`zone` since V6, `destination`/`frequency`/`frequency_weekly_rule`/`frequency_exception` since V7, and `route`/`route_stop` since V8), no policies, not forced, PUBLIC and Supabase API roles denied, nothing published in `public` |
 | `MasterDataConstraintIntegrationTest` | origin/zone code uniqueness is per-company, not installation-wide; FK to a real company; code normalization; the latitude/longitude pair and range checks; the generated `location` column reflects a valid pair and is `NULL` when coordinates are absent; `origin_type` is restricted to the catalogue; defaults and actor columns |
 | `MasterDataDestinationFrequencyConstraintIntegrationTest` | the same class of proof as above, extended to V7: destination/frequency code uniqueness per company; destination coordinate pair/range checks and generated `location`; `destination_type` and nonnegative `service_time_minutes`; a destination's `zone_id` must belong to its own company even though the two FK columns are separate; weekly rule `day_of_week` range and per-frequency uniqueness and nonnegative `lead_time_days`; weekly rules and exceptions cascade-delete with their frequency; exception date uniqueness and non-blank note |
+| `MasterDataRouteConstraintIntegrationTest` | the same class of proof, extended to V8: route code uniqueness per company; a route's origin/zone/frequency must belong to its own company even though the FK columns are separate; nonnegative reference distance/duration; a route stop's destination and company must both match its route; positive sequence; a destination cannot appear twice on one route; stops cascade-delete with their route; **the `DEFERRABLE INITIALLY DEFERRED` sequence constraint** - a two-stop in-place swap survives `COMMIT`, and a genuine unresolved duplicate still fails, just at `COMMIT` instead of at the statement |
 | `ApplicationDatabaseStartupIntegrationTest` | the real Spring context boots with datasource + JPA + Flyway against PostgreSQL |
 | `LocalSeedIntegrationTest` | the local seed still matches the schema and carries no credential |
 | `MigrationConventionTest` | naming, contiguous versions, no destructive DDL, no `auth`/`storage` DDL, no tenant data in migrations, no `supabase/migrations` |
@@ -262,7 +263,10 @@ rather than repeated in the database-level test above - see
 `docs/overnight/05_ORIGINS_ZONES.md` section 4 for that coverage. The destination/frequency
 slice (Step 06) is proven the same way by
 `backend/tms-api/src/test/java/com/ebim/tms/masterdata/api/DestinationFrequencyApiIntegrationTest.java`
-- see `docs/overnight/06_DESTINATIONS_FREQUENCIES.md` section 3 for that coverage.
+- see `docs/overnight/06_DESTINATIONS_FREQUENCIES.md` section 3 for that coverage. The route
+slice (Step 07) is proven the same way by
+`backend/tms-api/src/test/java/com/ebim/tms/masterdata/api/RouteApiIntegrationTest.java` - see
+`docs/overnight/07_ROUTES.md` section 5 for that coverage.
 
 ## 7. Master data: origins and zones (Step 05, migration V6)
 
@@ -474,7 +478,133 @@ shaped so a later join table can reference both without any change to either.
 | `ix_frequency_weekly_rule_frequency`, `ix_frequency_exception_frequency` | "rules/exceptions of this frequency", the only way either child table is ever queried |
 | `uq_zone_id_company` (on `tms.zone`) | composite-FK target for `destination.zone_id`, see section 8.1 |
 
-## 9. Rules for the next migrations
+## 9. Master data: routes (Step 07, migration V8)
+
+Follows V6/V7's shape unchanged (section 10 below): `company_id NOT NULL` with an FK and a
+leading index, actor columns, RLS enabled in this same migration, normalized-code `CHECK`s.
+
+```mermaid
+erDiagram
+    COMPANY  ||--o{ ROUTE      : "scopes"
+    ORIGIN   ||--o{ ROUTE      : "starts"
+    ZONE     ||--o{ ROUTE      : "optionally groups"
+    FREQUENCY ||--o{ ROUTE     : "optionally schedules"
+    ROUTE    ||--o{ ROUTE_STOP : "owns, ordered"
+    DESTINATION ||--o{ ROUTE_STOP : "visited by"
+
+    ROUTE {
+        uuid id PK
+        uuid company_id FK
+        text code "unique per company, ^[A-Z0-9][A-Z0-9_-]{0,31}$"
+        text name
+        uuid origin_id FK "mandatory, composite-FK tenant guarantee"
+        uuid zone_id "optional, composite-FK tenant guarantee"
+        uuid frequency_id "optional, composite-FK tenant guarantee"
+        numeric reference_distance_km "8,2 - planner-entered, nonnegative"
+        integer reference_duration_minutes "planner-entered, nonnegative"
+        bool active
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+        uuid updated_by FK
+    }
+    ROUTE_STOP {
+        uuid id PK
+        uuid route_id FK "cascades from route"
+        uuid company_id FK "denormalized from route - see 9.1"
+        uuid destination_id FK "composite-FK tenant guarantee"
+        integer sequence "1-based, contiguous, server-assigned - see 9.2"
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+        uuid updated_by FK
+    }
+```
+
+A master `tms.route` is a reusable planned corridor - company-scoped origin plus the ordered
+`tms.route_stop` destinations - and is deliberately distinct from a future dynamically
+calculated Trip route (deferred by decision, per the repository's OR-Tools/route-optimization
+deferral): no geometry, no live position, no optimizer output, just a named sequence a planner
+sets up once and a Trip can point at later.
+
+### 9.1 `route_stop` carries its own `company_id`, unlike every other pure child so far
+
+`tms.frequency_weekly_rule` and `tms.frequency_exception` (V7) are pure children of their
+parent with no `company_id` of their own, because neither references another company-scoped
+table. `tms.route_stop` is different: it references `tms.destination`, another company-scoped
+table, which section 10 rule 6 requires a composite-FK tenant guarantee for - and that
+guarantee needs `company_id` on the *referencing* row, not just the parent. So `route_stop`
+denormalizes `company_id` from its route and carries two composite FKs: `(route_id,
+company_id) -> route (id, company_id)` (the stop's company must match its own route's company)
+and `(destination_id, company_id) -> destination (id, company_id)` (the stop's destination
+must belong to that same company). This is the refinement rule 7 below captures: being a pure
+child (no lifecycle without its parent) and needing its own `company_id` are independent
+questions, not the same one.
+
+`tms.route` itself needs the identical guarantee for `origin_id` (mandatory) and the optional
+`zone_id`/`frequency_id`, reusing `tms.zone.uq_zone_id_company` (V7) and adding
+`uq_origin_id_company`/`uq_frequency_id_company` in this migration.
+
+### 9.2 Stop order is server-assigned from array order, not a client-supplied number
+
+`RouteRequest.destinationIds` is the whole ordered stop list; the server assigns
+`sequence = 1..N` from the array's position (`Route.replaceStops`), so a request can never ask
+for a duplicate or gapped sequence - "sequence starting at a consistent convention" from the
+step brief is satisfied by construction rather than by validating a client-supplied number.
+Reordering (the frontend's move up/down) resends the whole list in its new order and is applied
+as an update-only diff keyed by `destination_id` (`Route.replaceStops`, the same
+diff-and-replace-via-`orphanRemoval` shape `Frequency.replaceWeeklyRules` (V7) established), not
+a delete-then-insert.
+
+That diff necessarily passes a swap (two stops trading positions) through a transient duplicate
+`(route_id, sequence)` pair mid-transaction. `uq_route_stop_route_sequence` is declared
+`DEFERRABLE INITIALLY DEFERRED` so PostgreSQL checks it at `COMMIT` instead of at each
+statement - the standard idiom for a reorderable unique-position list. See the V8 migration
+comment on that constraint and `MasterDataRouteConstraintIntegrationTest` (which proves both
+that a legitimate swap survives commit and that a genuine unresolved duplicate still fails, just
+later) for the two-sided proof of this decision.
+
+### 9.3 A destination may appear at most once per route
+
+`uq_route_stop_route_destination UNIQUE (route_id, destination_id)` forbids a route from
+stopping at the same destination twice. Documented decision, matching how the step brief asks
+duplicates to be "explicitly forbidden or intentionally supported with a documented reason": a
+master Route in V1 is a corridor of distinct stops; a legitimate "visit the same place twice"
+itinerary belongs to Trip-level planning (not built yet), not a reusable master. Revisit only if
+a concrete round-trip use case appears - the same bar section 8.3 sets for the deferred
+destination-frequency association table.
+
+### 9.4 List and detail deliberately return different shapes
+
+The step brief is explicit that a route list must not load every destination for each row
+(N+1). `RouteService.list` therefore never touches any route's `stops` collection; it resolves a
+stop *count* per page with one batched `GROUP BY` query
+(`RouteStopRepository.countByRouteIds`) and returns `RouteView` (count only). `RouteService.get`
+(and create/update/activate/deactivate) returns `RouteDetailView`, which does include the
+ordered stops with each one's resolved destination - fetched with the same batched
+`findAllById` discipline `DestinationService.loadZones` (V7) established for a single route's
+stop set, never one query per stop.
+
+### 9.5 Deactivating an origin or destination does not erase route history
+
+Deactivation only flips the `active` boolean; the row is never deleted, so every FK a route or
+route stop holds remains valid and the composite-FK tenant guarantees keep working. A route (or
+a route editor screen) can therefore keep resolving and displaying a stop whose destination has
+since been deactivated - `RouteFormModal` on the frontend prefers the route's own
+`destinationCode`/`destinationName` over the active-only dropdown fetch for exactly this reason.
+
+### 9.6 Indexes added by V8
+
+| Index | Purpose |
+|---|---|
+| `uq_route_company_code` | codes unique per company, free to repeat across companies (ADR-003) |
+| `ix_route_company` | the hot path: "list mine", company-scoped queries lead with `company_id` |
+| `ix_route_origin`, `ix_route_zone` (partial), `ix_route_frequency` (partial) | reverse lookups and the list filters |
+| `ix_route_stop_route`, `ix_route_stop_destination` | "stops of this route" (the only way `route_stop` is queried per-route) and "routes touching this destination" |
+| `uq_route_id_company` (on `tms.route`) | composite-FK target for `route_stop.route_id` |
+| `uq_origin_id_company` (on `tms.origin`), `uq_destination_id_company` (on `tms.destination`), `uq_frequency_id_company` (on `tms.frequency`) | composite-FK targets `route`/`route_stop` need - the first cross-table references either table has had |
+
+## 10. Rules for the next migrations
 
 1. Business tables carry `company_id NOT NULL` with an FK to `tms.company` and an index
    that leads with it. Never both scope columns without a documented reason - a pure child
@@ -487,7 +617,15 @@ shaped so a later join table can reference both without any change to either.
 5. Every vertical slice adds a cross-tenant isolation test (ADR-003 compliance rule).
 6. A foreign key from one company-scoped table into another (like `destination.zone_id`)
    gets the composite-FK tenant guarantee from section 8.1, not just a same-column FK.
+7. Being a pure child of another table (rule 1's exception) and needing your own `company_id`
+   (rule 6) are independent questions. A child table that *itself* references another
+   company-scoped table needs `company_id` denormalized from its parent so it can carry rule
+   6's composite FK too - see section 9.1 (`route_stop`), which needs both.
+8. A reorderable unique-position column (a list a user can drag/move) declares its uniqueness
+   constraint `DEFERRABLE INITIALLY DEFERRED` so an update-only reorder diff can pass through
+   a transient duplicate mid-transaction without failing - see section 9.2
+   (`uq_route_stop_route_sequence`).
 
 V6 (Step 05) is the first migration to follow rules 1-5 against a real business table; V7
-(Step 06) is the first to need rule 6. Step 07 onward (routes, fleet) should match this
-shape rather than reinvent it.
+(Step 06) is the first to need rule 6. V8 (Step 07) is the first to need rules 7-8. Step 08
+onward (fleet) should match this shape rather than reinvent it.

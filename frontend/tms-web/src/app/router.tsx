@@ -4,6 +4,7 @@ import { LoginPage } from '../pages/LoginPage'
 import { DestinationsPage } from '../pages/masters/DestinationsPage'
 import { FrequenciesPage } from '../pages/masters/FrequenciesPage'
 import { OriginsPage } from '../pages/masters/OriginsPage'
+import { RoutesPage } from '../pages/masters/RoutesPage'
 import { ZonesPage } from '../pages/masters/ZonesPage'
 import { NotFoundPage } from '../pages/NotFoundPage'
 import { PlaceholderPage } from '../pages/PlaceholderPage'
@@ -28,7 +29,7 @@ export const router = createBrowserRouter([
               { path: 'masters/destinations', element: <DestinationsPage /> },
               { path: 'masters/zones', element: <ZonesPage /> },
               { path: 'masters/frequencies', element: <FrequenciesPage /> },
-              { path: 'masters/routes', element: <PlaceholderPage title="Routes" /> },
+              { path: 'masters/routes', element: <RoutesPage /> },
               { path: 'fleet/carriers', element: <PlaceholderPage title="Carriers" /> },
               { path: 'fleet/vehicle-types', element: <PlaceholderPage title="Vehicle types" /> },
               { path: 'fleet/vehicles', element: <PlaceholderPage title="Vehicles" /> },

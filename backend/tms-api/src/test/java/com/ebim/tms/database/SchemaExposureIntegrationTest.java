@@ -34,7 +34,8 @@ class SchemaExposureIntegrationTest {
     private static final List<String> APPLICATION_TABLES = List.of(
             "app_user", "organization", "company", "role", "permission",
             "role_permission", "membership", "membership_role", "origin", "zone",
-            "destination", "frequency", "frequency_weekly_rule", "frequency_exception");
+            "destination", "frequency", "frequency_weekly_rule", "frequency_exception",
+            "route", "route_stop");
 
     private static String jdbcUrl;
 
@@ -143,7 +144,8 @@ class SchemaExposureIntegrationTest {
                   AND table_name IN ('app_user','organization','company','role','permission',
                                      'role_permission','membership','membership_role',
                                      'origin','zone','destination','frequency',
-                                     'frequency_weekly_rule','frequency_exception')
+                                     'frequency_weekly_rule','frequency_exception',
+                                     'route','route_stop')
                 ORDER BY 1
                 """)).isEmpty();
     }
