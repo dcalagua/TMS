@@ -43,6 +43,9 @@ export function Sidebar({ open, collapsed, onRequestClose }: SidebarProps) {
         to={item.to}
         end={end}
         className={({ isActive }) => `tms-nav-link${isActive ? ' active' : ''}`}
+        // The route change closes the drawer for every other case; this covers tapping the
+        // entry the user is already on, where there is no route change to react to.
+        onClick={onRequestClose}
         // The rail hides the label visually, so the link keeps its name through `title`
         // as well; screen readers still read the text, which stays in the DOM.
         title={label}

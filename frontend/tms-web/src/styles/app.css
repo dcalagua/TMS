@@ -93,11 +93,16 @@ h6 {
   flex: none;
 }
 
+/* `!important` here is not a specificity shortcut: at the `lg` breakpoint Bootstrap's own
+   `.offcanvas-lg` rule declares `background-color: transparent !important` and zeroes the
+   border, which stripped the navy off the desktop column and left light slate text on a light
+   background - a contrast failure, not a cosmetic one. This is the documented way to opt a
+   responsive offcanvas out of that rule. */
 .tms-sidebar {
-  background-color: var(--tms-sidebar-bg);
+  background-color: var(--tms-sidebar-bg) !important;
   color: var(--tms-sidebar-text);
   width: var(--tms-sidebar-width);
-  border-right: 1px solid var(--tms-sidebar-border);
+  border-right: 1px solid var(--tms-sidebar-border) !important;
   transition: width 0.15s ease;
 }
 

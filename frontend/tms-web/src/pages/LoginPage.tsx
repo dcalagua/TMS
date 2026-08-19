@@ -69,7 +69,9 @@ export function LoginPage() {
         </div>
 
         <div>
-          <h2 className="fw-semibold mb-3" style={{ fontSize: '1.75rem', lineHeight: 1.25 }}>
+          {/* Headings inherit `--bs-heading-color`, which is the dark body colour; on this
+              navy panel that would fail contrast, so the colour is set explicitly. */}
+          <h2 className="fw-semibold mb-3 text-white" style={{ fontSize: '1.75rem', lineHeight: 1.25 }}>
             {t('brand.headline')}
           </h2>
           <ul className="list-unstyled mb-0 d-grid gap-2 text-white-50">
