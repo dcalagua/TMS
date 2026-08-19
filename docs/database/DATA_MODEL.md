@@ -248,10 +248,11 @@ history, and are verified by `LocalSeedIntegrationTest`.
 |---|---|
 | `FlywayMigrationIntegrationTest` | the history applies to an empty database, validates, is idempotent, replays deterministically, and PostGIS is present |
 | `TenancyConstraintIntegrationTest` | company code scoping, cross-organization membership refusal, membership uniqueness, RESTRICT deletes, cascade limits, email/code normalization, `updated_at` trigger, seeded catalogue |
-| `SchemaExposureIntegrationTest` | RLS enabled on every table (including `origin`/`zone` since V6, `destination`/`frequency`/`frequency_weekly_rule`/`frequency_exception` since V7, and `route`/`route_stop` since V8), no policies, not forced, PUBLIC and Supabase API roles denied, nothing published in `public` |
+| `SchemaExposureIntegrationTest` | RLS enabled on every table (including `origin`/`zone` since V6, `destination`/`frequency`/`frequency_weekly_rule`/`frequency_exception` since V7, `route`/`route_stop` since V8, and `carrier`/`vehicle_type`/`vehicle` since V9), no policies, not forced, PUBLIC and Supabase API roles denied, nothing published in `public` |
 | `MasterDataConstraintIntegrationTest` | origin/zone code uniqueness is per-company, not installation-wide; FK to a real company; code normalization; the latitude/longitude pair and range checks; the generated `location` column reflects a valid pair and is `NULL` when coordinates are absent; `origin_type` is restricted to the catalogue; defaults and actor columns |
 | `MasterDataDestinationFrequencyConstraintIntegrationTest` | the same class of proof as above, extended to V7: destination/frequency code uniqueness per company; destination coordinate pair/range checks and generated `location`; `destination_type` and nonnegative `service_time_minutes`; a destination's `zone_id` must belong to its own company even though the two FK columns are separate; weekly rule `day_of_week` range and per-frequency uniqueness and nonnegative `lead_time_days`; weekly rules and exceptions cascade-delete with their frequency; exception date uniqueness and non-blank note |
 | `MasterDataRouteConstraintIntegrationTest` | the same class of proof, extended to V8: route code uniqueness per company; a route's origin/zone/frequency must belong to its own company even though the FK columns are separate; nonnegative reference distance/duration; a route stop's destination and company must both match its route; positive sequence; a destination cannot appear twice on one route; stops cascade-delete with their route; **the `DEFERRABLE INITIALLY DEFERRED` sequence constraint** - a two-stop in-place swap survives `COMMIT`, and a genuine unresolved duplicate still fails, just at `COMMIT` instead of at the statement |
+| `FleetConstraintIntegrationTest` | the same class of proof, extended to V9: carrier/vehicle-type/vehicle code uniqueness per company; carrier tax-id pair uniqueness and normalization; carrier email normalization/shape when present; vehicle-type `max_weight_kg`/`max_volume_m3` strictly positive and `max_pallets` nonnegative-including-zero; optional dimensions positive when present; `body_type` restricted to the catalogue; the temperature-range coherence rule (requires `temperature_controlled`, `min <= max`); vehicle license-plate normalization/shape and per-company uniqueness; a vehicle's carrier and vehicle type must both belong to the vehicle's own company even though the FK columns are separate; override capacities positive/nonnegative when present; `availability_status` restricted to the catalogue; defaults and actor columns |
 | `ApplicationDatabaseStartupIntegrationTest` | the real Spring context boots with datasource + JPA + Flyway against PostgreSQL |
 | `LocalSeedIntegrationTest` | the local seed still matches the schema and carries no credential |
 | `MigrationConventionTest` | naming, contiguous versions, no destructive DDL, no `auth`/`storage` DDL, no tenant data in migrations, no `supabase/migrations` |
@@ -266,7 +267,9 @@ slice (Step 06) is proven the same way by
 - see `docs/overnight/06_DESTINATIONS_FREQUENCIES.md` section 3 for that coverage. The route
 slice (Step 07) is proven the same way by
 `backend/tms-api/src/test/java/com/ebim/tms/masterdata/api/RouteApiIntegrationTest.java` - see
-`docs/overnight/07_ROUTES.md` section 5 for that coverage.
+`docs/overnight/07_ROUTES.md` section 5 for that coverage. The fleet slice (Step 08) is proven
+the same way by `backend/tms-api/src/test/java/com/ebim/tms/fleet/api/FleetApiIntegrationTest.java`
+- see `docs/overnight/08_FLEET.md` section 5 for that coverage.
 
 ## 7. Master data: origins and zones (Step 05, migration V6)
 
@@ -604,7 +607,142 @@ since been deactivated - `RouteFormModal` on the frontend prefers the route's ow
 | `uq_route_id_company` (on `tms.route`) | composite-FK target for `route_stop.route_id` |
 | `uq_origin_id_company` (on `tms.origin`), `uq_destination_id_company` (on `tms.destination`), `uq_frequency_id_company` (on `tms.frequency`) | composite-FK targets `route`/`route_stop` need - the first cross-table references either table has had |
 
-## 10. Rules for the next migrations
+## 10. Fleet masters: carriers, vehicle types and vehicles (Step 08, migration V9)
+
+Follows V6/V7/V8's shape unchanged (section 11 below): `company_id NOT NULL` with an FK and a
+leading index, actor columns, RLS enabled in this same migration, normalized-code `CHECK`s, and
+the composite-FK tenant guarantee (rule 6) for `tms.vehicle`'s references into `tms.carrier` and
+`tms.vehicle_type`.
+
+```mermaid
+erDiagram
+    COMPANY      ||--o{ CARRIER      : "scopes"
+    COMPANY      ||--o{ VEHICLE_TYPE : "scopes"
+    COMPANY      ||--o{ VEHICLE      : "scopes"
+    CARRIER      ||--o{ VEHICLE      : "optionally operates"
+    VEHICLE_TYPE ||--o{ VEHICLE      : "defaults capacity for"
+
+    CARRIER {
+        uuid id PK
+        uuid company_id FK
+        text code "unique per company, ^[A-Z0-9][A-Z0-9_-]{0,31}$"
+        text business_name
+        text tax_id_type "flexible free text, normalized upper - see 10.1"
+        text tax_id_value "flexible free text, normalized upper"
+        text contact_name "optional"
+        text phone "optional"
+        text email "optional, normalized lower, shape-checked"
+        bool active
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+        uuid updated_by FK
+    }
+    VEHICLE_TYPE {
+        uuid id PK
+        uuid company_id FK
+        text code "unique per company"
+        text name
+        numeric max_weight_kg "10,2 - strictly positive"
+        numeric max_volume_m3 "10,3 - strictly positive"
+        integer max_pallets "nonnegative, may be zero"
+        numeric length_m "6,2 - optional, positive when present"
+        numeric width_m "6,2 - optional, positive when present"
+        numeric height_m "6,2 - optional, positive when present"
+        text body_type "optional, small fixed catalogue"
+        bool temperature_controlled
+        numeric min_temperature_celsius "optional, requires temperature_controlled"
+        numeric max_temperature_celsius "optional, requires temperature_controlled"
+        integer axles "optional, >= 1"
+        bool active
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+        uuid updated_by FK
+    }
+    VEHICLE {
+        uuid id PK
+        uuid company_id FK
+        text code "unique per company"
+        text license_plate "unique per company, normalized upper - see 10.2"
+        uuid carrier_id "optional, composite-FK tenant guarantee"
+        uuid vehicle_type_id "mandatory, composite-FK tenant guarantee"
+        numeric max_weight_override_kg "10,2 - optional, positive when present"
+        numeric max_volume_override_m3 "10,3 - optional, positive when present"
+        integer max_pallets_override "optional, nonnegative when present"
+        text availability_status "AVAILABLE | IN_MAINTENANCE | OUT_OF_SERVICE - see 10.3"
+        bool active
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+        uuid updated_by FK
+    }
+```
+
+### 10.1 `carrier.tax_id_type`/`tax_id_value` are a flexible pair, not a fixed enum
+
+Unlike `origin_type`/`destination_type` (a small catalogue enforced with `CHECK ... IN (...)`),
+a carrier's legal/tax identification is deliberately free text: identifier types vary by country
+(RUC in Peru, RFC in Mexico, CNPJ in Brazil, EIN in the US, ...), and hardcoding a per-country
+catalogue would either force TMS to add a migration for every new operating country or force an
+awkward `OTHER` bucket. Both halves are still normalized (`upper(btrim(...))`, per section 3.8 -
+"normalization is enforced, not assumed") so `uq_carrier_company_tax_id UNIQUE (company_id,
+tax_id_type, tax_id_value)` actually catches `'ruc'`/`'RUC'` as the same type instead of letting
+normalization drift create a duplicate the constraint cannot see.
+
+### 10.2 A vehicle's license plate is unique per company, not installation-wide
+
+A license plate is a real-world identifier a planner would expect to be globally unique - but
+`uq_vehicle_company_license_plate` scopes it to `company_id` anyway, matching every other
+master's code uniqueness (ADR-003) rather than carving out a special case. Two reasons:
+
+1. **Consistency with the tenancy model.** Every other uniqueness rule in this document is
+   company-scoped; a single globally-unique column would be a one-off exception with no
+   corresponding capability (V1 has no installation-wide fleet registry).
+2. **A global constraint is a cross-tenant information leak.** If plate uniqueness were
+   enforced across companies, company A could learn whether company B has a vehicle with a
+   specific plate simply by attempting to register it and observing a 409 instead of success -
+   the same class of leak the rest of the API avoids by answering a cross-company read with 404,
+   never 403 or 409 (see `RouteApiIntegrationTest.crossCompanyAccessIsBlocked` and its fleet
+   equivalent, `FleetApiIntegrationTest.Vehicles.crossCompanyAccessIsBlocked`).
+
+If a genuine cross-company fleet registry becomes a requirement, it is a new, explicitly
+designed capability - not a side effect of tightening this constraint.
+
+### 10.3 `vehicle.availability_status` is a current-state flag, not a scheduling calendar
+
+The step brief asks for "availability baseline that does not pretend to be a full scheduling
+calendar." `availability_status` is one column with three values (`AVAILABLE`,
+`IN_MAINTENANCE`, `OUT_OF_SERVICE`) recording the vehicle's current operational state - not a
+calendar of future slots, shifts or bookings. Trip/planning-level scheduling (deferred - not
+built in V1) is a separate, later concern; this column intentionally does not anticipate its
+shape.
+
+### 10.4 Effective capacity is resolved in Java, not stored
+
+`tms.vehicle`'s three override columns (`max_weight_override_kg`, `max_volume_override_m3`,
+`max_pallets_override`) are independently nullable - a vehicle may override one, two, or all
+three dimensions and fall back to its `tms.vehicle_type`'s defaults for the rest. Nothing in the
+schema materializes the *resolved* value: `EffectiveCapacityResolver`
+(`com.ebim.tms.fleet.application`) is the single place that computes it (vehicle override first,
+otherwise the type default, per dimension), used by every read (`VehicleView.effectiveMaxWeightKg`
+etc.) and available for Planning's future capacity checks
+(`docs/architecture/OWNERSHIP_MATRIX.md`, "Capacity checks") without a second implementation of
+the same rule.
+
+### 10.5 Indexes added by V9
+
+| Index | Purpose |
+|---|---|
+| `uq_carrier_company_code`, `uq_vehicle_type_company_code`, `uq_vehicle_company_code` | codes unique per company, free to repeat across companies (ADR-003) |
+| `uq_carrier_company_tax_id` | a legal identifier is registered once per company - section 10.1 |
+| `uq_vehicle_company_license_plate` | a plate is registered once per company - section 10.2 |
+| `ix_carrier_company`, `ix_vehicle_type_company`, `ix_vehicle_company` | the hot path: "list mine", company-scoped queries lead with `company_id` |
+| `ix_vehicle_carrier` (partial, `carrier_id IS NOT NULL`) | "vehicles of this carrier" without indexing the common owned-fleet case |
+| `ix_vehicle_type` | "vehicles of this type", the list filter and the capacity-resolution lookup |
+| `uq_carrier_id_company` (on `tms.carrier`), `uq_vehicle_type_id_company` (on `tms.vehicle_type`) | composite-FK targets `vehicle.carrier_id`/`vehicle.vehicle_type_id` need |
+
+## 11. Rules for the next migrations
 
 1. Business tables carry `company_id NOT NULL` with an FK to `tms.company` and an index
    that leads with it. Never both scope columns without a documented reason - a pure child
@@ -625,7 +763,13 @@ since been deactivated - `RouteFormModal` on the frontend prefers the route's ow
    constraint `DEFERRABLE INITIALLY DEFERRED` so an update-only reorder diff can pass through
    a transient duplicate mid-transaction without failing - see section 9.2
    (`uq_route_stop_route_sequence`).
+9. A uniqueness rule always scopes to `company_id`, even for a column that describes a
+   real-world-unique thing (a license plate, a legal tax id) - never installation-wide. A
+   global constraint would leak cross-tenant existence information through a conflict
+   response; see section 10.2.
 
 V6 (Step 05) is the first migration to follow rules 1-5 against a real business table; V7
-(Step 06) is the first to need rule 6. V8 (Step 07) is the first to need rules 7-8. Step 08
-onward (fleet) should match this shape rather than reinvent it.
+(Step 06) is the first to need rule 6. V8 (Step 07) is the first to need rules 7-8. V9
+(Step 08) is the first to need rule 9 explicitly, though it was implicit in every prior
+company-scoped unique constraint. Step 09 onward should match this shape rather than reinvent
+it.

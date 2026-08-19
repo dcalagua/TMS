@@ -1,5 +1,8 @@
 import { createBrowserRouter } from 'react-router-dom'
 import { DashboardPage } from '../pages/DashboardPage'
+import { CarriersPage } from '../pages/fleet/CarriersPage'
+import { VehicleTypesPage } from '../pages/fleet/VehicleTypesPage'
+import { VehiclesPage } from '../pages/fleet/VehiclesPage'
 import { LoginPage } from '../pages/LoginPage'
 import { DestinationsPage } from '../pages/masters/DestinationsPage'
 import { FrequenciesPage } from '../pages/masters/FrequenciesPage'
@@ -30,9 +33,9 @@ export const router = createBrowserRouter([
               { path: 'masters/zones', element: <ZonesPage /> },
               { path: 'masters/frequencies', element: <FrequenciesPage /> },
               { path: 'masters/routes', element: <RoutesPage /> },
-              { path: 'fleet/carriers', element: <PlaceholderPage title="Carriers" /> },
-              { path: 'fleet/vehicle-types', element: <PlaceholderPage title="Vehicle types" /> },
-              { path: 'fleet/vehicles', element: <PlaceholderPage title="Vehicles" /> },
+              { path: 'fleet/carriers', element: <CarriersPage /> },
+              { path: 'fleet/vehicle-types', element: <VehicleTypesPage /> },
+              { path: 'fleet/vehicles', element: <VehiclesPage /> },
               { path: 'orders', element: <PlaceholderPage title="Orders" /> },
               { path: 'planning', element: <PlaceholderPage title="Planning" /> },
               { path: 'trips', element: <PlaceholderPage title="Trips" /> },
