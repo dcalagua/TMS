@@ -1,0 +1,78 @@
+# TMS by EBIM - Render blueprint.
+#
+# Two services from one repository. Every secret is declared with `sync: false`, which tells
+# Render to prompt for the value in the dashboard and keep it out of this file - nothing here
+# is a credential, and nothing here should become one.
+#
+# The database is NOT declared here on purpose. TMS runs against Supabase PostgreSQL, and a
+# Render-managed database would be a second, competing home for the schema.
+
+services:
+  # ------------------------------------------------------------------------------------------
+  # Backend - Java 21 + Spring Boot. Owns every business rule; the browser never reaches the
+  # database directly.
+  # ------------------------------------------------------------------------------------------
+  - type: web
+    name: tms-api
+    runtime: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./backend/tms-api/Dockerfile
+    dockerContext: ./backend/tms-api
+    # Render only routes traffic to an instance once this answers 200. Spring Boot's readiness
+    # probe reports UP after Flyway has finished, so a deploy cannot serve requests while the
+    # schema is still migrating.
+    healthCheckPath: /actuator/health/readiness
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+
+      # Supabase PostgreSQL. Use the connection pooler URI (port 6543) rather than the direct
+      # one: Render restarts instances freely and the pooler is what keeps that from exhausting
+      # the database's connection slots.
+      - key: TMS_DB_URL
+        sync: false
+      - key: TMS_DB_USERNAME
+        sync: false
+      - key: TMS_DB_PASSWORD
+        sync: false
+
+      # Supabase Auth. Signatures are verified against the published JWKS, so there is no
+      # signing secret to set. The prod profile refuses a non-https or loopback issuer.
+      - key: TMS_SUPABASE_JWT_ISSUER_URI
+        sync: false
+      - key: TMS_SUPABASE_JWKS_URI
+        sync: false
+
+      # The browser origin allowed to call this API. Empty means no cross-origin call is
+      # permitted at all, so this has to be set to the frontend's URL for the app to work.
+      - key: TMS_CORS_ALLOWED_ORIGINS
+        sync: false
+
+  # ------------------------------------------------------------------------------------------
+  # Frontend - compiled by Vite, served by nginx. VITE_* values are baked in at build time, so
+  # changing one requires a rebuild, not a restart.
+  # ------------------------------------------------------------------------------------------
+  - type: web
+    name: tms-web
+    runtime: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./frontend/tms-web/Dockerfile
+    dockerContext: ./frontend/tms-web
+    healthCheckPath: /
+    envVars:
+      # Build arguments, not runtime configuration. Render passes matching env vars through to
+      # `docker build` as --build-arg.
+      #
+      # VITE_API_BASE_URL must end in /api/v1 and point at the tms-api service's public URL.
+      # It is deliberately not wired with `fromService`: the value needs a path suffix that a
+      # service reference cannot express, so setting it by hand is the honest option.
+      - key: VITE_API_BASE_URL
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      # The anon/publishable key. Designed to be public and safe in a browser bundle. The
+      # service-role key must never be set on this service.
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
