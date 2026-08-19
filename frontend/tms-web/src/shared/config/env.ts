@@ -15,14 +15,19 @@ export interface AppEnv {
 }
 
 const DEFAULT_API_BASE_URL = 'http://localhost:8080/api/v1'
+// Local Supabase CLI defaults. Not a real project: pointing at them without a running
+// local stack fails sign-in with a normal network error instead of a blank screen, which
+// is preferable to crashing the whole app when `.env.local` has not been created yet.
+const DEFAULT_SUPABASE_URL = 'http://localhost:54321'
+const DEFAULT_SUPABASE_ANON_KEY = 'local-development-anon-key-placeholder'
 
 function readEnv(): AppEnv {
   const raw = import.meta.env
 
   return {
     apiBaseUrl: (raw.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/+$/, ''),
-    supabaseUrl: raw.VITE_SUPABASE_URL ?? '',
-    supabaseAnonKey: raw.VITE_SUPABASE_ANON_KEY ?? '',
+    supabaseUrl: raw.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL,
+    supabaseAnonKey: raw.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY,
   }
 }
 

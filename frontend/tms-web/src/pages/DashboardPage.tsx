@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { fetchSystemInfo } from '../shared/api/systemApi'
+import { useAuth } from '../shared/auth/AuthContext'
+import { useCompany } from '../shared/company/CompanyContext'
 
 /**
- * Placeholder landing screen. Its only real job today is to prove the
- * React -> Spring Boot path works end to end before business screens exist.
+ * Landing screen. Proves the React -> Spring Boot path works end to end and shows the
+ * identity/company context resolved from Supabase Auth + `GET /api/v1/me`.
  */
 export function DashboardPage() {
   const backend = useQuery({
@@ -11,6 +13,8 @@ export function DashboardPage() {
     queryFn: ({ signal }) => fetchSystemInfo(signal),
     retry: false,
   })
+  const { user } = useAuth()
+  const { selected } = useCompany()
 
   return (
     <>
@@ -20,7 +24,21 @@ export function DashboardPage() {
       </div>
 
       <div className="row g-3">
-        <div className="col-12 col-lg-5">
+        <div className="col-12 col-lg-4">
+          <div className="card shadow-sm h-100">
+            <div className="card-header py-2 fw-semibold">Signed in as</div>
+            <div className="card-body">
+              <dl className="row mb-0 small">
+                <dt className="col-5 text-body-secondary">Email</dt>
+                <dd className="col-7">{user?.email ?? '-'}</dd>
+                <dt className="col-5 text-body-secondary">Company</dt>
+                <dd className="col-7 mb-0">{selected?.name ?? '-'}</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-12 col-lg-4">
           <div className="card shadow-sm h-100">
             <div className="card-header py-2 fw-semibold">Backend connection</div>
             <div className="card-body">
@@ -55,19 +73,19 @@ export function DashboardPage() {
           </div>
         </div>
 
-        <div className="col-12 col-lg-7">
+        <div className="col-12 col-lg-4">
           <div className="card shadow-sm h-100">
             <div className="card-header py-2 fw-semibold">Next steps</div>
             <div className="card-body">
               <p className="text-body-secondary small">
-                Business modules are delivered as vertical slices. Master data, fleet, orders and
-                manual planning screens arrive in later steps.
+                Business modules are delivered as vertical slices, from master data through manual
+                planning.
               </p>
               <ul className="small mb-0">
-                <li>Database and tenancy foundation</li>
-                <li>Supabase JWT authentication and company scoping</li>
-                <li>Master data, fleet, orders</li>
-                <li>Manual planning</li>
+                <li>Master data: origins, destinations, zones, frequencies, routes</li>
+                <li>Fleet: carriers, vehicle types, vehicles</li>
+                <li>Orders</li>
+                <li>Manual planning and trips</li>
               </ul>
             </div>
           </div>

@@ -3,6 +3,13 @@ import { render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DashboardPage } from './DashboardPage'
 
+vi.mock('../shared/auth/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'user-1', email: 'driver@ebim.test' } }),
+}))
+vi.mock('../shared/company/CompanyContext', () => ({
+  useCompany: () => ({ selected: { id: 'company-1', name: 'Acme Logistics' } }),
+}))
+
 function renderWithProviders() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -43,5 +50,16 @@ describe('DashboardPage', () => {
     renderWithProviders()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('TMS API unreachable')
+  })
+
+  it('shows the signed-in identity and selected company', () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+    )
+
+    renderWithProviders()
+
+    expect(screen.getByText('driver@ebim.test')).toBeInTheDocument()
+    expect(screen.getByText('Acme Logistics')).toBeInTheDocument()
   })
 })
