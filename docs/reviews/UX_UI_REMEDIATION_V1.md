@@ -3,7 +3,7 @@
 Scope: `frontend/tms-web`. No backend contract was changed, no migration was added and no
 security or tenancy rule was relaxed. Every fix is in the frontend.
 
-Status date: 2026-08-19. Branch `main`, five local commits, nothing pushed.
+Status date: 2026-08-19. Branch `main`, seven local commits, nothing pushed.
 
 ---
 
@@ -171,61 +171,152 @@ on every toggle; `aria-label` on every icon-only control; `role="menu"`/`menuite
 keyboard support; focus trap, focus restoration and scroll lock for `TmsModal`/`Drawer`; status
 conveyed by dot **and** label, never by hue alone; the two contrast failures in section 4.
 
-## 9. Tests
+---
+
+## 9. Form dialogs (phase 4A)
+
+All **twelve** form dialogs were migrated from hand-built Bootstrap modal markup onto the shared
+`TmsModal`, one file at a time. `grep -r 'modal d-block' src/pages` now returns nothing. Submit,
+create/edit, loading, error handling, permissions, callbacks, React Hook Form and the TanStack
+Query invalidation are unchanged, and no API contract moved.
+
+| File | Module | Complexity |
+|---|---|---|
+| `planning/CreateTripModal.tsx` | Planning | low |
+| `planning/TripVehicleModal.tsx` | Planning | low |
+| `planning/PlanningRunFormModal.tsx` | Planning | low |
+| `masters/ZoneFormModal.tsx` | Master data | low |
+| `masters/FrequencyFormModal.tsx` | Master data | medium |
+| `masters/OriginFormModal.tsx` | Master data | medium |
+| `masters/DestinationFormModal.tsx` | Master data | high |
+| `masters/RouteFormModal.tsx` | Master data | high |
+| `fleet/CarrierFormModal.tsx` | Fleet | medium |
+| `fleet/VehicleFormModal.tsx` | Fleet | medium |
+| `fleet/VehicleTypeFormModal.tsx` | Fleet | high |
+| `orders/OrderFormModal.tsx` | Orders | high |
+
+A thirteenth dialog turned up during phase 5: `TripDetailDrawer` was still an `.offcanvas` whose
+Escape handler only fired when focus happened to be inside it. It now uses the shared `Drawer`.
+
+**Field grouping.** Fields sit in semantic fieldsets with real `<legend>`s - Identification /
+Address / Geographic location / Operation for a destination; Identification / Capacities /
+Dimensions / Restrictions for a vehicle type - built from plain Bootstrap rows and columns,
+without nesting cards or losing density.
+
+**Copy.** Every label, placeholder, help line, title, button and validation message in those
+dialogs is translated. Validation still branches on the backend's `code`, never on its prose.
+
+**Enum labels.** The eight English `*_LABELS` maps are gone from `shared/api`. Presentation now
+goes through `useEnumLabels`, reading the `statuses` bundle; `enums.test.ts` fails if any value
+the API can send lacks a label in either language. `IN_MAINTENANCE` reads "En mantenimiento".
+
+**Duplication removed.** `applyApiFieldErrors` replaces the field-error mapping that had been
+written out in nine dialogs: known fields go inline, fields the form does not render surface at
+form level, everything else is described from its stable `code`.
+
+## 10. Orders and planning (phase 5)
+
+**Orders.** The header states how many orders the query found; three tiles give the weight,
+volume and pallets of the rows on screen, labelled as *this page's* totals because the backend
+paginates and anything beyond it is not known here. Nothing else is invented - there is still no
+KPI endpoint. Origin and destination are separate columns, the three amounts are right-aligned
+numeric columns through the regional formatters, and the row's three competing buttons became
+one `...` menu that follows the order's own lifecycle. Filters are in the shared toolbar, which
+collapses them behind a toggle below `md`. Pagination stays server-side.
+
+**Planning run.** The board header states plan number, status, trip count, origin and date.
+
+**`CapacityBar`** was rebuilt to show what a planner needs at a glance: the label, `used / limit`
+in the dimension's own unit, and the percentage - for example `Peso  8,850 kg / 10,000 kg
+(88.5%)` - above the bar itself.
+
+Over-capacity and near-limit are reported in words *and* an icon, never by colour alone, and the
+bar exposes `aria-valuenow` to assistive technology. It still refuses to derive any verdict the
+backend did not give: `exceeded` comes from the API, and the three states the backend documents
+as different - unlimited, a real zero limit, a normal limit - render differently.
+
+**`TripCard`** carries number, status, vehicle, carrier, departure, order and destination counts
+and all three capacity dimensions.
+
+**Responsive planning.** Below `lg` the two panels become tabs rather than two unusable narrow
+columns; trip detail opens in the shared drawer.
+
+**Three defects found while doing it:**
+
+- Taking an order off a trip did not return it to the eligible pool until the page was reloaded:
+  the board invalidated only its own query, never the eligible one.
+- `PageHeader` refused to shrink its action row, so three buttons pushed a 320px screen into a
+  horizontal scrollbar.
+- The eligible-orders table scrolled sideways inside a third-width column and hid the order
+  number and destination - the two things a planner scans for. It is now a compact list carrying
+  number, destination, customer, priority and all three amounts on two dense lines.
+
+**Not done on purpose:** drag and drop. The classic interaction had to be solid first, and
+pulling in a drag library for appearance alone was explicitly out of scope.
+
+## 11. Tests
 
 | Suite | Count | Command |
 |---|---|---|
-| Frontend unit/integration (Vitest) | **301** (from 219) | `npm test` |
-| End-to-end (Playwright, Chromium) | **40** | `npm run e2e` |
+| Frontend unit/integration (Vitest) | **367** (from 219 at the start) | `npm test` |
+| End-to-end (Playwright, Chromium) | **57** | `npm run e2e` |
 
-End-to-end runs against a real browser with **Supabase Auth and the TMS API intercepted**
-(`e2e/support/app.ts`): no project credentials, no running backend, no seeded database, and a
-test can script the exact backend behaviour it is about. Console output is asserted clean on
-every screen. Review screenshots are written to `frontend/tms-web/artifacts/ui-review/`, which
-is git-ignored - they are a regenerated review aid, not a source artefact.
+End-to-end runs against a real browser with Supabase Auth and the TMS API intercepted
+(`e2e/support/app.ts`): no project credentials, no running backend, no seeded database. The
+planning suite adds a **stateful** stub (`e2e/support/planning.ts`) that keeps the run in memory
+and recomputes capacity, so it exercises the real sequence - create a trip, assign an order,
+watch the bars move, take it back off - rather than fixed payloads.
 
----
+Console output is asserted clean on every screen. Review screenshots are written to
+`frontend/tms-web/artifacts/ui-review/` (git-ignored, regenerated by `npm run e2e`):
+`login-desktop`, `login-mobile`, `dashboard-desktop`, the eight master/fleet screens,
+`orders-desktop`, `orders-mobile`, `planning-desktop`, `planning-mobile`,
+`planning-board-desktop`, `planning-board-mobile`, `form-destination-desktop`,
+`form-destination-mobile`, `navigation-drawer-mobile`.
 
-## 10. Module coverage
+## 12. Module coverage
 
-| Module | Shell + i18n | List redesign | Form redesign |
+| Module | Shell + i18n | List | Form |
 |---|---|---|---|
-| Sign-in | done | n/a | done |
-| Dashboard | done | done | n/a |
-| Origins, Destinations, Zones, Frequencies, Routes | done | done | **pending** |
-| Carriers, Vehicle types, Vehicles | done | done | **pending** |
-| Orders | titles and actions only | **pending** | **pending** |
-| Planning runs / board | titles and actions only | **pending** | **pending** |
+| Sign-in, Dashboard | done | done | done |
+| Origins, Destinations, Zones, Frequencies, Routes | done | done | done |
+| Carriers, Vehicle types, Vehicles | done | done | done |
+| Orders | done | done | done |
+| Planning runs / board / trip drawer | done | done | done |
 | Trips, Security | placeholder screens, translated | n/a | n/a |
 
----
+## 13. Remaining debt
 
-## 11. Remaining debt
+All P2.
 
-All P2. Nothing here blocks the operation; every item is visual or per-module polish.
+1. **Route-level lazy loading** is not applied; the bundle is ~1 MB (about 270 kB gzipped).
+2. **Async autocomplete** for large master lookups is not built - the form selects still fetch
+   up to 200 rows eagerly.
+3. **Master and fleet list screens still use `FilterBar`**, not the collapsible `Toolbar` that
+   Orders now uses, so their filters do not collapse on a phone.
+4. **Drag and drop** on the planning board, deferred by decision.
+5. `planning.eligible.title` is unused now that the board owns the column heading.
 
-1. **Form dialogs still build Bootstrap modal markup by hand** (12 files). `TmsModal` exists and
-   is tested, but the forms have not been moved onto it, so they still lack a focus trap, scroll
-   lock and focus restoration. This is the largest single accessibility gap left.
-2. **Form field labels, placeholders and validation messages are still English** in those 12
-   dialogs. The `validations` namespace exists and is unused.
-3. **Field grouping** into semantic fieldsets (Identification / Address / Location / Operation /
-   Status; Identification / Capacities / Dimensions / Restrictions) is not applied.
-4. **Orders and Planning are not redesigned.** Orders still lacks the result-count header and the
-   dense operational table; the planning board is not a split panel, `TripCard` and `CapacityBar`
-   have not been reworked, and the mobile tab/segmented layout is not built.
-5. **Enum labels transported by the API** (`ORIGIN_TYPE_LABELS`, `ORDER_STATUS_LABELS`,
-   `VEHICLE_AVAILABILITY_STATUS_LABELS`) are still English constants in the api modules.
-6. **Route-level lazy loading** is not applied; the bundle is ~956 kB (260 kB gzipped).
-7. **Async autocomplete** for large master lookups is not built.
-8. Mobile collapsible filters exist as a `Toolbar` component but the list screens still use
-   `FilterBar`.
-
----
-
-## 12. Results
+## 14. Results
 
 ```
+FORMS_INVENTORIED=12
+FORMS_MIGRATED=12/12
+MANUAL_MODAL_MARKUP_REMAINING=0
+FORM_I18N_ES=PASS
+FORM_I18N_EN=PASS
+FORM_RESPONSIVE=PASS
+MODAL_ACCESSIBILITY=PASS
+
+ORDERS_UI=PASS
+ORDERS_RESPONSIVE=PASS
+PLANNING_UI=PASS
+PLANNING_RESPONSIVE=PASS
+TRIP_CARD=PASS
+CAPACITY_BAR=PASS
+PLANNING_OPERATIONS=PASS
+ES_EN=PASS
+
 AUTH_FIRST_LOGIN=PASS
 SESSION_PERSISTENCE=PASS
 SIDEBAR_NAVIGATION=PASS
@@ -234,24 +325,23 @@ DEFAULT_LANGUAGE_ES=PASS
 LANGUAGE_SWITCH=PASS
 LOGIN_UI=PASS
 APP_SHELL_UI=PASS
-MASTER_DATA_UI=PARTIAL   (lists done, form dialogs pending)
-FLEET_UI=PARTIAL         (lists done, form dialogs pending)
-ORDERS_UI=FAIL           (not started)
-PLANNING_UI=FAIL         (not started)
+MASTER_DATA_UI=PASS
+FLEET_UI=PASS
 RESPONSIVE=PASS
-ACCESSIBILITY=PARTIAL    (shell and shared components done, form dialogs pending)
-FRONTEND_TESTS=301
-E2E_TESTS=40
+ACCESSIBILITY=PASS
+
+CONSOLE_ERRORS=0
+FRONTEND_TESTS=367
+E2E_TESTS=57
 TYPECHECK=PASS
 BUILD=PASS
-CONSOLE_ERRORS=0
 P0=0
 P1=0
-P2=8
+P2=5
 ```
 
-**Not closed.** The functional and security-relevant work is complete and guarded by tests that
-were verified to fail against the previous code. The remaining items in section 11 are UI debt
-in Orders, Planning and the form dialogs.
+`PLANNING_OPERATIONS=PASS` covers create trip, assign vehicle, add order, remove order, move
+order, confirm and cancel, capacity recalculation and the backend's own capacity/concurrency
+refusals shown verbatim. Drag and drop is out of scope by decision.
 
 Nothing was pushed.
