@@ -1,0 +1,41 @@
+# TMS by EBIM - static hosting for the compiled frontend.
+# $PORT is substituted by the nginx image's own entrypoint at container start.
+
+server {
+    listen       ${PORT};
+    server_name  _;
+    root         /usr/share/nginx/html;
+
+    # Do not advertise the server version on every response and error page.
+    server_tokens off;
+
+    gzip              on;
+    gzip_types        text/css application/javascript application/json image/svg+xml;
+    gzip_min_length   1024;
+
+    # The client owns routing. Any path that is not a file on disk has to return index.html,
+    # or a browser reload on /masters/origins answers 404 instead of the application.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Vite fingerprints these filenames, so a given URL's contents never change and the file
+    # can be cached indefinitely.
+    location /assets/ {
+        expires    1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # index.html must not be cached: it is what points at the current fingerprinted bundle,
+    # and a stale copy pins the browser to a deployment that no longer exists.
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+
+    # The page loads its own scripts and styles, talks to the TMS API and to Supabase Auth,
+    # and does nothing else. Restricting that here means an injected script has nowhere to
+    # send what it collects. Adjust connect-src if the API or Supabase host changes.
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+}
