@@ -1,9 +1,43 @@
 {
+  "autoPlan": {
+    "appliedText_one": "{{count}} draft trip created.",
+    "appliedText_other": "{{count}} draft trips created.",
+    "appliedTitle": "Proposal applied",
+    "apply": "Apply proposal",
+    "applying": "Applying...",
+    "engineNote": "Produced by {{engine}}. The same input always produces the same proposal.",
+    "everythingPlanned": "Every order considered was assigned.",
+    "failedTitle": "Could not apply the proposal",
+    "nothingToPlan": "There is nothing to plan with this date's orders and vehicles.",
+    "orderCount_one": "{{count}} order",
+    "orderCount_other": "{{count}} orders",
+    "orders": "Orders",
+    "ordersConsidered": "Orders considered",
+    "ordersPlanned": "Orders assigned",
+    "proposedTrips": "Proposed trips",
+    "reason": "Reason",
+    "reasons": {
+      "exceedsLargestVehicle": "Larger than any available vehicle. Split the order or add a bigger one.",
+      "noFleet": "No vehicles are available for this date.",
+      "noVehicleAvailable": "No capacity left in this date's fleet.",
+      "notServiceableOnDate": "The destination is not served on this date according to its service calendar."
+    },
+    "stops": "Stops",
+    "subtitle": "A proposal of draft trips. Review before applying; nothing is confirmed automatically.",
+    "summary": "Summary",
+    "title": "Automatic planning",
+    "tripsProposed": "Trips proposed",
+    "unplanned": "Unplanned orders",
+    "unplannedHelp": "These orders are still in the pool. Decide what to do with each one.",
+    "vehicle": "Vehicle",
+    "vehiclesOffered": "Vehicles available"
+  },
   "board": {
     "orders": "Eligible orders",
     "trips": "Trips"
   },
   "boardScreen": {
+    "autoPlan": "Plan automatically",
     "backToRuns": "Planning runs",
     "cancelError": "Could not cancel the plan",
     "cancelPlan": "Cancel plan",

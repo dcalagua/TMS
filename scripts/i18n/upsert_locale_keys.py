@@ -26,122 +26,136 @@ NEW_NAMESPACES = {}
 # shape as NEW_NAMESPACES: namespace -> language -> partial tree. Only the branches named here
 # are touched; everything else in the file survives.
 EXISTING_NAMESPACE_UPDATES = {
-    # The Location domain close-out: a location's TYPE says what the place is, its OPERATIONAL
-    # USE says how it may be used in a movement. The old wording called the second one "roles"
-    # and listed five values that were really types, so the screen showed "Tipo: Tienda" beside
-    # "Roles: Tienda". Every string below exists to keep those two questions apart in words.
-    "statuses": {
+    # Frequency date exceptions get an editor. The wording carries the two-kind model: a
+    # closed date removes one the cadence would have served, an open one adds one it would not.
+    "masters": {
         "es": {
-            "locationRole": {
-                "ORIGIN": "Origen",
-                "DESTINATION": "Destino",
+            "frequencies": {
+                "form": {
+                    "exceptions": "Excepciones por fecha",
+                    "exceptionsHelp": "Fechas que se apartan de la cadencia semanal: feriados en "
+                                      "los que no se atiende, o d\u00edas extra en los que s\u00ed. "
+                                      "No permiten cambiar la hora de corte de una fecha.",
+                    "noExceptions": "Sin excepciones registradas.",
+                    "exceptionDate": "Fecha",
+                    "exceptionKind": "Tipo",
+                    "exceptionNote": "Nota",
+                    "exceptionClosed": "Cerrado",
+                    "exceptionOpen": "Abierto",
+                    "addException": "Agregar excepci\u00f3n",
+                    "removeException": "Eliminar la excepci\u00f3n del {{date}}",
+                    "saveFirstForExceptions": "Guarda la frecuencia primero para poder registrar "
+                                              "excepciones por fecha.",
+                },
             },
         },
         "en": {
-            "locationRole": {
-                "ORIGIN": "Origin",
-                "DESTINATION": "Destination",
+            "frequencies": {
+                "form": {
+                    "exceptions": "Date exceptions",
+                    "exceptionsHelp": "Dates that depart from the weekly cadence: holidays with no "
+                                      "service, or extra days with service. They cannot change a "
+                                      "single date's cutoff time.",
+                    "noExceptions": "No exceptions recorded.",
+                    "exceptionDate": "Date",
+                    "exceptionKind": "Kind",
+                    "exceptionNote": "Note",
+                    "exceptionClosed": "Closed",
+                    "exceptionOpen": "Open",
+                    "addException": "Add exception",
+                    "removeException": "Remove the exception for {{date}}",
+                    "saveFirstForExceptions": "Save the frequency first to record date exceptions.",
+                },
             },
         },
     },
-    "masters": {
+    # Automatic planning V1. The wording carries the product rule: the engine proposes, a person
+    # decides, and every order it could not place is named rather than quietly dropped.
+    "planning": {
         "es": {
-            "locations": {
-                "description": "Lugares f\u00edsicos utilizados por la operaci\u00f3n: tiendas, "
-                               "almacenes, plantas, hubs y puntos de entrega.",
-                "columns": {
-                    "use": "Uso operacional",
-                },
-                "use": {
-                    "none": "Sin uso definido",
-                },
-                "filters": {
-                    "anyUse": "Cualquier uso",
-                },
-                "form": {
-                    "sectionUse": "Uso operacional",
-                    "useHelp": "Define c\u00f3mo puede utilizarse este lugar en el transporte. "
-                               "Un mismo sitio puede ser origen y destino: la tienda recibe la "
-                               "entrega y despacha la devoluci\u00f3n.",
-                    "canBeOrigin": "Puede utilizarse como origen",
-                    "canBeDestination": "Puede utilizarse como destino",
-                },
-                "import": {
-                    "columns": {
-                        "roles": "Uso operacional",
-                    },
-                },
+            "boardScreen": {
+                "autoPlan": "Planificar autom\u00e1ticamente",
             },
-            "origins": {
-                "title": "Or\u00edgenes",
-                "description": "Ubicaciones habilitadas para despachar. Es la misma ficha de "
-                               "Ubicaciones, filtrada por uso operacional.",
-                "new": "Nuevo origen",
-                "empty": {
-                    "title": "Sin or\u00edgenes",
-                    "message": "Marca \u00abPuede utilizarse como origen\u00bb en una ubicaci\u00f3n "
-                               "o crea una nueva.",
+            "autoPlan": {
+                "title": "Planificaci\u00f3n autom\u00e1tica",
+                "subtitle": "Propuesta de viajes en borrador. Revisa antes de aplicar; nada se "
+                            "confirma autom\u00e1ticamente.",
+                "summary": "Resumen",
+                "ordersConsidered": "Pedidos evaluados",
+                "vehiclesOffered": "Unidades disponibles",
+                "tripsProposed": "Viajes propuestos",
+                "ordersPlanned": "Pedidos asignados",
+                "engineNote": "Generado por {{engine}}. La misma entrada produce siempre la misma "
+                              "propuesta.",
+                "proposedTrips": "Viajes propuestos",
+                "vehicle": "Unidad",
+                "orders": "Pedidos",
+                "stops": "Paradas",
+                "orderCount_one": "{{count}} pedido",
+                "orderCount_other": "{{count}} pedidos",
+                "nothingToPlan": "No hay nada que planificar con los pedidos y unidades de esta fecha.",
+                "unplanned": "Pedidos sin asignar",
+                "unplannedHelp": "Estos pedidos siguen disponibles en el pool. Decide qu\u00e9 hacer "
+                                 "con cada uno.",
+                "everythingPlanned": "Todos los pedidos evaluados quedaron asignados.",
+                "reason": "Motivo",
+                "reasons": {
+                    "exceedsLargestVehicle": "Excede la capacidad de cualquier unidad disponible. "
+                                             "Divide el pedido o incorpora una unidad mayor.",
+                    "noVehicleAvailable": "No qued\u00f3 capacidad disponible en la flota de esta fecha.",
+                    "noFleet": "No hay unidades disponibles para esta fecha.",
+                    "notServiceableOnDate": "El destino no se atiende en esta fecha seg\u00fan su "
+                                            "calendario de servicio.",
                 },
-            },
-            "destinations": {
-                "title": "Destinos",
-                "description": "Ubicaciones habilitadas para recibir entregas. Es la misma ficha "
-                               "de Ubicaciones, filtrada por uso operacional.",
-                "new": "Nuevo destino",
-                "empty": {
-                    "title": "Sin destinos",
-                    "message": "Marca \u00abPuede utilizarse como destino\u00bb en una ubicaci\u00f3n "
-                               "o crea una nueva.",
-                },
+                "apply": "Aplicar propuesta",
+                "applying": "Aplicando...",
+                "appliedTitle": "Propuesta aplicada",
+                "appliedText_one": "Se cre\u00f3 {{count}} viaje en borrador.",
+                "appliedText_other": "Se crearon {{count}} viajes en borrador.",
+                "failedTitle": "No se pudo aplicar la propuesta",
             },
         },
         "en": {
-            "locations": {
-                "description": "Physical places the operation uses: stores, warehouses, plants, "
-                               "hubs and delivery points.",
-                "columns": {
-                    "use": "Operational use",
-                },
-                "use": {
-                    "none": "No use set",
-                },
-                "filters": {
-                    "anyUse": "Any use",
-                },
-                "form": {
-                    "sectionUse": "Operational use",
-                    "useHelp": "How this place may be used in transport. One site can be both: "
-                               "the store receives the delivery and ships the return.",
-                    "canBeOrigin": "Can be used as origin",
-                    "canBeDestination": "Can be used as destination",
-                },
-                "import": {
-                    "columns": {
-                        "roles": "Operational use",
-                    },
-                },
+            "boardScreen": {
+                "autoPlan": "Plan automatically",
             },
-            "origins": {
-                "title": "Origins",
-                "description": "Locations enabled to ship. The same Locations record, filtered "
-                               "by operational use.",
-                "new": "New origin",
-                "empty": {
-                    "title": "No origins",
-                    "message": "Tick \u201cCan be used as origin\u201d on a location, or create "
-                               "a new one.",
+            "autoPlan": {
+                "title": "Automatic planning",
+                "subtitle": "A proposal of draft trips. Review before applying; nothing is "
+                            "confirmed automatically.",
+                "summary": "Summary",
+                "ordersConsidered": "Orders considered",
+                "vehiclesOffered": "Vehicles available",
+                "tripsProposed": "Trips proposed",
+                "ordersPlanned": "Orders assigned",
+                "engineNote": "Produced by {{engine}}. The same input always produces the same "
+                              "proposal.",
+                "proposedTrips": "Proposed trips",
+                "vehicle": "Vehicle",
+                "orders": "Orders",
+                "stops": "Stops",
+                "orderCount_one": "{{count}} order",
+                "orderCount_other": "{{count}} orders",
+                "nothingToPlan": "There is nothing to plan with this date's orders and vehicles.",
+                "unplanned": "Unplanned orders",
+                "unplannedHelp": "These orders are still in the pool. Decide what to do with each "
+                                 "one.",
+                "everythingPlanned": "Every order considered was assigned.",
+                "reason": "Reason",
+                "reasons": {
+                    "exceedsLargestVehicle": "Larger than any available vehicle. Split the order or "
+                                             "add a bigger one.",
+                    "noVehicleAvailable": "No capacity left in this date's fleet.",
+                    "noFleet": "No vehicles are available for this date.",
+                    "notServiceableOnDate": "The destination is not served on this date according "
+                                            "to its service calendar.",
                 },
-            },
-            "destinations": {
-                "title": "Destinations",
-                "description": "Locations enabled to receive deliveries. The same Locations "
-                               "record, filtered by operational use.",
-                "new": "New destination",
-                "empty": {
-                    "title": "No destinations",
-                    "message": "Tick \u201cCan be used as destination\u201d on a location, or "
-                               "create a new one.",
-                },
+                "apply": "Apply proposal",
+                "applying": "Applying...",
+                "appliedTitle": "Proposal applied",
+                "appliedText_one": "{{count}} draft trip created.",
+                "appliedText_other": "{{count}} draft trips created.",
+                "failedTitle": "Could not apply the proposal",
             },
         },
     },
@@ -153,32 +167,8 @@ EXISTING_NAMESPACE_UPDATES = {
 # strings nobody can trace to a screen - and both languages must lose it together, which is why
 # this is one list rather than a per-language one.
 REMOVED_KEYS = {
-    # The two legacy type vocabularies and the five role values that were really types. Their
-    # last callers went with tms.origin and tms.destination.
-    "statuses": [
-        "originType",
-        "destinationType",
-        "locationRole.SHIP_TO",
-        "locationRole.STORE",
-        "locationRole.DC",
-        "locationRole.PLANT",
-        "locationRole.HUB",
-        "locationRole.OTHER",
-    ],
-    "masters": [
-        # "Roles" and "Utilizable como" were the same fact told twice; one "Uso operacional"
-        # column replaces both.
-        "locations.columns.roles",
-        "locations.columns.usableAs",
-        "locations.usableAs",
-        "locations.filters.allRoles",
-        "locations.form.sectionRoles",
-        "locations.form.rolesHelp",
-        # Origins and Destinations no longer have forms of their own: both open the Location
-        # drawer with one use pre-ticked.
-        "origins.form",
-        "destinations.form",
-    ],
+    # The exceptions editor exists now, so the note that apologised for its absence does not.
+    "masters": ["frequencies.form.exceptionsNote"],
 }
 
 

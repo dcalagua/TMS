@@ -246,6 +246,53 @@ export function cancelPlanningRun(
   return apiRequest<PlanningRunDetailView>(`/planning/runs/${id}/cancel`, { method: 'POST', companyId, body: request })
 }
 
+// --- automatic planning ----------------------------------------------------------------
+
+/**
+ * Mirrors the backend's `AutoPlanView.UnplannedOrderView`. `reason` is the enum name, never a
+ * sentence: the backend does not translate, and the four values are labelled by `statuses`.
+ */
+export interface UnplannedOrderView {
+  orderId: string
+  orderNumber: string | null
+  reason: 'EXCEEDS_LARGEST_VEHICLE' | 'NO_VEHICLE_AVAILABLE' | 'NO_FLEET' | 'NOT_SERVICEABLE_ON_DATE'
+}
+
+/** Mirrors `AutoPlanView.ProposedTripView`. */
+export interface ProposedTripView {
+  vehicleId: string
+  vehicleCode: string | null
+  routeId: string | null
+  orderNumbers: string[]
+  stopCount: number
+}
+
+/**
+ * Mirrors the backend's `AutoPlanView`. Preview and apply return the same shape, differing only
+ * in `applied` and `created` - so what the planner reviewed is what they get.
+ */
+export interface AutoPlanView {
+  applied: boolean
+  engine: string
+  proposed: ProposedTripView[]
+  created: TripDetailView[]
+  unplanned: UnplannedOrderView[]
+  ordersConsidered: number
+  vehiclesOffered: number
+}
+
+/** What automatic planning would do. Writes nothing. */
+export function previewAutoPlan(companyId: string, runId: string, signal?: AbortSignal): Promise<AutoPlanView> {
+  return apiRequest<AutoPlanView>(`/planning/runs/${runId}/auto-plan/preview`, { companyId, signal })
+}
+
+/** Writes the proposal as draft trips. Never confirms them. */
+export function applyAutoPlan(
+  companyId: string, runId: string, request: PlanningActionRequest,
+): Promise<AutoPlanView> {
+  return apiRequest<AutoPlanView>(`/planning/runs/${runId}/auto-plan`, { method: 'POST', companyId, body: request })
+}
+
 /** Mirrors the backend's `TripCreateRequest` record. `version` is the *run's* version - trip
  * creation is a run-level operation (`PlanningRunController.createTrip`). */
 export interface TripCreateRequest {

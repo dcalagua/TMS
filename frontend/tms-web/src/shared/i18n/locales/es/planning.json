@@ -1,9 +1,43 @@
 {
+  "autoPlan": {
+    "appliedText_one": "Se creó {{count}} viaje en borrador.",
+    "appliedText_other": "Se crearon {{count}} viajes en borrador.",
+    "appliedTitle": "Propuesta aplicada",
+    "apply": "Aplicar propuesta",
+    "applying": "Aplicando...",
+    "engineNote": "Generado por {{engine}}. La misma entrada produce siempre la misma propuesta.",
+    "everythingPlanned": "Todos los pedidos evaluados quedaron asignados.",
+    "failedTitle": "No se pudo aplicar la propuesta",
+    "nothingToPlan": "No hay nada que planificar con los pedidos y unidades de esta fecha.",
+    "orderCount_one": "{{count}} pedido",
+    "orderCount_other": "{{count}} pedidos",
+    "orders": "Pedidos",
+    "ordersConsidered": "Pedidos evaluados",
+    "ordersPlanned": "Pedidos asignados",
+    "proposedTrips": "Viajes propuestos",
+    "reason": "Motivo",
+    "reasons": {
+      "exceedsLargestVehicle": "Excede la capacidad de cualquier unidad disponible. Divide el pedido o incorpora una unidad mayor.",
+      "noFleet": "No hay unidades disponibles para esta fecha.",
+      "noVehicleAvailable": "No quedó capacidad disponible en la flota de esta fecha.",
+      "notServiceableOnDate": "El destino no se atiende en esta fecha según su calendario de servicio."
+    },
+    "stops": "Paradas",
+    "subtitle": "Propuesta de viajes en borrador. Revisa antes de aplicar; nada se confirma automáticamente.",
+    "summary": "Resumen",
+    "title": "Planificación automática",
+    "tripsProposed": "Viajes propuestos",
+    "unplanned": "Pedidos sin asignar",
+    "unplannedHelp": "Estos pedidos siguen disponibles en el pool. Decide qué hacer con cada uno.",
+    "vehicle": "Unidad",
+    "vehiclesOffered": "Unidades disponibles"
+  },
   "board": {
     "orders": "Pedidos elegibles",
     "trips": "Viajes"
   },
   "boardScreen": {
+    "autoPlan": "Planificar automáticamente",
     "backToRuns": "Corridas de planificación",
     "cancelError": "No se pudo cancelar el plan",
     "cancelPlan": "Cancelar plan",
