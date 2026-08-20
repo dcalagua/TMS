@@ -128,6 +128,11 @@
     "allOrigins": "Todos los orígenes",
     "allTypes": "Todos los tipos",
     "allZones": "Todas las zonas",
+    "applied": "Filtros:",
+    "clearAll": "Quitar todos",
+    "clearOne": "Quitar filtro {{filter}}",
+    "noResultsMessage": "Ningun registro coincide con los filtros seleccionados.",
+    "noResultsTitle": "Sin resultados",
     "statusActive": "Activos",
     "statusAll": "Todos",
     "statusInactive": "Inactivos"
@@ -162,8 +167,11 @@
   },
   "pagination": {
     "label": "Paginación",
+    "nextPage": "Página siguiente",
     "pageOf": "Página {{page}} de {{pages}}",
-    "range": "{{from}}-{{to}} de {{total}}"
+    "previousPage": "Página anterior",
+    "range": "{{from}}-{{to}} de {{total}}",
+    "rowsPerPage": "Filas por página"
   },
   "placeholders": {
     "addressReference": "p. ej. portón azul",

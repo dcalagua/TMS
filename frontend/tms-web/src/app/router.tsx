@@ -31,6 +31,9 @@ export const appRoutes: RouteObject[] = [
         element: <AppLayout />,
         children: [
           { index: true, element: <DashboardPage /> },
+          // Outside RequireCompany on purpose: a profile belongs to the person, not to the
+          // company the session happens to be scoped to.
+          { path: 'account', element: <PlaceholderPage titleKey="items.account" /> },
           {
             element: <RequireCompany />,
             children: [

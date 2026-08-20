@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { horizontalOverflow, signIn, stubServices } from './support/app'
+import { horizontalOverflow, signIn, stubServices, switchLanguage } from './support/app'
 
 /**
  * The form dialogs, checked in a real browser: they must fit every viewport the brief lists and
@@ -78,7 +78,9 @@ test('a dialog traps focus, returns it to the trigger, and locks the page behind
   await signIn(page)
   await page.goto('/masters/origins')
 
-  const trigger = page.getByRole('button', { name: 'Nuevo origen' })
+  // Scoped to the page header: an empty list offers the same action again inside the table, and
+  // an unscoped locator matches both.
+  const trigger = page.locator('.tms-page-actions').getByRole('button', { name: 'Nuevo origen' })
   await trigger.click()
 
   const dialog = page.getByRole('dialog')
@@ -113,11 +115,11 @@ test('a dialog reports validation inline, in the active language', async ({ page
 
   await expect(page.getByText('Este campo es obligatorio').first()).toBeVisible()
 
-  // The language switch lives in the top bar, which a modal correctly covers, so the language
-  // is changed with the dialog closed and the dialog reopened.
+  // The language switch lives in the account menu, which a modal correctly covers, so the
+  // language is changed with the dialog closed and the dialog reopened.
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toBeHidden()
-  await page.getByRole('button', { name: 'EN', exact: true }).click()
+  await switchLanguage(page, 'EN')
 
   await page.getByRole('button', { name: 'New zone' }).click()
   await expect(page.getByRole('dialog')).toHaveAccessibleName('New zone')

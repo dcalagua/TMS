@@ -49,7 +49,7 @@ test('the create drawer is anchored to the right edge and leaves the list visibl
   await openOrigins(page, DESKTOP)
   await expect(page.getByText('LIM-CD1')).toBeVisible()
 
-  await page.getByRole('button', { name: 'Nuevo origen' }).click()
+  await page.locator('.tms-page-actions').getByRole('button', { name: 'Nuevo origen' }).click()
 
   const drawer = page.getByRole('dialog')
   await expect(drawer).toBeVisible()
@@ -73,7 +73,7 @@ test('creating an origin closes the drawer and refreshes the table without reloa
   await openOrigins(page, DESKTOP)
   await markDocument(page)
 
-  await page.getByRole('button', { name: 'Nuevo origen' }).click()
+  await page.locator('.tms-page-actions').getByRole('button', { name: 'Nuevo origen' }).click()
   const drawer = page.getByRole('dialog')
 
   await drawer.getByLabel(/^Código/).fill('TRU-CD2')
@@ -110,7 +110,7 @@ test('editing an origin opens the same drawer prefilled and writes the change ba
 test('a drawer with unsaved edits asks before discarding them', async ({ page }) => {
   await openOrigins(page, DESKTOP)
 
-  await page.getByRole('button', { name: 'Nuevo origen' }).click()
+  await page.locator('.tms-page-actions').getByRole('button', { name: 'Nuevo origen' }).click()
   const drawer = page.getByRole('dialog')
   await drawer.getByLabel(/^Código/).fill('TEMP-1')
 
@@ -132,7 +132,7 @@ test('a drawer with unsaved edits asks before discarding them', async ({ page })
 test('a clean drawer closes without asking anything', async ({ page }) => {
   await openOrigins(page, DESKTOP)
 
-  await page.getByRole('button', { name: 'Nuevo origen' }).click()
+  await page.locator('.tms-page-actions').getByRole('button', { name: 'Nuevo origen' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
 
   await page.keyboard.press('Escape')
@@ -144,7 +144,7 @@ test('a clean drawer closes without asking anything', async ({ page }) => {
 test('the drawer takes the whole screen on a phone and still scrolls only inside itself', async ({ page }) => {
   await openOrigins(page, MOBILE)
 
-  await page.getByRole('button', { name: 'Nuevo origen' }).click()
+  await page.locator('.tms-page-actions').getByRole('button', { name: 'Nuevo origen' }).click()
   const drawer = page.getByRole('dialog')
   await expect(drawer).toBeVisible()
   await settled(drawer)

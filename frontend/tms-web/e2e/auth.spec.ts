@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { TEST_USER, signIn, stubServices } from './support/app'
+import { signIn, stubServices } from './support/app'
 
 /**
  * The regression guard for the defect this remediation started from:
@@ -90,7 +90,9 @@ test.describe('session', () => {
     await signIn(page)
     await expect(page.getByRole('heading', { level: 1, name: /^Hola,/ })).toBeVisible()
 
-    await page.getByRole('button', { name: new RegExp(TEST_USER.email) }).click()
+    // The chip shows the display name from /me, not the address, so it is located by its own
+    // class rather than by the email it used to spell out.
+    await page.locator('.tms-topbar-user').click()
     await page.getByRole('menuitem', { name: 'Cerrar sesión' }).click()
     // SweetAlert2 confirmation.
     await page.getByRole('button', { name: 'Cerrar sesión' }).last().click()

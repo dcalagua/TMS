@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import i18n from '../i18n'
 import { onApiResponseError, type ApiError } from '../api/httpClient'
-import { fetchMe, type CompanyAccessView, type MeView } from '../api/meApi'
+import { fetchMe, type CompanyAccessView, type MeView, type UserView } from '../api/meApi'
 import { describeApiError, isCompanyScopeStale } from '../api/problemMessages'
 import { useAuth } from '../auth/AuthContext'
 import { notifyError } from '../ui/alerts'
@@ -13,6 +13,10 @@ export type CompanyStatus = 'idle' | 'loading' | 'error' | 'ready'
 
 interface CompanyContextValue {
   status: CompanyStatus
+  /** The signed-in user's business profile from `GET /api/v1/me`. Distinct from the Supabase
+   * auth user: this is who the backend resolved server-side, and it carries the display name
+   * the shell shows. Null until `/me` has answered. */
+  profile: UserView | null
   companies: CompanyAccessView[]
   selected: CompanyAccessView | null
   selectCompany: (companyId: string) => void
@@ -88,6 +92,8 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
   const companies = useMemo(() => meQuery.data?.companies ?? [], [meQuery.data])
 
+  const profile = meQuery.data?.user ?? null
+
   const selected = useMemo(() => {
     if (companies.length === 0) {
       return null
@@ -105,6 +111,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
   const value: CompanyContextValue = {
     status,
+    profile,
     companies,
     selected,
     selectCompany: setSelectedId,

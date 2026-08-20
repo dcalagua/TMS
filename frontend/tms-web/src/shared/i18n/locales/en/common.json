@@ -128,6 +128,11 @@
     "allOrigins": "All origins",
     "allTypes": "All types",
     "allZones": "All zones",
+    "applied": "Filters:",
+    "clearAll": "Clear all",
+    "clearOne": "Remove {{filter}} filter",
+    "noResultsMessage": "No record matches the selected filters.",
+    "noResultsTitle": "No results",
     "statusActive": "Active",
     "statusAll": "All",
     "statusInactive": "Inactive"
@@ -162,8 +167,11 @@
   },
   "pagination": {
     "label": "Pagination",
+    "nextPage": "Next page",
     "pageOf": "Page {{page}} of {{pages}}",
-    "range": "{{from}}-{{to}} of {{total}}"
+    "previousPage": "Previous page",
+    "range": "{{from}}-{{to}} of {{total}}",
+    "rowsPerPage": "Rows per page"
   },
   "placeholders": {
     "addressReference": "e.g. blue gate",

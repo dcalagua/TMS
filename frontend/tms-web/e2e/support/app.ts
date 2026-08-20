@@ -170,6 +170,24 @@ export async function signIn(page: Page, password: string = TEST_USER.password) 
 }
 
 /**
+ * Switches the interface language.
+ *
+ * The ES|EN pair lives inside the account menu rather than loose in the top bar, so reaching
+ * it means opening that menu first. Tests go through this helper instead of clicking the
+ * segmented option directly: the control moved once already, and every spec that had spelled
+ * the interaction out by hand had to be edited.
+ *
+ * The menu must be reachable, so close any open dialog before calling this - a modal correctly
+ * covers the top bar.
+ */
+export async function switchLanguage(page: Page, language: 'ES' | 'EN') {
+  await page.locator('.tms-topbar-user').click()
+  await page.getByRole('button', { name: language, exact: true }).click()
+  // Close the menu again so it cannot swallow the next click.
+  await page.keyboard.press('Escape')
+}
+
+/**
  * The page must never scroll sideways. Wide content scrolls inside its own container; if the
  * document itself is wider than the viewport, a layout is broken.
  */

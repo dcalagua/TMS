@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { horizontalOverflow, signIn, stubServices } from './support/app'
+import { horizontalOverflow, signIn, stubServices, switchLanguage } from './support/app'
 import { stubPlanning } from './support/planning'
 
 /**
@@ -140,7 +140,7 @@ test('planning is fully translated: no raw enum values in either language', asyn
   await expect(page.getByText('Borrador')).toBeVisible()
   expect(await page.locator('body').innerText()).not.toContain('DRAFT')
 
-  await page.getByRole('button', { name: 'EN', exact: true }).click()
+  await switchLanguage(page, 'EN')
   await expect(page.getByText('Draft')).toBeVisible()
   await expect(page.getByRole('button', { name: 'New trip' })).toBeVisible()
   expect(await page.locator('body').innerText()).not.toContain('READY_FOR_PLANNING')

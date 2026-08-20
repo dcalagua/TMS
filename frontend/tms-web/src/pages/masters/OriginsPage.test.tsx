@@ -129,7 +129,9 @@ describe('OriginsPage', () => {
     renderPage()
     await screen.findByText('Sin orígenes')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Nuevo origen' }))
+    // The empty table offers its own "create" call to action, so the page header's button has
+    // to be named explicitly rather than matched by label alone.
+    await userEvent.click(screen.getAllByRole('button', { name: 'Nuevo origen' })[0]!)
     const dialog = within(screen.getByRole('dialog'))
     await userEvent.type(dialog.getByLabelText(/^código/i), 'NEW-ORIGIN')
     await userEvent.type(dialog.getByLabelText(/^nombre/i), 'New Origin')

@@ -10,6 +10,9 @@ import { stubOrigins } from './support/masters'
  * "we removed the blue" is a claim that has to be checked against what the browser actually
  * paints. This walks the real screens and reads every computed colour.
  *
+ * Elements carrying a `tms-accent-*` class are skipped: those are the categorical module
+ * colours, which are chosen rather than inherited.
+ *
  * A colour counts as blue residue when its blue channel dominates both others by a wide margin.
  * Bootstrap's #0d6efd clears that by 143; the product's own slate `--tms-info` (#3a4552) sits at
  * 13, and the ink focus ring at 5, so the threshold separates framework blue from a neutral
@@ -43,6 +46,13 @@ async function findBlues(page: Page): Promise<Offender[]> {
     const properties = ['color', 'backgroundColor', 'borderTopColor', 'borderLeftColor', 'outlineColor']
 
     for (const element of Array.from(document.querySelectorAll('*'))) {
+      /* The categorical accents are a deliberate, tokenised palette used to tell modules apart
+         (`tokens.css` section 2b), and two of the six are blues. This test is about framework
+         blue leaking out of Bootstrap, not about every blue in the product, so the accent tiles
+         and anything inside them are exempt - by class, so the exemption cannot silently widen
+         to a control that merely sits nearby. */
+      if (element.closest('[class*="tms-accent-"]')) continue
+
       const styles = getComputedStyle(element)
       for (const property of properties) {
         const raw = styles[property as keyof CSSStyleDeclaration] as string
@@ -85,7 +95,7 @@ test('no framework blue survives on the list screens, their menus or their drawe
   expect(await findBlues(page), 'row action menu').toEqual([])
   await page.keyboard.press('Escape')
 
-  await page.getByRole('button', { name: 'Nuevo origen' }).click()
+  await page.locator('.tms-page-actions').getByRole('button', { name: 'Nuevo origen' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await page.getByLabel(/^Código/).last().focus()
   expect(await findBlues(page), 'drawer with a focused field').toEqual([])
@@ -102,6 +112,12 @@ test('no framework blue survives in the top bar controls or the sign-in screen',
   await signIn(page)
   await expect(page.getByRole('heading', { level: 1, name: /^Hola,/ })).toBeVisible()
 
-  await page.getByRole('button', { name: /EBIM Logistics Peru/ }).click()
+  // Targeted by class rather than by the company name: the account chip also carries the
+  // active company under the user's name, so a name-based locator now matches both controls.
+  await page.locator('.tms-workspace-control').click()
   expect(await findBlues(page), 'company switcher open').toEqual([])
+
+  await page.keyboard.press('Escape')
+  await page.locator('.tms-topbar-user').click()
+  expect(await findBlues(page), 'account menu open').toEqual([])
 })
