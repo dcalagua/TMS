@@ -1,5 +1,6 @@
 package com.ebim.tms.shared.reference;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -30,4 +31,12 @@ public interface RouteTemplateLookupPort {
      * query, not 300 ({@code docs/domain/PLANNING_MANUAL_V1.md} section 10).
      */
     Map<UUID, RouteTemplate> findAllInCompany(Set<UUID> ids, UUID companyId);
+
+    /**
+     * Every active corridor leaving one origin, ordered by code. An automatic planning engine
+     * uses these to group orders that are normally served together - which is the difference
+     * between a proposal a dispatcher recognises and a set of mathematically valid truckloads
+     * nobody would drive.
+     */
+    List<RouteTemplate> findActiveByOriginInCompany(UUID originId, UUID companyId);
 }

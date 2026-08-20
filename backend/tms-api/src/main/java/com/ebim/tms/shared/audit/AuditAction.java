@@ -18,6 +18,8 @@ public enum AuditAction {
     CREDENTIAL_CREATE,
     CREDENTIAL_ROTATE,
     CREDENTIAL_REVOKE,
+    /** An automatic planning proposal was written onto a run as draft trips. */
+    AUTO_PLAN,
     IMPORT_EXECUTED,
     SHIPMENT_CONFIRMED
 }

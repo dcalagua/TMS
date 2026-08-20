@@ -55,6 +55,12 @@ public class PlanningCapacityService {
      *             {@code "Order TO-00000007 does not fit trip 2"}
      */
     public void requireWithinCapacity(String what, CapacityLimits limits, CapacityLoad load) {
+        if (limits.accommodates(load)) {
+            return;
+        }
+        // Past this point at least one dimension failed; the loop below is only building the
+        // message. CapacityLimits.accommodates stays the single definition of "fits", so the
+        // automatic planning engine cannot propose a load this method would then refuse.
         List<String> failures = new ArrayList<>();
         addFailure(failures, "weight", load.weightKg(), limits.maxWeightKg(), "kg");
         addFailure(failures, "volume", load.volumeM3(), limits.maxVolumeM3(), "m3");

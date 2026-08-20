@@ -43,4 +43,23 @@ public record CapacityLimits(BigDecimal maxWeightKg, BigDecimal maxVolumeM3, Big
     public boolean isFullyUnlimited() {
         return maxWeightKg == null && maxVolumeM3 == null && maxPallets == null;
     }
+
+    /**
+     * Whether {@code load} fits, in every dimension at once. The single definition of "fits" in
+     * TMS: {@code PlanningCapacityService.requireWithinCapacity} asks this first and then only
+     * builds a message, and {@code HeuristicPlanningEngine} asks it while packing. Two answers to
+     * that question would mean the engine could propose a trip the service then refuses.
+     *
+     * <p>A null limit never constrains; a zero limit refuses anything above zero. That asymmetry
+     * is the record contract above, not a special case here.
+     */
+    public boolean accommodates(CapacityLoad load) {
+        return within(load.weightKg(), maxWeightKg)
+                && within(load.volumeM3(), maxVolumeM3)
+                && within(load.pallets(), maxPallets);
+    }
+
+    private static boolean within(BigDecimal used, BigDecimal limit) {
+        return limit == null || used.compareTo(limit) <= 0;
+    }
 }

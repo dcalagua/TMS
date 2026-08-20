@@ -40,6 +40,13 @@ class RouteTemplateLookupAdapter implements RouteTemplateLookupPort {
     }
 
     @Override
+    public List<RouteTemplate> findActiveByOriginInCompany(UUID originId, UUID companyId) {
+        return routeRepository.findByCompanyIdAndOriginIdAndActiveTrueOrderByCodeAsc(companyId, originId).stream()
+                .map(RouteTemplateLookupAdapter::toTemplate)
+                .toList();
+    }
+
+    @Override
     public Map<UUID, RouteTemplate> findAllInCompany(Set<UUID> ids, UUID companyId) {
         Map<UUID, RouteTemplate> byId = new HashMap<>();
         if (ids.isEmpty()) {

@@ -1,5 +1,6 @@
 package com.ebim.tms.shared.reference;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -31,4 +32,16 @@ public interface VehicleLookupPort {
      * assignment.
      */
     Map<UUID, VehicleCapacityReference> findAllInCompany(Set<UUID> ids, UUID companyId);
+
+    /**
+     * Every vehicle of this company that may be planned right now - the same three conditions
+     * {@link #findAssignable} applies, for the whole fleet at once. This is what an automatic
+     * planning engine is allowed to draw from: it proposes trips, so it needs the candidates, not
+     * one vehicle a planner already picked.
+     *
+     * <p>Ordered by capacity, heaviest first, then by code. Not a presentation choice - a
+     * proposal has to be reproducible, and "which truck did it pick first" must not depend on
+     * what order the database happened to return rows in.
+     */
+    List<VehicleCapacityReference> findAssignableInCompany(UUID companyId);
 }

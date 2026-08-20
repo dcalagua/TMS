@@ -1,6 +1,7 @@
 package com.ebim.tms.fleet.infrastructure;
 
 import com.ebim.tms.fleet.domain.Vehicle;
+import com.ebim.tms.fleet.domain.VehicleAvailabilityStatus;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -31,6 +32,14 @@ public interface VehicleRepository extends JpaRepository<Vehicle, UUID>, JpaSpec
 
     /** Which of a bulk import file's codes/plates this company already holds - see {@code VehicleImportService}. */
     List<Vehicle> findByCompanyIdAndCodeIn(UUID companyId, Collection<String> codes);
+
+    /**
+     * The assignable fleet, for {@code VehicleLookupService.findAssignableInCompany}: active and
+     * currently available. Ordering is applied in Java, on the resolved effective capacity - see
+     * that method.
+     */
+    List<Vehicle> findByCompanyIdAndActiveTrueAndAvailabilityStatus(
+            UUID companyId, VehicleAvailabilityStatus availabilityStatus);
 
     List<Vehicle> findByCompanyIdAndLicensePlateIn(UUID companyId, Collection<String> licensePlates);
 }

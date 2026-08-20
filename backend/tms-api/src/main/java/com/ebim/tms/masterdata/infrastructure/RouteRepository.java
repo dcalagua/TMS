@@ -25,6 +25,13 @@ public interface RouteRepository extends JpaRepository<Route, UUID>, JpaSpecific
      */
     List<Route> findByIdInAndCompanyId(Collection<UUID> ids, UUID companyId);
 
+    /**
+     * The active corridors leaving one origin, for the automatic planning engine. Ordered by code
+     * in the query: a proposal must be reproducible, and grouping that depended on row order
+     * would make the same input plan differently on two runs.
+     */
+    List<Route> findByCompanyIdAndOriginIdAndActiveTrueOrderByCodeAsc(UUID companyId, UUID originId);
+
     boolean existsByCompanyIdAndCode(UUID companyId, String code);
 
     boolean existsByCompanyIdAndCodeAndIdNot(UUID companyId, String code, UUID id);
