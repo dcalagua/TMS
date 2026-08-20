@@ -6,7 +6,10 @@ import com.ebim.tms.fleet.domain.VehicleType;
 import com.ebim.tms.fleet.infrastructure.CarrierRepository;
 import com.ebim.tms.fleet.infrastructure.VehicleRepository;
 import com.ebim.tms.fleet.infrastructure.VehicleTypeRepository;
+import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.audit.AuditAggregateType;
+import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.imports.ImportBatch;
 import com.ebim.tms.shared.imports.ImportEntityType;
 import com.ebim.tms.shared.imports.ImportFormat;
@@ -50,16 +53,19 @@ public class VehicleImportService {
     private final VehicleTypeRepository vehicleTypeRepository;
     private final ImportBatchRepository importBatchRepository;
     private final AuditActorProvider auditActorProvider;
+    private final AuditRecorder auditRecorder;
 
     public VehicleImportService(VehicleImportParser parser, VehicleRepository vehicleRepository,
             CarrierRepository carrierRepository, VehicleTypeRepository vehicleTypeRepository,
-            ImportBatchRepository importBatchRepository, AuditActorProvider auditActorProvider) {
+            ImportBatchRepository importBatchRepository, AuditActorProvider auditActorProvider,
+            AuditRecorder auditRecorder) {
         this.parser = parser;
         this.vehicleRepository = vehicleRepository;
         this.carrierRepository = carrierRepository;
         this.vehicleTypeRepository = vehicleTypeRepository;
         this.importBatchRepository = importBatchRepository;
         this.auditActorProvider = auditActorProvider;
+        this.auditRecorder = auditRecorder;
     }
 
     @Transactional(readOnly = true)
@@ -86,6 +92,9 @@ public class VehicleImportService {
         ImportBatch batch = importBatchRepository.save(new ImportBatch(scope.companyId(), ImportEntityType.VEHICLE,
                 fileName, evaluation.format(), ImportSupport.sha256(content), evaluation.rowCount(),
                 creatable.size(), skipped, actorId));
+        auditRecorder.record(scope, AuditAggregateType.MASTER_DATA_IMPORT_BATCH, batch.id(), AuditAction.IMPORT_EXECUTED,
+                Map.of("entityType", ImportEntityType.VEHICLE.name(), "createdCount", creatable.size(),
+                        "skippedCount", skipped));
 
         return report(evaluation, false, true, batch.id());
     }

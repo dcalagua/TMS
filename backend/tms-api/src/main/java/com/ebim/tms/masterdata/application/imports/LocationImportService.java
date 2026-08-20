@@ -5,7 +5,10 @@ import com.ebim.tms.masterdata.domain.Location;
 import com.ebim.tms.masterdata.domain.Zone;
 import com.ebim.tms.masterdata.infrastructure.LocationRepository;
 import com.ebim.tms.masterdata.infrastructure.ZoneRepository;
+import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.audit.AuditAggregateType;
+import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.imports.ImportBatch;
 import com.ebim.tms.shared.imports.ImportEntityType;
 import com.ebim.tms.shared.imports.ImportFormat;
@@ -55,16 +58,19 @@ public class LocationImportService {
     private final LocationCompatibilityProjector projector;
     private final ImportBatchRepository importBatchRepository;
     private final AuditActorProvider auditActorProvider;
+    private final AuditRecorder auditRecorder;
 
     public LocationImportService(LocationImportParser parser, LocationRepository locationRepository,
             ZoneRepository zoneRepository, LocationCompatibilityProjector projector,
-            ImportBatchRepository importBatchRepository, AuditActorProvider auditActorProvider) {
+            ImportBatchRepository importBatchRepository, AuditActorProvider auditActorProvider,
+            AuditRecorder auditRecorder) {
         this.parser = parser;
         this.locationRepository = locationRepository;
         this.zoneRepository = zoneRepository;
         this.projector = projector;
         this.importBatchRepository = importBatchRepository;
         this.auditActorProvider = auditActorProvider;
+        this.auditRecorder = auditRecorder;
     }
 
     @Transactional(readOnly = true)
@@ -91,6 +97,9 @@ public class LocationImportService {
         ImportBatch batch = importBatchRepository.save(new ImportBatch(scope.companyId(), ImportEntityType.LOCATION,
                 fileName, evaluation.format(), ImportSupport.sha256(content), evaluation.rowCount(),
                 creatable.size(), skipped, actorId));
+        auditRecorder.record(scope, AuditAggregateType.MASTER_DATA_IMPORT_BATCH, batch.id(), AuditAction.IMPORT_EXECUTED,
+                Map.of("entityType", ImportEntityType.LOCATION.name(), "createdCount", creatable.size(),
+                        "skippedCount", skipped));
 
         return report(evaluation, false, true, batch.id());
     }

@@ -10,7 +10,10 @@ import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
+import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.audit.AuditAggregateType;
+import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.math.BigDecimal;
 import java.time.DateTimeException;
@@ -52,13 +55,16 @@ public class LocationService {
     private final ZoneRepository zoneRepository;
     private final LocationCompatibilityProjector projector;
     private final AuditActorProvider auditActorProvider;
+    private final AuditRecorder auditRecorder;
 
     public LocationService(LocationRepository locationRepository, ZoneRepository zoneRepository,
-            LocationCompatibilityProjector projector, AuditActorProvider auditActorProvider) {
+            LocationCompatibilityProjector projector, AuditActorProvider auditActorProvider,
+            AuditRecorder auditRecorder) {
         this.locationRepository = locationRepository;
         this.zoneRepository = zoneRepository;
         this.projector = projector;
         this.auditActorProvider = auditActorProvider;
+        this.auditRecorder = auditRecorder;
     }
 
     @Transactional(readOnly = true)
@@ -103,6 +109,8 @@ public class LocationService {
         location.replaceRoles(request.roles());
 
         Location saved = saveOrConflict(location, code);
+        auditRecorder.record(scope, AuditAggregateType.LOCATION, saved.id(), AuditAction.CREATE,
+                Map.of("code", saved.code(), "type", saved.type().name()));
         return toView(saved, zone, projector.synchronize(saved, actorId));
     }
 
@@ -128,6 +136,8 @@ public class LocationService {
         location.replaceRoles(request.roles());
 
         Location saved = saveOrConflict(location, code);
+        auditRecorder.record(scope, AuditAggregateType.LOCATION, saved.id(), AuditAction.UPDATE,
+                Map.of("code", saved.code()));
         return toView(saved, zone, projector.synchronize(saved, actorId));
     }
 
@@ -155,6 +165,8 @@ public class LocationService {
             location.deactivate(actorId);
         }
         Location saved = locationRepository.saveAndFlush(location);
+        auditRecorder.record(scope, AuditAggregateType.LOCATION, saved.id(),
+                active ? AuditAction.ACTIVATE : AuditAction.DEACTIVATE, Map.of("code", saved.code()));
         return toView(saved, resolveZone(scope, saved.zoneId()), projector.synchronize(saved, actorId));
     }
 

@@ -19,6 +19,7 @@ Rules:
 | [`DATA_MODEL.md`](DATA_MODEL.md) | Schema of record: entity diagram, tenancy design and its reasons, constraints, indexes, reference data, rules for the next migrations |
 | [`MIGRATION_STRATEGY.md`](MIGRATION_STRATEGY.md) | Naming, immutability, schema placement, PostGIS convention, seed policy, Testcontainers setup, rollback stance, per-migration checklist |
 | [`../security/RLS_STRATEGY.md`](../security/RLS_STRATEGY.md) | Why the `tms` schema is backend-only, and what RLS does and does not defend |
+| [`../domain/AUDIT_TRAIL_V1.md`](../domain/AUDIT_TRAIL_V1.md) | `tms.audit_event` (V22): the one table in this schema where `tms_app` never holds UPDATE/DELETE |
 
 ## Shape in one paragraph
 

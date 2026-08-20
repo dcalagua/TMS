@@ -30,7 +30,11 @@ sender would still need before it could ship.
 **Underneath the pull API is a transactional outbox**, not a query straight against `tms.trip`.
 `tms.shipment_outbox_event` (migration V20) gets one row in the *same* database transaction as the
 trip state change it records - `PlanningRunService.confirmTrip` writes both the trip's `CONFIRMED`
-status and its outbox row before either is committed. That is what makes the change feed
+status and its outbox row before either is committed (and, since Job 13, a `SHIPMENT` /
+`SHIPMENT_CONFIRMED` row in `tms.audit_event` alongside them - see
+`docs/domain/AUDIT_TRAIL_V1.md`; the outbox row is the partner-facing change feed below, the
+audit row is the company's own business-audit trail, and both are written in the same
+transaction as the confirmation itself). That is what makes the change feed
 (`GET /integration/v1/shipments/events`, [§6](#6-the-change-feed)) trustworthy: a row here can
 never describe a change that was itself rolled back, and a change can never commit without a row
 here to describe it. A poller that only looked at `updated_at` would not have that guarantee - an

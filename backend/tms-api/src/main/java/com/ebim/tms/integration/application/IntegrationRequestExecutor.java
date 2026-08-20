@@ -8,6 +8,8 @@ import com.ebim.tms.shared.api.IdempotencyConflictException;
 import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.web.CorrelationId;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
@@ -73,19 +75,31 @@ public class IntegrationRequestExecutor {
     /** {@code error_summary} is a summary. Anything longer is a log line, not a column. */
     private static final int MAX_ERROR_SUMMARY = 500;
 
+    /**
+     * Counts every inbound delivery this executor finishes, tagged {@code operation} and
+     * {@code outcome} (a status from {@link IntegrationRequestStatus}, or {@code FAILED} for the
+     * unexpected-exception branch, which never reaches the inbox with a status of its own). The
+     * inbox row this class already writes is the audit trail for one delivery; this is the
+     * aggregate view an operator watches without querying it - see
+     * {@code docs/integrations/INBOUND_API_V1.md}, "Observability".
+     */
+    private static final String REQUESTS_METRIC = "tms.integration.requests";
+
     private final IntegrationInboxService inbox;
     private final IntegrationProperties properties;
     private final ObjectMapper objectMapper;
     private final Validator validator;
     private final Clock clock;
+    private final MeterRegistry meterRegistry;
 
     public IntegrationRequestExecutor(IntegrationInboxService inbox, IntegrationProperties properties,
-            ObjectMapper objectMapper, Validator validator, Clock clock) {
+            ObjectMapper objectMapper, Validator validator, Clock clock, MeterRegistry meterRegistry) {
         this.inbox = inbox;
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.validator = validator;
         this.clock = clock;
+        this.meterRegistry = meterRegistry;
     }
 
     /**
@@ -120,6 +134,7 @@ public class IntegrationRequestExecutor {
             IntegrationOutcome<T> outcome = work.get();
             inbox.record(row(principal, operation, key, payloadHash, snapshot, outcome, outcome.status(),
                     outcome.httpStatus(), outcome.errorSummary(), responseBody(outcome.body()), receivedAt));
+            count(operation, outcome.status().name());
             return new IntegrationExecution<>(outcome.body(), outcome.httpStatus(), false);
         } catch (ConstraintViolationException validationFailure) {
             recordRejection(principal, operation, key, payloadHash, snapshot, 400, summarise(validationFailure),
@@ -146,8 +161,17 @@ public class IntegrationRequestExecutor {
             inbox.record(row(principal, operation, key, payloadHash, snapshot, null,
                     IntegrationRequestStatus.FAILED, 500,
                     "The request could not be completed. Correlation id: " + correlationId, null, receivedAt));
+            count(operation, "FAILED");
             throw unexpected;
         }
+    }
+
+    private void count(IntegrationOperation operation, String outcome) {
+        Counter.builder(REQUESTS_METRIC)
+                .tag("operation", operation.code())
+                .tag("outcome", outcome)
+                .register(meterRegistry)
+                .increment();
     }
 
     /**
@@ -206,6 +230,7 @@ public class IntegrationRequestExecutor {
             String payloadHash, String snapshot, int httpStatus, String errorSummary, OffsetDateTime receivedAt) {
         inbox.record(row(principal, operation, key, payloadHash, snapshot, null, IntegrationRequestStatus.REJECTED,
                 httpStatus, errorSummary, null, receivedAt));
+        count(operation, IntegrationRequestStatus.REJECTED.name());
     }
 
     private IntegrationRequest row(IntegrationPrincipal principal, IntegrationOperation operation, String key,

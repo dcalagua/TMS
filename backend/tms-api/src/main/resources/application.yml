@@ -63,9 +63,11 @@ management:
   endpoints:
     web:
       exposure:
-        # Only liveness/readiness and build identification. Nothing that lists beans,
-        # configuration properties, environment variables or the HTTP mappings.
-        include: health,info
+        # Liveness/readiness, build identification, and aggregate operational counters
+        # (integration success/failure, import outcomes - see IntegrationRequestExecutor and
+        # AuditEventRecorder). Nothing that lists beans, configuration properties, environment
+        # variables or the HTTP mappings - metrics values only, never the running config.
+        include: health,info,metrics
   endpoint:
     health:
       # Component details (database URL, disk paths, vendor versions) are never rendered to

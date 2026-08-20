@@ -18,7 +18,10 @@ import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
+import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.audit.AuditAggregateType;
+import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
@@ -74,13 +77,14 @@ public class PlanningRunService {
     private final PlanningCapacityService capacityService;
     private final TripViewAssembler assembler;
     private final AuditActorProvider auditActorProvider;
+    private final AuditRecorder auditRecorder;
 
     public PlanningRunService(PlanningRunRepository planningRunRepository, TripRepository tripRepository,
             TripOrderAssignmentRepository assignmentRepository, ShipmentOutboxEventRepository outboxRepository,
             TripAssignmentService assignments, OriginLookupPort originLookupPort,
             DestinationLookupPort destinationLookupPort, OrderPlanningPort orderPlanningPort,
             VehicleLookupPort vehicleLookupPort, PlanningCapacityService capacityService, TripViewAssembler assembler,
-            AuditActorProvider auditActorProvider) {
+            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder) {
         this.planningRunRepository = planningRunRepository;
         this.tripRepository = tripRepository;
         this.assignmentRepository = assignmentRepository;
@@ -93,6 +97,7 @@ public class PlanningRunService {
         this.capacityService = capacityService;
         this.assembler = assembler;
         this.auditActorProvider = auditActorProvider;
+        this.auditRecorder = auditRecorder;
     }
 
     /**
@@ -154,7 +159,10 @@ public class PlanningRunService {
         UUID actorId = auditActorProvider.requireAppUserId();
         PlanningRun run = new PlanningRun(scope.companyId(), generatePlanNumber(), request.originId(),
                 request.planningDate(), blankToNull(request.notes()), actorId);
-        return toDetail(scope, saveOrConflict(run, origin, request));
+        PlanningRun saved = saveOrConflict(run, origin, request);
+        auditRecorder.record(scope, AuditAggregateType.PLANNING_RUN, saved.id(), AuditAction.CREATE,
+                Map.of("planNumber", saved.planNumber()));
+        return toDetail(scope, saved);
     }
 
     /**
@@ -187,7 +195,10 @@ public class PlanningRunService {
         }
 
         run.confirm(actorId);
-        return toDetail(scope, save(run));
+        PlanningRun saved = save(run);
+        auditRecorder.record(scope, AuditAggregateType.PLANNING_RUN, saved.id(), AuditAction.CONFIRM,
+                Map.of("planNumber", saved.planNumber(), "tripCount", plannedTrips.size()));
+        return toDetail(scope, saved);
     }
 
     /**
@@ -213,7 +224,10 @@ public class PlanningRunService {
         }
 
         run.cancel(reason, actorId);
-        return toDetail(scope, save(run));
+        PlanningRun saved = save(run);
+        auditRecorder.record(scope, AuditAggregateType.PLANNING_RUN, saved.id(), AuditAction.CANCEL,
+                Map.of("planNumber", saved.planNumber()));
+        return toDetail(scope, saved);
     }
 
     /**
@@ -278,6 +292,8 @@ public class PlanningRunService {
         outboxRepository.saveAndFlush(new ShipmentOutboxEvent(
                 scope.companyId(), trip.id(), trip.shipmentNumber(), ShipmentEventType.SHIPMENT_CONFIRMED,
                 OffsetDateTime.now()));
+        auditRecorder.record(scope, AuditAggregateType.SHIPMENT, trip.id(), AuditAction.SHIPMENT_CONFIRMED,
+                Map.of("shipmentNumber", trip.shipmentNumber()));
     }
 
     /**

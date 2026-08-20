@@ -11,7 +11,10 @@ import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
+import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.audit.AuditAggregateType;
+import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.time.Clock;
 import java.time.Duration;
@@ -19,6 +22,7 @@ import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -54,15 +58,17 @@ public class IntegrationClientService {
     private final IntegrationRequestRepository requestRepository;
     private final IntegrationProperties properties;
     private final AuditActorProvider auditActorProvider;
+    private final AuditRecorder auditRecorder;
     private final Clock clock;
 
     public IntegrationClientService(IntegrationClientRepository clientRepository,
             IntegrationRequestRepository requestRepository, IntegrationProperties properties,
-            AuditActorProvider auditActorProvider, Clock clock) {
+            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder, Clock clock) {
         this.clientRepository = clientRepository;
         this.requestRepository = requestRepository;
         this.properties = properties;
         this.auditActorProvider = auditActorProvider;
+        this.auditRecorder = auditRecorder;
         this.clock = clock;
     }
 
@@ -100,6 +106,8 @@ public class IntegrationClientService {
         client.replaceScopes(scopes, actorId);
 
         IntegrationClient saved = clientRepository.saveAndFlush(client);
+        auditRecorder.record(scope, AuditAggregateType.INTEGRATION_CLIENT, saved.id(), AuditAction.CREDENTIAL_CREATE,
+                Map.of("name", saved.name()));
         return IntegrationClientSecretView.of(IntegrationClientView.from(saved), clientId, secret,
                 IntegrationSecrets.toBearerToken(clientId, secret), null);
     }
@@ -148,6 +156,8 @@ public class IntegrationClientService {
         client.rotateSecret(IntegrationSecrets.hash(secret), graceUntil, now, actorId);
 
         IntegrationClient saved = clientRepository.saveAndFlush(client);
+        auditRecorder.record(scope, AuditAggregateType.INTEGRATION_CLIENT, saved.id(), AuditAction.CREDENTIAL_ROTATE,
+                Map.of("name", saved.name(), "graceHours", grace.toHours()));
         return IntegrationClientSecretView.of(IntegrationClientView.from(saved), saved.clientId(), secret,
                 IntegrationSecrets.toBearerToken(saved.clientId(), secret), saved.previousSecretExpiresAt());
     }
@@ -164,7 +174,10 @@ public class IntegrationClientService {
             throw new ConflictException("This credential is already revoked.");
         }
         client.revoke(OffsetDateTime.now(clock), auditActorProvider.requireAppUserId());
-        return IntegrationClientView.from(clientRepository.saveAndFlush(client));
+        IntegrationClient saved = clientRepository.saveAndFlush(client);
+        auditRecorder.record(scope, AuditAggregateType.INTEGRATION_CLIENT, saved.id(), AuditAction.CREDENTIAL_REVOKE,
+                Map.of("name", saved.name()));
+        return IntegrationClientView.from(saved);
     }
 
     /** Every delivery this company received, newest first - the integration inbox as a screen. */

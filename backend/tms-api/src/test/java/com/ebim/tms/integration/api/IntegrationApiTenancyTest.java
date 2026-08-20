@@ -37,6 +37,8 @@ import com.ebim.tms.shared.security.TmsAccessDeniedHandler;
 import com.ebim.tms.shared.security.TmsAuthenticationEntryPoint;
 import com.ebim.tms.shared.security.TmsJwtAuthenticationConverter;
 import com.ebim.tms.shared.web.WebConfig;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -628,6 +630,11 @@ class IntegrationApiTenancyTest {
         @Bean
         RecordingOrderIntake recordingOrderIntake() {
             return new RecordingOrderIntake();
+        }
+
+        @Bean
+        MeterRegistry meterRegistry() {
+            return new SimpleMeterRegistry();
         }
     }
 

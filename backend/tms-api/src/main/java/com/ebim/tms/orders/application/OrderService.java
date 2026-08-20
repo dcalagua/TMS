@@ -14,7 +14,10 @@ import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
+import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.audit.AuditAggregateType;
+import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OriginLookupPort;
@@ -56,15 +59,18 @@ public class OrderService {
     private final OriginLookupPort originLookupPort;
     private final DestinationLookupPort destinationLookupPort;
     private final AuditActorProvider auditActorProvider;
+    private final AuditRecorder auditRecorder;
 
     public OrderService(TransportOrderRepository transportOrderRepository,
             TransportOrderLineRepository transportOrderLineRepository, OriginLookupPort originLookupPort,
-            DestinationLookupPort destinationLookupPort, AuditActorProvider auditActorProvider) {
+            DestinationLookupPort destinationLookupPort, AuditActorProvider auditActorProvider,
+            AuditRecorder auditRecorder) {
         this.transportOrderRepository = transportOrderRepository;
         this.transportOrderLineRepository = transportOrderLineRepository;
         this.originLookupPort = originLookupPort;
         this.destinationLookupPort = destinationLookupPort;
         this.auditActorProvider = auditActorProvider;
+        this.auditRecorder = auditRecorder;
     }
 
     @Transactional(readOnly = true)
@@ -118,6 +124,8 @@ public class OrderService {
                 request.requestedWindowStart(), request.requestedWindowEnd(), actorId);
         order.applyLines(lines, declared, actorId);
         TransportOrder saved = saveOrConflict(order);
+        auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.CREATE,
+                Map.of("orderNumber", saved.orderNumber()));
         return OrderDetailView.from(saved, origin, destination);
     }
 
@@ -148,6 +156,8 @@ public class OrderService {
                 request.priority(), request.requestedWindowStart(), request.requestedWindowEnd(), actorId);
         order.applyLines(lines, declared, actorId);
         TransportOrder saved = saveOrConflict(order);
+        auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.UPDATE,
+                Map.of("orderNumber", saved.orderNumber()));
         return OrderDetailView.from(saved, origin, destination);
     }
 
@@ -197,7 +207,10 @@ public class OrderService {
         }
 
         order.cancel(blankToNull(reason), auditActorProvider.writerAppUserId());
-        return toDetailView(scope, saveOrConflict(order));
+        TransportOrder saved = saveOrConflict(order);
+        auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.CANCEL,
+                Map.of("orderNumber", saved.orderNumber()));
+        return toDetailView(scope, saved);
     }
 
     private OrderDetailView toDetailView(CompanyScope scope, TransportOrder order) {

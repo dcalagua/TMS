@@ -1,8 +1,10 @@
 # TMS by EBIM - order lifecycle (V1)
 
 Owner: `com.ebim.tms.orders` (backend), schema owner `backend/tms-api/src/main/resources/db/migration/V10__orders.sql`.
-Scope: the transport order status lifecycle introduced in Step 09. Does not cover Planning
-(step 10, not built) or dispatch/delivery/EWM integration (deferred by decision).
+Scope: the transport order status lifecycle introduced in Step 09. Manual planning (Step 10) is
+now built - `docs/domain/PLANNING_MANUAL_V1.md` owns the `PLANNED` transition and everything
+downstream of it; this document still owns everything up to and including `READY_FOR_PLANNING`.
+Does not cover dispatch/delivery/EWM integration (deferred by decision).
 
 ## 1. Why a lifecycle exists at all
 
@@ -14,8 +16,8 @@ The step 09 brief asks for a "minimal V1 lifecycle" that at minimum distinguishe
 - cancelled orders,
 
 and is explicit that this module must not pretend dispatch/delivery integration exists. V1
-therefore stops at "planned", which nothing in this step actually sets - that state is reserved
-for a future Planning module (step 10) to reach.
+therefore stops at "planned" - reached only through `TripService.assignOrder`
+(`docs/domain/PLANNING_MANUAL_V1.md`), never directly through an Orders endpoint.
 
 ## 2. States
 
@@ -23,7 +25,7 @@ for a future Planning module (step 10) to reach.
 |---|---|---|
 | `NOT_READY` | The default state of every newly created order. May be missing lines, or have lines whose combined weight/volume/pallets are all unknown. Fully editable. | `OrderService.create`; also re-entered from `READY_FOR_PLANNING` by any edit (section 4) |
 | `READY_FOR_PLANNING` | The order passed the completeness check (section 3) and is visible to a future Planning module as plannable. Still editable, because a planner may need to fix a detail before it is actually planned. | `OrderService.markReadyForPlanning` |
-| `PLANNED` | Assigned to a trip. **No endpoint in this step sets this state** - it exists in the enum (`OrderStatus.PLANNED`) and the schema `CHECK` so Planning (step 10) has a state to transition into without a schema change, and so `OrderService.cancel`'s rule for it (section 5) is meaningful from day one. | Reserved for a future Planning module; `TransportOrder.markPlanned` exists but is not called from any controller yet |
+| `PLANNED` | Assigned to a trip. Not editable through `OrderService.update` (section 4); `OrderService.cancel` refuses it directly (section 5) - unassigning it is Planning's job. | `TripService.assignOrder`, via `OrderPlanningPort.markPlanned` (`docs/domain/PLANNING_MANUAL_V1.md`) |
 | `CANCELLED` | Terminal. Not editable. Carries an optional `cancelReason`. | `OrderService.cancel` |
 
 ```mermaid
@@ -33,8 +35,9 @@ stateDiagram-v2
     READY_FOR_PLANNING --> NOT_READY: any edit (header or lines)
     NOT_READY --> CANCELLED: cancel
     READY_FOR_PLANNING --> CANCELLED: cancel
-    READY_FOR_PLANNING --> PLANNED: reserved for Planning (step 10)
-    PLANNED --> CANCELLED: reserved for Planning (step 10) - unassign, then cancel
+    READY_FOR_PLANNING --> PLANNED: TripService.assignOrder
+    PLANNED --> READY_FOR_PLANNING: TripService.removeOrder
+    PLANNED --> CANCELLED: unassign in Planning, then cancel here
 ```
 
 There is no `DELIVERED`/`COMPLETED`/`IN_TRANSIT` state. Those describe dispatch/delivery
@@ -80,7 +83,7 @@ the same bar every other "add complexity later" decision in this repository uses
 |---|---|
 | `NOT_READY` | Cancelled. |
 | `READY_FOR_PLANNING` | Cancelled. |
-| `PLANNED` | Refused with `409 Conflict`: "unassign it from its trip first." Not reachable via this step's API (nothing sets `PLANNED` yet), but the rule is coded and tested now so Planning (step 10) inherits a correct invariant instead of having to add it later. |
+| `PLANNED` | Refused with `409 Conflict`: "unassign it from its trip first." `TripService.removeOrder` (`docs/domain/PLANNING_MANUAL_V1.md`) returns it to `READY_FOR_PLANNING`; only then can `OrderService.cancel` reach it. |
 | `CANCELLED` | Refused with `409 Conflict`: already cancelled - cancellation is not idempotent, unlike a master's activate/deactivate toggle, because "cancel" is a one-way business event, not a flag. |
 
 `cancelReason` is optional free text, stored only when the transition succeeds
@@ -142,8 +145,18 @@ instant, both having read the same version. Both failure paths return the same `
 
 - **No dispatch/delivery status** (`IN_TRANSIT`, `DELIVERED`, `POD_RECEIVED`, ...) - the brief's
   explicit "do not pretend integration exists".
-- **No vehicle/carrier/route assignment on the order itself** - that belongs to Planning (step
-  10); an order in V1 only ever names an origin and a destination.
+- **No vehicle/carrier/route assignment on the order itself** - that belongs to Planning
+  (`docs/domain/PLANNING_MANUAL_V1.md`); an order in V1 only ever names an origin and a
+  destination.
 - **No automatic re-validation of `READY_FOR_PLANNING` on edit** - see section 4.
 - **No idempotent replay of `external_reference`** - a duplicate is rejected (409), not answered
   with the original resource. See `docs/database/DATA_MODEL.md` section 12.2.
+
+## 9. Audit trail
+
+`OrderService.create`/`update`/`cancel` each write a `TRANSPORT_ORDER` audit event (`CREATE`,
+`UPDATE`, `CANCEL`) after the order is saved, in the same transaction - whether the call came
+from the UI or from the inbound integration API (`docs/integrations/INBOUND_API_V1.md`), since
+both reach the same `OrderService` methods. `markReadyForPlanning` and the Planning-owned
+`PLANNED` transition are not covered here - see `docs/domain/AUDIT_TRAIL_V1.md` for the full
+action list and `docs/domain/PLANNING_MANUAL_V1.md` for what Planning itself audits.

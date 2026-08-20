@@ -143,6 +143,13 @@ the tenant.
 There is no delete. A credential is **revoked**, which keeps its inbox history intact and
 answerable, following the "deactivate, never delete" rule every master in TMS follows.
 
+Create, rotate and revoke each write an `INTEGRATION_CLIENT` row to `tms.audit_event`
+(`CREDENTIAL_CREATE`, `CREDENTIAL_ROTATE`, `CREDENTIAL_REVOKE`) - the credential's `name` and, for
+a rotation, `graceHours`; never the secret or its hash. See
+`docs/domain/AUDIT_TRAIL_V1.md`. This is a second, complementary record to the inbox row every
+*delivery* produces (section 8): this one is "the credential itself changed", the inbox is
+"a request happened using it".
+
 **Create** (the only response that ever contains a secret):
 
 ```http
@@ -741,6 +748,17 @@ If you enable it, you take on these obligations:
 
 Enable it in staging while onboarding a partner, and turn it off in production once the feed is
 stable.
+
+### 8.2 Metrics
+
+`IntegrationRequestExecutor` increments the Micrometer counter `tms.integration.requests`, tagged
+`operation` (`location.upsert`, `order.batch`, ...) and `outcome` (`SUCCEEDED`, `PARTIAL`,
+`REJECTED`, `FAILED`), on every delivery it finishes - the same four outcomes the inbox row's own
+`status` column can hold. It is readable at `GET /actuator/metrics/tms.integration.requests`
+(`metrics` is on the exposed actuator endpoint list, `application.yml`), with a `tag` query
+parameter to break it down per operation or outcome. This is the aggregate view an operator
+watches without querying `tms.integration_request`; the inbox row is still the record for any one
+delivery.
 
 ---
 

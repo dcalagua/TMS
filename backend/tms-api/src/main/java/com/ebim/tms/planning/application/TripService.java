@@ -12,7 +12,10 @@ import com.ebim.tms.planning.infrastructure.TripRepository;
 import com.ebim.tms.shared.api.ConflictException;
 import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
+import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.audit.AuditAggregateType;
+import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.RouteTemplate;
@@ -24,6 +27,7 @@ import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -64,12 +68,13 @@ public class TripService {
     private final PlanningCapacityService capacityService;
     private final TripViewAssembler assembler;
     private final AuditActorProvider auditActorProvider;
+    private final AuditRecorder auditRecorder;
 
     public TripService(TripRepository tripRepository, PlanningRunRepository planningRunRepository,
             TripOrderAssignmentRepository assignmentRepository, TripAssignmentService assignments,
             OrderPlanningPort orderPlanningPort, VehicleLookupPort vehicleLookupPort,
             RouteTemplateLookupPort routeTemplateLookupPort, PlanningCapacityService capacityService,
-            TripViewAssembler assembler, AuditActorProvider auditActorProvider) {
+            TripViewAssembler assembler, AuditActorProvider auditActorProvider, AuditRecorder auditRecorder) {
         this.tripRepository = tripRepository;
         this.planningRunRepository = planningRunRepository;
         this.assignmentRepository = assignmentRepository;
@@ -80,6 +85,7 @@ public class TripService {
         this.capacityService = capacityService;
         this.assembler = assembler;
         this.auditActorProvider = auditActorProvider;
+        this.auditRecorder = auditRecorder;
     }
 
     @Transactional(readOnly = true)
@@ -110,7 +116,10 @@ public class TripService {
         Trip trip = new Trip(scope.companyId(), run.id(), run.planningDate(),
                 tripRepository.maxTripNumber(run.id()) + 1, generateShipmentNumber(), request.vehicleId(), carrierId,
                 request.plannedDepartureAt(), actorId);
-        return assembler.toDetail(saveWithDoubleBookingBackstop(trip), scope.companyId());
+        Trip saved = saveWithDoubleBookingBackstop(trip);
+        auditRecorder.record(scope, AuditAggregateType.TRIP, saved.id(), AuditAction.CREATE,
+                Map.of("shipmentNumber", saved.shipmentNumber()));
+        return assembler.toDetail(saved, scope.companyId());
     }
 
     /**
@@ -135,7 +144,10 @@ public class TripService {
 
         trip.assignVehicle(vehicle.id(), vehicle.carrierId(), request.plannedDepartureAt(),
                 auditActorProvider.requireAppUserId());
-        return assembler.toDetail(saveWithDoubleBookingBackstop(trip), scope.companyId());
+        Trip saved = saveWithDoubleBookingBackstop(trip);
+        auditRecorder.record(scope, AuditAggregateType.TRIP, saved.id(), AuditAction.VEHICLE_CHANGE,
+                Map.of("vehicleId", vehicle.id().toString()));
+        return assembler.toDetail(saved, scope.companyId());
     }
 
     @Transactional
@@ -158,7 +170,10 @@ public class TripService {
         orderPlanningPort.markPlanned(order.id(), scope.companyId());
         assignments.refreshStops(trip, scope.companyId(), actorId);
         trip.touch(actorId);
-        return assembler.toDetail(save(trip), scope.companyId());
+        Trip saved = save(trip);
+        auditRecorder.record(scope, AuditAggregateType.TRIP, saved.id(), AuditAction.ASSIGN_ORDER,
+                Map.of("orderNumber", order.orderNumber()));
+        return assembler.toDetail(saved, scope.companyId());
     }
 
     @Transactional
@@ -170,7 +185,10 @@ public class TripService {
         assignments.closeAndRelease(assignment, blankToNull(reason), actorId);
         assignments.refreshStops(trip, scope.companyId(), actorId);
         trip.touch(actorId);
-        return assembler.toDetail(save(trip), scope.companyId());
+        Trip saved = save(trip);
+        auditRecorder.record(scope, AuditAggregateType.TRIP, saved.id(), AuditAction.REMOVE_ORDER,
+                Map.of("orderId", orderId.toString()));
+        return assembler.toDetail(saved, scope.companyId());
     }
 
     /**
@@ -216,7 +234,10 @@ public class TripService {
         source.touch(actorId);
         target.touch(actorId);
         save(target);
-        return assembler.toDetail(save(source), scope.companyId());
+        Trip savedSource = save(source);
+        auditRecorder.record(scope, AuditAggregateType.TRIP, savedSource.id(), AuditAction.MOVE_ORDER,
+                Map.of("orderNumber", order.orderNumber(), "targetTripId", target.id().toString()));
+        return assembler.toDetail(savedSource, scope.companyId());
     }
 
     /**
@@ -290,7 +311,10 @@ public class TripService {
         String reason = blankToNull(request.reason());
         assignments.releaseAll(trip, reason == null ? "Trip cancelled" : reason, actorId);
         trip.cancel(reason, actorId);
-        return assembler.toDetail(save(trip), scope.companyId());
+        Trip saved = save(trip);
+        auditRecorder.record(scope, AuditAggregateType.TRIP, saved.id(), AuditAction.CANCEL,
+                Map.of("shipmentNumber", saved.shipmentNumber()));
+        return assembler.toDetail(saved, scope.companyId());
     }
 
     private Trip find(CompanyScope scope, UUID tripId) {

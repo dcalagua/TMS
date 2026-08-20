@@ -7,7 +7,10 @@ import com.ebim.tms.orders.domain.TransportOrder;
 import com.ebim.tms.orders.infrastructure.OrderImportBatchRepository;
 import com.ebim.tms.orders.infrastructure.TransportOrderRepository;
 import com.ebim.tms.shared.api.InvalidRequestException;
+import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.audit.AuditAggregateType;
+import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OriginLookupPort;
@@ -62,16 +65,19 @@ public class OrderImportService {
     private final OriginLookupPort originLookupPort;
     private final DestinationLookupPort destinationLookupPort;
     private final AuditActorProvider auditActorProvider;
+    private final AuditRecorder auditRecorder;
 
     public OrderImportService(OrderImportParser parser, TransportOrderRepository transportOrderRepository,
             OrderImportBatchRepository orderImportBatchRepository, OriginLookupPort originLookupPort,
-            DestinationLookupPort destinationLookupPort, AuditActorProvider auditActorProvider) {
+            DestinationLookupPort destinationLookupPort, AuditActorProvider auditActorProvider,
+            AuditRecorder auditRecorder) {
         this.parser = parser;
         this.transportOrderRepository = transportOrderRepository;
         this.orderImportBatchRepository = orderImportBatchRepository;
         this.originLookupPort = originLookupPort;
         this.destinationLookupPort = destinationLookupPort;
         this.auditActorProvider = auditActorProvider;
+        this.auditRecorder = auditRecorder;
     }
 
     /** Reads the file and reports what importing it would do. Writes nothing, ever. */
@@ -103,6 +109,9 @@ public class OrderImportService {
         OrderImportBatch batch = orderImportBatchRepository.save(new OrderImportBatch(scope.companyId(),
                 evaluation.externalSource(), fileName, evaluation.format().name(), sha256(content),
                 evaluation.rowCount(), creatable.size(), skipped, actorId));
+        auditRecorder.record(scope, AuditAggregateType.ORDER_IMPORT_BATCH, batch.id(), AuditAction.IMPORT_EXECUTED,
+                Map.of("externalSource", evaluation.externalSource(), "createdCount", creatable.size(),
+                        "skippedCount", skipped));
 
         return report(evaluation, false, true, batch.id(), orderNumbers);
     }
