@@ -8,7 +8,7 @@ document/ADR is the source of truth for its rules; this page only orients.
 
 | Master | Module | Schema owner | Detail |
 |---|---|---|---|
-| Location (canonical store/warehouse/plant) | `com.ebim.tms.masterdata` | `V14__masterdata_canonical_location.sql` | `docs/architecture/ADR_LOCATION_MODEL.md` |
+| Location (the one physical place: store, warehouse, plant, hub, delivery point) | `com.ebim.tms.masterdata` | `V14__masterdata_canonical_location.sql`, unified in `V23` | `docs/domain/LOCATIONS.md` |
 | Zone | `com.ebim.tms.masterdata` | `V6__masterdata_origins_zones.sql` | `docs/database/DATA_MODEL.md` section 9 |
 | Location service calendar (`location_frequency`) | `com.ebim.tms.masterdata` | `V15__masterdata_location_frequency.sql` | `docs/database/DATA_MODEL.md` section 15 |
 | Route (master route + suggested stop sequence) | `com.ebim.tms.masterdata` | `V8__masterdata_routes.sql` | `docs/database/DATA_MODEL.md` section 9 |
@@ -16,12 +16,16 @@ document/ADR is the source of truth for its rules; this page only orients.
 | Vehicle Type | `com.ebim.tms.fleet` | `V9__fleet_masters.sql` | `docs/database/DATA_MODEL.md` section 10 |
 | Vehicle | `com.ebim.tms.fleet` | `V9__fleet_masters.sql`, double-booking in `V16` | `docs/database/DATA_MODEL.md` section 10, 16.2 |
 
-`Origin` (V6) and `Destination` (V7) still exist as **compatibility projections** synchronised
-from `Location` by `LocationCompatibilityProjector` on every Location write - they are not a
-second source of truth. See `ADR_LOCATION_MODEL.md` for why: `Route`, `TransportOrder`,
-`PlanningRun` and `TripStop` still reference `origin_id`/`destination_id`, and migrating every one
-of those foreign keys onto `location_id` in one step was rejected as unnecessary churn for a
-schema Location already serves correctly through the projection.
+**There is no Origin master and no Destination master.** An origin is a `Location` holding the
+`ORIGIN` operational use; a destination is one holding `DESTINATION`; a store that receives
+deliveries and ships its own returns holds both, as one record. `Route`, `RouteStop`,
+`TransportOrder`, `PlanningRun` and `TripStop` all reference `tms.location` since V23. The
+Origins and Destinations screens are that master filtered by use, not separate CRUDs.
+
+`tms.origin` (V6) and `tms.destination` (V7) survive only as frozen tables: no reader, no
+writer, no foreign key, and no write privilege for the `tms_app` role. They are the recovery
+path for V14's merge-on-code and will be dropped once V23 has run against a real database. See
+`docs/domain/LOCATIONS.md` for the domain contract and `ADR_LOCATION_MODEL.md` for the decision.
 
 ## 2. Common shape every master follows
 

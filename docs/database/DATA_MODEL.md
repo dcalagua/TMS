@@ -1295,3 +1295,64 @@ strongest thing applying a route may do is reorder the stops the shipment alread
 | `ck_trip_shipment_number_not_blank` | the usual blank-text guard |
 | `fk_trip_route` / `fk_trip_route_company` | the route reference and rule 6's tenant guarantee |
 | `ix_trip_route` | partial (`route_id IS NOT NULL`): "which shipments used this corridor" |
+
+
+## 18. Location unification (migration V23)
+
+**Read this before sections 7, 8, 9, 12 and 14.** Those sections describe `tms.origin` and
+`tms.destination` as live masters that other tables reference, which is how the schema was built
+and is no longer how it works. They are kept as the record of what each migration did; this
+section is what is true now.
+
+### 18.1 What changed
+
+`tms.location` (V14, section 15's neighbour) is the only physical-place master. V23:
+
+1. reduced `tms.location_role.role` to `ORIGIN` and `DESTINATION` - `SHIP_TO` was renamed, and
+   `STORE`, `DC`, `PLANT`, `HUB` and `OTHER` were deleted because each names a value
+   `tms.location.location_type` already carries;
+2. repointed all six references at `tms.location`, simple and composite tenant key alike;
+3. revoked `INSERT`, `UPDATE` and `DELETE` on `tms.origin` and `tms.destination` from `tms_app`.
+
+| Table | Column | Referenced before V23 | References now |
+|---|---|---|---|
+| `tms.route` | `origin_id` | `tms.origin` | `tms.location` |
+| `tms.route_stop` | `destination_id` | `tms.destination` | `tms.location` |
+| `tms.transport_order` | `origin_id` | `tms.origin` | `tms.location` |
+| `tms.transport_order` | `destination_id` | `tms.destination` | `tms.location` |
+| `tms.planning_run` | `origin_id` | `tms.origin` | `tms.location` |
+| `tms.trip_stop` | `destination_id` | `tms.destination` | `tms.location` |
+
+The column names did not change. They name the two ends of a movement, and renaming them would
+rename the JSON fields of the inbound integration contract v1 for a synonym; `COMMENT ON COLUMN`
+carries the new target instead.
+
+### 18.2 Why the repoint could not break a unique constraint
+
+`uq_origin_location` and `uq_destination_location` (V14) allow at most one legacy row per
+location, so the mapping through `location_id` is injective: two distinct references cannot
+collapse onto one id. That is what guarantees `uq_route_stop_route_destination`,
+`uq_trip_stop_trip_destination` and `uq_planning_run_company_origin_date` survive the change.
+
+Rule 6 (section 13) is unaffected and still holds: every one of the six columns kept its
+composite `(reference_id, company_id)` foreign key, now targeting `uq_location_id_company`.
+
+### 18.3 What an order with one location at both ends means
+
+`transport_order.origin_id` and `destination_id` may now hold the same value. No constraint
+forbids it and none should: a distribution centre that both ships and receives used to require
+two rows in two tables, and the whole point of the change is that it is one place. The same
+applies to the coordinates read live by `tms.trip_stop` - the source is `tms.location`, not
+`tms.destination`, and section 14.4's reasoning about not copying them is unchanged.
+
+### 18.4 The frozen tables
+
+`tms.origin` and `tms.destination` still exist, still hold their rows and their V14
+`location_id` link, and are referenced by nothing. `SELECT` is deliberately retained: they are
+the recovery path if V14's merge-on-code united two places that were genuinely different.
+Dropping them is a later migration, after V23 has been executed against a real database.
+
+Their constraints are still asserted by `MasterDataConstraintIntegrationTest` and
+`MasterDataDestinationFrequencyConstraintIntegrationTest`, which now cover frozen tables rather
+than live ones - kept, because a migration that accidentally altered them should still fail
+loudly.

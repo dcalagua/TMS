@@ -1,6 +1,7 @@
 # ADR-006 - Canonical Location master (`ADR_LOCATION_MODEL`)
 
-- Status: Accepted
+- Status: Accepted. **Amended 2026-08-20 by "Amendment: V23" below**, which unifies the model
+  and retires debts D-1, D-2, D-3 and D-6.
 - Date: 2026-08-20
 - File name: `docs/architecture/ADR_LOCATION_MODEL.md` (the name Job 01 of the overnight V3 pack
   asks for). It is the sixth ADR in the sequence and is referenced as ADR-006 elsewhere.
@@ -294,3 +295,159 @@ and would fire for Flyway data migrations.
 | **Every Testcontainers test: migration, constraints, RLS, API integration, smoke** | **Skipped - Docker unavailable (BASELINE E-1)** |
 
 D-7 is the honest headline: the design is reviewable, the SQL is not proven.
+
+---
+
+# Amendment: V23 - unification, and roles that are only roles
+
+- Status: Accepted
+- Date: 2026-08-20
+- Migration: `V23__location_canonical_unification.sql`
+- Domain contract: `docs/domain/LOCATIONS.md`
+- Pre-change audit: `docs/domain/LOCATION_DOMAIN_CURRENT_STATE.md`
+
+## Context
+
+V14 above delivered the canonical master and deliberately stopped short of unification, for one
+reason it stated plainly: five NOT NULL composite foreign keys across five tables would have to
+be dropped and recreated, and not a line of it could be executed on a host without Docker.
+
+Two things have changed since.
+
+**First, the compatibility surface turned out to cost more than the migration risk it bought.**
+Three tables described a place, two write paths were kept in step by `LocationCompatibilityProjector`
+rather than by a constraint, and every consumer still spoke Origin/Destination. Debts D-1, D-2
+and D-6 were not theoretical - they were the daily shape of the module.
+
+**Second, and this is the part V14 got wrong rather than merely deferred: the role vocabulary
+mixed two questions.** V14 shipped seven roles - `ORIGIN`, `SHIP_TO`, `STORE`, `DC`, `PLANT`,
+`HUB`, `OTHER` - and its own section 2 recorded that only the first two carried behaviour. It
+called the rest "classification only", and stated that a role which sometimes means capability
+and sometimes means category is how a master-data model rots. It then implemented all seven
+anyway, on the grounds that the job brief listed them. The result was visible on the screen an
+operator uses every day:
+
+```text
+Tipo:  Tienda
+Roles: Tienda, Destino
+```
+
+A master that appears to contradict itself is one an operator stops trusting.
+
+## Decision
+
+**Unify. Repoint every consumer at `tms.location`, and reduce the role vocabulary to the two
+values that are actually operational uses.**
+
+### 1. `location_role` is `ORIGIN` or `DESTINATION`, and nothing else
+
+The five classification values are removed, not remapped: each names something
+`location_type` already carries, with a richer vocabulary and exactly one value per place.
+`SHIP_TO` becomes `DESTINATION` - the two words meant the same thing, and `DESTINATION` is the
+one the rest of the product already uses (`transport_order.destination_id`, `route_stop`,
+`trip_stop`). A master-data vocabulary that needs a translation table to reach the tables that
+consume it has a bug in it.
+
+A location left with no role after the cleanup keeps none. That is the honest outcome: such a
+location never had a projection and could never be selected as either end of a movement, so
+nothing that worked stops working. The API refuses to create one (`LocationRequest.roles` is
+`@NotEmpty`); the database still represents one, so the migration's outcome is loadable.
+
+`PICKUP`, `CROSS_DOCK` and `RETURN_POINT` remain plausible extensions and remain unimplemented
+until a functional requirement asks for them.
+
+### 2. All six foreign keys point at `tms.location`
+
+`route.origin_id`, `route_stop.destination_id`, `transport_order.origin_id`,
+`transport_order.destination_id`, `planning_run.origin_id` and `trip_stop.destination_id` are
+carried across through the `location_id` link V14 added, then their simple and composite tenant
+foreign keys are dropped and recreated against `tms.location`.
+
+The mapping is injective - `uq_origin_location` and `uq_destination_location` allow at most one
+legacy row per location - so `uq_route_stop_route_destination`, `uq_trip_stop_trip_destination`
+and `uq_planning_run_company_origin_date` cannot newly collide. For every row that existed
+before V14 the `UPDATE` writes the value already there, exactly as section 3 of the original
+decision designed.
+
+**Column names do not change.** `originId`/`destinationId` name the two ends of a movement,
+which is what an order has. Renaming them to `originLocationId` would rename the JSON fields of
+the inbound integration contract v1 that external systems already call - a breaking change
+bought for a synonym. `COMMENT ON COLUMN` carries the new target instead.
+
+### 3. Legacy tables are frozen, not dropped
+
+`tms.origin` and `tms.destination` keep their rows and lose every write privilege on the
+`tms_app` role. Nothing in the application references them, no foreign key targets them, and
+"this is not a source of truth" stops being a claim about the source tree and becomes a grant.
+
+They are kept rather than dropped for two reasons: the brief's own rule is not to remove legacy
+until the data migration can be shown green, and it cannot be shown green here (see
+Verification); and they are the recovery path for a V14 merge that united two genuinely
+different places (D-5). Dropping them is a separate migration after V23 has run against a real
+database.
+
+### 4. One lookup implementation, two ports
+
+`OriginLookupPort` and `DestinationLookupPort` survive unchanged as interfaces - they are what
+keeps `orders` and `planning` from importing `masterdata`, and merging them would require
+putting `LocationRole` into `shared`. Behind them, `OriginLookupAdapter` and
+`DestinationLookupAdapter` became three-line delegates over one `LocationReferenceAdapter`,
+parameterised by role. That single change migrated orders, planning and the bulk import at once.
+
+The asymmetry between the two kinds of lookup is now explicit and is the module's eligibility
+contract: **assignment** filters by company, `active` and role; **display** filters by company
+only, so an order keeps rendering the place it was actually sent to after that place is
+deactivated or loses a use.
+
+### 5. Origins and Destinations are views
+
+`OriginsPage` and `DestinationsPage` are `LocationsPage` with the role pinned. The menu entries
+stay because a planner looks for them; the second CRUD behind them does not, because that is
+what made the Lima distribution centre exist twice with two addresses to maintain.
+
+## Consequences
+
+### Good
+
+- One physical record per place, from every direction. `transport_order.origin_id` and
+  `destination_id` may now legitimately hold the same id.
+- Deactivating a location retires it from both ends of a movement, because it is one row and
+  one flag - no projection to keep in step, and no second screen to repeat the decision in.
+- The lossy narrowing V14 documented as D-3 is gone with the projections that needed it.
+- `LocationCompatibilityProjector` and both legacy CRUD stacks - entities, repositories,
+  specifications, services, requests, filters, views and controllers - are deleted, not
+  maintained.
+- Type and use are separable in the vocabulary, so they are separable on the screen.
+
+### Debts retired
+
+| # | Debt | Retired by |
+|---|---|---|
+| D-1 | Three tables describe places | V23 section 2/3: one table is referenced, two are frozen |
+| D-2 | Two write paths kept consistent by application code | V23: one write path; the projector is deleted |
+| D-3 | The downward projection is lossy | V23: there is no projection |
+| D-6 | Consumers still speak Origin/Destination | V23 section 2 |
+
+### Debts that remain
+
+| # | Debt | Retire it by |
+|---|---|---|
+| D-4 | Pre-existing duplicate `external_reference` values leave some canonical rows without one | An operator resolving them in the Locations screen |
+| D-5 | A merge on exact code match may have united two genuinely different places | An operator splitting them; both frozen legacy rows kept their own attributes |
+| D-7 | **The migrations remain unexecuted on this host** | Running `./mvnw verify` where Docker works |
+| D-8 | `tms.origin` and `tms.destination` still exist, frozen and empty of readers | A migration that drops them, once V23 has been verified against a real database |
+
+### Verification status - read this before trusting the table above
+
+| Layer | Status |
+|---|---|
+| Backend unit, architecture, capability and convention tests | Executed - 659 tests, 0 failures |
+| Frontend unit and component tests | Executed - 460 tests, 0 failures |
+| Frontend typecheck, lint, production build | Executed - clean |
+| Playwright end-to-end (mocked backend) | Executed - 71 tests, 0 failures |
+| **Every Testcontainers test: migration, constraints, RLS, API integration, smoke** | **Skipped - 329 of them. Docker unavailable (BASELINE E-1)** |
+
+D-7 is still the honest headline, and it now covers more ground than it did for V14: the SQL
+that repoints six foreign keys is reviewable, and it is not proven. What *is* proven is that
+the application no longer contains a second model - that is a property of the source tree, and
+the compiler and the suites above cover it.
