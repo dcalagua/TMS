@@ -82,6 +82,9 @@
     "text": "Tienes cambios sin guardar.",
     "title": "¿Descartar cambios?"
   },
+  "empty": {
+    "noMatches": "Sin coincidencias"
+  },
   "fields": {
     "availability": "Disponibilidad",
     "axles": "Ejes",
@@ -160,6 +163,7 @@
     "spanish": "Español"
   },
   "loading": {
+    "generic": "Cargando...",
     "order": "Cargando pedido...",
     "route": "Cargando ruta..."
   },

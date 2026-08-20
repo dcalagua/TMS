@@ -62,3 +62,22 @@ export function describePlanningError(error: ApiError): string {
   }
   return describeApiError(error)
 }
+
+/**
+ * The same exception as {@link describePlanningError}, for the bulk order import.
+ *
+ * The import's whole-file refusals - "the file is larger than 2 MB", "only .xlsx and .csv can be
+ * imported", "an external source is required" - are written in `OrderImportService` to be read
+ * by the operator holding the file, and each one names the thing they have to change. Collapsing
+ * all three into `malformed-request`'s generic copy would tell them only that something was
+ * wrong with an upload they can see nothing wrong with.
+ *
+ * Per-row problems never come through here: they are data, not an error status, and travel in
+ * `OrderImportReport.issues` (see that record on why an unusable file is still a 200).
+ */
+export function describeImportError(error: ApiError): string {
+  if (error.code === 'malformed-request' && error.problem?.detail) {
+    return error.problem.detail
+  }
+  return describeApiError(error)
+}

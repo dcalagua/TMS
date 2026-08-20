@@ -44,18 +44,21 @@ silently diverging.
 15. [`domain/CAPACITY_MODEL.md`](domain/CAPACITY_MODEL.md) - how weight/volume/pallet utilisation
     is computed, when it is live and when it is frozen, and why a null limit and a zero limit are
     different answers.
+16. [`domain/ORDER_TOTALS_V1.md`](domain/ORDER_TOTALS_V1.md) - where an order's weight, volume and
+    pallet figures come from, which of the lines and the sender's declaration wins, and why the
+    browser may never send the effective totals.
 
 ## Review records
 
-16. [`security/SECURITY_REVIEW.md`](security/SECURITY_REVIEW.md) - what was checked in the Step 12
+17. [`security/SECURITY_REVIEW.md`](security/SECURITY_REVIEW.md) - what was checked in the Step 12
     security review, what was found and fixed, and the gaps deliberately left open.
-17. [`performance/PERFORMANCE_BASELINE.md`](performance/PERFORMANCE_BASELINE.md) - measured query
+18. [`performance/PERFORMANCE_BASELINE.md`](performance/PERFORMANCE_BASELINE.md) - measured query
     shape and query count against 10,000+ orders/day, and the accepted scale ceilings.
-18. [`overnight/TEST_EVIDENCE.md`](overnight/TEST_EVIDENCE.md) - the Step 13 verification record:
+19. [`overnight/TEST_EVIDENCE.md`](overnight/TEST_EVIDENCE.md) - the Step 13 verification record:
     exact commands, test counts, migration replay, the eleven-step API smoke flow, tenant
     isolation, repository hygiene, and what was blocked and why.
-19. [`overnight/FINAL_REPORT.md`](overnight/FINAL_REPORT.md) - the Step 14 audit and morning
+20. [`overnight/FINAL_REPORT.md`](overnight/FINAL_REPORT.md) - the Step 14 audit and morning
     handoff: what exists, what is scaffold, the module inventory, the data model, the security
     posture, the test and Git evidence, the P0-P3 findings and the recommended next work.
-20. [`overnight/NEXT_STEPS.md`](overnight/NEXT_STEPS.md) - the short actionable roadmap with an
+21. [`overnight/NEXT_STEPS.md`](overnight/NEXT_STEPS.md) - the short actionable roadmap with an
     acceptance gate per item.

@@ -22,6 +22,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <springdoc.version>3.0.3</springdoc.version>
         <archunit.version>1.5.0</archunit.version>
+        <!-- XLSX support for the order import; see the dependency comment below. -->
+        <poi.version>5.4.0</poi.version>
         <!--
           Latest 1.x. Testcontainers 2.0.x exists but changes API surface, and this repository
           cannot execute container tests on every machine (Docker is not always running), so a
@@ -95,6 +97,24 @@
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
             <version>${springdoc.version}</version>
+        </dependency>
+
+        <!--
+          XLSX reading and writing for the bulk order import (Step 05): the downloadable
+          template and the uploaded workbook. Only poi-ooxml is declared - it pulls poi itself -
+          and only the XSSF (.xlsx) side is used. The legacy .xls format is deliberately not
+          supported: it would add the HSSF surface for a format no current spreadsheet writes by
+          default. CSV needs no dependency; DelimitedTextReader parses it.
+
+          Nothing outside com.ebim.tms.orders.application.imports may import org.apache.poi - a
+          spreadsheet library is a file-format detail of one feature, not an architectural
+          building block. ModuleBoundaryTest.spreadsheet_library_stays_inside_the_import enforces
+          it, so this is a rule rather than a wish.
+        -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
         </dependency>
 
         <!-- Testing. -->

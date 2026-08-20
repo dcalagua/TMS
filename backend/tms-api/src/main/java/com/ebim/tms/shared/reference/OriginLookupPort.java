@@ -1,5 +1,6 @@
 package com.ebim.tms.shared.reference;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -33,4 +34,17 @@ public interface OriginLookupPort {
      * the same N+1 discipline {@code RouteService.loadByIds} established.
      */
     Map<UUID, MasterReference> findAllInCompany(Set<UUID> ids, UUID companyId);
+
+    /**
+     * Resolves active origins by their user-facing {@code code}, batched, for a caller that has
+     * a code rather than an id - the bulk order import, where a spreadsheet names an origin the
+     * only way a human can. Inactive origins are excluded, exactly as in
+     * {@link #findActiveInCompany}: an import must not be able to assign a master the manual API
+     * would refuse.
+     *
+     * <p>The returned map is keyed by the code as stored, and matching is case-insensitive
+     * because a spreadsheet's casing is not a fact anyone controls. Codes with no active origin
+     * are simply absent, which is how the caller detects them.
+     */
+    Map<String, MasterReference> findActiveByCodesInCompany(Collection<String> codes, UUID companyId);
 }

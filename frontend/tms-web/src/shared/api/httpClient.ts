@@ -154,11 +154,17 @@ function generateCorrelationId(): string {
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   body?: unknown
+  /** A `multipart/form-data` body - file uploads. Mutually exclusive with `body`; the browser
+   * sets `Content-Type` itself, because only it knows the multipart boundary. */
+  formData?: FormData
   signal?: AbortSignal
   /** Query parameters; `undefined` and `null` values are omitted. */
   query?: Record<string, string | number | boolean | undefined | null>
   /** Company UUID sent as `X-Company-Id` for company-scoped endpoints. */
   companyId?: string
+  /** `blob` for a file download; the error path stays JSON either way, because a failed
+   * download still answers with an RFC 9457 document. */
+  responseType?: 'json' | 'blob'
 }
 
 function buildUrl(path: string, query?: RequestOptions['query']): string {
@@ -174,13 +180,47 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
   return url.toString()
 }
 
-async function parseBody(response: Response): Promise<unknown> {
+async function parseBody(response: Response, responseType: 'json' | 'blob'): Promise<unknown> {
   if (response.status === 204 || response.headers.get('content-length') === '0') {
     return null
   }
 
   const contentType = response.headers.get('content-type') ?? ''
+  // Only a *successful* blob request yields a blob. A failed one carries problem+json, and
+  // handing that back as an opaque Blob would lose the error the caller has to show.
+  if (responseType === 'blob' && response.ok) {
+    return { blob: await response.blob(), fileName: fileNameFromDisposition(response) }
+  }
   return contentType.includes('json') ? response.json() : response.text()
+}
+
+/**
+ * The name the server asked the browser to save the file under. Parsed rather than guessed
+ * from the URL so that renaming the template on the server renames the download, and only the
+ * last path segment is kept so a crafted header cannot suggest a directory.
+ */
+function fileNameFromDisposition(response: Response): string | null {
+  const disposition = response.headers.get('content-disposition')
+  if (!disposition) return null
+
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1]
+  if (encoded !== undefined) return lastSegment(decodeURIComponent(encoded))
+
+  const plain = /filename="?([^";]+)"?/i.exec(disposition)?.[1]
+  return plain === undefined ? null : lastSegment(plain.trim())
+}
+
+/** The bare file name: anything before the last separator is a directory the server has no
+ * business suggesting. Returns null for a value that is only separators. */
+function lastSegment(value: string): string | null {
+  const bare = value.split(/[\\/]/).pop()
+  return bare === undefined || bare === '' ? null : bare
+}
+
+/** What a `responseType: 'blob'` request resolves to. */
+export interface DownloadedFile {
+  blob: Blob
+  fileName: string | null
 }
 
 interface Attempt {
@@ -190,10 +230,12 @@ interface Attempt {
 }
 
 async function sendRequest(path: string, options: RequestOptions, token: string | null): Promise<Attempt> {
-  const { method = 'GET', body, signal, query, companyId } = options
+  const { method = 'GET', body, formData, signal, query, companyId, responseType = 'json' } = options
   const correlationId = generateCorrelationId()
 
   const headers: Record<string, string> = {
+    // Still `application/json` for a download: the *error* shape is what this negotiates, and
+    // the endpoints that return a file ignore Accept for their success case.
     Accept: 'application/json',
     [CORRELATION_ID_HEADER]: correlationId,
   }
@@ -211,10 +253,12 @@ async function sendRequest(path: string, options: RequestOptions, token: string 
     method,
     headers,
     signal,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    // `Content-Type` is deliberately absent for FormData: fetch adds it together with the
+    // multipart boundary, and setting it by hand produces a body the server cannot split.
+    body: formData ?? (body === undefined ? undefined : JSON.stringify(body)),
   })
 
-  const payload = await parseBody(response)
+  const payload = await parseBody(response, responseType)
 
   if (response.ok) {
     return { ok: true, payload, error: null }
@@ -264,4 +308,25 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   reportResponseError(error)
   throw error
+}
+
+/**
+ * Uploads a `multipart/form-data` body and reads a JSON answer. Everything else - the bearer
+ * token, the company header, the single refresh-and-retry, the Problem Details translation -
+ * is {@link apiRequest}'s, because an upload that failed authentication must behave exactly
+ * like every other request that did.
+ */
+export function apiUpload<T>(
+  path: string,
+  options: { companyId?: string; formData: FormData; signal?: AbortSignal },
+): Promise<T> {
+  return apiRequest<T>(path, { method: 'POST', ...options })
+}
+
+/** Downloads a file, resolving to its bytes and the name the server suggested. */
+export function apiDownload(
+  path: string,
+  options: { companyId?: string; query?: RequestOptions['query']; signal?: AbortSignal } = {},
+): Promise<DownloadedFile> {
+  return apiRequest<DownloadedFile>(path, { ...options, responseType: 'blob' })
 }

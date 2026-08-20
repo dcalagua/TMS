@@ -28,6 +28,14 @@ public interface OriginRepository extends JpaRepository<Origin, UUID>, JpaSpecif
      */
     List<Origin> findByIdInAndCompanyId(Collection<UUID> ids, UUID companyId);
 
+    /**
+     * Resolves several {@code code} values of one company in a single query - the bulk order
+     * import's lookup, where a spreadsheet names masters by code. {@code ck_origin_code_normalized}
+     * guarantees stored codes are upper-cased and trimmed, so the caller upper-cases its input
+     * and this stays an exact, index-usable match rather than a per-row {@code lower()} scan.
+     */
+    List<Origin> findByCompanyIdAndCodeIn(UUID companyId, Collection<String> codes);
+
     boolean existsByCompanyIdAndCode(UUID companyId, String code);
 
     boolean existsByCompanyIdAndCodeAndIdNot(UUID companyId, String code, UUID id);

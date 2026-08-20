@@ -1348,6 +1348,67 @@ h6 {
   font-size: 0.875rem;
 }
 
+/* ---- Async lookup (LookupField) ----------------------------------------
+   An editable combobox over master data. Unlike `.tms-menu`'s other users this
+   panel is *not* portalled: it belongs to a form field inside a drawer that
+   scrolls, and a fixed-position panel would stay put while its field scrolled
+   away from underneath it. Absolute positioning inside the field keeps the two
+   together, which is the behaviour that matters here; nothing in a drawer form
+   clips it the way a table's overflow container would. */
+.tms-lookup {
+  position: relative;
+}
+
+.tms-lookup-control {
+  position: relative;
+}
+
+/* Room for the clear button, so a long "CODE - Name" selection does not run
+   underneath it. */
+.tms-lookup-control .form-control {
+  padding-right: 2.25rem;
+}
+
+.tms-lookup-clear {
+  position: absolute;
+  right: 0.375rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--tms-radius-sm);
+  background: none;
+  color: var(--tms-muted);
+  font-size: 0.6875rem;
+}
+
+.tms-lookup-clear:hover,
+.tms-lookup-clear:focus-visible {
+  background-color: var(--tms-surface-alt);
+  color: var(--tms-text);
+}
+
+.tms-lookup-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  /* About six entries before it scrolls: enough to show that the list continues,
+     short enough not to cover the rest of the form. */
+  max-height: 17rem;
+}
+
+.tms-lookup-empty {
+  padding: 0.5rem 0.625rem;
+  font-size: var(--tms-font-base);
+  color: var(--tms-muted);
+}
+
 .tms-filter-field {
   display: flex;
   flex-direction: column;

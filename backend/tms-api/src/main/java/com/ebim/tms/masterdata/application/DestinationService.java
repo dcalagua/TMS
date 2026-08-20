@@ -55,7 +55,8 @@ public class DestinationService {
     @Transactional(readOnly = true)
     public PageResponse<DestinationView> list(CompanyScope scope, DestinationFilter filter, PageQuery pageQuery) {
         var specification = DestinationSpecifications.matching(
-                scope.companyId(), filter.code(), filter.name(), filter.type(), filter.zoneId(), filter.active());
+                scope.companyId(), filter.code(), filter.name(), filter.search(), filter.type(), filter.zoneId(),
+                filter.active());
         Page<Destination> page = destinationRepository.findAll(specification, toPageable(pageQuery));
 
         Map<UUID, Zone> zonesById = loadZones(scope, page.getContent());

@@ -59,7 +59,7 @@ public class OriginService {
     @Transactional(readOnly = true)
     public PageResponse<OriginView> list(CompanyScope scope, OriginFilter filter, PageQuery pageQuery) {
         var specification = OriginSpecifications.matching(
-                scope.companyId(), filter.code(), filter.name(), filter.type(), filter.active());
+                scope.companyId(), filter.code(), filter.name(), filter.search(), filter.type(), filter.active());
         Page<Origin> page = originRepository.findAll(specification, toPageable(pageQuery));
         List<OriginView> content = page.getContent().stream().map(OriginView::from).toList();
         return new PageResponse<>(content, pageQuery.pageNumber(), pageQuery.pageSize(), page.getTotalElements());

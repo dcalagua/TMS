@@ -194,6 +194,19 @@ class OrderApiIntegrationTest {
         return orderRequest(originId, destinationId, null, null, null, null, null, lines);
     }
 
+    /**
+     * The same body plus the V17 declared figures. Kept separate from {@link #orderRequest} so
+     * that the dozen existing cases stay readable - only the totals tests care about these.
+     */
+    private String declaredOrderRequest(String originId, String destinationId, String declaredWeightKg,
+            String declaredVolumeM3, String declaredPallets, String... lines) {
+        return """
+                {"originId":"%s","destinationId":"%s","serviceDate":"2026-03-01","priority":"NORMAL",
+                 "declaredWeightKg":%s,"declaredVolumeM3":%s,"declaredPallets":%s,"lines":[%s]}
+                """.formatted(originId, destinationId, numberOrNull(declaredWeightKg), numberOrNull(declaredVolumeM3),
+                numberOrNull(declaredPallets), String.join(",", lines));
+    }
+
     private static String quoteOrNull(String value) {
         return value == null ? "null" : "\"" + value + "\"";
     }
@@ -362,14 +375,17 @@ class OrderApiIntegrationTest {
     // --- lifecycle -----------------------------------------------------------------
 
     @Test
-    @DisplayName("mark-ready refuses an order with no lines, then refuses one whose totals are all still zero")
-    void markReadyRequiresCompleteness() throws Exception {
-        String noLines = mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+    @DisplayName("mark-ready refuses an order whose weight, volume and pallets are all still unknown")
+    void markReadyRequiresKnownCapacity() throws Exception {
+        // Since V17 the rule is about capacity, not about lines: an order with no lines and no
+        // declared figures fails, and so does one whose only line states no unit measure at all.
+        // What both have in common is that a planner could not fill a vehicle with them.
+        String nothingKnown = mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(simpleOrderRequest(originA, destinationA)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
-        mockMvc.perform(asAdmin(post(BASE + "/" + idOf(noLines) + "/mark-ready"), COMPANY_A))
+        mockMvc.perform(asAdmin(post(BASE + "/" + idOf(nothingKnown) + "/mark-ready"), COMPANY_A))
                 .andExpect(status().isConflict());
 
         String zeroCapacity = mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
@@ -379,6 +395,114 @@ class OrderApiIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         mockMvc.perform(asAdmin(post(BASE + "/" + idOf(zeroCapacity) + "/mark-ready"), COMPANY_A))
                 .andExpect(status().isConflict());
+    }
+
+    // --- declared totals and the V17 precedence rule ---------------------------------
+
+    @Test
+    @DisplayName("a header-only order carries its declared totals, is marked DECLARED, and can be planned")
+    void headerOnlyOrderWithDeclaredTotals() throws Exception {
+        // The payload an inbound integration produces constantly: "one order, 1,200 kg, 2
+        // pallets", no line detail. Before V17 this could only be stored with zero totals and
+        // could therefore never be planned.
+        String response = mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(declaredOrderRequest(originA, destinationA, "1200", "3.4", "2")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.totalsSource").value("DECLARED"))
+                .andExpect(jsonPath("$.totalWeightKg").value(1200.0))
+                .andExpect(jsonPath("$.totalVolumeM3").value(3.4))
+                .andExpect(jsonPath("$.totalPallets").value(2.00))
+                .andExpect(jsonPath("$.declaredWeightKg").value(1200.0))
+                .andExpect(jsonPath("$.lines.length()").value(0))
+                .andReturn().getResponse().getContentAsString();
+
+        mockMvc.perform(asAdmin(post(BASE + "/" + idOf(response) + "/mark-ready"), COMPANY_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("READY_FOR_PLANNING"));
+    }
+
+    @Test
+    @DisplayName("with lines present the totals come from them and the source is CALCULATED")
+    void linesWinOverAnAgreeingDeclaration() throws Exception {
+        mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(declaredOrderRequest(originA, destinationA, "20", null, null,
+                                line("SKU-1", "2", "10", null, null))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.totalsSource").value("CALCULATED"))
+                .andExpect(jsonPath("$.totalWeightKg").value(20.0))
+                .andExpect(jsonPath("$.declaredWeightKg").value(20.0));
+    }
+
+    @Test
+    @DisplayName("a declaration that contradicts the lines is refused rather than silently preferred")
+    void contradictingDeclarationIsRefused() throws Exception {
+        // Lines add to 20 kg; the caller says 1,200. Guessing which is right would put a
+        // fabricated capacity figure in front of a planner.
+        mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(declaredOrderRequest(originA, destinationA, "1200", null, null,
+                                line("SKU-1", "2", "10", null, null))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("do not match the lines")));
+    }
+
+    @Test
+    @DisplayName("a declaration fills a measure the lines are silent about, without becoming the source")
+    void declarationFillsASilentMeasure() throws Exception {
+        // The line states pallets but no unit weight, so the weight sum is unknown rather than
+        // zero - and the declared 1,200 kg is the only real figure there is.
+        mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(declaredOrderRequest(originA, destinationA, "1200", null, null,
+                                line("SKU-1", "2", null, null, "3"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.totalsSource").value("CALCULATED"))
+                .andExpect(jsonPath("$.totalWeightKg").value(1200.0))
+                .andExpect(jsonPath("$.totalPallets").value(3.00));
+    }
+
+    @Test
+    @DisplayName("a negative declared figure is rejected by validation, never stored")
+    void negativeDeclaredFigureIsRejected() throws Exception {
+        mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(declaredOrderRequest(originA, destinationA, "-5", null, null)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("adding lines to a declared order moves it to CALCULATED, and removing them moves it back")
+    void totalsSourceFollowsTheLines() throws Exception {
+        String response = mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(declaredOrderRequest(originA, destinationA, "20", null, null)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.totalsSource").value("DECLARED"))
+                .andReturn().getResponse().getContentAsString();
+        String id = idOf(response);
+
+        String withLines = """
+                {"originId":"%s","destinationId":"%s","serviceDate":"2026-03-01","priority":"NORMAL",
+                 "declaredWeightKg":20,"version":0,"lines":[%s]}
+                """.formatted(originA, destinationA, line("SKU-1", "2", "10", null, null));
+        mockMvc.perform(asAdmin(put(BASE + "/" + id), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON).content(withLines))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalsSource").value("CALCULATED"));
+
+        // And back again: removing the last line moves the order back to its declared figure
+        // rather than leaving it claiming a calculated total it no longer has.
+        String withoutLines = """
+                {"originId":"%s","destinationId":"%s","serviceDate":"2026-03-01","priority":"NORMAL",
+                 "declaredWeightKg":20,"version":1,"lines":[]}
+                """.formatted(originA, destinationA);
+        mockMvc.perform(asAdmin(put(BASE + "/" + id), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON).content(withoutLines))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalsSource").value("DECLARED"))
+                .andExpect(jsonPath("$.totalWeightKg").value(20.0));
     }
 
     @Test

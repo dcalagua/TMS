@@ -82,6 +82,9 @@
     "text": "You have unsaved changes.",
     "title": "Discard changes?"
   },
+  "empty": {
+    "noMatches": "No matches"
+  },
   "fields": {
     "availability": "Availability",
     "axles": "Axles",
@@ -160,6 +163,7 @@
     "spanish": "Spanish"
   },
   "loading": {
+    "generic": "Loading...",
     "order": "Loading order...",
     "route": "Loading route..."
   },

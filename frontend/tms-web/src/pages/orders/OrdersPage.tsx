@@ -31,6 +31,7 @@ import {
   type StatusTone,
 } from '../../shared/ui/components'
 import { OrderFormDrawer } from './OrderFormDrawer'
+import { OrderImportDrawer } from './OrderImportDrawer'
 
 const PAGE_SIZE = 25
 
@@ -62,7 +63,7 @@ const DEFAULT_FILTERS: AppliedFilters = {
   orderNumber: '', originId: '', destinationId: '', serviceDateFrom: '', serviceDateTo: '', status: '', priority: '',
 }
 
-type ModalState = { mode: 'create' } | { mode: 'edit'; orderId: string } | null
+type ModalState = { mode: 'create' } | { mode: 'edit'; orderId: string } | { mode: 'import' } | null
 
 /** Totals for the rows currently on screen. Deliberately not presented as a company-wide
  * figure: the backend paginates, so anything beyond this page is simply not known here. */
@@ -298,14 +299,24 @@ export function OrdersPage() {
         }
         actions={
           canManage && (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2"
-              onClick={() => setModal({ mode: 'create' })}
-            >
-              <i className="bi bi-plus-lg" aria-hidden="true" />
-              {t('new')}
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
+                onClick={() => setModal({ mode: 'import' })}
+              >
+                <i className="bi bi-upload" aria-hidden="true" />
+                {t('actions.import')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2"
+                onClick={() => setModal({ mode: 'create' })}
+              >
+                <i className="bi bi-plus-lg" aria-hidden="true" />
+                {t('new')}
+              </button>
+            </>
           )
         }
       />
@@ -468,7 +479,11 @@ export function OrdersPage() {
         footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
       />
 
-      {modal && (
+      {modal?.mode === 'import' && (
+        <OrderImportDrawer companyId={companyId} onClose={() => setModal(null)} onImported={refresh} />
+      )}
+
+      {(modal?.mode === 'create' || modal?.mode === 'edit') && (
         <OrderFormDrawer
           companyId={companyId}
           orderId={modal.mode === 'edit' ? modal.orderId : null}

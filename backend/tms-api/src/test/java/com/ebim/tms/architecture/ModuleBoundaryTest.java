@@ -56,6 +56,25 @@ class ModuleBoundaryTest {
         }
     }
 
+    /**
+     * A spreadsheet library is a file-format detail of one feature, not a building block the rest
+     * of the product may reach for.
+     *
+     * <p>Apache POI arrived for the bulk order import's template and .xlsx reader. Left
+     * unconstrained it spreads: the next report, the next export, and eventually the domain holds
+     * an {@code XSSFWorkbook}. Confining it to the one package that reads and writes those files
+     * is what keeps swapping the library - or dropping .xlsx support - a change to that package
+     * alone.
+     */
+    @ArchTest
+    static final ArchRule spreadsheet_library_stays_inside_the_import =
+            noClasses()
+                    .that().resideOutsideOfPackage(ROOT + ".orders.application.imports..")
+                    .should().dependOnClassesThat().resideInAnyPackage("org.apache.poi..")
+                    .because("Apache POI is a file-format detail of the order import, not an "
+                            + "architectural building block")
+                    .allowEmptyShould(true);
+
     private static String[] businessPackages() {
         return BUSINESS_MODULES.stream().map(module -> ROOT + "." + module + "..").toArray(String[]::new);
     }

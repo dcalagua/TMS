@@ -37,6 +37,15 @@ spring:
     validate-on-migrate: true
     # `clean` must never be reachable from an application process.
     clean-disabled: true
+  servlet:
+    multipart:
+      # The bulk order import is the only multipart endpoint. Both limits mirror
+      # OrderImportLimits.MAX_FILE_BYTES, and this is the half that matters most: it rejects an
+      # oversized upload while it is still streaming, before the request is fully buffered.
+      # OrderImportService checks the received bytes again, so the limit does not depend on this
+      # file alone being right.
+      max-file-size: 2MB
+      max-request-size: 3MB
   threads:
     virtual:
       enabled: true
