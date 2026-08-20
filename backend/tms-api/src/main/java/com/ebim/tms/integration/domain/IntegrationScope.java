@@ -26,7 +26,14 @@ public enum IntegrationScope {
     LOCATION_WRITE("integration.location:write"),
 
     /** Create and update transport orders. */
-    ORDER_WRITE("integration.order:write");
+    ORDER_WRITE("integration.order:write"),
+
+    /**
+     * Read confirmed/cancelled shipments (job 08's outbound {@code ShipmentPlan V1}). Read-only:
+     * holding it grants no write anywhere, on purpose - see
+     * {@code docs/integrations/OUTBOUND_SHIPMENT_V1.md}.
+     */
+    SHIPMENT_READ("integration.shipment:read");
 
     private static final Map<String, IntegrationScope> BY_CODE = Arrays.stream(values())
             .collect(Collectors.toUnmodifiableMap(IntegrationScope::code, Function.identity()));

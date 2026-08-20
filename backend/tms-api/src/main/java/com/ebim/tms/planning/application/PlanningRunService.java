@@ -3,11 +3,14 @@ package com.ebim.tms.planning.application;
 import com.ebim.tms.planning.domain.AssignmentStatus;
 import com.ebim.tms.planning.domain.PlanningRun;
 import com.ebim.tms.planning.domain.PlanningRunStatus;
+import com.ebim.tms.planning.domain.ShipmentEventType;
+import com.ebim.tms.planning.domain.ShipmentOutboxEvent;
 import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.planning.domain.TripOrderAssignment;
 import com.ebim.tms.planning.domain.TripStatus;
 import com.ebim.tms.planning.infrastructure.PlanningRunRepository;
 import com.ebim.tms.planning.infrastructure.PlanningRunSpecifications;
+import com.ebim.tms.planning.infrastructure.ShipmentOutboxEventRepository;
 import com.ebim.tms.planning.infrastructure.TripOrderAssignmentRepository;
 import com.ebim.tms.planning.infrastructure.TripRepository;
 import com.ebim.tms.shared.api.ConflictException;
@@ -25,6 +28,7 @@ import com.ebim.tms.shared.reference.PlannableOrderQuery;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -61,6 +65,7 @@ public class PlanningRunService {
     private final PlanningRunRepository planningRunRepository;
     private final TripRepository tripRepository;
     private final TripOrderAssignmentRepository assignmentRepository;
+    private final ShipmentOutboxEventRepository outboxRepository;
     private final TripAssignmentService assignments;
     private final OriginLookupPort originLookupPort;
     private final DestinationLookupPort destinationLookupPort;
@@ -71,14 +76,15 @@ public class PlanningRunService {
     private final AuditActorProvider auditActorProvider;
 
     public PlanningRunService(PlanningRunRepository planningRunRepository, TripRepository tripRepository,
-            TripOrderAssignmentRepository assignmentRepository, TripAssignmentService assignments,
-            OriginLookupPort originLookupPort, DestinationLookupPort destinationLookupPort,
-            OrderPlanningPort orderPlanningPort, VehicleLookupPort vehicleLookupPort,
-            PlanningCapacityService capacityService, TripViewAssembler assembler,
+            TripOrderAssignmentRepository assignmentRepository, ShipmentOutboxEventRepository outboxRepository,
+            TripAssignmentService assignments, OriginLookupPort originLookupPort,
+            DestinationLookupPort destinationLookupPort, OrderPlanningPort orderPlanningPort,
+            VehicleLookupPort vehicleLookupPort, PlanningCapacityService capacityService, TripViewAssembler assembler,
             AuditActorProvider auditActorProvider) {
         this.planningRunRepository = planningRunRepository;
         this.tripRepository = tripRepository;
         this.assignmentRepository = assignmentRepository;
+        this.outboxRepository = outboxRepository;
         this.assignments = assignments;
         this.originLookupPort = originLookupPort;
         this.destinationLookupPort = destinationLookupPort;
@@ -263,6 +269,15 @@ public class PlanningRunService {
         assignments.refreshStops(trip, scope.companyId(), actorId);
         trip.confirm(vehicle.maxWeightKg(), vehicle.maxVolumeM3(), vehicle.maxPallets(), actorId);
         tripRepository.saveAndFlush(trip);
+
+        // Written in THIS transaction, not after commit - the whole point of a transactional
+        // outbox is that the event and the state change it describes share one atomic unit, so a
+        // rollback anywhere else in this loop (a sibling trip failing confirmTrip) takes this row
+        // down with it too. See tms.shipment_outbox_event's migration V20 comment and
+        // docs/integrations/OUTBOUND_SHIPMENT_V1.md, "Change feed".
+        outboxRepository.saveAndFlush(new ShipmentOutboxEvent(
+                scope.companyId(), trip.id(), trip.shipmentNumber(), ShipmentEventType.SHIPMENT_CONFIRMED,
+                OffsetDateTime.now()));
     }
 
     /**

@@ -16,10 +16,16 @@ import java.util.UUID;
  * {@code orders} ({@code ModuleBoundaryTest}); {@code priority} is the plain code rather than
  * {@code OrderPriority} for the same reason. See {@link OrderPlanningPort}.
  *
- * @param totalWeightKg  kilograms, never tons - the unit is in the name, like every capacity
- *                       column in the schema
- * @param totalVolumeM3  cubic meters, never cm3
- * @param totalPallets   may be fractional, matching {@code transport_order.total_pallets}
+ * @param totalWeightKg      kilograms, never tons - the unit is in the name, like every capacity
+ *                           column in the schema
+ * @param totalVolumeM3      cubic meters, never cm3
+ * @param totalPallets       may be fractional, matching {@code transport_order.total_pallets}
+ * @param externalSource     the sending system's own identity for this order (inbound integration
+ *                           API), or null for an order created by hand - carried here rather than
+ *                           resolved separately so a shipment publication (job 08's
+ *                           {@code ShipmentPublicationPort}) can echo back the same reference an
+ *                           ERP sent in, without a second lookup into {@code orders}
+ * @param externalReference  the sending system's identifier, paired with {@code externalSource}
  */
 public record PlannableOrder(
         UUID id,
@@ -34,5 +40,7 @@ public record PlannableOrder(
         LocalTime requestedWindowEnd,
         BigDecimal totalWeightKg,
         BigDecimal totalVolumeM3,
-        BigDecimal totalPallets) {
+        BigDecimal totalPallets,
+        String externalSource,
+        String externalReference) {
 }

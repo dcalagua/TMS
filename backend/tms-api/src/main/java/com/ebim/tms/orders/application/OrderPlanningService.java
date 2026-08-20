@@ -141,7 +141,7 @@ public class OrderPlanningService implements OrderPlanningPort {
         return new PlannableOrder(order.id(), order.orderNumber(), order.originId(), order.destinationId(),
                 order.customerName(), order.customerReference(), order.serviceDate(), order.priority().name(),
                 order.requestedWindowStart(), order.requestedWindowEnd(), order.totalWeightKg(), order.totalVolumeM3(),
-                order.totalPallets());
+                order.totalPallets(), order.externalSource(), order.externalReference());
     }
 
     private static Pageable toPageable(PageQuery pageQuery) {

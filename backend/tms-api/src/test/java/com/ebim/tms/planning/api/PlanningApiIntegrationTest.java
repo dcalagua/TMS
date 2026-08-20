@@ -1237,6 +1237,33 @@ class PlanningApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("confirming a trip writes exactly one SHIPMENT_CONFIRMED outbox row for it")
+    void confirmationWritesAShipmentOutboxEvent() throws Exception {
+        // The transactional-outbox proof behind job 08's outbound Shipment integration
+        // (docs/integrations/OUTBOUND_SHIPMENT_V1.md): tms.shipment_outbox_event gets its row in
+        // the very transaction PlanningRunService.confirmTrip commits, not afterwards.
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("OUTBOX", "10000", "40", 20));
+        assign(trip, order(COMPANY_A, originA, destinationA1, date, "100", "1", "1", "READY_FOR_PLANNING"))
+                .andExpect(status().isOk());
+        String shipmentNumber = JsonPath.read(mockMvc.perform(asAdmin(get(TRIPS + "/" + trip), COMPANY_A))
+                .andReturn().getResponse().getContentAsString(), "$.trip.shipmentNumber");
+
+        confirm(run).andExpect(status().isOk());
+
+        assertThat(queryLong("SELECT count(*) FROM tms.shipment_outbox_event WHERE trip_id = '" + trip + "'"))
+                .isEqualTo(1);
+        assertThat(queryString("SELECT event_type FROM tms.shipment_outbox_event WHERE trip_id = '" + trip + "'"))
+                .isEqualTo("SHIPMENT_CONFIRMED");
+        assertThat(queryString("SELECT shipment_number FROM tms.shipment_outbox_event WHERE trip_id = '" + trip + "'"))
+                .isEqualTo(shipmentNumber);
+        assertThat(queryString(
+                "SELECT company_id::text FROM tms.shipment_outbox_event WHERE trip_id = '" + trip + "'"))
+                .isEqualTo(COMPANY_A.toString());
+    }
+
+    @Test
     @DisplayName("every shipment number is distinct, including across planning runs")
     void shipmentNumbersAreUnique() throws Exception {
         Run runOne = newRun(nextDate());

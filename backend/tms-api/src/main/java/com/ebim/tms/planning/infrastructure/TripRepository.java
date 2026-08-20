@@ -4,10 +4,13 @@ import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.planning.domain.TripStatus;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -70,6 +73,27 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
     int maxTripNumber(@Param("planningRunId") UUID planningRunId);
 
     long countByPlanningRunIdAndStatusNot(UUID planningRunId, TripStatus status);
+
+    /**
+     * Resolves a trip by its external identity rather than its internal id - the lookup key of
+     * the outbound Shipment integration (job 08), where a partner never learns {@code trip.id}.
+     * See {@code docs/domain/SHIPMENT_V2.md} on why {@code shipmentNumber} exists.
+     */
+    Optional<Trip> findByShipmentNumberAndCompanyId(String shipmentNumber, UUID companyId);
+
+    /**
+     * The publishable set for {@code ShipmentPublicationAdapter}: this company's trips in one of
+     * {@code statuses}, touched at or after {@code updatedSince} (or all of them, when null),
+     * oldest-touched first with {@code id} as the tie-breaker for a deterministic page boundary -
+     * the same shape {@code ShipmentOutboxEventRepository.findPublishable} uses for the same
+     * reason. {@code DRAFT} is never one of {@code statuses} in production use; the caller
+     * decides that, not this query, so a test can still ask for it explicitly.
+     */
+    @Query("SELECT t FROM Trip t WHERE t.companyId = :companyId AND t.status IN :statuses "
+            + "AND (:updatedSince IS NULL OR t.updatedAt >= :updatedSince) "
+            + "ORDER BY t.updatedAt ASC, t.id ASC")
+    Page<Trip> findPublishable(@Param("companyId") UUID companyId, @Param("statuses") Collection<TripStatus> statuses,
+            @Param("updatedSince") OffsetDateTime updatedSince, Pageable pageable);
 
     /**
      * The double-booking pre-check ({@code TripService.requireVehicleNotDoubleBooked}): is this
