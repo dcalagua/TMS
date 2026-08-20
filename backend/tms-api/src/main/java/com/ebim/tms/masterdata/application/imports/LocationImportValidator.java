@@ -162,7 +162,7 @@ final class LocationImportValidator {
                 roles.add(LocationRole.valueOf(trimmed.toUpperCase(Locale.ROOT)));
             } catch (IllegalArgumentException unknown) {
                 issues.add(issue(row, LocationImportColumn.ROLES, code, "'" + trimmed + "' is not recognised. Use "
-                        + "one or more of ORIGIN, SHIP_TO, STORE, DC, PLANT, HUB, OTHER, separated by commas."));
+                        + "ORIGIN, DESTINATION, or both separated by a comma."));
             }
         }
         if (roles.isEmpty() && raw.isBlank()) {

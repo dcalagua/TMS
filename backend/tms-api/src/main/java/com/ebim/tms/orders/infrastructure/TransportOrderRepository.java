@@ -10,7 +10,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 
 /**
- * Company-scoped persistence for {@link TransportOrder}. See {@code OriginRepository} for the
+ * Company-scoped persistence for {@link TransportOrder}. See {@code LocationRepository} for the
  * isolation rule every finder here follows.
  */
 public interface TransportOrderRepository extends JpaRepository<TransportOrder, UUID>, JpaSpecificationExecutor<TransportOrder> {

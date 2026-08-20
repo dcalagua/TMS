@@ -28,7 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Frequency use cases, including the weekly-rule child collection and the date-exception
- * sub-resource. Takes a {@link CompanyScope}, never a company id - see {@code OriginService}
+ * sub-resource. Takes a {@link CompanyScope}, never a company id - see {@code LocationService}
  * for the contract this follows.
  */
 @Service

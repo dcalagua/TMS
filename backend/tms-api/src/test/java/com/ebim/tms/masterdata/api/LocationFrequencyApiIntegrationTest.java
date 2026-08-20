@@ -183,7 +183,7 @@ class LocationFrequencyApiIntegrationTest {
     }
 
     private String createLocation(UUID companyId, String code) throws Exception {
-        return createLocation(companyId, code, "[\"SHIP_TO\"]");
+        return createLocation(companyId, code, "[\"DESTINATION\"]");
     }
 
     private String createLocation(UUID companyId, String code, String roles) throws Exception {

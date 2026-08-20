@@ -85,7 +85,7 @@ class ShipmentOutboxTenancyIsolationIntegrationTest {
         UUID vehicle = UUID.randomUUID();
         UUID run = UUID.randomUUID();
         statement.execute("""
-                INSERT INTO tms.origin (id, company_id, code, name)
+                INSERT INTO tms.location (id, company_id, code, name)
                 VALUES ('%s', '%s', 'ORIGIN-%s', 'Origin %s')
                 """.formatted(origin, company, suffix, suffix));
         statement.execute("""

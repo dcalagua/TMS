@@ -37,14 +37,14 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 /**
  * The destination/frequency vertical slice (Step 06), exercised end to end through the real
  * HTTP filter chain and a real, freshly migrated PostgreSQL - the same proof
- * {@code OriginZoneApiIntegrationTest} gives V6's origin/zone slice, extended to V7.
+ * {@code ZoneApiIntegrationTest} gives V6's zone slice, extended to the V7 frequency model.
  */
 @EnabledIf(value = DockerAvailability.CONDITION, disabledReason = DockerAvailability.DISABLED_REASON)
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import(DestinationFrequencyApiIntegrationTest.JwtDecoderOverride.class)
-class DestinationFrequencyApiIntegrationTest {
+@Import(FrequencyApiIntegrationTest.JwtDecoderOverride.class)
+class FrequencyApiIntegrationTest {
 
     private static final UUID ORGANIZATION = UUID.fromString("33333333-0000-4000-8000-000000000001");
     private static final UUID COMPANY_A = UUID.fromString("33333333-0000-4000-8000-0000000000c1");
@@ -71,7 +71,7 @@ class DestinationFrequencyApiIntegrationTest {
         }
     }
 
-    /** Same admin-in-both/viewer-in-A-only fixture as {@code OriginZoneApiIntegrationTest}, plus one zone per company. */
+    /** Same admin-in-both/viewer-in-A-only fixture as {@code ZoneApiIntegrationTest}, plus one zone per company. */
     @DynamicPropertySource
     static void datasourceProperties(DynamicPropertyRegistry registry) {
         jdbcUrl = PostgresTestDatabase.createMigratedDatabase("tms_dest_freq_api");
@@ -156,172 +156,6 @@ class DestinationFrequencyApiIntegrationTest {
 
     private static String idOf(String jsonResponse) {
         return JsonPath.read(jsonResponse, "$.id");
-    }
-
-    @Nested
-    @DisplayName("destinations")
-    class Destinations {
-
-        private static final String BASE = "/api/v1/masterdata/destinations";
-
-        private String destinationRequest(String code, String type, Double latitude, Double longitude, String zoneId) {
-            return """
-                    {"code":"%s","name":"%s Name","type":"%s","address":"123 Main St",
-                     "district":"Miraflores","province":"Lima","department":"Lima","country":"PE",
-                     "latitude":%s,"longitude":%s,"zoneId":%s,"serviceTimeMinutes":15,"externalReference":"EWM-1"}
-                    """.formatted(code, code, type, latitude, longitude, zoneId == null ? "null" : "\"" + zoneId + "\"");
-        }
-
-        @Test
-        @DisplayName("create normalizes the code and is readable back through list and get")
-        void createNormalizesCodeAndIsListed() throws Exception {
-            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(destinationRequest("south-store", "STORE", 10.5, -75.2, zoneInCompanyA)))
-                    .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.code").value("SOUTH-STORE"))
-                    .andExpect(jsonPath("$.zoneCode").value("ZONE-A"))
-                    .andExpect(jsonPath("$.active").value(true));
-
-            mockMvc.perform(asAdmin(get(BASE), COMPANY_A))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.content[?(@.code == 'SOUTH-STORE')]").exists());
-        }
-
-        @Test
-        @DisplayName("the same code is allowed in a different company but conflicts inside the same one")
-        void sameCodeAcrossCompaniesButNotWithinOne() throws Exception {
-            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(destinationRequest("dup-code", "CUSTOMER", null, null, null)))
-                    .andExpect(status().isCreated());
-
-            mockMvc.perform(asAdmin(post(BASE), COMPANY_B)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(destinationRequest("dup-code", "CUSTOMER", null, null, null)))
-                    .andExpect(status().isCreated());
-
-            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(destinationRequest("dup-code", "CUSTOMER", null, null, null)))
-                    .andExpect(status().isConflict())
-                    .andExpect(jsonPath("$.code").value("conflict"));
-        }
-
-        @Test
-        @DisplayName("a destination of one company cannot be read through another company's scope")
-        void crossCompanyAccessIsBlocked() throws Exception {
-            String response = mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(destinationRequest("isolated", "BRANCH", null, null, null)))
-                    .andExpect(status().isCreated())
-                    .andReturn().getResponse().getContentAsString();
-            String id = idOf(response);
-
-            mockMvc.perform(asAdmin(get(BASE + "/" + id), COMPANY_B))
-                    .andExpect(status().isNotFound())
-                    .andExpect(jsonPath("$.code").value("resource-not-found"));
-        }
-
-        @Test
-        @DisplayName("out-of-range or incomplete coordinates are rejected with a field-level error")
-        void invalidCoordinatesAreBlocked() throws Exception {
-            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(destinationRequest("bad-lat", "HUB", 200.0, 0.0, null)))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.code").value("validation-failed"))
-                    .andExpect(jsonPath("$.errors[?(@.field == 'latitude')]").exists());
-
-            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    {"code":"bad-pair","name":"Bad Pair","type":"HUB","country":"PE",
-                                     "latitude":10.0,"serviceTimeMinutes":0}
-                                    """))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.code").value("malformed-request"));
-        }
-
-        @Test
-        @DisplayName("a zone from another company is rejected even though it is a real zone")
-        void zoneMustBelongToCallersCompany() throws Exception {
-            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(destinationRequest("cross-zone", "CUSTOMER", null, null, zoneInCompanyB)))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.code").value("malformed-request"));
-        }
-
-        @Test
-        @DisplayName("deactivate and activate toggle state and are reflected in the active filter")
-        void deactivateAndActivate() throws Exception {
-            String response = mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(destinationRequest("togglable", "HUB", null, null, null)))
-                    .andExpect(status().isCreated())
-                    .andReturn().getResponse().getContentAsString();
-            String id = idOf(response);
-
-            mockMvc.perform(asAdmin(post(BASE + "/" + id + "/deactivate"), COMPANY_A))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.active").value(false));
-
-            mockMvc.perform(asAdmin(get(BASE), COMPANY_A).param("active", "false"))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.content[?(@.code == 'TOGGLABLE')]").exists());
-
-            mockMvc.perform(asAdmin(post(BASE + "/" + id + "/activate"), COMPANY_A))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.active").value(true));
-        }
-
-        @Test
-        @DisplayName("update edits the record and re-checks the code for conflicts")
-        void updateEditsAndRechecksCode() throws Exception {
-            String response = mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(destinationRequest("editable", "HUB", null, null, null)))
-                    .andExpect(status().isCreated())
-                    .andReturn().getResponse().getContentAsString();
-            String id = idOf(response);
-
-            mockMvc.perform(asAdmin(put(BASE + "/" + id), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(destinationRequest("renamed", "STORE", null, null, null)))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.code").value("RENAMED"))
-                    .andExpect(jsonPath("$.type").value("STORE"));
-        }
-
-        @Test
-        @DisplayName("a read-only role may list but not create")
-        void readOnlyRoleCannotManage() throws Exception {
-            mockMvc.perform(asViewer(get(BASE), COMPANY_A)).andExpect(status().isOk());
-
-            mockMvc.perform(asViewer(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(destinationRequest("forbidden", "HUB", null, null, null)))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.code").value("access-denied"));
-        }
-
-        @Test
-        @DisplayName("pagination reports the size actually applied and the total within the company")
-        void paginationIsServerSide() throws Exception {
-            for (int i = 0; i < 3; i++) {
-                mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(destinationRequest("page-" + i, "HUB", null, null, null)))
-                        .andExpect(status().isCreated());
-            }
-
-            mockMvc.perform(asAdmin(get(BASE), COMPANY_A).param("page", "0").param("size", "2"))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.size").value(2))
-                    .andExpect(jsonPath("$.content.length()").value(2))
-                    .andExpect(jsonPath("$.totalElements").value(org.hamcrest.Matchers.greaterThanOrEqualTo(3)));
-        }
     }
 
     @Nested

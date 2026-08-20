@@ -1,13 +1,12 @@
 package com.ebim.tms.masterdata.application;
 
-import com.ebim.tms.masterdata.domain.Destination;
 import com.ebim.tms.masterdata.domain.Frequency;
-import com.ebim.tms.masterdata.domain.Origin;
+import com.ebim.tms.masterdata.domain.Location;
+import com.ebim.tms.masterdata.domain.LocationRole;
 import com.ebim.tms.masterdata.domain.Route;
 import com.ebim.tms.masterdata.domain.Zone;
-import com.ebim.tms.masterdata.infrastructure.DestinationRepository;
 import com.ebim.tms.masterdata.infrastructure.FrequencyRepository;
-import com.ebim.tms.masterdata.infrastructure.OriginRepository;
+import com.ebim.tms.masterdata.infrastructure.LocationRepository;
 import com.ebim.tms.masterdata.infrastructure.RouteRepository;
 import com.ebim.tms.masterdata.infrastructure.RouteSpecifications;
 import com.ebim.tms.masterdata.infrastructure.RouteStopRepository;
@@ -37,8 +36,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Route use cases. Takes a {@link CompanyScope}, never a company id - see
- * {@code OriginService} for the contract this follows.
+ * Route use cases. Takes a {@link CompanyScope}, never a company id, so the tenant comes from the
+ * caller's membership and never from the request body.
+ *
+ * <p>Since V23 a route's origin and every one of its stops are canonical {@code tms.location}
+ * rows, and the eligibility rule is stated here rather than implied by which table an id came
+ * from: the origin must hold {@link LocationRole#ORIGIN} and every stop must hold
+ * {@link LocationRole#DESTINATION}, both active and both in the caller's company. Rendering an
+ * already-saved route is deliberately laxer - a stop whose location was later deactivated still
+ * shows the place the route actually serves.
  *
  * <p>List and detail deliberately return different view shapes ({@link RouteView} vs
  * {@link RouteDetailView}) and resolve their related records with batched lookups rather than
@@ -51,21 +57,19 @@ public class RouteService {
 
     private final RouteRepository routeRepository;
     private final RouteStopRepository routeStopRepository;
-    private final OriginRepository originRepository;
+    private final LocationRepository locationRepository;
     private final ZoneRepository zoneRepository;
     private final FrequencyRepository frequencyRepository;
-    private final DestinationRepository destinationRepository;
     private final AuditActorProvider auditActorProvider;
 
     public RouteService(RouteRepository routeRepository, RouteStopRepository routeStopRepository,
-            OriginRepository originRepository, ZoneRepository zoneRepository, FrequencyRepository frequencyRepository,
-            DestinationRepository destinationRepository, AuditActorProvider auditActorProvider) {
+            LocationRepository locationRepository, ZoneRepository zoneRepository,
+            FrequencyRepository frequencyRepository, AuditActorProvider auditActorProvider) {
         this.routeRepository = routeRepository;
         this.routeStopRepository = routeStopRepository;
-        this.originRepository = originRepository;
+        this.locationRepository = locationRepository;
         this.zoneRepository = zoneRepository;
         this.frequencyRepository = frequencyRepository;
-        this.destinationRepository = destinationRepository;
         this.auditActorProvider = auditActorProvider;
     }
 
@@ -76,8 +80,8 @@ public class RouteService {
         Page<Route> page = routeRepository.findAll(specification, toPageable(pageQuery));
         List<Route> routes = page.getContent();
 
-        Map<UUID, Origin> originsById = loadByIds(routes.stream().map(Route::originId), scope, originRepository::findAllById,
-                Origin::id, Origin::companyId);
+        Map<UUID, Location> originsById = loadByIds(routes.stream().map(Route::originId), scope,
+                locationRepository::findAllById, Location::id, Location::companyId);
         Map<UUID, Zone> zonesById = loadByIds(routes.stream().map(Route::zoneId), scope, zoneRepository::findAllById,
                 Zone::id, Zone::companyId);
         Map<UUID, Frequency> frequenciesById = loadByIds(routes.stream().map(Route::frequencyId), scope,
@@ -100,11 +104,11 @@ public class RouteService {
     @Transactional
     public RouteDetailView create(CompanyScope scope, RouteRequest request) {
         String code = normalizeCode(request.code());
-        Origin origin = requireOriginInScope(scope, request.originId());
+        Location origin = requireOriginLocation(scope, request.originId());
         Zone zone = requireZoneInScope(scope, request.zoneId());
         Frequency frequency = requireFrequencyInScope(scope, request.frequencyId());
         List<UUID> destinationIds = distinctOrThrow(request.destinationIds());
-        Map<UUID, Destination> destinationsById = requireDestinationsInScope(scope, destinationIds);
+        Map<UUID, Location> destinationsById = requireDestinationLocations(scope, destinationIds);
         if (routeRepository.existsByCompanyIdAndCode(scope.companyId(), code)) {
             throw duplicateCode(code);
         }
@@ -121,11 +125,11 @@ public class RouteService {
     public RouteDetailView update(CompanyScope scope, UUID id, RouteRequest request) {
         Route route = find(scope, id);
         String code = normalizeCode(request.code());
-        Origin origin = requireOriginInScope(scope, request.originId());
+        Location origin = requireOriginLocation(scope, request.originId());
         Zone zone = requireZoneInScope(scope, request.zoneId());
         Frequency frequency = requireFrequencyInScope(scope, request.frequencyId());
         List<UUID> destinationIds = distinctOrThrow(request.destinationIds());
-        Map<UUID, Destination> destinationsById = requireDestinationsInScope(scope, destinationIds);
+        Map<UUID, Location> destinationsById = requireDestinationLocations(scope, destinationIds);
         if (routeRepository.existsByCompanyIdAndCodeAndIdNot(scope.companyId(), code, id)) {
             throw duplicateCode(code);
         }
@@ -153,11 +157,11 @@ public class RouteService {
     }
 
     private RouteDetailView toDetailView(CompanyScope scope, Route route) {
-        Origin origin = originRepository.findByIdAndCompanyId(route.originId(), scope.companyId()).orElse(null);
+        Location origin = locationRepository.findByIdAndCompanyId(route.originId(), scope.companyId()).orElse(null);
         Zone zone = resolveInScope(scope, route.zoneId(), zoneRepository::findByIdAndCompanyId);
         Frequency frequency = resolveInScope(scope, route.frequencyId(), frequencyRepository::findByIdAndCompanyId);
         List<UUID> destinationIds = route.stops().stream().map(stop -> stop.destinationId()).toList();
-        Map<UUID, Destination> destinationsById = loadDestinations(scope, destinationIds);
+        Map<UUID, Location> destinationsById = loadStopLocations(scope, destinationIds);
         return RouteDetailView.from(route, origin, zone, frequency, destinationsById);
     }
 
@@ -166,9 +170,16 @@ public class RouteService {
                 .orElseThrow(() -> new ResourceNotFoundException("Route not found."));
     }
 
-    private Origin requireOriginInScope(CompanyScope scope, UUID originId) {
-        return originRepository.findByIdAndCompanyId(originId, scope.companyId())
-                .orElseThrow(() -> new InvalidRequestException("originId does not reference an origin in this company."));
+    /**
+     * The route's origin: an active location of this company that is enabled as an origin. All
+     * three conditions are checked on every assignment, update included - the same rule
+     * {@code OrderService} applies - so a route can never be re-saved pointing at a place the
+     * operator has withdrawn from service or from origin duty.
+     */
+    private Location requireOriginLocation(CompanyScope scope, UUID originId) {
+        return locationRepository.findUsableAs(originId, scope.companyId(), LocationRole.ORIGIN)
+                .orElseThrow(() -> new InvalidRequestException(
+                        "originId does not reference an active location in this company enabled as an origin."));
     }
 
     /** {@code null} zoneId is allowed (the field is optional); a non-null one must resolve within this company. */
@@ -189,36 +200,43 @@ public class RouteService {
                 .orElseThrow(() -> new InvalidRequestException("frequencyId does not reference a frequency in this company."));
     }
 
-    /** Every id must resolve to a destination in the caller's own company - batched, not one lookup per id. */
-    private Map<UUID, Destination> requireDestinationsInScope(CompanyScope scope, List<UUID> destinationIds) {
-        Map<UUID, Destination> byId = new HashMap<>();
+    /**
+     * Every stop must resolve to an active location of this company that is enabled as a
+     * destination - batched, not one lookup per id. The failure names the offending id rather
+     * than saying "one of them": a route can carry dozens of stops, and "fix the wrong one" is
+     * not an instruction anybody can follow.
+     */
+    private Map<UUID, Location> requireDestinationLocations(CompanyScope scope, List<UUID> destinationIds) {
+        Map<UUID, Location> byId = new HashMap<>();
         if (destinationIds.isEmpty()) {
             return byId;
         }
-        for (Destination destination : destinationRepository.findAllById(Set.copyOf(destinationIds))) {
-            if (destination.companyId().equals(scope.companyId())) {
-                byId.put(destination.id(), destination);
-            }
+        for (Location location : locationRepository.findUsableAsByIds(
+                Set.copyOf(destinationIds), scope.companyId(), LocationRole.DESTINATION)) {
+            byId.put(location.id(), location);
         }
         for (UUID destinationId : destinationIds) {
             if (!byId.containsKey(destinationId)) {
-                throw new InvalidRequestException(
-                        "destinationIds contains a destination not in this company: " + destinationId);
+                throw new InvalidRequestException("destinationIds contains an id that is not an active location "
+                        + "in this company enabled as a destination: " + destinationId);
             }
         }
         return byId;
     }
 
-    /** One batched lookup for a single route's stops, never one query per stop. */
-    private Map<UUID, Destination> loadDestinations(CompanyScope scope, List<UUID> destinationIds) {
-        Map<UUID, Destination> byId = new HashMap<>();
+    /**
+     * One batched lookup for a single route's stops, never one query per stop. Deliberately
+     * role-blind and state-blind, unlike {@link #requireDestinationLocations}: a saved route has
+     * to keep showing where it goes even after one of its stops has been deactivated.
+     */
+    private Map<UUID, Location> loadStopLocations(CompanyScope scope, List<UUID> destinationIds) {
+        Map<UUID, Location> byId = new HashMap<>();
         if (destinationIds.isEmpty()) {
             return byId;
         }
-        for (Destination destination : destinationRepository.findAllById(Set.copyOf(destinationIds))) {
-            if (destination.companyId().equals(scope.companyId())) {
-                byId.put(destination.id(), destination);
-            }
+        for (Location location : locationRepository.findByIdInAndCompanyId(
+                Set.copyOf(destinationIds), scope.companyId())) {
+            byId.put(location.id(), location);
         }
         return byId;
     }

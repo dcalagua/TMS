@@ -104,23 +104,16 @@ class RouteApiIntegrationTest {
         membership("rt.admin@example.invalid", COMPANY_B, "COMPANY_ADMIN");
         membership("rt.viewer@example.invalid", COMPANY_A, "VIEWER");
 
-        originInCompanyA = insertReturningId(
-                "INSERT INTO tms.origin (company_id, code, name) VALUES ('" + COMPANY_A + "', 'ORIGIN-A', 'Origin A')");
-        originInCompanyB = insertReturningId(
-                "INSERT INTO tms.origin (company_id, code, name) VALUES ('" + COMPANY_B + "', 'ORIGIN-B', 'Origin B')");
+        originInCompanyA = insertLocation(COMPANY_A, "ORIGIN-A", "Origin A", "ORIGIN");
+        originInCompanyB = insertLocation(COMPANY_B, "ORIGIN-B", "Origin B", "ORIGIN");
         zoneInCompanyA = insertReturningId(
                 "INSERT INTO tms.zone (company_id, code, name) VALUES ('" + COMPANY_A + "', 'ZONE-A', 'Zone A')");
         frequencyInCompanyA = insertReturningId("INSERT INTO tms.frequency (company_id, code, name) VALUES ('"
                 + COMPANY_A + "', 'FREQ-A', 'Frequency A')");
-        destinationA1 = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country) VALUES ('"
-                + COMPANY_A + "', 'DEST-A1', 'Destination A1', 'PE')");
-        destinationA2 = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country) VALUES ('"
-                + COMPANY_A + "', 'DEST-A2', 'Destination A2', 'PE')");
-        destinationA3 = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country) VALUES ('"
-                + COMPANY_A + "', 'DEST-A3', 'Destination A3', 'PE')");
-        destinationInCompanyB = insertReturningId(
-                "INSERT INTO tms.destination (company_id, code, name, country) VALUES ('" + COMPANY_B
-                        + "', 'DEST-B1', 'Destination B1', 'PE')");
+        destinationA1 = insertLocation(COMPANY_A, "DEST-A1", "Destination A1", "DESTINATION");
+        destinationA2 = insertLocation(COMPANY_A, "DEST-A2", "Destination A2", "DESTINATION");
+        destinationA3 = insertLocation(COMPANY_A, "DEST-A3", "Destination A3", "DESTINATION");
+        destinationInCompanyB = insertLocation(COMPANY_B, "DEST-B1", "Destination B1", "DESTINATION");
     }
 
     private static void membership(String email, UUID companyId, String roleCode) {
@@ -135,6 +128,25 @@ class RouteApiIntegrationTest {
                 JOIN tms.role r ON r.code = '%s'
                 WHERE m.company_id = '%s';
                 """.formatted(ORGANIZATION, companyId, email, email, roleCode, companyId));
+    }
+
+    /**
+     * Seeds one canonical location holding one operational role. Since V23 an origin and a
+     * destination are not records of their own - they are {@code tms.location} rows holding
+     * {@code ORIGIN} or {@code DESTINATION} - and the role is what every assignment lookup
+     * filters on, so a location seeded without one is invisible to the API under test.
+     */
+    private static String insertLocation(UUID companyId, String code, String name, String role) {
+        return insertLocation(companyId, code, name, role, "", "");
+    }
+
+    /** {@link #insertLocation(UUID, String, String, String)} with extra columns, e.g. coordinates. */
+    private static String insertLocation(UUID companyId, String code, String name, String role,
+            String extraColumns, String extraValues) {
+        String id = insertReturningId("INSERT INTO tms.location (company_id, code, name" + extraColumns
+                + ") VALUES ('" + companyId + "', '" + code + "', '" + name + "'" + extraValues + ")");
+        execute("INSERT INTO tms.location_role (location_id, role) VALUES ('" + id + "', '" + role + "')");
+        return id;
     }
 
     private static String insertReturningId(String sql) {
@@ -386,10 +398,9 @@ class RouteApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("deactivating a destination used by a route does not remove the route's stop history")
+    @DisplayName("deactivating a stop's location does not remove the route's stop history")
     void deactivatingADestinationPreservesRouteHistory() throws Exception {
-        String deactivatable = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country)"
-                + " VALUES ('" + COMPANY_A + "', 'DEACTIVATABLE', 'Deactivatable', 'PE')");
+        String deactivatable = insertLocation(COMPANY_A, "DEACTIVATABLE", "Deactivatable", "DESTINATION");
 
         String response = mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -398,7 +409,7 @@ class RouteApiIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         String id = idOf(response);
 
-        mockMvc.perform(asAdmin(post("/api/v1/masterdata/destinations/" + deactivatable + "/deactivate"), COMPANY_A))
+        mockMvc.perform(asAdmin(post("/api/v1/masterdata/locations/" + deactivatable + "/deactivate"), COMPANY_A))
                 .andExpect(status().isOk());
 
         mockMvc.perform(asAdmin(get(BASE + "/" + id), COMPANY_A))

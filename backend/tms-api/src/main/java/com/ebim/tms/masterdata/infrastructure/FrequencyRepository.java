@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 /**
- * Company-scoped persistence for {@link Frequency}. See {@code OriginRepository} for the
+ * Company-scoped persistence for {@link Frequency}. See {@code LocationRepository} for the
  * isolation rule every finder here follows.
  */
 public interface FrequencyRepository extends JpaRepository<Frequency, UUID>, JpaSpecificationExecutor<Frequency> {

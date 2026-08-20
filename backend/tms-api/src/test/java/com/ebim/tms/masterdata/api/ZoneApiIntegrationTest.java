@@ -34,10 +34,15 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * The origin/zone vertical slice, exercised end to end through the real HTTP filter chain and
- * a real, freshly migrated PostgreSQL - the same proof {@code IdentityResolutionIntegrationTest}
- * gives the tenancy model, extended one layer further to the controller/service/repository code
- * this step adds.
+ * The zone vertical slice, exercised end to end through the real HTTP filter chain and a real,
+ * freshly migrated PostgreSQL - the same proof {@code IdentityResolutionIntegrationTest} gives
+ * the tenancy model, extended one layer further to the controller/service/repository code.
+ *
+ * <p>This file used to cover {@code /masterdata/origins} as well. V23 retired that endpoint - an
+ * origin is a {@code tms.location} holding the {@code ORIGIN} role - and every behaviour the
+ * origins half asserted (code uniqueness per company, cross-company isolation, coordinate
+ * range, activate/deactivate, edit, permission gating, pagination) is asserted by
+ * {@code LocationApiIntegrationTest} against the master that now owns it.
  *
  * <p>Only the {@link JwtDecoder} is replaced, with a decoder that trusts a keypair generated in
  * this JVM ({@link TestJwts}) instead of a real Supabase project - the same substitution
@@ -49,8 +54,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import(OriginZoneApiIntegrationTest.JwtDecoderOverride.class)
-class OriginZoneApiIntegrationTest {
+@Import(ZoneApiIntegrationTest.JwtDecoderOverride.class)
+class ZoneApiIntegrationTest {
 
     private static final UUID ORGANIZATION = UUID.fromString("22222222-0000-4000-8000-000000000001");
     private static final UUID COMPANY_A = UUID.fromString("22222222-0000-4000-8000-0000000000c1");
@@ -152,163 +157,6 @@ class OriginZoneApiIntegrationTest {
 
     private static String idOf(String jsonResponse) {
         return JsonPath.read(jsonResponse, "$.id");
-    }
-
-    @Nested
-    @DisplayName("origins")
-    class Origins {
-
-        private static final String BASE = "/api/v1/masterdata/origins";
-
-        private String originRequest(String code, String type, Double latitude, Double longitude) {
-            return """
-                    {"code":"%s","name":"%s Name","type":"%s","address":"123 Main St",
-                     "latitude":%s,"longitude":%s,"timeZone":"America/Lima","externalReference":"EWM-1"}
-                    """.formatted(code, code, type, latitude, longitude);
-        }
-
-        @Test
-        @DisplayName("create normalizes the code and is readable back through list and get")
-        void createNormalizesCodeAndIsListed() throws Exception {
-            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(originRequest("north-hub", "WAREHOUSE", 10.5, -75.2)))
-                    .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.code").value("NORTH-HUB"))
-                    .andExpect(jsonPath("$.active").value(true))
-                    .andExpect(jsonPath("$.id").isNotEmpty());
-
-            mockMvc.perform(asAdmin(get(BASE), COMPANY_A))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.content[?(@.code == 'NORTH-HUB')]").exists())
-                    .andExpect(jsonPath("$.page").value(0));
-        }
-
-        @Test
-        @DisplayName("the same code is allowed in a different company but conflicts inside the same one")
-        void sameCodeAcrossCompaniesButNotWithinOne() throws Exception {
-            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(originRequest("dup-code", "HUB", null, null)))
-                    .andExpect(status().isCreated());
-
-            mockMvc.perform(asAdmin(post(BASE), COMPANY_B)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(originRequest("dup-code", "HUB", null, null)))
-                    .andExpect(status().isCreated());
-
-            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(originRequest("dup-code", "HUB", null, null)))
-                    .andExpect(status().isConflict())
-                    .andExpect(jsonPath("$.code").value("conflict"));
-        }
-
-        @Test
-        @DisplayName("an origin of one company cannot be read through another company's scope")
-        void crossCompanyAccessIsBlocked() throws Exception {
-            String id = createAndReadId(originRequest("isolated", "PLANT", null, null));
-
-            mockMvc.perform(asAdmin(get(BASE + "/" + id), COMPANY_B))
-                    .andExpect(status().isNotFound())
-                    .andExpect(jsonPath("$.code").value("resource-not-found"));
-
-            mockMvc.perform(asAdmin(get(BASE + "/" + id), COMPANY_A))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.code").value("ISOLATED"));
-        }
-
-        @Test
-        @DisplayName("out-of-range or incomplete coordinates are rejected with a field-level error")
-        void invalidCoordinatesAreBlocked() throws Exception {
-            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(originRequest("bad-lat", "HUB", 200.0, 0.0)))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.code").value("validation-failed"))
-                    .andExpect(jsonPath("$.errors[?(@.field == 'latitude')]").exists());
-
-            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    {"code":"bad-pair","name":"Bad Pair","type":"HUB",
-                                     "latitude":10.0,"timeZone":"America/Lima"}
-                                    """))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.code").value("malformed-request"));
-        }
-
-        @Test
-        @DisplayName("deactivate and activate toggle state and are reflected in the active filter")
-        void deactivateAndActivate() throws Exception {
-            String id = createAndReadId(originRequest("togglable", "HUB", null, null));
-
-            mockMvc.perform(asAdmin(post(BASE + "/" + id + "/deactivate"), COMPANY_A))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.active").value(false));
-
-            mockMvc.perform(asAdmin(get(BASE), COMPANY_A).param("active", "false"))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.content[?(@.code == 'TOGGLABLE')]").exists());
-            mockMvc.perform(asAdmin(get(BASE), COMPANY_A).param("active", "true"))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.content[?(@.code == 'TOGGLABLE')]").doesNotExist());
-
-            mockMvc.perform(asAdmin(post(BASE + "/" + id + "/activate"), COMPANY_A))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.active").value(true));
-        }
-
-        @Test
-        @DisplayName("update edits the record and re-checks the code for conflicts")
-        void updateEditsAndRechecksCode() throws Exception {
-            String id = createAndReadId(originRequest("editable", "HUB", null, null));
-
-            mockMvc.perform(asAdmin(put(BASE + "/" + id), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(originRequest("renamed", "PLANT", null, null)))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.code").value("RENAMED"))
-                    .andExpect(jsonPath("$.type").value("PLANT"));
-        }
-
-        @Test
-        @DisplayName("a read-only role may list but not create")
-        void readOnlyRoleCannotManage() throws Exception {
-            mockMvc.perform(asViewer(get(BASE), COMPANY_A)).andExpect(status().isOk());
-
-            mockMvc.perform(asViewer(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(originRequest("forbidden", "HUB", null, null)))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.code").value("access-denied"));
-        }
-
-        @Test
-        @DisplayName("pagination reports the size actually applied and the total within the company")
-        void paginationIsServerSide() throws Exception {
-            for (int i = 0; i < 3; i++) {
-                mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(originRequest("page-" + i, "HUB", null, null)))
-                        .andExpect(status().isCreated());
-            }
-
-            mockMvc.perform(asAdmin(get(BASE), COMPANY_A).param("page", "0").param("size", "2"))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.size").value(2))
-                    .andExpect(jsonPath("$.content.length()").value(2))
-                    .andExpect(jsonPath("$.totalElements").value(org.hamcrest.Matchers.greaterThanOrEqualTo(3)));
-        }
-
-        private String createAndReadId(String requestBody) throws Exception {
-            String response = mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(requestBody))
-                    .andExpect(status().isCreated())
-                    .andReturn().getResponse().getContentAsString();
-            return idOf(response);
-        }
     }
 
     @Nested

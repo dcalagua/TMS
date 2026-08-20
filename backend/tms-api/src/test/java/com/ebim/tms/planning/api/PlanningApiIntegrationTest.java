@@ -134,24 +134,18 @@ class PlanningApiIntegrationTest {
         membership("pln.admin@example.invalid", COMPANY_B, "COMPANY_ADMIN");
         membership("pln.viewer@example.invalid", COMPANY_A, "VIEWER");
 
-        originA = insertReturningId(
-                "INSERT INTO tms.origin (company_id, code, name) VALUES ('" + COMPANY_A + "', 'ORIGIN-A', 'Origin A')");
-        originA2 = insertReturningId("INSERT INTO tms.origin (company_id, code, name) VALUES ('" + COMPANY_A
-                + "', 'ORIGIN-A2', 'Origin A2')");
+        originA = insertLocation(COMPANY_A, "ORIGIN-A", "Origin A", "ORIGIN");
+        originA2 = insertLocation(COMPANY_A, "ORIGIN-A2", "Origin A2", "ORIGIN");
         // Coordinates on purpose: a shipment's stops must come back map-ready (Job 07,
         // "map-ready lat/lng data") and destinationA2 deliberately has none, so the
         // "degrade gracefully for a store nobody geocoded" case is exercised too.
-        destinationA1 = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country,"
-                + " latitude, longitude) VALUES ('" + COMPANY_A
-                + "', 'DEST-A1', 'Destination A1', 'PE', -12.046374, -77.042793)");
-        destinationA2 = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country) VALUES ('"
-                + COMPANY_A + "', 'DEST-A2', 'Destination A2', 'PE')");
+        destinationA1 = insertLocation(COMPANY_A, "DEST-A1", "Destination A1", "DESTINATION",
+                ", latitude, longitude", ", -12.046374, -77.042793");
+        destinationA2 = insertLocation(COMPANY_A, "DEST-A2", "Destination A2", "DESTINATION");
         carrierA = insertReturningId("INSERT INTO tms.carrier (company_id, code, business_name, tax_id_type,"
                 + " tax_id_value) VALUES ('" + COMPANY_A + "', 'CARR-A', 'Carrier A', 'RUC', '20100000001')");
-        originB = insertReturningId(
-                "INSERT INTO tms.origin (company_id, code, name) VALUES ('" + COMPANY_B + "', 'ORIGIN-B', 'Origin B')");
-        destinationB = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country) VALUES ('"
-                + COMPANY_B + "', 'DEST-B', 'Destination B', 'PE')");
+        originB = insertLocation(COMPANY_B, "ORIGIN-B", "Origin B", "ORIGIN");
+        destinationB = insertLocation(COMPANY_B, "DEST-B", "Destination B", "DESTINATION");
 
         // Master routes, for the shipment/route relationship. routeA serves A2 before A1, which is
         // the reverse of the order assignments naturally produce - so "applying the route
@@ -1442,6 +1436,25 @@ class PlanningApiIntegrationTest {
     private MockHttpServletRequestBuilder asViewer(MockHttpServletRequestBuilder builder, UUID companyId) {
         return builder.header("Authorization", "Bearer " + viewerToken)
                 .header(ApiHeaders.COMPANY_ID, companyId.toString());
+    }
+
+    /**
+     * Seeds one canonical location holding one operational role. Since V23 an origin and a
+     * destination are not records of their own - they are {@code tms.location} rows holding
+     * {@code ORIGIN} or {@code DESTINATION} - and the role is what every assignment lookup
+     * filters on, so a location seeded without one is invisible to the API under test.
+     */
+    private static String insertLocation(UUID companyId, String code, String name, String role) {
+        return insertLocation(companyId, code, name, role, "", "");
+    }
+
+    /** {@link #insertLocation(UUID, String, String, String)} with extra columns, e.g. coordinates. */
+    private static String insertLocation(UUID companyId, String code, String name, String role,
+            String extraColumns, String extraValues) {
+        String id = insertReturningId("INSERT INTO tms.location (company_id, code, name" + extraColumns
+                + ") VALUES ('" + companyId + "', '" + code + "', '" + name + "'" + extraValues + ")");
+        execute("INSERT INTO tms.location_role (location_id, role) VALUES ('" + id + "', '" + role + "')");
+        return id;
     }
 
     private static String insertReturningId(String sql) {

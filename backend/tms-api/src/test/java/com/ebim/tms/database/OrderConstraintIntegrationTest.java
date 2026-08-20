@@ -458,13 +458,20 @@ class OrderConstraintIntegrationTest {
                 "INSERT INTO tms.app_user (email, full_name) VALUES ('" + email + "', 'Test person') RETURNING id");
     }
 
+    /**
+     * A canonical location to be used as an origin. No {@code tms.location_role} row: this suite
+     * proves database constraints, and which roles a location holds is an application rule the
+     * services enforce - {@code RouteApiIntegrationTest} and {@code OrderApiIntegrationTest} are
+     * where that is asserted.
+     */
     private UUID insertOrigin(UUID companyId, String code) throws SQLException {
-        return insertReturningId("INSERT INTO tms.origin (company_id, code, name) VALUES ('" + companyId + "', '"
+        return insertReturningId("INSERT INTO tms.location (company_id, code, name) VALUES ('" + companyId + "', '"
                 + code + "', '" + code + " name') RETURNING id");
     }
 
+    /** A canonical location to be used as a destination; see {@link #insertOrigin}. */
     private UUID insertDestination(UUID companyId, String code) throws SQLException {
-        return insertReturningId("INSERT INTO tms.destination (company_id, code, name, country) VALUES ('"
+        return insertReturningId("INSERT INTO tms.location (company_id, code, name, country) VALUES ('"
                 + companyId + "', '" + code + "', '" + code + " name', 'PE') RETURNING id");
     }
 

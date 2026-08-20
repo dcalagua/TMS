@@ -6,7 +6,7 @@ import java.util.UUID;
 
 /**
  * The optional list filters for {@code GET /masterdata/locations}, bound alongside
- * {@link com.ebim.tms.shared.api.PageQuery}. See {@link OriginFilter}.
+ * {@link com.ebim.tms.shared.api.PageQuery}.
  *
  * <p>One {@code search} box rather than separate {@code code} and {@code name} parameters:
  * locations are the master an operator looks something up in, and they look it up by whichever

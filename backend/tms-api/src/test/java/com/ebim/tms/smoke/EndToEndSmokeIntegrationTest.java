@@ -210,11 +210,11 @@ class EndToEndSmokeIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
-    // --- 3. Origin / Zone / Destination / Frequency / Route ------------------------
+    // --- 3. Zone / Locations / Frequency / Route ----------------------------------
 
     @Test
     @Order(3)
-    @DisplayName("3. Zone, Origin, Destination, Frequency and Route are created through the API")
+    @DisplayName("3. Zone, Locations, Frequency and Route are created through the API")
     void createMasterdata() throws Exception {
         created(mockMvc.perform(asPlannerA(post(MASTERDATA + "/zones"), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -223,22 +223,27 @@ class EndToEndSmokeIntegrationTest {
                                 """)), id -> zoneId = id)
                 .andExpect(jsonPath("$.code").value("SMK-ZONE"));
 
-        created(mockMvc.perform(asPlannerA(post(MASTERDATA + "/origins"), COMPANY_A)
+        // Two physical places, one master. The warehouse only ships; the customer site only
+        // receives - and each says so with an operational role, not with a second record.
+        created(mockMvc.perform(asPlannerA(post(MASTERDATA + "/locations"), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"code":"SMK-ORIG","name":"Smoke Origin","type":"WAREHOUSE",
+                                 "roles":["ORIGIN"],
                                  "address":"Av. Industrial 100","latitude":-12.0464,"longitude":-77.0428,
-                                 "timeZone":"America/Lima"}
+                                 "country":"PE","timeZone":"America/Lima","serviceTimeMinutes":0}
                                 """)), id -> originId = id)
-                .andExpect(jsonPath("$.type").value("WAREHOUSE"));
+                .andExpect(jsonPath("$.type").value("WAREHOUSE"))
+                .andExpect(jsonPath("$.roles").value(java.util.List.of("ORIGIN")));
 
-        created(mockMvc.perform(asPlannerA(post(MASTERDATA + "/destinations"), COMPANY_A)
+        created(mockMvc.perform(asPlannerA(post(MASTERDATA + "/locations"), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"code":"SMK-DEST","name":"Smoke Destination","type":"CUSTOMER",
+                                 "roles":["DESTINATION"],
                                  "address":"Av. Comercio 500","district":"Surco","province":"Lima",
                                  "department":"Lima","country":"PE","latitude":-12.1200,"longitude":-76.9900,
-                                 "zoneId":"%s","serviceTimeMinutes":30}
+                                 "timeZone":"America/Lima","zoneId":"%s","serviceTimeMinutes":30}
                                 """.formatted(zoneId))), id -> destinationId = id)
                 .andExpect(jsonPath("$.zoneId").value(zoneId));
 
@@ -495,9 +500,9 @@ class EndToEndSmokeIntegrationTest {
         mockMvc.perform(asPlannerB(get(TRIPS + "/" + tripId + "/capacity"), COMPANY_B))
                 .andExpect(status().isNotFound());
         mockMvc.perform(asPlannerB(get(PLANNING + "/runs/" + runId), COMPANY_B)).andExpect(status().isNotFound());
-        mockMvc.perform(asPlannerB(get(MASTERDATA + "/origins/" + originId), COMPANY_B))
+        mockMvc.perform(asPlannerB(get(MASTERDATA + "/locations/" + originId), COMPANY_B))
                 .andExpect(status().isNotFound());
-        mockMvc.perform(asPlannerB(get(MASTERDATA + "/destinations/" + destinationId), COMPANY_B))
+        mockMvc.perform(asPlannerB(get(MASTERDATA + "/locations/" + destinationId), COMPANY_B))
                 .andExpect(status().isNotFound());
         mockMvc.perform(asPlannerB(get(MASTERDATA + "/routes/" + routeId), COMPANY_B))
                 .andExpect(status().isNotFound());
@@ -510,7 +515,7 @@ class EndToEndSmokeIntegrationTest {
         mockMvc.perform(asPlannerB(get(ORDERS), COMPANY_B))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(0));
-        mockMvc.perform(asPlannerB(get(MASTERDATA + "/origins"), COMPANY_B))
+        mockMvc.perform(asPlannerB(get(MASTERDATA + "/locations"), COMPANY_B))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(0));
     }
@@ -540,7 +545,7 @@ class EndToEndSmokeIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"version\":0}"))
                 .andExpect(status().isNotFound());
-        mockMvc.perform(asPlannerB(post(MASTERDATA + "/origins/" + originId + "/deactivate"), COMPANY_B))
+        mockMvc.perform(asPlannerB(post(MASTERDATA + "/locations/" + originId + "/deactivate"), COMPANY_B))
                 .andExpect(status().isNotFound());
         mockMvc.perform(asPlannerB(post(FLEET + "/vehicles/" + vehicleId + "/deactivate"), COMPANY_B))
                 .andExpect(status().isNotFound());

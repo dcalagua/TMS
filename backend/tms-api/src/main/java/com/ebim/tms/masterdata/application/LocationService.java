@@ -35,14 +35,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Canonical Location use cases. Takes a {@link CompanyScope}, never a company id - see
- * {@link OriginService} for the contract this follows.
+ * Canonical Location use cases: the one write path for a physical place. Takes a
+ * {@link CompanyScope}, never a company id, so the tenant is whatever
+ * {@code CompanyScopeFilter} resolved from the caller's membership and never something the
+ * request body can name.
  *
- * <p>Every write ends by calling {@link LocationCompatibilityProjector#synchronize}, in the same
- * transaction, so a location and its {@code tms.origin} / {@code tms.destination} projections can
- * never be observed out of step by another request. That call is what lets a location created
- * here be used immediately as a route origin or an order destination while those tables still
- * speak the old vocabulary ({@code docs/architecture/ADR_LOCATION_MODEL.md}).
+ * <p>Until V23 every write here also had to project the location into {@code tms.origin} and
+ * {@code tms.destination} and keep the three tables in step. Those foreign keys now point at
+ * {@code tms.location} directly, so there is nothing left to synchronise: saving the location
+ * <em>is</em> the write. Deactivating one no longer needs to deactivate anything else either -
+ * a place that is out of service is out of service from both ends of a movement, which is the
+ * behaviour an operator expected all along.
+ *
+ * <p>See {@code docs/domain/LOCATIONS.md} for the domain contract this implements.
  */
 @Service
 public class LocationService {
@@ -53,16 +58,13 @@ public class LocationService {
 
     private final LocationRepository locationRepository;
     private final ZoneRepository zoneRepository;
-    private final LocationCompatibilityProjector projector;
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
 
     public LocationService(LocationRepository locationRepository, ZoneRepository zoneRepository,
-            LocationCompatibilityProjector projector, AuditActorProvider auditActorProvider,
-            AuditRecorder auditRecorder) {
+            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder) {
         this.locationRepository = locationRepository;
         this.zoneRepository = zoneRepository;
-        this.projector = projector;
         this.auditActorProvider = auditActorProvider;
         this.auditRecorder = auditRecorder;
     }
@@ -74,10 +76,8 @@ public class LocationService {
         Page<Location> page = locationRepository.findAll(specification, toPageable(pageQuery));
 
         Map<UUID, Zone> zonesById = loadZones(scope, page.getContent());
-        Map<UUID, LocationCompatibilityProjector.Projections> projections =
-                projector.projectionsOf(scope.companyId(), page.getContent());
         List<LocationView> content = page.getContent().stream()
-                .map(location -> toView(location, zonesById.get(location.zoneId()), projections.get(location.id())))
+                .map(location -> LocationView.from(location, zonesById.get(location.zoneId())))
                 .toList();
         return new PageResponse<>(content, pageQuery.pageNumber(), pageQuery.pageSize(), page.getTotalElements());
     }
@@ -85,7 +85,7 @@ public class LocationService {
     @Transactional(readOnly = true)
     public LocationView get(CompanyScope scope, UUID id) {
         Location location = find(scope, id);
-        return toView(location, resolveZone(scope, location.zoneId()), projector.projectionsOf(location));
+        return LocationView.from(location, resolveZone(scope, location.zoneId()));
     }
 
     @Transactional
@@ -111,7 +111,7 @@ public class LocationService {
         Location saved = saveOrConflict(location, code);
         auditRecorder.record(scope, AuditAggregateType.LOCATION, saved.id(), AuditAction.CREATE,
                 Map.of("code", saved.code(), "type", saved.type().name()));
-        return toView(saved, zone, projector.synchronize(saved, actorId));
+        return LocationView.from(saved, zone);
     }
 
     @Transactional
@@ -138,7 +138,7 @@ public class LocationService {
         Location saved = saveOrConflict(location, code);
         auditRecorder.record(scope, AuditAggregateType.LOCATION, saved.id(), AuditAction.UPDATE,
                 Map.of("code", saved.code()));
-        return toView(saved, zone, projector.synchronize(saved, actorId));
+        return LocationView.from(saved, zone);
     }
 
     @Transactional
@@ -152,9 +152,10 @@ public class LocationService {
     }
 
     /**
-     * Deactivating a location deactivates its projections too, which is the point: a store that is
-     * out of service must stop being offered as an order destination, and the Destinations screen
-     * is not where an operator would think to go and repeat the decision.
+     * One flag, both ends: a store that is out of service stops being offered as an order
+     * destination and as the origin of its own returns, because there is one row and one
+     * {@code active} on it. Existing orders and trips that already reference it keep rendering -
+     * see {@code OriginLookupPort.findAllInCompany}.
      */
     private LocationView setActive(CompanyScope scope, UUID id, boolean active) {
         Location location = find(scope, id);
@@ -167,19 +168,12 @@ public class LocationService {
         Location saved = locationRepository.saveAndFlush(location);
         auditRecorder.record(scope, AuditAggregateType.LOCATION, saved.id(),
                 active ? AuditAction.ACTIVATE : AuditAction.DEACTIVATE, Map.of("code", saved.code()));
-        return toView(saved, resolveZone(scope, saved.zoneId()), projector.synchronize(saved, actorId));
+        return LocationView.from(saved, resolveZone(scope, saved.zoneId()));
     }
 
     private Location find(CompanyScope scope, UUID id) {
         return locationRepository.findByIdAndCompanyId(id, scope.companyId())
                 .orElseThrow(() -> new ResourceNotFoundException("Location not found."));
-    }
-
-    private static LocationView toView(Location location, Zone zone,
-            LocationCompatibilityProjector.Projections projections) {
-        return LocationView.from(location, zone,
-                projections == null ? null : projections.originId(),
-                projections == null ? null : projections.destinationId());
     }
 
     /** {@code null} zoneId is allowed (the field is optional); a non-null one must resolve within this company. */

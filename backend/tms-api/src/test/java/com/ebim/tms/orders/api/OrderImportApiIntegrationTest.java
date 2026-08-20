@@ -102,14 +102,28 @@ class OrderImportApiIntegrationTest {
 
                 -- Company A's masters, plus one deactivated origin so "inactive is refused" is
                 -- provable, and Company B's own STORE-B so a cross-tenant code exists to try.
-                INSERT INTO tms.origin (company_id, code, name) VALUES ('%s', 'LIM-01', 'Lima DC');
-                INSERT INTO tms.origin (company_id, code, name, active)
-                     VALUES ('%s', 'LIM-OLD', 'Retired DC', false);
-                INSERT INTO tms.destination (company_id, code, name, country)
-                     VALUES ('%s', 'STORE-1', 'Miraflores store', 'PE');
-                INSERT INTO tms.origin (company_id, code, name) VALUES ('%s', 'LIM-B', 'B origin');
-                INSERT INTO tms.destination (company_id, code, name, country)
-                     VALUES ('%s', 'STORE-B', 'B store', 'PE');
+                -- One canonical location per place, each with the operational role that makes it
+                -- assignable: since V23 the import resolver filters by role, so a location
+                -- seeded without one reads as a code that does not exist.
+                WITH l AS (INSERT INTO tms.location (company_id, code, name)
+                           VALUES ('%s', 'LIM-01', 'Lima DC') RETURNING id)
+                INSERT INTO tms.location_role (location_id, role) SELECT id, 'ORIGIN' FROM l;
+
+                WITH l AS (INSERT INTO tms.location (company_id, code, name, active)
+                           VALUES ('%s', 'LIM-OLD', 'Retired DC', false) RETURNING id)
+                INSERT INTO tms.location_role (location_id, role) SELECT id, 'ORIGIN' FROM l;
+
+                WITH l AS (INSERT INTO tms.location (company_id, code, name, country)
+                           VALUES ('%s', 'STORE-1', 'Miraflores store', 'PE') RETURNING id)
+                INSERT INTO tms.location_role (location_id, role) SELECT id, 'DESTINATION' FROM l;
+
+                WITH l AS (INSERT INTO tms.location (company_id, code, name)
+                           VALUES ('%s', 'LIM-B', 'B origin') RETURNING id)
+                INSERT INTO tms.location_role (location_id, role) SELECT id, 'ORIGIN' FROM l;
+
+                WITH l AS (INSERT INTO tms.location (company_id, code, name, country)
+                           VALUES ('%s', 'STORE-B', 'B store', 'PE') RETURNING id)
+                INSERT INTO tms.location_role (location_id, role) SELECT id, 'DESTINATION' FROM l;
                 """.formatted(ORGANIZATION, COMPANY_A, ORGANIZATION, COMPANY_B, ORGANIZATION, ADMIN_AUTH, VIEWER_AUTH,
                 COMPANY_A, COMPANY_A, COMPANY_A, COMPANY_B, COMPANY_B));
 
