@@ -12,13 +12,16 @@ import {
   deactivateVehicle,
   fetchVehicles,
   VEHICLE_AVAILABILITY_STATUSES,
+  VEHICLE_IMPORT_BASE_PATH,
   type VehicleAvailabilityStatus,
+  type VehicleImportPreview,
   type VehicleView,
 } from '../../shared/api/vehiclesApi'
 import {
   confirmDialog,
   DataTable,
   FilterBar,
+  ImportDrawer,
   PageHeader,
   Pagination,
   ActionMenu,
@@ -68,6 +71,7 @@ export function VehiclesPage() {
   const [draftFilters, setDraftFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
   const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
   const [modal, setModal] = useState<ModalState>(null)
+  const [showImport, setShowImport] = useState(false)
 
   const vehiclesQuery = useQuery({
     queryKey: ['vehicles', companyId, page, filters],
@@ -221,10 +225,20 @@ export function VehiclesPage() {
         description={t('vehicles.description')}
         actions={
           canManage && (
-            <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setModal({ mode: 'create' })}>
-              <i className="bi bi-plus-lg" aria-hidden="true" />
-              {t('vehicles.new')}
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
+                onClick={() => setShowImport(true)}
+              >
+                <i className="bi bi-upload" aria-hidden="true" />
+                {tc('actions.import')}
+              </button>
+              <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setModal({ mode: 'create' })}>
+                <i className="bi bi-plus-lg" aria-hidden="true" />
+                {t('vehicles.new')}
+              </button>
+            </>
           )
         }
       />
@@ -348,6 +362,92 @@ export function VehiclesPage() {
             notifySuccess(modal.mode === 'edit' ? td('updated') : td('created'))
             refresh()
           }}
+        />
+      )}
+
+      {showImport && (
+        <ImportDrawer<VehicleImportPreview>
+          apiBasePath={VEHICLE_IMPORT_BASE_PATH}
+          companyId={companyId}
+          onClose={() => setShowImport(false)}
+          onImported={refresh}
+          strings={{
+            title: t('vehicles.import.title'),
+            subtitle: t('vehicles.import.subtitle'),
+            templateSection: t('vehicles.import.templateSection'),
+            templateHelp: t('vehicles.import.templateHelp'),
+            downloadXlsx: t('vehicles.import.downloadXlsx'),
+            downloadCsv: t('vehicles.import.downloadCsv'),
+            downloadError: t('vehicles.import.downloadError'),
+            fileSection: t('vehicles.import.fileSection'),
+            file: t('vehicles.import.file'),
+            fileHelp: (mb, rows) => t('vehicles.import.fileHelp', { mb, rows }),
+            previewSection: t('vehicles.import.previewSection'),
+            validate: t('vehicles.import.validate'),
+            previewing: t('vehicles.import.previewing'),
+            apply: t('vehicles.import.apply'),
+            applying: t('vehicles.import.applying'),
+            applied: (created, skipped) => `${t('vehicles.import.applied')}: ${t('vehicles.import.appliedText', { created, skipped })}`,
+            confirmTitle: t('vehicles.import.confirmTitle'),
+            confirmText: (count) => t('vehicles.import.confirmText', { count }),
+            blocked: t('vehicles.import.blocked'),
+            readyToApply: t('vehicles.import.readyToApply'),
+            nothingToCreate: t('vehicles.import.nothingToCreate'),
+            reset: t('vehicles.import.reset'),
+            issuesTitle: t('vehicles.import.issuesTitle'),
+            issuesTruncated: (shown, total) => t('vehicles.import.issuesTruncated', { shown, total }),
+            downloadIssuesReport: t('vehicles.import.downloadIssuesReport'),
+            itemsTitle: t('vehicles.import.itemsTitle'),
+            columnRow: t('vehicles.import.columnRow'),
+            columnColumn: t('vehicles.import.columnColumn'),
+            columnIdentifier: t('vehicles.import.columnIdentifier'),
+            columnMessage: t('vehicles.import.columnMessage'),
+            countRows: t('vehicles.import.countRows'),
+            countItems: t('vehicles.import.countItems'),
+            countCreate: t('vehicles.import.countCreate'),
+            countDuplicates: t('vehicles.import.countDuplicates'),
+            countRejected: t('vehicles.import.countRejected'),
+            countIssues: t('vehicles.import.countIssues'),
+            outcomeCreate: t('vehicles.import.outcomeCreate'),
+            outcomeSkipped: t('vehicles.import.outcomeSkipped'),
+            outcomeRejected: t('vehicles.import.outcomeRejected'),
+            cancel: t('vehicles.import.cancel'),
+            close: t('vehicles.import.close'),
+          }}
+          renderItems={(items, outcomeLabel) => (
+            <div className="tms-table-scroll">
+              <table className="table table-sm align-middle">
+                <caption className="visually-hidden">{t('vehicles.import.itemsTitle')}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{tc('columns.status')}</th>
+                    <th scope="col">{tc('columns.code')}</th>
+                    <th scope="col">{t('vehicles.import.columns.plate')}</th>
+                    <th scope="col">{t('vehicles.import.columns.carrier')}</th>
+                    <th scope="col">{t('vehicles.import.columns.type')}</th>
+                    <th scope="col">{t('vehicles.import.columns.status')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, index) => (
+                    <tr key={`${item.code}-${index}`}>
+                      <td>
+                        <StatusBadge
+                          label={outcomeLabel(item.outcome)}
+                          tone={item.outcome === 'CREATE' ? 'success' : item.outcome === 'REJECTED' ? 'danger' : 'neutral'}
+                        />
+                      </td>
+                      <td className="tms-code">{item.code}</td>
+                      <td className="tms-code">{item.licensePlate}</td>
+                      <td className="tms-code">{item.carrierCode ?? '—'}</td>
+                      <td className="tms-code">{item.vehicleTypeCode ?? '—'}</td>
+                      <td>{enumLabels.vehicleAvailability(item.availabilityStatus)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         />
       )}
     </div>

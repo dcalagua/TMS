@@ -87,3 +87,23 @@ export function activateVehicle(companyId: string, id: string): Promise<VehicleV
 export function deactivateVehicle(companyId: string, id: string): Promise<VehicleView> {
   return apiRequest<VehicleView>(`/fleet/vehicles/${id}/deactivate`, { method: 'POST', companyId })
 }
+
+// --- bulk import -----------------------------------------------------------------------
+
+/** The `VehicleImportController`'s `@RequestMapping` - shared by template/preview/apply. */
+export const VEHICLE_IMPORT_BASE_PATH = '/fleet/vehicles/import'
+
+/** Mirrors the backend's `VehicleImportPreview` record. */
+export interface VehicleImportPreview {
+  code: string
+  outcome: 'CREATE' | 'SKIPPED_DUPLICATE' | 'REJECTED'
+  rowNumber: number
+  licensePlate: string
+  carrierCode: string | null
+  vehicleTypeCode: string | null
+  maxWeightOverrideKg: number | null
+  maxVolumeOverrideM3: number | null
+  maxPalletsOverride: number | null
+  availabilityStatus: VehicleAvailabilityStatus
+  externalReference: string | null
+}

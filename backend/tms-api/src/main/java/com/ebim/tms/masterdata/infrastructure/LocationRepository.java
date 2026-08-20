@@ -1,6 +1,8 @@
 package com.ebim.tms.masterdata.infrastructure;
 
 import com.ebim.tms.masterdata.domain.Location;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -40,4 +42,10 @@ public interface LocationRepository extends JpaRepository<Location, UUID>, JpaSp
 
     /** The fallback identity for a payload that carries no external reference. */
     Optional<Location> findByCompanyIdAndCode(UUID companyId, String code);
+
+    /**
+     * Which of a bulk import file's codes this company already holds, resolved once for the whole
+     * file rather than once per row - see {@code LocationImportService}.
+     */
+    List<Location> findByCompanyIdAndCodeIn(UUID companyId, Collection<String> codes);
 }

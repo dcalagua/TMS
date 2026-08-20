@@ -2,17 +2,26 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-quer
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
-import { activateCarrier, deactivateCarrier, fetchCarriers, type CarrierView } from '../../shared/api/carriersApi'
+import {
+  activateCarrier,
+  CARRIER_IMPORT_BASE_PATH,
+  deactivateCarrier,
+  fetchCarriers,
+  type CarrierImportPreview,
+  type CarrierView,
+} from '../../shared/api/carriersApi'
 import { describeApiError } from '../../shared/api/problemMessages'
 import { useCompany } from '../../shared/company/CompanyContext'
 import {
   confirmDialog,
   DataTable,
   FilterBar,
+  ImportDrawer,
   PageHeader,
   Pagination,
   ActionMenu,
   ActiveBadge,
+  StatusBadge,
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
@@ -45,6 +54,7 @@ export function CarriersPage() {
   const [draftFilters, setDraftFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
   const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
   const [modal, setModal] = useState<ModalState>(null)
+  const [showImport, setShowImport] = useState(false)
 
   const carriersQuery = useQuery({
     queryKey: ['carriers', companyId, page, filters],
@@ -154,10 +164,20 @@ export function CarriersPage() {
         description={t('carriers.description')}
         actions={
           canManage && (
-            <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setModal({ mode: 'create' })}>
-              <i className="bi bi-plus-lg" aria-hidden="true" />
-              {t('carriers.new')}
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
+                onClick={() => setShowImport(true)}
+              >
+                <i className="bi bi-upload" aria-hidden="true" />
+                {tc('actions.import')}
+              </button>
+              <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setModal({ mode: 'create' })}>
+                <i className="bi bi-plus-lg" aria-hidden="true" />
+                {t('carriers.new')}
+              </button>
+            </>
           )
         }
       />
@@ -225,6 +245,90 @@ export function CarriersPage() {
             notifySuccess(modal.mode === 'edit' ? td('updated') : td('created'))
             refresh()
           }}
+        />
+      )}
+
+      {showImport && (
+        <ImportDrawer<CarrierImportPreview>
+          apiBasePath={CARRIER_IMPORT_BASE_PATH}
+          companyId={companyId}
+          onClose={() => setShowImport(false)}
+          onImported={refresh}
+          strings={{
+            title: t('carriers.import.title'),
+            subtitle: t('carriers.import.subtitle'),
+            templateSection: t('carriers.import.templateSection'),
+            templateHelp: t('carriers.import.templateHelp'),
+            downloadXlsx: t('carriers.import.downloadXlsx'),
+            downloadCsv: t('carriers.import.downloadCsv'),
+            downloadError: t('carriers.import.downloadError'),
+            fileSection: t('carriers.import.fileSection'),
+            file: t('carriers.import.file'),
+            fileHelp: (mb, rows) => t('carriers.import.fileHelp', { mb, rows }),
+            previewSection: t('carriers.import.previewSection'),
+            validate: t('carriers.import.validate'),
+            previewing: t('carriers.import.previewing'),
+            apply: t('carriers.import.apply'),
+            applying: t('carriers.import.applying'),
+            applied: (created, skipped) => `${t('carriers.import.applied')}: ${t('carriers.import.appliedText', { created, skipped })}`,
+            confirmTitle: t('carriers.import.confirmTitle'),
+            confirmText: (count) => t('carriers.import.confirmText', { count }),
+            blocked: t('carriers.import.blocked'),
+            readyToApply: t('carriers.import.readyToApply'),
+            nothingToCreate: t('carriers.import.nothingToCreate'),
+            reset: t('carriers.import.reset'),
+            issuesTitle: t('carriers.import.issuesTitle'),
+            issuesTruncated: (shown, total) => t('carriers.import.issuesTruncated', { shown, total }),
+            downloadIssuesReport: t('carriers.import.downloadIssuesReport'),
+            itemsTitle: t('carriers.import.itemsTitle'),
+            columnRow: t('carriers.import.columnRow'),
+            columnColumn: t('carriers.import.columnColumn'),
+            columnIdentifier: t('carriers.import.columnIdentifier'),
+            columnMessage: t('carriers.import.columnMessage'),
+            countRows: t('carriers.import.countRows'),
+            countItems: t('carriers.import.countItems'),
+            countCreate: t('carriers.import.countCreate'),
+            countDuplicates: t('carriers.import.countDuplicates'),
+            countRejected: t('carriers.import.countRejected'),
+            countIssues: t('carriers.import.countIssues'),
+            outcomeCreate: t('carriers.import.outcomeCreate'),
+            outcomeSkipped: t('carriers.import.outcomeSkipped'),
+            outcomeRejected: t('carriers.import.outcomeRejected'),
+            cancel: t('carriers.import.cancel'),
+            close: t('carriers.import.close'),
+          }}
+          renderItems={(items, outcomeLabel) => (
+            <div className="tms-table-scroll">
+              <table className="table table-sm align-middle">
+                <caption className="visually-hidden">{t('carriers.import.itemsTitle')}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{tc('columns.status')}</th>
+                    <th scope="col">{tc('columns.code')}</th>
+                    <th scope="col">{t('carriers.import.columns.businessName')}</th>
+                    <th scope="col">{t('carriers.import.columns.taxId')}</th>
+                    <th scope="col">{t('carriers.import.columns.contact')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, index) => (
+                    <tr key={`${item.code}-${index}`}>
+                      <td>
+                        <StatusBadge
+                          label={outcomeLabel(item.outcome)}
+                          tone={item.outcome === 'CREATE' ? 'success' : item.outcome === 'REJECTED' ? 'danger' : 'neutral'}
+                        />
+                      </td>
+                      <td className="tms-code">{item.code}</td>
+                      <td>{item.businessName}</td>
+                      <td>{item.taxIdType ? `${item.taxIdType} ${item.taxIdValue}` : '—'}</td>
+                      <td>{item.contactName ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         />
       )}
     </div>

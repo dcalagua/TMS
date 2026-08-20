@@ -119,3 +119,26 @@ export function activateLocation(companyId: string, id: string): Promise<Locatio
 export function deactivateLocation(companyId: string, id: string): Promise<LocationView> {
   return apiRequest<LocationView>(`/masterdata/locations/${id}/deactivate`, { method: 'POST', companyId })
 }
+
+// --- bulk import -----------------------------------------------------------------------
+
+/** The `LocationImportController`'s `@RequestMapping` - shared by template/preview/apply. */
+export const LOCATION_IMPORT_BASE_PATH = '/masterdata/locations/import'
+
+/** Mirrors the backend's `LocationImportPreview` record. */
+export interface LocationImportPreview {
+  code: string
+  outcome: 'CREATE' | 'SKIPPED_DUPLICATE' | 'REJECTED'
+  rowNumber: number
+  name: string
+  type: LocationType
+  roles: LocationRole[]
+  zoneCode: string | null
+  country: string
+  timeZone: string
+  latitude: number | null
+  longitude: number | null
+  serviceTimeMinutes: number
+  externalSystem: string | null
+  externalReference: string | null
+}

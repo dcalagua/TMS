@@ -1,6 +1,8 @@
 package com.ebim.tms.masterdata.infrastructure;
 
 import com.ebim.tms.masterdata.domain.Zone;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -23,4 +25,7 @@ public interface ZoneRepository extends JpaRepository<Zone, UUID>, JpaSpecificat
     boolean existsByCompanyIdAndCode(UUID companyId, String code);
 
     boolean existsByCompanyIdAndCodeAndIdNot(UUID companyId, String code, UUID id);
+
+    /** Resolves every zone a bulk import file's rows reference, in one query - see {@code LocationImportService}. */
+    List<Zone> findByCompanyIdAndCodeIn(UUID companyId, Collection<String> codes);
 }

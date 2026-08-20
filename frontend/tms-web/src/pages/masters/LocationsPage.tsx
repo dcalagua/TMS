@@ -6,8 +6,10 @@ import {
   activateLocation,
   deactivateLocation,
   fetchLocations,
+  LOCATION_IMPORT_BASE_PATH,
   LOCATION_ROLES,
   LOCATION_TYPES,
+  type LocationImportPreview,
   type LocationRole,
   type LocationType,
   type LocationView,
@@ -24,9 +26,11 @@ import {
   FilterBar,
   FilterChips,
   FilterField,
+  ImportDrawer,
   PageHeader,
   Pagination,
   Select,
+  StatusBadge,
   type DataTableColumn,
   type FilterChip,
 } from '../../shared/ui/components'
@@ -71,6 +75,7 @@ export function LocationsPage() {
   const [draftFilters, setDraftFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
   const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
   const [modal, setModal] = useState<ModalState>(null)
+  const [showImport, setShowImport] = useState(false)
 
   const locationsQuery = useQuery({
     queryKey: ['locations', companyId, page, pageSize, filters],
@@ -260,14 +265,24 @@ export function LocationsPage() {
         description={t('locations.description')}
         actions={
           canManage && (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2"
-              onClick={() => setModal({ mode: 'create' })}
-            >
-              <i className="bi bi-plus-lg" aria-hidden="true" />
-              {t('locations.new')}
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
+                onClick={() => setShowImport(true)}
+              >
+                <i className="bi bi-upload" aria-hidden="true" />
+                {tc('actions.import')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2"
+                onClick={() => setModal({ mode: 'create' })}
+              >
+                <i className="bi bi-plus-lg" aria-hidden="true" />
+                {t('locations.new')}
+              </button>
+            </>
           )
         }
       />
@@ -399,6 +414,92 @@ export function LocationsPage() {
             notifySuccess(modal.mode === 'edit' ? td('updated') : td('created'))
             refresh()
           }}
+        />
+      )}
+
+      {showImport && (
+        <ImportDrawer<LocationImportPreview>
+          apiBasePath={LOCATION_IMPORT_BASE_PATH}
+          companyId={companyId}
+          onClose={() => setShowImport(false)}
+          onImported={refresh}
+          strings={{
+            title: t('locations.import.title'),
+            subtitle: t('locations.import.subtitle'),
+            templateSection: t('locations.import.templateSection'),
+            templateHelp: t('locations.import.templateHelp'),
+            downloadXlsx: t('locations.import.downloadXlsx'),
+            downloadCsv: t('locations.import.downloadCsv'),
+            downloadError: t('locations.import.downloadError'),
+            fileSection: t('locations.import.fileSection'),
+            file: t('locations.import.file'),
+            fileHelp: (mb, rows) => t('locations.import.fileHelp', { mb, rows }),
+            previewSection: t('locations.import.previewSection'),
+            validate: t('locations.import.validate'),
+            previewing: t('locations.import.previewing'),
+            apply: t('locations.import.apply'),
+            applying: t('locations.import.applying'),
+            applied: (created, skipped) => `${t('locations.import.applied')}: ${t('locations.import.appliedText', { created, skipped })}`,
+            confirmTitle: t('locations.import.confirmTitle'),
+            confirmText: (count) => t('locations.import.confirmText', { count }),
+            blocked: t('locations.import.blocked'),
+            readyToApply: t('locations.import.readyToApply'),
+            nothingToCreate: t('locations.import.nothingToCreate'),
+            reset: t('locations.import.reset'),
+            issuesTitle: t('locations.import.issuesTitle'),
+            issuesTruncated: (shown, total) => t('locations.import.issuesTruncated', { shown, total }),
+            downloadIssuesReport: t('locations.import.downloadIssuesReport'),
+            itemsTitle: t('locations.import.itemsTitle'),
+            columnRow: t('locations.import.columnRow'),
+            columnColumn: t('locations.import.columnColumn'),
+            columnIdentifier: t('locations.import.columnIdentifier'),
+            columnMessage: t('locations.import.columnMessage'),
+            countRows: t('locations.import.countRows'),
+            countItems: t('locations.import.countItems'),
+            countCreate: t('locations.import.countCreate'),
+            countDuplicates: t('locations.import.countDuplicates'),
+            countRejected: t('locations.import.countRejected'),
+            countIssues: t('locations.import.countIssues'),
+            outcomeCreate: t('locations.import.outcomeCreate'),
+            outcomeSkipped: t('locations.import.outcomeSkipped'),
+            outcomeRejected: t('locations.import.outcomeRejected'),
+            cancel: t('locations.import.cancel'),
+            close: t('locations.import.close'),
+          }}
+          renderItems={(items, outcomeLabel) => (
+            <div className="tms-table-scroll">
+              <table className="table table-sm align-middle">
+                <caption className="visually-hidden">{t('locations.import.itemsTitle')}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{tc('columns.status')}</th>
+                    <th scope="col">{tc('columns.code')}</th>
+                    <th scope="col">{tc('columns.name')}</th>
+                    <th scope="col">{t('locations.import.columns.type')}</th>
+                    <th scope="col">{t('locations.import.columns.roles')}</th>
+                    <th scope="col">{t('locations.import.columns.zone')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, index) => (
+                    <tr key={`${item.code}-${index}`}>
+                      <td>
+                        <StatusBadge
+                          label={outcomeLabel(item.outcome)}
+                          tone={item.outcome === 'CREATE' ? 'success' : item.outcome === 'REJECTED' ? 'danger' : 'neutral'}
+                        />
+                      </td>
+                      <td className="tms-code">{item.code}</td>
+                      <td>{item.name}</td>
+                      <td>{enumLabels.locationType(item.type)}</td>
+                      <td>{item.roles.map((role) => enumLabels.locationRole(role)).join(', ')}</td>
+                      <td className="tms-code">{item.zoneCode ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         />
       )}
     </div>
