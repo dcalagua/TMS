@@ -1,13 +1,20 @@
 # Overnight V3 - Final Report and Morning Handoff
 
-Verification run: Job 14. Date: 2026-08-20.
+Verification run: Job 14. Date: 2026-08-20. Revised on the Job 14 retry (§4 re-executed
+from scratch; §5, §6 and §7 corrected - see §12 for what changed and why).
 
 **Gate result: `JOB_STATUS=BLOCKED`.**
 
-Nothing is broken. Every test that *could* execute on this machine passed. The gate is
-blocked because a specific, load-bearing half of the verification never ran: no Docker
-daemon is reachable, so all 329 database-backed assertions were skipped, and migrations
-V14-V22 have therefore never been applied to any PostgreSQL instance. See P1-1.
+Nothing is broken. Every test that *could* execute on this machine passed, and the full
+suite was re-run independently on the retry with identical results. The gate is blocked
+because a specific, load-bearing half of the verification never ran: no Docker daemon is
+reachable, so all 329 database-backed assertions were skipped, and migrations V14-V22 have
+therefore never been applied to any PostgreSQL instance. See P1-1.
+
+A second finding was added on the retry: the untracked local `backend/tms-api/.env` points
+`TMS_DB_URL` at a **remote** Supabase pooler, so the first ordinary backend start with that
+file exported would auto-apply those nine unproven migrations to a live project. Nothing
+tonight did so - but it is one command away. See P1-2.
 
 ---
 
@@ -16,8 +23,8 @@ V14-V22 have therefore never been applied to any PostgreSQL instance. See P1-1.
 | Item | Value |
 | --- | --- |
 | Branch | `dev` |
-| HEAD | `635ba4efa88c90aa54eb44776d07f686c5ffd8de` |
-| HEAD subject | `feat(audit): business audit trail, integration/import observability, docs (Job 13)` |
+| HEAD at time of verification | `6b0687ce486afebb84d50844f100c573d15481ba` - `docs(overnight-v3): final verification report and morning handoff (Job 14)` |
+| HEAD after this revision | the commit that carries this revised report (Job 14 retry). Every test result below was produced against a tree whose only difference from `6b0687c` is this document |
 | Working tree | Clean except untracked `tms-overnight-v3/` (the overnight pack - deliberately never staged) |
 | Pushed | No. Nothing was pushed. `origin` is untouched. |
 
@@ -25,7 +32,8 @@ V14-V22 have therefore never been applied to any PostgreSQL instance. See P1-1.
 
 ## 2. Commits made tonight
 
-Baseline for the run is `0fa0654` (the last pre-V3 commit). Fourteen commits were added:
+Baseline for the run is `0fa0654` (the last pre-V3 commit). Fifteen commits were added
+(fourteen job commits plus this report; a sixteenth carries the retry revision):
 
 | # | SHA | Subject | Files | +/- |
 | --- | --- | --- | --- | --- |
@@ -43,6 +51,7 @@ Baseline for the run is `0fa0654` (the last pre-V3 commit). Fourteen commits wer
 | 11 | `5647c0f` | feat(ui): eliminate remaining native selects, fix i18n gaps | 28 | +453 / -334 |
 | 12 | `28e9485` | security(tenancy): audit overnight V3 surfaces and repair the RLS drift guard | 4 | +627 / -7 |
 | 13 | `635ba4e` | feat(audit): business audit trail, integration/import observability, docs | 31 | +998 / -51 |
+| 14 | `6b0687c` | docs(overnight-v3): final verification report and morning handoff (Job 14) | 1 | +397 / -0 |
 
 No secrets, no `.env` file and no part of `tms-overnight-v3/` entered any commit
 (scanned the full range for service-role keys, `AIza…` Google keys, JWTs and literal
@@ -97,13 +106,15 @@ Versions are unique and contiguous 1..22. Flyway remains the sole migration owne
 ## 4. Tests actually executed
 
 Everything below was run on this machine during Job 14 and the counts are copied from the
-real output. Nothing here is inferred.
+real output. Nothing here is inferred. **Every row was then re-executed from scratch on the
+Job 14 retry and produced identical counts**, so these numbers are reproducible rather than
+a single lucky run.
 
 | Suite | Command | Result |
 | --- | --- | --- |
 | Backend (Maven Surefire) | `./mvnw -B test` | **671 tests: 0 failures, 0 errors, 329 skipped → 342 executed.** BUILD SUCCESS |
 | Frontend unit/component | `npm test` (vitest) | **57 files, 491 tests, 491 passed**, 22.6 s |
-| Frontend typecheck | `npm run typecheck` (`tsc -b`) | Pass, no diagnostics |
+| Frontend typecheck | `npm run typecheck` (`tsc -b`) | Pass, no diagnostics. The retry additionally ran `tsc -b --force` to prove the clean result was a real full check and not an incremental-cache no-op |
 | Frontend lint | `npm run lint` (oxlint) | **0 errors**, 6 warnings (all `react(only-export-components)` fast-refresh hints) |
 | Frontend build | `npm run build` | Pass, 286 modules, 1122 kB JS / 373 kB CSS. One warning: main chunk > 500 kB |
 | E2E | `npx playwright test` | **68 tests, 68 passed**, 3.4 min, chromium |
@@ -171,8 +182,20 @@ Evidence gathered:
   connection string anywhere in `tms-overnight-v3/` or `scripts/`.
 - Backend datasource is env-driven (`TMS_DB_URL`); `application-local.yml` defaults to
   `jdbc:postgresql://localhost:54322/postgres`, `application-prod.yml` has no default at all.
-  No hard-coded host exists in the repository.
-- The backend application was never started against any database during the run.
+  No hard-coded host exists in the tracked repository.
+- The backend application was never started against any database during the run: no
+  `spring-boot:run`, `bootRun` or `java -jar` appears in any of the 21 job logs under
+  `tms-overnight-v3/runtime/logs/`, and none of them contains a Flyway `Migrating schema`
+  or `Successfully applied` line.
+- **Correction (retry).** An earlier draft of this section implied no remote connection
+  string existed anywhere. That scan covered `tms-overnight-v3/` and `scripts/` only. The
+  untracked, git-ignored `backend/tms-api/.env` *does* point `TMS_DB_URL` at a remote
+  Supabase pooler host. It changes nothing about tonight - that file is inert unless a human
+  exports it (the backend has no dotenv dependency, no `spring.config.import` of `.env`, and
+  `scripts/dev-backend.sh` does not source it) - but it is a live hazard for tomorrow.
+  See P1-2.
+- Docker was unavailable for the whole run, so not even a throwaway Testcontainers database
+  was created. **Zero JDBC connections were opened by anything tonight.**
 - A native PostgreSQL 18 service is listening on `localhost:5432`. It is a pre-existing local
   install unrelated to this work; nothing tonight connected to it.
 
@@ -194,7 +217,7 @@ covered, and whether that coverage actually executed tonight.
 | Frequency / location eligibility | `LocationEligibilityEvaluator`, `FrequencyCalendar`, `LocationFrequencyPanel` | `LocationEligibilityEvaluatorTest`, `FrequencyCalendarTest`, `LocationFrequencyPanel.test.tsx`, `FrequenciesPage.test.tsx` | `MasterDataLocationFrequencyConstraintIntegrationTest` (9), `LocationFrequencyApiIntegrationTest` (4) |
 | Route stops | `RouteController`, `RouteFormDrawer` | `RoutesPage.test.tsx`, `RouteFormDrawer.test.tsx` | `MasterDataRouteConstraintIntegrationTest` (14), `RouteApiIntegrationTest` (13) |
 | Carrier / VehicleType / Vehicle | `Carrier/VehicleType/VehicleController`, `EffectiveCapacityResolver` | `EffectiveCapacityResolverTest`, 6 fleet page/drawer test files | `FleetConstraintIntegrationTest` (18), `FleetApiIntegrationTest` (3) |
-| **Vehicle double-booking prevention** | `ShipmentTimeRules`, `TripService`, `TripRepository`, exclusion constraint in V16 + V19 | `ShipmentTimeRulesTest` (6, pure domain) | **`PlanningConstraintIntegrationTest` (29), `PlanningApiIntegrationTest` (46) - the DB-level invariant itself is unproven** |
+| **Vehicle double-booking prevention** | `ShipmentTimeRules`, `TripService`, `TripRepository`, and the partial unique index `uq_trip_vehicle_active_planning_date` on `tms.trip (company_id, vehicle_id, planning_date)` `WHERE status <> 'CANCELLED' AND vehicle_id IS NOT NULL` (V16 - a partial unique index, *not* an exclusion constraint as an earlier draft stated) | `ShipmentTimeRulesTest` (6, pure domain) | **`PlanningConstraintIntegrationTest` (29), `PlanningApiIntegrationTest` (46) - the DB-level invariant itself is unproven** |
 | Manual Order | `OrderController`, `OrderFormDrawer` | `OrderTotalsTest` (13), `OrdersPage.test.tsx`, `OrderFormDrawer.test.tsx` | `OrderApiIntegrationTest` (23), `OrderConstraintIntegrationTest` (23) |
 | Order import dry-run / apply | `OrderImportController`, `OrderImportService/Validator/Parser` | `OrderImportParserTest` (14), `OrderImportValidatorTest` (30), `OrderImportTemplateTest` (8), `OrderImportDrawer.test.tsx` | `OrderImportApiIntegrationTest` (17) |
 | **Inbound Location/Order API idempotency** | `IntegrationLocationController`, `IntegrationOrderController`, `IntegrationInboxService`, `PayloadHash`, `IntegrationRequest` | `IntegrationApiTenancyTest`, `IntegrationClientTest`, `IntegrationSecretsTest`, `IntegrationAuthenticationServiceTest` | **`IntegrationTenancyIsolationIntegrationTest` (16) - inbox uniqueness/replay at DB level unproven** |
@@ -265,6 +288,38 @@ the project rules, so no workaround was attempted.
 `Skipped: 0`. This is a machine-level repair and was deliberately not attempted by unattended
 automation.
 
+### P1-2 - A routine backend start could auto-apply the nine unproven migrations to a remote Supabase project
+
+**What.** `backend/tms-api/.env` (untracked and correctly git-ignored - it was never
+committed) sets `TMS_DB_URL` to a remote Supabase **pooler** host, not to localhost. Spring
+is configured with `spring.flyway.enabled: true`, `baseline-on-migrate: false` and
+`validate-on-migrate: true`. So if that file's contents are exported into the environment and
+the backend is started, Flyway migrates on startup - and V14-V22, the 1439 lines of SQL that
+P1-1 says have never been executed anywhere, would first execute against a live remote
+project.
+
+**Why it did not happen tonight.** Nothing loads that file automatically:
+
+- no `spring-dotenv`/`dotenv` dependency in `pom.xml`;
+- no `spring.config.import` of `.env` in any `application*.yml`;
+- `scripts/dev-backend.sh` runs `./mvnw spring-boot:run` without sourcing it;
+- and no backend process was started at all during the run (see §5).
+
+Absent an explicit export, `application-local.yml` falls back to
+`jdbc:postgresql://localhost:54322/postgres`. The remote host is reachable only through a
+deliberate human action.
+
+**Why it is P1 anyway.** The consequence is unbounded (unvalidated DDL, including a
+`NOT NULL` backfill in V16 and a data-moving projection in V14, applied to a real project)
+and the trigger is an ordinary developer gesture - exporting your own `.env` and starting
+your own app. P1-1 and P1-2 compound: the migrations are unproven *and* the shortest path to
+running them is the one aimed at production.
+
+**Fix.** Close P1-1 first (prove the SQL against a throwaway container). Until then, either
+point `TMS_DB_URL` at a local database, or start the backend with `TMS_FLYWAY_ENABLED=false`.
+Longer term, consider requiring an explicit opt-in variable before Flyway may migrate a
+non-localhost host.
+
 ### P2-1 - Frontend ships as a single 1.12 MB chunk
 
 `npm run build` emits one 1,122 kB JS bundle (302 kB gzipped) and warns about it. Acceptable
@@ -328,7 +383,14 @@ Full Maps guidance: `docs/integrations/GOOGLE_MAPS.md`.
 
 ## 9. Manual steps for tomorrow
 
-1. **Restore Docker, then close P1-1.** This is the only thing standing between this branch
+0. **Before you start the backend for any reason, read P1-2.** Your local
+   `backend/tms-api/.env` points `TMS_DB_URL` at a remote Supabase pooler, and Flyway
+   migrates on startup. Starting the app with that environment exported, before step 1 has
+   proven the SQL, would apply nine never-executed migrations to a live project. Either
+   repoint `TMS_DB_URL` at a local database or set `TMS_FLYWAY_ENABLED=false` until step 1
+   passes. This is the single most consequential thing in this document.
+
+1. **Restore Docker, then close P1-1.** This is the main thing standing between this branch
    and a green gate.
    - Open Docker Desktop and let it re-provision its WSL distro, or
      *Settings → Troubleshoot → Reset to factory defaults*, or reinstall.
@@ -342,7 +404,9 @@ Full Maps guidance: `docs/integrations/GOOGLE_MAPS.md`.
    - Run `smoke.EndToEndSmokeIntegrationTest` first (P3-1).
 2. **Review the branch before merging.** 14 commits, ~38 k inserted lines. In particular read
    `docs/security/OVERNIGHT_V3_TENANCY_REVIEW.md` (Job 12's audit) and the nine new migrations.
-3. **Do not apply V14-V22 to any shared environment until step 1 passes.** They are unproven SQL.
+3. **Do not apply V14-V22 to any shared environment until step 1 passes.** They are unproven
+   SQL. Note this is not only about a deliberate `migrate` command - see step 0 for the
+   accidental path.
 4. **Provision the Google Maps key** and apply the HTTP-referrer + API restrictions described
    in §8 before anyone uses the location picker outside localhost.
 5. **Decide on the push.** Nothing was pushed. `dev` is 14 commits ahead locally.
@@ -357,6 +421,9 @@ Ordered by dependency, not by appeal.
 **Immediately after the gate closes**
 - Restore Docker in CI as a hard requirement so `Skipped: 0` is enforced, not hoped for
   (P1-1 existed because a skip reads as a pass at a glance).
+- Guard the accidental-migrate path from P1-2: require an explicit opt-in variable before
+  Flyway may migrate a host that is not localhost, so a stray `.env` cannot reach a real
+  project by itself.
 - Locale-parity assertion (P3-2); route-level code splitting (P2-1).
 
 **Next functional increment**
@@ -388,10 +455,39 @@ Supabase Realtime, Storage, live map tracking.
 ## 11. Verdict
 
 - P0: **0**
-- P1: **1** (P1-1 - database verification layer unexecuted; V14-V22 never applied)
+- P1: **2** (P1-1 - database verification layer unexecuted, V14-V22 never applied;
+  P1-2 - a routine backend start could apply them to a remote project)
 - P2: 2
 - P3: 2
 
 The gate requires P0 = 0 **and** P1 = 0.
 
 `JOB_STATUS=BLOCKED`
+
+---
+
+## 12. What the Job 14 retry changed
+
+The first Job 14 attempt produced this report and committed it as `6b0687c`. The retry did
+not take that report on trust: it re-derived every claim. Four things changed.
+
+1. **All six test suites were re-executed from scratch** and reproduced the original counts
+   exactly (671/0/329 backend, 491 frontend unit, 68 E2E, clean typecheck, 0 lint errors,
+   successful build). `tsc -b --force` was added to rule out an incremental-cache no-op.
+   V1-V13 checksums were recomputed and match the recorded values byte for byte; each still
+   has exactly one commit in its history, all pre-dating the run.
+
+2. **P1-2 was found and added.** The remote-pooler `TMS_DB_URL` in the untracked local
+   `.env` was not visible to the original scan, which was scoped to the overnight pack and
+   `scripts/`.
+
+3. **§5's "no remote connection string anywhere" claim was corrected** to state its real
+   scope, and the evidence for "nothing connected to a database tonight" was strengthened
+   from *no hard-coded host* to *no process opened a JDBC connection at all*.
+
+4. **The double-booking mechanism was described wrongly** as an exclusion constraint in
+   V16 + V19. It is a partial unique index in V16. The invariant exists and is enforced by
+   the database; only the description was wrong. It remains unproven at runtime under P1-1.
+
+The gate outcome is unchanged, and unchanged for the original reason: the database half of
+the verification cannot run on this machine.
