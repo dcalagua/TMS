@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DESTINATION_TYPES } from '../api/destinationsApi'
+import { LOCATION_ROLES, LOCATION_TYPES } from '../api/locationsApi'
 import { ORDER_PRIORITIES, ORDER_STATUSES } from '../api/ordersApi'
 import { ORIGIN_TYPES } from '../api/originsApi'
 import { PLANNING_RUN_STATUSES, TRIP_STATUSES } from '../api/planningApi'
@@ -11,6 +12,8 @@ import i18n from './index'
 const GROUPS: [string, readonly string[]][] = [
   ['originType', ORIGIN_TYPES],
   ['destinationType', DESTINATION_TYPES],
+  ['locationType', LOCATION_TYPES],
+  ['locationRole', LOCATION_ROLES],
   ['vehicleBodyType', VEHICLE_BODY_TYPES],
   ['vehicleAvailability', VEHICLE_AVAILABILITY_STATUSES],
   ['orderStatus', ORDER_STATUSES],

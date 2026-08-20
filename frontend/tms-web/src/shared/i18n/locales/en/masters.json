@@ -36,6 +36,38 @@
     "new": "New frequency",
     "title": "Frequencies"
   },
+  "locations": {
+    "columns": {
+      "roles": "Roles",
+      "usableAs": "Usable as"
+    },
+    "description": "The physical places of the operation: stores, warehouses, plants, hubs and delivery points.",
+    "empty": {
+      "message": "Create a location or adjust the filters.",
+      "title": "No locations"
+    },
+    "filters": {
+      "allRoles": "All roles",
+      "searchLabel": "Search",
+      "searchPlaceholder": "Code, name or external reference"
+    },
+    "form": {
+      "create": "New location",
+      "edit": "Edit location",
+      "identityHelp": "The external system and reference identify this location to an integration. Provide both or neither.",
+      "noZone": "No zone",
+      "rolesHelp": "ORIGIN and SHIP TO make the location usable in orders, routes and planning. The other roles only classify it.",
+      "sectionRoles": "Roles",
+      "subtitle": "A physical place and the roles it plays in the operation."
+    },
+    "new": "New location",
+    "title": "Locations",
+    "usableAs": {
+      "none": "Classification only",
+      "origin": "Origin",
+      "shipTo": "Destination"
+    }
+  },
   "origins": {
     "description": "Loading and dispatch points used to plan and build trips.",
     "empty": {

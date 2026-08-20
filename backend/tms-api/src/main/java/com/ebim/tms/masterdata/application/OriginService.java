@@ -29,6 +29,14 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code CompanyContextService}) - a caller with no active membership in a company cannot
  * reach these methods with that company's id at all, because nothing can construct the scope
  * for them.
+ *
+ * <p>Since migration V14 an origin is a <em>compatibility projection</em> of a canonical
+ * {@code tms.location}. This endpoint is unchanged for callers, and every write additionally
+ * pushes the change up to the linked location through {@link LocationCompatibilityProjector},
+ * in the same transaction. Without that the two models would drift the moment anyone used the
+ * older API. See {@code docs/architecture/ADR_LOCATION_MODEL.md} section 5, which is also where
+ * the one deliberate behaviour change lives: renaming an origin to a code another location
+ * already holds is now a 409.
  */
 @Service
 public class OriginService {
@@ -38,10 +46,13 @@ public class OriginService {
             Set.of("code", "name", "type", "active", "createdAt", "updatedAt");
 
     private final OriginRepository originRepository;
+    private final LocationCompatibilityProjector projector;
     private final AuditActorProvider auditActorProvider;
 
-    public OriginService(OriginRepository originRepository, AuditActorProvider auditActorProvider) {
+    public OriginService(OriginRepository originRepository, LocationCompatibilityProjector projector,
+            AuditActorProvider auditActorProvider) {
         this.originRepository = originRepository;
+        this.projector = projector;
         this.auditActorProvider = auditActorProvider;
     }
 
@@ -72,7 +83,7 @@ public class OriginService {
         Origin origin = new Origin(scope.companyId(), code, request.name().trim(), request.type(),
                 blankToNull(request.address()), request.latitude(), request.longitude(),
                 request.timeZone().trim(), blankToNull(request.externalReference()), actorId);
-        return OriginView.from(saveOrConflict(origin, code));
+        return OriginView.from(syncUp(saveOrConflict(origin, code), actorId));
     }
 
     @Transactional
@@ -89,26 +100,37 @@ public class OriginService {
         origin.applyChanges(code, request.name().trim(), request.type(), blankToNull(request.address()),
                 request.latitude(), request.longitude(), request.timeZone().trim(),
                 blankToNull(request.externalReference()), actorId);
-        return OriginView.from(saveOrConflict(origin, code));
+        return OriginView.from(syncUp(saveOrConflict(origin, code), actorId));
     }
 
     @Transactional
     public OriginView activate(CompanyScope scope, UUID id) {
         Origin origin = find(scope, id);
-        origin.activate(auditActorProvider.requireAppUserId());
-        return OriginView.from(originRepository.save(origin));
+        UUID actorId = auditActorProvider.requireAppUserId();
+        origin.activate(actorId);
+        return OriginView.from(syncUp(originRepository.saveAndFlush(origin), actorId));
     }
 
     @Transactional
     public OriginView deactivate(CompanyScope scope, UUID id) {
         Origin origin = find(scope, id);
-        origin.deactivate(auditActorProvider.requireAppUserId());
-        return OriginView.from(originRepository.save(origin));
+        UUID actorId = auditActorProvider.requireAppUserId();
+        origin.deactivate(actorId);
+        return OriginView.from(syncUp(originRepository.saveAndFlush(origin), actorId));
     }
 
     private Origin find(CompanyScope scope, UUID id) {
         return originRepository.findByIdAndCompanyId(id, scope.companyId())
                 .orElseThrow(() -> new ResourceNotFoundException("Origin not found."));
+    }
+
+    /**
+     * Pushes a just-saved origin up to its canonical location, creating one if this origin has
+     * none yet. Returns the same instance so call sites read as one expression.
+     */
+    private Origin syncUp(Origin origin, UUID actorId) {
+        projector.syncFromOrigin(origin, actorId);
+        return origin;
     }
 
     /** Saves and translates a race with a concurrent duplicate write into the same conflict a pre-check would give. */

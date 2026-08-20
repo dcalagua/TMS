@@ -1,5 +1,7 @@
 {
+  "atLeastOneRole": "Selecciona al menos un rol",
   "codePattern": "Solo letras, dígitos, guion bajo o guion",
+  "externalIdentityPair": "Indica el sistema y la referencia externa, o deja ambos en blanco",
   "highlightedFields": "Corrige los campos marcados.",
   "invalidEmail": "Ingresa un correo electrónico válido",
   "invalidNumber": "Ingresa un número válido",

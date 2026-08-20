@@ -97,6 +97,7 @@
     "email": "Correo electrónico",
     "externalReference": "Referencia externa",
     "externalSource": "Sistema de origen",
+    "externalSystem": "Sistema externo",
     "frequency": "Frecuencia",
     "heightM": "Alto (m)",
     "latitude": "Latitud",
@@ -176,6 +177,7 @@
   "placeholders": {
     "addressReference": "p. ej. portón azul",
     "externalReference": "Código opcional de EWM u otro sistema",
+    "externalSystem": "p. ej. EWM, ERP",
     "latitude": "-12.046374",
     "longitude": "-77.042793",
     "taxIdType": "RUC, DNI, ...",

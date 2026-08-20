@@ -36,6 +36,38 @@
     "new": "Nueva frecuencia",
     "title": "Frecuencias"
   },
+  "locations": {
+    "columns": {
+      "roles": "Roles",
+      "usableAs": "Utilizable como"
+    },
+    "description": "Lugares físicos de la operación: tiendas, almacenes, plantas, hubs y puntos de entrega.",
+    "empty": {
+      "message": "Crea una ubicación o ajusta los filtros.",
+      "title": "Sin ubicaciones"
+    },
+    "filters": {
+      "allRoles": "Todos los roles",
+      "searchLabel": "Buscar",
+      "searchPlaceholder": "Código, nombre o referencia externa"
+    },
+    "form": {
+      "create": "Nueva ubicación",
+      "edit": "Editar ubicación",
+      "identityHelp": "El sistema y la referencia externa identifican esta ubicación ante una integración. Van juntos o ninguno.",
+      "noZone": "Sin zona",
+      "rolesHelp": "Origen y Destino habilitan el uso en pedidos, rutas y planificación. Los demás roles solo clasifican.",
+      "sectionRoles": "Roles",
+      "subtitle": "Un lugar físico y los roles que cumple en la operación."
+    },
+    "new": "Nueva ubicación",
+    "title": "Ubicaciones",
+    "usableAs": {
+      "none": "Solo clasificación",
+      "origin": "Origen",
+      "shipTo": "Destino"
+    }
+  },
   "origins": {
     "description": "Puntos de carga y despacho usados para planificar y armar viajes.",
     "empty": {

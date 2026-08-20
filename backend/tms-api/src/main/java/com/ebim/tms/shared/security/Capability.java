@@ -23,12 +23,14 @@ import java.util.Set;
 public enum Capability {
 
     MASTER_DATA_VIEW(
+            Permission.MASTERDATA_LOCATION_READ,
             Permission.MASTERDATA_ORIGIN_READ,
             Permission.MASTERDATA_ZONE_READ,
             Permission.MASTERDATA_DESTINATION_READ,
             Permission.MASTERDATA_FREQUENCY_READ,
             Permission.MASTERDATA_ROUTE_READ),
     MASTER_DATA_MANAGE(
+            Permission.MASTERDATA_LOCATION_MANAGE,
             Permission.MASTERDATA_ORIGIN_MANAGE,
             Permission.MASTERDATA_ZONE_MANAGE,
             Permission.MASTERDATA_DESTINATION_MANAGE,

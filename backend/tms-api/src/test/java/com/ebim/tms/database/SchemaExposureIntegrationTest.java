@@ -35,6 +35,7 @@ class SchemaExposureIntegrationTest {
     private static final List<String> APPLICATION_TABLES = List.of(
             "app_user", "organization", "company", "role", "permission",
             "role_permission", "membership", "membership_role", "origin", "zone",
+            "location", "location_role",
             "destination", "frequency", "frequency_weekly_rule", "frequency_exception",
             "route", "route_stop", "carrier", "vehicle_type", "vehicle",
             "transport_order", "transport_order_line",
@@ -47,7 +48,8 @@ class SchemaExposureIntegrationTest {
      * {@code p_backend_managed} policy instead.
      */
     private static final List<String> TENANT_SCOPED_TABLES = List.of(
-            "origin", "zone", "destination", "frequency", "frequency_weekly_rule",
+            "origin", "zone", "location", "location_role",
+            "destination", "frequency", "frequency_weekly_rule",
             "frequency_exception", "route", "route_stop", "carrier", "vehicle_type", "vehicle",
             "transport_order", "transport_order_line",
             "planning_run", "trip", "trip_stop", "trip_order_assignment");

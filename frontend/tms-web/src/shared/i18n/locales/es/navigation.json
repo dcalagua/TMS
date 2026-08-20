@@ -18,6 +18,7 @@
     "carriers": "Transportistas",
     "destinations": "Destinos",
     "frequencies": "Frecuencias",
+    "locations": "Ubicaciones",
     "orders": "Pedidos",
     "origins": "Orígenes",
     "planning": "Planificación",

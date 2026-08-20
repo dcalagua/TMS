@@ -31,6 +31,11 @@ export const NAV_GROUPS: NavGroup[] = [
     accent: 1,
     capability: 'MASTER_DATA_VIEW',
     items: [
+      // First, and above Origins/Destinations on purpose: since migration V14 a location is
+      // the canonical record and those two are its compatibility projections, so this is where
+      // a place should be created. They stay in the menu because routes, orders and planning
+      // still speak their vocabulary (docs/architecture/ADR_LOCATION_MODEL.md).
+      { to: '/masters/locations', labelKey: 'items.locations', icon: 'bi-geo-alt-fill' },
       { to: '/masters/origins', labelKey: 'items.origins', icon: 'bi-geo-alt' },
       { to: '/masters/destinations', labelKey: 'items.destinations', icon: 'bi-pin-map' },
       { to: '/masters/zones', labelKey: 'items.zones', icon: 'bi-bounding-box' },

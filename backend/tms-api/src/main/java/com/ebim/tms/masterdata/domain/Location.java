@@ -1,37 +1,48 @@
 package com.ebim.tms.masterdata.domain;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.EnumSet;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.annotations.UuidGenerator;
 
 /**
- * A delivery/service point: customer, store, branch, hub, distribution center or delivery
- * point (migration V7). Follows the same shape as {@link Origin}: coordinates are plain
- * columns for ordinary JPA CRUD, the database derives its own generated {@code geography}
- * column from them.
+ * The canonical physical place (migration V14): an origin, a store, a customer delivery point,
+ * a distribution centre, a plant or a hub. What it <em>is</em> is {@link LocationType}; what it
+ * may <em>do</em> is the set of {@link LocationRole}s it holds.
  *
- * <p>{@code zoneId} is a plain UUID, not a JPA association: {@code DestinationService} resolves
- * the referenced {@link Zone} explicitly (batched for lists) to build {@code
- * com.ebim.tms.masterdata.application.DestinationView}. A mapped {@code @ManyToOne} would go
- * stale within the same persistence context the moment {@code applyChanges} assigns a new
- * {@code zoneId} without a flush/refresh, which is worse than one extra explicit query. The
- * database's composite FK ({@code fk_destination_zone_company}) is what actually guarantees the
- * referenced zone belongs to this destination's company; the Java-side lookup in {@code
- * DestinationService} is the primary check, that constraint is defense in depth.
+ * <p>{@code tms.origin} and {@code tms.destination} are compatibility projections of this
+ * entity, maintained by {@code LocationCompatibilityProjector}. See
+ * {@code docs/architecture/ADR_LOCATION_MODEL.md}.
+ *
+ * <p>The authoritative link to a projection is {@code origin.location_id} /
+ * {@code destination.location_id}, not an id convention - which is what lets the eventual
+ * unification repoint {@code route.origin_id} and friends with a plain
+ * {@code UPDATE ... FROM origin o WHERE ... = o.id} regardless of how a row came to exist. The
+ * V14 backfill additionally gives every pre-V14 row {@code location.id = origin.id} (or the
+ * destination's, with no origin), so for that data the repoint is a no-op.
+ *
+ * <p>{@code roles} is owned here: every mutation goes through {@link #replaceRoles}, which diffs
+ * the incoming set against what is persisted and lets {@code orphanRemoval} delete the rest -
+ * the same pattern {@link Frequency#replaceWeeklyRules} uses.
  */
 @Entity
-@Table(name = "destination")
-public class Destination {
+@Table(name = "location")
+public class Location {
 
     @Id
     @GeneratedValue
@@ -49,8 +60,8 @@ public class Destination {
     private String name;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "destination_type", nullable = false)
-    private DestinationType type;
+    @Column(name = "location_type", nullable = false)
+    private LocationType type;
 
     @Column(name = "address")
     private String address;
@@ -70,34 +81,33 @@ public class Destination {
     @Column(name = "country", nullable = false)
     private String country;
 
+    @Column(name = "time_zone", nullable = false)
+    private String timeZone;
+
     @Column(name = "latitude", precision = 9, scale = 6)
     private BigDecimal latitude;
 
     @Column(name = "longitude", precision = 9, scale = 6)
     private BigDecimal longitude;
 
+    /** Plain UUID rather than a JPA association, for the reason {@code Destination.zoneId} documents. */
     @Column(name = "zone_id")
     private UUID zoneId;
 
     @Column(name = "service_time_minutes", nullable = false)
     private int serviceTimeMinutes;
 
+    @Column(name = "external_system")
+    private String externalSystem;
+
     @Column(name = "external_reference")
     private String externalReference;
 
-    /**
-     * The canonical {@code tms.location} this destination projects (migration V14), and the
-     * authoritative mapping for the later unification - see
-     * {@code docs/architecture/ADR_LOCATION_MODEL.md} sections 3 and 4. For pre-V14 rows it
-     * equals this destination's own id, unless the backfill merged it with a same-code origin.
-     * Nullable because the constraint suites seed destinations with direct SQL;
-     * {@code LocationCompatibilityProjector} is the only writer in the application.
-     */
-    @Column(name = "location_id")
-    private UUID locationId;
-
     @Column(name = "active", nullable = false)
     private boolean active = true;
+
+    @OneToMany(mappedBy = "location", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<LocationRoleAssignment> roles = new LinkedHashSet<>();
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false, nullable = false)
@@ -113,14 +123,14 @@ public class Destination {
     @Column(name = "updated_by")
     private UUID updatedBy;
 
-    protected Destination() {
+    protected Location() {
         // JPA
     }
 
-    public Destination(UUID companyId, String code, String name, DestinationType type, String address,
+    public Location(UUID companyId, String code, String name, LocationType type, String address,
             String addressReference, String district, String province, String department, String country,
-            BigDecimal latitude, BigDecimal longitude, UUID zoneId, int serviceTimeMinutes,
-            String externalReference, UUID actorId) {
+            String timeZone, BigDecimal latitude, BigDecimal longitude, UUID zoneId, int serviceTimeMinutes,
+            String externalSystem, String externalReference, UUID actorId) {
         this.companyId = companyId;
         this.code = code;
         this.name = name;
@@ -131,10 +141,12 @@ public class Destination {
         this.province = province;
         this.department = department;
         this.country = country;
+        this.timeZone = timeZone;
         this.latitude = latitude;
         this.longitude = longitude;
         this.zoneId = zoneId;
         this.serviceTimeMinutes = serviceTimeMinutes;
+        this.externalSystem = externalSystem;
         this.externalReference = externalReference;
         this.createdBy = actorId;
         this.updatedBy = actorId;
@@ -156,7 +168,7 @@ public class Destination {
         return name;
     }
 
-    public DestinationType type() {
+    public LocationType type() {
         return type;
     }
 
@@ -184,6 +196,10 @@ public class Destination {
         return country;
     }
 
+    public String timeZone() {
+        return timeZone;
+    }
+
     public BigDecimal latitude() {
         return latitude;
     }
@@ -198,6 +214,10 @@ public class Destination {
 
     public int serviceTimeMinutes() {
         return serviceTimeMinutes;
+    }
+
+    public String externalSystem() {
+        return externalSystem;
     }
 
     public String externalReference() {
@@ -224,19 +244,30 @@ public class Destination {
         return updatedBy;
     }
 
-    public UUID locationId() {
-        return locationId;
+    /** The roles as a value set, ordered by the enum's own declaration order for a stable API response. */
+    public Set<LocationRole> roles() {
+        Set<LocationRole> held = EnumSet.noneOf(LocationRole.class);
+        roles.forEach(assignment -> held.add(assignment.role()));
+        return held;
     }
 
-    /** Set once, by {@code LocationCompatibilityProjector}, when the canonical location exists. */
-    public void linkToLocation(UUID locationId) {
-        this.locationId = locationId;
+    /**
+     * The assignment rows themselves rather than their values. Package-private and used only by
+     * {@code LocationModelTest}, which pins {@link #replaceRoles} as a diff: an unchanged role has
+     * to keep its own row so its {@code created_at} keeps saying when the location first took it.
+     */
+    Set<LocationRoleAssignment> roleAssignments() {
+        return Set.copyOf(roles);
     }
 
-    public void applyChanges(String code, String name, DestinationType type, String address,
-            String addressReference, String district, String province, String department, String country,
+    public boolean hasRole(LocationRole role) {
+        return roles.stream().anyMatch(assignment -> assignment.role() == role);
+    }
+
+    public void applyChanges(String code, String name, LocationType type, String address, String addressReference,
+            String district, String province, String department, String country, String timeZone,
             BigDecimal latitude, BigDecimal longitude, UUID zoneId, int serviceTimeMinutes,
-            String externalReference, UUID actorId) {
+            String externalSystem, String externalReference, UUID actorId) {
         this.code = code;
         this.name = name;
         this.type = type;
@@ -246,12 +277,32 @@ public class Destination {
         this.province = province;
         this.department = department;
         this.country = country;
+        this.timeZone = timeZone;
         this.latitude = latitude;
         this.longitude = longitude;
         this.zoneId = zoneId;
         this.serviceTimeMinutes = serviceTimeMinutes;
+        this.externalSystem = externalSystem;
         this.externalReference = externalReference;
         this.updatedBy = actorId;
+    }
+
+    /**
+     * Diffs the requested roles against the persisted ones: roles already held are left alone
+     * (so their {@code created_at} keeps saying when the location first took that role), new
+     * ones are added, and the rest are removed through {@code orphanRemoval}.
+     */
+    public void replaceRoles(Collection<LocationRole> requested) {
+        // Built by addAll rather than EnumSet.copyOf, which throws on an empty non-EnumSet.
+        Set<LocationRole> target = EnumSet.noneOf(LocationRole.class);
+        target.addAll(requested);
+        roles.removeIf(assignment -> !target.contains(assignment.role()));
+        Set<LocationRole> held = roles();
+        for (LocationRole role : target) {
+            if (!held.contains(role)) {
+                roles.add(new LocationRoleAssignment(this, role));
+            }
+        }
     }
 
     public void activate(UUID actorId) {

@@ -109,6 +109,26 @@ public final class PostgresTestDatabase {
                 .load();
     }
 
+    /**
+     * Flyway stopped at {@code targetVersion}, for the one thing a fully migrated database cannot
+     * prove: what a <em>data</em> migration does to rows that were already there. A backfill is
+     * only exercised when the rows exist before it runs, which means migrating to the version
+     * before it, seeding, and then migrating the rest of the way.
+     */
+    public static Flyway flywayTo(String jdbcUrl, String targetVersion) {
+        return Flyway.configure()
+                .dataSource(jdbcUrl, USERNAME, PASSWORD)
+                .locations("classpath:db/migration")
+                .schemas("tms")
+                .defaultSchema("tms")
+                .createSchemas(true)
+                .baselineOnMigrate(false)
+                .validateOnMigrate(true)
+                .cleanDisabled(true)
+                .target(org.flywaydb.core.api.MigrationVersion.fromVersion(targetVersion))
+                .load();
+    }
+
     /** Creates an empty database and applies the whole migration history to it. */
     public static String createMigratedDatabase(String databaseName) {
         String jdbcUrl = createEmptyDatabase(databaseName);

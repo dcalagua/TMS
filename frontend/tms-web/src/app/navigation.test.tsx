@@ -49,6 +49,7 @@ vi.mock('../shared/company/CompanyContext', () => ({
 const NAV_TARGETS = [
   // The dashboard greets the signed-in user rather than repeating the menu label.
   { link: 'Inicio', path: '/', heading: /^Hola,/ },
+  { link: 'Ubicaciones', path: '/masters/locations', heading: 'Ubicaciones' },
   { link: 'Orígenes', path: '/masters/origins', heading: 'Orígenes' },
   { link: 'Destinos', path: '/masters/destinations', heading: 'Destinos' },
   { link: 'Zonas', path: '/masters/zones', heading: 'Zonas' },

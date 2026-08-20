@@ -62,6 +62,17 @@ public class Origin {
     @Column(name = "external_reference")
     private String externalReference;
 
+    /**
+     * The canonical {@code tms.location} this origin projects (migration V14), and the
+     * authoritative mapping for the later unification - see
+     * {@code docs/architecture/ADR_LOCATION_MODEL.md} section 3. Equal to this origin's own id
+     * for every row that existed before V14. Nullable because the constraint suites seed origins
+     * with direct SQL; {@code LocationCompatibilityProjector} is the only writer in the
+     * application.
+     */
+    @Column(name = "location_id")
+    private UUID locationId;
+
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
@@ -156,6 +167,15 @@ public class Origin {
 
     public UUID updatedBy() {
         return updatedBy;
+    }
+
+    public UUID locationId() {
+        return locationId;
+    }
+
+    /** Set once, by {@code LocationCompatibilityProjector}, when the canonical location exists. */
+    public void linkToLocation(UUID locationId) {
+        this.locationId = locationId;
     }
 
     public void applyChanges(String code, String name, OriginType type, String address, BigDecimal latitude,
