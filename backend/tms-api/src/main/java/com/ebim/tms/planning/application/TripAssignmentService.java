@@ -3,6 +3,7 @@ package com.ebim.tms.planning.application;
 import com.ebim.tms.planning.domain.AssignmentStatus;
 import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.planning.domain.TripOrderAssignment;
+import com.ebim.tms.planning.domain.TripStop;
 import com.ebim.tms.planning.infrastructure.TripOrderAssignmentRepository;
 import com.ebim.tms.shared.api.ConflictException;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
@@ -10,6 +11,8 @@ import com.ebim.tms.shared.reference.PlannableOrder;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -110,12 +113,43 @@ public class TripAssignmentService {
      * Recomputes the trip's stop list from what is now assigned, preserving the planner's manual
      * ordering (see {@link Trip#syncStops}). Called after every assignment change - a stop list
      * that lags behind its assignments is what makes a driver miss a delivery.
+     *
+     * <p>Verifies the result before returning ({@link #requireStopsCoverAssignments}): the whole
+     * point of the stop list is that it is derivable from the assignments, so checking that it
+     * actually was costs one set comparison over data already in hand and turns "a shipment
+     * silently lost a destination" from a class of production bug into a failed transaction.
      */
     public void refreshStops(Trip trip, UUID companyId, UUID actorId) {
         List<TripOrderAssignment> active = activeAssignments(trip.id());
         Map<UUID, PlannableOrder> orders = orderPlanningPort.findAllInCompany(
                 active.stream().map(TripOrderAssignment::orderId).collect(Collectors.toSet()), companyId);
         trip.syncStops(TripStopPlanner.plan(active, orders), actorId);
+        requireStopsCoverAssignments(trip, active, orders);
+    }
+
+    /**
+     * The stop-coverage invariant: every destination an active assignment delivers to has exactly
+     * one stop, and no stop exists that nothing is delivered at.
+     *
+     * <p>Stated as an {@link IllegalStateException} rather than a caller-facing 4xx on purpose -
+     * no request can ask for this state, so reaching it is a defect in whatever mutated the trip,
+     * and the honest answer is 500 plus a rolled-back transaction rather than a shipment that
+     * looks fine and misses a delivery. {@link Trip#assertStopSequenceIntegrity} is its sibling
+     * for positions; this one is for membership.
+     */
+    void requireStopsCoverAssignments(
+            Trip trip, List<TripOrderAssignment> active, Map<UUID, PlannableOrder> orders) {
+        Set<UUID> assigned = active.stream()
+                .map(assignment -> orders.get(assignment.orderId()))
+                .filter(Objects::nonNull)
+                .map(PlannableOrder::destinationId)
+                .collect(Collectors.toSet());
+        Set<UUID> stopped = trip.stops().stream().map(TripStop::destinationId).collect(Collectors.toSet());
+        if (!stopped.equals(assigned)) {
+            throw new IllegalStateException("trip " + trip.shipmentNumber()
+                    + " stops at " + stopped + " but its active assignments deliver to " + assigned);
+        }
+        trip.assertStopSequenceIntegrity();
     }
 
     private static BigDecimal zeroIfNull(BigDecimal value) {

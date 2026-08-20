@@ -33,7 +33,11 @@ const RUN: PlanningRunView = {
 
 function trip(overrides: Partial<TripView> = {}): TripView {
   return {
-    id: 'trip-1', planningRunId: 'run-1', tripNumber: 1, status: 'DRAFT', vehicleId: null, vehicleCode: null,
+    id: 'trip-1', companyId: 'company-1', planningRunId: 'run-1', planNumber: 'PL-00000001',
+    planningDate: '2026-03-01', shipmentNumber: 'SH-00000001', originId: 'origin-1',
+    originCode: 'LIM-01', originName: 'Lima depot', originLatitude: null, originLongitude: null,
+    vehicleTypeCode: null, routeId: null, routeCode: null, routeName: null,
+    tripNumber: 1, status: 'DRAFT', vehicleId: null, vehicleCode: null,
     vehicleLicensePlate: null, carrierId: null, carrierName: null, plannedDepartureAt: null,
     capacity: {
       tripId: 'trip-1', source: 'NONE', orderCount: 0,

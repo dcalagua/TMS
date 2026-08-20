@@ -87,7 +87,14 @@ class EndToEndSmokeIntegrationTest {
     /** The whole flow runs against one service date so every step lines up with the plan. */
     private static final LocalDate SERVICE_DATE = LocalDate.now().plusDays(1);
 
-    private static final String DEPARTURE = "2026-09-01T08:00:00Z";
+    /**
+     * 08:00 on the planning day in the smoke company's own time zone. It has to be derived
+     * from {@link #SERVICE_DATE} rather than fixed: {@code ShipmentTimeRules} refuses a
+     * departure that falls on a day the run is not planning, judged in
+     * {@code tms.company.time_zone}.
+     */
+    private static final String DEPARTURE = SERVICE_DATE.atTime(8, 0)
+            .atZone(java.time.ZoneId.of("America/Lima")).toOffsetDateTime().toString();
 
     private static String jdbcUrl;
 

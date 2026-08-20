@@ -1214,3 +1214,84 @@ caller-facing message, before every write that sets a trip's vehicle (`create`, 
 the index is the concurrency backstop for two planners racing to book the same vehicle on the same
 day, translated back to a 409 by `TripService.saveWithDoubleBookingBackstop` - the same
 pre-check-then-index-backstop relationship section 14.4 documents for order assignment.
+
+
+## 17. Planning/Shipment V2: shipment number and the route suggestion (job 07 overnight-v3, migration V19)
+
+Two columns on `tms.trip`, and a deliberately short list. The design record is
+[`docs/domain/SHIPMENT_V2.md`](../domain/SHIPMENT_V2.md); migration V19's header enumerates every
+field of the shipment header that is *not* stored and why.
+
+### 17.1 `trip.shipment_number`: the identity a trip has outside its planning board
+
+`trip_number` is unique inside one `planning_run` ("trip 2 of PL-00000017") and useless outside it:
+two runs on the same day both have a trip 2. An outbound integration, a printed manifest or a
+support call needs a stable, installation-wide handle, so V19 adds one.
+
+```sql
+CREATE SEQUENCE tms.shipment_number_seq AS bigint INCREMENT BY 1 START WITH 1 NO CYCLE;
+ALTER TABLE tms.trip ADD COLUMN shipment_number text;   -- backfilled, then NOT NULL
+ALTER TABLE tms.trip ALTER COLUMN shipment_number
+    SET DEFAULT 'SH-' || lpad(nextval('tms.shipment_number_seq')::text, 8, '0');
+ALTER TABLE tms.trip ADD CONSTRAINT uq_trip_shipment_number UNIQUE (shipment_number);
+```
+
+The uniqueness is global rather than company-scoped, which section 12.1 flags as normally a
+cross-tenant enumeration risk. The exception is the same one `plan_number` (V11) and `order_number`
+(V10) take, for the same reason: this is a system-generated opaque number nobody types, guesses or
+quotes from another tenant's document.
+
+The `DEFAULT` is what makes "every trip has a shipment number" a property of the *table* rather
+than of the one service that writes it. `TripService.generateShipmentNumber()` still assigns the
+value explicitly - Hibernate always names the column, so the default never fires from the
+application - but a raw `INSERT` (a data fix, a test fixture, a future SQL bulk import) now draws a
+collision-free number instead of failing `NOT NULL`. Same sequence, same format, one source of
+truth.
+
+### 17.2 `trip.route_id`: a suggestion, not a constraint
+
+```sql
+ALTER TABLE tms.trip ADD COLUMN route_id uuid;
+ALTER TABLE tms.trip ADD CONSTRAINT fk_trip_route FOREIGN KEY (route_id)
+    REFERENCES tms.route (id) ON DELETE RESTRICT;
+ALTER TABLE tms.trip ADD CONSTRAINT fk_trip_route_company FOREIGN KEY (route_id, company_id)
+    REFERENCES tms.route (id, company_id);
+CREATE INDEX ix_trip_route ON tms.trip (route_id) WHERE route_id IS NOT NULL;
+```
+
+`MATCH SIMPLE` (the default) so the reference is unchecked while null and enforced otherwise - the
+same idiom `trip.vehicle_id` (V11) and `destination.zone_id` (V7) use. The composite half is rule
+6's tenant guarantee: a shipment of company A can never point at a route of company B, whatever the
+service layer does.
+
+Section 9 introduced `tms.route` as "a named, reusable sequence a planner can point a Trip at
+later". This is that pointer, and it stays weak on purpose: the shipment's stops are not required
+to equal the route's, are not re-synchronised when the master is edited, and are never *created*
+from it - `tms.trip_stop` always follows the trip's own active assignments (section 14.6). The
+strongest thing applying a route may do is reorder the stops the shipment already has. See
+`SHIPMENT_V2.md`, "Route master interaction", for why a materialised copy was rejected.
+
+### 17.3 What V19 deliberately does not add
+
+- **No per-stop planned arrival/service time.** `tms.trip` has one optional `planned_departure_at`
+  and no travel-time model; a stored ETA would be inventing the routing that `CLAUDE.md` defers by
+  decision. Section 16.2 documents the same limitation for the double-booking rule.
+- **No stored used-weight/volume/pallet totals on `tms.trip`.** They are one grouped `SUM` over
+  active `trip_order_assignment` rows; a stored copy is a second source of truth a concurrent
+  assignment can leave stale (section 14.2's reasoning, applied to a trip).
+- **No coordinate copy on `tms.trip_stop`.** Read live from `tms.destination`: a corrected store
+  coordinate must reach an open plan immediately, and a frozen wrong one would be undetectable.
+- **No contiguity trigger on `trip_stop.sequence`.** Section 14's migration rules out triggers
+  carrying planning logic, and `uq_trip_stop_trip_sequence` already covers uniqueness. Contiguity
+  and stop/assignment coverage stay Java invariants (`Trip.assertStopSequenceIntegrity`,
+  `TripAssignmentService.requireStopsCoverAssignments`), both asserted on every mutation.
+
+### 17.4 Indexes and constraints added by V19
+
+| Object | Purpose |
+|---|---|
+| `tms.shipment_number_seq` | feeds `trip.shipment_number`; global, like the plan and order sequences |
+| `uq_trip_shipment_number` | one shipment number per installation |
+| `ck_trip_shipment_number_not_blank` | the usual blank-text guard |
+| `fk_trip_route` / `fk_trip_route_company` | the route reference and rule 6's tenant guarantee |
+| `ix_trip_route` | partial (`route_id IS NOT NULL`): "which shipments used this corridor" |

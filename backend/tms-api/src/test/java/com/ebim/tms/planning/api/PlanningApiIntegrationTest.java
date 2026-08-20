@@ -85,6 +85,9 @@ class PlanningApiIntegrationTest {
     private static String carrierA;
     private static String originB;
     private static String destinationB;
+    private static String routeA;
+    private static String routeOtherOriginA;
+    private static String routeB;
 
     @Autowired
     private MockMvc mockMvc;
@@ -135,8 +138,12 @@ class PlanningApiIntegrationTest {
                 "INSERT INTO tms.origin (company_id, code, name) VALUES ('" + COMPANY_A + "', 'ORIGIN-A', 'Origin A')");
         originA2 = insertReturningId("INSERT INTO tms.origin (company_id, code, name) VALUES ('" + COMPANY_A
                 + "', 'ORIGIN-A2', 'Origin A2')");
-        destinationA1 = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country) VALUES ('"
-                + COMPANY_A + "', 'DEST-A1', 'Destination A1', 'PE')");
+        // Coordinates on purpose: a shipment's stops must come back map-ready (Job 07,
+        // "map-ready lat/lng data") and destinationA2 deliberately has none, so the
+        // "degrade gracefully for a store nobody geocoded" case is exercised too.
+        destinationA1 = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country,"
+                + " latitude, longitude) VALUES ('" + COMPANY_A
+                + "', 'DEST-A1', 'Destination A1', 'PE', -12.046374, -77.042793)");
         destinationA2 = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country) VALUES ('"
                 + COMPANY_A + "', 'DEST-A2', 'Destination A2', 'PE')");
         carrierA = insertReturningId("INSERT INTO tms.carrier (company_id, code, business_name, tax_id_type,"
@@ -145,6 +152,25 @@ class PlanningApiIntegrationTest {
                 "INSERT INTO tms.origin (company_id, code, name) VALUES ('" + COMPANY_B + "', 'ORIGIN-B', 'Origin B')");
         destinationB = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country) VALUES ('"
                 + COMPANY_B + "', 'DEST-B', 'Destination B', 'PE')");
+
+        // Master routes, for the shipment/route relationship. routeA serves A2 before A1, which is
+        // the reverse of the order assignments naturally produce - so "applying the route
+        // reordered the stops" is visible rather than coincidental.
+        routeA = route(COMPANY_A, "ROUTE-A", originA, List.of(destinationA2, destinationA1));
+        routeOtherOriginA = route(COMPANY_A, "ROUTE-A-ALT", originA2, List.of(destinationA1));
+        routeB = route(COMPANY_B, "ROUTE-B", originB, List.of(destinationB));
+    }
+
+    /** A master route with its ordered stops, inserted directly - masterdata's API is not under test here. */
+    private static String route(UUID companyId, String code, String originId, List<String> destinationIds) {
+        String routeId = insertReturningId("INSERT INTO tms.route (company_id, code, name, origin_id) VALUES ('"
+                + companyId + "', '" + code + "', '" + code + " corridor', '" + originId + "')");
+        int sequence = 1;
+        for (String destinationId : destinationIds) {
+            execute("INSERT INTO tms.route_stop (route_id, company_id, destination_id, sequence) VALUES ('"
+                    + routeId + "', '" + companyId + "', '" + destinationId + "', " + sequence++ + ")");
+        }
+        return routeId;
     }
 
     private static void membership(String email, UUID companyId, String roleCode) {
@@ -322,8 +348,8 @@ class PlanningApiIntegrationTest {
         mockMvc.perform(asAdmin(put(TRIPS + "/" + trip + "/vehicle"), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"vehicleId":"%s","plannedDepartureAt":"2026-05-01T08:00:00Z","version":%d}
-                                """.formatted(small, version)))
+                                {"vehicleId":"%s","plannedDepartureAt":"%s","version":%d}
+                                """.formatted(small, departure(date), version)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("weight 5000")));
 
@@ -345,8 +371,8 @@ class PlanningApiIntegrationTest {
         mockMvc.perform(asAdmin(post(PLANNING + "/runs/" + run.id + "/trips"), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"vehicleId":"%s","plannedDepartureAt":"2026-05-01T08:00:00Z","version":0}
-                                """.formatted(busyVehicle)))
+                                {"vehicleId":"%s","plannedDepartureAt":"%s","version":0}
+                                """.formatted(busyVehicle, departure(date))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("already booked")));
     }
@@ -365,8 +391,8 @@ class PlanningApiIntegrationTest {
         mockMvc.perform(asAdmin(put(TRIPS + "/" + trip + "/vehicle"), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"vehicleId":"%s","plannedDepartureAt":"2026-05-01T08:00:00Z","version":%d}
-                                """.formatted(busyVehicle, version)))
+                                {"vehicleId":"%s","plannedDepartureAt":"%s","version":%d}
+                                """.formatted(busyVehicle, departure(date), version)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("already booked")));
 
@@ -386,8 +412,8 @@ class PlanningApiIntegrationTest {
         mockMvc.perform(asAdmin(put(TRIPS + "/" + trip + "/vehicle"), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"vehicleId":"%s","plannedDepartureAt":"2026-05-01T10:00:00Z","version":%d}
-                                """.formatted(ownVehicle, version)))
+                                {"vehicleId":"%s","plannedDepartureAt":"%s","version":%d}
+                                """.formatted(ownVehicle, departure(date, 10), version)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.trip.vehicleId").value(ownVehicle));
     }
@@ -403,8 +429,8 @@ class PlanningApiIntegrationTest {
         mockMvc.perform(asAdmin(post(PLANNING + "/runs/" + runTwo.id + "/trips"), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"vehicleId":"%s","plannedDepartureAt":"2026-05-01T08:00:00Z","version":0}
-                                """.formatted(sharedVehicle)))
+                                {"vehicleId":"%s","plannedDepartureAt":"%s","version":0}
+                                """.formatted(sharedVehicle, departure(runTwo.date()))))
                 .andExpect(status().isCreated());
     }
 
@@ -422,8 +448,8 @@ class PlanningApiIntegrationTest {
         mockMvc.perform(asAdmin(post(PLANNING + "/runs/" + run.id + "/trips"), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"vehicleId":"%s","plannedDepartureAt":"2026-05-01T08:00:00Z","version":0}
-                                """.formatted(sharedVehicle)))
+                                {"vehicleId":"%s","plannedDepartureAt":"%s","version":0}
+                                """.formatted(sharedVehicle, departure(date))))
                 .andExpect(status().isCreated());
     }
 
@@ -730,8 +756,8 @@ class PlanningApiIntegrationTest {
         mockMvc.perform(asAdmin(put(TRIPS + "/" + trip + "/vehicle"), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"vehicleId":"%s","plannedDepartureAt":"2026-05-01T08:00:00Z","version":%d}
-                                """.formatted(vehicle, version)))
+                                {"vehicleId":"%s","plannedDepartureAt":"%s","version":%d}
+                                """.formatted(vehicle, departure(date), version)))
                 .andExpect(status().isOk());
         confirm(run).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("no orders")));
@@ -750,8 +776,8 @@ class PlanningApiIntegrationTest {
         mockMvc.perform(asAdmin(put(TRIPS + "/" + trip + "/vehicle"), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"vehicleId":"%s","plannedDepartureAt":"2026-05-01T08:00:00Z","version":%d}
-                                """.formatted(vehicle, version)))
+                                {"vehicleId":"%s","plannedDepartureAt":"%s","version":%d}
+                                """.formatted(vehicle, departure(date), version)))
                 .andExpect(status().isOk());
 
         confirm(run)
@@ -794,8 +820,8 @@ class PlanningApiIntegrationTest {
         mockMvc.perform(asAdmin(put(TRIPS + "/" + trip + "/vehicle"), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"vehicleId":"%s","plannedDepartureAt":"2026-05-01T08:00:00Z","version":%d}
-                                """.formatted(vehicle, version)))
+                                {"vehicleId":"%s","plannedDepartureAt":"%s","version":%d}
+                                """.formatted(vehicle, departure(date), version)))
                 .andExpect(status().isOk());
 
         execute("UPDATE tms.vehicle SET availability_status = 'IN_MAINTENANCE' WHERE id = '" + vehicle + "'");
@@ -817,8 +843,8 @@ class PlanningApiIntegrationTest {
         mockMvc.perform(asAdmin(put(TRIPS + "/" + trip + "/vehicle"), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"vehicleId":"%s","plannedDepartureAt":"2026-05-01T08:00:00Z","version":0}
-                                """.formatted(vehicle("STALE-2", "10000", "40", 20))))
+                                {"vehicleId":"%s","plannedDepartureAt":"%s","version":0}
+                                """.formatted(vehicle("STALE-2", "10000", "40", 20), departure(date))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("changed by someone else")));
     }
@@ -911,6 +937,335 @@ class PlanningApiIntegrationTest {
         }
     }
 
+    // --- shipment header, stops and the route relationship (Job 07) ---------------
+
+    @Test
+    @DisplayName("a planned shipment exposes its whole header: number, plan, origin, carrier, unit, plate, type")
+    void shipmentHeaderIsComplete() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String vehicleTypeId = vehicleType("HEADER", "10000", "40", 20);
+        String trip = newTrip(run, vehicleOfType("HEADER", vehicleTypeId));
+        assign(trip, order(COMPANY_A, originA, destinationA1, date, "2500", "10", "5", "READY_FOR_PLANNING"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(asAdmin(get(TRIPS + "/" + trip), COMPANY_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.shipmentNumber").value(org.hamcrest.Matchers.startsWith("SH-")))
+                .andExpect(jsonPath("$.trip.companyId").value(COMPANY_A.toString()))
+                .andExpect(jsonPath("$.trip.planNumber").value(org.hamcrest.Matchers.startsWith("PL-")))
+                .andExpect(jsonPath("$.trip.planningDate").value(date.toString()))
+                .andExpect(jsonPath("$.trip.tripNumber").value(1))
+                .andExpect(jsonPath("$.trip.status").value("DRAFT"))
+                .andExpect(jsonPath("$.trip.originId").value(originA))
+                .andExpect(jsonPath("$.trip.originCode").value("ORIGIN-A"))
+                .andExpect(jsonPath("$.trip.carrierId").value(carrierA))
+                // Resolved from the trip's own carrier_id, not from the vehicle - see below.
+                .andExpect(jsonPath("$.trip.carrierName").value("Carrier A"))
+                .andExpect(jsonPath("$.trip.vehicleCode").exists())
+                .andExpect(jsonPath("$.trip.vehicleLicensePlate").exists())
+                .andExpect(jsonPath("$.trip.vehicleTypeCode").exists())
+                .andExpect(jsonPath("$.trip.plannedDepartureAt").exists())
+                .andExpect(jsonPath("$.trip.capacity.source").value("LIVE"))
+                .andExpect(jsonPath("$.trip.capacity.weight.used").value(2500.000))
+                .andExpect(jsonPath("$.trip.capacity.weight.percentUsed").value(25.0))
+                .andExpect(jsonPath("$.trip.orderCount").value(1))
+                .andExpect(jsonPath("$.trip.stopCount").value(1))
+                .andExpect(jsonPath("$.trip.routeId").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("the carrier on a shipment is the one it was planned with, even after the vehicle changes carrier")
+    void carrierIsTheOneThePlanNamedNotTheVehiclesCurrentOne() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String vehicleId = vehicle("CARRIER-MOVE", "10000", "40", 20);
+        String trip = newTrip(run, vehicleId);
+        String otherCarrier = insertReturningId("INSERT INTO tms.carrier (company_id, code, business_name,"
+                + " tax_id_type, tax_id_value) VALUES ('" + COMPANY_A + "', 'CARR-A2', 'Carrier A2', 'RUC',"
+                + " '20100000002')");
+
+        // The fleet master moves the truck to another carrier after the plan named the first one.
+        execute("UPDATE tms.vehicle SET carrier_id = '" + otherCarrier + "' WHERE id = '" + vehicleId + "'");
+
+        mockMvc.perform(asAdmin(get(TRIPS + "/" + trip), COMPANY_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.carrierId").value(carrierA))
+                .andExpect(jsonPath("$.trip.carrierName").value("Carrier A"));
+    }
+
+    @Test
+    @DisplayName("stops come back map-ready, and a destination nobody geocoded reports no coordinate rather than a wrong one")
+    void stopsCarryCoordinatesWhenTheDestinationHasThem() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("GEO", "10000", "40", 20));
+        assign(trip, order(COMPANY_A, originA, destinationA1, date, "100", "1", "1", "READY_FOR_PLANNING"))
+                .andExpect(status().isOk());
+        assign(trip, order(COMPANY_A, originA, destinationA2, date, "100", "1", "1", "READY_FOR_PLANNING"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(asAdmin(get(TRIPS + "/" + trip), COMPANY_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stops.length()").value(2))
+                .andExpect(jsonPath("$.stops[0].destinationCode").value("DEST-A1"))
+                .andExpect(jsonPath("$.stops[0].latitude").value(-12.046374))
+                .andExpect(jsonPath("$.stops[0].longitude").value(-77.042793))
+                .andExpect(jsonPath("$.stops[1].destinationCode").value("DEST-A2"))
+                .andExpect(jsonPath("$.stops[1].latitude").doesNotExist())
+                .andExpect(jsonPath("$.stops[1].longitude").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("applying a route reorders the shipment's stops without creating or dropping one")
+    void applyingARouteReordersTheStops() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("ROUTE-APPLY", "10000", "40", 20));
+        // Assigned A1 first, so the natural stop order is A1, A2 - the reverse of ROUTE-A's.
+        assign(trip, order(COMPANY_A, originA, destinationA1, date, "100", "1", "1", "READY_FOR_PLANNING"))
+                .andExpect(status().isOk());
+        long version = versionOf(
+                assign(trip, order(COMPANY_A, originA, destinationA2, date, "100", "1", "1", "READY_FOR_PLANNING"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.stops[0].destinationCode").value("DEST-A1")));
+
+        applyRoute(trip, routeA, true, version)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.routeId").value(routeA))
+                .andExpect(jsonPath("$.trip.routeCode").value("ROUTE-A"))
+                .andExpect(jsonPath("$.stops.length()").value(2))
+                .andExpect(jsonPath("$.stops[0].destinationCode").value("DEST-A2"))
+                .andExpect(jsonPath("$.stops[0].sequence").value(1))
+                .andExpect(jsonPath("$.stops[1].destinationCode").value("DEST-A1"))
+                .andExpect(jsonPath("$.stops[1].sequence").value(2));
+    }
+
+    @Test
+    @DisplayName("recording a route without applying its sequence leaves the planner's stop order alone")
+    void recordingARouteWithoutItsSequenceKeepsTheOrder() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("ROUTE-NOSEQ", "10000", "40", 20));
+        assign(trip, order(COMPANY_A, originA, destinationA1, date, "100", "1", "1", "READY_FOR_PLANNING"))
+                .andExpect(status().isOk());
+        long version = versionOf(
+                assign(trip, order(COMPANY_A, originA, destinationA2, date, "100", "1", "1", "READY_FOR_PLANNING"))
+                        .andExpect(status().isOk()));
+
+        applyRoute(trip, routeA, false, version)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.routeId").value(routeA))
+                .andExpect(jsonPath("$.stops[0].destinationCode").value("DEST-A1"))
+                .andExpect(jsonPath("$.stops[1].destinationCode").value("DEST-A2"));
+    }
+
+    @Test
+    @DisplayName("a route is a suggestion: editing the master afterwards never rewrites a shipment's stops")
+    void editingTheRouteMasterDoesNotRewriteTheShipment() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("ROUTE-DRIFT", "10000", "40", 20));
+        assign(trip, order(COMPANY_A, originA, destinationA1, date, "100", "1", "1", "READY_FOR_PLANNING"))
+                .andExpect(status().isOk());
+        long version = versionOf(
+                assign(trip, order(COMPANY_A, originA, destinationA2, date, "100", "1", "1", "READY_FOR_PLANNING"))
+                        .andExpect(status().isOk()));
+        applyRoute(trip, routeA, true, version).andExpect(status().isOk());
+
+        // The corridor is re-sequenced in masterdata. The shipment stopped being a copy of it the
+        // moment it was planned, and must not silently follow.
+        execute("UPDATE tms.route_stop SET sequence = sequence + 10 WHERE route_id = '" + routeA + "'");
+
+        mockMvc.perform(asAdmin(get(TRIPS + "/" + trip), COMPANY_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stops[0].destinationCode").value("DEST-A2"))
+                .andExpect(jsonPath("$.stops[1].destinationCode").value("DEST-A1"));
+
+        // Restore the fixture: this class shares its route masters across tests.
+        execute("UPDATE tms.route_stop SET sequence = sequence - 10 WHERE route_id = '" + routeA + "'");
+    }
+
+    @Test
+    @DisplayName("a route from another origin, an inactive one, or one of another company is refused")
+    void anIneligibleRouteIsRefused() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("ROUTE-BAD", "10000", "40", 20));
+
+        applyRoute(trip, routeOtherOriginA, true, 0)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("different origin")));
+        // Another company's route is indistinguishable from one that does not exist.
+        applyRoute(trip, routeB, true, 0).andExpect(status().isBadRequest());
+
+        execute("UPDATE tms.route SET active = false WHERE id = '" + routeA + "'");
+        try {
+            applyRoute(trip, routeA, true, 0).andExpect(status().isBadRequest());
+        } finally {
+            execute("UPDATE tms.route SET active = true WHERE id = '" + routeA + "'");
+        }
+    }
+
+    @Test
+    @DisplayName("clearing a shipment's route keeps every stop it had")
+    void clearingTheRouteKeepsTheStops() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("ROUTE-CLEAR", "10000", "40", 20));
+        long version = versionOf(
+                assign(trip, order(COMPANY_A, originA, destinationA1, date, "100", "1", "1", "READY_FOR_PLANNING"))
+                        .andExpect(status().isOk()));
+        version = versionOf(applyRoute(trip, routeA, true, version).andExpect(status().isOk()));
+
+        mockMvc.perform(asAdmin(put(TRIPS + "/" + trip + "/route"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"routeId\":null,\"applySequence\":false,\"version\":" + version + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.routeId").doesNotExist())
+                .andExpect(jsonPath("$.stops.length()").value(1));
+    }
+
+    @Test
+    @DisplayName("two planners applying a route to the same shipment: the second is told to reload")
+    void concurrentRouteChangesDoNotBothWin() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("ROUTE-RACE", "10000", "40", 20));
+        long version = versionOf(mockMvc.perform(asAdmin(get(TRIPS + "/" + trip), COMPANY_A)));
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            CyclicBarrier barrier = new CyclicBarrier(2);
+            Callable<Integer> attempt = () -> {
+                barrier.await(15, TimeUnit.SECONDS);
+                return mockMvc.perform(asAdmin(put(TRIPS + "/" + trip + "/route"), COMPANY_A)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"routeId\":\"" + routeA + "\",\"applySequence\":true,\"version\":"
+                                        + version + "}"))
+                        .andReturn().getResponse().getStatus();
+            };
+            Future<Integer> first = pool.submit(attempt);
+            Future<Integer> second = pool.submit(attempt);
+            List<Integer> statuses = List.of(first.get(30, TimeUnit.SECONDS), second.get(30, TimeUnit.SECONDS));
+
+            assertThat(statuses).as("both planners held version %d; only one may write it", version)
+                    .containsOnlyOnce(200);
+            assertThat(statuses).allSatisfy(statusCode -> assertThat(statusCode).isLessThan(500));
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    @DisplayName("a planned departure that falls on another day than the run's planning date is refused")
+    void aDepartureOnAnotherDayIsRefused() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+
+        mockMvc.perform(asAdmin(post(PLANNING + "/runs/" + run.id() + "/trips"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"vehicleId":"%s","plannedDepartureAt":"%s","version":0}
+                                """.formatted(vehicle("WRONG-DAY", "10000", "40", 20), departure(date.plusDays(3)))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("planning date")));
+
+        String trip = newTrip(run, vehicle("WRONG-DAY-SWAP", "10000", "40", 20));
+        long version = versionOf(mockMvc.perform(asAdmin(get(TRIPS + "/" + trip), COMPANY_A)));
+        mockMvc.perform(asAdmin(put(TRIPS + "/" + trip + "/vehicle"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"vehicleId":"%s","plannedDepartureAt":"%s","version":%d}
+                                """.formatted(vehicle("WRONG-DAY-2", "10000", "40", 20), departure(date.minusDays(1)),
+                                version)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("a departure late in the local evening still belongs to the planning day, not to UTC's next one")
+    void aLateLocalDepartureIsStillThePlanningDay() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+
+        // 22:00 in America/Lima is already 03:00 the following day in UTC. The company's zone is
+        // what decides, or the last hours of every planning day would be unusable.
+        mockMvc.perform(asAdmin(post(PLANNING + "/runs/" + run.id() + "/trips"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"vehicleId":"%s","plannedDepartureAt":"%s","version":0}
+                                """.formatted(vehicle("LATE-DAY", "10000", "40", 20), departure(date, 22))))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("confirmation refuses a shipment carrying an order that was rescheduled after it was assigned")
+    void confirmationRevalidatesTheOrdersItCarries() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("RESCHED", "10000", "40", 20));
+        String rescheduled = order(COMPANY_A, originA, destinationA1, date, "100", "1", "1", "READY_FOR_PLANNING");
+        assign(trip, rescheduled).andExpect(status().isOk());
+
+        // The order moves to another service day while it sits on the draft trip. Confirming would
+        // otherwise dispatch it on the run's day.
+        execute("UPDATE tms.transport_order SET service_date = '" + date.plusDays(2) + "' WHERE id = '"
+                + rescheduled + "'");
+
+        confirm(run).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("service date")));
+    }
+
+    @Test
+    @DisplayName("a confirmed shipment keeps its number and reports its frozen capacity as a snapshot")
+    void aConfirmedShipmentKeepsItsIdentity() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("CONF-ID", "10000", "40", 20));
+        assign(trip, order(COMPANY_A, originA, destinationA1, date, "100", "1", "1", "READY_FOR_PLANNING"))
+                .andExpect(status().isOk());
+        String before = JsonPath.read(mockMvc.perform(asAdmin(get(TRIPS + "/" + trip), COMPANY_A))
+                .andReturn().getResponse().getContentAsString(), "$.trip.shipmentNumber");
+
+        confirm(run).andExpect(status().isOk());
+
+        mockMvc.perform(asAdmin(get(TRIPS + "/" + trip), COMPANY_A))
+                .andExpect(jsonPath("$.trip.shipmentNumber").value(before))
+                .andExpect(jsonPath("$.trip.status").value("CONFIRMED"))
+                .andExpect(jsonPath("$.trip.capacity.source").value("SNAPSHOT"))
+                .andExpect(jsonPath("$.trip.capacity.weight.limit").value(10000.00));
+    }
+
+    @Test
+    @DisplayName("every shipment number is distinct, including across planning runs")
+    void shipmentNumbersAreUnique() throws Exception {
+        Run runOne = newRun(nextDate());
+        Run runTwo = newRun(nextDate());
+        List<String> numbers = new java.util.ArrayList<>();
+        for (Run run : List.of(runOne, runOne, runTwo)) {
+            String trip = newTrip(run, vehicle("SHIP-NUM", "10000", "40", 20));
+            numbers.add(JsonPath.read(mockMvc.perform(asAdmin(get(TRIPS + "/" + trip), COMPANY_A))
+                    .andReturn().getResponse().getContentAsString(), "$.trip.shipmentNumber"));
+        }
+
+        assertThat(numbers).doesNotHaveDuplicates().allMatch(number -> number.startsWith("SH-"));
+    }
+
+    @Test
+    @DisplayName("a shipment cannot be pointed at a route through another company's board")
+    void routeOfAnotherCompanyIsNotReachable() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("ROUTE-TENANT", "10000", "40", 20));
+
+        // Company B's admin cannot even see the trip; company A's cannot see company B's route.
+        mockMvc.perform(asAdmin(put(TRIPS + "/" + trip + "/route"), COMPANY_B)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"routeId\":\"" + routeB + "\",\"applySequence\":false,\"version\":0}"))
+                .andExpect(status().isNotFound());
+        applyRoute(trip, routeB, false, 0).andExpect(status().isBadRequest());
+    }
+
     // --- helpers ------------------------------------------------------------------
 
     private record Run(String id, LocalDate date) {
@@ -924,6 +1279,14 @@ class PlanningApiIntegrationTest {
                             .content("{\"orderId\":\"" + orderId + "\"}"))
                     .andReturn().getResponse().getStatus();
         };
+    }
+
+    private org.springframework.test.web.servlet.ResultActions applyRoute(
+            String tripId, String routeId, boolean applySequence, long version) throws Exception {
+        return mockMvc.perform(asAdmin(put(TRIPS + "/" + tripId + "/route"), COMPANY_A)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"routeId\":\"" + routeId + "\",\"applySequence\":" + applySequence
+                        + ",\"version\":" + version + "}"));
     }
 
     private org.springframework.test.web.servlet.ResultActions assign(String tripId, String orderId) throws Exception {
@@ -956,7 +1319,8 @@ class PlanningApiIntegrationTest {
     private String newTrip(Run run, String vehicleId) throws Exception {
         String body = vehicleId == null
                 ? "{\"version\":0}"
-                : "{\"vehicleId\":\"" + vehicleId + "\",\"plannedDepartureAt\":\"2026-05-01T08:00:00Z\",\"version\":0}";
+                : "{\"vehicleId\":\"" + vehicleId + "\",\"plannedDepartureAt\":\"" + departure(run.date())
+                        + "\",\"version\":0}";
         String response = mockMvc.perform(asAdmin(post(PLANNING + "/runs/" + run.id + "/trips"), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())
@@ -968,6 +1332,20 @@ class PlanningApiIntegrationTest {
     private static long versionOf(org.springframework.test.web.servlet.ResultActions actions) throws Exception {
         Number version = JsonPath.read(actions.andReturn().getResponse().getContentAsString(), "$.trip.version");
         return version.longValue();
+    }
+
+    /**
+     * A planned departure that belongs to {@code date} in the fixture company's own time zone
+     * ({@code America/Lima}, UTC-5): {@code ShipmentTimeRules} judges the departure day there, so
+     * a literal instant shared by every test would now be on the wrong planning day for all but
+     * one of them.
+     */
+    private static String departure(LocalDate date) {
+        return departure(date, 8);
+    }
+
+    private static String departure(LocalDate date, int localHour) {
+        return date.atTime(localHour, 0).atZone(java.time.ZoneId.of("America/Lima")).toOffsetDateTime().toString();
     }
 
     private static LocalDate nextDate() {

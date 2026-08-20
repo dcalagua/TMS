@@ -6,6 +6,11 @@ ready for planning into trips, and what the backend guarantees while they do it.
 Capacity has its own document: [`CAPACITY_MODEL.md`](CAPACITY_MODEL.md). The order lifecycle this
 one plugs into is [`ORDER_LIFECYCLE_V1.md`](ORDER_LIFECYCLE_V1.md).
 
+What a planned trip exposes as an outward-facing **Shipment** - its shipment number, the resolved
+header, map-ready stops, the stop-integrity assertions and the master-route relationship - is
+[`SHIPMENT_V2.md`](SHIPMENT_V2.md) (job 07, migration V19). It extends this document; every rule
+below still holds.
+
 **Not in this scope, by decision**: no solver or route optimisation (OR-Tools stays deferred), no
 loading/dispatch/execution states, no EWM interaction, no live tracking. `planning_run.mode`
 already distinguishes `MANUAL` from a future `AUTOMATIC`, which is the whole extent of the

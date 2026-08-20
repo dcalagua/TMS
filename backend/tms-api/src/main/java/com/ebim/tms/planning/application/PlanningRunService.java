@@ -4,6 +4,7 @@ import com.ebim.tms.planning.domain.AssignmentStatus;
 import com.ebim.tms.planning.domain.PlanningRun;
 import com.ebim.tms.planning.domain.PlanningRunStatus;
 import com.ebim.tms.planning.domain.Trip;
+import com.ebim.tms.planning.domain.TripOrderAssignment;
 import com.ebim.tms.planning.domain.TripStatus;
 import com.ebim.tms.planning.infrastructure.PlanningRunRepository;
 import com.ebim.tms.planning.infrastructure.PlanningRunSpecifications;
@@ -237,6 +238,13 @@ public class PlanningRunService {
         if (trip.plannedDepartureAt() == null) {
             throw new ConflictException(label + " has no planned departure date and time.");
         }
+        // Re-checked here and not only where the departure was typed: the run's planning date and
+        // the trip's departure were validated against each other when each was written, but
+        // confirmation is the moment the plan becomes binding and is the last place a stored
+        // inconsistency (a row written before this rule existed, or by a raw SQL fix) can be
+        // caught before a driver is dispatched on the wrong day.
+        ShipmentTimeRules.requireDepartureOnPlanningDate(
+                trip.plannedDepartureAt(), run.planningDate(), scope.timeZone(), label);
         VehicleCapacityReference vehicle = vehicleLookupPort.findAssignable(trip.vehicleId(), scope.companyId())
                 .orElseThrow(() -> new ConflictException(
                         label + " is assigned a vehicle that is no longer active and available."));
@@ -246,12 +254,46 @@ public class PlanningRunService {
             throw new ConflictException(label + " has no orders assigned.");
         }
         capacityService.requireWithinCapacity(label + " cannot be confirmed", CapacityLimits.of(vehicle), load);
+        requireOrdersStillFitRun(scope, run, trip, label);
 
         // Idempotent, and the reason a confirmed trip's stop list always matches its assignments:
-        // re-synchronised here rather than trusted to have stayed in step.
+        // re-synchronised here rather than trusted to have stayed in step. refreshStops also
+        // asserts that the resulting stops cover exactly the destinations the assignments deliver
+        // to, so a confirmed shipment cannot be missing one.
         assignments.refreshStops(trip, scope.companyId(), actorId);
         trip.confirm(vehicle.maxWeightKg(), vehicle.maxVolumeM3(), vehicle.maxPallets(), actorId);
         tripRepository.saveAndFlush(trip);
+    }
+
+    /**
+     * Re-checks, at the moment the plan becomes binding, that every order still on the trip is
+     * still an order this run may carry: same origin, same service date.
+     *
+     * <p>Both were checked when the order was assigned. Neither is immutable afterwards - an
+     * order's service date can be rescheduled and its destination or origin corrected while it
+     * sits on a draft trip - and a confirmed shipment that departs from the wrong depot or on the
+     * wrong day is exactly the failure this gate exists to prevent. One batched lookup for the
+     * whole trip, not one per order.
+     */
+    private void requireOrdersStillFitRun(CompanyScope scope, PlanningRun run, Trip trip, String label) {
+        List<TripOrderAssignment> active = assignments.activeAssignments(trip.id());
+        Map<UUID, PlannableOrder> orders = orderPlanningPort.findAllInCompany(
+                active.stream().map(TripOrderAssignment::orderId).collect(Collectors.toSet()), scope.companyId());
+        for (TripOrderAssignment assignment : active) {
+            PlannableOrder order = orders.get(assignment.orderId());
+            if (order == null) {
+                throw new ConflictException(label + " carries an order that no longer exists in this company.");
+            }
+            if (!order.originId().equals(run.originId())) {
+                throw new ConflictException(label + " carries order " + order.orderNumber()
+                        + ", which now departs from a different origin than the run.");
+            }
+            if (!order.serviceDate().equals(run.planningDate())) {
+                throw new ConflictException(label + " carries order " + order.orderNumber()
+                        + ", whose service date is now " + order.serviceDate() + " and not the run's planning date ("
+                        + run.planningDate() + ").");
+            }
+        }
     }
 
     private PlanningRunDetailView toDetail(CompanyScope scope, PlanningRun run) {

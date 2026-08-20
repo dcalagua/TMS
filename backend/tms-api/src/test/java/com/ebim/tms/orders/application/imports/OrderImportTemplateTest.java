@@ -38,9 +38,9 @@ class OrderImportTemplateTest {
      * set of random master ids each time would make two identical imports look different.
      */
     private static final OrderImportValidator.MasterSnapshot COMPANY = new OrderImportValidator.MasterSnapshot(
-            Map.of("ORIGIN-01", new MasterReference(UUID.randomUUID(), "ORIGIN-01", "Main origin")),
-            Map.of("STORE-01", new MasterReference(UUID.randomUUID(), "STORE-01", "Store one"),
-                    "STORE-02", new MasterReference(UUID.randomUUID(), "STORE-02", "Store two")),
+            Map.of("ORIGIN-01", MasterReference.of(UUID.randomUUID(), "ORIGIN-01", "Main origin")),
+            Map.of("STORE-01", MasterReference.of(UUID.randomUUID(), "STORE-01", "Store one"),
+                    "STORE-02", MasterReference.of(UUID.randomUUID(), "STORE-02", "Store two")),
             Set.of());
 
     private static OrderImportValidator.Result importTemplate(OrderImportFormat format) {

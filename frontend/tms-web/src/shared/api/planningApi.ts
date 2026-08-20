@@ -97,17 +97,38 @@ export interface PlanningRunView {
   updatedAt: string
 }
 
-/** Mirrors the backend's `TripView` record - the board-row shape of a trip. */
+/** Mirrors the backend's `TripView` record - the board-row shape of a trip and the shipment
+ * header (`docs/domain/SHIPMENT_V2.md`).
+ *
+ * `shipmentNumber` is the trip's identity outside the board (`SH-00000012`); `tripNumber` is its
+ * identity inside `planNumber` and means nothing without it, so a screen that shows one without
+ * the other should show the shipment number. Everything except those two and the trip's own
+ * columns is resolved server-side - the browser never joins a master to a trip itself. */
 export interface TripView {
   id: string
+  companyId: string
   planningRunId: string
+  planNumber: string | null
+  planningDate: string
   tripNumber: number
+  shipmentNumber: string
   status: TripStatus
+  originId: string | null
+  originCode: string | null
+  originName: string | null
+  originLatitude: number | null
+  originLongitude: number | null
   vehicleId: string | null
   vehicleCode: string | null
   vehicleLicensePlate: string | null
+  vehicleTypeCode: string | null
   carrierId: string | null
+  /** The carrier the shipment was *planned* with, resolved from `carrierId` - not the vehicle's
+   * current carrier, which may since have changed (see `CarrierLookupPort`). */
   carrierName: string | null
+  routeId: string | null
+  routeCode: string | null
+  routeName: string | null
   plannedDepartureAt: string | null
   capacity: TripCapacityView
   stopCount: number
@@ -144,13 +165,21 @@ export interface TripAssignmentView {
   assignedAt: string
 }
 
-/** Mirrors the backend's `TripStopView` record. */
+/** Mirrors the backend's `TripStopView` record.
+ *
+ * `sequence` is always part of a contiguous 1..N series over the trip's stops - the backend
+ * refuses to persist anything else - so a map may number its markers from it directly.
+ * `latitude`/`longitude` are the destination's current coordinates, both null together when the
+ * destination has never been geocoded: render the stop without a marker rather than inventing a
+ * position. */
 export interface TripStopView {
   id: string
   sequence: number
   destinationId: string
   destinationCode: string | null
   destinationName: string | null
+  latitude: number | null
+  longitude: number | null
   serviceWindowStart: string | null
   serviceWindowEnd: string | null
   orderCount: number
@@ -293,6 +322,24 @@ export function reorderTripStops(
   companyId: string, tripId: string, request: TripStopOrderRequest,
 ): Promise<TripDetailView> {
   return apiRequest<TripDetailView>(`/planning/trips/${tripId}/stops`, { method: 'PUT', companyId, body: request })
+}
+
+/** Mirrors the backend's `TripRouteRequest` record.
+ *
+ * The route is a *suggestion*: sending it never changes which destinations the shipment serves.
+ * `applySequence` asks the backend to reorder the stops the shipment already has into the route's
+ * order - destinations the route omits are kept, at the end. Send `routeId: null` to clear the
+ * reference. */
+export interface TripRouteRequest {
+  routeId: string | null
+  applySequence: boolean
+  version: number
+}
+
+export function updateTripRoute(
+  companyId: string, id: string, request: TripRouteRequest,
+): Promise<TripDetailView> {
+  return apiRequest<TripDetailView>(`/planning/trips/${id}/route`, { method: 'PUT', companyId, body: request })
 }
 
 export function cancelTrip(

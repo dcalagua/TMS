@@ -50,10 +50,13 @@
     "ordersLabel": "Orders",
     "orders_one": "{{count}} order",
     "orders_other": "{{count}} orders",
+    "route": "Route",
+    "shipment": "Shipment",
     "stopsLabel": "Destinations",
     "stops_one": "{{count}} destination",
     "stops_other": "{{count}} destinations",
-    "title": "Trip {{number}}"
+    "title": "Trip {{number}}",
+    "vehicleType": "Type"
   },
   "description": "Manual planning runs: one origin, one planning date. Open a run to create trips, assign orders and confirm the plan.",
   "drawer": {
@@ -65,6 +68,20 @@
     "cancelTripText": "Trip {{number}} will be cancelled and every order on it returned to the eligible pool.",
     "cancelTripTitle": "Cancel trip?",
     "changeVehicle": "Change vehicle",
+    "coordinatesMissing": "No coordinates",
+    "coordinatesMissingHint": "This destination has no latitude and longitude yet, so it cannot be placed on the map.",
+    "header": {
+      "carrier": "Carrier",
+      "departure": "Planned departure",
+      "origin": "Origin",
+      "plan": "Planning run",
+      "planningDate": "Planning date",
+      "route": "Route",
+      "shipment": "Shipment",
+      "title": "Shipment details",
+      "vehicle": "Vehicle",
+      "vehicleType": "Vehicle type"
+    },
     "loading": "Loading trip...",
     "move": "Move",
     "moveAria": "Move {{number}} to another trip",
@@ -80,7 +97,20 @@
     "orderRemovedDetail": "{{number}} returned to the eligible pool",
     "remove": "Remove",
     "removeError": "Could not remove order",
+    "route": {
+      "apply": "Save the route",
+      "applySequence": "Reorder the stops to follow the route",
+      "applySequenceHelp": "Destinations the route does not name are kept, at the end: a route never adds or removes a stop.",
+      "clear": "Clear the route",
+      "cleared": "Route cleared",
+      "error": "Could not save the route",
+      "none": "No route",
+      "saved": "Route saved",
+      "subtitle": "A master route is a suggestion: it defines the corridor's usual order, not which destinations this shipment carries.",
+      "title": "Suggested route"
+    },
     "saveStopOrder": "Save the order",
+    "saving": "Saving...",
     "stopOrderError": "Could not save stop order",
     "stopOrderSaved": "Stop order saved",
     "stopOrders_one": "{{count}} order",
@@ -89,7 +119,8 @@
     "subtitle": "Stops, assigned orders and trip capacity.",
     "titleFallback": "Trip",
     "tripCancelled": "Trip cancelled",
-    "tripOption": "Trip {{number}}"
+    "tripOption": "Trip {{number}}",
+    "vehicleSaved": "Vehicle saved"
   },
   "eligible": {
     "allDestinations": "All destinations",

@@ -5,6 +5,7 @@ import com.ebim.tms.planning.application.MoveOrderRequest;
 import com.ebim.tms.planning.application.PlanningActionRequest;
 import com.ebim.tms.planning.application.TripCapacityView;
 import com.ebim.tms.planning.application.TripDetailView;
+import com.ebim.tms.planning.application.TripRouteRequest;
 import com.ebim.tms.planning.application.TripService;
 import com.ebim.tms.planning.application.TripStopOrderRequest;
 import com.ebim.tms.planning.application.TripVehicleRequest;
@@ -37,7 +38,13 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Assignment endpoints take no {@code version}: they are serialised by the trip's row lock and
  * guarded by the assignment uniqueness invariant, so one planner assigning an order does not
  * invalidate another planner's open board. Operations that edit a field the caller read
- * (vehicle, cancellation) do take one - see {@code PlanningActionRequest}.
+ * (vehicle, route, cancellation) do take one - see {@code PlanningActionRequest}.
+ *
+ * <p>The route endpoint carries no extra authority beyond {@code planning.trip:manage}, matching
+ * {@code updateVehicle}: like a vehicle, a route reaches a planning response as a display
+ * reference (code and name), which every planning read already does for origins and destinations.
+ * The extra {@code orders.order:read} on the read endpoints exists because those return order
+ * <em>fields</em>, not a master's label.
  */
 @RestController
 @RequestMapping("${tms.api.base-path}/planning/trips")
@@ -106,6 +113,16 @@ public class TripController {
     public TripDetailView moveOrder(CompanyScope scope, @PathVariable UUID id, @PathVariable UUID orderId,
             @Valid @RequestBody MoveOrderRequest request) {
         return tripService.moveOrder(scope, id, orderId, request);
+    }
+
+    @PutMapping("/{id}/route")
+    @PreAuthorize("hasAuthority('planning.trip:manage')")
+    @Operation(summary = "Point the shipment at a master route as a suggestion, optionally adopting its stop order")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TripDetailView updateRoute(
+            CompanyScope scope, @PathVariable UUID id, @Valid @RequestBody TripRouteRequest request) {
+        return tripService.updateRoute(scope, id, request);
     }
 
     @PutMapping("/{id}/stops")

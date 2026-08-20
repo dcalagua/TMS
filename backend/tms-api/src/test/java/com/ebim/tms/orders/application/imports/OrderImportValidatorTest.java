@@ -27,9 +27,9 @@ import org.junit.jupiter.api.Test;
 class OrderImportValidatorTest {
 
     private static final MasterReference ORIGIN =
-            new MasterReference(UUID.randomUUID(), "LIM-01", "Lima distribution centre");
+            MasterReference.of(UUID.randomUUID(), "LIM-01", "Lima distribution centre");
     private static final MasterReference DESTINATION =
-            new MasterReference(UUID.randomUUID(), "STORE-1", "Miraflores store");
+            MasterReference.of(UUID.randomUUID(), "STORE-1", "Miraflores store");
 
     private static final String HEADER = "externalReference,originCode,destinationCode,serviceDate,priority,"
             + "windowStart,windowEnd,declaredWeightKg,declaredVolumeM3,declaredPallets,"

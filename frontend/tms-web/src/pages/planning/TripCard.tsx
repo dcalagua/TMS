@@ -17,9 +17,11 @@ interface TripCardProps {
 }
 
 /**
- * One trip on the board: identity and status, the vehicle and its carrier, the departure, how
- * much is on it, and the three capacity dimensions rendered exactly as the backend computed
- * them (`TripCapacityView` - see `CapacityBar`).
+ * One shipment on the board: both identities (the run-local trip number a planner reads and the
+ * `shipmentNumber` everything outside the board uses), status, the vehicle with its type and the
+ * carrier the shipment was *planned* with, the departure, how much is on it, the suggested route
+ * if a planner picked one, and the three capacity dimensions rendered exactly as the backend
+ * computed them (`TripCapacityView` - see `CapacityBar`).
  *
  * The whole card is the control that opens `TripDetailDrawer`: on a board of a dozen trips,
  * hunting for a small "Open" button in each footer is slower than clicking the card a planner
@@ -36,8 +38,13 @@ export function TripCard({ trip, onOpen }: TripCardProps) {
   return (
     <article className={`tms-card h-100 d-flex flex-column${overCapacity ? ' border-danger' : ''}`}>
       <div className="tms-card-header">
-        <span className="tms-min-w-0">
+        <span className="tms-min-w-0 d-flex flex-column">
           <span className="tms-code tms-cell-strong">{title}</span>
+          {/* The shipment number, not the trip number, is what an external system, a manifest or
+              a phone call refers to: trip 3 means nothing without naming its planning run. */}
+          <span className="small text-body-secondary tms-truncate">
+            {t('card.shipment')} <span className="tms-code">{trip.shipmentNumber}</span>
+          </span>
         </span>
         <StatusBadge label={enumLabels.tripStatus(trip.status)} tone={STATUS_TONE[trip.status]} />
       </div>
@@ -53,7 +60,15 @@ export function TripCard({ trip, onOpen }: TripCardProps) {
             <span className="text-body-secondary fst-italic">{t('card.noVehicle')}</span>
           )}
         </p>
-        <p className="small text-body-secondary mb-2 tms-truncate">{trip.carrierName ?? t('card.noCarrier')}</p>
+        <p className="small text-body-secondary mb-2 tms-truncate">
+          {trip.carrierName ?? t('card.noCarrier')}
+          {trip.vehicleTypeCode && (
+            <>
+              {' · '}
+              {t('card.vehicleType')} {trip.vehicleTypeCode}
+            </>
+          )}
+        </p>
 
         <dl className="row row-cols-1 small mb-3 g-0">
           <div className="d-flex justify-content-between gap-2">
@@ -70,6 +85,12 @@ export function TripCard({ trip, onOpen }: TripCardProps) {
             <dt className="fw-normal text-body-secondary">{t('card.stopsLabel')}</dt>
             <dd className="mb-0 text-end">{format.quantity(trip.stopCount)}</dd>
           </div>
+          {trip.routeCode && (
+            <div className="d-flex justify-content-between gap-2">
+              <dt className="fw-normal text-body-secondary">{t('card.route')}</dt>
+              <dd className="mb-0 text-end tms-truncate">{trip.routeCode}</dd>
+            </div>
+          )}
         </dl>
 
         <CapacityBar kind="weight" dimension={trip.capacity.weight} />

@@ -64,6 +64,7 @@ class DestinationLookupAdapter implements DestinationLookupPort {
     }
 
     private static MasterReference toReference(Destination destination) {
-        return new MasterReference(destination.id(), destination.code(), destination.name());
+        return new MasterReference(destination.id(), destination.code(), destination.name(),
+                destination.latitude(), destination.longitude());
     }
 }

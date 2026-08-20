@@ -67,6 +67,7 @@ class OriginLookupAdapter implements OriginLookupPort {
     }
 
     private static MasterReference toReference(Origin origin) {
-        return new MasterReference(origin.id(), origin.code(), origin.name());
+        return new MasterReference(origin.id(), origin.code(), origin.name(),
+                origin.latitude(), origin.longitude());
     }
 }

@@ -471,6 +471,103 @@ class PlanningConstraintIntegrationTest {
                 + "', " + confirmedAt + ", " + cancelledAt + ") RETURNING id");
     }
 
+    // --- V19: shipment number and the route suggestion ----------------------------
+
+    @Test
+    @DisplayName("every trip gets a distinct shipment number, even when the insert does not name one")
+    void shipmentNumbersAreAssignedAndUnique() throws SQLException {
+        Fixture fixture = fixture("SHIPNUM");
+
+        UUID first = insertTrip(fixture, 1);
+        UUID second = insertTrip(fixture, 2);
+
+        String firstNumber = shipmentNumberOf(first);
+        String secondNumber = shipmentNumberOf(second);
+        assertThat(firstNumber).startsWith("SH-");
+        assertThat(secondNumber).startsWith("SH-").isNotEqualTo(firstNumber);
+    }
+
+    @Test
+    @DisplayName("two trips cannot share a shipment number, whatever company they belong to")
+    void shipmentNumberIsUniqueInstallationWide() throws SQLException {
+        Fixture companyA = fixture("SHIPUQ-A");
+        Fixture companyB = fixture("SHIPUQ-B");
+        UUID first = insertTrip(companyA, 1);
+        String taken = shipmentNumberOf(first);
+
+        assertViolates(UNIQUE_VIOLATION, () -> execute(
+                "INSERT INTO tms.trip (company_id, planning_run_id, planning_date, trip_number, shipment_number)"
+                        + " VALUES ('" + companyB.companyId + "', '" + companyB.runId + "', '2026-04-01', 1, '"
+                        + taken + "')"));
+    }
+
+    @Test
+    @DisplayName("a blank shipment number is refused")
+    void blankShipmentNumberIsRefused() throws SQLException {
+        Fixture fixture = fixture("SHIPBLANK");
+
+        assertViolates(CHECK_VIOLATION, () -> execute(
+                "INSERT INTO tms.trip (company_id, planning_run_id, planning_date, trip_number, shipment_number)"
+                        + " VALUES ('" + fixture.companyId + "', '" + fixture.runId + "', '2026-04-01', 1, '   ')"));
+    }
+
+    @Test
+    @DisplayName("a trip cannot point at a route of another company")
+    void tripRouteMustBelongToTheSameCompany() throws SQLException {
+        Fixture companyA = fixture("TRIPROUTE-A");
+        Fixture companyB = fixture("TRIPROUTE-B");
+        UUID foreignRoute = insertRoute(companyB, "ROUTE-FOREIGN");
+
+        assertViolates(FOREIGN_KEY_VIOLATION, () -> execute(
+                "INSERT INTO tms.trip (company_id, planning_run_id, planning_date, trip_number, route_id)"
+                        + " VALUES ('" + companyA.companyId + "', '" + companyA.runId + "', '2026-04-01', 1, '"
+                        + foreignRoute + "')"));
+    }
+
+    @Test
+    @DisplayName("a trip may point at a route of its own company, and may point at none")
+    void tripRouteOfTheSameCompanyIsAccepted() throws SQLException {
+        Fixture fixture = fixture("TRIPROUTE-OK");
+        UUID ownRoute = insertRoute(fixture, "ROUTE-OWN");
+
+        execute("INSERT INTO tms.trip (company_id, planning_run_id, planning_date, trip_number, route_id)"
+                + " VALUES ('" + fixture.companyId + "', '" + fixture.runId + "', '2026-04-01', 1, '"
+                + ownRoute + "')");
+        insertTrip(fixture, 2);
+
+        assertThat(scalar("SELECT COUNT(*) FROM tms.trip WHERE planning_run_id = '" + fixture.runId + "'"))
+                .isEqualTo("2");
+    }
+
+    @Test
+    @DisplayName("a route that a trip points at cannot be deleted out from under it")
+    void aReferencedRouteCannotBeDeleted() throws SQLException {
+        Fixture fixture = fixture("ROUTEDEL");
+        UUID route = insertRoute(fixture, "ROUTE-DEL");
+        execute("INSERT INTO tms.trip (company_id, planning_run_id, planning_date, trip_number, route_id)"
+                + " VALUES ('" + fixture.companyId + "', '" + fixture.runId + "', '2026-04-01', 1, '" + route + "')");
+
+        assertViolates(FOREIGN_KEY_VIOLATION,
+                () -> execute("DELETE FROM tms.route WHERE id = '" + route + "'"));
+    }
+
+    private String shipmentNumberOf(UUID tripId) throws SQLException {
+        return scalar("SELECT shipment_number FROM tms.trip WHERE id = '" + tripId + "'");
+    }
+
+    private UUID insertRoute(Fixture fixture, String code) throws SQLException {
+        return insertReturningId("INSERT INTO tms.route (company_id, code, name, origin_id) VALUES ('"
+                + fixture.companyId + "', '" + code + "-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase()
+                + "', 'Route master', '" + fixture.originId + "') RETURNING id");
+    }
+
+    private String scalar(String sql) throws SQLException {
+        try (Statement statement = connection.createStatement(); ResultSet rows = statement.executeQuery(sql)) {
+            rows.next();
+            return rows.getString(1);
+        }
+    }
+
     private UUID insertTrip(Fixture fixture, int tripNumber) throws SQLException {
         return insertReturningId("INSERT INTO tms.trip (company_id, planning_run_id, planning_date, trip_number)"
                 + " VALUES ('" + fixture.companyId + "', '" + fixture.runId + "', '2026-04-01', " + tripNumber

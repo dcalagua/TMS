@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../shared/api/httpClient'
 import type { TripDetailView, TripView } from '../../shared/api/planningApi'
 import { TripDetailDrawer } from './TripDetailDrawer'
@@ -11,11 +11,18 @@ const planningApiMocks = vi.hoisted(() => ({
   removeOrderFromTrip: vi.fn(),
   moveOrderToTrip: vi.fn(),
   reorderTripStops: vi.fn(),
+  updateTripRoute: vi.fn(),
   cancelTrip: vi.fn(),
 }))
 vi.mock('../../shared/api/planningApi', async () => {
   const actual = await vi.importActual<typeof import('../../shared/api/planningApi')>('../../shared/api/planningApi')
   return { ...actual, ...planningApiMocks }
+})
+
+const routesApiMocks = vi.hoisted(() => ({ fetchRoutes: vi.fn() }))
+vi.mock('../../shared/api/routesApi', async () => {
+  const actual = await vi.importActual<typeof import('../../shared/api/routesApi')>('../../shared/api/routesApi')
+  return { ...actual, fetchRoutes: routesApiMocks.fetchRoutes }
 })
 
 const vehiclesApiMocks = vi.hoisted(() => ({ fetchVehicles: vi.fn() }))
@@ -33,7 +40,11 @@ vi.mock('../../shared/ui/alerts', () => alertMocks)
 
 function trip(overrides: Partial<TripView> = {}): TripView {
   return {
-    id: 'trip-1', planningRunId: 'run-1', tripNumber: 1, status: 'DRAFT', vehicleId: 'vehicle-1',
+    id: 'trip-1', companyId: 'company-1', planningRunId: 'run-1', planNumber: 'PL-00000001',
+    planningDate: '2026-03-01', shipmentNumber: 'SH-00000001', originId: 'origin-1',
+    originCode: 'LIM-01', originName: 'Lima depot', originLatitude: null, originLongitude: null,
+    vehicleTypeCode: null, routeId: null, routeCode: null, routeName: null,
+    tripNumber: 1, status: 'DRAFT', vehicleId: 'vehicle-1',
     vehicleCode: 'VH-1', vehicleLicensePlate: 'ABC-123', carrierId: 'carrier-1', carrierName: 'Acme Carriers',
     plannedDepartureAt: null,
     capacity: {
@@ -66,8 +77,10 @@ function detail(overrides: Partial<TripDetailView> = {}): TripDetailView {
       },
     ],
     stops: [
-      { id: 'stop-1', sequence: 1, destinationId: 'dest-1', destinationCode: 'DEST-A', destinationName: 'Destination A', serviceWindowStart: null, serviceWindowEnd: null, orderCount: 1 },
-      { id: 'stop-2', sequence: 2, destinationId: 'dest-2', destinationCode: 'DEST-B', destinationName: 'Destination B', serviceWindowStart: null, serviceWindowEnd: null, orderCount: 1 },
+      // dest-1 is geocoded, dest-2 is not: the drawer must say so for the second rather than
+      // implying it can be mapped.
+      { id: 'stop-1', sequence: 1, destinationId: 'dest-1', destinationCode: 'DEST-A', destinationName: 'Destination A', latitude: -12.05, longitude: -77.04, serviceWindowStart: null, serviceWindowEnd: null, orderCount: 1 },
+      { id: 'stop-2', sequence: 2, destinationId: 'dest-2', destinationCode: 'DEST-B', destinationName: 'Destination B', latitude: null, longitude: null, serviceWindowStart: null, serviceWindowEnd: null, orderCount: 1 },
     ],
     ...overrides,
   }
@@ -94,11 +107,107 @@ function renderDrawer(props: { siblingTrips?: TripView[]; canManage?: boolean; o
   return { ...utils, onChanged, onClose }
 }
 
+beforeEach(() => {
+  // The drawer asks for the corridors that depart from this shipment's origin every time it
+  // renders an editable trip; tests that care override it.
+  routesApiMocks.fetchRoutes.mockResolvedValue({ content: [], page: 0, size: 20, totalElements: 0 })
+})
+
 afterEach(() => {
   vi.clearAllMocks()
 })
 
 describe('TripDetailDrawer', () => {
+  it('renders the shipment header the backend resolved, without joining anything client-side', async () => {
+    planningApiMocks.fetchTrip.mockResolvedValue(detail())
+
+    renderDrawer()
+
+    expect(await screen.findByText('SH-00000001')).toBeInTheDocument()
+    expect(screen.getByText('PL-00000001')).toBeInTheDocument()
+    expect(screen.getByText('Datos del envio'.replace('envio', 'env\u00edo'))).toBeInTheDocument()
+    expect(screen.getByText('Lima depot')).toBeInTheDocument()
+  })
+
+  it('says a destination cannot be mapped instead of implying it can', async () => {
+    planningApiMocks.fetchTrip.mockResolvedValue(detail())
+
+    renderDrawer()
+
+    await screen.findByText('TO-1')
+    // dest-1 is geocoded and dest-2 is not, so exactly one stop carries the warning.
+    expect(screen.getAllByText('Sin coordenadas')).toHaveLength(1)
+  })
+
+  it('offers only the routes of this shipment\'s origin and sends the route with its sequence flag', async () => {
+    planningApiMocks.fetchTrip.mockResolvedValue(detail())
+    planningApiMocks.updateTripRoute.mockResolvedValue(detail())
+    routesApiMocks.fetchRoutes.mockResolvedValue({
+      content: [{
+        id: 'route-1', code: 'RTE-1', name: 'North corridor', originId: 'origin-1', originCode: 'LIM-01',
+        originName: 'Lima depot', zoneId: null, zoneCode: null, zoneName: null, frequencyId: null,
+        frequencyCode: null, frequencyName: null, referenceDistanceKm: null, referenceDurationMinutes: null,
+        stopCount: 2, active: true, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+      }],
+      page: 0, size: 20, totalElements: 1,
+    })
+
+    renderDrawer()
+
+    await screen.findByText('TO-1')
+    await waitFor(() =>
+      expect(routesApiMocks.fetchRoutes).toHaveBeenCalledWith(
+        expect.objectContaining({ companyId: 'company-1', originId: 'origin-1', active: true }),
+      ),
+    )
+
+    await userEvent.selectOptions(await screen.findByLabelText('Ruta'), 'route-1')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar la ruta' }))
+
+    await waitFor(() =>
+      expect(planningApiMocks.updateTripRoute).toHaveBeenCalledWith('company-1', 'trip-1', {
+        routeId: 'route-1', applySequence: true, version: 1,
+      }),
+    )
+  })
+
+  it('records a route without reordering when the planner unticks the sequence box', async () => {
+    planningApiMocks.fetchTrip.mockResolvedValue(detail())
+    planningApiMocks.updateTripRoute.mockResolvedValue(detail())
+    routesApiMocks.fetchRoutes.mockResolvedValue({
+      content: [{
+        id: 'route-1', code: 'RTE-1', name: 'North corridor', originId: 'origin-1', originCode: 'LIM-01',
+        originName: 'Lima depot', zoneId: null, zoneCode: null, zoneName: null, frequencyId: null,
+        frequencyCode: null, frequencyName: null, referenceDistanceKm: null, referenceDurationMinutes: null,
+        stopCount: 2, active: true, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+      }],
+      page: 0, size: 20, totalElements: 1,
+    })
+
+    renderDrawer()
+
+    await screen.findByText('TO-1')
+    await userEvent.click(screen.getByRole('checkbox', { name: /Reordenar los destinos/ }))
+    await userEvent.selectOptions(await screen.findByLabelText('Ruta'), 'route-1')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar la ruta' }))
+
+    await waitFor(() =>
+      expect(planningApiMocks.updateTripRoute).toHaveBeenCalledWith('company-1', 'trip-1', {
+        routeId: 'route-1', applySequence: false, version: 1,
+      }),
+    )
+  })
+
+  it('does not offer the route picker on a confirmed shipment', async () => {
+    planningApiMocks.fetchTrip.mockResolvedValue(detail({ trip: trip({ status: 'CONFIRMED' }) }))
+
+    renderDrawer()
+
+    await screen.findByText('TO-1')
+    expect(screen.queryByLabelText('Ruta')).not.toBeInTheDocument()
+    expect(routesApiMocks.fetchRoutes).not.toHaveBeenCalled()
+  })
+
   it('shows a loading state before the trip detail resolves', () => {
     planningApiMocks.fetchTrip.mockReturnValue(new Promise(() => {}))
 
@@ -180,10 +289,10 @@ describe('TripDetailDrawer', () => {
     renderDrawer()
 
     await screen.findByText('TO-1')
-    const saveButton = screen.getByRole('button', { name: 'Save stop order' })
+    const saveButton = screen.getByRole('button', { name: 'Guardar el orden' })
     expect(saveButton).toBeDisabled()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Move stop 2 up' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Subir el destino 2' }))
     expect(saveButton).toBeEnabled()
 
     await userEvent.click(saveButton)

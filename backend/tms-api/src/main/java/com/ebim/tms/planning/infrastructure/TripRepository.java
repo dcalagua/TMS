@@ -52,6 +52,15 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
     List<Trip> findByPlanningRunIdOrderByTripNumberAsc(UUID planningRunId);
 
     /**
+     * The next value of {@code tms.shipment_number_seq} - {@code TripService} formats it into
+     * {@code shipment_number} (migration V19). A plain {@code nextval()} call, not an entity
+     * read, so it never participates in optimistic locking or the persistence context - the same
+     * shape as {@code PlanningRunRepository.nextPlanNumberValue}.
+     */
+    @Query(value = "SELECT nextval('tms.shipment_number_seq')", nativeQuery = true)
+    long nextShipmentNumberValue();
+
+    /**
      * The next trip number inside a run. Read while the run row is locked by the caller
      * ({@code PlanningRunService}/{@code TripService} hold the run's optimistic version and the
      * uniqueness constraint {@code uq_trip_run_number} is the backstop), so two concurrent
