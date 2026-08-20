@@ -17,10 +17,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 
 /**
- * Proves the V1 exposure decision documented in {@code docs/security/RLS_STRATEGY.md}:
- * the {@code tms} schema is backend-only, nobody but its owner holds a privilege on it, and
- * Row Level Security is enabled on every table with no policy, so any accidental exposure
- * denies instead of leaking.
+ * Proves the exposure decision documented in {@code docs/security/RLS_STRATEGY.md}: the
+ * {@code tms} schema is backend-only, nobody but its owner and the non-owner runtime role
+ * holds a privilege on it, and Row Level Security is enabled on every table - with tenant
+ * policies on business data (ADR-005) and none at all for the Supabase API roles, so any
+ * accidental exposure denies instead of leaking.
  *
  * <p>The Supabase API roles ({@code anon}, {@code authenticated}) do not exist on a plain
  * PostgreSQL container, so the tests create them and then assert that the schema still
@@ -36,6 +37,18 @@ class SchemaExposureIntegrationTest {
             "role_permission", "membership", "membership_role", "origin", "zone",
             "destination", "frequency", "frequency_weekly_rule", "frequency_exception",
             "route", "route_stop", "carrier", "vehicle_type", "vehicle",
+            "transport_order", "transport_order_line",
+            "planning_run", "trip", "trip_stop", "trip_order_assignment");
+
+    /**
+     * The tables whose rows belong to a company and are therefore filtered by RLS for the
+     * runtime role (ADR-005). Identity and authorization-catalogue tables are excluded on
+     * purpose: they are read before a company scope exists, so they carry the explicit
+     * {@code p_backend_managed} policy instead.
+     */
+    private static final List<String> TENANT_SCOPED_TABLES = List.of(
+            "origin", "zone", "destination", "frequency", "frequency_weekly_rule",
+            "frequency_exception", "route", "route_stop", "carrier", "vehicle_type", "vehicle",
             "transport_order", "transport_order_line",
             "planning_run", "trip", "trip_stop", "trip_order_assignment");
 
@@ -82,12 +95,50 @@ class SchemaExposureIntegrationTest {
     }
 
     @Test
-    @DisplayName("no RLS policy exists: V1 is a documented deny-all, not a permissive placeholder")
-    void thereAreNoPolicies() throws SQLException {
-        assertThat(strings("SELECT policyname FROM pg_policies WHERE schemaname = 'tms' ORDER BY 1"))
-                .as("a policy would claim an access path that V1 does not open; "
-                        + "add one only together with an ADR and its tests")
-                .isEmpty();
+    @DisplayName("the migrating role may actually SET ROLE tms_app, not merely administer it")
+    void theRuntimeRoleCanBeEntered() throws SQLException {
+        // Since PostgreSQL 16 creating a role grants ADMIN OPTION but not the SET option, so
+        // this is not implied by V13 having created tms_app. The distinction is invisible on a
+        // superuser connection - and the Testcontainers user is one - which is precisely why it
+        // is asserted on the catalogue rather than by attempting SET ROLE and seeing it pass.
+        assertThat(bool("""
+                SELECT m.set_option
+                FROM pg_auth_members m
+                JOIN pg_roles r ON r.oid = m.roleid
+                JOIN pg_roles g ON g.oid = m.member
+                WHERE r.rolname = 'tms_app' AND g.rolname = current_user
+                """))
+                .as("without the SET option the backend cannot enter the runtime role, and "
+                        + "every company-scoped request fails with 'permission denied to set "
+                        + "role tms_app' on any cluster where it is not a superuser")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("every company-scoped table carries the tenant policy (ADR-005)")
+    void businessTablesCarryTheTenantPolicy() throws SQLException {
+        assertThat(strings("""
+                SELECT tablename FROM pg_policies
+                WHERE schemaname = 'tms' AND policyname = 'p_tenant_company_scope'
+                ORDER BY 1
+                """))
+                .as("a company-scoped table without a tenant policy is readable across "
+                        + "tenants by the runtime role; add the policy in the migration that "
+                        + "creates the table")
+                .containsExactlyInAnyOrderElementsOf(TENANT_SCOPED_TABLES);
+    }
+
+    @Test
+    @DisplayName("no policy is granted to the Supabase API roles: the Data API stays denied")
+    void policiesTargetTheRuntimeRoleOnly() throws SQLException {
+        assertThat(strings("""
+                SELECT DISTINCT unnest(roles)::text FROM pg_policies WHERE schemaname = 'tms'
+                ORDER BY 1
+                """))
+                .as("V13 grants tenant access to the non-owner runtime role only; a policy "
+                        + "naming anon/authenticated/service_role - or PUBLIC - would open the "
+                        + "Data API path that ADR-004 closes")
+                .containsExactly("tms_app");
     }
 
     @Test

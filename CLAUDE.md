@@ -79,6 +79,10 @@ Authoritative documents live under `docs/architecture/`:
 - `ADR-003-multitenancy-company-scope.md` - Organization/Company tenancy and Company scoping.
 - `ADR-004-application-schema-and-database-exposure.md` - application objects live in the
   `tms` schema; the Supabase Data API does not see them; RLS is enabled with no policies.
+- `ADR-005-tenant-rls-runtime-role.md` - business tables are filtered by the tenant of the
+  current transaction for the non-owner `tms_app` role, so a query missing its company
+  predicate stops being a cross-tenant leak. Supersedes ADR-004's "no policies" for business
+  tables only.
 
 Database and security detail lives in `docs/database/DATA_MODEL.md`,
 `docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.
