@@ -94,6 +94,8 @@
     "destination": "Destino",
     "destinationToAdd": "Destino a agregar",
     "district": "Distrito",
+    "effectiveFrom": "Vigente desde",
+    "effectiveTo": "Vigente hasta",
     "email": "Correo electrónico",
     "externalReference": "Referencia externa",
     "externalSource": "Sistema de origen",

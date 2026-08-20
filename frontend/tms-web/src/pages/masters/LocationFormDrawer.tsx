@@ -20,6 +20,7 @@ import { LocationPickerMap } from '../../shared/maps/LocationPickerMap'
 import { FormField } from '../../shared/ui/components/FormField'
 import { Select } from '../../shared/ui/components/Select'
 import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
+import { LocationFrequencyPanel } from './LocationFrequencyPanel'
 
 const FORM_ID = 'location-form'
 
@@ -504,7 +505,7 @@ export function LocationFormDrawer({ companyId, location, onClose, onSaved }: Lo
           </div>
         </fieldset>
 
-        <fieldset className="tms-fieldset mb-0">
+        <fieldset className="tms-fieldset">
           <legend className="tms-fieldset-legend">{tc('sections.operation')}</legend>
           <div className="row">
             <div className="col-12 col-sm-4">
@@ -563,6 +564,12 @@ export function LocationFormDrawer({ companyId, location, onClose, onSaved }: Lo
             </div>
           </div>
         </fieldset>
+
+        {isEdit ? (
+          <LocationFrequencyPanel companyId={companyId} locationId={location.id} locationName={location.name} />
+        ) : (
+          <p className="text-body-secondary small mb-0">{t('locations.form.saveFirstForServiceCalendar')}</p>
+        )}
       </form>
     </TmsDrawer>
   )

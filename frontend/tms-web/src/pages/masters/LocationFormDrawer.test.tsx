@@ -21,6 +21,21 @@ vi.mock('../../shared/api/zonesApi', async () => {
   return { ...actual, fetchZones: zonesApiMocks.fetchZones }
 })
 
+// LocationFrequencyPanel (rendered only in edit mode) fetches its own data independently of this
+// drawer's form fields - stubbed here so edit-mode tests do not depend on its network calls.
+const frequenciesApiMocks = vi.hoisted(() => ({ fetchFrequencies: vi.fn() }))
+vi.mock('../../shared/api/frequenciesApi', async () => {
+  const actual = await vi.importActual<typeof import('../../shared/api/frequenciesApi')>('../../shared/api/frequenciesApi')
+  return { ...actual, fetchFrequencies: frequenciesApiMocks.fetchFrequencies }
+})
+
+const locationFrequenciesApiMocks = vi.hoisted(() => ({ fetchLocationFrequencies: vi.fn() }))
+vi.mock('../../shared/api/locationFrequenciesApi', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../shared/api/locationFrequenciesApi')>('../../shared/api/locationFrequenciesApi')
+  return { ...actual, fetchLocationFrequencies: locationFrequenciesApiMocks.fetchLocationFrequencies }
+})
+
 const LOCATION: LocationView = {
   id: 'location-1',
   code: 'LIM-DC',
@@ -52,6 +67,8 @@ const LOCATION: LocationView = {
 function renderDrawer(location: LocationView | null, onSaved = vi.fn()) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   zonesApiMocks.fetchZones.mockResolvedValue({ content: [], page: 0, size: 200, totalElements: 0 })
+  frequenciesApiMocks.fetchFrequencies.mockResolvedValue({ content: [], page: 0, size: 200, totalElements: 0 })
+  locationFrequenciesApiMocks.fetchLocationFrequencies.mockResolvedValue([])
   render(
     <QueryClientProvider client={queryClient}>
       <LocationFormDrawer companyId="company-1" location={location} onClose={vi.fn()} onSaved={onSaved} />
@@ -71,6 +88,15 @@ describe('LocationFormDrawer', () => {
     expect(screen.getByRole('heading', { name: 'Nueva ubicación' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Destino' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Origen' })).not.toBeChecked()
+  })
+
+  it('only offers the service-calendar panel once the location exists', async () => {
+    renderDrawer(null)
+    expect(screen.getByText('Guarda la ubicación primero para poder asociarle frecuencias.')).toBeInTheDocument()
+    expect(screen.queryByText('Calendario de servicio')).not.toBeInTheDocument()
+
+    renderDrawer(LOCATION)
+    expect(await screen.findByText('Calendario de servicio')).toBeInTheDocument()
   })
 
   it('pre-fills every field when editing, including the roles the location holds', () => {

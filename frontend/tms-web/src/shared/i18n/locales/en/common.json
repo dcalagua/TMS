@@ -94,6 +94,8 @@
     "destination": "Destination",
     "destinationToAdd": "Destination to add",
     "district": "District",
+    "effectiveFrom": "Effective from",
+    "effectiveTo": "Effective to",
     "email": "Email",
     "externalReference": "External reference",
     "externalSource": "External source",

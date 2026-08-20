@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
-import { useFieldArray, useForm } from 'react-hook-form'
+import { Controller, useFieldArray, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { applyApiFieldErrors } from '../../shared/api/formErrors'
 import type { ApiError } from '../../shared/api/httpClient'
@@ -18,6 +18,7 @@ import {
 import { describeApiError } from '../../shared/api/problemMessages'
 import { FormField } from '../../shared/ui/components/FormField'
 import { LoadingState } from '../../shared/ui/components/LoadingState'
+import { Select } from '../../shared/ui/components/Select'
 import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'route-form'
@@ -289,42 +290,63 @@ function RouteForm({
           <div className="row">
             <div className="col-12 col-sm-4">
               <FormField label={tc('columns.origin')} htmlFor="route-origin" error={errors.originId?.message} required>
-                <select
-                  id="route-origin"
-                  className={`form-select${errors.originId ? ' is-invalid' : ''}`}
-                  {...register('originId', { required: tv('required') })}
-                >
-                  <option value="">{t('routes.form.selectOrigin')}</option>
-                  {originOptions.map((origin) => (
-                    <option key={origin.id} value={origin.id}>
-                      {origin.name}
-                    </option>
-                  ))}
-                </select>
+                {/* Controller rather than `register`: the control is a button plus a listbox, so
+                    there is no native change event for react-hook-form to hook into. */}
+                <Controller
+                  control={control}
+                  name="originId"
+                  rules={{ required: tv('required') }}
+                  render={({ field }) => (
+                    <Select
+                      id="route-origin"
+                      value={field.value}
+                      onChange={field.onChange}
+                      invalid={Boolean(errors.originId)}
+                      options={[
+                        { value: '', label: t('routes.form.selectOrigin') },
+                        ...originOptions.map((origin) => ({ value: origin.id, label: origin.name })),
+                      ]}
+                    />
+                  )}
+                />
               </FormField>
             </div>
             <div className="col-12 col-sm-4">
               <FormField label={tc('columns.zone')} htmlFor="route-zone" error={errors.zoneId?.message}>
-                <select id="route-zone" className="form-select" {...register('zoneId')}>
-                  <option value="">{t('routes.form.noZone')}</option>
-                  {zoneOptions.map((zone) => (
-                    <option key={zone.id} value={zone.id}>
-                      {zone.name}
-                    </option>
-                  ))}
-                </select>
+                <Controller
+                  control={control}
+                  name="zoneId"
+                  render={({ field }) => (
+                    <Select
+                      id="route-zone"
+                      value={field.value}
+                      onChange={field.onChange}
+                      options={[
+                        { value: '', label: t('routes.form.noZone') },
+                        ...zoneOptions.map((zone) => ({ value: zone.id, label: zone.name })),
+                      ]}
+                    />
+                  )}
+                />
               </FormField>
             </div>
             <div className="col-12 col-sm-4">
               <FormField label={tc('fields.frequency')} htmlFor="route-frequency" error={errors.frequencyId?.message}>
-                <select id="route-frequency" className="form-select" {...register('frequencyId')}>
-                  <option value="">{t('routes.form.noFrequency')}</option>
-                  {frequencyOptions.map((frequency) => (
-                    <option key={frequency.id} value={frequency.id}>
-                      {frequency.name}
-                    </option>
-                  ))}
-                </select>
+                <Controller
+                  control={control}
+                  name="frequencyId"
+                  render={({ field }) => (
+                    <Select
+                      id="route-frequency"
+                      value={field.value}
+                      onChange={field.onChange}
+                      options={[
+                        { value: '', label: t('routes.form.noFrequency') },
+                        ...frequencyOptions.map((frequency) => ({ value: frequency.id, label: frequency.name })),
+                      ]}
+                    />
+                  )}
+                />
               </FormField>
             </div>
             <div className="col-6">
@@ -409,21 +431,33 @@ function RouteForm({
             </ol>
           )}
 
-          <div className="input-group input-group-sm">
-            <select
-              className="form-select"
-              aria-label={tc('fields.destinationToAdd')}
-              value={stopToAdd}
-              onChange={(event) => setStopToAdd(event.target.value)}
+          <div className="d-flex gap-2 align-items-start">
+            {/* Not an `input-group`: `.tms-select` draws its own border and radius, unlike
+                `.form-select`, so it does not need (or want) Bootstrap's input-group merging. */}
+            <div className="flex-grow-1">
+              <label htmlFor="route-stop-picker" className="visually-hidden">
+                {tc('fields.destinationToAdd')}
+              </label>
+              <Select
+                id="route-stop-picker"
+                size="sm"
+                value={stopToAdd}
+                onChange={setStopToAdd}
+                options={[
+                  { value: '', label: t('routes.form.selectDestination') },
+                  ...addableDestinations.map((destination) => ({
+                    value: destination.id,
+                    label: `${destination.code} — ${destination.name}`,
+                  })),
+                ]}
+              />
+            </div>
+            <button
+              type="button"
+              className="btn btn-outline-primary btn-sm"
+              onClick={addStop}
+              disabled={stopToAdd === ''}
             >
-              <option value="">{t('routes.form.selectDestination')}</option>
-              {addableDestinations.map((destination) => (
-                <option key={destination.id} value={destination.id}>
-                  {destination.code} — {destination.name}
-                </option>
-              ))}
-            </select>
-            <button type="button" className="btn btn-outline-primary" onClick={addStop} disabled={stopToAdd === ''}>
               {t('routes.form.addStop')}
             </button>
           </div>

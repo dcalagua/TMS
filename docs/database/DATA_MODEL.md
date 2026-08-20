@@ -461,7 +461,7 @@ individually through its own sub-resource (`POST`/`DELETE
 /masterdata/frequencies/{id}/exceptions`), because a calendar override is an independent fact
 about one date, not a slot in a fixed weekly grid.
 
-### 8.3 A destination-frequency association table was deliberately not added
+### 8.3 A destination-frequency association table was deliberately not added in V7
 
 The "Frequency model" brief recommends an explicit destination-frequency association (rather
 than a rigid single FK) so multiple schedules can be modeled later. V7 does not add that
@@ -473,6 +473,10 @@ already made for zone geometry ("no geometry in V1... a future migration can add
 changing this shape"). When Orders/Planning defines what "which frequency serves this
 destination" needs to look like, add the table then; `destination`/`frequency` are already
 shaped so a later join table can reference both without any change to either.
+
+**Superseded by section 15.** Job 03 of the overnight-v3 pack is that concrete requirement, and
+`tms.location_frequency` (migration V15) is that table - associating the canonical `tms.location`
+(V14) rather than the legacy `tms.destination`, since V14 postdates this paragraph.
 
 ### 8.4 Indexes added by V7
 
@@ -1079,3 +1083,87 @@ additive `ALTER TABLE` - applied migrations stay immutable (rule: never edit V9)
 | `ix_trip_order_assignment_order` (full) | the audit path: everywhere this order has been planned, closed rows included |
 | `ix_trip_order_assignment_company` | company-scoped reads |
 | `uq_vehicle_id_company` (on `tms.vehicle`) | see 14.7 |
+
+## 15. Location service calendar: `tms.location_frequency` (job 03 overnight-v3, migration V15)
+
+Section 8.3 deliberately did not add a destination-frequency association table in V7: "when
+Orders/Planning defines what 'which frequency serves this destination' needs to look like, add
+the table then." Job 03 of the overnight-v3 pack is that concrete requirement - a location/store
+must be able to answer "can I be serviced/dispatched on this date?" independently of whether it
+also happens to be a stop on some `tms.route`, because `route.frequency_id` (V8) only ever
+describes the route's own planning cadence, not any one stop's.
+
+```mermaid
+erDiagram
+    LOCATION  ||--o{ LOCATION_FREQUENCY : "has a calendar of"
+    FREQUENCY ||--o{ LOCATION_FREQUENCY : "governs"
+
+    LOCATION_FREQUENCY {
+        uuid id PK
+        uuid company_id FK
+        uuid location_id FK "composite FK guarantees same company as location"
+        uuid frequency_id FK "composite FK guarantees same company as frequency"
+        date effective_from "nullable - no start boundary"
+        date effective_to "nullable - no end boundary, effective_to >= effective_from when both present"
+        bool active "pauses the association without losing its date range"
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+        uuid updated_by FK
+    }
+```
+
+### 15.1 Associates `tms.location`, not `tms.destination`
+
+`tms.location` (V14) is the forward-looking canonical master, and every location with a SHIP_TO
+role already has a `location_id`-linked `tms.destination` projection
+(`docs/architecture/ADR_LOCATION_MODEL.md`), so attaching the calendar to `tms.location` loses no
+reach today and needs no rework when the legacy projections eventually retire (ADR-006 debt D-1).
+
+### 15.2 Deliberately independent of `tms.route.frequency_id`
+
+A route may reference a frequency (V8) for its own planning cadence; a location may independently
+reference one or more frequencies for its own service calendar. Neither implies the other - the
+job brief is explicit: "do not hard-wire frequency solely to a route if that prevents a store from
+having its own calendar." A location's eligibility is evaluated purely from its own
+`location_frequency` associations, never through any route it might also be a stop on.
+
+### 15.3 One or multiple schedules per location, each independently pausable and time-boxed
+
+A location may hold several associations (a store served by two independent schedules is eligible
+if *either* one runs on the evaluated date - `LocationEligibilityEvaluator`). `effective_from`/
+`effective_to` are both optional, matching a seasonal or contract-bound calendar without forcing
+every association to declare boundaries it does not need. `active` is separate from the date
+range for the same reason `frequency_weekly_rule.enabled` is separate from row presence (V7): an
+operator can pause an association without losing its configured dates.
+
+The one thing V1 deliberately does not model: two *active* associations between the same location
+and the same frequency (`LocationFrequencyService` rejects the second with a 409) - an operator
+who wants to reassign a period edits the existing association's dates rather than creating a
+second row that means the same thing.
+
+### 15.4 Carries its own `company_id`, unlike `frequency_weekly_rule`
+
+Like `tms.route_stop` (section 9.1) and unlike `tms.frequency_weekly_rule` (a pure child with no
+`company_id` of its own), `location_frequency` cross-references two independently company-scoped
+masters (`tms.location` and `tms.frequency`), so both composite tenant FKs need a `company_id` on
+this row to be checked against. The RLS policy is the direct `company_id = current_company_id()`
+form (section 3 of the RLS migration), not the EXISTS-through-parent form, for the same reason.
+
+### 15.5 The eligibility question is answered in Java, not SQL
+
+`LocationEligibilityEvaluator` (pure, no repository access, unit-tested without a database) takes
+already-resolved candidates - each a `location_frequency` row, its `Frequency` and, if one exists,
+the `FrequencyException` for the evaluated date - and decides in the same precedence
+`FrequencyCalendar.runsOn` already gives `FrequencyService`: an exception always overrides the
+weekly rule, and a day with no configured row or a disabled row both mean "does not run". This
+matches `CLAUDE.md`'s "Java owns business rules" and the job brief's "do not yet build an
+optimizer" - the service makes one yes/no decision for one date, nothing more.
+
+### 15.6 Indexes added by V15
+
+| Index | Purpose |
+|---|---|
+| `ix_location_frequency_company` | company-scoped reads (ADR-003) |
+| `ix_location_frequency_location` | "this location's calendar" - the eligibility service's own lookup |
+| `ix_location_frequency_frequency` | "which locations use this frequency" - a future Frequency detail screen |
