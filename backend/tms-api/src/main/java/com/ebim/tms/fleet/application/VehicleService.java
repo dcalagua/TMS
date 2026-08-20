@@ -105,7 +105,8 @@ public class VehicleService {
         UUID actorId = auditActorProvider.requireAppUserId();
         Vehicle vehicle = new Vehicle(scope.companyId(), code, licensePlate, request.carrierId(),
                 request.vehicleTypeId(), request.maxWeightOverrideKg(), request.maxVolumeOverrideM3(),
-                request.maxPalletsOverride(), request.availabilityStatus(), actorId);
+                request.maxPalletsOverride(), request.availabilityStatus(), blankToNull(request.externalReference()),
+                actorId);
         return toView(saveOrConflict(vehicle, code, licensePlate), carrier, type);
     }
 
@@ -126,7 +127,7 @@ public class VehicleService {
         UUID actorId = auditActorProvider.requireAppUserId();
         vehicle.applyChanges(code, licensePlate, request.carrierId(), request.vehicleTypeId(),
                 request.maxWeightOverrideKg(), request.maxVolumeOverrideM3(), request.maxPalletsOverride(),
-                request.availabilityStatus(), actorId);
+                request.availabilityStatus(), blankToNull(request.externalReference()), actorId);
         return toView(saveOrConflict(vehicle, code, licensePlate), carrier, type);
     }
 
@@ -239,6 +240,10 @@ public class VehicleService {
 
     private static String normalizePlate(String licensePlate) {
         return licensePlate.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private static String blankToNull(String value) {
+        return (value == null || value.isBlank()) ? null : value.trim();
     }
 
     private static Pageable toPageable(PageQuery pageQuery) {

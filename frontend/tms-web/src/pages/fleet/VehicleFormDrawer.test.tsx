@@ -42,6 +42,7 @@ const VEHICLE: VehicleView = {
   effectiveMaxVolumeM3: 40,
   effectiveMaxPallets: 20,
   availabilityStatus: 'AVAILABLE',
+  externalReference: null,
   active: true,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
@@ -61,6 +62,12 @@ function vehicleTypesPage() {
     }],
     page: 0, size: 200, totalElements: 1,
   }
+}
+
+/** `Select` is a button + listbox, not a native `<select>`: open it, then click the option. */
+async function pickOption(comboboxName: RegExp | string, optionName: RegExp | string) {
+  await userEvent.click(screen.getByRole('combobox', { name: comboboxName }))
+  await userEvent.click(await screen.findByRole('option', { name: optionName }))
 }
 
 function renderModal(props: Partial<ComponentProps<typeof VehicleFormDrawer>> = {}) {
@@ -114,8 +121,12 @@ describe('VehicleFormDrawer', () => {
     vehicleTypesApiMocks.fetchVehicleTypes.mockResolvedValue(vehicleTypesPage())
     renderModal()
 
+    await userEvent.click(await screen.findByRole('combobox', { name: /^tipo de vehículo/i }))
     expect(await screen.findByRole('option', { name: /TYPE-1/ })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: /Carrier One SA/ })).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+
+    await userEvent.click(screen.getByRole('combobox', { name: /^transportista/i }))
+    expect(await screen.findByRole('option', { name: /Carrier One SA/ })).toBeInTheDocument()
   })
 
   it('creates a vehicle with no carrier (owned fleet) and no overrides', async () => {
@@ -127,7 +138,7 @@ describe('VehicleFormDrawer', () => {
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'truck-2')
     await userEvent.type(screen.getByLabelText(/^placa/i), 'xyz-999')
-    await userEvent.selectOptions(await screen.findByLabelText(/^tipo de vehículo/i), 'type-1')
+    await pickOption(/tipo de vehículo/i, /TYPE-1/)
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
@@ -151,7 +162,7 @@ describe('VehicleFormDrawer', () => {
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'truck-3')
     await userEvent.type(screen.getByLabelText(/^placa/i), 'ovr-001')
-    await userEvent.selectOptions(await screen.findByLabelText(/^tipo de vehículo/i), 'type-1')
+    await pickOption(/tipo de vehículo/i, /TYPE-1/)
     await userEvent.type(screen.getByLabelText(/^peso propio/i), '9500')
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
@@ -171,8 +182,10 @@ describe('VehicleFormDrawer', () => {
 
     expect(screen.getByLabelText(/^código/i)).toHaveValue('TRUCK-1')
     expect(screen.getByLabelText(/^placa/i)).toHaveValue('ABC-123')
-    expect(await screen.findByRole('option', { name: /TYPE-1/ })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: /Carrier One SA|CARRIER-1/ })).toBeInTheDocument()
+    // The vehicle's own type/carrier fell out of the active-only fetch, but the closed trigger
+    // still shows it - the form injects the currently assigned option when it is missing.
+    expect(await screen.findByRole('combobox', { name: /^tipo de vehículo/i })).toHaveTextContent('TYPE-1')
+    expect(screen.getByRole('combobox', { name: /^transportista/i })).toHaveTextContent(/Carrier One SA|CARRIER-1/)
 
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
@@ -194,7 +207,7 @@ describe('VehicleFormDrawer', () => {
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'DUP')
     await userEvent.type(screen.getByLabelText(/^placa/i), 'dup-001')
-    await userEvent.selectOptions(await screen.findByLabelText(/^tipo de vehículo/i), 'type-1')
+    await pickOption(/tipo de vehículo/i, /TYPE-1/)
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     expect(await screen.findByText("license plate 'DUP-001' already exists")).toBeInTheDocument()

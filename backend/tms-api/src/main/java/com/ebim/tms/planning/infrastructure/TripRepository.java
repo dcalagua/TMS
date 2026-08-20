@@ -3,6 +3,7 @@ package com.ebim.tms.planning.infrastructure;
 import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.planning.domain.TripStatus;
 import jakarta.persistence.LockModeType;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -60,6 +61,15 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
     int maxTripNumber(@Param("planningRunId") UUID planningRunId);
 
     long countByPlanningRunIdAndStatusNot(UUID planningRunId, TripStatus status);
+
+    /**
+     * The double-booking pre-check ({@code TripService.requireVehicleNotDoubleBooked}): is this
+     * vehicle already on another non-cancelled trip the same planning date? The database's own
+     * copy of the same rule is {@code uq_trip_vehicle_active_planning_date} (migration V16) - this
+     * is the caller-facing check that runs first, the index is the concurrency backstop.
+     */
+    boolean existsByCompanyIdAndVehicleIdAndPlanningDateAndStatusNotAndIdNot(
+            UUID companyId, UUID vehicleId, LocalDate planningDate, TripStatus excludedStatus, UUID excludedTripId);
 
     /**
      * Trip counts for a whole page of planning runs in one grouped query - never one count per

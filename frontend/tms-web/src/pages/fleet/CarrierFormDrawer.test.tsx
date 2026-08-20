@@ -19,6 +19,7 @@ const CARRIER: CarrierView = {
   contactName: 'Jane Doe',
   phone: '+51 999 999 999',
   email: 'ops@acme.example.test',
+  externalReference: null,
   active: true,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',

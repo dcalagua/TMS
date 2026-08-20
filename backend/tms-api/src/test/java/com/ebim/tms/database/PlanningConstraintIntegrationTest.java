@@ -231,6 +231,105 @@ class PlanningConstraintIntegrationTest {
         assertViolates(UNIQUE_VIOLATION, () -> insertTrip(fixture, 1));
     }
 
+    // --- vehicle double-booking (migration V16) ------------------------------------
+
+    @Test
+    @DisplayName("the same vehicle cannot be booked on two active trips for the same planning date")
+    void vehicleCannotBeDoubleBookedOnTheSameDate() throws SQLException {
+        Fixture fixture = fixture("DBLBOOK");
+        insertTripWithVehicle(fixture, 1, fixture.vehicleId, "2026-04-01");
+
+        assertViolates(UNIQUE_VIOLATION,
+                () -> insertTripWithVehicle(fixture, 2, fixture.vehicleId, "2026-04-01"));
+    }
+
+    @Test
+    @DisplayName("the same vehicle may run one trip per day: a different planning date is not a conflict")
+    void sameVehicleDifferentPlanningDateIsAllowed() throws SQLException {
+        Fixture fixture = fixture("DBLBOOK-DATE");
+        insertTripWithVehicle(fixture, 1, fixture.vehicleId, "2026-04-01");
+
+        insertTripWithVehicle(fixture, 2, fixture.vehicleId, "2026-04-02");
+        assertThat(count("SELECT count(*) FROM tms.trip WHERE vehicle_id = '" + fixture.vehicleId + "'"))
+                .isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("cancelling a trip frees its vehicle for another active trip the same day")
+    void cancellingATripFreesItsVehicleForTheSameDay() throws SQLException {
+        Fixture fixture = fixture("DBLBOOK-CANCEL");
+        UUID first = insertTripWithVehicle(fixture, 1, fixture.vehicleId, "2026-04-01");
+
+        execute("UPDATE tms.trip SET status = 'CANCELLED', cancelled_at = now() WHERE id = '" + first + "'");
+        insertTripWithVehicle(fixture, 2, fixture.vehicleId, "2026-04-01");
+
+        assertThat(count("SELECT count(*) FROM tms.trip WHERE vehicle_id = '" + fixture.vehicleId
+                + "' AND status <> 'CANCELLED'")).isOne();
+    }
+
+    @Test
+    @DisplayName("a confirmed trip still counts as active for the double-booking invariant")
+    void confirmedTripStillCountsAsActive() throws SQLException {
+        Fixture fixture = fixture("DBLBOOK-CONFIRM");
+        UUID first = insertTripWithVehicle(fixture, 1, fixture.vehicleId, "2026-04-01");
+        execute("UPDATE tms.trip SET status = 'CONFIRMED', confirmed_at = now(), planned_departure_at = now(),"
+                + " snapshot_max_weight_kg = 1000, snapshot_max_volume_m3 = 10, snapshot_max_pallets = 4,"
+                + " capacity_snapshot_at = now() WHERE id = '" + first + "'");
+
+        assertViolates(UNIQUE_VIOLATION,
+                () -> insertTripWithVehicle(fixture, 2, fixture.vehicleId, "2026-04-01"));
+    }
+
+    @Test
+    @DisplayName("two vehicle-less draft trips on the same day never conflict: only an assigned vehicle reserves anything")
+    void vehicleLessTripsNeverConflict() throws SQLException {
+        Fixture fixture = fixture("DBLBOOK-NOVEH");
+        insertTrip(fixture, 1);
+        insertTrip(fixture, 2);
+
+        assertThat(count("SELECT count(*) FROM tms.trip WHERE planning_run_id = '" + fixture.runId + "'"))
+                .isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("two concurrent transactions booking the same vehicle for the same day: the second blocks, then fails")
+    void concurrentDoubleBookingBlocksThenFails() throws Exception {
+        // Committed on purpose - see PlanningConstraintIntegrationTest.concurrentAssignmentOfTheSameOrderBlocksThenFails
+        // for why a second connection needs committed fixture rows.
+        Fixture fixture = fixture("DBLBOOK-RACE");
+        connection.commit();
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (Connection second = PostgresTestDatabase.connect(jdbcUrl)) {
+            second.setAutoCommit(false);
+            insertTripWithVehicle(fixture, 1, fixture.vehicleId, "2026-04-01"); // first planner, not committed yet
+
+            Future<Throwable> blocked = executor.submit(() -> catchThrowable(() -> {
+                try (Statement statement = second.createStatement()) {
+                    statement.execute("INSERT INTO tms.trip (company_id, planning_run_id, planning_date,"
+                            + " trip_number, vehicle_id) VALUES ('" + fixture.companyId + "', '" + fixture.runId
+                            + "', '2026-04-01', 2, '" + fixture.vehicleId + "')");
+                }
+            }));
+
+            assertThat(catchThrowable(() -> blocked.get(750, TimeUnit.MILLISECONDS)))
+                    .as("the second planner must be made to wait, not allowed to book the same vehicle")
+                    .isInstanceOf(TimeoutException.class);
+
+            connection.commit(); // the first planner wins
+
+            Throwable thrown = blocked.get(10, TimeUnit.SECONDS);
+            assertThat(thrown).as("the second insert must fail once the first is committed").isNotNull();
+            assertThat(thrown).isInstanceOf(SQLException.class);
+            assertThat(((SQLException) thrown).getSQLState()).isEqualTo(UNIQUE_VIOLATION);
+            second.rollback();
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(count("SELECT count(*) FROM tms.trip WHERE vehicle_id = '" + fixture.vehicleId + "'")).isOne();
+    }
+
     // --- planning runs ------------------------------------------------------------
 
     @Test
@@ -373,8 +472,17 @@ class PlanningConstraintIntegrationTest {
     }
 
     private UUID insertTrip(Fixture fixture, int tripNumber) throws SQLException {
-        return insertReturningId("INSERT INTO tms.trip (company_id, planning_run_id, trip_number) VALUES ('"
-                + fixture.companyId + "', '" + fixture.runId + "', " + tripNumber + ") RETURNING id");
+        return insertReturningId("INSERT INTO tms.trip (company_id, planning_run_id, planning_date, trip_number)"
+                + " VALUES ('" + fixture.companyId + "', '" + fixture.runId + "', '2026-04-01', " + tripNumber
+                + ") RETURNING id");
+    }
+
+    private UUID insertTripWithVehicle(Fixture fixture, int tripNumber, UUID vehicleId, String planningDate)
+            throws SQLException {
+        return insertReturningId(
+                "INSERT INTO tms.trip (company_id, planning_run_id, planning_date, trip_number, vehicle_id)"
+                        + " VALUES ('" + fixture.companyId + "', '" + fixture.runId + "', '" + planningDate + "', "
+                        + tripNumber + ", '" + vehicleId + "') RETURNING id");
     }
 
     private UUID insertOrder(Fixture fixture, String orderNumber) throws SQLException {

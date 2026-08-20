@@ -20,5 +20,6 @@ public record CarrierRequest(
         @NotBlank @Size(max = 64) String taxIdValue,
         @Size(max = 200) String contactName,
         @Size(max = 32) String phone,
-        @Size(max = 200) String email) {
+        @Size(max = 200) String email,
+        @Size(max = 200) String externalReference) {
 }

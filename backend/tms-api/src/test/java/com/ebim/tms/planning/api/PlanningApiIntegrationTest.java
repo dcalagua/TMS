@@ -332,6 +332,101 @@ class PlanningApiIntegrationTest {
                 .andExpect(jsonPath("$.assignments.length()").value(1));
     }
 
+    // --- vehicle double-booking -----------------------------------------------------
+
+    @Test
+    @DisplayName("a vehicle already booked on another active trip the same planning date is refused")
+    void doubleBookingVehicleOnCreateIsRefused() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String busyVehicle = vehicle("BOOKED", "10000", "40", 20);
+        newTrip(run, busyVehicle);
+
+        mockMvc.perform(asAdmin(post(PLANNING + "/runs/" + run.id + "/trips"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"vehicleId":"%s","plannedDepartureAt":"2026-05-01T08:00:00Z","version":0}
+                                """.formatted(busyVehicle)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("already booked")));
+    }
+
+    @Test
+    @DisplayName("swapping a trip's vehicle into one already booked the same day is refused, and the trip keeps its own vehicle")
+    void doubleBookingVehicleOnSwapIsRefused() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String busyVehicle = vehicle("BUSY-SWAP", "10000", "40", 20);
+        String ownVehicle = vehicle("OWN-SWAP", "10000", "40", 20);
+        newTrip(run, busyVehicle);
+        String trip = newTrip(run, ownVehicle);
+        long version = versionOf(mockMvc.perform(asAdmin(get(TRIPS + "/" + trip), COMPANY_A)));
+
+        mockMvc.perform(asAdmin(put(TRIPS + "/" + trip + "/vehicle"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"vehicleId":"%s","plannedDepartureAt":"2026-05-01T08:00:00Z","version":%d}
+                                """.formatted(busyVehicle, version)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("already booked")));
+
+        mockMvc.perform(asAdmin(get(TRIPS + "/" + trip), COMPANY_A))
+                .andExpect(jsonPath("$.trip.vehicleId").value(ownVehicle));
+    }
+
+    @Test
+    @DisplayName("re-submitting a trip's own vehicle (e.g. only changing the departure time) never double-booking-conflicts with itself")
+    void reassigningATripsOwnVehicleIsNotADoubleBooking() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String ownVehicle = vehicle("SELF-SWAP", "10000", "40", 20);
+        String trip = newTrip(run, ownVehicle);
+        long version = versionOf(mockMvc.perform(asAdmin(get(TRIPS + "/" + trip), COMPANY_A)));
+
+        mockMvc.perform(asAdmin(put(TRIPS + "/" + trip + "/vehicle"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"vehicleId":"%s","plannedDepartureAt":"2026-05-01T10:00:00Z","version":%d}
+                                """.formatted(ownVehicle, version)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.vehicleId").value(ownVehicle));
+    }
+
+    @Test
+    @DisplayName("the same vehicle may run trips on two different planning runs/dates without conflict")
+    void sameVehicleDifferentPlanningDateIsAllowed() throws Exception {
+        String sharedVehicle = vehicle("MULTI-DAY", "10000", "40", 20);
+        Run runOne = newRun(nextDate());
+        newTrip(runOne, sharedVehicle);
+
+        Run runTwo = newRun(nextDate());
+        mockMvc.perform(asAdmin(post(PLANNING + "/runs/" + runTwo.id + "/trips"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"vehicleId":"%s","plannedDepartureAt":"2026-05-01T08:00:00Z","version":0}
+                                """.formatted(sharedVehicle)))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("cancelling a trip frees its vehicle to be booked again the same planning date")
+    void cancellingATripFreesItsVehicleForRebooking() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String sharedVehicle = vehicle("CANCEL-FREE", "10000", "40", 20);
+        String trip = newTrip(run, sharedVehicle);
+        mockMvc.perform(asAdmin(post(TRIPS + "/" + trip + "/cancel"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"version\":0}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(asAdmin(post(PLANNING + "/runs/" + run.id + "/trips"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"vehicleId":"%s","plannedDepartureAt":"2026-05-01T08:00:00Z","version":0}
+                                """.formatted(sharedVehicle)))
+                .andExpect(status().isCreated());
+    }
+
     // --- moving between trips -----------------------------------------------------
 
     @Test

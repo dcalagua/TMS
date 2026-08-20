@@ -640,6 +640,7 @@ erDiagram
         text contact_name "optional"
         text phone "optional"
         text email "optional, normalized lower, shape-checked"
+        text external_reference "optional, free text - see 16.1"
         bool active
         timestamptz created_at
         timestamptz updated_at
@@ -679,6 +680,7 @@ erDiagram
         numeric max_volume_override_m3 "10,3 - optional, positive when present"
         integer max_pallets_override "optional, nonnegative when present"
         text availability_status "AVAILABLE | IN_MAINTENANCE | OUT_OF_SERVICE - see 10.3"
+        text external_reference "optional, free text - see 16.1"
         bool active
         timestamptz created_at
         timestamptz updated_at
@@ -1167,3 +1169,48 @@ optimizer" - the service makes one yes/no decision for one date, nothing more.
 | `ix_location_frequency_company` | company-scoped reads (ADR-003) |
 | `ix_location_frequency_location` | "this location's calendar" - the eligibility service's own lookup |
 | `ix_location_frequency_frequency` | "which locations use this frequency" - a future Frequency detail screen |
+
+## 16. Fleet hardening: external references and vehicle double-booking (job 04 overnight-v3, migration V16)
+
+Two independent, additive changes to the V9 fleet masters and the V11 trip table - no existing
+column, constraint or index from either migration is touched.
+
+### 16.1 `carrier.external_reference` / `vehicle.external_reference`
+
+Both are optional free text, unindexed and unnormalized, the same shape as
+`transport_order.external_reference` (section 12) minus its `external_source` sibling: a fleet
+master is not (yet) written through an inbound idempotency flow, so there is no "who sent this" to
+pair it with - just "what does the external fleet/ERP system call this row." Integration matching
+on the value is the connector's job, not a database constraint.
+
+### 16.2 The vehicle double-booking invariant: one active trip per vehicle per planning date
+
+`tms.trip` gained `planning_date date NOT NULL`, denormalized from `tms.planning_run.planning_date`
+at trip creation (rule 7 - the same idiom `trip.company_id` already uses, for the same reason: the
+partial index below needs the value on `trip` itself, not reachable only through a join). The copy
+can never drift because nothing on `PlanningRun` mutates `planningDate` after construction.
+
+```sql
+CREATE UNIQUE INDEX uq_trip_vehicle_active_planning_date
+    ON tms.trip (company_id, vehicle_id, planning_date)
+    WHERE status <> 'CANCELLED' AND vehicle_id IS NOT NULL;
+```
+
+The step brief allows either an interval reservation (if planned start/end times are reliable) or a
+documented one-trip-per-vehicle-per-day rule (if the domain only has a planning date). `tms.trip`
+has `planned_departure_at` but no planned arrival/end - Step 10 built manual planning around a
+single planning date per run, not a per-trip time window - so an interval is not a fact the schema
+holds today. The per-day rule is therefore the simplest invariant the current data actually
+supports; revisit if/when trips gain a reliable planned duration.
+
+The index is partial in both directions, mirroring `uq_trip_order_assignment_open_whole_order`
+(section 14.4): `status <> 'CANCELLED'` so a cancelled trip releases its vehicle for the same day,
+and `vehicle_id IS NOT NULL` so a still-unassigned draft trip reserves nothing. Both `DRAFT` and
+`CONFIRMED` count as "active" - a draft already represents a planner's intent to run that vehicle
+that day.
+
+`TripService.requireVehicleNotDoubleBooked` runs the same check in Java first, with a
+caller-facing message, before every write that sets a trip's vehicle (`create`, `updateVehicle`);
+the index is the concurrency backstop for two planners racing to book the same vehicle on the same
+day, translated back to a 409 by `TripService.saveWithDoubleBookingBackstop` - the same
+pre-check-then-index-backstop relationship section 14.4 documents for order assignment.

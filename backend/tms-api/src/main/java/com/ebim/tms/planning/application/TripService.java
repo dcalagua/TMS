@@ -4,6 +4,7 @@ import com.ebim.tms.planning.domain.AssignmentStatus;
 import com.ebim.tms.planning.domain.PlanningRun;
 import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.planning.domain.TripOrderAssignment;
+import com.ebim.tms.planning.domain.TripStatus;
 import com.ebim.tms.planning.domain.TripStop;
 import com.ebim.tms.planning.infrastructure.PlanningRunRepository;
 import com.ebim.tms.planning.infrastructure.TripOrderAssignmentRepository;
@@ -17,12 +18,14 @@ import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -93,10 +96,13 @@ public class TripService {
         UUID carrierId = null;
         if (request.vehicleId() != null) {
             carrierId = requireAssignableVehicle(scope, request.vehicleId()).carrierId();
+            // No trip id exists yet to exclude, and none ever will collide with a random one.
+            requireVehicleNotDoubleBooked(scope, request.vehicleId(), run.planningDate(), UUID.randomUUID());
         }
-        Trip trip = new Trip(scope.companyId(), run.id(), tripRepository.maxTripNumber(run.id()) + 1,
-                request.vehicleId(), carrierId, request.plannedDepartureAt(), actorId);
-        return assembler.toDetail(save(trip), scope.companyId());
+        Trip trip = new Trip(scope.companyId(), run.id(), run.planningDate(),
+                tripRepository.maxTripNumber(run.id()) + 1, request.vehicleId(), carrierId,
+                request.plannedDepartureAt(), actorId);
+        return assembler.toDetail(saveWithDoubleBookingBackstop(trip), scope.companyId());
     }
 
     /**
@@ -114,10 +120,11 @@ public class TripService {
         capacityService.requireWithinCapacity(
                 "Vehicle " + vehicle.code() + " cannot take what is already planned on trip " + trip.tripNumber(),
                 CapacityLimits.of(vehicle), load);
+        requireVehicleNotDoubleBooked(scope, vehicle.id(), trip.planningDate(), trip.id());
 
         trip.assignVehicle(vehicle.id(), vehicle.carrierId(), request.plannedDepartureAt(),
                 auditActorProvider.requireAppUserId());
-        return assembler.toDetail(save(trip), scope.companyId());
+        return assembler.toDetail(saveWithDoubleBookingBackstop(trip), scope.companyId());
     }
 
     @Transactional
@@ -321,6 +328,23 @@ public class TripService {
     }
 
     /**
+     * The V1 double-booking invariant (docs/database/DATA_MODEL.md section 10, migration V16):
+     * one active (DRAFT or CONFIRMED) trip per vehicle per planning date. Checked here with a
+     * caller-facing message before every write that sets a trip's vehicle; the database's own
+     * copy, {@code uq_trip_vehicle_active_planning_date}, is the concurrency backstop for two
+     * planners racing to book the same vehicle on the same day - the same relationship
+     * {@link #requireNotAlreadyAssigned} has with the assignment table's partial unique index.
+     */
+    private void requireVehicleNotDoubleBooked(CompanyScope scope, UUID vehicleId, LocalDate planningDate,
+            UUID excludedTripId) {
+        if (tripRepository.existsByCompanyIdAndVehicleIdAndPlanningDateAndStatusNotAndIdNot(
+                scope.companyId(), vehicleId, planningDate, TripStatus.CANCELLED, excludedTripId)) {
+            throw new ConflictException(
+                    "This vehicle is already booked on another active trip for " + planningDate + ".");
+        }
+    }
+
+    /**
      * The limits a <em>draft</em> trip is checked against: the attached vehicle's current
      * effective capacity, or unlimited when no vehicle is attached yet.
      *
@@ -353,6 +377,22 @@ public class TripService {
             return tripRepository.saveAndFlush(trip);
         } catch (ObjectOptimisticLockingFailureException raced) {
             throw new ConflictException("This trip was changed by someone else since it was loaded. Reload and try again.");
+        }
+    }
+
+    /**
+     * {@link #save} plus a translation for {@code uq_trip_vehicle_active_planning_date}: the
+     * concurrency backstop for {@link #requireVehicleNotDoubleBooked}, the moment two planners who
+     * each passed their own pre-check both try to book the same vehicle on the same day. Used only
+     * by the two writes that set a trip's vehicle ({@code create}, {@code updateVehicle}) - every
+     * other {@code save(trip)} call cannot touch that index.
+     */
+    private Trip saveWithDoubleBookingBackstop(Trip trip) {
+        try {
+            return save(trip);
+        } catch (DataIntegrityViolationException raced) {
+            throw new ConflictException(
+                    "This vehicle is already booked on another active trip for " + trip.planningDate() + ".");
         }
     }
 

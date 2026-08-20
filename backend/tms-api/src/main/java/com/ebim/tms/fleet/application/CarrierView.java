@@ -14,13 +14,14 @@ public record CarrierView(
         String contactName,
         String phone,
         String email,
+        String externalReference,
         boolean active,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt) {
 
     public static CarrierView from(Carrier carrier) {
         return new CarrierView(carrier.id(), carrier.code(), carrier.businessName(), carrier.taxIdType(),
-                carrier.taxIdValue(), carrier.contactName(), carrier.phone(), carrier.email(), carrier.active(),
-                carrier.createdAt(), carrier.updatedAt());
+                carrier.taxIdValue(), carrier.contactName(), carrier.phone(), carrier.email(),
+                carrier.externalReference(), carrier.active(), carrier.createdAt(), carrier.updatedAt());
     }
 }

@@ -11,6 +11,7 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -56,6 +57,16 @@ public class Trip {
 
     @Column(name = "planning_run_id", updatable = false, nullable = false)
     private UUID planningRunId;
+
+    /**
+     * Denormalized from {@code planningRunId}'s {@link PlanningRun#planningDate()} at
+     * construction time (migration V16, rule 7) - never changes afterwards, since nothing on
+     * {@link PlanningRun} mutates its own planning date. Exists so the database can enforce "one
+     * active trip per vehicle per planning date" ({@code uq_trip_vehicle_active_planning_date})
+     * without a join back to {@code planning_run}.
+     */
+    @Column(name = "planning_date", updatable = false, nullable = false)
+    private LocalDate planningDate;
 
     @Column(name = "trip_number", updatable = false, nullable = false)
     private int tripNumber;
@@ -125,10 +136,11 @@ public class Trip {
         // JPA
     }
 
-    public Trip(UUID companyId, UUID planningRunId, int tripNumber, UUID vehicleId, UUID carrierId,
-            OffsetDateTime plannedDepartureAt, UUID actorId) {
+    public Trip(UUID companyId, UUID planningRunId, LocalDate planningDate, int tripNumber, UUID vehicleId,
+            UUID carrierId, OffsetDateTime plannedDepartureAt, UUID actorId) {
         this.companyId = companyId;
         this.planningRunId = planningRunId;
+        this.planningDate = planningDate;
         this.tripNumber = tripNumber;
         this.vehicleId = vehicleId;
         this.carrierId = carrierId;
@@ -148,6 +160,10 @@ public class Trip {
 
     public UUID planningRunId() {
         return planningRunId;
+    }
+
+    public LocalDate planningDate() {
+        return planningDate;
     }
 
     public int tripNumber() {

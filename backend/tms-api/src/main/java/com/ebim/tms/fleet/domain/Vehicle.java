@@ -67,6 +67,9 @@ public class Vehicle {
     @Column(name = "availability_status", nullable = false)
     private VehicleAvailabilityStatus availabilityStatus;
 
+    @Column(name = "external_reference")
+    private String externalReference;
+
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
@@ -90,7 +93,7 @@ public class Vehicle {
 
     public Vehicle(UUID companyId, String code, String licensePlate, UUID carrierId, UUID vehicleTypeId,
             BigDecimal maxWeightOverrideKg, BigDecimal maxVolumeOverrideM3, Integer maxPalletsOverride,
-            VehicleAvailabilityStatus availabilityStatus, UUID actorId) {
+            VehicleAvailabilityStatus availabilityStatus, String externalReference, UUID actorId) {
         this.companyId = companyId;
         this.code = code;
         this.licensePlate = licensePlate;
@@ -100,6 +103,7 @@ public class Vehicle {
         this.maxVolumeOverrideM3 = maxVolumeOverrideM3;
         this.maxPalletsOverride = maxPalletsOverride;
         this.availabilityStatus = availabilityStatus;
+        this.externalReference = externalReference;
         this.createdBy = actorId;
         this.updatedBy = actorId;
     }
@@ -144,6 +148,10 @@ public class Vehicle {
         return availabilityStatus;
     }
 
+    public String externalReference() {
+        return externalReference;
+    }
+
     public boolean active() {
         return active;
     }
@@ -166,7 +174,7 @@ public class Vehicle {
 
     public void applyChanges(String code, String licensePlate, UUID carrierId, UUID vehicleTypeId,
             BigDecimal maxWeightOverrideKg, BigDecimal maxVolumeOverrideM3, Integer maxPalletsOverride,
-            VehicleAvailabilityStatus availabilityStatus, UUID actorId) {
+            VehicleAvailabilityStatus availabilityStatus, String externalReference, UUID actorId) {
         this.code = code;
         this.licensePlate = licensePlate;
         this.carrierId = carrierId;
@@ -175,6 +183,7 @@ public class Vehicle {
         this.maxVolumeOverrideM3 = maxVolumeOverrideM3;
         this.maxPalletsOverride = maxPalletsOverride;
         this.availabilityStatus = availabilityStatus;
+        this.externalReference = externalReference;
         this.updatedBy = actorId;
     }
 

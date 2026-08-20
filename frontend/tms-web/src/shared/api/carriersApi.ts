@@ -11,6 +11,7 @@ export interface CarrierView {
   contactName: string | null
   phone: string | null
   email: string | null
+  externalReference: string | null
   active: boolean
   createdAt: string
   updatedAt: string
@@ -25,6 +26,7 @@ export interface CarrierRequest {
   contactName?: string | null
   phone?: string | null
   email?: string | null
+  externalReference?: string | null
 }
 
 export interface CarrierListParams {

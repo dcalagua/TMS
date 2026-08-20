@@ -72,7 +72,8 @@ public class CarrierService {
 
         UUID actorId = auditActorProvider.requireAppUserId();
         Carrier carrier = new Carrier(scope.companyId(), code, request.businessName().trim(), taxIdType, taxIdValue,
-                blankToNull(request.contactName()), blankToNull(request.phone()), email, actorId);
+                blankToNull(request.contactName()), blankToNull(request.phone()), email,
+                blankToNull(request.externalReference()), actorId);
         return CarrierView.from(saveOrConflict(carrier, code));
     }
 
@@ -94,7 +95,8 @@ public class CarrierService {
 
         UUID actorId = auditActorProvider.requireAppUserId();
         carrier.applyChanges(code, request.businessName().trim(), taxIdType, taxIdValue,
-                blankToNull(request.contactName()), blankToNull(request.phone()), email, actorId);
+                blankToNull(request.contactName()), blankToNull(request.phone()), email,
+                blankToNull(request.externalReference()), actorId);
         return CarrierView.from(saveOrConflict(carrier, code));
     }
 

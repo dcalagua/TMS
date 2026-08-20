@@ -20,6 +20,7 @@ interface CarrierFormValues {
   contactName: string
   phone: string
   email: string
+  externalReference: string
 }
 
 interface CarrierFormDrawerProps {
@@ -31,7 +32,7 @@ interface CarrierFormDrawerProps {
 }
 
 const KNOWN_FIELDS = new Set<keyof CarrierFormValues>([
-  'code', 'businessName', 'taxIdType', 'taxIdValue', 'contactName', 'phone', 'email',
+  'code', 'businessName', 'taxIdType', 'taxIdValue', 'contactName', 'phone', 'email', 'externalReference',
 ])
 
 /** Create and edit share one form; see `ZoneFormDrawer` (masters) for the same pattern. */
@@ -55,6 +56,7 @@ export function CarrierFormDrawer({ companyId, carrier, onClose, onSaved }: Carr
       contactName: carrier?.contactName ?? '',
       phone: carrier?.phone ?? '',
       email: carrier?.email ?? '',
+      externalReference: carrier?.externalReference ?? '',
     },
   })
 
@@ -68,6 +70,7 @@ export function CarrierFormDrawer({ companyId, carrier, onClose, onSaved }: Carr
       contactName: values.contactName.trim() || null,
       phone: values.phone.trim() || null,
       email: values.email.trim() || null,
+      externalReference: values.externalReference.trim() || null,
     }
 
     try {
@@ -187,7 +190,7 @@ export function CarrierFormDrawer({ companyId, carrier, onClose, onSaved }: Carr
           </div>
         </fieldset>
 
-        <fieldset className="tms-fieldset mb-0">
+        <fieldset className="tms-fieldset">
           <legend className="tms-fieldset-legend">{tc('sections.contact')}</legend>
           <div className="row">
             <div className="col-12 col-sm-12">
@@ -220,6 +223,28 @@ export function CarrierFormDrawer({ companyId, carrier, onClose, onSaved }: Carr
                   type="email"
                   className={`form-control${errors.email ? ' is-invalid' : ''}`}
                   {...register('email', { maxLength: { value: 200, message: tv('maxLength', { count: 200 }) } })}
+                />
+              </FormField>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset className="tms-fieldset mb-0">
+          <legend className="tms-fieldset-legend">{tc('sections.operation')}</legend>
+          <div className="row">
+            <div className="col-12">
+              <FormField
+                label={tc('fields.externalReference')}
+                htmlFor="carrier-external-reference"
+                error={errors.externalReference?.message}
+              >
+                <input
+                  id="carrier-external-reference"
+                  placeholder={tc('placeholders.externalReference')}
+                  className={`form-control${errors.externalReference ? ' is-invalid' : ''}`}
+                  {...register('externalReference', {
+                    maxLength: { value: 200, message: tv('maxLength', { count: 200 }) },
+                  })}
                 />
               </FormField>
             </div>

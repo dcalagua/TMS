@@ -30,6 +30,7 @@ export interface VehicleView {
   effectiveMaxVolumeM3: number
   effectiveMaxPallets: number
   availabilityStatus: VehicleAvailabilityStatus
+  externalReference: string | null
   active: boolean
   createdAt: string
   updatedAt: string
@@ -45,6 +46,7 @@ export interface VehicleRequest {
   maxVolumeOverrideM3?: number | null
   maxPalletsOverride?: number | null
   availabilityStatus: VehicleAvailabilityStatus
+  externalReference?: string | null
 }
 
 export interface VehicleListParams {
