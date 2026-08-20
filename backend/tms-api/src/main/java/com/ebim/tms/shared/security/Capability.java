@@ -57,6 +57,13 @@ public enum Capability {
 
     TRANSPORT_MONITOR_VIEW(Permission.MONITORING_TRANSPORT_READ),
 
+    /**
+     * Deliberately separate from {@code IAM_*}: issuing a machine credential is not the same
+     * decision as inviting a person, and an installation may well want the two in different hands.
+     */
+    INTEGRATION_VIEW(Permission.INTEGRATION_CLIENT_READ),
+    INTEGRATION_MANAGE(Permission.INTEGRATION_CLIENT_MANAGE),
+
     IAM_VIEW(
             Permission.IAM_ORGANIZATION_READ,
             Permission.IAM_COMPANY_READ,

@@ -111,7 +111,7 @@ public class OrderService {
         DeclaredTotals declared = toDeclaredTotals(request);
         requireConsistentTotals(lines, declared);
 
-        UUID actorId = auditActorProvider.requireAppUserId();
+        UUID actorId = auditActorProvider.writerAppUserId();
         TransportOrder order = new TransportOrder(scope.companyId(), generateOrderNumber(), externalSource, externalReference,
                 request.originId(), request.destinationId(), blankToNull(request.customerName()),
                 blankToNull(request.customerReference()), request.serviceDate(), request.priority(),
@@ -142,7 +142,7 @@ public class OrderService {
         DeclaredTotals declared = toDeclaredTotals(request);
         requireConsistentTotals(lines, declared);
 
-        UUID actorId = auditActorProvider.requireAppUserId();
+        UUID actorId = auditActorProvider.writerAppUserId();
         order.applyChanges(externalSource, externalReference, request.originId(), request.destinationId(),
                 blankToNull(request.customerName()), blankToNull(request.customerReference()), request.serviceDate(),
                 request.priority(), request.requestedWindowStart(), request.requestedWindowEnd(), actorId);
@@ -176,7 +176,7 @@ public class OrderService {
                     + "declared on the header - before it can be marked ready for planning.");
         }
 
-        order.markReadyForPlanning(auditActorProvider.requireAppUserId());
+        order.markReadyForPlanning(auditActorProvider.writerAppUserId());
         return toDetailView(scope, saveOrConflict(order));
     }
 
@@ -196,7 +196,7 @@ public class OrderService {
             throw new ConflictException("A planned order cannot be cancelled directly; unassign it from its trip first.");
         }
 
-        order.cancel(blankToNull(reason), auditActorProvider.requireAppUserId());
+        order.cancel(blankToNull(reason), auditActorProvider.writerAppUserId());
         return toDetailView(scope, saveOrConflict(order));
     }
 

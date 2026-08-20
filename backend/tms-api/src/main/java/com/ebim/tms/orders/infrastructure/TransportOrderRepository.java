@@ -28,6 +28,14 @@ public interface TransportOrderRepository extends JpaRepository<TransportOrder, 
     boolean existsByCompanyIdAndExternalSourceAndExternalReference(UUID companyId, String externalSource, String externalReference);
 
     /**
+     * Resolves the order a sending system's own key names, for the inbound integration upsert.
+     * The pair is unique per company ({@code uq_transport_order_external}), so at most one row
+     * can match - which is what makes a redelivery an update rather than a duplicate.
+     */
+    Optional<TransportOrder> findByCompanyIdAndExternalSourceAndExternalReference(
+            UUID companyId, String externalSource, String externalReference);
+
+    /**
      * Which of {@code references} this company already holds under {@code externalSource} - the
      * bulk import's idempotency check, answered in one query for the whole file rather than one
      * {@code exists} per order.

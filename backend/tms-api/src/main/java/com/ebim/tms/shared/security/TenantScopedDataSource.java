@@ -109,8 +109,12 @@ public class TenantScopedDataSource extends DelegatingDataSource {
 
     private static Optional<CompanyScope> currentCompanyScope() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication instanceof TmsAuthenticationToken token) {
-            return token.companyScope();
+        // Deliberately the interface and not TmsAuthenticationToken: a partner integration
+        // credential is company-scoped too (MachineAuthentication), and it would be exactly the
+        // wrong outcome for the machine-to-machine surface - the one with no browser and no
+        // human reviewing the result - to be the one path RLS does not cover.
+        if (authentication instanceof CompanyScopedAuthentication scoped) {
+            return scoped.companyScope();
         }
         return Optional.empty();
     }

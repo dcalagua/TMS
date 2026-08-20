@@ -52,6 +52,15 @@ public enum ProblemType {
     /** A business invariant or an optimistic-locking check refused the change. */
     CONFLICT("conflict", "Conflicting request", HttpStatus.CONFLICT),
 
+    /**
+     * An {@code Idempotency-Key} was reused with a different payload. Distinct from
+     * {@link #CONFLICT} because the caller's reaction is different in kind: a conflict means
+     * "reload and try again", this means "your own client sent two different bodies under one
+     * key", and telling a partner integration those apart is the difference between a retry loop
+     * and a bug report.
+     */
+    IDEMPOTENCY_KEY_REUSED("idempotency-key-reused", "Idempotency key reused", HttpStatus.CONFLICT),
+
     /** Anything unexpected. The detail is deliberately generic; the cause is only in the server log. */
     INTERNAL_ERROR("internal-error", "Internal server error", HttpStatus.INTERNAL_SERVER_ERROR);
 

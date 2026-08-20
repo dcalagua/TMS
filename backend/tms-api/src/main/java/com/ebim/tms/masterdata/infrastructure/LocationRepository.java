@@ -30,4 +30,14 @@ public interface LocationRepository extends JpaRepository<Location, UUID>, JpaSp
 
     boolean existsByCompanyIdAndExternalSystemAndExternalReferenceAndIdNot(
             UUID companyId, String externalSystem, String externalReference, UUID id);
+
+    /**
+     * Resolves the row a sending system's own key names, for the inbound integration upsert. The
+     * pair is unique per company ({@code uq_location_external}), so at most one row can match.
+     */
+    Optional<Location> findByCompanyIdAndExternalSystemAndExternalReference(
+            UUID companyId, String externalSystem, String externalReference);
+
+    /** The fallback identity for a payload that carries no external reference. */
+    Optional<Location> findByCompanyIdAndCode(UUID companyId, String code);
 }

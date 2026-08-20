@@ -21,5 +21,19 @@ public final class ApiHeaders {
     /** Accepted as an alias for {@link #CORRELATION_ID} because most gateways already emit it. */
     public static final String REQUEST_ID = "X-Request-Id";
 
+    /**
+     * Optional on the inbound integration API: the sending system's own key for one delivery.
+     * Repeating it with the same payload returns the first response instead of executing again;
+     * repeating it with a different payload is refused. See
+     * {@code docs/integrations/INBOUND_API_V1.md}.
+     */
+    public static final String IDEMPOTENCY_KEY = "Idempotency-Key";
+
+    /**
+     * Set to {@code true} on a response that was replayed from the integration inbox rather than
+     * executed, so a partner can see the difference in their own logs.
+     */
+    public static final String IDEMPOTENT_REPLAY = "X-Idempotent-Replay";
+
     private ApiHeaders() {}
 }

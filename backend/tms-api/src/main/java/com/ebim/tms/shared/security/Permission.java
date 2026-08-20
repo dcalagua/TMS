@@ -58,6 +58,9 @@ public enum Permission {
     PLANNING_TRIP_READ("planning.trip:read"),
     PLANNING_TRIP_MANAGE("planning.trip:manage"),
 
+    INTEGRATION_CLIENT_READ("integration.client:read"),
+    INTEGRATION_CLIENT_MANAGE("integration.client:manage"),
+
     MONITORING_TRANSPORT_READ("monitoring.transport:read"),
 
     AUDIT_LOG_READ("audit.log:read");

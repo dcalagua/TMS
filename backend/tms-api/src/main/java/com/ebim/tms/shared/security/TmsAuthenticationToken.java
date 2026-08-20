@@ -21,7 +21,8 @@ import org.springframework.security.oauth2.jwt.Jwt;
  * deny by default rather than fall back to a union across tenants - the union would be a
  * cross-tenant escalation.
  */
-public final class TmsAuthenticationToken extends AbstractAuthenticationToken {
+public final class TmsAuthenticationToken extends AbstractAuthenticationToken
+        implements CompanyScopedAuthentication {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -72,6 +73,7 @@ public final class TmsAuthenticationToken extends AbstractAuthenticationToken {
         return principal.appUserId().toString();
     }
 
+    @Override
     public Optional<CompanyScope> companyScope() {
         return Optional.ofNullable(companyScope);
     }

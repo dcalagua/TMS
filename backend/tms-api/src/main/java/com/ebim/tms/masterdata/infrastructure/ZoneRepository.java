@@ -14,6 +14,12 @@ public interface ZoneRepository extends JpaRepository<Zone, UUID>, JpaSpecificat
 
     Optional<Zone> findByIdAndCompanyId(UUID id, UUID companyId);
 
+    /**
+     * Resolves a zone by the code a human or a sending system knows it as - the inbound
+     * integration API takes codes, never uuids.
+     */
+    Optional<Zone> findByCompanyIdAndCode(UUID companyId, String code);
+
     boolean existsByCompanyIdAndCode(UUID companyId, String code);
 
     boolean existsByCompanyIdAndCodeAndIdNot(UUID companyId, String code, UUID id);

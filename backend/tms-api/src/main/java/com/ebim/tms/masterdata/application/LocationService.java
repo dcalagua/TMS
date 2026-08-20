@@ -94,7 +94,7 @@ public class LocationService {
         }
         requireExternalIdentityIsFree(scope, identity, null);
 
-        UUID actorId = auditActorProvider.requireAppUserId();
+        UUID actorId = auditActorProvider.writerAppUserId();
         Location location = new Location(scope.companyId(), code, request.name().trim(), request.type(),
                 blankToNull(request.address()), blankToNull(request.addressReference()),
                 blankToNull(request.district()), blankToNull(request.province()), blankToNull(request.department()),
@@ -119,7 +119,7 @@ public class LocationService {
         }
         requireExternalIdentityIsFree(scope, identity, id);
 
-        UUID actorId = auditActorProvider.requireAppUserId();
+        UUID actorId = auditActorProvider.writerAppUserId();
         location.applyChanges(code, request.name().trim(), request.type(), blankToNull(request.address()),
                 blankToNull(request.addressReference()), blankToNull(request.district()),
                 blankToNull(request.province()), blankToNull(request.department()), request.country().trim(),
@@ -148,7 +148,7 @@ public class LocationService {
      */
     private LocationView setActive(CompanyScope scope, UUID id, boolean active) {
         Location location = find(scope, id);
-        UUID actorId = auditActorProvider.requireAppUserId();
+        UUID actorId = auditActorProvider.writerAppUserId();
         if (active) {
             location.activate(actorId);
         } else {
