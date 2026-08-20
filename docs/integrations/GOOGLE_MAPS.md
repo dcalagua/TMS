@@ -8,11 +8,13 @@ when no key is configured.**
 ## 1. Scope
 
 This covers the Location/Store create-and-edit drawer (`LocationFormDrawer`) and the shared
-components it is built from. It does not cover shipment/trip stop maps or route
-optimization - `StopsMap` is a read-only foundation for that later work
-(`tms-overnight-v3/prompts/10_shipment_maps_and_stop_sequence.md`), not a finished feature.
-OR-Tools/route optimization and GPS/telematics remain out of scope per the repository's
-deferred-decisions list.
+components it is built from, plus the trip/shipment stop-sequence map added by job 10
+(`tms-overnight-v3/prompts/10_shipment_maps_and_stop_sequence.md`): `TripStopMap.tsx`, a sibling
+of `StopsMap` that adds the origin marker, numbered stop markers in `trip_stop` sequence, a
+selection highlight and a straight-line polyline between known coordinates - never a routed path.
+Route optimization stays out of scope: OR-Tools/route optimization and GPS/telematics remain
+deferred per the repository's deferred-decisions list, and `TripStopMap` never calls the
+Directions/Routes APIs.
 
 ## 2. Why the browser calls Google directly
 
@@ -75,7 +77,11 @@ frontend/tms-web/src/shared/maps/
   LocationPickerMap.tsx    address search + click-to-place + draggable marker; reports
                           plain {lat, lng} numbers back to the caller via onChange.
   StopsMap.tsx             read-only multi-marker map that fits its view to a list of
-                          stops; the foundation Job 10 (shipment stop maps) builds on.
+                          stops; the foundation TripStopMap builds on.
+  TripStopMap.tsx          trip/shipment stop-sequence map: origin marker "0", numbered stop
+                          markers in trip_stop sequence, a selection highlight driven by (and
+                          reported back to) the caller, and a straight-line polyline between
+                          the known coordinates.
 ```
 
 `LocationPickerMap` does not own any form state: `LocationFormDrawer` passes it the current
@@ -93,7 +99,7 @@ the exact numbers are there for anyone who needs to read or paste them, not as t
 
 ## 5. Graceful degradation
 
-Both `LocationPickerMap` and `StopsMap` render one of three states, driven by
+`LocationPickerMap`, `StopsMap` and `TripStopMap` all render one of three states, driven by
 `MapLoadStatus`:
 
 | Status | Trigger | What renders |
@@ -102,16 +108,21 @@ Both `LocationPickerMap` and `StopsMap` render one of three states, driven by
 | `loading` | key configured, libraries loading | the map canvas plus a small loading line |
 | `ready` | libraries resolved | the interactive map |
 
-A missing key never throws and never blocks the surrounding form: `LocationFormDrawer` and any
-future consumer of `StopsMap` keep working with manual data entry alone.
+A missing key never throws and never blocks the surrounding form or drawer: `LocationFormDrawer`,
+`TripDetailDrawer` and any future consumer of `StopsMap`/`TripStopMap` keep working with the
+underlying list/manual data alone. `TripStopMap` also treats a per-stop missing coordinate as a
+normal state, not an error: the stop is simply not drawn, and the caller is told how many stops
+were skipped so it can say so next to the list rather than implying every stop is mapped.
 
 ## 6. Testing
 
-- **Unit/component (Vitest)**: `googleMapsLoader.test.ts`, `LocationPickerMap.test.tsx` and
-  `StopsMap.test.tsx` mock `./googleMapsLoader` entirely with fake `Map`/`Marker`/`Geocoder`
-  classes, so the suite never loads the real Google script and never needs a key. They cover
-  the unavailable state, a load failure, map clicks, marker drag, and address search
-  (including the "no results" case).
+- **Unit/component (Vitest)**: `googleMapsLoader.test.ts`, `LocationPickerMap.test.tsx`,
+  `StopsMap.test.tsx` and `TripStopMap.test.tsx` mock `./googleMapsLoader` entirely with fake
+  `Map`/`Marker`/`Polyline`/`Geocoder` classes, so the suite never loads the real Google script
+  and never needs a key. They cover the unavailable state, a load failure, map clicks, marker
+  drag, address search (including the "no results" case), stop numbering/selection and a stop
+  with no coordinates. `TripDetailDrawer.test.tsx` covers the selected-stop detail panel (address,
+  service window, order count) and that selection clears when a destination leaves the trip.
 - **Playwright (`e2e/maps.spec.ts`)**: runs against this repository's dev environment, which
   has no key configured, and asserts the Location drawer's graceful no-key state plus that the
   "Coordenadas exactas" section is an open-by-default disclosure. This is the mandatory,
@@ -126,7 +137,9 @@ future consumer of `StopsMap` keep working with manual data entry alone.
 
 ## 7. Non-goals (see deferred-decisions list)
 
-Route optimization, live GPS/telematics tracking, and shipment stop sequencing UI are not part
-of this change. `StopsMap` intentionally has no click-to-add, drag-to-reorder, or routing line -
-those decisions belong to the shipment/stop-sequence work and should be made there, against
-real requirements, rather than guessed at here.
+Route optimization and live GPS/telematics tracking are not part of this change, and `TripStopMap`
+never calls the Directions/Routes APIs - its polyline is a straight line between known
+coordinates, not a routed path. If real road routing is introduced later, it must be explicit
+configuration, not a default, and it must document the additional API/billing requirement it
+brings. `StopsMap` itself still intentionally has no numbering, selection or routing line of its
+own - that is what `TripStopMap` adds as a sibling component, per this file's earlier revision.

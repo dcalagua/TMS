@@ -79,8 +79,8 @@ function detail(overrides: Partial<TripDetailView> = {}): TripDetailView {
     stops: [
       // dest-1 is geocoded, dest-2 is not: the drawer must say so for the second rather than
       // implying it can be mapped.
-      { id: 'stop-1', sequence: 1, destinationId: 'dest-1', destinationCode: 'DEST-A', destinationName: 'Destination A', latitude: -12.05, longitude: -77.04, serviceWindowStart: null, serviceWindowEnd: null, orderCount: 1 },
-      { id: 'stop-2', sequence: 2, destinationId: 'dest-2', destinationCode: 'DEST-B', destinationName: 'Destination B', latitude: null, longitude: null, serviceWindowStart: null, serviceWindowEnd: null, orderCount: 1 },
+      { id: 'stop-1', sequence: 1, destinationId: 'dest-1', destinationCode: 'DEST-A', destinationName: 'Destination A', latitude: -12.05, longitude: -77.04, address: 'Av. Uno 123', serviceWindowStart: '08:00:00', serviceWindowEnd: '10:00:00', orderCount: 1 },
+      { id: 'stop-2', sequence: 2, destinationId: 'dest-2', destinationCode: 'DEST-B', destinationName: 'Destination B', latitude: null, longitude: null, address: null, serviceWindowStart: null, serviceWindowEnd: null, orderCount: 1 },
     ],
     ...overrides,
   }
@@ -301,6 +301,48 @@ describe('TripDetailDrawer', () => {
       expect(planningApiMocks.reorderTripStops).toHaveBeenCalledWith('company-1', 'trip-1', {
         destinationIds: ['dest-2', 'dest-1'],
       }),
+    )
+  })
+
+  it('shows a hint until a stop is selected, then its address, service window and order count', async () => {
+    planningApiMocks.fetchTrip.mockResolvedValue(detail())
+    renderDrawer()
+
+    await screen.findByText('TO-1')
+    expect(screen.getByText('Selecciona una parada en el mapa o la lista para ver sus datos.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Destination A/ }))
+
+    expect(screen.getByText('Av. Uno 123')).toBeInTheDocument()
+    expect(screen.getByText('08:00–10:00')).toBeInTheDocument()
+    expect(screen.getByText('Parada 1 de 2')).toBeInTheDocument()
+  })
+
+  it('says a selected stop has no address or service window instead of leaving it blank', async () => {
+    planningApiMocks.fetchTrip.mockResolvedValue(detail())
+    renderDrawer()
+
+    await screen.findByText('TO-1')
+    await userEvent.click(screen.getByRole('button', { name: /Destination B/ }))
+
+    expect(screen.getByText('Sin dirección registrada')).toBeInTheDocument()
+    expect(screen.getByText('Sin ventana de servicio')).toBeInTheDocument()
+  })
+
+  it('clears the stop selection once that destination leaves the trip', async () => {
+    planningApiMocks.fetchTrip.mockResolvedValue(detail())
+    const updated = detail({ stops: [detail().stops[0]!] })
+    planningApiMocks.removeOrderFromTrip.mockResolvedValue(updated)
+    renderDrawer()
+
+    await screen.findByText('TO-1')
+    await userEvent.click(screen.getByRole('button', { name: /Destination B/ }))
+    expect(screen.getByText('Parada 2 de 2')).toBeInTheDocument()
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Quitar' })[1]!)
+
+    await waitFor(() =>
+      expect(screen.getByText('Selecciona una parada en el mapa o la lista para ver sus datos.')).toBeInTheDocument(),
     )
   })
 

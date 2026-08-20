@@ -83,6 +83,17 @@
       "vehicleType": "Tipo de vehículo"
     },
     "loading": "Cargando el viaje...",
+    "map": {
+      "address": "Dirección",
+      "noAddress": "Sin dirección registrada",
+      "noServiceWindow": "Sin ventana de servicio",
+      "orders": "Pedidos en esta parada",
+      "selectHint": "Selecciona una parada en el mapa o la lista para ver sus datos.",
+      "sequenceLabel": "Parada {{position}} de {{total}}",
+      "serviceWindow": "Ventana de servicio",
+      "tabList": "Lista",
+      "tabMap": "Mapa"
+    },
     "move": "Mover",
     "moveAria": "Mover {{number}} a otro viaje",
     "moveError": "No se pudo mover el pedido",

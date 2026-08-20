@@ -70,7 +70,9 @@ the plan was validated against and make an audit of it irreproducible.
 `TripStopView` carries `latitude`/`longitude`, always both or neither, null when the destination
 has never been geocoded. A null pair is information, not a gap to paper over: a client renders the
 stop in the list without a marker rather than inventing a position. `sequence` is always part of a
-contiguous 1..N series (below), so a map can number its markers straight from it. Drawing that map
+contiguous 1..N series (below), so a map can number its markers straight from it. `address` (added
+by job 10, read live from the destination master like the coordinates) is the free-text line a
+selected stop's detail panel shows next to its service window and order count. Drawing that map
 is [job 10's](../../tms-overnight-v3/prompts/10_shipment_maps_and_stop_sequence.md) scope; this job
 supplies the data it needs.
 

@@ -83,6 +83,17 @@
       "vehicleType": "Vehicle type"
     },
     "loading": "Loading trip...",
+    "map": {
+      "address": "Address",
+      "noAddress": "No address on file",
+      "noServiceWindow": "No service window",
+      "orders": "Orders at this stop",
+      "selectHint": "Select a stop on the map or the list to see its details.",
+      "sequenceLabel": "Stop {{position}} of {{total}}",
+      "serviceWindow": "Service window",
+      "tabList": "List",
+      "tabMap": "Map"
+    },
     "move": "Move",
     "moveAria": "Move {{number}} to another trip",
     "moveError": "Could not move order",

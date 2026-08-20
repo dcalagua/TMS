@@ -24,12 +24,14 @@ import java.util.UUID;
  *
  * @param latitude  decimal degrees, or null when the master has not been geocoded
  * @param longitude decimal degrees, or null when the master has not been geocoded
+ * @param address   the master's free-text address line, or null when it has none
  */
-public record MasterReference(UUID id, String code, String name, BigDecimal latitude, BigDecimal longitude) {
+public record MasterReference(UUID id, String code, String name, BigDecimal latitude, BigDecimal longitude,
+        String address) {
 
-    /** A reference with no coordinates - for a master that has none, and for tests. */
+    /** A reference with no coordinates and no address - for a master that has neither, and for tests. */
     public static MasterReference of(UUID id, String code, String name) {
-        return new MasterReference(id, code, name, null, null);
+        return new MasterReference(id, code, name, null, null, null);
     }
 
     /** True when both coordinates are present, so a caller can decide whether it is mappable. */

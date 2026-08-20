@@ -7,6 +7,8 @@
   "searchFailed": "No se pudo buscar la dirección. Inténtalo de nuevo.",
   "searchNoResults": "No se encontraron resultados para esa dirección.",
   "searchPlaceholder": "Buscar una dirección",
+  "someStopsNotMapped_one": "{{count}} destino no tiene coordenadas y no aparece en el mapa.",
+  "someStopsNotMapped_other": "{{count}} destinos no tienen coordenadas y no aparecen en el mapa.",
   "stopsAriaLabel": "Mapa de paradas",
   "unavailable": "El mapa no está disponible. Puedes ingresar la latitud y la longitud manualmente."
 }

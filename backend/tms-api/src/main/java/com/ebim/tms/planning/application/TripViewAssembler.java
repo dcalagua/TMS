@@ -237,6 +237,7 @@ public class TripViewAssembler {
         return new TripStopView(stop.id(), stop.sequence(), stop.destinationId(),
                 destination == null ? null : destination.code(), destination == null ? null : destination.name(),
                 destination == null ? null : destination.latitude(), destination == null ? null : destination.longitude(),
+                destination == null ? null : destination.address(),
                 stop.serviceWindowStart(), stop.serviceWindowEnd(), orderCount);
     }
 }

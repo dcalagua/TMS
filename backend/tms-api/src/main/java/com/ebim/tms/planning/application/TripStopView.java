@@ -19,6 +19,8 @@ import java.util.UUID;
  *                  store coordinate must reach an open plan immediately, and a frozen wrong one
  *                  would be undetectable. See migration V19's header.
  * @param longitude see {@code latitude}; the two are always both present or both null
+ * @param address   the destination's current address line, or null when it has none. Also read
+ *                  live from the master, for the same reason as the coordinates.
  */
 public record TripStopView(
         UUID id,
@@ -28,6 +30,7 @@ public record TripStopView(
         String destinationName,
         BigDecimal latitude,
         BigDecimal longitude,
+        String address,
         LocalTime serviceWindowStart,
         LocalTime serviceWindowEnd,
         long orderCount) {

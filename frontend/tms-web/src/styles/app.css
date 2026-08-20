@@ -2506,6 +2506,21 @@ h6 {
   background-color: var(--tms-surface-muted);
 }
 
+/* Trip detail: the stop map and the stop list. Stacked on a phone (a tab switches which one
+   shows); side by side from md up, where both are useful to keep in view together. */
+@media (min-width: 768px) {
+  .tms-trip-stop-layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .tms-trip-stop-layout > * {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
 /* ---------------------------------------------------------------------------
    Modal and drawer chrome
    ------------------------------------------------------------------------- */

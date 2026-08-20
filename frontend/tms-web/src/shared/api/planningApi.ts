@@ -171,7 +171,8 @@ export interface TripAssignmentView {
  * refuses to persist anything else - so a map may number its markers from it directly.
  * `latitude`/`longitude` are the destination's current coordinates, both null together when the
  * destination has never been geocoded: render the stop without a marker rather than inventing a
- * position. */
+ * position. `address` is read live from the same master, independently of the coordinates - a
+ * destination can have one without the other. */
 export interface TripStopView {
   id: string
   sequence: number
@@ -180,6 +181,7 @@ export interface TripStopView {
   destinationName: string | null
   latitude: number | null
   longitude: number | null
+  address: string | null
   serviceWindowStart: string | null
   serviceWindowEnd: string | null
   orderCount: number

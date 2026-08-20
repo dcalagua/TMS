@@ -1,6 +1,6 @@
 import { useEnumLabels } from '../../shared/i18n/enums'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import {
@@ -16,10 +16,19 @@ import {
 import { describePlanningError } from '../../shared/api/problemMessages'
 import { fetchRoutes } from '../../shared/api/routesApi'
 import { useFormat } from '../../shared/i18n/format'
+import { TripStopMap, type TripStopMapOrigin, type TripStopMapStop } from '../../shared/maps/TripStopMap'
 import { CapacityBar, confirmDialog, StatusBadge, type StatusTone, TmsDrawer } from '../../shared/ui/components'
 import { LoadingState } from '../../shared/ui/components/LoadingState'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
 import { TripVehicleDrawer } from './TripVehicleDrawer'
+
+/** `LocalTime` strings from the backend ("HH:mm" or "HH:mm:ss") trimmed to "HH:mm" for display. */
+function formatServiceWindow(start: string | null, end: string | null): string | null {
+  if (!start && !end) return null
+  const short = (value: string) => value.slice(0, 5)
+  if (start && end) return `${short(start)}–${short(end)}`
+  return short(start ?? end ?? '')
+}
 
 const STATUS_TONE: Record<TripView['status'], StatusTone> = {
   DRAFT: 'info',
@@ -81,6 +90,8 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
   const [routeId, setRouteId] = useState<string>('')
   const [applyRouteSequence, setApplyRouteSequence] = useState(true)
   const [savingRoute, setSavingRoute] = useState(false)
+  const [selectedStopId, setSelectedStopId] = useState<string | null>(null)
+  const [mobileStopTab, setMobileStopTab] = useState<'map' | 'list'>('list')
 
   const serverStopIds = detail ? detail.stops.slice().sort((a, b) => a.sequence - b.sequence).map((s) => s.destinationId) : []
   const serverStopsKey = serverStopIds.join('|')
@@ -93,6 +104,44 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
     setStopOrder(serverStopIds)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverStopsKey])
+
+  // A selection that fell off the set (the destination was removed/moved elsewhere) would
+  // otherwise keep highlighting a marker/list row that no longer exists.
+  useEffect(() => {
+    if (selectedStopId && !stopOrder.includes(selectedStopId)) {
+      setSelectedStopId(null)
+    }
+  }, [stopOrder, selectedStopId])
+
+  const mapOrigin = useMemo<TripStopMapOrigin | null>(() => {
+    if (!detail || !detail.trip.originId) return null
+    return {
+      latitude: detail.trip.originLatitude,
+      longitude: detail.trip.originLongitude,
+      label: detail.trip.originName ?? detail.trip.originCode ?? t('drawer.header.origin'),
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail?.trip.originId, detail?.trip.originLatitude, detail?.trip.originLongitude, detail?.trip.originName, detail?.trip.originCode])
+
+  // Numbered from the planner's current (possibly unsaved) order, not the last-saved sequence, so
+  // the map reflects an up/down move immediately instead of only after "Guardar el orden".
+  const mapStops = useMemo<TripStopMapStop[]>(() => {
+    const stops = detail?.stops
+    if (!stops) return []
+    return stopOrder.map((destinationId, index) => {
+      const stop = stops.find((s) => s.destinationId === destinationId)
+      return {
+        id: destinationId,
+        sequence: index + 1,
+        latitude: stop?.latitude ?? null,
+        longitude: stop?.longitude ?? null,
+        label: stop?.destinationName ?? stop?.destinationCode ?? destinationId,
+      }
+    })
+  }, [stopOrder, detail?.stops])
+
+  const selectedStop = detail?.stops.find((s) => s.destinationId === selectedStopId) ?? null
+  const selectedStopPosition = selectedStopId ? stopOrder.indexOf(selectedStopId) + 1 : 0
 
   const serverRouteId = detail?.trip.routeId ?? ''
   useEffect(() => {
@@ -210,7 +259,7 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
       open
       title={detail ? t('card.title', { number: detail.trip.tripNumber }) : t('drawer.titleFallback')}
       subtitle={t('drawer.subtitle')}
-      size="lg"
+      size="xl"
       onClose={onClose}
       // Stops reordered or a route picked but not yet saved are unsaved work like any edited field.
       dirty={stopsDirty || routeDirty}
@@ -420,54 +469,125 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
             <h3 className="tms-section-title mt-4 mb-2">{t('drawer.stopSequence')}</h3>
             {stopOrder.length === 0 && <p className="small text-body-secondary">{t('drawer.noStops')}</p>}
             {stopOrder.length > 0 && (
-              <ol className="list-group list-group-numbered mb-2">
-                {stopOrder.map((destinationId, index) => {
-                  const stop = detail.stops.find((s) => s.destinationId === destinationId)
-                  const mappable = stop?.latitude !== null && stop?.longitude !== null
-                  return (
-                    <li key={destinationId} className="list-group-item d-flex justify-content-between align-items-center gap-2">
-                      <span className="tms-min-w-0">
-                        <span className="tms-truncate d-block">
-                          {stop?.destinationName ?? stop?.destinationCode ?? destinationId}
-                        </span>
-                        <span className="text-body-secondary small">
-                          {t('drawer.stopOrders', { count: stop?.orderCount ?? 0 })}
-                          {/* A stop with no coordinate is not an error - it simply cannot be put on
-                              a map, and saying so beats a marker at (0, 0) in the Atlantic. */}
-                          {!mappable && (
-                            <>
-                              {' · '}
-                              <span title={t('drawer.coordinatesMissingHint')}>{t('drawer.coordinatesMissing')}</span>
-                            </>
-                          )}
-                        </span>
-                      </span>
-                      {editable && (
-                        <div className="btn-group btn-group-sm flex-shrink-0">
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary"
-                            aria-label={t('drawer.moveStopUp', { position: index + 1 })}
-                            disabled={index === 0}
-                            onClick={() => setStopOrder(moveItem(stopOrder, index, index - 1))}
+              <>
+                {/* Below md a map and a full stop list cannot both fit usefully, so a phone gets
+                    tabs instead of one or the other being squeezed unreadably small. */}
+                <ul className="nav nav-pills nav-fill mb-2 d-md-none" role="tablist">
+                  <li className="nav-item" role="presentation">
+                    <button
+                      type="button"
+                      className={`nav-link ${mobileStopTab === 'map' ? 'active' : ''}`}
+                      onClick={() => setMobileStopTab('map')}
+                    >
+                      {t('drawer.map.tabMap')}
+                    </button>
+                  </li>
+                  <li className="nav-item" role="presentation">
+                    <button
+                      type="button"
+                      className={`nav-link ${mobileStopTab === 'list' ? 'active' : ''}`}
+                      onClick={() => setMobileStopTab('list')}
+                    >
+                      {t('drawer.map.tabList')}
+                    </button>
+                  </li>
+                </ul>
+
+                <div className="tms-trip-stop-layout mb-2">
+                  <div className={`${mobileStopTab === 'map' ? 'd-block' : 'd-none'} d-md-block`}>
+                    <TripStopMap
+                      origin={mapOrigin}
+                      stops={mapStops}
+                      selectedStopId={selectedStopId}
+                      onSelectStop={setSelectedStopId}
+                    />
+                    {selectedStop ? (
+                      <div className="border rounded p-2 small">
+                        <p className="fw-semibold mb-1 tms-truncate">
+                          {selectedStop.destinationName ?? selectedStop.destinationCode ?? selectedStop.destinationId}
+                        </p>
+                        <p className="text-body-secondary mb-2">
+                          {t('drawer.map.sequenceLabel', { position: selectedStopPosition, total: stopOrder.length })}
+                        </p>
+                        <dl className="row g-1 mb-0">
+                          <dt className="col-4 fw-normal text-body-secondary">{t('drawer.map.address')}</dt>
+                          <dd className="col-8 mb-0">{selectedStop.address ?? t('drawer.map.noAddress')}</dd>
+                          <dt className="col-4 fw-normal text-body-secondary">{t('drawer.map.serviceWindow')}</dt>
+                          <dd className="col-8 mb-0">
+                            {formatServiceWindow(selectedStop.serviceWindowStart, selectedStop.serviceWindowEnd) ??
+                              t('drawer.map.noServiceWindow')}
+                          </dd>
+                          <dt className="col-4 fw-normal text-body-secondary">{t('drawer.map.orders')}</dt>
+                          <dd className="col-8 mb-0">{t('drawer.stopOrders', { count: selectedStop.orderCount })}</dd>
+                        </dl>
+                      </div>
+                    ) : (
+                      <p className="small text-body-secondary mb-0">{t('drawer.map.selectHint')}</p>
+                    )}
+                  </div>
+
+                  <div className={`${mobileStopTab === 'list' ? 'd-block' : 'd-none'} d-md-block`}>
+                    <ol className="list-group list-group-numbered mb-2">
+                      {stopOrder.map((destinationId, index) => {
+                        const stop = detail.stops.find((s) => s.destinationId === destinationId)
+                        const mappable = stop?.latitude !== null && stop?.longitude !== null
+                        return (
+                          <li
+                            key={destinationId}
+                            className={`list-group-item d-flex justify-content-between align-items-center gap-2 ${
+                              destinationId === selectedStopId ? 'active' : ''
+                            }`}
                           >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary"
-                            aria-label={t('drawer.moveStopDown', { position: index + 1 })}
-                            disabled={index === stopOrder.length - 1}
-                            onClick={() => setStopOrder(moveItem(stopOrder, index, index + 1))}
-                          >
-                            ↓
-                          </button>
-                        </div>
-                      )}
-                    </li>
-                  )
-                })}
-              </ol>
+                            <button
+                              type="button"
+                              className="btn btn-link p-0 text-start text-decoration-none text-reset tms-min-w-0 flex-grow-1"
+                              aria-pressed={destinationId === selectedStopId}
+                              onClick={() => setSelectedStopId(destinationId)}
+                            >
+                              <span className="tms-truncate d-block">
+                                {stop?.destinationName ?? stop?.destinationCode ?? destinationId}
+                              </span>
+                              <span className="small">
+                                {t('drawer.stopOrders', { count: stop?.orderCount ?? 0 })}
+                                {/* A stop with no coordinate is not an error - it simply cannot be put on
+                                    a map, and saying so beats a marker at (0, 0) in the Atlantic. */}
+                                {!mappable && (
+                                  <>
+                                    {' · '}
+                                    <span title={t('drawer.coordinatesMissingHint')}>{t('drawer.coordinatesMissing')}</span>
+                                  </>
+                                )}
+                              </span>
+                            </button>
+                            {editable && (
+                              <div className="btn-group btn-group-sm flex-shrink-0">
+                                <button
+                                  type="button"
+                                  className="btn btn-outline-secondary"
+                                  aria-label={t('drawer.moveStopUp', { position: index + 1 })}
+                                  disabled={index === 0}
+                                  onClick={() => setStopOrder(moveItem(stopOrder, index, index - 1))}
+                                >
+                                  ↑
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline-secondary"
+                                  aria-label={t('drawer.moveStopDown', { position: index + 1 })}
+                                  disabled={index === stopOrder.length - 1}
+                                  onClick={() => setStopOrder(moveItem(stopOrder, index, index + 1))}
+                                >
+                                  ↓
+                                </button>
+                              </div>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ol>
+                  </div>
+                </div>
+              </>
             )}
             {editable && stopOrder.length > 0 && (
               <button
