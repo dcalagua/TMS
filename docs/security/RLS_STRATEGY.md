@@ -96,7 +96,8 @@ No table is exposed through the Data API, and no policy names `anon`, `authentic
 | Table | RLS | Policy for `tms_app` | Reason |
 |---|---|---|---|
 | `origin`, `zone`, `destination`, `frequency`, `route`, `route_stop`, `carrier`, `vehicle_type`, `vehicle`, `transport_order`, `planning_run`, `trip`, `trip_stop`, `trip_order_assignment` | enabled | `p_tenant_company_scope` on `company_id` | company-scoped business data: the tenant boundary this document exists for |
-| `frequency_weekly_rule`, `frequency_exception`, `transport_order_line` | enabled | `p_tenant_company_scope` through the parent | no `company_id` of their own; a copy would be denormalised state that can drift |
+| `location` (V14), `location_frequency` (V15), `order_import_batch` (V17), `integration_client` and `integration_request` (V18), `shipment_outbox_event` (V20), `import_batch` (V21) | enabled | `p_tenant_company_scope` on `company_id` | same rule, applied by the migration that creates each table |
+| `frequency_weekly_rule`, `frequency_exception`, `transport_order_line`, `location_role` (V14), `integration_client_scope` (V18) | enabled | `p_tenant_company_scope` through the parent | no `company_id` of their own; a copy would be denormalised state that can drift |
 | `tms.organization` | enabled | `p_backend_managed` | read to resolve the caller's tenant, before a scope exists |
 | `tms.company` | enabled | `p_backend_managed` | same; also the list `/api/v1/me` returns |
 | `tms.app_user` | enabled | `p_backend_managed` | identity resolution: read *to decide* the company |
@@ -204,6 +205,13 @@ the backend never wrote:
 
 - every application table has RLS enabled, exactly the expected list;
 - every company-scoped table carries `p_tenant_company_scope`;
+- **structurally**, every table carrying a `company_id` column carries that policy - asked of
+  `pg_attribute` rather than of a hand-written constant, with `membership` the single declared
+  exception (it defines the tenant, so it cannot be keyed on one). This is the assertion that
+  does not go stale: a table added by a future migration that forgets its policy fails here
+  without anyone remembering to update a list;
+- no table is left with RLS enabled and no policy at all, which would deny every row to
+  `tms_app` and break the feature on exactly the deployments where the runtime role is entered;
 - no policy names any role other than `tms_app`, so the Data API stays closed;
 - no table is `FORCE`d, so the owning application role keeps working by design;
 - `PUBLIC` has no `USAGE` on the schema, no `SELECT` on any table, no `EXECUTE` on

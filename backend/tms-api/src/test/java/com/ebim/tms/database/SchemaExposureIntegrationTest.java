@@ -35,11 +35,13 @@ class SchemaExposureIntegrationTest {
     private static final List<String> APPLICATION_TABLES = List.of(
             "app_user", "organization", "company", "role", "permission",
             "role_permission", "membership", "membership_role", "origin", "zone",
-            "location", "location_role",
+            "location", "location_role", "location_frequency",
             "destination", "frequency", "frequency_weekly_rule", "frequency_exception",
             "route", "route_stop", "carrier", "vehicle_type", "vehicle",
-            "transport_order", "transport_order_line",
-            "planning_run", "trip", "trip_stop", "trip_order_assignment");
+            "transport_order", "transport_order_line", "order_import_batch",
+            "integration_client", "integration_client_scope", "integration_request",
+            "planning_run", "trip", "trip_stop", "trip_order_assignment",
+            "shipment_outbox_event", "import_batch");
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the
@@ -48,11 +50,24 @@ class SchemaExposureIntegrationTest {
      * {@code p_backend_managed} policy instead.
      */
     private static final List<String> TENANT_SCOPED_TABLES = List.of(
-            "origin", "zone", "location", "location_role",
+            "origin", "zone", "location", "location_role", "location_frequency",
             "destination", "frequency", "frequency_weekly_rule",
             "frequency_exception", "route", "route_stop", "carrier", "vehicle_type", "vehicle",
-            "transport_order", "transport_order_line",
-            "planning_run", "trip", "trip_stop", "trip_order_assignment");
+            "transport_order", "transport_order_line", "order_import_batch",
+            "integration_client", "integration_client_scope", "integration_request",
+            "planning_run", "trip", "trip_stop", "trip_order_assignment",
+            "shipment_outbox_event", "import_batch");
+
+    /**
+     * The only tables allowed to carry a {@code company_id} and <em>not</em> the tenant policy.
+     *
+     * <p>{@code membership} is the join between an {@code app_user} and a company, and it is read
+     * by {@code PrincipalResolutionService} in order to <em>decide</em> which companies the caller
+     * may select - before any company scope exists. A tenant policy on it would make
+     * authentication impossible, so it carries {@code p_backend_managed} like the rest of the
+     * identity tables (V13 section 5).
+     */
+    private static final List<String> COMPANY_COLUMN_WITHOUT_TENANT_POLICY = List.of("membership");
 
     private static String jdbcUrl;
 
@@ -128,6 +143,66 @@ class SchemaExposureIntegrationTest {
                         + "tenants by the runtime role; add the policy in the migration that "
                         + "creates the table")
                 .containsExactlyInAnyOrderElementsOf(TENANT_SCOPED_TABLES);
+    }
+
+    /**
+     * The self-maintaining half of the guard above.
+     *
+     * <p>{@link #businessTablesCarryTheTenantPolicy()} compares against a hand-written list, which
+     * is precise but only as current as the last person to edit it - and a list that goes stale
+     * while Docker is unavailable stops guarding anything, silently. This test asks PostgreSQL the
+     * structural question instead: <em>every</em> table carrying a {@code company_id} must carry
+     * the tenant policy, whatever it is called and whenever it was added. A table introduced in
+     * some future migration that forgets its policy fails here without anyone remembering to
+     * update a constant.
+     */
+    @Test
+    @DisplayName("any table with a company_id carries the tenant policy, list or no list (ADR-005)")
+    void everyCompanyColumnIsPoliced() throws SQLException {
+        List<String> unpoliced = strings("""
+                SELECT c.relname
+                FROM pg_class c
+                JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'company_id'
+                                   AND a.attnum > 0 AND NOT a.attisdropped
+                WHERE c.relnamespace = 'tms'::regnamespace
+                  AND c.relkind = 'r'
+                  AND NOT EXISTS (SELECT 1 FROM pg_policies p
+                                   WHERE p.schemaname = 'tms' AND p.tablename = c.relname
+                                     AND p.policyname = 'p_tenant_company_scope')
+                ORDER BY 1
+                """);
+
+        assertThat(unpoliced)
+                .as("a table storing a company_id without p_tenant_company_scope is readable "
+                        + "across tenants by the runtime role; add the policy in the migration "
+                        + "that creates the table, or justify it in "
+                        + "COMPANY_COLUMN_WITHOUT_TENANT_POLICY")
+                .containsExactlyInAnyOrderElementsOf(COMPANY_COLUMN_WITHOUT_TENANT_POLICY);
+    }
+
+    /**
+     * No table may be left with RLS enabled and no policy at all. That combination denies every
+     * row to {@code tms_app}, so it does not leak - but it breaks the feature instead, and it
+     * would do so only on a deployment where the runtime role is actually entered. Failing here
+     * turns a production-only outage into a test failure.
+     */
+    @Test
+    @DisplayName("every table carries exactly one of the two policies - none is left policy-less")
+    void noTableIsLeftWithoutAPolicy() throws SQLException {
+        assertThat(strings("""
+                SELECT c.relname
+                FROM pg_class c
+                WHERE c.relnamespace = 'tms'::regnamespace
+                  AND c.relkind = 'r'
+                  AND c.relname <> 'flyway_schema_history'
+                  AND NOT EXISTS (SELECT 1 FROM pg_policies p
+                                   WHERE p.schemaname = 'tms' AND p.tablename = c.relname)
+                ORDER BY 1
+                """))
+                .as("RLS is enabled on every table, so a table with no policy reads zero rows "
+                        + "for the runtime role: add p_tenant_company_scope for business data or "
+                        + "p_backend_managed for the identity catalogue")
+                .isEmpty();
     }
 
     @Test
