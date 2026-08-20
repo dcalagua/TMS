@@ -1,0 +1,12 @@
+{
+  "advancedCoordinates": "Coordenadas exactas",
+  "helpText": "Haz clic en el mapa o arrastra el marcador para ajustar la ubicación.",
+  "loading": "Cargando el mapa...",
+  "mapAriaLabel": "Mapa para seleccionar la ubicación",
+  "search": "Buscar",
+  "searchFailed": "No se pudo buscar la dirección. Inténtalo de nuevo.",
+  "searchNoResults": "No se encontraron resultados para esa dirección.",
+  "searchPlaceholder": "Buscar una dirección",
+  "stopsAriaLabel": "Mapa de paradas",
+  "unavailable": "El mapa no está disponible. Puedes ingresar la latitud y la longitud manualmente."
+}

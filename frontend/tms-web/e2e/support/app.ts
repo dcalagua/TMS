@@ -26,6 +26,7 @@ export const TEST_COMPANY = {
   permissions: [
     'masterdata.origin:manage',
     'masterdata.destination:manage',
+    'masterdata.location:manage',
     'masterdata.zone:manage',
     'masterdata.frequency:manage',
     'masterdata.route:manage',

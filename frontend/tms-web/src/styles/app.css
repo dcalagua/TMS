@@ -2425,6 +2425,26 @@ h6 {
   background-color: var(--tms-border);
 }
 
+/* A visible-by-default disclosure for a field a form must expose without letting it compete
+   with the primary control above it, e.g. exact coordinates under a map picker. */
+.tms-details-compact > summary {
+  cursor: pointer;
+  font-size: var(--tms-font-xs);
+  font-weight: 700;
+  letter-spacing: var(--tms-tracking-wide);
+  text-transform: uppercase;
+  color: var(--tms-text-secondary);
+}
+
+.tms-details-compact[open] > summary {
+  margin-bottom: 0.625rem;
+}
+
+.tms-map-picker-canvas,
+.tms-stops-map-canvas {
+  background-color: var(--tms-surface-muted);
+}
+
 /* ---------------------------------------------------------------------------
    Modal and drawer chrome
    ------------------------------------------------------------------------- */

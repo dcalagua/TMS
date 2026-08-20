@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Controller, useForm, type Validate } from 'react-hook-form'
+import { Controller, useForm, useWatch, type Validate } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { applyApiFieldErrors } from '../../shared/api/formErrors'
 import type { ApiError } from '../../shared/api/httpClient'
@@ -16,6 +16,7 @@ import {
 } from '../../shared/api/locationsApi'
 import { fetchZones } from '../../shared/api/zonesApi'
 import { useEnumLabels } from '../../shared/i18n/enums'
+import { LocationPickerMap } from '../../shared/maps/LocationPickerMap'
 import { FormField } from '../../shared/ui/components/FormField'
 import { Select } from '../../shared/ui/components/Select'
 import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
@@ -37,6 +38,13 @@ function isValidTimeZone(value: string): boolean {
   } catch {
     return false
   }
+}
+
+/** The map only needs a valid pair; a half-typed or invalid value just means no marker yet. */
+function parseCoordinate(value: string | undefined): number | null {
+  if (value === undefined || value.trim() === '') return null
+  const parsed = Number(value)
+  return Number.isNaN(parsed) ? null : parsed
 }
 
 interface LocationFormValues {
@@ -87,6 +95,7 @@ export function LocationFormDrawer({ companyId, location, onClose, onSaved }: Lo
   const { t } = useTranslation('masters')
   const { t: tc } = useTranslation('common')
   const { t: tv } = useTranslation('validations')
+  const { t: tm } = useTranslation('maps')
   const enumLabels = useEnumLabels()
   const isEdit = location !== null
   const [formError, setFormError] = useState<string | null>(null)
@@ -102,6 +111,7 @@ export function LocationFormDrawer({ companyId, location, onClose, onSaved }: Lo
     control,
     handleSubmit,
     setError,
+    setValue,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<LocationFormValues>({
     defaultValues: {
@@ -124,6 +134,14 @@ export function LocationFormDrawer({ companyId, location, onClose, onSaved }: Lo
       externalReference: location?.externalReference ?? '',
     },
   })
+
+  const watchedLatitude = useWatch({ control, name: 'latitude' })
+  const watchedLongitude = useWatch({ control, name: 'longitude' })
+  const mapLatitude = parseCoordinate(watchedLatitude)
+  const mapLongitude = parseCoordinate(watchedLongitude)
+  const initialMapSearchValue = location
+    ? [location.address, location.district, location.province, location.country].filter(Boolean).join(', ')
+    : ''
 
   const validateLatitude: Validate<string, LocationFormValues> = (value, formValues) => {
     if (value.trim() === '') {
@@ -416,31 +434,49 @@ export function LocationFormDrawer({ companyId, location, onClose, onSaved }: Lo
 
         <fieldset className="tms-fieldset">
           <legend className="tms-fieldset-legend">{tc('sections.location')}</legend>
+          <LocationPickerMap
+            latitude={mapLatitude}
+            longitude={mapLongitude}
+            initialSearchValue={initialMapSearchValue}
+            onChange={(lat, lng) => {
+              setValue('latitude', lat.toFixed(6), { shouldDirty: true, shouldValidate: true })
+              setValue('longitude', lng.toFixed(6), { shouldDirty: true, shouldValidate: true })
+            }}
+          />
+          <details className="tms-details-compact mb-3" open>
+            <summary>{tm('advancedCoordinates')}</summary>
+            <div className="row mt-2">
+              <div className="col-6 col-sm-3">
+                <FormField label={tc('fields.latitude')} htmlFor="location-latitude" error={errors.latitude?.message}>
+                  <input
+                    id="location-latitude"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder={tc('placeholders.latitude')}
+                    className={`form-control${errors.latitude ? ' is-invalid' : ''}`}
+                    {...register('latitude', { validate: validateLatitude })}
+                  />
+                </FormField>
+              </div>
+              <div className="col-6 col-sm-3">
+                <FormField
+                  label={tc('fields.longitude')}
+                  htmlFor="location-longitude"
+                  error={errors.longitude?.message}
+                >
+                  <input
+                    id="location-longitude"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder={tc('placeholders.longitude')}
+                    className={`form-control${errors.longitude ? ' is-invalid' : ''}`}
+                    {...register('longitude', { validate: validateLongitude })}
+                  />
+                </FormField>
+              </div>
+            </div>
+          </details>
           <div className="row">
-            <div className="col-6 col-sm-3">
-              <FormField label={tc('fields.latitude')} htmlFor="location-latitude" error={errors.latitude?.message}>
-                <input
-                  id="location-latitude"
-                  type="text"
-                  inputMode="decimal"
-                  placeholder={tc('placeholders.latitude')}
-                  className={`form-control${errors.latitude ? ' is-invalid' : ''}`}
-                  {...register('latitude', { validate: validateLatitude })}
-                />
-              </FormField>
-            </div>
-            <div className="col-6 col-sm-3">
-              <FormField label={tc('fields.longitude')} htmlFor="location-longitude" error={errors.longitude?.message}>
-                <input
-                  id="location-longitude"
-                  type="text"
-                  inputMode="decimal"
-                  placeholder={tc('placeholders.longitude')}
-                  className={`form-control${errors.longitude ? ' is-invalid' : ''}`}
-                  {...register('longitude', { validate: validateLongitude })}
-                />
-              </FormField>
-            </div>
             <div className="col-12 col-sm-6">
               <FormField
                 label={tc('columns.timeZone')}
