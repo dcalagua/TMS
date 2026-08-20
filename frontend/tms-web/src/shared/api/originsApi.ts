@@ -1,75 +1,26 @@
-import { apiRequest } from './httpClient'
+import { fetchLocations, type LocationListParams, type LocationView } from './locationsApi'
 import type { PageResponse } from './pageResponse'
 
-/** Mirrors the backend's `OriginType` enum (`masterdata/domain/OriginType.java`). */
-export type OriginType = 'WAREHOUSE' | 'DISTRIBUTION_CENTER' | 'PLANT' | 'HUB' | 'OTHER'
+/**
+ * "Origins" as a lens over the one physical master, not as a master of its own.
+ *
+ * There is no `/masterdata/origins` endpoint any anymore and no `tms.origin` table behind one:
+ * an origin is a `tms.location` that holds the `ORIGIN` operational role, so this module is a
+ * single preset filter. Everything else a caller might want - creating, editing, deactivating -
+ * belongs to `locationsApi`, because it happens to the place, not to its role.
+ *
+ * Kept as its own module rather than folded into `locationsApi` for one reason: it names what
+ * the caller means. An order's origin selector wants "the places this company may ship from",
+ * and `fetchOrigins` says that where `fetchLocations({ role: 'ORIGIN' })` repeated at nine call
+ * sites would only imply it.
+ */
 
-export const ORIGIN_TYPES: OriginType[] = ['WAREHOUSE', 'DISTRIBUTION_CENTER', 'PLANT', 'HUB', 'OTHER']
+/** A place usable as an origin - the canonical location row, unchanged. */
+export type OriginView = LocationView
 
-/** Mirrors the backend's `OriginView` record. */
-export interface OriginView {
-  id: string
-  code: string
-  name: string
-  type: OriginType
-  address: string | null
-  latitude: number | null
-  longitude: number | null
-  timeZone: string
-  externalReference: string | null
-  active: boolean
-  createdAt: string
-  updatedAt: string
-}
+export type OriginListParams = Omit<LocationListParams, 'role'>
 
-/** Mirrors the backend's `OriginRequest` record - shared shape for create and update. */
-export interface OriginRequest {
-  code: string
-  name: string
-  type: OriginType
-  address?: string | null
-  latitude?: number | null
-  longitude?: number | null
-  timeZone: string
-  externalReference?: string | null
-}
-
-export interface OriginListParams {
-  companyId: string
-  page?: number
-  size?: number
-  sort?: string
-  code?: string
-  name?: string
-  /** One free-text term matched against the code OR the name - what the lookup field sends.
-   * `code`/`name` narrow one field each and remain what the filter bar uses. */
-  search?: string
-  type?: OriginType
-  active?: boolean
-  signal?: AbortSignal
-}
-
+/** Locations of this company that hold the `ORIGIN` role, with the caller's other filters applied. */
 export function fetchOrigins(params: OriginListParams): Promise<PageResponse<OriginView>> {
-  const { companyId, signal, ...query } = params
-  return apiRequest<PageResponse<OriginView>>('/masterdata/origins', { companyId, signal, query })
-}
-
-export function fetchOrigin(companyId: string, id: string, signal?: AbortSignal): Promise<OriginView> {
-  return apiRequest<OriginView>(`/masterdata/origins/${id}`, { companyId, signal })
-}
-
-export function createOrigin(companyId: string, request: OriginRequest): Promise<OriginView> {
-  return apiRequest<OriginView>('/masterdata/origins', { method: 'POST', companyId, body: request })
-}
-
-export function updateOrigin(companyId: string, id: string, request: OriginRequest): Promise<OriginView> {
-  return apiRequest<OriginView>(`/masterdata/origins/${id}`, { method: 'PUT', companyId, body: request })
-}
-
-export function activateOrigin(companyId: string, id: string): Promise<OriginView> {
-  return apiRequest<OriginView>(`/masterdata/origins/${id}/activate`, { method: 'POST', companyId })
-}
-
-export function deactivateOrigin(companyId: string, id: string): Promise<OriginView> {
-  return apiRequest<OriginView>(`/masterdata/origins/${id}/deactivate`, { method: 'POST', companyId })
+  return fetchLocations({ ...params, role: 'ORIGIN' })
 }

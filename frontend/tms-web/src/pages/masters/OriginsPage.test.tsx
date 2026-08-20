@@ -2,20 +2,39 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError } from '../../shared/api/httpClient'
-import type { OriginView } from '../../shared/api/originsApi'
+import type { LocationView } from '../../shared/api/locationsApi'
 import { OriginsPage } from './OriginsPage'
 
-const originsApiMocks = vi.hoisted(() => ({
-  fetchOrigins: vi.fn(),
-  createOrigin: vi.fn(),
-  updateOrigin: vi.fn(),
-  activateOrigin: vi.fn(),
-  deactivateOrigin: vi.fn(),
+/**
+ * Origins is a view, not a master. What has to hold is that it asks the Locations endpoint for
+ * the `ORIGIN` role and nothing else, that it never offers the use as a filter (it *is* the
+ * filter), and that creating from here produces a place that appears in this list - the failure
+ * that would otherwise send an operator to Ubicaciones to fix what they just created.
+ */
+
+const locationsApiMocks = vi.hoisted(() => ({
+  fetchLocations: vi.fn(),
+  createLocation: vi.fn(),
+  updateLocation: vi.fn(),
+  activateLocation: vi.fn(),
+  deactivateLocation: vi.fn(),
 }))
-vi.mock('../../shared/api/originsApi', async () => {
-  const actual = await vi.importActual<typeof import('../../shared/api/originsApi')>('../../shared/api/originsApi')
-  return { ...actual, ...originsApiMocks }
+vi.mock('../../shared/api/locationsApi', async () => {
+  const actual = await vi.importActual<typeof import('../../shared/api/locationsApi')>('../../shared/api/locationsApi')
+  return { ...actual, ...locationsApiMocks }
+})
+
+const zonesApiMocks = vi.hoisted(() => ({ fetchZones: vi.fn() }))
+vi.mock('../../shared/api/zonesApi', async () => {
+  const actual = await vi.importActual<typeof import('../../shared/api/zonesApi')>('../../shared/api/zonesApi')
+  return { ...actual, fetchZones: zonesApiMocks.fetchZones }
+})
+
+const frequenciesApiMocks = vi.hoisted(() => ({ fetchFrequencies: vi.fn() }))
+vi.mock('../../shared/api/frequenciesApi', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../shared/api/frequenciesApi')>('../../shared/api/frequenciesApi')
+  return { ...actual, fetchFrequencies: frequenciesApiMocks.fetchFrequencies }
 })
 
 const companyMocks = vi.hoisted(() => ({ useCompany: vi.fn() }))
@@ -28,34 +47,47 @@ const alertMocks = vi.hoisted(() => ({
 }))
 vi.mock('../../shared/ui/alerts', () => alertMocks)
 
-const ORIGIN: OriginView = {
-  id: 'origin-1',
-  code: 'NORTH-HUB',
-  name: 'North Hub',
-  type: 'HUB',
-  address: '123 Main St',
-  latitude: -12.046374,
-  longitude: -77.042793,
+const PLANT: LocationView = {
+  id: 'location-1',
+  code: 'PLANT-01',
+  name: 'Lurin Plant',
+  type: 'PLANT',
+  roles: ['ORIGIN'],
+  address: 'Panamericana Sur km 30',
+  addressReference: null,
+  district: 'Lurin',
+  province: 'Lima',
+  department: 'Lima',
+  country: 'PE',
   timeZone: 'America/Lima',
+  latitude: -12.28,
+  longitude: -76.87,
+  zoneId: null,
+  zoneCode: null,
+  zoneName: null,
+  serviceTimeMinutes: 0,
+  externalSystem: null,
   externalReference: null,
   active: true,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
 }
 
-function page(content: OriginView[], overrides: Partial<{ page: number; size: number; totalElements: number }> = {}) {
-  return { content, page: overrides.page ?? 0, size: overrides.size ?? 25, totalElements: overrides.totalElements ?? content.length }
+function page<T>(content: T[], totalElements = content.length) {
+  return { content, page: 0, size: 25, totalElements }
 }
 
 function mockCompany(canManage: boolean) {
   companyMocks.useCompany.mockReturnValue({
     selected: { id: 'company-1', name: 'Acme Logistics' },
-    hasPermission: (permission: string) => (permission === 'masterdata.origin:manage' ? canManage : true),
+    hasPermission: (permission: string) => (permission === 'masterdata.location:manage' ? canManage : true),
   })
 }
 
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  zonesApiMocks.fetchZones.mockResolvedValue(page([]))
+  frequenciesApiMocks.fetchFrequencies.mockResolvedValue(page([]))
   return render(
     <QueryClientProvider client={queryClient}>
       <OriginsPage />
@@ -68,115 +100,72 @@ afterEach(() => {
 })
 
 describe('OriginsPage', () => {
-  it('shows a loading state while the first page is fetched', () => {
+  it('asks the Locations endpoint for the ORIGIN role', async () => {
     mockCompany(true)
-    originsApiMocks.fetchOrigins.mockReturnValue(new Promise(() => {}))
+    locationsApiMocks.fetchLocations.mockResolvedValue(page([PLANT]))
 
     renderPage()
 
-    expect(screen.getByText('Cargando registros...')).toBeInTheDocument()
-  })
-
-  it('shows an empty state when the company has no origins yet', async () => {
-    mockCompany(true)
-    originsApiMocks.fetchOrigins.mockResolvedValue(page([]))
-
-    renderPage()
-
-    expect(await screen.findByText('Sin orígenes')).toBeInTheDocument()
-  })
-
-  it('shows an error state with a retry action when the request fails', async () => {
-    mockCompany(true)
-    originsApiMocks.fetchOrigins.mockRejectedValue(
-      new ApiError(500, { code: 'internal-error' }, 'corr-1', 'boom'),
+    await screen.findByText('PLANT-01')
+    expect(locationsApiMocks.fetchLocations).toHaveBeenCalledWith(
+      expect.objectContaining({ companyId: 'company-1', role: 'ORIGIN' }),
     )
-
-    renderPage()
-
-    expect(await screen.findByText('Ocurrió un error de nuestro lado. Vuelve a intentarlo.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
   })
 
-  it('lists origins returned by the backend and shows pagination once there is more than one page', async () => {
+  it('is titled Orígenes and explains that it is a view of Ubicaciones', async () => {
     mockCompany(true)
-    originsApiMocks.fetchOrigins.mockResolvedValue(page([ORIGIN], { totalElements: 60, size: 25 }))
+    locationsApiMocks.fetchLocations.mockResolvedValue(page([PLANT]))
 
     renderPage()
 
-    expect(await screen.findByText('NORTH-HUB')).toBeInTheDocument()
-    expect(screen.getByRole('cell', { name: 'Hub' })).toBeInTheDocument()
-    expect(screen.getByText(/Página 1 de 3/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Orígenes' })).toBeInTheDocument()
+    expect(screen.getByText(/filtrada por uso operacional/i)).toBeInTheDocument()
+    await screen.findByText('PLANT-01')
   })
 
-  it('hides create and manage actions for a caller without masterdata.origin:manage', async () => {
-    mockCompany(false)
-    originsApiMocks.fetchOrigins.mockResolvedValue(page([ORIGIN]))
-
-    renderPage()
-
-    await screen.findByText('NORTH-HUB')
-
-    expect(screen.queryByRole('button', { name: 'Nuevo origen' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Abrir menú de acciones' })).not.toBeInTheDocument()
-  })
-
-  it('creates an origin through the modal and refreshes the list', async () => {
+  it('does not offer the operational use as a filter, because it is the screen', async () => {
     mockCompany(true)
-    originsApiMocks.fetchOrigins.mockResolvedValue(page([]))
-    originsApiMocks.createOrigin.mockResolvedValue({ ...ORIGIN, code: 'NEW-ORIGIN' })
+    locationsApiMocks.fetchLocations.mockResolvedValue(page([PLANT]))
+
+    renderPage()
+    await screen.findByText('PLANT-01')
+
+    expect(screen.queryByLabelText('Uso operacional')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Tipo')).toBeInTheDocument()
+  })
+
+  it('creates through the Location drawer with the origin use already ticked', async () => {
+    mockCompany(true)
+    locationsApiMocks.fetchLocations.mockResolvedValue(page([]))
+    locationsApiMocks.createLocation.mockResolvedValue(PLANT)
 
     renderPage()
     await screen.findByText('Sin orígenes')
 
-    // The empty table offers its own "create" call to action, so the page header's button has
-    // to be named explicitly rather than matched by label alone.
-    await userEvent.click(screen.getAllByRole('button', { name: 'Nuevo origen' })[0]!)
+    await userEvent.click(screen.getAllByRole('button', { name: 'Nuevo origen' })[0] as HTMLElement)
     const dialog = within(screen.getByRole('dialog'))
-    await userEvent.type(dialog.getByLabelText(/^código/i), 'NEW-ORIGIN')
-    await userEvent.type(dialog.getByLabelText(/^nombre/i), 'New Origin')
-    await userEvent.type(dialog.getByLabelText(/^zona horaria/i), 'America/Lima')
+    expect(dialog.getByRole('checkbox', { name: 'Puede utilizarse como origen' })).toBeChecked()
+
+    await userEvent.type(dialog.getByLabelText(/^código/i), 'PLANT-02')
+    await userEvent.type(dialog.getByLabelText(/^nombre/i), 'Second plant')
     await userEvent.click(dialog.getByRole('button', { name: 'Guardar' }))
 
-    await waitFor(() => expect(originsApiMocks.createOrigin).toHaveBeenCalledWith('company-1', expect.objectContaining({ code: 'NEW-ORIGIN' })))
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Registro creado')
-  })
-
-  it('deactivates an origin only after the confirmation dialog is accepted', async () => {
-    mockCompany(true)
-    originsApiMocks.fetchOrigins.mockResolvedValue(page([ORIGIN]))
-    originsApiMocks.deactivateOrigin.mockResolvedValue({ ...ORIGIN, active: false })
-
-    alertMocks.confirmAction.mockResolvedValueOnce(false)
-    renderPage()
-    await screen.findByText('NORTH-HUB')
-
-    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Desactivar' }))
-    await waitFor(() => expect(alertMocks.confirmAction).toHaveBeenCalled())
-    expect(originsApiMocks.deactivateOrigin).not.toHaveBeenCalled()
-
-    alertMocks.confirmAction.mockResolvedValueOnce(true)
-    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Desactivar' }))
-
-    await waitFor(() => expect(originsApiMocks.deactivateOrigin).toHaveBeenCalledWith('company-1', 'origin-1'))
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Registro desactivado', 'North Hub')
-  })
-
-  it('applies the code filter to the query', async () => {
-    mockCompany(true)
-    originsApiMocks.fetchOrigins.mockResolvedValue(page([ORIGIN]))
-
-    renderPage()
-    await screen.findByText('NORTH-HUB')
-
-    await userEvent.type(screen.getByLabelText(/^código$/i), 'north')
-    await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
-
     await waitFor(() =>
-      expect(originsApiMocks.fetchOrigins).toHaveBeenLastCalledWith(expect.objectContaining({ code: 'north' })),
+      expect(locationsApiMocks.createLocation).toHaveBeenCalledWith(
+        'company-1',
+        expect.objectContaining({ code: 'PLANT-02', roles: ['ORIGIN'] }),
+      ),
     )
+  })
+
+  it('hides create and manage actions without masterdata.location:manage', async () => {
+    mockCompany(false)
+    locationsApiMocks.fetchLocations.mockResolvedValue(page([PLANT]))
+
+    renderPage()
+    await screen.findByText('PLANT-01')
+
+    expect(screen.queryByRole('button', { name: 'Nuevo origen' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Abrir menú de acciones' })).not.toBeInTheDocument()
   })
 })

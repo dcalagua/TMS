@@ -72,6 +72,13 @@ interface LocationFormDrawerProps {
   companyId: string
   /** `null` creates a new location; otherwise the form edits this one. */
   location: LocationView | null
+  /**
+   * Ticked by default on a new location. The Origins and Destinations screens are filtered views
+   * of this same master, so "Nuevo origen" there has to open this drawer already saying what the
+   * operator asked for - otherwise they would create a place that does not appear in the list
+   * they created it from.
+   */
+  presetRole?: LocationRole
   onClose: () => void
   onSaved: () => void
 }
@@ -85,14 +92,17 @@ const KNOWN_FIELDS = new Set<keyof LocationFormValues>([
 /**
  * Create and edit share one form: the fields and validation are identical (see
  * `LocationRequest`). Seventeen fields is far too many for one flat list, so they are grouped
- * the way an operator thinks about a place: what it is, what it may do, where it is, how it is
- * served, and how another system refers to it.
+ * the way an operator thinks about a place: what it is, how it may be used, where it is, how it
+ * is served, and how another system refers to it.
  *
- * Roles are checkboxes rather than a multi-select, because the two that matter carry a
- * consequence a closed list would hide: ticking ORIGIN or SHIP_TO is what makes the location
- * usable in orders, routes and planning at all.
+ * The operational use is two checkboxes, phrased as sentences - "puede utilizarse como origen" -
+ * rather than as a list of role codes. They are the only fields in this form with a consequence
+ * elsewhere: ticking them is what makes the place selectable in orders, routes and planning, and
+ * a label that just said "Origen" next to a type that already said "Tienda" is what made the old
+ * form read as if the master contradicted itself.
  */
-export function LocationFormDrawer({ companyId, location, onClose, onSaved }: LocationFormDrawerProps) {
+export function LocationFormDrawer(
+    { companyId, location, presetRole, onClose, onSaved }: LocationFormDrawerProps) {
   const { t } = useTranslation('masters')
   const { t: tc } = useTranslation('common')
   const { t: tv } = useTranslation('validations')
@@ -119,7 +129,7 @@ export function LocationFormDrawer({ companyId, location, onClose, onSaved }: Lo
       code: location?.code ?? '',
       name: location?.name ?? '',
       type: location?.type ?? 'STORE',
-      roles: location?.roles ?? ['SHIP_TO'],
+      roles: location?.roles ?? (presetRole ? [presetRole] : ['DESTINATION']),
       zoneId: location?.zoneId ?? '',
       address: location?.address ?? '',
       addressReference: location?.addressReference ?? '',
@@ -305,28 +315,28 @@ export function LocationFormDrawer({ companyId, location, onClose, onSaved }: Lo
         </fieldset>
 
         <fieldset className="tms-fieldset">
-          <legend className="tms-fieldset-legend">{t('locations.form.sectionRoles')}</legend>
+          <legend className="tms-fieldset-legend">{t('locations.form.sectionUse')}</legend>
           {/* FormField's htmlFor points at the group div, not at the first checkbox. A
               `<label for>` aimed at a non-labelable element contributes nothing to any control's
-              accessible name, which is what keeps each box named "Origen", "Destino", ...
-              rather than "Roles Origen". */}
+              accessible name, which is what keeps each box named "Puede utilizarse como origen"
+              rather than "Uso operacional Puede utilizarse como origen". */}
           <Controller
             control={control}
             name="roles"
             rules={{ validate: (value) => value.length > 0 || tv('atLeastOneRole') }}
             render={({ field }) => (
               <FormField
-                label={t('locations.columns.roles')}
+                label={t('locations.columns.use')}
                 htmlFor="location-roles"
                 error={errors.roles?.message}
-                help={t('locations.form.rolesHelp')}
+                help={t('locations.form.useHelp')}
                 required
               >
                 <div
                   id="location-roles"
-                  className="d-flex flex-wrap gap-3"
+                  className="d-flex flex-column flex-sm-row flex-wrap gap-2 gap-sm-4"
                   role="group"
-                  aria-label={t('locations.columns.roles')}
+                  aria-label={t('locations.columns.use')}
                 >
                   {LOCATION_ROLES.map((role) => (
                     <div className="form-check" key={role}>
@@ -344,7 +354,9 @@ export function LocationFormDrawer({ companyId, location, onClose, onSaved }: Lo
                         }
                       />
                       <label className="form-check-label" htmlFor={`location-role-${role}`}>
-                        {enumLabels.locationRole(role)}
+                        {role === 'ORIGIN'
+                          ? t('locations.form.canBeOrigin')
+                          : t('locations.form.canBeDestination')}
                       </label>
                     </div>
                   ))}

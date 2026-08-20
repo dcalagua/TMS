@@ -6,14 +6,14 @@ import { DEFAULT_LANGUAGE } from '../shared/i18n/config'
 import { CarrierFormDrawer } from './fleet/CarrierFormDrawer'
 import { VehicleTypeFormDrawer } from './fleet/VehicleTypeFormDrawer'
 import { FrequencyFormDrawer } from './masters/FrequencyFormDrawer'
-import { OriginFormDrawer } from './masters/OriginFormDrawer'
 import { ZoneFormDrawer } from './masters/ZoneFormDrawer'
 
 /**
  * The drawer contract, asserted against the real forms rather than against `TmsDrawer` in
  * isolation: create, edit, detail and configure all open in the right-side panel, and every one
- * of them behaves the same way. Covered here are the five that need no async lookups; the others
- * assert the same contract in their own suites.
+ * of them behaves the same way. Covered here are the four that need no async lookups; the
+ * others assert the same contract in their own suites - `LocationFormDrawer`, which replaced the
+ * origin and destination forms, in `LocationFormDrawer.test.tsx`.
  */
 
 const DRAWERS = [
@@ -24,14 +24,6 @@ const DRAWERS = [
     ),
     createTitle: 'Nueva zona',
     englishTitle: 'New zone',
-  },
-  {
-    name: 'OriginFormDrawer',
-    render: (onClose: () => void) => (
-      <OriginFormDrawer companyId="company-1" origin={null} onClose={onClose} onSaved={vi.fn()} />
-    ),
-    createTitle: 'Nuevo origen',
-    englishTitle: 'New origin',
   },
   {
     name: 'FrequencyFormDrawer',

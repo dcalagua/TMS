@@ -1,23 +1,10 @@
 {
   "active": "Activo",
   "available": "Disponible",
-  "destinationType": {
-    "BRANCH": "Sucursal",
-    "CUSTOMER": "Cliente",
-    "DELIVERY_POINT": "Punto de entrega",
-    "DISTRIBUTION_CENTER": "Centro de distribución",
-    "HUB": "Hub",
-    "STORE": "Tienda"
-  },
   "inactive": "Inactivo",
   "locationRole": {
-    "DC": "Centro de distribución",
-    "HUB": "Hub",
-    "ORIGIN": "Origen",
-    "OTHER": "Otro",
-    "PLANT": "Planta",
-    "SHIP_TO": "Destino",
-    "STORE": "Tienda"
+    "DESTINATION": "Destino",
+    "ORIGIN": "Origen"
   },
   "locationType": {
     "BRANCH": "Sucursal",
@@ -42,13 +29,6 @@
     "NOT_READY": "No listo",
     "PLANNED": "Planificado",
     "READY_FOR_PLANNING": "Listo para planificar"
-  },
-  "originType": {
-    "DISTRIBUTION_CENTER": "Centro de distribución",
-    "HUB": "Hub",
-    "OTHER": "Otro",
-    "PLANT": "Planta",
-    "WAREHOUSE": "Almacén"
   },
   "outOfService": "Fuera de servicio",
   "planningRunStatus": {

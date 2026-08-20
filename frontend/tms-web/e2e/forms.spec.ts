@@ -18,8 +18,11 @@ const VIEWPORTS = [
 
 /** One dialog per module, opened from its own screen's primary action. */
 const FORMS = [
-  { path: '/masters/origins', open: 'Nuevo origen', title: 'Nuevo origen' },
-  { path: '/masters/destinations', open: 'Nuevo destino', title: 'Nuevo destino' },
+  // Origins and Destinations are filtered views of Locations: the action is named for the
+  // screen the operator is on, the dialog for the record it creates.
+  { path: '/masters/locations', open: 'Nueva ubicación', title: 'Nueva ubicación' },
+  { path: '/masters/origins', open: 'Nuevo origen', title: 'Nueva ubicación' },
+  { path: '/masters/destinations', open: 'Nuevo destino', title: 'Nueva ubicación' },
   { path: '/masters/zones', open: 'Nueva zona', title: 'Nueva zona' },
   { path: '/masters/frequencies', open: 'Nueva frecuencia', title: 'Nueva frecuencia' },
   { path: '/fleet/carriers', open: 'Nuevo transportista', title: 'Nuevo transportista' },
@@ -42,7 +45,9 @@ for (const viewport of VIEWPORTS) {
 
     for (const form of FORMS) {
       await page.goto(form.path)
-      await page.getByRole('button', { name: form.open }).click()
+      // Two buttons carry this label on an empty list - the header action and the empty
+      // state's own. Either opens the same dialog.
+      await page.locator('.tms-page-actions').getByRole('button', { name: form.open }).click()
 
       const dialog = page.getByRole('dialog')
       await expect(dialog).toBeVisible()

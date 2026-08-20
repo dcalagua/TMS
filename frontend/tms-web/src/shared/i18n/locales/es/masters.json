@@ -1,15 +1,9 @@
 {
   "destinations": {
-    "description": "Puntos de entrega y servicio usados para planificar y armar viajes.",
+    "description": "Ubicaciones habilitadas para recibir entregas. Es la misma ficha de Ubicaciones, filtrada por uso operacional.",
     "empty": {
-      "message": "Crea un destino o ajusta los filtros.",
+      "message": "Marca «Puede utilizarse como destino» en una ubicación o crea una nueva.",
       "title": "Sin destinos"
-    },
-    "form": {
-      "create": "Nuevo destino",
-      "edit": "Editar destino",
-      "noZone": "Sin zona",
-      "subtitle": "Punto de entrega al que se despachan los pedidos."
     },
     "new": "Nuevo destino",
     "title": "Destinos"
@@ -38,21 +32,22 @@
   },
   "locations": {
     "columns": {
-      "roles": "Roles",
-      "usableAs": "Utilizable como"
+      "use": "Uso operacional"
     },
-    "description": "Lugares físicos de la operación: tiendas, almacenes, plantas, hubs y puntos de entrega.",
+    "description": "Lugares físicos utilizados por la operación: tiendas, almacenes, plantas, hubs y puntos de entrega.",
     "empty": {
       "message": "Crea una ubicación o ajusta los filtros.",
       "title": "Sin ubicaciones"
     },
     "filters": {
-      "allRoles": "Todos los roles",
+      "anyUse": "Cualquier uso",
       "searchLabel": "Buscar",
       "searchPlaceholder": "Código, nombre o referencia externa"
     },
     "form": {
       "addAssociation": "Asociar frecuencia",
+      "canBeDestination": "Puede utilizarse como destino",
+      "canBeOrigin": "Puede utilizarse como origen",
       "create": "Nueva ubicación",
       "edit": "Editar ubicación",
       "eligibilityCheck": "Verificar",
@@ -63,14 +58,14 @@
       "identityHelp": "El sistema y la referencia externa identifican esta ubicación ante una integración. Van juntos o ninguno.",
       "noAssociations": "Aún no hay frecuencias asociadas a esta ubicación.",
       "noZone": "Sin zona",
-      "rolesHelp": "Origen y Destino habilitan el uso en pedidos, rutas y planificación. Los demás roles solo clasifican.",
       "saveFirstForServiceCalendar": "Guarda la ubicación primero para poder asociarle frecuencias.",
       "sectionEligibility": "Verificar elegibilidad",
-      "sectionRoles": "Roles",
       "sectionServiceCalendar": "Calendario de servicio",
+      "sectionUse": "Uso operacional",
       "selectFrequency": "Selecciona una frecuencia",
       "serviceCalendarHelp": "Asocia una o más frecuencias para definir en qué fechas puede despacharse o recibir servicio esta ubicación.",
-      "subtitle": "Un lugar físico y los roles que cumple en la operación."
+      "subtitle": "Un lugar físico y los roles que cumple en la operación.",
+      "useHelp": "Define cómo puede utilizarse este lugar en el transporte. Un mismo sitio puede ser origen y destino: la tienda recibe la entrega y despacha la devolución."
     },
     "import": {
       "applied": "Importación completa",
@@ -86,7 +81,7 @@
       "columnRow": "Fila",
       "columns": {
         "coordinates": "Coordenadas",
-        "roles": "Roles",
+        "roles": "Uso operacional",
         "type": "Tipo",
         "zone": "Zona"
       },
@@ -124,22 +119,15 @@
     },
     "new": "Nueva ubicación",
     "title": "Ubicaciones",
-    "usableAs": {
-      "none": "Solo clasificación",
-      "origin": "Origen",
-      "shipTo": "Destino"
+    "use": {
+      "none": "Sin uso definido"
     }
   },
   "origins": {
-    "description": "Puntos de carga y despacho usados para planificar y armar viajes.",
+    "description": "Ubicaciones habilitadas para despachar. Es la misma ficha de Ubicaciones, filtrada por uso operacional.",
     "empty": {
-      "message": "Crea un origen o ajusta los filtros.",
+      "message": "Marca «Puede utilizarse como origen» en una ubicación o crea una nueva.",
       "title": "Sin orígenes"
-    },
-    "form": {
-      "create": "Nuevo origen",
-      "edit": "Editar origen",
-      "subtitle": "Punto de carga y despacho usado para planificar viajes."
     },
     "new": "Nuevo origen",
     "title": "Orígenes"

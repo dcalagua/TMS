@@ -17,17 +17,16 @@ export const LOCATION_TYPES: LocationType[] = [
   'WAREHOUSE', 'DISTRIBUTION_CENTER', 'PLANT', 'HUB', 'STORE', 'CUSTOMER', 'BRANCH', 'DELIVERY_POINT', 'OTHER',
 ]
 
-/** Mirrors the backend's `LocationRole` enum (`masterdata/domain/LocationRole.java`). */
-export type LocationRole = 'ORIGIN' | 'SHIP_TO' | 'STORE' | 'DC' | 'PLANT' | 'HUB' | 'OTHER'
-
-export const LOCATION_ROLES: LocationRole[] = ['ORIGIN', 'SHIP_TO', 'STORE', 'DC', 'PLANT', 'HUB', 'OTHER']
-
 /**
- * The two roles that do something rather than describe something: they decide whether the
- * location has an origin and/or a destination projection, and therefore whether it can be used
- * as an order's origin or destination at all. See `docs/architecture/ADR_LOCATION_MODEL.md`.
+ * How a location may be used in a movement - mirrors the backend's `LocationRole`
+ * (`masterdata/domain/LocationRole.java`). Not what the place is: that is `LocationType`.
+ *
+ * A location may hold both. The same store is the destination of a delivery and the origin of
+ * the return, as one record with one address and one pair of coordinates.
  */
-export const PROJECTING_ROLES: LocationRole[] = ['ORIGIN', 'SHIP_TO']
+export type LocationRole = 'ORIGIN' | 'DESTINATION'
+
+export const LOCATION_ROLES: LocationRole[] = ['ORIGIN', 'DESTINATION']
 
 /** Mirrors the backend's `LocationView` record. */
 export interface LocationView {
@@ -51,10 +50,6 @@ export interface LocationView {
   serviceTimeMinutes: number
   externalSystem: string | null
   externalReference: string | null
-  /** Id of the `tms.origin` projection, or `null` when the location has no ORIGIN role. */
-  originId: string | null
-  /** Id of the `tms.destination` projection, or `null` when the location has no SHIP_TO role. */
-  destinationId: string | null
   active: boolean
   createdAt: string
   updatedAt: string

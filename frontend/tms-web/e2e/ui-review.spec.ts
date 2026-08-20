@@ -1,6 +1,6 @@
 import { expect, test, type ConsoleMessage, type Locator, type Page } from '@playwright/test'
 import { signIn, stubServices } from './support/app'
-import { stubOrigins } from './support/masters'
+import { stubLocations } from './support/masters'
 import { stubPlanning } from './support/planning'
 
 const SHOTS_DIR = 'artifacts/ui-review'
@@ -150,7 +150,7 @@ test('captures the review screenshots', async ({ page }) => {
    count strip and the pager sit against the data. */
 test('captures a populated list screen', async ({ page }) => {
   await stubServices(page)
-  await stubOrigins(page)
+  await stubLocations(page)
   await signIn(page)
 
   await page.setViewportSize({ width: 1440, height: 900 })

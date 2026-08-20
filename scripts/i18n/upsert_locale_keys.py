@@ -19,241 +19,129 @@ LOCALES_DIR = os.path.join(
 )
 
 # Brand-new namespace files, written from scratch. Keyed by namespace name -> language -> tree.
-NEW_NAMESPACES = {
-    "maps": {
-        "es": {
-            "advancedCoordinates": "Coordenadas exactas",
-            "helpText": "Haz clic en el mapa o arrastra el marcador para ajustar la ubicación.",
-            "loading": "Cargando el mapa...",
-            "mapAriaLabel": "Mapa para seleccionar la ubicación",
-            "search": "Buscar",
-            "searchFailed": "No se pudo buscar la dirección. Inténtalo de nuevo.",
-            "searchNoResults": "No se encontraron resultados para esa dirección.",
-            "searchPlaceholder": "Buscar una dirección",
-            "someStopsNotMapped_one": "{{count}} destino no tiene coordenadas y no aparece en "
-                                      "el mapa.",
-            "someStopsNotMapped_other": "{{count}} destinos no tienen coordenadas y no "
-                                        "aparecen en el mapa.",
-            "stopsAriaLabel": "Mapa de paradas",
-            "unavailable": "El mapa no está disponible. Puedes ingresar la latitud y la "
-                            "longitud manualmente.",
-        },
-        "en": {
-            "advancedCoordinates": "Exact coordinates",
-            "helpText": "Click the map or drag the marker to adjust the location.",
-            "loading": "Loading the map...",
-            "mapAriaLabel": "Map to pick the location",
-            "search": "Search",
-            "searchFailed": "Could not search the address. Try again.",
-            "searchNoResults": "No results found for that address.",
-            "searchPlaceholder": "Search an address",
-            "someStopsNotMapped_one": "{{count}} destination has no coordinates and does not "
-                                      "appear on the map.",
-            "someStopsNotMapped_other": "{{count}} destinations have no coordinates and do "
-                                        "not appear on the map.",
-            "stopsAriaLabel": "Stops map",
-            "unavailable": "The map is unavailable. You can enter latitude and longitude manually.",
-        },
-    },
-}
+NEW_NAMESPACES = {}
 
 
 # Keys layered over an existing namespace file, deep-merged into what is already there. Same
 # shape as NEW_NAMESPACES: namespace -> language -> partial tree. Only the branches named here
 # are touched; everything else in the file survives.
 EXISTING_NAMESPACE_UPDATES = {
-    "common": {
+    # The Location domain close-out: a location's TYPE says what the place is, its OPERATIONAL
+    # USE says how it may be used in a movement. The old wording called the second one "roles"
+    # and listed five values that were really types, so the screen showed "Tipo: Tienda" beside
+    # "Roles: Tienda". Every string below exists to keep those two questions apart in words.
+    "statuses": {
         "es": {
-            "empty": {
-                "noMatches": "Sin coincidencias",
-            },
-            "loading": {
-                "generic": "Cargando...",
+            "locationRole": {
+                "ORIGIN": "Origen",
+                "DESTINATION": "Destino",
             },
         },
         "en": {
-            "empty": {
-                "noMatches": "No matches",
-            },
-            "loading": {
-                "generic": "Loading...",
+            "locationRole": {
+                "ORIGIN": "Origin",
+                "DESTINATION": "Destination",
             },
         },
     },
-    "fleet": {
+    "masters": {
         "es": {
-            "vehicles": {
+            "locations": {
+                "description": "Lugares f\u00edsicos utilizados por la operaci\u00f3n: tiendas, "
+                               "almacenes, plantas, hubs y puntos de entrega.",
                 "columns": {
-                    "effectiveCapacity": "Capacidad efectiva",
+                    "use": "Uso operacional",
                 },
-                "ownedFleet": "Flota propia",
-                "palletsUnit": "pallets",
+                "use": {
+                    "none": "Sin uso definido",
+                },
+                "filters": {
+                    "anyUse": "Cualquier uso",
+                },
+                "form": {
+                    "sectionUse": "Uso operacional",
+                    "useHelp": "Define c\u00f3mo puede utilizarse este lugar en el transporte. "
+                               "Un mismo sitio puede ser origen y destino: la tienda recibe la "
+                               "entrega y despacha la devoluci\u00f3n.",
+                    "canBeOrigin": "Puede utilizarse como origen",
+                    "canBeDestination": "Puede utilizarse como destino",
+                },
+                "import": {
+                    "columns": {
+                        "roles": "Uso operacional",
+                    },
+                },
+            },
+            "origins": {
+                "title": "Or\u00edgenes",
+                "description": "Ubicaciones habilitadas para despachar. Es la misma ficha de "
+                               "Ubicaciones, filtrada por uso operacional.",
+                "new": "Nuevo origen",
+                "empty": {
+                    "title": "Sin or\u00edgenes",
+                    "message": "Marca \u00abPuede utilizarse como origen\u00bb en una ubicaci\u00f3n "
+                               "o crea una nueva.",
+                },
+            },
+            "destinations": {
+                "title": "Destinos",
+                "description": "Ubicaciones habilitadas para recibir entregas. Es la misma ficha "
+                               "de Ubicaciones, filtrada por uso operacional.",
+                "new": "Nuevo destino",
+                "empty": {
+                    "title": "Sin destinos",
+                    "message": "Marca \u00abPuede utilizarse como destino\u00bb en una ubicaci\u00f3n "
+                               "o crea una nueva.",
+                },
             },
         },
         "en": {
-            "vehicles": {
+            "locations": {
+                "description": "Physical places the operation uses: stores, warehouses, plants, "
+                               "hubs and delivery points.",
                 "columns": {
-                    "effectiveCapacity": "Effective capacity",
+                    "use": "Operational use",
                 },
-                "ownedFleet": "Owned fleet",
-                "palletsUnit": "pallets",
-            },
-        },
-    },
-    "orders": {
-        "es": {
-            "actions": {
-                "import": "Importar",
-            },
-            "form": {
-                "declaredHelp": "Lo que el remitente afirma que pesa u ocupa el pedido, al margen "
-                                "de las líneas. Déjalo vacío si las líneas ya lo describen.",
-                "declaredPallets": "Pallets declarados",
-                "declaredTotals": "Totales declarados",
-                "declaredVolume": "Volumen declarado (m³)",
-                "declaredWeight": "Peso declarado (kg)",
-                "declaredWithoutLines": "Sin líneas, estos son los totales con los que se "
-                                        "planificará el pedido.",
-                "declaredWithLines": "Las líneas mandan: si además declaras una cifra, ambas "
-                                     "deben coincidir con un margen del 1 % o el pedido se rechaza.",
-                "searchDestination": "Escribe un código o un nombre de destino",
-                "searchOrigin": "Escribe un código o un nombre de origen",
-                "storedTotals": "Totales guardados",
-                "totalsSourceCalculated": "Calculados desde las líneas",
-                "totalsSourceDeclared": "Declarados",
-            },
-            "import": {
-                "apply": "Importar los pedidos",
-                "applied": "Importación completada",
-                "appliedText": "{{created}} pedidos creados y {{skipped}} omitidos por duplicado.",
-                "applying": "Importando...",
-                "blocked": "El archivo tiene errores y no se importó nada. Corrige las filas "
-                           "indicadas y vuelve a validarlo.",
-                "columnColumn": "Columna",
-                "columnMessage": "Problema",
-                "columnOutcome": "Resultado",
-                "columnReference": "Referencia externa",
-                "columnRow": "Fila",
-                "confirmText": "Se crearán {{count}} pedidos en una sola operación. Si algo "
-                               "falla no se guardará nada.",
-                "confirmTitle": "¿Importar los pedidos?",
-                "counts": {
-                    "create": "Se crearán",
-                    "duplicates": "Ya existen",
-                    "issues": "Errores",
-                    "orders": "Pedidos",
-                    "rejected": "Rechazados",
-                    "rows": "Filas leídas",
+                "use": {
+                    "none": "No use set",
                 },
-                "downloadCsv": "Plantilla CSV",
-                "downloadError": "No se pudo descargar la plantilla",
-                "downloadXlsx": "Plantilla XLSX",
-                "error": "No se pudo procesar el archivo",
-                "externalSource": "Sistema de origen",
-                "externalSourceHelp": "Identifica el sistema del que viene el archivo. Junto con "
-                                      "la referencia externa de cada fila es lo que hace que "
-                                      "reimportar el mismo archivo sea inofensivo.",
-                "file": "Archivo",
-                "fileHelp": "Formatos .xlsx o .csv, hasta {{mb}} MB y {{rows}} filas.",
-                "fileSection": "2. Archivo",
-                "issuesTitle": "Filas con problemas",
-                "issuesTruncated": "Se muestran los primeros {{shown}} de {{total}} problemas.",
-                "nothingToCreate": "No hay pedidos nuevos: todas las referencias del archivo ya "
-                                   "existen en esta compañía.",
-                "ordersTitle": "Pedidos del archivo",
-                "outcomeCreate": "Se creará",
-                "outcomeRejected": "Rechazado",
-                "outcomeSkipped": "Ya existe",
-                "previewSection": "3. Validación",
-                "previewing": "Validando...",
-                "readyToApply": "El archivo es válido. Todavía no se ha guardado nada.",
-                "reset": "Empezar de nuevo",
-                "selectFile": "Selecciona un archivo.",
-                "subtitle": "Carga masiva de pedidos desde XLSX o CSV, validada antes de guardar.",
-                "templateHelp": "Descarga la plantilla, complétala y súbela. Un pedido con varias "
-                                "líneas se escribe en varias filas que comparten la misma "
-                                "referencia externa.",
-                "templateSection": "1. Plantilla",
-                "title": "Importar pedidos",
-                "validate": "Validar el archivo",
-            },
-        },
-        "en": {
-            "actions": {
-                "import": "Import",
-            },
-            "form": {
-                "declaredHelp": "What the sender asserts the order weighs or occupies, "
-                                "independently of the lines. Leave empty when the lines already "
-                                "describe it.",
-                "declaredPallets": "Declared pallets",
-                "declaredTotals": "Declared totals",
-                "declaredVolume": "Declared volume (m³)",
-                "declaredWeight": "Declared weight (kg)",
-                "declaredWithoutLines": "With no lines, these are the totals the order will be "
-                                        "planned with.",
-                "declaredWithLines": "The lines win: if you also declare a figure the two must "
-                                     "agree within 1% or the order is rejected.",
-                "searchDestination": "Type a destination code or name",
-                "searchOrigin": "Type an origin code or name",
-                "storedTotals": "Stored totals",
-                "totalsSourceCalculated": "Calculated from the lines",
-                "totalsSourceDeclared": "Declared",
-            },
-            "import": {
-                "apply": "Import the orders",
-                "applied": "Import complete",
-                "appliedText": "{{created}} orders created and {{skipped}} skipped as duplicates.",
-                "applying": "Importing...",
-                "blocked": "The file has errors and nothing was imported. Fix the rows listed "
-                           "below and validate it again.",
-                "columnColumn": "Column",
-                "columnMessage": "Problem",
-                "columnOutcome": "Outcome",
-                "columnReference": "External reference",
-                "columnRow": "Row",
-                "confirmText": "{{count}} orders will be created in a single operation. If "
-                               "anything fails, nothing is saved.",
-                "confirmTitle": "Import the orders?",
-                "counts": {
-                    "create": "Will be created",
-                    "duplicates": "Already exist",
-                    "issues": "Problems",
-                    "orders": "Orders",
-                    "rejected": "Rejected",
-                    "rows": "Rows read",
+                "filters": {
+                    "anyUse": "Any use",
                 },
-                "downloadCsv": "CSV template",
-                "downloadError": "Could not download the template",
-                "downloadXlsx": "XLSX template",
-                "error": "Could not process the file",
-                "externalSource": "Source system",
-                "externalSourceHelp": "Identifies the system the file came from. Together with "
-                                      "each row's external reference it is what makes "
-                                      "re-importing the same file harmless.",
-                "file": "File",
-                "fileHelp": ".xlsx or .csv, up to {{mb}} MB and {{rows}} rows.",
-                "fileSection": "2. File",
-                "issuesTitle": "Rows with problems",
-                "issuesTruncated": "Showing the first {{shown}} of {{total}} problems.",
-                "nothingToCreate": "No new orders: every reference in the file already exists in "
-                                   "this company.",
-                "ordersTitle": "Orders in the file",
-                "outcomeCreate": "Will be created",
-                "outcomeRejected": "Rejected",
-                "outcomeSkipped": "Already exists",
-                "previewSection": "3. Validation",
-                "previewing": "Validating...",
-                "readyToApply": "The file is valid. Nothing has been saved yet.",
-                "reset": "Start over",
-                "selectFile": "Select a file.",
-                "subtitle": "Bulk order upload from XLSX or CSV, validated before anything is saved.",
-                "templateHelp": "Download the template, fill it in and upload it. An order with "
-                                "several lines is written as several rows sharing one external "
-                                "reference.",
-                "templateSection": "1. Template",
-                "title": "Import orders",
-                "validate": "Validate the file",
+                "form": {
+                    "sectionUse": "Operational use",
+                    "useHelp": "How this place may be used in transport. One site can be both: "
+                               "the store receives the delivery and ships the return.",
+                    "canBeOrigin": "Can be used as origin",
+                    "canBeDestination": "Can be used as destination",
+                },
+                "import": {
+                    "columns": {
+                        "roles": "Operational use",
+                    },
+                },
+            },
+            "origins": {
+                "title": "Origins",
+                "description": "Locations enabled to ship. The same Locations record, filtered "
+                               "by operational use.",
+                "new": "New origin",
+                "empty": {
+                    "title": "No origins",
+                    "message": "Tick \u201cCan be used as origin\u201d on a location, or create "
+                               "a new one.",
+                },
+            },
+            "destinations": {
+                "title": "Destinations",
+                "description": "Locations enabled to receive deliveries. The same Locations "
+                               "record, filtered by operational use.",
+                "new": "New destination",
+                "empty": {
+                    "title": "No destinations",
+                    "message": "Tick \u201cCan be used as destination\u201d on a location, or "
+                               "create a new one.",
+                },
             },
         },
     },
@@ -265,9 +153,32 @@ EXISTING_NAMESPACE_UPDATES = {
 # strings nobody can trace to a screen - and both languages must lose it together, which is why
 # this is one list rather than a per-language one.
 REMOVED_KEYS = {
-    # Replaced by form.searchOrigin / form.searchDestination when the Orders drawer's selects
-    # became async lookups: a combobox has a "type to search" placeholder, not a "pick one".
-    "orders": ["form.selectOrigin", "form.selectDestination"],
+    # The two legacy type vocabularies and the five role values that were really types. Their
+    # last callers went with tms.origin and tms.destination.
+    "statuses": [
+        "originType",
+        "destinationType",
+        "locationRole.SHIP_TO",
+        "locationRole.STORE",
+        "locationRole.DC",
+        "locationRole.PLANT",
+        "locationRole.HUB",
+        "locationRole.OTHER",
+    ],
+    "masters": [
+        # "Roles" and "Utilizable como" were the same fact told twice; one "Uso operacional"
+        # column replaces both.
+        "locations.columns.roles",
+        "locations.columns.usableAs",
+        "locations.usableAs",
+        "locations.filters.allRoles",
+        "locations.form.sectionRoles",
+        "locations.form.rolesHelp",
+        # Origins and Destinations no longer have forms of their own: both open the Location
+        # drawer with one use pre-ticked.
+        "origins.form",
+        "destinations.form",
+    ],
 }
 
 

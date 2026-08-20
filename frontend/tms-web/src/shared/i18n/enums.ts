@@ -1,9 +1,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { DestinationType } from '../api/destinationsApi'
 import type { LocationRole, LocationType } from '../api/locationsApi'
 import type { OrderPriority, OrderStatus } from '../api/ordersApi'
-import type { OriginType } from '../api/originsApi'
 import type { PlanningRunStatus, TripStatus } from '../api/planningApi'
 import type { VehicleBodyType } from '../api/vehicleTypesApi'
 import type { VehicleAvailabilityStatus } from '../api/vehiclesApi'
@@ -18,8 +16,6 @@ import type { VehicleAvailabilityStatus } from '../api/vehiclesApi'
  * `enums.test.ts` fails if any value ever lacks a label in either language.
  */
 export interface EnumLabels {
-  originType: (value: OriginType) => string
-  destinationType: (value: DestinationType) => string
   locationType: (value: LocationType) => string
   locationRole: (value: LocationRole) => string
   vehicleBodyType: (value: VehicleBodyType) => string
@@ -35,8 +31,6 @@ export function useEnumLabels(): EnumLabels {
 
   return useMemo<EnumLabels>(
     () => ({
-      originType: (value) => t(`originType.${value}`),
-      destinationType: (value) => t(`destinationType.${value}`),
       locationType: (value) => t(`locationType.${value}`),
       locationRole: (value) => t(`locationRole.${value}`),
       vehicleBodyType: (value) => t(`vehicleBodyType.${value}`),
