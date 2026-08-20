@@ -129,6 +129,9 @@
     "title": "Tipos de vehículo"
   },
   "vehicles": {
+    "columns": {
+      "effectiveCapacity": "Capacidad efectiva"
+    },
     "description": "Vehículos físicos, su asignación de transportista y tipo, y su capacidad efectiva. El seguimiento GPS/telemetría no forma parte de esta pantalla.",
     "empty": {
       "message": "Crea un vehículo o ajusta los filtros.",
@@ -193,6 +196,8 @@
       "validate": "Validar el archivo"
     },
     "new": "Nuevo vehículo",
+    "ownedFleet": "Flota propia",
+    "palletsUnit": "pallets",
     "title": "Vehículos"
   }
 }

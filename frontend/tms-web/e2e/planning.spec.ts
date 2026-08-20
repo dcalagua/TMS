@@ -39,9 +39,13 @@ test('creates a trip, assigns an order, and the capacity bars move', async ({ pa
   await page.getByRole('button', { name: 'Nuevo viaje' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toHaveAccessibleName('Nuevo viaje')
-  // Wait for the vehicle list to arrive before picking from it.
-  await expect(dialog.getByRole('option', { name: /VH-001/ })).toBeAttached()
-  await dialog.getByLabel('Vehículo').selectOption('veh-1')
+  // `Select` is a button + listbox, not a native `<select>`: open it, then click the option.
+  // The listbox is portalled to the document body, so the option is looked up unscoped rather
+  // than through `dialog`, and only exists once opened - unlike a native select's options, which
+  // are always attached even while closed.
+  await dialog.getByLabel('Vehículo').click()
+  await expect(page.getByRole('option', { name: /VH-001/ })).toBeVisible()
+  await page.getByRole('option', { name: /VH-001/ }).click()
   await dialog.getByRole('button', { name: 'Crear viaje' }).click()
   await expect(dialog).toBeHidden()
 
@@ -79,7 +83,9 @@ test('removes an assigned order and returns it to the eligible pool', async ({ p
   await expect(drawer.getByRole('heading', { name: 'Pedidos asignados' })).toBeVisible()
   await expect(drawer.getByText('TO-00000001')).toBeVisible()
 
-  await drawer.getByRole('button', { name: 'Quitar' }).click()
+  // `exact: true`: a substring match on "Quitar" also catches the route section's "Quitar la
+  // ruta" button, which renders in the same editable-trip state.
+  await drawer.getByRole('button', { name: 'Quitar', exact: true }).click()
   await expect(drawer.getByText('Aún no hay pedidos asignados.')).toBeVisible()
 
   await page.keyboard.press('Escape')

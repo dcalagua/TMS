@@ -22,6 +22,7 @@ import {
   Pagination,
   ActionMenu,
   ActiveBadge,
+  Select,
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
@@ -215,52 +216,47 @@ export function DestinationsPage() {
           <label htmlFor="filter-type" className="form-label small mb-1">
             {tc('columns.type')}
           </label>
-          <select
+          <Select
             id="filter-type"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.type}
-            onChange={(event) => setDraftFilters({ ...draftFilters, type: event.target.value as DestinationType | '' })}
-          >
-            <option value="">{tc('filters.allTypes')}</option>
-            {DESTINATION_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {enumLabels.destinationType(type)}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => setDraftFilters({ ...draftFilters, type: next as DestinationType | '' })}
+            options={[
+              { value: '', label: tc('filters.allTypes') },
+              ...DESTINATION_TYPES.map((type) => ({ value: type, label: enumLabels.destinationType(type) })),
+            ]}
+          />
         </div>
         <div>
           <label htmlFor="filter-zone" className="form-label small mb-1">
             {tc('columns.zone')}
           </label>
-          <select
+          <Select
             id="filter-zone"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.zoneId}
-            onChange={(event) => setDraftFilters({ ...draftFilters, zoneId: event.target.value })}
-          >
-            <option value="">{tc('filters.allZones')}</option>
-            {zones.map((zone) => (
-              <option key={zone.id} value={zone.id}>
-                {zone.name}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => setDraftFilters({ ...draftFilters, zoneId: next })}
+            options={[
+              { value: '', label: tc('filters.allZones') },
+              ...zones.map((zone) => ({ value: zone.id, label: zone.name })),
+            ]}
+          />
         </div>
         <div>
           <label htmlFor="filter-active" className="form-label small mb-1">
             {tc('columns.status')}
           </label>
-          <select
+          <Select
             id="filter-active"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.active}
-            onChange={(event) => setDraftFilters({ ...draftFilters, active: event.target.value as ActiveFilter })}
-          >
-            <option value="active">{tc('filters.statusActive')}</option>
-            <option value="inactive">{tc('filters.statusInactive')}</option>
-            <option value="all">{tc('filters.statusAll')}</option>
-          </select>
+            onChange={(next) => setDraftFilters({ ...draftFilters, active: next as ActiveFilter })}
+            options={[
+              { value: 'active', label: tc('filters.statusActive') },
+              { value: 'inactive', label: tc('filters.statusInactive') },
+              { value: 'all', label: tc('filters.statusAll') },
+            ]}
+          />
         </div>
       </FilterBar>
 

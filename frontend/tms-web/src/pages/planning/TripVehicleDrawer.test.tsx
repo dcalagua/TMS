@@ -44,6 +44,12 @@ function trip(overrides: Partial<TripView> = {}): TripView {
   }
 }
 
+/** `Select` is a button + listbox, not a native `<select>`: open it, then click the option. */
+async function pickOption(comboboxName: RegExp | string, optionName: RegExp | string) {
+  await userEvent.click(screen.getByRole('combobox', { name: comboboxName }))
+  await userEvent.click(await screen.findByRole('option', { name: optionName }))
+}
+
 function renderModal(tripFixture: TripView, onUpdated = vi.fn(), onClose = vi.fn()) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const utils = render(
@@ -66,8 +72,7 @@ describe('TripVehicleDrawer', () => {
     planningApiMocks.updateTripVehicle.mockResolvedValue(detail)
     const { onUpdated } = renderModal(trip())
 
-    await screen.findByRole('option', { name: 'VH-1 — ABC-123' })
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: /^Vehículo/ }), 'vehicle-1')
+    await pickOption(/^Vehículo/, 'VH-1 — ABC-123')
     await userEvent.click(screen.getByRole('button', { name: 'Guardar vehículo' }))
 
     await waitFor(() =>
@@ -87,8 +92,9 @@ describe('TripVehicleDrawer', () => {
     )
     renderModal(trip({ vehicleId: 'vehicle-2', vehicleCode: 'VH-2' }))
 
-    await screen.findByRole('option', { name: 'VH-2 — XYZ-999' })
-    expect(screen.getByRole('combobox', { name: /^Vehículo/ })).toHaveValue('vehicle-2')
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: /^Vehículo/ })).toHaveTextContent('VH-2 — XYZ-999'),
+    )
   })
 
   it('shows the backend refusal verbatim when a downgrade no longer fits the current load', async () => {
@@ -98,8 +104,7 @@ describe('TripVehicleDrawer', () => {
     )
     const { onUpdated } = renderModal(trip())
 
-    await screen.findByRole('option', { name: 'VH-1 — ABC-123' })
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: /^Vehículo/ }), 'vehicle-1')
+    await pickOption(/^Vehículo/, 'VH-1 — ABC-123')
     await userEvent.click(screen.getByRole('button', { name: 'Guardar vehículo' }))
 
     expect(await screen.findByText('Trip 1 would exceed capacity: weight 1200.00/1000.00 kg.')).toBeInTheDocument()
@@ -134,6 +139,7 @@ describe('TripVehicleDrawer', () => {
     renderModal(trip())
 
     expect(await screen.findByRole('button', { name: 'Save vehicle' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Select a vehicle' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('combobox', { name: /^Vehicle/ }))
+    expect(await screen.findByRole('option', { name: 'Select a vehicle' })).toBeInTheDocument()
   })
 })

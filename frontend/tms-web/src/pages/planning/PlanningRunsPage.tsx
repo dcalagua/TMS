@@ -18,6 +18,7 @@ import {
   FilterBar,
   PageHeader,
   Pagination,
+  Select,
   StatusBadge,
   type DataTableColumn,
   type StatusTone,
@@ -151,19 +152,16 @@ export function PlanningRunsPage() {
           <label htmlFor="filter-origin" className="form-label small mb-1">
             Origin
           </label>
-          <select
+          <Select
             id="filter-origin"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.originId}
-            onChange={(event) => setDraftFilters({ ...draftFilters, originId: event.target.value })}
-          >
-            <option value="">All origins</option>
-            {origins.map((origin) => (
-              <option key={origin.id} value={origin.id}>
-                {origin.name}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => setDraftFilters({ ...draftFilters, originId: next })}
+            options={[
+              { value: '', label: 'All origins' },
+              ...origins.map((origin) => ({ value: origin.id, label: origin.name })),
+            ]}
+          />
         </div>
         <div>
           <label htmlFor="filter-date-from" className="form-label small mb-1">
@@ -193,19 +191,16 @@ export function PlanningRunsPage() {
           <label htmlFor="filter-status" className="form-label small mb-1">
             Status
           </label>
-          <select
+          <Select
             id="filter-status"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.status}
-            onChange={(event) => setDraftFilters({ ...draftFilters, status: event.target.value as PlanningRunStatus | '' })}
-          >
-            <option value="">All statuses</option>
-            {PLANNING_RUN_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {enumLabels.planningRunStatus(status)}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => setDraftFilters({ ...draftFilters, status: next as PlanningRunStatus | '' })}
+            options={[
+              { value: '', label: 'All statuses' },
+              ...PLANNING_RUN_STATUSES.map((status) => ({ value: status, label: enumLabels.planningRunStatus(status) })),
+            ]}
+          />
         </div>
       </FilterBar>
 

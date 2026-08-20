@@ -161,7 +161,8 @@ describe('TripDetailDrawer', () => {
       ),
     )
 
-    await userEvent.selectOptions(await screen.findByLabelText('Ruta'), 'route-1')
+    await userEvent.click(await screen.findByRole('combobox', { name: 'Ruta' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'RTE-1 — North corridor' }))
     await userEvent.click(screen.getByRole('button', { name: 'Guardar la ruta' }))
 
     await waitFor(() =>
@@ -188,7 +189,8 @@ describe('TripDetailDrawer', () => {
 
     await screen.findByText('TO-1')
     await userEvent.click(screen.getByRole('checkbox', { name: /Reordenar los destinos/ }))
-    await userEvent.selectOptions(await screen.findByLabelText('Ruta'), 'route-1')
+    await userEvent.click(await screen.findByRole('combobox', { name: 'Ruta' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'RTE-1 — North corridor' }))
     await userEvent.click(screen.getByRole('button', { name: 'Guardar la ruta' }))
 
     await waitFor(() =>

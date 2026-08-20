@@ -155,7 +155,11 @@ describe('PlanningRunsPage', () => {
     renderPage()
     await userEvent.click(await screen.findByRole('button', { name: 'Nueva corrida' }))
     const dialog = screen.getByRole('dialog')
-    await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: /^Origen/ }), 'origin-1')
+    // `Select`'s listbox is portalled to `document.body`, so the option is not a DOM descendant
+    // of `dialog` even though it belongs to this form - found unscoped, like elsewhere in the
+    // e2e/unit suites that drive this control.
+    await userEvent.click(within(dialog).getByRole('combobox', { name: /^Origen/ }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Origin A' }))
     await userEvent.type(within(dialog).getByLabelText(/^Fecha de planificaci/i), '2026-03-01')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Crear corrida' }))
 

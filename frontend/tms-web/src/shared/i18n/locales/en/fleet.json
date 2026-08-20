@@ -129,6 +129,9 @@
     "title": "Vehicle types"
   },
   "vehicles": {
+    "columns": {
+      "effectiveCapacity": "Effective capacity"
+    },
     "description": "Physical vehicles, their carrier and type assignment and effective capacity. GPS/telematics tracking is not part of this screen.",
     "empty": {
       "message": "Create a vehicle or adjust your filters.",
@@ -193,6 +196,8 @@
       "validate": "Validate the file"
     },
     "new": "New vehicle",
+    "ownedFleet": "Owned fleet",
+    "palletsUnit": "pallets",
     "title": "Vehicles"
   }
 }

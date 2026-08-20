@@ -25,6 +25,11 @@ export interface SelectProps {
   size?: 'sm' | 'md'
   name?: string
   'aria-describedby'?: string
+  /** For a control with no visible `<label>` - a per-row picker whose name would otherwise repeat
+   * text already on screen (an order number, say). Prefer `id` + `<label htmlFor>` whenever the
+   * control can carry a real label instead: unlike an attribute, that text also survives forms
+   * that read the DOM rather than the accessibility tree. */
+  'aria-label'?: string
 }
 
 /**
@@ -55,6 +60,7 @@ export function Select({
   size = 'md',
   name,
   'aria-describedby': describedBy,
+  'aria-label': ariaLabel,
 }: SelectProps) {
   const listId = useId()
   const { open, toggle, close, containerRef, triggerRef, menuRef, menuStyle, registerItem, onKeyDown } = useMenu(
@@ -93,6 +99,7 @@ export function Select({
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         aria-describedby={describedBy}
+        aria-label={ariaLabel}
         aria-invalid={invalid || undefined}
         disabled={disabled}
         className={`tms-select-trigger tms-select-${size}${open ? ' is-open' : ''}${invalid ? ' is-invalid' : ''}`}

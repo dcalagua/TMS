@@ -21,6 +21,7 @@ import { useFormat } from '../../shared/i18n/format'
 import { FormField } from '../../shared/ui/components/FormField'
 import { LoadingState } from '../../shared/ui/components/LoadingState'
 import { LookupField, type LookupOption } from '../../shared/ui/components/LookupField'
+import { Select } from '../../shared/ui/components/Select'
 import { StatusBadge } from '../../shared/ui/components/StatusBadge'
 import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
@@ -443,13 +444,23 @@ function OrderForm({
               </div>
               <div className="col-6 col-sm-2">
                 <FormField label={tc('fields.priority')} htmlFor="order-priority" required>
-                  <select id="order-priority" className="form-select" {...register('priority')}>
-                    {ORDER_PRIORITIES.map((priority) => (
-                      <option key={priority} value={priority}>
-                        {enumLabels.orderPriority(priority)}
-                      </option>
-                    ))}
-                  </select>
+                  <Controller
+                    control={control}
+                    name="priority"
+                    rules={{ required: true }}
+                    render={({ field }) => (
+                      <Select
+                        id="order-priority"
+                        value={field.value}
+                        onChange={(next) => field.onChange(next)}
+                        invalid={Boolean(errors.priority)}
+                        options={ORDER_PRIORITIES.map((priority) => ({
+                          value: priority,
+                          label: enumLabels.orderPriority(priority),
+                        }))}
+                      />
+                    )}
+                  />
                 </FormField>
               </div>
               <div className="col-6 col-sm-1">

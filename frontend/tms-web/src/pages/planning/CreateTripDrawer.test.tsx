@@ -24,6 +24,12 @@ function page<T>(content: T[]) {
   return { content, page: 0, size: 200, totalElements: content.length }
 }
 
+/** `Select` is a button + listbox, not a native `<select>`: open it, then click the option. */
+async function pickOption(comboboxName: RegExp | string, optionName: RegExp | string) {
+  await userEvent.click(screen.getByRole('combobox', { name: comboboxName }))
+  await userEvent.click(await screen.findByRole('option', { name: optionName }))
+}
+
 function renderModal(onCreated = vi.fn(), onClose = vi.fn()) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const utils = render(
@@ -63,8 +69,7 @@ describe('CreateTripDrawer', () => {
     planningApiMocks.createTrip.mockResolvedValue({ trip: { id: 'trip-1' } } as unknown as TripDetailView)
     renderModal()
 
-    await screen.findByRole('option', { name: 'VH-1 — ABC-123' })
-    await userEvent.selectOptions(screen.getByLabelText('Vehículo'), 'vehicle-1')
+    await pickOption('Vehículo', 'VH-1 — ABC-123')
     await userEvent.click(screen.getByRole('button', { name: 'Crear viaje' }))
 
     await waitFor(() =>
@@ -124,7 +129,9 @@ describe('CreateTripDrawer', () => {
     renderModal()
 
     expect(await screen.findByRole('button', { name: 'Create trip' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Vehicle')).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Decide later' })).toBeInTheDocument()
+    const combobox = screen.getByRole('combobox', { name: 'Vehicle' })
+    expect(combobox).toBeInTheDocument()
+    await userEvent.click(combobox)
+    expect(await screen.findByRole('option', { name: 'Decide later' })).toBeInTheDocument()
   })
 })

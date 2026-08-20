@@ -17,7 +17,7 @@ import { describePlanningError } from '../../shared/api/problemMessages'
 import { fetchRoutes } from '../../shared/api/routesApi'
 import { useFormat } from '../../shared/i18n/format'
 import { TripStopMap, type TripStopMapOrigin, type TripStopMapStop } from '../../shared/maps/TripStopMap'
-import { CapacityBar, confirmDialog, StatusBadge, type StatusTone, TmsDrawer } from '../../shared/ui/components'
+import { CapacityBar, confirmDialog, Select, StatusBadge, type StatusTone, TmsDrawer } from '../../shared/ui/components'
 import { LoadingState } from '../../shared/ui/components/LoadingState'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
 import { TripVehicleDrawer } from './TripVehicleDrawer'
@@ -363,24 +363,28 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
                         </td>
                         {editable && (
                           <td>
-                            <div className="d-flex gap-1 justify-content-end">
-                              <select
-                                className="form-select form-select-sm"
-                                style={{ width: '10rem' }}
-                                aria-label={t('drawer.moveAria', { number: assignment.orderNumber })}
-                                value={moveTargets[assignment.orderId] ?? targetTrips[0]?.id ?? ''}
-                                disabled={targetTrips.length === 0}
-                                onChange={(event) =>
-                                  setMoveTargets({ ...moveTargets, [assignment.orderId]: event.target.value })
-                                }
-                              >
-                                {targetTrips.length === 0 && <option value="">{t('drawer.noOtherTrips')}</option>}
-                                {targetTrips.map((trip) => (
-                                  <option key={trip.id} value={trip.id}>
-                                    {t('drawer.tripOption', { number: trip.tripNumber })}
-                                  </option>
-                                ))}
-                              </select>
+                            <div className="d-flex gap-1 justify-content-end align-items-start">
+                              <div style={{ width: '10rem' }}>
+                                {/* `aria-label`, not a visible `<label>`: this text repeats the
+                                    order number already on screen in the row, and a real DOM
+                                    label (even visually hidden) would make it match twice
+                                    wherever a test looks that text up. */}
+                                <Select
+                                  aria-label={t('drawer.moveAria', { number: assignment.orderNumber })}
+                                  size="sm"
+                                  value={moveTargets[assignment.orderId] ?? targetTrips[0]?.id ?? ''}
+                                  onChange={(next) => setMoveTargets({ ...moveTargets, [assignment.orderId]: next })}
+                                  disabled={targetTrips.length === 0}
+                                  options={
+                                    targetTrips.length === 0
+                                      ? [{ value: '', label: t('drawer.noOtherTrips') }]
+                                      : targetTrips.map((trip) => ({
+                                          value: trip.id,
+                                          label: t('drawer.tripOption', { number: trip.tripNumber }),
+                                        }))
+                                  }
+                                />
+                              </div>
                               <button
                                 type="button"
                                 className="btn btn-sm btn-outline-secondary"
@@ -416,20 +420,17 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
                     <label className="form-label small mb-1" htmlFor="trip-route">
                       {t('drawer.header.route')}
                     </label>
-                    <select
+                    <Select
                       id="trip-route"
-                      className="form-select form-select-sm"
+                      size="sm"
                       value={routeId}
                       disabled={savingRoute || routesQuery.isPending}
-                      onChange={(event) => setRouteId(event.target.value)}
-                    >
-                      <option value="">{t('drawer.route.none')}</option>
-                      {routes.map((route) => (
-                        <option key={route.id} value={route.id}>
-                          {route.code} — {route.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(next) => setRouteId(next)}
+                      options={[
+                        { value: '', label: t('drawer.route.none') },
+                        ...routes.map((route) => ({ value: route.id, label: `${route.code} — ${route.name}` })),
+                      ]}
+                    />
                   </div>
                   <div className="d-flex gap-2">
                     <button

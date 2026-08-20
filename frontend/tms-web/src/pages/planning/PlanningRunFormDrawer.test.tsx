@@ -51,8 +51,8 @@ describe('PlanningRunFormDrawer', () => {
     planningApiMocks.createPlanningRun.mockResolvedValue(created)
     const { onCreated } = renderModal()
 
-    await screen.findByRole('option', { name: 'Origin A' })
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: /^Origen/ }), 'origin-1')
+    await userEvent.click(screen.getByRole('combobox', { name: /^Origen/ }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Origin A' }))
     await userEvent.type(screen.getByLabelText(/^Fecha de planificaci/i), '2026-03-01')
     await userEvent.type(screen.getByLabelText(/^Notas/i), '  Priority run  ')
     await userEvent.click(screen.getByRole('button', { name: 'Crear corrida' }))
@@ -72,8 +72,8 @@ describe('PlanningRunFormDrawer', () => {
     )
     const { onCreated } = renderModal()
 
-    await screen.findByRole('option', { name: 'Origin A' })
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: /^Origen/ }), 'origin-1')
+    await userEvent.click(screen.getByRole('combobox', { name: /^Origen/ }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Origin A' }))
     await userEvent.type(screen.getByLabelText(/^Fecha de planificaci/i), '2026-03-01')
     await userEvent.click(screen.getByRole('button', { name: 'Crear corrida' }))
 

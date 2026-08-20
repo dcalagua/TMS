@@ -138,7 +138,7 @@ describe('VehiclesPage', () => {
     expect(screen.getByText('TRUCK-1')).toBeInTheDocument()
     expect(screen.getByText('Carrier One SA')).toBeInTheDocument()
     expect(screen.getByText('10 ton truck')).toBeInTheDocument()
-    expect(screen.getByText(/10000 kg/)).toBeInTheDocument()
+    expect(screen.getByText(/10,000 kg/)).toBeInTheDocument()
     expect(screen.getByText('Disponible', { selector: 'span' })).toBeInTheDocument()
     expect(screen.getByText(/Página 1 de 3/)).toBeInTheDocument()
   })
@@ -151,7 +151,7 @@ describe('VehiclesPage', () => {
 
     renderPage()
 
-    expect(await screen.findByText('Owned fleet')).toBeInTheDocument()
+    expect(await screen.findByText('Flota propia')).toBeInTheDocument()
   })
 
   it('hides create and manage actions for a caller without fleet.vehicle:manage', async () => {

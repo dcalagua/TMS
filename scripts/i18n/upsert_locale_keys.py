@@ -30,6 +30,10 @@ NEW_NAMESPACES = {
             "searchFailed": "No se pudo buscar la dirección. Inténtalo de nuevo.",
             "searchNoResults": "No se encontraron resultados para esa dirección.",
             "searchPlaceholder": "Buscar una dirección",
+            "someStopsNotMapped_one": "{{count}} destino no tiene coordenadas y no aparece en "
+                                      "el mapa.",
+            "someStopsNotMapped_other": "{{count}} destinos no tienen coordenadas y no "
+                                        "aparecen en el mapa.",
             "stopsAriaLabel": "Mapa de paradas",
             "unavailable": "El mapa no está disponible. Puedes ingresar la latitud y la "
                             "longitud manualmente.",
@@ -43,6 +47,10 @@ NEW_NAMESPACES = {
             "searchFailed": "Could not search the address. Try again.",
             "searchNoResults": "No results found for that address.",
             "searchPlaceholder": "Search an address",
+            "someStopsNotMapped_one": "{{count}} destination has no coordinates and does not "
+                                      "appear on the map.",
+            "someStopsNotMapped_other": "{{count}} destinations have no coordinates and do "
+                                        "not appear on the map.",
             "stopsAriaLabel": "Stops map",
             "unavailable": "The map is unavailable. You can enter latitude and longitude manually.",
         },
@@ -69,6 +77,26 @@ EXISTING_NAMESPACE_UPDATES = {
             },
             "loading": {
                 "generic": "Loading...",
+            },
+        },
+    },
+    "fleet": {
+        "es": {
+            "vehicles": {
+                "columns": {
+                    "effectiveCapacity": "Capacidad efectiva",
+                },
+                "ownedFleet": "Flota propia",
+                "palletsUnit": "pallets",
+            },
+        },
+        "en": {
+            "vehicles": {
+                "columns": {
+                    "effectiveCapacity": "Effective capacity",
+                },
+                "ownedFleet": "Owned fleet",
+                "palletsUnit": "pallets",
             },
         },
     },

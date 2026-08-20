@@ -22,6 +22,7 @@ import {
   ActionMenu,
   ActiveBadge,
   StatusBadge,
+  Select,
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
@@ -209,16 +210,17 @@ export function CarriersPage() {
           <label htmlFor="carrier-filter-active" className="form-label small mb-1">
             {tc('columns.status')}
           </label>
-          <select
+          <Select
             id="carrier-filter-active"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.active}
-            onChange={(event) => setDraftFilters({ ...draftFilters, active: event.target.value as ActiveFilter })}
-          >
-            <option value="active">{tc('filters.statusActive')}</option>
-            <option value="inactive">{tc('filters.statusInactive')}</option>
-            <option value="all">{tc('filters.statusAll')}</option>
-          </select>
+            onChange={(next) => setDraftFilters({ ...draftFilters, active: next as ActiveFilter })}
+            options={[
+              { value: 'active', label: tc('filters.statusActive') },
+              { value: 'inactive', label: tc('filters.statusInactive') },
+              { value: 'all', label: tc('filters.statusAll') },
+            ]}
+          />
         </div>
       </FilterBar>
 

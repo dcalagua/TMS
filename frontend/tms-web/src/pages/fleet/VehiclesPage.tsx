@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import { describeApiError } from '../../shared/api/problemMessages'
 import { useEnumLabels } from '../../shared/i18n/enums'
+import { useFormat } from '../../shared/i18n/format'
 import { useCompany } from '../../shared/company/CompanyContext'
 import { fetchCarriers } from '../../shared/api/carriersApi'
 import { fetchVehicleTypes } from '../../shared/api/vehicleTypesApi'
@@ -27,6 +28,7 @@ import {
   ActionMenu,
   ActiveBadge,
   StatusBadge,
+  Select,
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
@@ -62,6 +64,7 @@ export function VehiclesPage() {
   const { t: tc } = useTranslation('common')
   const { t: td } = useTranslation('dialogs')
   const enumLabels = useEnumLabels()
+  const format = useFormat()
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('fleet.vehicle:manage')
@@ -157,15 +160,15 @@ export function VehiclesPage() {
         </div>
       ),
     },
-    { key: 'carrier', header: tc('columns.carrier'), render: (vehicle) => vehicle.carrierBusinessName ?? 'Owned fleet' },
+    { key: 'carrier', header: tc('columns.carrier'), render: (vehicle) => vehicle.carrierBusinessName ?? t('vehicles.ownedFleet') },
     { key: 'type', header: tc('columns.type'), render: (vehicle) => vehicle.vehicleTypeName ?? '—' },
     {
       key: 'capacity',
-      header: 'Effective capacity',
+      header: t('vehicles.columns.effectiveCapacity'),
       render: (vehicle) => (
         <span>
-          {vehicle.effectiveMaxWeightKg} kg &middot; {vehicle.effectiveMaxVolumeM3} m³ &middot;{' '}
-          {vehicle.effectiveMaxPallets} pallets
+          {format.weight(vehicle.effectiveMaxWeightKg)} &middot; {format.volume(vehicle.effectiveMaxVolumeM3)}{' '}
+          &middot; {format.quantity(vehicle.effectiveMaxPallets)} {t('vehicles.palletsUnit')}
         </span>
       ),
     },
@@ -270,72 +273,64 @@ export function VehiclesPage() {
           <label htmlFor="vehicle-filter-carrier" className="form-label small mb-1">
             {tc('columns.carrier')}
           </label>
-          <select
+          <Select
             id="vehicle-filter-carrier"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.carrierId}
-            onChange={(event) => setDraftFilters({ ...draftFilters, carrierId: event.target.value })}
-          >
-            <option value="">{tc('filters.allCarriers')}</option>
-            {carriers.map((carrier) => (
-              <option key={carrier.id} value={carrier.id}>
-                {carrier.businessName}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => setDraftFilters({ ...draftFilters, carrierId: next })}
+            options={[
+              { value: '', label: tc('filters.allCarriers') },
+              ...carriers.map((carrier) => ({ value: carrier.id, label: carrier.businessName })),
+            ]}
+          />
         </div>
         <div>
           <label htmlFor="vehicle-filter-type" className="form-label small mb-1">
             {tc('columns.type')}
           </label>
-          <select
+          <Select
             id="vehicle-filter-type"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.vehicleTypeId}
-            onChange={(event) => setDraftFilters({ ...draftFilters, vehicleTypeId: event.target.value })}
-          >
-            <option value="">{tc('filters.allTypes')}</option>
-            {vehicleTypes.map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.name}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => setDraftFilters({ ...draftFilters, vehicleTypeId: next })}
+            options={[
+              { value: '', label: tc('filters.allTypes') },
+              ...vehicleTypes.map((type) => ({ value: type.id, label: type.name })),
+            ]}
+          />
         </div>
         <div>
           <label htmlFor="vehicle-filter-availability" className="form-label small mb-1">
             {tc('columns.availability')}
           </label>
-          <select
+          <Select
             id="vehicle-filter-availability"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.availabilityStatus}
-            onChange={(event) =>
-              setDraftFilters({ ...draftFilters, availabilityStatus: event.target.value as VehicleAvailabilityStatus | '' })
+            onChange={(next) =>
+              setDraftFilters({ ...draftFilters, availabilityStatus: next as VehicleAvailabilityStatus | '' })
             }
-          >
-            <option value="">{tc('filters.allAvailability')}</option>
-            {VEHICLE_AVAILABILITY_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {enumLabels.vehicleAvailability(status)}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: '', label: tc('filters.allAvailability') },
+              ...VEHICLE_AVAILABILITY_STATUSES.map((status) => ({ value: status, label: enumLabels.vehicleAvailability(status) })),
+            ]}
+          />
         </div>
         <div>
           <label htmlFor="vehicle-filter-active" className="form-label small mb-1">
             {tc('columns.status')}
           </label>
-          <select
+          <Select
             id="vehicle-filter-active"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.active}
-            onChange={(event) => setDraftFilters({ ...draftFilters, active: event.target.value as ActiveFilter })}
-          >
-            <option value="active">{tc('filters.statusActive')}</option>
-            <option value="inactive">{tc('filters.statusInactive')}</option>
-            <option value="all">{tc('filters.statusAll')}</option>
-          </select>
+            onChange={(next) => setDraftFilters({ ...draftFilters, active: next as ActiveFilter })}
+            options={[
+              { value: 'active', label: tc('filters.statusActive') },
+              { value: 'inactive', label: tc('filters.statusInactive') },
+              { value: 'all', label: tc('filters.statusAll') },
+            ]}
+          />
         </div>
       </FilterBar>
 

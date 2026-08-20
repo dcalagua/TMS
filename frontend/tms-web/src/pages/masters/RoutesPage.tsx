@@ -208,37 +208,31 @@ export function RoutesPage() {
           <label htmlFor="filter-origin" className="form-label small mb-1">
             {tc('columns.origin')}
           </label>
-          <select
+          <Select
             id="filter-origin"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.originId}
-            onChange={(event) => setDraftFilters({ ...draftFilters, originId: event.target.value })}
-          >
-            <option value="">{tc('filters.allOrigins')}</option>
-            {origins.map((origin) => (
-              <option key={origin.id} value={origin.id}>
-                {origin.name}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => setDraftFilters({ ...draftFilters, originId: next })}
+            options={[
+              { value: '', label: tc('filters.allOrigins') },
+              ...origins.map((origin) => ({ value: origin.id, label: origin.name })),
+            ]}
+          />
         </div>
         <div>
           <label htmlFor="filter-zone" className="form-label small mb-1">
             {tc('columns.zone')}
           </label>
-          <select
+          <Select
             id="filter-zone"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.zoneId}
-            onChange={(event) => setDraftFilters({ ...draftFilters, zoneId: event.target.value })}
-          >
-            <option value="">{tc('filters.allZones')}</option>
-            {zones.map((zone) => (
-              <option key={zone.id} value={zone.id}>
-                {zone.name}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => setDraftFilters({ ...draftFilters, zoneId: next })}
+            options={[
+              { value: '', label: tc('filters.allZones') },
+              ...zones.map((zone) => ({ value: zone.id, label: zone.name })),
+            ]}
+          />
         </div>
         <div>
           <label htmlFor="filter-active" className="form-label small mb-1">

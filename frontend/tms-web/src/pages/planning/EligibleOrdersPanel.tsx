@@ -20,6 +20,7 @@ import {
   ErrorState,
   LoadingState,
   Pagination,
+  Select,
   StatusBadge,
   type StatusTone,
 } from '../../shared/ui/components'
@@ -165,19 +166,16 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
           <label htmlFor="eligible-destination" className="tms-filter-label">
             {tc('columns.destination')}
           </label>
-          <select
+          <Select
             id="eligible-destination"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.destinationId}
-            onChange={(event) => setDraftFilters({ ...draftFilters, destinationId: event.target.value })}
-          >
-            <option value="">{t('eligible.allDestinations')}</option>
-            {destinations.map((destination) => (
-              <option key={destination.id} value={destination.id}>
-                {destination.name}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => setDraftFilters({ ...draftFilters, destinationId: next })}
+            options={[
+              { value: '', label: t('eligible.allDestinations') },
+              ...destinations.map((destination) => ({ value: destination.id, label: destination.name })),
+            ]}
+          />
         </div>
         <div className="d-flex gap-2 ms-auto">
           <button type="button" className="btn btn-sm btn-outline-secondary" onClick={resetFilters}>
@@ -232,27 +230,36 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
                 </p>
 
                 {canManage && (
-                  <div className="input-group input-group-sm">
-                    <select
-                      className="form-select"
-                      aria-label={t('eligible.assignAria', { number: order.orderNumber })}
-                      value={assignTargets[order.id] ?? draftTrips[0]?.id ?? ''}
-                      disabled={draftTrips.length === 0}
-                      onChange={(event) => setAssignTargets({ ...assignTargets, [order.id]: event.target.value })}
-                    >
-                      {draftTrips.length === 0 && <option value="">{t('eligible.noOpenTrips')}</option>}
-                      {draftTrips.map((trip) => (
-                        <option key={trip.id} value={trip.id}>
-                          {t('eligible.tripOption', {
-                            number: trip.tripNumber,
-                            vehicle: trip.vehicleCode ?? t('eligible.noVehicle'),
-                          })}
-                        </option>
-                      ))}
-                    </select>
+                  // Not an `input-group`: `.tms-select` draws its own border and radius, unlike
+                  // `.form-select`, so it does not need (or want) Bootstrap's input-group merging.
+                  <div className="d-flex gap-2 align-items-start">
+                    <div className="flex-grow-1">
+                      {/* `aria-label`, not a visible `<label>`: this text repeats the order
+                          number already on screen in the row, and a real DOM label (even
+                          visually hidden) would make it match twice wherever a test looks that
+                          text up. */}
+                      <Select
+                        aria-label={t('eligible.assignAria', { number: order.orderNumber })}
+                        size="sm"
+                        value={assignTargets[order.id] ?? draftTrips[0]?.id ?? ''}
+                        onChange={(next) => setAssignTargets({ ...assignTargets, [order.id]: next })}
+                        disabled={draftTrips.length === 0}
+                        options={
+                          draftTrips.length === 0
+                            ? [{ value: '', label: t('eligible.noOpenTrips') }]
+                            : draftTrips.map((trip) => ({
+                                value: trip.id,
+                                label: t('eligible.tripOption', {
+                                  number: trip.tripNumber,
+                                  vehicle: trip.vehicleCode ?? t('eligible.noVehicle'),
+                                }),
+                              }))
+                        }
+                      />
+                    </div>
                     <button
                       type="button"
-                      className="btn btn-outline-primary"
+                      className="btn btn-outline-primary btn-sm"
                       disabled={draftTrips.length === 0 || assigningOrderId === order.id}
                       onClick={() => void assign(order)}
                     >
