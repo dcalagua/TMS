@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import { fetchVehicles } from '../../shared/api/vehiclesApi'
 import { createTrip, type TripCreateRequest, type TripDetailView } from '../../shared/api/planningApi'
 import { describePlanningError } from '../../shared/api/problemMessages'
 import { FormField } from '../../shared/ui/components/FormField'
+import { Select } from '../../shared/ui/components/Select'
 import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'create-trip-form'
@@ -41,6 +42,7 @@ export function CreateTripDrawer({ companyId, runId, runVersion, onClose, onCrea
 
   const {
     register,
+    control,
     handleSubmit,
     formState: { isDirty, isSubmitting },
   } = useForm<CreateTripFormValues>({ defaultValues: { vehicleId: '', plannedDepartureAt: '' } })
@@ -91,14 +93,23 @@ export function CreateTripDrawer({ companyId, runId, runVersion, onClose, onCrea
         )}
 
         <FormField label={t('trip.form.vehicle')} htmlFor="trip-vehicle">
-          <select id="trip-vehicle" className="form-select" {...register('vehicleId')}>
-            <option value="">{t('trip.form.decideLater')}</option>
-            {vehicles.map((vehicle) => (
-              <option key={vehicle.id} value={vehicle.id}>
-                {vehicle.code} — {vehicle.licensePlate}
-              </option>
-            ))}
-          </select>
+          {/* Controller rather than `register`: the control is a button plus a listbox, so
+              there is no native change event for react-hook-form to hook into. */}
+          <Controller
+            control={control}
+            name="vehicleId"
+            render={({ field }) => (
+              <Select
+                id="trip-vehicle"
+                value={field.value}
+                onChange={(next) => field.onChange(next)}
+                options={[
+                  { value: '', label: t('trip.form.decideLater') },
+                  ...vehicles.map((vehicle) => ({ value: vehicle.id, label: `${vehicle.code} — ${vehicle.licensePlate}` })),
+                ]}
+              />
+            )}
+          />
         </FormField>
 
         <FormField label={t('trip.form.departure')} htmlFor="trip-departure">

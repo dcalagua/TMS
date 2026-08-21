@@ -4,6 +4,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { Sidebar } from './Sidebar'
 
 const companyMocks = vi.hoisted(() => ({ useCompany: vi.fn() }))
+
+/** The sidebar now hosts the company switcher, so a mock has to carry the switcher's slice of
+ * the context too. These tests are about capability gating; an empty list keeps the control
+ * inert without pulling its own behaviour into their assertions. */
+const switcherSlice = { companies: [], selected: null, selectCompany: () => {} }
 vi.mock('../company/CompanyContext', () => ({ useCompany: companyMocks.useCompany }))
 
 function renderSidebar() {
@@ -16,7 +21,7 @@ function renderSidebar() {
 
 describe('Sidebar', () => {
   it('always shows Dashboard, which needs no capability', () => {
-    companyMocks.useCompany.mockReturnValue({ status: 'ready', hasCapability: () => false })
+    companyMocks.useCompany.mockReturnValue({ ...switcherSlice, status: 'ready', hasCapability: () => false })
 
     renderSidebar()
 
@@ -25,6 +30,7 @@ describe('Sidebar', () => {
 
   it('hides a module group once the selected company is known to lack its capability', () => {
     companyMocks.useCompany.mockReturnValue({
+      ...switcherSlice,
       status: 'ready',
       hasCapability: (capability: string) => capability === 'FLEET_VIEW',
     })
@@ -37,12 +43,14 @@ describe('Sidebar', () => {
   })
 
   it('shows every group while the company is still loading, instead of flickering empty then full', () => {
-    companyMocks.useCompany.mockReturnValue({ status: 'loading', hasCapability: () => false })
+    companyMocks.useCompany.mockReturnValue({ ...switcherSlice, status: 'loading', hasCapability: () => false })
 
     renderSidebar()
 
     expect(screen.getByText('Maestros')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Pedidos' })).toBeInTheDocument()
-    expect(screen.getByText('Administración')).toBeInTheDocument()
+    // Security is a plain entry now rather than a group of its own, so the assertion is on
+    // the link instead of on a section heading that no longer exists.
+    expect(screen.getByRole('link', { name: 'Seguridad' })).toBeInTheDocument()
   })
 })

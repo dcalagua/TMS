@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import { fetchOrigins } from '../../shared/api/originsApi'
 import { createPlanningRun, type PlanningRunDetailView, type PlanningRunRequest } from '../../shared/api/planningApi'
 import { applyApiFieldErrors } from '../../shared/api/formErrors'
 import { FormField } from '../../shared/ui/components/FormField'
+import { Select } from '../../shared/ui/components/Select'
 import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'planning-run-form'
@@ -42,6 +43,7 @@ export function PlanningRunFormDrawer({ companyId, onClose, onCreated }: Plannin
 
   const {
     register,
+    control,
     handleSubmit,
     setError,
     formState: { errors, isDirty, isSubmitting },
@@ -94,18 +96,25 @@ export function PlanningRunFormDrawer({ companyId, onClose, onCreated }: Plannin
         <div className="row">
           <div className="col-12 col-md-7">
             <FormField label={t('run.form.origin')} htmlFor="run-origin" error={errors.originId?.message} required>
-              <select
-                id="run-origin"
-                className={`form-select${errors.originId ? ' is-invalid' : ''}`}
-                {...register('originId', { required: tv('required') })}
-              >
-                <option value="">{t('run.form.selectOrigin')}</option>
-                {origins.map((origin) => (
-                  <option key={origin.id} value={origin.id}>
-                    {origin.name}
-                  </option>
-                ))}
-              </select>
+              {/* Controller rather than `register`: the control is a button plus a listbox, so
+                  there is no native change event for react-hook-form to hook into. */}
+              <Controller
+                control={control}
+                name="originId"
+                rules={{ required: tv('required') }}
+                render={({ field }) => (
+                  <Select
+                    id="run-origin"
+                    value={field.value}
+                    onChange={(next) => field.onChange(next)}
+                    invalid={Boolean(errors.originId)}
+                    options={[
+                      { value: '', label: t('run.form.selectOrigin') },
+                      ...origins.map((origin) => ({ value: origin.id, label: origin.name })),
+                    ]}
+                  />
+                )}
+              />
             </FormField>
           </div>
           <div className="col-12 col-md-5">

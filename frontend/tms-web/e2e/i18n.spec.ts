@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { signIn, stubServices } from './support/app'
+import { signIn, stubServices, switchLanguage } from './support/app'
 
 test.describe('language', () => {
   test('starts in Spanish for a first-time visitor', async ({ page }) => {
@@ -30,15 +30,19 @@ test.describe('language', () => {
     const sidebar = page.locator('#tms-sidebar')
     await expect(sidebar.getByRole('link', { name: 'Orígenes', exact: true })).toBeVisible()
 
-    await page.getByRole('button', { name: 'EN', exact: true }).click()
+    await switchLanguage(page, 'EN')
     await expect(sidebar.getByRole('link', { name: 'Origins', exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { level: 1, name: /^Hello,/ })).toBeVisible()
 
     await page.reload()
     await expect(sidebar.getByRole('link', { name: 'Origins', exact: true })).toBeVisible()
+    // The stored choice must also be what the control itself reports, which means opening the
+    // account menu the switch now lives in.
+    await page.locator('.tms-topbar-user').click()
     await expect(page.getByRole('button', { name: 'EN', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await page.keyboard.press('Escape')
 
-    await page.getByRole('button', { name: 'ES', exact: true }).click()
+    await switchLanguage(page, 'ES')
     await expect(sidebar.getByRole('link', { name: 'Orígenes', exact: true })).toBeVisible()
     await page.reload()
     await expect(sidebar.getByRole('link', { name: 'Orígenes', exact: true })).toBeVisible()
@@ -50,19 +54,19 @@ test.describe('language', () => {
     await page.goto('/masters/origins')
 
     await expect(page.getByRole('heading', { level: 1, name: 'Orígenes' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Nuevo origen' })).toBeVisible()
+    await expect(page.locator('.tms-page-actions').getByRole('button', { name: 'Nuevo origen' })).toBeVisible()
 
-    await page.getByRole('button', { name: 'EN', exact: true }).click()
+    await switchLanguage(page, 'EN')
 
     await expect(page.getByRole('heading', { level: 1, name: 'Origins' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'New origin' })).toBeVisible()
+    await expect(page.locator('.tms-page-actions').getByRole('button', { name: 'New origin' })).toBeVisible()
   })
 
   test('URLs are never translated', async ({ page }) => {
     await stubServices(page)
     await signIn(page)
     await page.goto('/masters/origins')
-    await page.getByRole('button', { name: 'EN', exact: true }).click()
+    await switchLanguage(page, 'EN')
 
     await expect(page.getByRole('heading', { level: 1, name: 'Origins' })).toBeVisible()
     await expect(page).toHaveURL(/\/masters\/origins$/)

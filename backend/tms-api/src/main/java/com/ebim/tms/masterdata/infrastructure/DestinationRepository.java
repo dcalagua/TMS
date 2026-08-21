@@ -24,7 +24,28 @@ public interface DestinationRepository extends JpaRepository<Destination, UUID>,
      */
     List<Destination> findByIdInAndCompanyId(Collection<UUID> ids, UUID companyId);
 
+    /**
+     * Resolves several {@code code} values of one company in a single query - the bulk order
+     * import's lookup, where a spreadsheet names masters by code. {@code ck_destination_code_normalized}
+     * guarantees stored codes are upper-cased and trimmed, so the caller upper-cases its input
+     * and this stays an exact, index-usable match rather than a per-row {@code lower()} scan.
+     */
+    List<Destination> findByCompanyIdAndCodeIn(UUID companyId, Collection<String> codes);
+
     boolean existsByCompanyIdAndCode(UUID companyId, String code);
 
     boolean existsByCompanyIdAndCodeAndIdNot(UUID companyId, String code, UUID id);
+
+    /**
+     * The compatibility projection of one canonical {@code tms.location} (migration V14). The
+     * company predicate is redundant here - {@code uq_destination_location} makes the link
+     * one-to-one and {@code fk_destination_location_company} makes it same-company - but it is present
+     * for the same reason every other finder carries one: a query in this package is read as
+     * proof of tenant scoping, and an exception to that rule has to be re-proved every time it
+     * is read.
+     */
+    Optional<Destination> findByLocationIdAndCompanyId(UUID locationId, UUID companyId);
+
+    /** The batched sibling of {@link #findByLocationIdAndCompanyId}, one query per page. */
+    List<Destination> findByLocationIdInAndCompanyId(Collection<UUID> locationIds, UUID companyId);
 }

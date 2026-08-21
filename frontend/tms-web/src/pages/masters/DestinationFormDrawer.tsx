@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { useForm, type Validate } from 'react-hook-form'
+import { Controller, useForm, type Validate } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { applyApiFieldErrors } from '../../shared/api/formErrors'
 import type { ApiError } from '../../shared/api/httpClient'
@@ -15,6 +15,7 @@ import {
 import { fetchZones } from '../../shared/api/zonesApi'
 import { useEnumLabels } from '../../shared/i18n/enums'
 import { FormField } from '../../shared/ui/components/FormField'
+import { Select } from '../../shared/ui/components/Select'
 import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'destination-form'
@@ -71,6 +72,7 @@ export function DestinationFormDrawer({ companyId, destination, onClose, onSaved
 
   const {
     register,
+    control,
     handleSubmit,
     setError,
     formState: { errors, isDirty, isSubmitting },
@@ -202,25 +204,45 @@ export function DestinationFormDrawer({ companyId, destination, onClose, onSaved
             </div>
             <div className="col-6 col-sm-2">
               <FormField label={tc('columns.type')} htmlFor="destination-type" error={errors.type?.message} required>
-                <select id="destination-type" className="form-select" {...register('type', { required: true })}>
-                  {DESTINATION_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {enumLabels.destinationType(type)}
-                    </option>
-                  ))}
-                </select>
+                {/* Controller rather than `register`: the control is a button plus a listbox, so
+                    there is no native change event for react-hook-form to hook into. */}
+                <Controller
+                  control={control}
+                  name="type"
+                  rules={{ required: true }}
+                  render={({ field }) => (
+                    <Select
+                      id="destination-type"
+                      value={field.value}
+                      onChange={(next) => field.onChange(next as DestinationType)}
+                      invalid={Boolean(errors.type)}
+                      options={DESTINATION_TYPES.map((type) => ({
+                        value: type,
+                        label: enumLabels.destinationType(type),
+                      }))}
+                    />
+                  )}
+                />
               </FormField>
             </div>
             <div className="col-6 col-sm-2">
               <FormField label={tc('columns.zone')} htmlFor="destination-zone" error={errors.zoneId?.message}>
-                <select id="destination-zone" className="form-select" {...register('zoneId')}>
-                  <option value="">{t('destinations.form.noZone')}</option>
-                  {zones.map((zone) => (
-                    <option key={zone.id} value={zone.id}>
-                      {zone.name}
-                    </option>
-                  ))}
-                </select>
+                <Controller
+                  control={control}
+                  name="zoneId"
+                  render={({ field }) => (
+                    <Select
+                      id="destination-zone"
+                      value={field.value}
+                      onChange={(next) => field.onChange(next)}
+                      invalid={Boolean(errors.zoneId)}
+                      options={[
+                        { value: '', label: t('destinations.form.noZone') },
+                        ...zones.map((zone) => ({ value: zone.id, label: zone.name })),
+                      ]}
+                    />
+                  )}
+                />
               </FormField>
             </div>
           </div>

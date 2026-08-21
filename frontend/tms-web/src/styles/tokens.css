@@ -4,105 +4,63 @@
    else in the codebase may declare a hex value: components reference these
    variables, so a palette change is one file, not a search across screens.
 
-   The system is monochrome by decision: white, off-white, grey, charcoal and
-   near-black carry the whole interface. Colour is reserved for meaning - a
-   status pill, a capacity bar over its limit, a destructive action - so that
-   when something *is* coloured, it is because it matters. A generic framework
-   blue filling buttons, links and headers would drown that signal out.
+   ---------------------------------------------------------------------------
+   THEMES
+   ---------------------------------------------------------------------------
+   The file is in two layers, and the split is the whole point:
 
-   Bootstrap 5.3 is themed through its own `--bs-*` custom properties, so the
-   product's identity is applied by remapping Bootstrap rather than by fighting
-   it with overrides. Bootstrap keeps owning grid, utilities and behaviour. */
+     1. STRUCTURE - radius, elevation, layout, type, motion. Identical in every
+        theme, because a theme changes how the product looks, not how it is
+        built. Declared once on `:root`.
+     2. PALETTE   - every colour. Declared once per theme, always the same list
+        of names, so a component never asks which theme is active.
 
+   Themes are selected by two attributes on <html>, both always present (see
+   `shared/theme/ThemeProvider.tsx`):
+
+     data-theme="neutral" | "ebim"     the brand
+     data-bs-theme="light" | "dark"    the mode (Bootstrap 5.3's own hook)
+
+   Adding a theme means adding one palette block. It must never mean adding a
+   component, a class or a conditional in TSX.
+
+   `neutral` was for a long time not a theme but *the* decision: the interface
+   was monochrome on purpose, and colour was reserved for meaning so that a
+   status pill or an over-capacity bar was the only hue on screen. That reading
+   still holds inside the neutral theme and is why its semantic colours stay
+   desaturated. What changed is its status - it is now the default theme rather
+   than the only possibility, and `ebim` exists beside it.
+
+   ---------------------------------------------------------------------------
+   NAMING
+   ---------------------------------------------------------------------------
+   The `--tms-` prefix is kept deliberately. The semantic names below map 1:1 to
+   the conventional ones, and renaming ~2200 lines of CSS would carry real risk
+   for no visual gain:
+
+     --app-bg          -> --tms-body-bg        --primary        -> --tms-primary
+     --surface         -> --tms-surface        --primary-hover  -> --tms-primary-hover
+     --surface-raised  -> --tms-surface-raised --primary-soft   -> --tms-primary-soft
+     --surface-muted   -> --tms-surface-muted  --success        -> --tms-success
+     --surface-hover   -> --tms-surface-hover  --success-soft   -> --tms-success-soft
+     --text-primary    -> --tms-text           --warning/-soft  -> --tms-warning/-soft
+     --text-secondary  -> --tms-text-secondary --danger/-soft   -> --tms-danger/-soft
+     --text-muted      -> --tms-muted          --info/-soft     -> --tms-info/-soft
+     --border          -> --tms-border         --shadow-*       -> --tms-shadow-*
+     --border-strong   -> --tms-border-strong  --radius-*       -> --tms-radius-*
+
+   Bootstrap 5.3 is themed through its own `--bs-*` properties at the end of the
+   file, so the product's identity is applied by remapping Bootstrap rather than
+   by fighting it with overrides. Bootstrap keeps owning grid and behaviour. */
+
+/* ===========================================================================
+   1. STRUCTURE - theme-independent
+   ======================================================================== */
 :root {
-  /* ---- Ink: the primary "colour" of the product ---------------------------
-     Near-black rather than pure black: #000 on white is harsh at text sizes and
-     reads as unfinished. This is also what fills primary buttons. */
-  --tms-ink: #16181d;
-  --tms-ink-hover: #24272e;
-  --tms-ink-active: #0d0f13;
-  --tms-on-ink: #ffffff;
-
-  /* Kept under the historical name so nothing has to know that "primary" is a
-     graphite rather than a hue. */
-  --tms-primary: var(--tms-ink);
-  --tms-primary-hover: var(--tms-ink-hover);
-  --tms-primary-active: var(--tms-ink-active);
-  --tms-primary-subtle: #f0f1f3;
-  --tms-primary-border-subtle: #d9dce1;
-  --tms-on-primary: var(--tms-on-ink);
-
-  /* ---- Surfaces ----------------------------------------------------------
-     Three tiers, and no more: the page ground, the panels that sit on it, and a
-     recessed tone for table headers, footers and filter strips. A fourth would
-     stop reading as a hierarchy and start reading as inconsistency. */
-  --tms-body-bg: #f2f3f5;
-  --tms-bg: var(--tms-body-bg);
-  --tms-surface: #ffffff;
-  --tms-surface-alt: #f7f8fa;
-  --tms-surface-muted: #fafbfc;
-  /* Placeholder shimmer: two neutral greys, never a tinted one. */
-  --tms-skeleton-base: #eceef1;
-  --tms-skeleton-sheen: #f5f6f8;
-  --tms-surface-hover: #f5f6f8;
-  --tms-border: #e6e8ec;
-  --tms-border-strong: #d2d6dc;
-
-  /* ---- Text -------------------------------------------------------------- */
-  --tms-text: #16181d;
-  --tms-text-secondary: #4c525b;
-  --tms-muted: #757b85;
-  --tms-text-muted: var(--tms-muted);
-  --tms-text-inverse: #f7f8f9;
-
-  /* ---- Navigation shell --------------------------------------------------
-     Charcoal, not navy: the sidebar is chrome, and a coloured chrome competes
-     with the status colours in the content it frames. */
-  --tms-sidebar-bg: #131519;
-  --tms-sidebar-bg-elevated: #1a1d22;
-  --tms-sidebar-text: #a8adb6;
-  --tms-sidebar-text-strong: #ffffff;
-  --tms-sidebar-muted: #6b717b;
-  --tms-sidebar-hover-bg: #1e2127;
-  /* The active entry inverts the column instead of tinting it. A slightly lighter
-     grey on grey is the one contrast a user cannot resolve at a glance, and the
-     navigation is the control they look at most. */
-  --tms-sidebar-active-bg: #f2f3f5;
-  --tms-sidebar-active-text: #16181d;
-  --tms-sidebar-active: var(--tms-sidebar-active-bg);
-  --tms-sidebar-accent: #ffffff;
-  --tms-sidebar-border: #23262c;
-  --tms-topbar-bg: #ffffff;
-  --tms-topbar-border: #e6e8ec;
-
-  /* ---- Semantic ----------------------------------------------------------
-     The only saturated values in the system, and they exist to carry meaning.
-     Deliberately desaturated so a table of pills stays calm. */
-  --tms-success: #1f7a44;
-  --tms-success-subtle: #e8f3ec;
-  --tms-success-border: #c3e0ce;
-  --tms-warning: #9a6212;
-  --tms-warning-subtle: #fbf2e3;
-  --tms-warning-border: #ecd9b4;
-  --tms-danger: #a92d2d;
-  --tms-danger-subtle: #fbebeb;
-  --tms-danger-border: #eecccc;
-  --tms-info: #3a4552;
-  --tms-info-subtle: #eef0f3;
-  --tms-info-border: #d8dce2;
-  --tms-neutral: #5c626b;
-  --tms-neutral-subtle: #f0f1f3;
-  --tms-neutral-border: #dcdfe4;
-
-  /* The system carries no hue at all. What used to be a blue accent lived on the
-     focus ring, which means it appeared on every field an operator touched - the
-     most frequently rendered state in a data-entry application, and therefore the
-     interface's real colour rather than an accent. Focus is now expressed with
-     ink: a darkened border plus a soft graphite halo, which reads as deliberate at
-     any size and leaves the semantic colours as the only hues on screen. */
-  --tms-accent: var(--tms-ink);
-
-  /* ---- Shape ------------------------------------------------------------- */
+  /* ---- Shape --------------------------------------------------------------
+     Restrained on purpose: an operational screen shows dozens of rectangles at
+     once, and a large radius on all of them reads as a consumer app rather than
+     as a tool. */
   --tms-radius-xs: 0.25rem;
   --tms-radius-sm: 0.375rem;
   --tms-radius-md: 0.5rem;
@@ -110,16 +68,24 @@
   --tms-radius-xl: 1rem;
   --tms-radius-pill: 999px;
 
-  /* ---- Elevation ---------------------------------------------------------
-     Soft and low-contrast: an operational screen shows many panels at once, and
-     heavy shadows turn a dense list into visual noise. */
-  --tms-shadow-xs: 0 1px 2px rgba(22, 24, 29, 0.05);
-  --tms-shadow-sm: 0 1px 3px rgba(22, 24, 29, 0.07), 0 1px 2px rgba(22, 24, 29, 0.04);
-  --tms-shadow-md: 0 4px 14px rgba(22, 24, 29, 0.08);
-  --tms-shadow-lg: 0 16px 40px rgba(22, 24, 29, 0.16);
-  --tms-shadow-drawer: -18px 0 48px rgba(22, 24, 29, 0.14);
+  /* ---- Elevation ----------------------------------------------------------
+     Composed from the theme's own shadow colour, so a dark theme casts a darker
+     shadow without redefining the scale. Soft and low-contrast: many panels are
+     on screen at once, and heavy shadows turn a dense list into noise.
 
-  /* ---- Layout ------------------------------------------------------------
+     The scale is a hierarchy, not a set of options:
+       xs  resting card, table panel
+       sm  raised surface, hovered card
+       md  dropdown, popover, sticky footer
+       lg  modal
+       drawer  the side panel, which casts sideways */
+  --tms-shadow-xs: 0 1px 2px rgba(var(--tms-shadow-rgb), 0.05);
+  --tms-shadow-sm: 0 1px 3px rgba(var(--tms-shadow-rgb), 0.07), 0 1px 2px rgba(var(--tms-shadow-rgb), 0.04);
+  --tms-shadow-md: 0 4px 14px rgba(var(--tms-shadow-rgb), 0.08);
+  --tms-shadow-lg: 0 16px 40px rgba(var(--tms-shadow-rgb), 0.16);
+  --tms-shadow-drawer: -18px 0 48px rgba(var(--tms-shadow-rgb), 0.14);
+
+  /* ---- Layout -------------------------------------------------------------
      The content column is capped and centred. Capping without centring is what
      leaves a wide monitor with several hundred pixels of dead ground down the
      right-hand side while the work crowds against the sidebar. */
@@ -143,51 +109,584 @@
   --tms-tracking-wide: 0.08em;
   --tms-tracking-tight: -0.015em;
 
-  /* ---- Drawer widths ----------------------------------------------------- */
+  /* ---- Drawer widths ------------------------------------------------------
+     Percentages with a cap rather than fixed pixels: the drawer has to hold a
+     two-column form on a laptop and the whole screen on a phone. */
   --tms-drawer-sm: 420px;
   --tms-drawer-md: 520px;
   --tms-drawer-lg: 660px;
   --tms-drawer-xl: 820px;
 
-  /* ---- Motion ------------------------------------------------------------ */
-  --tms-motion-drawer: 220ms;
+  /* ---- Motion -------------------------------------------------------------
+     Short enough to feel like response rather than animation. Anything above
+     ~250ms in an operational tool starts to feel like waiting. */
+  --tms-motion-fast: 120ms;
+  --tms-motion-base: 160ms;
+  --tms-motion-slow: 220ms;
+  --tms-motion-drawer: var(--tms-motion-slow);
   --tms-easing: cubic-bezier(0.32, 0.72, 0, 1);
+  --tms-easing-out: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* ---- Focus ------------------------------------------------------------- */
-  --tms-focus-ring: 0 0 0 3px rgba(22, 24, 29, 0.14);
+  /* ---- Controls on the shell bar -----------------------------------------
+     The top bar carries the navigation shell's colour in every theme, so it is
+     always a dark ground and the controls on it are always white at a low
+     alpha. That makes these mode-independent, unlike everything else in a
+     palette - a theme only overrides them if it ever makes the bar light. */
+  --tms-topbar-control-bg: rgba(255, 255, 255, 0.1);
+  --tms-topbar-control-hover-bg: rgba(255, 255, 255, 0.16);
+  --tms-topbar-control-border: rgba(255, 255, 255, 0.14);
+  --tms-topbar-divider-color: rgba(255, 255, 255, 0.16);
+
+  /* ---- Focus --------------------------------------------------------------
+     Built from the theme's primary, so the ring is the brand colour in every
+     theme without a component knowing which one is active. */
+  --tms-focus-ring: 0 0 0 3px rgba(var(--tms-focus-rgb), 0.18);
   --tms-focus-ring-inverse: 0 0 0 3px rgba(255, 255, 255, 0.45);
 }
 
+/* ===========================================================================
+   2. PALETTES
+   ---------------------------------------------------------------------------
+   Every block below declares the SAME names. If one gains a token, all of them
+   do - a half-defined theme fails as an inherited colour from another theme,
+   which is the hardest kind of visual bug to trace.
+   ======================================================================== */
+
 /* ---------------------------------------------------------------------------
-   Bootstrap remap. Everything Bootstrap draws - buttons, alerts, badges, form
-   controls, tables - picks the product palette up from here.
-   ------------------------------------------------------------------------- */
+   TMS Neutral - light. The default, and the fallback when no attribute is set.
+   Graphite carries the interface; colour is reserved for meaning.
+   ------------------------------------------------------------------------ */
 :root,
-[data-bs-theme='light'] {
-  --bs-primary: var(--tms-ink);
-  --bs-primary-rgb: 22, 24, 29;
-  --bs-primary-text-emphasis: var(--tms-ink);
-  --bs-primary-bg-subtle: var(--tms-primary-subtle);
+[data-theme='neutral'] {
+  --tms-ink: #16181d;
+  --tms-ink-hover: #24272e;
+  --tms-ink-active: #0d0f13;
+  --tms-on-ink: #ffffff;
+
+  /* "Primary" is a graphite rather than a hue here; nothing downstream needs to
+     know that, which is exactly what lets the ebim theme swap it for a green. */
+  --tms-primary: var(--tms-ink);
+  --tms-primary-hover: var(--tms-ink-hover);
+  --tms-primary-active: var(--tms-ink-active);
+  --tms-primary-soft: #f0f1f3;
+  --tms-primary-subtle: var(--tms-primary-soft);
+  --tms-primary-border-subtle: #d9dce1;
+  --tms-on-primary: var(--tms-on-ink);
+  --tms-primary-rgb: 22, 24, 29;
+
+  /* ---- Surfaces ---------------------------------------------------------
+     Four tiers, each with a job: the page ground, the panels on it, a raised
+     tier for what floats above them (dropdowns, drawers, sticky footers), and a
+     recessed tone for table headers and filter strips. */
+  --tms-body-bg: #f1f2f5;
+  --tms-bg: var(--tms-body-bg);
+  --tms-surface: #ffffff;
+  --tms-surface-raised: #ffffff;
+  --tms-surface-alt: #f7f8fa;
+  --tms-surface-muted: #fafbfc;
+  --tms-surface-hover: #f5f6f8;
+  --tms-skeleton-base: #eceef1;
+  --tms-skeleton-sheen: #f5f6f8;
+  --tms-border: #e5e7ec;
+  --tms-border-strong: #d2d6dc;
+
+  --tms-text: #16181d;
+  --tms-text-secondary: #4c525b;
+  --tms-muted: #757b85;
+  --tms-text-muted: var(--tms-muted);
+  --tms-text-inverse: #f7f8f9;
+
+  /* ---- Navigation shell -------------------------------------------------
+     Charcoal, not navy: in this theme the sidebar is chrome, and a coloured
+     chrome would compete with the status colours in the content it frames. */
+  --tms-sidebar-bg: #131519;
+  --tms-sidebar-bg-elevated: #1a1d22;
+  --tms-sidebar-text: #a8adb6;
+  --tms-sidebar-text-strong: #ffffff;
+  --tms-sidebar-muted: #6b717b;
+  --tms-sidebar-hover-bg: #1e2127;
+  /* The active entry inverts the column instead of tinting it. A slightly
+     lighter grey on grey is the one contrast a user cannot resolve at a glance,
+     and the navigation is the control they look at most. */
+  --tms-sidebar-active-bg: #f2f3f5;
+  --tms-sidebar-active-text: #16181d;
+  --tms-sidebar-active: var(--tms-sidebar-active-bg);
+  --tms-sidebar-accent: #ffffff;
+  --tms-sidebar-border: #23262c;
+
+  --tms-sidebar-tile-bg: #1e2127;
+  --tms-sidebar-tile-border: #2b2f37;
+  --tms-sidebar-tile-icon: #b9bfc9;
+  --tms-sidebar-tile-hover-bg: #272b32;
+  --tms-sidebar-tile-active-bg: #16181d;
+  --tms-sidebar-tile-active-icon: #ffffff;
+
+  --tms-workspace-bg: #1b1e24;
+  --tms-workspace-hover-bg: #22262d;
+  --tms-workspace-border: #2b2f37;
+  --tms-workspace-avatar-bg: #f2f3f5;
+  --tms-workspace-avatar-text: #16181d;
+
+  --tms-topbar-bg: #1a1d22;
+  --tms-topbar-border: #23262c;
+  --tms-topbar-text: #ffffff;
+  --tms-topbar-muted: #9aa0aa;
+
+  /* ---- Semantic ---------------------------------------------------------
+     Deliberately desaturated so a table of thirty pills stays calm. `-soft` is
+     the fill, `-border` its edge, the base colour the text and the dot. */
+  --tms-success: #1f7a44;
+  --tms-success-soft: #e8f3ec;
+  --tms-success-subtle: var(--tms-success-soft);
+  --tms-success-border: #c3e0ce;
+  --tms-warning: #9a6212;
+  --tms-warning-soft: #fbf2e3;
+  --tms-warning-subtle: var(--tms-warning-soft);
+  --tms-warning-border: #ecd9b4;
+  --tms-danger: #a92d2d;
+  --tms-danger-soft: #fbebeb;
+  --tms-danger-subtle: var(--tms-danger-soft);
+  --tms-danger-border: #eecccc;
+  --tms-info: #3a4552;
+  --tms-info-soft: #eef0f3;
+  --tms-info-subtle: var(--tms-info-soft);
+  --tms-info-border: #d8dce2;
+  --tms-neutral: #5c626b;
+  --tms-neutral-soft: #f0f1f3;
+  --tms-neutral-subtle: var(--tms-neutral-soft);
+  --tms-neutral-border: #dcdfe4;
+
+  --tms-success-rgb: 31, 122, 68;
+  --tms-warning-rgb: 154, 98, 18;
+  --tms-danger-rgb: 169, 45, 45;
+  --tms-info-rgb: 58, 69, 82;
+  --tms-neutral-rgb: 92, 98, 107;
+
+  /* Focus is expressed with ink here. A blue ring would appear on every field an
+     operator touches - the most frequently rendered state in a data-entry
+     application, and therefore the interface's real colour rather than an
+     accent. */
+  --tms-accent: var(--tms-ink);
+  --tms-focus-rgb: var(--tms-primary-rgb);
+  --tms-shadow-rgb: 22, 24, 29;
+
+  /* The veil behind a drawer or modal, and the sign-in brand panel. Both are
+     surfaces whose job is to sit *under* or *beside* the palette rather than in
+     it, so they get their own tokens instead of borrowing ink. */
+  --tms-scrim-rgb: 22, 24, 29;
+  --tms-scrim-alpha: 0.38;
+  --tms-brand-panel-from: #24272e;
+  --tms-brand-panel-via: #16181d;
+  --tms-brand-panel-to: #0b0d10;
+}
+
+/* ---------------------------------------------------------------------------
+   TMS Neutral - dark.
+   Surfaces climb toward the light instead of borders getting brighter: on a
+   dark ground a lifted surface reads as nearer, whereas a lighter border just
+   reads as a louder box.
+   ------------------------------------------------------------------------ */
+[data-theme='neutral'][data-bs-theme='dark'] {
+  --tms-ink: #e9ebef;
+  --tms-ink-hover: #f4f5f7;
+  --tms-ink-active: #ffffff;
+  --tms-on-ink: #16181d;
+
+  --tms-primary: #e9ebef;
+  --tms-primary-hover: #f4f5f7;
+  --tms-primary-active: #ffffff;
+  --tms-primary-soft: #24272e;
+  --tms-primary-subtle: var(--tms-primary-soft);
+  --tms-primary-border-subtle: #32363f;
+  --tms-on-primary: #16181d;
+  --tms-primary-rgb: 233, 235, 239;
+
+  --tms-body-bg: #0e1013;
+  --tms-bg: var(--tms-body-bg);
+  --tms-surface: #16181d;
+  --tms-surface-raised: #1c1f25;
+  --tms-surface-alt: #1a1d22;
+  --tms-surface-muted: #131519;
+  --tms-surface-hover: #1e2127;
+  --tms-skeleton-base: #1c1f25;
+  --tms-skeleton-sheen: #24272e;
+  --tms-border: #262a31;
+  --tms-border-strong: #363b44;
+
+  --tms-text: #e9ebef;
+  --tms-text-secondary: #a8adb6;
+  --tms-muted: #7d838d;
+  --tms-text-muted: var(--tms-muted);
+  --tms-text-inverse: #16181d;
+
+  --tms-sidebar-bg: #0b0d10;
+  --tms-sidebar-bg-elevated: #131519;
+  --tms-sidebar-text: #9aa0aa;
+  --tms-sidebar-text-strong: #ffffff;
+  --tms-sidebar-muted: #656b75;
+  --tms-sidebar-hover-bg: #191c21;
+  --tms-sidebar-active-bg: #262a31;
+  --tms-sidebar-active-text: #ffffff;
+  --tms-sidebar-active: var(--tms-sidebar-active-bg);
+  --tms-sidebar-accent: #ffffff;
+  --tms-sidebar-border: #1c1f25;
+
+  --tms-sidebar-tile-bg: #191c21;
+  --tms-sidebar-tile-border: #262a31;
+  --tms-sidebar-tile-icon: #a8adb6;
+  --tms-sidebar-tile-hover-bg: #22262d;
+  --tms-sidebar-tile-active-bg: #e9ebef;
+  --tms-sidebar-tile-active-icon: #16181d;
+
+  --tms-workspace-bg: #16181d;
+  --tms-workspace-hover-bg: #1e2127;
+  --tms-workspace-border: #262a31;
+  --tms-workspace-avatar-bg: #e9ebef;
+  --tms-workspace-avatar-text: #16181d;
+
+  --tms-topbar-bg: #131519;
+  --tms-topbar-border: #1f2329;
+  --tms-topbar-text: #ffffff;
+  --tms-topbar-muted: #9aa0aa;
+
+  /* Lifted and desaturated: the light-mode fills are far too bright on a dark
+     ground, and the light-mode text colours fail contrast against them. */
+  --tms-success: #5fc98d;
+  --tms-success-soft: #12291d;
+  --tms-success-subtle: var(--tms-success-soft);
+  --tms-success-border: #1e4531;
+  --tms-warning: #e0a94a;
+  --tms-warning-soft: #2b2110;
+  --tms-warning-subtle: var(--tms-warning-soft);
+  --tms-warning-border: #4a3a1a;
+  --tms-danger: #ef8b8b;
+  --tms-danger-soft: #2e1618;
+  --tms-danger-subtle: var(--tms-danger-soft);
+  --tms-danger-border: #4d2528;
+  --tms-info: #9aa9bd;
+  --tms-info-soft: #1a1f27;
+  --tms-info-subtle: var(--tms-info-soft);
+  --tms-info-border: #2c333d;
+  --tms-neutral: #9aa0aa;
+  --tms-neutral-soft: #1c1f25;
+  --tms-neutral-subtle: var(--tms-neutral-soft);
+  --tms-neutral-border: #2c313a;
+
+  --tms-success-rgb: 95, 201, 141;
+  --tms-warning-rgb: 224, 169, 74;
+  --tms-danger-rgb: 239, 139, 139;
+  --tms-info-rgb: 154, 169, 189;
+  --tms-neutral-rgb: 154, 160, 170;
+
+  --tms-accent: var(--tms-primary);
+  --tms-focus-rgb: 233, 235, 239;
+  --tms-shadow-rgb: 0, 0, 0;
+
+  /* Denser than in light: a 38% ink veil over an already dark page barely
+     separates the drawer from what it covers. */
+  --tms-scrim-rgb: 0, 0, 0;
+  --tms-scrim-alpha: 0.62;
+  --tms-brand-panel-from: #1c1f25;
+  --tms-brand-panel-via: #111317;
+  --tms-brand-panel-to: #06070a;
+}
+
+/* ---------------------------------------------------------------------------
+   EBIM Green - light.
+   Emerald as the product's action colour and a deep green navigation column.
+   Inspired by the suite, not a copy of it: the text, the greys and the density
+   stay TMS's own, so the product still reads as TMS wearing a green rather than
+   as a different application.
+   ------------------------------------------------------------------------ */
+[data-theme='ebim'] {
+  --tms-ink: #16211c;
+  --tms-ink-hover: #22302a;
+  --tms-ink-active: #0e1714;
+  --tms-on-ink: #ffffff;
+
+  /* #2f8159 is the action green: 4.7:1 on white, so it can carry text and icons
+     and not only fills. The lighter brand green lives in `-soft` only. */
+  --tms-primary: #2f8159;
+  --tms-primary-hover: #266a49;
+  --tms-primary-active: #1e553a;
+  --tms-primary-soft: #e6f2eb;
+  --tms-primary-subtle: var(--tms-primary-soft);
+  --tms-primary-border-subtle: #bfdfcd;
+  --tms-on-primary: #ffffff;
+  --tms-primary-rgb: 47, 129, 89;
+
+  --tms-body-bg: #eff3f0;
+  --tms-bg: var(--tms-body-bg);
+  --tms-surface: #ffffff;
+  --tms-surface-raised: #ffffff;
+  --tms-surface-alt: #f5f8f6;
+  --tms-surface-muted: #f9fbfa;
+  --tms-surface-hover: #f2f7f4;
+  --tms-skeleton-base: #e7ece9;
+  --tms-skeleton-sheen: #f2f6f4;
+  --tms-border: #e0e7e3;
+  --tms-border-strong: #c9d5ce;
+
+  --tms-text: #16211c;
+  --tms-text-secondary: #4a5a52;
+  --tms-muted: #74857c;
+  --tms-text-muted: var(--tms-muted);
+  --tms-text-inverse: #f7faf8;
+
+  /* The deep green column. Flat rather than a gradient: a gradient behind a
+     scrolling list of items shifts the contrast under the labels as they move. */
+  --tms-sidebar-bg: #0a3f33;
+  --tms-sidebar-bg-elevated: #0d4a3c;
+  --tms-sidebar-text: #a9c6ba;
+  --tms-sidebar-text-strong: #ffffff;
+  --tms-sidebar-muted: #7ba393;
+  --tms-sidebar-hover-bg: #105544;
+  --tms-sidebar-active-bg: #ffffff;
+  --tms-sidebar-active-text: #0a3f33;
+  --tms-sidebar-active: var(--tms-sidebar-active-bg);
+  --tms-sidebar-accent: #aeea94;
+  --tms-sidebar-border: #105544;
+
+  --tms-sidebar-tile-bg: #10554a;
+  --tms-sidebar-tile-border: #16665a;
+  --tms-sidebar-tile-icon: #b7d9cb;
+  --tms-sidebar-tile-hover-bg: #16665a;
+  --tms-sidebar-tile-active-bg: #0a3f33;
+  --tms-sidebar-tile-active-icon: #ffffff;
+
+  --tms-workspace-bg: #0d4a3c;
+  --tms-workspace-hover-bg: #10554a;
+  --tms-workspace-border: #16665a;
+  --tms-workspace-avatar-bg: #aeea94;
+  --tms-workspace-avatar-text: #0a3f33;
+
+  --tms-topbar-bg: #0d4a3c;
+  --tms-topbar-border: #105544;
+  --tms-topbar-text: #ffffff;
+  --tms-topbar-muted: #a9c6ba;
+
+  /* Success is deliberately NOT the primary green. If "saved" and "the primary
+     button" are the same colour, the operator loses the one signal that tells
+     them the save actually happened. */
+  --tms-success: #1c7d47;
+  --tms-success-soft: #e3f3e9;
+  --tms-success-subtle: var(--tms-success-soft);
+  --tms-success-border: #bcdfc9;
+  --tms-warning: #96600f;
+  --tms-warning-soft: #fbf1e0;
+  --tms-warning-subtle: var(--tms-warning-soft);
+  --tms-warning-border: #ead6ae;
+  --tms-danger: #a92d2d;
+  --tms-danger-soft: #fbebeb;
+  --tms-danger-subtle: var(--tms-danger-soft);
+  --tms-danger-border: #eecccc;
+  --tms-info: #1f5f8f;
+  --tms-info-soft: #e6eff6;
+  --tms-info-subtle: var(--tms-info-soft);
+  --tms-info-border: #c3d8e8;
+  --tms-neutral: #5c6b63;
+  --tms-neutral-soft: #eef2f0;
+  --tms-neutral-subtle: var(--tms-neutral-soft);
+  --tms-neutral-border: #d7e0db;
+
+  --tms-success-rgb: 28, 125, 71;
+  --tms-warning-rgb: 150, 96, 15;
+  --tms-danger-rgb: 169, 45, 45;
+  --tms-info-rgb: 31, 95, 143;
+  --tms-neutral-rgb: 92, 107, 99;
+
+  --tms-accent: var(--tms-primary);
+  --tms-focus-rgb: var(--tms-primary-rgb);
+  --tms-shadow-rgb: 10, 45, 35;
+
+  --tms-scrim-rgb: 6, 35, 26;
+  --tms-scrim-alpha: 0.42;
+  --tms-brand-panel-from: #0d4a3c;
+  --tms-brand-panel-via: #0a3f33;
+  --tms-brand-panel-to: #062a22;
+}
+
+/* ---------------------------------------------------------------------------
+   EBIM Green - dark.
+   ------------------------------------------------------------------------ */
+[data-theme='ebim'][data-bs-theme='dark'] {
+  --tms-ink: #e6efea;
+  --tms-ink-hover: #f2f7f4;
+  --tms-ink-active: #ffffff;
+  --tms-on-ink: #0c1712;
+
+  --tms-primary: #5cbf8c;
+  --tms-primary-hover: #74cc9d;
+  --tms-primary-active: #8ed8b1;
+  --tms-primary-soft: #13312479;
+  --tms-primary-subtle: #133124;
+  --tms-primary-border-subtle: #1f4a37;
+  --tms-on-primary: #0b2418;
+  --tms-primary-rgb: 92, 191, 140;
+
+  --tms-body-bg: #0a0f0d;
+  --tms-bg: var(--tms-body-bg);
+  --tms-surface: #111a16;
+  --tms-surface-raised: #17231e;
+  --tms-surface-alt: #15201b;
+  --tms-surface-muted: #0e1714;
+  --tms-surface-hover: #1a2823;
+  --tms-skeleton-base: #17231e;
+  --tms-skeleton-sheen: #1f2f28;
+  --tms-border: #223029;
+  --tms-border-strong: #31443a;
+
+  --tms-text: #e6efea;
+  --tms-text-secondary: #a3b8ae;
+  --tms-muted: #788d83;
+  --tms-text-muted: var(--tms-muted);
+  --tms-text-inverse: #0c1712;
+
+  --tms-sidebar-bg: #071f1a;
+  --tms-sidebar-bg-elevated: #0a2b23;
+  --tms-sidebar-text: #9ab8ab;
+  --tms-sidebar-text-strong: #ffffff;
+  --tms-sidebar-muted: #6d8f81;
+  --tms-sidebar-hover-bg: #0d372c;
+  --tms-sidebar-active-bg: #5cbf8c;
+  --tms-sidebar-active-text: #06231a;
+  --tms-sidebar-active: var(--tms-sidebar-active-bg);
+  --tms-sidebar-accent: #aeea94;
+  --tms-sidebar-border: #0d372c;
+
+  --tms-sidebar-tile-bg: #0d372c;
+  --tms-sidebar-tile-border: #124436;
+  --tms-sidebar-tile-icon: #a9c6ba;
+  --tms-sidebar-tile-hover-bg: #124436;
+  --tms-sidebar-tile-active-bg: #06231a;
+  --tms-sidebar-tile-active-icon: #ffffff;
+
+  --tms-workspace-bg: #0a2b23;
+  --tms-workspace-hover-bg: #0d372c;
+  --tms-workspace-border: #124436;
+  --tms-workspace-avatar-bg: #aeea94;
+  --tms-workspace-avatar-text: #06231a;
+
+  --tms-topbar-bg: #0a2b23;
+  --tms-topbar-border: #0d372c;
+  --tms-topbar-text: #ffffff;
+  --tms-topbar-muted: #9ab8ab;
+
+  --tms-success: #5fc98d;
+  --tms-success-soft: #12291d;
+  --tms-success-subtle: var(--tms-success-soft);
+  --tms-success-border: #1e4531;
+  --tms-warning: #e0a94a;
+  --tms-warning-soft: #2b2110;
+  --tms-warning-subtle: var(--tms-warning-soft);
+  --tms-warning-border: #4a3a1a;
+  --tms-danger: #ef8b8b;
+  --tms-danger-soft: #2e1618;
+  --tms-danger-subtle: var(--tms-danger-soft);
+  --tms-danger-border: #4d2528;
+  --tms-info: #7fb2ee;
+  --tms-info-soft: #14212f;
+  --tms-info-subtle: var(--tms-info-soft);
+  --tms-info-border: #22374f;
+  --tms-neutral: #9ab0a6;
+  --tms-neutral-soft: #17231e;
+  --tms-neutral-subtle: var(--tms-neutral-soft);
+  --tms-neutral-border: #2b3a33;
+
+  --tms-success-rgb: 95, 201, 141;
+  --tms-warning-rgb: 224, 169, 74;
+  --tms-danger-rgb: 239, 139, 139;
+  --tms-info-rgb: 127, 178, 238;
+  --tms-neutral-rgb: 154, 176, 166;
+
+  --tms-accent: var(--tms-primary);
+  --tms-focus-rgb: var(--tms-primary-rgb);
+  --tms-shadow-rgb: 0, 0, 0;
+
+  --tms-scrim-rgb: 0, 0, 0;
+  --tms-scrim-alpha: 0.62;
+  --tms-brand-panel-from: #0a2b23;
+  --tms-brand-panel-via: #071f1a;
+  --tms-brand-panel-to: #041412;
+}
+
+/* ===========================================================================
+   2b. CATEGORICAL ACCENTS
+   ---------------------------------------------------------------------------
+   Six hues used to tell modules apart at a glance - the icon tile of Orders is
+   not the icon tile of Fleet. This is colour carrying meaning, the same licence
+   a status pill has: it is wayfinding, not decoration, and it is why they are
+   assigned per module in `navConfig` rather than picked per screen.
+
+   They do not rotate with the brand theme. A module's colour is part of how the
+   user remembers where things are, and having it change when somebody switches
+   to the green theme would undo exactly that.
+   ======================================================================== */
+:root {
+  --tms-accent-1-soft: #eef1fd;
+  --tms-accent-1-fg: #4a53c4;
+  --tms-accent-2-soft: #e6f4f3;
+  --tms-accent-2-fg: #10736d;
+  --tms-accent-3-soft: #fdf1e3;
+  --tms-accent-3-fg: #9a6212;
+  --tms-accent-4-soft: #fdecef;
+  --tms-accent-4-fg: #b03b52;
+  --tms-accent-5-soft: #f3edfb;
+  --tms-accent-5-fg: #6d45a8;
+  --tms-accent-6-soft: #e8f1fa;
+  --tms-accent-6-fg: #1f6091;
+}
+
+/* Lifted and desaturated for a dark ground: the light fills glare, and the light
+   foregrounds fail contrast against them. */
+[data-bs-theme='dark'] {
+  --tms-accent-1-soft: #1b1f3a;
+  --tms-accent-1-fg: #9aa4f2;
+  --tms-accent-2-soft: #102b2a;
+  --tms-accent-2-fg: #5fc4bd;
+  --tms-accent-3-soft: #2b2110;
+  --tms-accent-3-fg: #e0a94a;
+  --tms-accent-4-soft: #331821;
+  --tms-accent-4-fg: #ec8ba0;
+  --tms-accent-5-soft: #251d38;
+  --tms-accent-5-fg: #b394e0;
+  --tms-accent-6-soft: #132433;
+  --tms-accent-6-fg: #74aede;
+}
+
+/* ===========================================================================
+   3. BOOTSTRAP REMAP
+   ---------------------------------------------------------------------------
+   Everything Bootstrap draws - buttons, alerts, badges, form controls, tables -
+   picks the product palette up from here. Written once and pointed at the
+   `--tms-*` variables, so it follows whichever theme is active instead of
+   needing a copy per theme.
+   ======================================================================== */
+:root {
+  --bs-primary: var(--tms-primary);
+  --bs-primary-rgb: var(--tms-primary-rgb);
+  --bs-primary-text-emphasis: var(--tms-primary);
+  --bs-primary-bg-subtle: var(--tms-primary-soft);
   --bs-primary-border-subtle: var(--tms-primary-border-subtle);
 
   --bs-success: var(--tms-success);
-  --bs-success-rgb: 31, 122, 68;
-  --bs-success-bg-subtle: var(--tms-success-subtle);
+  --bs-success-rgb: var(--tms-success-rgb);
+  --bs-success-bg-subtle: var(--tms-success-soft);
 
   --bs-warning: var(--tms-warning);
-  --bs-warning-rgb: 154, 98, 18;
-  --bs-warning-bg-subtle: var(--tms-warning-subtle);
+  --bs-warning-rgb: var(--tms-warning-rgb);
+  --bs-warning-bg-subtle: var(--tms-warning-soft);
 
   --bs-danger: var(--tms-danger);
-  --bs-danger-rgb: 169, 45, 45;
-  --bs-danger-bg-subtle: var(--tms-danger-subtle);
+  --bs-danger-rgb: var(--tms-danger-rgb);
+  --bs-danger-bg-subtle: var(--tms-danger-soft);
 
   --bs-info: var(--tms-info);
-  --bs-info-rgb: 58, 69, 82;
-  --bs-info-bg-subtle: var(--tms-info-subtle);
+  --bs-info-rgb: var(--tms-info-rgb);
+  --bs-info-bg-subtle: var(--tms-info-soft);
 
   --bs-secondary: var(--tms-neutral);
-  --bs-secondary-rgb: 92, 98, 107;
+  --bs-secondary-rgb: var(--tms-neutral-rgb);
 
   --bs-body-bg: var(--tms-body-bg);
   --bs-body-color: var(--tms-text);
@@ -198,12 +697,14 @@
   --bs-border-radius-sm: var(--tms-radius-sm);
   --bs-border-radius-lg: var(--tms-radius-lg);
 
-  /* Links are ink with an underline rather than a blue: in a monochrome system
-     the underline is what marks a link, not the hue. */
-  --bs-link-color: var(--tms-text);
-  --bs-link-hover-color: var(--tms-ink-active);
-  --bs-link-color-rgb: 22, 24, 29;
+  /* Links carry the primary and an underline. The underline is what marks a
+     link; the hue alone would not survive the neutral theme, where the primary
+     is the same graphite as body text. */
+  --bs-link-color: var(--tms-primary);
+  --bs-link-hover-color: var(--tms-primary-hover);
+  --bs-link-color-rgb: var(--tms-primary-rgb);
 
+  --bs-emphasis-color: var(--tms-text);
   --bs-body-font-family: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
   --bs-body-font-size: 0.9375rem;
   --bs-body-line-height: 1.5;

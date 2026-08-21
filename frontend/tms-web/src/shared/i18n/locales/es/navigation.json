@@ -14,9 +14,11 @@
   },
   "home": "Inicio",
   "items": {
+    "account": "Mi cuenta",
     "carriers": "Transportistas",
     "destinations": "Destinos",
     "frequencies": "Frecuencias",
+    "locations": "Ubicaciones",
     "orders": "Pedidos",
     "origins": "Orígenes",
     "planning": "Planificación",
@@ -29,6 +31,9 @@
   },
   "mainNavigation": "Navegación principal",
   "menu": "Menú",
+  "notifications": "Avisos",
+  "notificationsEmpty": "No tienes avisos",
+  "notificationsEmptyHint": "Aquí aparecerán los avisos de tu operación.",
   "search": {
     "empty": "Sin coincidencias",
     "label": "Buscar una pantalla",

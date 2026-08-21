@@ -7,7 +7,12 @@ import 'bootstrap-icons/font/bootstrap-icons.css'
 import './index.css'
 import './shared/i18n'
 import { AppProviders } from './app/AppProviders'
+import { applyStoredTheme } from './shared/theme/ThemeProvider'
 import { router } from './app/router'
+
+// Before the first render, so the page paints in the stored theme instead of flashing the
+// default one and correcting itself.
+applyStoredTheme()
 
 const container = document.getElementById('root')
 if (!container) {

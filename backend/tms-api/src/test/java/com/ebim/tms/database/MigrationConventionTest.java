@@ -29,10 +29,17 @@ class MigrationConventionTest {
             "drop schema",
             "drop database",
             "truncate",
-            "create role",
+            // `create role` is NOT here. The rule this list enforces is "no credential in a
+            // versioned file", and ADR-005 needs a passwordless NOLOGIN role that carries
+            // none. What actually matters is enforced by roleCreationCarriesNoCredential()
+            // below: no password, and no role that can log in.
             "alter role",
             "drop role",
             "drop owned");
+
+    /** A role that can log in, or any password, would be a credential in a versioned file. */
+    private static final Pattern LOGIN_ROLE = Pattern.compile(
+            "create\\s+role\\b[^;]*?(?<!no)login", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
     /** Supabase-managed namespaces Flyway must never create or alter (ADR-002). */
     private static final Pattern SUPABASE_MANAGED_DDL = Pattern.compile(
@@ -74,6 +81,27 @@ class MigrationConventionTest {
                                 script.getFileName(), forbidden)
                         .doesNotContain(forbidden);
             }
+        }
+    }
+
+    @Test
+    @DisplayName("a migration may create a role, but never one that carries a credential")
+    void roleCreationCarriesNoCredential() {
+        for (Path script : SCRIPTS) {
+            String sql = MigrationScripts.withoutComments(MigrationScripts.read(script));
+
+            assertThat(sql.toLowerCase(Locale.ROOT))
+                    .as("%s must not mention a password - a credential must never appear in a "
+                            + "versioned file, and provisioning one is an operations concern",
+                            script.getFileName())
+                    .doesNotContain("password");
+
+            assertThat(LOGIN_ROLE.matcher(sql).find())
+                    .as("%s creates a role that can log in. A migration may only create a "
+                            + "NOLOGIN role reached through SET ROLE (ADR-005); a connectable "
+                            + "role needs a credential, which is provisioned outside the repo",
+                            script.getFileName())
+                    .isFalse();
         }
     }
 

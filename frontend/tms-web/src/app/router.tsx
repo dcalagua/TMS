@@ -6,6 +6,7 @@ import { VehiclesPage } from '../pages/fleet/VehiclesPage'
 import { LoginPage } from '../pages/LoginPage'
 import { DestinationsPage } from '../pages/masters/DestinationsPage'
 import { FrequenciesPage } from '../pages/masters/FrequenciesPage'
+import { LocationsPage } from '../pages/masters/LocationsPage'
 import { OriginsPage } from '../pages/masters/OriginsPage'
 import { RoutesPage } from '../pages/masters/RoutesPage'
 import { ZonesPage } from '../pages/masters/ZonesPage'
@@ -31,9 +32,13 @@ export const appRoutes: RouteObject[] = [
         element: <AppLayout />,
         children: [
           { index: true, element: <DashboardPage /> },
+          // Outside RequireCompany on purpose: a profile belongs to the person, not to the
+          // company the session happens to be scoped to.
+          { path: 'account', element: <PlaceholderPage titleKey="items.account" /> },
           {
             element: <RequireCompany />,
             children: [
+              { path: 'masters/locations', element: <LocationsPage /> },
               { path: 'masters/origins', element: <OriginsPage /> },
               { path: 'masters/destinations', element: <DestinationsPage /> },
               { path: 'masters/zones', element: <ZonesPage /> },

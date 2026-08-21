@@ -84,3 +84,27 @@ export function activateVehicleType(companyId: string, id: string): Promise<Vehi
 export function deactivateVehicleType(companyId: string, id: string): Promise<VehicleTypeView> {
   return apiRequest<VehicleTypeView>(`/fleet/vehicle-types/${id}/deactivate`, { method: 'POST', companyId })
 }
+
+// --- bulk import -----------------------------------------------------------------------
+
+/** The `VehicleTypeImportController`'s `@RequestMapping` - shared by template/preview/apply. */
+export const VEHICLE_TYPE_IMPORT_BASE_PATH = '/fleet/vehicle-types/import'
+
+/** Mirrors the backend's `VehicleTypeImportPreview` record. */
+export interface VehicleTypeImportPreview {
+  code: string
+  outcome: 'CREATE' | 'SKIPPED_DUPLICATE' | 'REJECTED'
+  rowNumber: number
+  name: string
+  maxWeightKg: number | null
+  maxVolumeM3: number | null
+  maxPallets: number
+  lengthM: number | null
+  widthM: number | null
+  heightM: number | null
+  bodyType: VehicleBodyType | null
+  temperatureControlled: boolean
+  minTemperatureCelsius: number | null
+  maxTemperatureCelsius: number | null
+  axles: number | null
+}

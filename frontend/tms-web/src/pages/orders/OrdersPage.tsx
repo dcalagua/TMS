@@ -24,6 +24,7 @@ import {
   DataTable,
   PageHeader,
   Pagination,
+  Select,
   StatusBadge,
   Toolbar,
   confirmDialog,
@@ -31,6 +32,7 @@ import {
   type StatusTone,
 } from '../../shared/ui/components'
 import { OrderFormDrawer } from './OrderFormDrawer'
+import { OrderImportDrawer } from './OrderImportDrawer'
 
 const PAGE_SIZE = 25
 
@@ -62,7 +64,7 @@ const DEFAULT_FILTERS: AppliedFilters = {
   orderNumber: '', originId: '', destinationId: '', serviceDateFrom: '', serviceDateTo: '', status: '', priority: '',
 }
 
-type ModalState = { mode: 'create' } | { mode: 'edit'; orderId: string } | null
+type ModalState = { mode: 'create' } | { mode: 'edit'; orderId: string } | { mode: 'import' } | null
 
 /** Totals for the rows currently on screen. Deliberately not presented as a company-wide
  * figure: the backend paginates, so anything beyond this page is simply not known here. */
@@ -298,14 +300,24 @@ export function OrdersPage() {
         }
         actions={
           canManage && (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2"
-              onClick={() => setModal({ mode: 'create' })}
-            >
-              <i className="bi bi-plus-lg" aria-hidden="true" />
-              {t('new')}
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
+                onClick={() => setModal({ mode: 'import' })}
+              >
+                <i className="bi bi-upload" aria-hidden="true" />
+                {t('actions.import')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2"
+                onClick={() => setModal({ mode: 'create' })}
+              >
+                <i className="bi bi-plus-lg" aria-hidden="true" />
+                {t('new')}
+              </button>
+            </>
           )
         }
       />
@@ -356,37 +368,31 @@ export function OrdersPage() {
               <label htmlFor="filter-origin" className="tms-filter-label">
                 {tc('columns.origin')}
               </label>
-              <select
+              <Select
                 id="filter-origin"
-                className="form-select form-select-sm"
+                size="sm"
                 value={draftFilters.originId}
-                onChange={(event) => setDraftFilters({ ...draftFilters, originId: event.target.value })}
-              >
-                <option value="">{tc('filters.allOrigins')}</option>
-                {origins.map((origin) => (
-                  <option key={origin.id} value={origin.id}>
-                    {origin.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(next) => setDraftFilters({ ...draftFilters, originId: next })}
+                options={[
+                  { value: '', label: tc('filters.allOrigins') },
+                  ...origins.map((origin) => ({ value: origin.id, label: origin.name })),
+                ]}
+              />
             </div>
             <div className="tms-filter-field">
               <label htmlFor="filter-destination" className="tms-filter-label">
                 {tc('columns.destination')}
               </label>
-              <select
+              <Select
                 id="filter-destination"
-                className="form-select form-select-sm"
+                size="sm"
                 value={draftFilters.destinationId}
-                onChange={(event) => setDraftFilters({ ...draftFilters, destinationId: event.target.value })}
-              >
-                <option value="">{t('filters.allDestinations')}</option>
-                {destinations.map((destination) => (
-                  <option key={destination.id} value={destination.id}>
-                    {destination.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(next) => setDraftFilters({ ...draftFilters, destinationId: next })}
+                options={[
+                  { value: '', label: t('filters.allDestinations') },
+                  ...destinations.map((destination) => ({ value: destination.id, label: destination.name })),
+                ]}
+              />
             </div>
             <div className="tms-filter-field">
               <label htmlFor="filter-date-from" className="tms-filter-label">
@@ -416,39 +422,31 @@ export function OrdersPage() {
               <label htmlFor="filter-status" className="tms-filter-label">
                 {tc('columns.status')}
               </label>
-              <select
+              <Select
                 id="filter-status"
-                className="form-select form-select-sm"
+                size="sm"
                 value={draftFilters.status}
-                onChange={(event) => setDraftFilters({ ...draftFilters, status: event.target.value as OrderStatus | '' })}
-              >
-                <option value="">{t('filters.allStatuses')}</option>
-                {ORDER_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {enumLabels.orderStatus(status)}
-                  </option>
-                ))}
-              </select>
+                onChange={(next) => setDraftFilters({ ...draftFilters, status: next as OrderStatus | '' })}
+                options={[
+                  { value: '', label: t('filters.allStatuses') },
+                  ...ORDER_STATUSES.map((status) => ({ value: status, label: enumLabels.orderStatus(status) })),
+                ]}
+              />
             </div>
             <div className="tms-filter-field">
               <label htmlFor="filter-priority" className="tms-filter-label">
                 {tc('columns.priority')}
               </label>
-              <select
+              <Select
                 id="filter-priority"
-                className="form-select form-select-sm"
+                size="sm"
                 value={draftFilters.priority}
-                onChange={(event) =>
-                  setDraftFilters({ ...draftFilters, priority: event.target.value as OrderPriority | '' })
-                }
-              >
-                <option value="">{t('filters.allPriorities')}</option>
-                {ORDER_PRIORITIES.map((priority) => (
-                  <option key={priority} value={priority}>
-                    {enumLabels.orderPriority(priority)}
-                  </option>
-                ))}
-              </select>
+                onChange={(next) => setDraftFilters({ ...draftFilters, priority: next as OrderPriority | '' })}
+                options={[
+                  { value: '', label: t('filters.allPriorities') },
+                  ...ORDER_PRIORITIES.map((priority) => ({ value: priority, label: enumLabels.orderPriority(priority) })),
+                ]}
+              />
             </div>
           </>
         }
@@ -468,7 +466,11 @@ export function OrdersPage() {
         footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
       />
 
-      {modal && (
+      {modal?.mode === 'import' && (
+        <OrderImportDrawer companyId={companyId} onClose={() => setModal(null)} onImported={refresh} />
+      )}
+
+      {(modal?.mode === 'create' || modal?.mode === 'edit') && (
         <OrderFormDrawer
           companyId={companyId}
           orderId={modal.mode === 'edit' ? modal.orderId : null}

@@ -8,16 +8,21 @@ import {
   activateVehicleType,
   deactivateVehicleType,
   fetchVehicleTypes,
+  VEHICLE_TYPE_IMPORT_BASE_PATH,
+  type VehicleTypeImportPreview,
   type VehicleTypeView,
 } from '../../shared/api/vehicleTypesApi'
 import {
   confirmDialog,
   DataTable,
   FilterBar,
+  ImportDrawer,
   PageHeader,
   Pagination,
   ActionMenu,
   ActiveBadge,
+  StatusBadge,
+  Select,
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
@@ -50,6 +55,7 @@ export function VehicleTypesPage() {
   const [draftFilters, setDraftFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
   const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
   const [modal, setModal] = useState<ModalState>(null)
+  const [showImport, setShowImport] = useState(false)
 
   const vehicleTypesQuery = useQuery({
     queryKey: ['vehicle-types', companyId, page, filters],
@@ -159,10 +165,20 @@ export function VehicleTypesPage() {
         description={t('vehicleTypes.description')}
         actions={
           canManage && (
-            <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setModal({ mode: 'create' })}>
-              <i className="bi bi-plus-lg" aria-hidden="true" />
-              {t('vehicleTypes.new')}
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
+                onClick={() => setShowImport(true)}
+              >
+                <i className="bi bi-upload" aria-hidden="true" />
+                {tc('actions.import')}
+              </button>
+              <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setModal({ mode: 'create' })}>
+                <i className="bi bi-plus-lg" aria-hidden="true" />
+                {t('vehicleTypes.new')}
+              </button>
+            </>
           )
         }
       />
@@ -194,16 +210,17 @@ export function VehicleTypesPage() {
           <label htmlFor="vehicle-type-filter-active" className="form-label small mb-1">
             {tc('columns.status')}
           </label>
-          <select
+          <Select
             id="vehicle-type-filter-active"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.active}
-            onChange={(event) => setDraftFilters({ ...draftFilters, active: event.target.value as ActiveFilter })}
-          >
-            <option value="active">{tc('filters.statusActive')}</option>
-            <option value="inactive">{tc('filters.statusInactive')}</option>
-            <option value="all">{tc('filters.statusAll')}</option>
-          </select>
+            onChange={(next) => setDraftFilters({ ...draftFilters, active: next as ActiveFilter })}
+            options={[
+              { value: 'active', label: tc('filters.statusActive') },
+              { value: 'inactive', label: tc('filters.statusInactive') },
+              { value: 'all', label: tc('filters.statusAll') },
+            ]}
+          />
         </div>
       </FilterBar>
 
@@ -230,6 +247,97 @@ export function VehicleTypesPage() {
             notifySuccess(modal.mode === 'edit' ? td('updated') : td('created'))
             refresh()
           }}
+        />
+      )}
+
+      {showImport && (
+        <ImportDrawer<VehicleTypeImportPreview>
+          apiBasePath={VEHICLE_TYPE_IMPORT_BASE_PATH}
+          companyId={companyId}
+          onClose={() => setShowImport(false)}
+          onImported={refresh}
+          strings={{
+            title: t('vehicleTypes.import.title'),
+            subtitle: t('vehicleTypes.import.subtitle'),
+            templateSection: t('vehicleTypes.import.templateSection'),
+            templateHelp: t('vehicleTypes.import.templateHelp'),
+            downloadXlsx: t('vehicleTypes.import.downloadXlsx'),
+            downloadCsv: t('vehicleTypes.import.downloadCsv'),
+            downloadError: t('vehicleTypes.import.downloadError'),
+            fileSection: t('vehicleTypes.import.fileSection'),
+            file: t('vehicleTypes.import.file'),
+            fileHelp: (mb, rows) => t('vehicleTypes.import.fileHelp', { mb, rows }),
+            previewSection: t('vehicleTypes.import.previewSection'),
+            validate: t('vehicleTypes.import.validate'),
+            previewing: t('vehicleTypes.import.previewing'),
+            apply: t('vehicleTypes.import.apply'),
+            applying: t('vehicleTypes.import.applying'),
+            applied: (created, skipped) =>
+              `${t('vehicleTypes.import.applied')}: ${t('vehicleTypes.import.appliedText', { created, skipped })}`,
+            confirmTitle: t('vehicleTypes.import.confirmTitle'),
+            confirmText: (count) => t('vehicleTypes.import.confirmText', { count }),
+            blocked: t('vehicleTypes.import.blocked'),
+            readyToApply: t('vehicleTypes.import.readyToApply'),
+            nothingToCreate: t('vehicleTypes.import.nothingToCreate'),
+            reset: t('vehicleTypes.import.reset'),
+            issuesTitle: t('vehicleTypes.import.issuesTitle'),
+            issuesTruncated: (shown, total) => t('vehicleTypes.import.issuesTruncated', { shown, total }),
+            downloadIssuesReport: t('vehicleTypes.import.downloadIssuesReport'),
+            itemsTitle: t('vehicleTypes.import.itemsTitle'),
+            columnRow: t('vehicleTypes.import.columnRow'),
+            columnColumn: t('vehicleTypes.import.columnColumn'),
+            columnIdentifier: t('vehicleTypes.import.columnIdentifier'),
+            columnMessage: t('vehicleTypes.import.columnMessage'),
+            countRows: t('vehicleTypes.import.countRows'),
+            countItems: t('vehicleTypes.import.countItems'),
+            countCreate: t('vehicleTypes.import.countCreate'),
+            countDuplicates: t('vehicleTypes.import.countDuplicates'),
+            countRejected: t('vehicleTypes.import.countRejected'),
+            countIssues: t('vehicleTypes.import.countIssues'),
+            outcomeCreate: t('vehicleTypes.import.outcomeCreate'),
+            outcomeSkipped: t('vehicleTypes.import.outcomeSkipped'),
+            outcomeRejected: t('vehicleTypes.import.outcomeRejected'),
+            cancel: t('vehicleTypes.import.cancel'),
+            close: t('vehicleTypes.import.close'),
+          }}
+          renderItems={(items, outcomeLabel) => (
+            <div className="tms-table-scroll">
+              <table className="table table-sm align-middle">
+                <caption className="visually-hidden">{t('vehicleTypes.import.itemsTitle')}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{tc('columns.status')}</th>
+                    <th scope="col">{tc('columns.code')}</th>
+                    <th scope="col">{tc('columns.name')}</th>
+                    <th scope="col">{t('vehicleTypes.import.columns.capacity')}</th>
+                    <th scope="col">{t('vehicleTypes.import.columns.temperature')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, index) => (
+                    <tr key={`${item.code}-${index}`}>
+                      <td>
+                        <StatusBadge
+                          label={outcomeLabel(item.outcome)}
+                          tone={item.outcome === 'CREATE' ? 'success' : item.outcome === 'REJECTED' ? 'danger' : 'neutral'}
+                        />
+                      </td>
+                      <td className="tms-code">{item.code}</td>
+                      <td>{item.name}</td>
+                      <td>
+                        {item.maxWeightKg} kg &middot; {item.maxVolumeM3} m³ &middot; {item.maxPallets} pallets
+                      </td>
+                      <td>
+                        {item.temperatureControlled
+                          ? `${item.minTemperatureCelsius ?? '—'} / ${item.maxTemperatureCelsius ?? '—'} °C`
+                          : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         />
       )}
     </div>

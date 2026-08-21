@@ -28,7 +28,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Destination use cases. Takes a {@link CompanyScope}, never a company id - see
- * {@link com.ebim.tms.masterdata.application.OriginService} for the contract this follows.
+ * {@link com.ebim.tms.masterdata.application.OriginService} for the contract this follows, and
+ * for why every write here also pushes the change up to the canonical {@code tms.location} this
+ * destination projects (migration V14, {@code docs/architecture/ADR_LOCATION_MODEL.md}).
  */
 @Service
 public class DestinationService {
@@ -38,20 +40,23 @@ public class DestinationService {
 
     private final DestinationRepository destinationRepository;
     private final ZoneRepository zoneRepository;
+    private final LocationCompatibilityProjector projector;
     private final AuditActorProvider auditActorProvider;
 
     public DestinationService(
             DestinationRepository destinationRepository, ZoneRepository zoneRepository,
-            AuditActorProvider auditActorProvider) {
+            LocationCompatibilityProjector projector, AuditActorProvider auditActorProvider) {
         this.destinationRepository = destinationRepository;
         this.zoneRepository = zoneRepository;
+        this.projector = projector;
         this.auditActorProvider = auditActorProvider;
     }
 
     @Transactional(readOnly = true)
     public PageResponse<DestinationView> list(CompanyScope scope, DestinationFilter filter, PageQuery pageQuery) {
         var specification = DestinationSpecifications.matching(
-                scope.companyId(), filter.code(), filter.name(), filter.type(), filter.zoneId(), filter.active());
+                scope.companyId(), filter.code(), filter.name(), filter.search(), filter.type(), filter.zoneId(),
+                filter.active());
         Page<Destination> page = destinationRepository.findAll(specification, toPageable(pageQuery));
 
         Map<UUID, Zone> zonesById = loadZones(scope, page.getContent());
@@ -82,7 +87,7 @@ public class DestinationService {
                 blankToNull(request.province()), blankToNull(request.department()), request.country().trim(),
                 request.latitude(), request.longitude(), request.zoneId(), request.serviceTimeMinutes(),
                 blankToNull(request.externalReference()), actorId);
-        return DestinationView.from(saveOrConflict(destination, code), zone);
+        return DestinationView.from(syncUp(saveOrConflict(destination, code), actorId), zone);
     }
 
     @Transactional
@@ -101,21 +106,25 @@ public class DestinationService {
                 blankToNull(request.province()), blankToNull(request.department()), request.country().trim(),
                 request.latitude(), request.longitude(), request.zoneId(), request.serviceTimeMinutes(),
                 blankToNull(request.externalReference()), actorId);
-        return DestinationView.from(saveOrConflict(destination, code), zone);
+        return DestinationView.from(syncUp(saveOrConflict(destination, code), actorId), zone);
     }
 
     @Transactional
     public DestinationView activate(CompanyScope scope, UUID id) {
         Destination destination = find(scope, id);
-        destination.activate(auditActorProvider.requireAppUserId());
-        return DestinationView.from(destinationRepository.save(destination), resolveZone(scope, destination.zoneId()));
+        UUID actorId = auditActorProvider.requireAppUserId();
+        destination.activate(actorId);
+        return DestinationView.from(syncUp(destinationRepository.saveAndFlush(destination), actorId),
+                resolveZone(scope, destination.zoneId()));
     }
 
     @Transactional
     public DestinationView deactivate(CompanyScope scope, UUID id) {
         Destination destination = find(scope, id);
-        destination.deactivate(auditActorProvider.requireAppUserId());
-        return DestinationView.from(destinationRepository.save(destination), resolveZone(scope, destination.zoneId()));
+        UUID actorId = auditActorProvider.requireAppUserId();
+        destination.deactivate(actorId);
+        return DestinationView.from(syncUp(destinationRepository.saveAndFlush(destination), actorId),
+                resolveZone(scope, destination.zoneId()));
     }
 
     private Destination find(CompanyScope scope, UUID id) {
@@ -152,6 +161,15 @@ public class DestinationService {
             }
         }
         return byId;
+    }
+
+    /**
+     * Pushes a just-saved destination up to its canonical location, creating one if this
+     * destination has none yet. Returns the same instance so call sites read as one expression.
+     */
+    private Destination syncUp(Destination destination, UUID actorId) {
+        projector.syncFromDestination(destination, actorId);
+        return destination;
     }
 
     /** Saves and translates a race with a concurrent duplicate write into the same conflict a pre-check would give. */

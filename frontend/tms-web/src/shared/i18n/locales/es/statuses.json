@@ -10,6 +10,26 @@
     "STORE": "Tienda"
   },
   "inactive": "Inactivo",
+  "locationRole": {
+    "DC": "Centro de distribución",
+    "HUB": "Hub",
+    "ORIGIN": "Origen",
+    "OTHER": "Otro",
+    "PLANT": "Planta",
+    "SHIP_TO": "Destino",
+    "STORE": "Tienda"
+  },
+  "locationType": {
+    "BRANCH": "Sucursal",
+    "CUSTOMER": "Cliente",
+    "DELIVERY_POINT": "Punto de entrega",
+    "DISTRIBUTION_CENTER": "Centro de distribución",
+    "HUB": "Hub",
+    "OTHER": "Otro",
+    "PLANT": "Planta",
+    "STORE": "Tienda",
+    "WAREHOUSE": "Almacén"
+  },
   "maintenance": "Mantenimiento",
   "orderPriority": {
     "HIGH": "Alta",

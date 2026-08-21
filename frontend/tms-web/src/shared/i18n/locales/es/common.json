@@ -11,6 +11,7 @@
     "delete": "Eliminar",
     "edit": "Editar",
     "filters": "Filtros",
+    "import": "Importar",
     "new": "Nuevo",
     "next": "Siguiente",
     "openMenu": "Abrir menú de acciones",
@@ -82,6 +83,9 @@
     "text": "Tienes cambios sin guardar.",
     "title": "¿Descartar cambios?"
   },
+  "empty": {
+    "noMatches": "Sin coincidencias"
+  },
   "fields": {
     "availability": "Disponibilidad",
     "axles": "Ejes",
@@ -94,9 +98,12 @@
     "destination": "Destino",
     "destinationToAdd": "Destino a agregar",
     "district": "Distrito",
+    "effectiveFrom": "Vigente desde",
+    "effectiveTo": "Vigente hasta",
     "email": "Correo electrónico",
     "externalReference": "Referencia externa",
     "externalSource": "Sistema de origen",
+    "externalSystem": "Sistema externo",
     "frequency": "Frecuencia",
     "heightM": "Alto (m)",
     "latitude": "Latitud",
@@ -128,6 +135,11 @@
     "allOrigins": "Todos los orígenes",
     "allTypes": "Todos los tipos",
     "allZones": "Todas las zonas",
+    "applied": "Filtros:",
+    "clearAll": "Quitar todos",
+    "clearOne": "Quitar filtro {{filter}}",
+    "noResultsMessage": "Ningun registro coincide con los filtros seleccionados.",
+    "noResultsTitle": "Sin resultados",
     "statusActive": "Activos",
     "statusAll": "Todos",
     "statusInactive": "Inactivos"
@@ -152,6 +164,7 @@
     "spanish": "Español"
   },
   "loading": {
+    "generic": "Cargando...",
     "order": "Cargando pedido...",
     "route": "Cargando ruta..."
   },
@@ -162,12 +175,16 @@
   },
   "pagination": {
     "label": "Paginación",
+    "nextPage": "Página siguiente",
     "pageOf": "Página {{page}} de {{pages}}",
-    "range": "{{from}}-{{to}} de {{total}}"
+    "previousPage": "Página anterior",
+    "range": "{{from}}-{{to}} de {{total}}",
+    "rowsPerPage": "Filas por página"
   },
   "placeholders": {
     "addressReference": "p. ej. portón azul",
     "externalReference": "Código opcional de EWM u otro sistema",
+    "externalSystem": "p. ej. EWM, ERP",
     "latitude": "-12.046374",
     "longitude": "-77.042793",
     "taxIdType": "RUC, DNI, ...",

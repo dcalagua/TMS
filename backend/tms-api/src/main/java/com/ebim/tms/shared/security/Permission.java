@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
  * The authorization vocabulary of TMS, mirroring {@code tms.permission} one for one.
  *
  * <p>A permission is an atomic capability written {@code resource:action}. The database is the
- * catalogue of record (migrations V3 and V5); this enum is the compile-time view of it, so a
+ * catalogue of record (migrations V3, V5 and V14); this enum is the compile-time view of it, so a
  * typo in a {@code @PreAuthorize} expression is a failing test rather than a silently open
  * endpoint. {@code PermissionCatalogueIntegrationTest} asserts the two are identical.
  *
@@ -30,6 +30,8 @@ public enum Permission {
     IAM_MEMBERSHIP_READ("iam.membership:read"),
     IAM_MEMBERSHIP_MANAGE("iam.membership:manage"),
 
+    MASTERDATA_LOCATION_READ("masterdata.location:read"),
+    MASTERDATA_LOCATION_MANAGE("masterdata.location:manage"),
     MASTERDATA_ORIGIN_READ("masterdata.origin:read"),
     MASTERDATA_ORIGIN_MANAGE("masterdata.origin:manage"),
     MASTERDATA_ZONE_READ("masterdata.zone:read"),
@@ -55,6 +57,9 @@ public enum Permission {
     PLANNING_PLAN_MANAGE("planning.plan:manage"),
     PLANNING_TRIP_READ("planning.trip:read"),
     PLANNING_TRIP_MANAGE("planning.trip:manage"),
+
+    INTEGRATION_CLIENT_READ("integration.client:read"),
+    INTEGRATION_CLIENT_MANAGE("integration.client:manage"),
 
     MONITORING_TRANSPORT_READ("monitoring.transport:read"),
 

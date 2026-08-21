@@ -37,6 +37,15 @@ spring:
     validate-on-migrate: true
     # `clean` must never be reachable from an application process.
     clean-disabled: true
+  servlet:
+    multipart:
+      # The bulk order import is the only multipart endpoint. Both limits mirror
+      # OrderImportLimits.MAX_FILE_BYTES, and this is the half that matters most: it rejects an
+      # oversized upload while it is still streaming, before the request is fully buffered.
+      # OrderImportService checks the received bytes again, so the limit does not depend on this
+      # file alone being right.
+      max-file-size: 2MB
+      max-request-size: 3MB
   threads:
     virtual:
       enabled: true
@@ -54,9 +63,11 @@ management:
   endpoints:
     web:
       exposure:
-        # Only liveness/readiness and build identification. Nothing that lists beans,
-        # configuration properties, environment variables or the HTTP mappings.
-        include: health,info
+        # Liveness/readiness, build identification, and aggregate operational counters
+        # (integration success/failure, import outcomes - see IntegrationRequestExecutor and
+        # AuditEventRecorder). Nothing that lists beans, configuration properties, environment
+        # variables or the HTTP mappings - metrics values only, never the running config.
+        include: health,info,metrics
   endpoint:
     health:
       # Component details (database URL, disk paths, vendor versions) are never rendered to
@@ -96,6 +107,18 @@ tms:
     cors:
       # Empty by default: no cross-origin browser call is allowed until origins are listed.
       allowed-origins: ${TMS_CORS_ALLOWED_ORIGINS:}
+  integration:
+    # Raw inbound payloads are NOT retained by default. An order payload carries customer names
+    # and addresses; copying them into an append-only audit table is a data-protection
+    # commitment, not a debugging convenience. See docs/integrations/INBOUND_API_V1.md before
+    # turning this on, and set a retention job with it.
+    retain-payloads: ${TMS_INTEGRATION_RETAIN_PAYLOADS:false}
+    # How long a superseded secret keeps working after a rotation, so a partner can redeploy
+    # without a coordinated cutover. A rotation responding to a suspected leak passes
+    # graceHours=0 explicitly and ignores this.
+    rotation-grace: ${TMS_INTEGRATION_ROTATION_GRACE:168h}
+    # The largest number of objects one batch request may carry.
+    max-batch-size: ${TMS_INTEGRATION_MAX_BATCH_SIZE:200}
 
 logging:
   # The correlation id is on every line, so a request can be followed across log entries and

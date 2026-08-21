@@ -3,10 +3,14 @@ package com.ebim.tms.planning.application;
 import com.ebim.tms.planning.domain.AssignmentStatus;
 import com.ebim.tms.planning.domain.PlanningRun;
 import com.ebim.tms.planning.domain.PlanningRunStatus;
+import com.ebim.tms.planning.domain.ShipmentEventType;
+import com.ebim.tms.planning.domain.ShipmentOutboxEvent;
 import com.ebim.tms.planning.domain.Trip;
+import com.ebim.tms.planning.domain.TripOrderAssignment;
 import com.ebim.tms.planning.domain.TripStatus;
 import com.ebim.tms.planning.infrastructure.PlanningRunRepository;
 import com.ebim.tms.planning.infrastructure.PlanningRunSpecifications;
+import com.ebim.tms.planning.infrastructure.ShipmentOutboxEventRepository;
 import com.ebim.tms.planning.infrastructure.TripOrderAssignmentRepository;
 import com.ebim.tms.planning.infrastructure.TripRepository;
 import com.ebim.tms.shared.api.ConflictException;
@@ -14,7 +18,10 @@ import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
+import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.audit.AuditAggregateType;
+import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
@@ -24,6 +31,7 @@ import com.ebim.tms.shared.reference.PlannableOrderQuery;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -60,6 +68,7 @@ public class PlanningRunService {
     private final PlanningRunRepository planningRunRepository;
     private final TripRepository tripRepository;
     private final TripOrderAssignmentRepository assignmentRepository;
+    private final ShipmentOutboxEventRepository outboxRepository;
     private final TripAssignmentService assignments;
     private final OriginLookupPort originLookupPort;
     private final DestinationLookupPort destinationLookupPort;
@@ -68,16 +77,18 @@ public class PlanningRunService {
     private final PlanningCapacityService capacityService;
     private final TripViewAssembler assembler;
     private final AuditActorProvider auditActorProvider;
+    private final AuditRecorder auditRecorder;
 
     public PlanningRunService(PlanningRunRepository planningRunRepository, TripRepository tripRepository,
-            TripOrderAssignmentRepository assignmentRepository, TripAssignmentService assignments,
-            OriginLookupPort originLookupPort, DestinationLookupPort destinationLookupPort,
-            OrderPlanningPort orderPlanningPort, VehicleLookupPort vehicleLookupPort,
-            PlanningCapacityService capacityService, TripViewAssembler assembler,
-            AuditActorProvider auditActorProvider) {
+            TripOrderAssignmentRepository assignmentRepository, ShipmentOutboxEventRepository outboxRepository,
+            TripAssignmentService assignments, OriginLookupPort originLookupPort,
+            DestinationLookupPort destinationLookupPort, OrderPlanningPort orderPlanningPort,
+            VehicleLookupPort vehicleLookupPort, PlanningCapacityService capacityService, TripViewAssembler assembler,
+            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder) {
         this.planningRunRepository = planningRunRepository;
         this.tripRepository = tripRepository;
         this.assignmentRepository = assignmentRepository;
+        this.outboxRepository = outboxRepository;
         this.assignments = assignments;
         this.originLookupPort = originLookupPort;
         this.destinationLookupPort = destinationLookupPort;
@@ -86,6 +97,7 @@ public class PlanningRunService {
         this.capacityService = capacityService;
         this.assembler = assembler;
         this.auditActorProvider = auditActorProvider;
+        this.auditRecorder = auditRecorder;
     }
 
     /**
@@ -147,7 +159,10 @@ public class PlanningRunService {
         UUID actorId = auditActorProvider.requireAppUserId();
         PlanningRun run = new PlanningRun(scope.companyId(), generatePlanNumber(), request.originId(),
                 request.planningDate(), blankToNull(request.notes()), actorId);
-        return toDetail(scope, saveOrConflict(run, origin, request));
+        PlanningRun saved = saveOrConflict(run, origin, request);
+        auditRecorder.record(scope, AuditAggregateType.PLANNING_RUN, saved.id(), AuditAction.CREATE,
+                Map.of("planNumber", saved.planNumber()));
+        return toDetail(scope, saved);
     }
 
     /**
@@ -180,7 +195,10 @@ public class PlanningRunService {
         }
 
         run.confirm(actorId);
-        return toDetail(scope, save(run));
+        PlanningRun saved = save(run);
+        auditRecorder.record(scope, AuditAggregateType.PLANNING_RUN, saved.id(), AuditAction.CONFIRM,
+                Map.of("planNumber", saved.planNumber(), "tripCount", plannedTrips.size()));
+        return toDetail(scope, saved);
     }
 
     /**
@@ -206,7 +224,10 @@ public class PlanningRunService {
         }
 
         run.cancel(reason, actorId);
-        return toDetail(scope, save(run));
+        PlanningRun saved = save(run);
+        auditRecorder.record(scope, AuditAggregateType.PLANNING_RUN, saved.id(), AuditAction.CANCEL,
+                Map.of("planNumber", saved.planNumber()));
+        return toDetail(scope, saved);
     }
 
     /**
@@ -237,6 +258,13 @@ public class PlanningRunService {
         if (trip.plannedDepartureAt() == null) {
             throw new ConflictException(label + " has no planned departure date and time.");
         }
+        // Re-checked here and not only where the departure was typed: the run's planning date and
+        // the trip's departure were validated against each other when each was written, but
+        // confirmation is the moment the plan becomes binding and is the last place a stored
+        // inconsistency (a row written before this rule existed, or by a raw SQL fix) can be
+        // caught before a driver is dispatched on the wrong day.
+        ShipmentTimeRules.requireDepartureOnPlanningDate(
+                trip.plannedDepartureAt(), run.planningDate(), scope.timeZone(), label);
         VehicleCapacityReference vehicle = vehicleLookupPort.findAssignable(trip.vehicleId(), scope.companyId())
                 .orElseThrow(() -> new ConflictException(
                         label + " is assigned a vehicle that is no longer active and available."));
@@ -246,12 +274,57 @@ public class PlanningRunService {
             throw new ConflictException(label + " has no orders assigned.");
         }
         capacityService.requireWithinCapacity(label + " cannot be confirmed", CapacityLimits.of(vehicle), load);
+        requireOrdersStillFitRun(scope, run, trip, label);
 
         // Idempotent, and the reason a confirmed trip's stop list always matches its assignments:
-        // re-synchronised here rather than trusted to have stayed in step.
+        // re-synchronised here rather than trusted to have stayed in step. refreshStops also
+        // asserts that the resulting stops cover exactly the destinations the assignments deliver
+        // to, so a confirmed shipment cannot be missing one.
         assignments.refreshStops(trip, scope.companyId(), actorId);
         trip.confirm(vehicle.maxWeightKg(), vehicle.maxVolumeM3(), vehicle.maxPallets(), actorId);
         tripRepository.saveAndFlush(trip);
+
+        // Written in THIS transaction, not after commit - the whole point of a transactional
+        // outbox is that the event and the state change it describes share one atomic unit, so a
+        // rollback anywhere else in this loop (a sibling trip failing confirmTrip) takes this row
+        // down with it too. See tms.shipment_outbox_event's migration V20 comment and
+        // docs/integrations/OUTBOUND_SHIPMENT_V1.md, "Change feed".
+        outboxRepository.saveAndFlush(new ShipmentOutboxEvent(
+                scope.companyId(), trip.id(), trip.shipmentNumber(), ShipmentEventType.SHIPMENT_CONFIRMED,
+                OffsetDateTime.now()));
+        auditRecorder.record(scope, AuditAggregateType.SHIPMENT, trip.id(), AuditAction.SHIPMENT_CONFIRMED,
+                Map.of("shipmentNumber", trip.shipmentNumber()));
+    }
+
+    /**
+     * Re-checks, at the moment the plan becomes binding, that every order still on the trip is
+     * still an order this run may carry: same origin, same service date.
+     *
+     * <p>Both were checked when the order was assigned. Neither is immutable afterwards - an
+     * order's service date can be rescheduled and its destination or origin corrected while it
+     * sits on a draft trip - and a confirmed shipment that departs from the wrong depot or on the
+     * wrong day is exactly the failure this gate exists to prevent. One batched lookup for the
+     * whole trip, not one per order.
+     */
+    private void requireOrdersStillFitRun(CompanyScope scope, PlanningRun run, Trip trip, String label) {
+        List<TripOrderAssignment> active = assignments.activeAssignments(trip.id());
+        Map<UUID, PlannableOrder> orders = orderPlanningPort.findAllInCompany(
+                active.stream().map(TripOrderAssignment::orderId).collect(Collectors.toSet()), scope.companyId());
+        for (TripOrderAssignment assignment : active) {
+            PlannableOrder order = orders.get(assignment.orderId());
+            if (order == null) {
+                throw new ConflictException(label + " carries an order that no longer exists in this company.");
+            }
+            if (!order.originId().equals(run.originId())) {
+                throw new ConflictException(label + " carries order " + order.orderNumber()
+                        + ", which now departs from a different origin than the run.");
+            }
+            if (!order.serviceDate().equals(run.planningDate())) {
+                throw new ConflictException(label + " carries order " + order.orderNumber()
+                        + ", whose service date is now " + order.serviceDate() + " and not the run's planning date ("
+                        + run.planningDate() + ").");
+            }
+        }
     }
 
     private PlanningRunDetailView toDetail(CompanyScope scope, PlanningRun run) {

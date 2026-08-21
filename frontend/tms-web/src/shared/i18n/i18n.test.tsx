@@ -28,7 +28,15 @@ const companyMocks = vi.hoisted(() => ({ useCompany: vi.fn() }))
 vi.mock('../company/CompanyContext', () => ({ useCompany: companyMocks.useCompany }))
 
 beforeEach(() => {
-  companyMocks.useCompany.mockReturnValue({ status: 'ready', hasCapability: () => true })
+  // `companies` is part of the contract because the sidebar hosts the company switcher. These
+  // tests translate the navigation; an empty list keeps the switcher out of their way.
+  companyMocks.useCompany.mockReturnValue({
+    status: 'ready',
+    hasCapability: () => true,
+    companies: [],
+    selected: null,
+    selectCompany: () => {},
+  })
   window.localStorage.clear()
 })
 

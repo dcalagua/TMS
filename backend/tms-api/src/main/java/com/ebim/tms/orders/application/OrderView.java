@@ -2,6 +2,7 @@ package com.ebim.tms.orders.application;
 
 import com.ebim.tms.orders.domain.OrderPriority;
 import com.ebim.tms.orders.domain.OrderStatus;
+import com.ebim.tms.orders.domain.TotalsSource;
 import com.ebim.tms.orders.domain.TransportOrder;
 import com.ebim.tms.shared.reference.MasterReference;
 import java.math.BigDecimal;
@@ -39,6 +40,10 @@ public record OrderView(
         BigDecimal totalWeightKg,
         BigDecimal totalVolumeM3,
         BigDecimal totalPallets,
+        BigDecimal declaredWeightKg,
+        BigDecimal declaredVolumeM3,
+        BigDecimal declaredPallets,
+        TotalsSource totalsSource,
         int lineCount,
         long version,
         OffsetDateTime createdAt,
@@ -50,7 +55,9 @@ public record OrderView(
                 order.destinationId(), destination == null ? null : destination.code(),
                 destination == null ? null : destination.name(), order.customerName(), order.customerReference(),
                 order.serviceDate(), order.priority(), order.requestedWindowStart(), order.requestedWindowEnd(),
-                order.status(), order.cancelReason(), order.totalWeightKg(), order.totalVolumeM3(), order.totalPallets(),
+                order.status(), order.cancelReason(), order.totalWeightKg(), order.totalVolumeM3(),
+                order.totalPallets(), order.declaredWeightKg(), order.declaredVolumeM3(), order.declaredPallets(),
+                order.totalsSource(),
                 (int) lineCount, order.version(), order.createdAt(), order.updatedAt());
     }
 }

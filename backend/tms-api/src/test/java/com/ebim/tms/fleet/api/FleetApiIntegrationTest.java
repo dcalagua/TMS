@@ -177,6 +177,25 @@ class FleetApiIntegrationTest {
         }
 
         @Test
+        @DisplayName("external reference is optional, round-trips when present, and is rejected when blank")
+        void externalReferenceRoundTrips() throws Exception {
+            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"code":"extref-carrier","businessName":"Extref Transport S.A.","taxIdType":"RUC",
+                                     "taxIdValue":"20100000020","externalReference":"ERP-CARR-77"}
+                                    """))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.externalReference").value("ERP-CARR-77"));
+
+            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(carrierRequest("no-extref-carrier", "20100000021")))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.externalReference").doesNotExist());
+        }
+
+        @Test
         @DisplayName("the same code and tax id are allowed in a different company but conflict inside the same one")
         void duplicateCodeAndTaxIdAreScoped() throws Exception {
             mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
@@ -410,6 +429,27 @@ class FleetApiIntegrationTest {
                     .andExpect(jsonPath("$.effectiveMaxVolumeM3").value(40))
                     .andExpect(jsonPath("$.effectiveMaxPallets").value(20))
                     .andExpect(jsonPath("$.maxWeightOverrideKg").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("external reference is optional and round-trips when present")
+        void externalReferenceRoundTrips() throws Exception {
+            String typeId = createVehicleType(COMPANY_A, "type-extref", 10000, 40, 20);
+
+            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"code":"extref-truck","licensePlate":"EXT-001","vehicleTypeId":"%s",
+                                     "availabilityStatus":"AVAILABLE","externalReference":"ERP-VEH-77"}
+                                    """.formatted(typeId)))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.externalReference").value("ERP-VEH-77"));
+
+            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(vehicleRequest("no-extref-truck", "ext-002", typeId, null)))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.externalReference").doesNotExist());
         }
 
         @Test

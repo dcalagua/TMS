@@ -60,6 +60,10 @@ const ORDER_DETAIL: OrderDetailView = {
   totalWeightKg: 20,
   totalVolumeM3: 1,
   totalPallets: 1,
+  declaredWeightKg: null,
+  declaredVolumeM3: null,
+  declaredPallets: null,
+  totalsSource: 'CALCULATED',
   version: 2,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
@@ -73,6 +77,20 @@ function mockLookups() {
   originsApiMocks.fetchOrigins.mockResolvedValue(page([ORIGIN]))
   destinationsApiMocks.fetchDestinations.mockResolvedValue(page([DESTINATION]))
 }
+
+/**
+ * Picks a master through the async lookup: focus opens the panel, the listbox fills from the
+ * mocked search, and the entry is clicked. Written as a helper because origin and destination
+ * are chosen this way in almost every test, and because it is the interaction that replaced
+ * `selectOptions` when the selects became comboboxes.
+ */
+async function pickLookup(label: RegExp, optionName: RegExp) {
+  await userEvent.click(screen.getByLabelText(label))
+  await userEvent.click(await screen.findByRole('option', { name: optionName }))
+}
+
+const ORIGIN_OPTION = /Origin A/
+const DESTINATION_OPTION = /Destination A/
 
 function renderModal(props: Partial<ComponentProps<typeof OrderFormDrawer>> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -110,9 +128,8 @@ describe('OrderFormDrawer', () => {
 
     expect(screen.getByText(/Totales estimados/)).toHaveTextContent('0 kg')
 
-    await screen.findByRole('option', { name: 'Origin A' })
-    await userEvent.selectOptions(screen.getByLabelText(/^origen/i), 'origin-1')
-    await userEvent.selectOptions(screen.getByLabelText(/^destino/i), 'dest-1')
+    await pickLookup(/^origen/i, ORIGIN_OPTION)
+    await pickLookup(/^destino/i, DESTINATION_OPTION)
     await userEvent.type(screen.getByLabelText(/^fecha de servicio/i), '2026-03-01')
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
@@ -130,9 +147,8 @@ describe('OrderFormDrawer', () => {
     ordersApiMocks.createOrder.mockResolvedValue(ORDER_DETAIL)
     renderModal()
 
-    await screen.findByRole('option', { name: 'Origin A' })
-    await userEvent.selectOptions(screen.getByLabelText(/^origen/i), 'origin-1')
-    await userEvent.selectOptions(screen.getByLabelText(/^destino/i), 'dest-1')
+    await pickLookup(/^origen/i, ORIGIN_OPTION)
+    await pickLookup(/^destino/i, DESTINATION_OPTION)
     await userEvent.type(screen.getByLabelText(/^fecha de servicio/i), '2026-03-01')
 
     await userEvent.click(screen.getByRole('button', { name: 'Agregar línea' }))
@@ -207,13 +223,91 @@ describe('OrderFormDrawer', () => {
     })
     renderModal()
 
-    await screen.findByRole('option', { name: 'Origin A' })
-    await userEvent.selectOptions(screen.getByLabelText(/^origen/i), 'origin-1')
-    await userEvent.selectOptions(screen.getByLabelText(/^destino/i), 'dest-1')
+    await pickLookup(/^origen/i, ORIGIN_OPTION)
+    await pickLookup(/^destino/i, DESTINATION_OPTION)
     await userEvent.type(screen.getByLabelText(/^fecha de servicio/i), '2026-03-01')
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     expect(await screen.findByText('originId does not reference an active origin in this company.')).toBeInTheDocument()
+  })
+
+  it('sends declared totals as null when the operator leaves them empty', async () => {
+    // null, never 0: "not stated" and "stated as zero" are different inputs to OrderTotals.
+    mockLookups()
+    ordersApiMocks.createOrder.mockResolvedValue(ORDER_DETAIL)
+    renderModal()
+
+    await pickLookup(/^origen/i, ORIGIN_OPTION)
+    await pickLookup(/^destino/i, DESTINATION_OPTION)
+    await userEvent.type(screen.getByLabelText(/^fecha de servicio/i), '2026-03-01')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    await waitFor(() =>
+      expect(ordersApiMocks.createOrder).toHaveBeenCalledWith(
+        'company-1',
+        expect.objectContaining({ declaredWeightKg: null, declaredVolumeM3: null, declaredPallets: null }),
+      ),
+    )
+  })
+
+  it('plans a line-less order from its declared totals and says so', async () => {
+    mockLookups()
+    ordersApiMocks.createOrder.mockResolvedValue(ORDER_DETAIL)
+    renderModal()
+
+    await pickLookup(/^origen/i, ORIGIN_OPTION)
+    await pickLookup(/^destino/i, DESTINATION_OPTION)
+    await userEvent.type(screen.getByLabelText(/^fecha de servicio/i), '2026-03-01')
+    await userEvent.type(screen.getByLabelText(/^peso declarado/i), '1200')
+    await userEvent.type(screen.getByLabelText(/^pallets declarados/i), '2')
+
+    // With no lines the declared figures are the effective ones - the DECLARED branch of the rule.
+    const totals = screen.getByText(/Totales estimados/).closest('div')
+    // Separator-agnostic: which one `format.weight` picks is the locale's business, not this
+    // test's, and asserting it here would break the day the test environment's ICU data changes.
+    expect(totals).toHaveTextContent(/1.200 kg/)
+    expect(totals).toHaveTextContent('2 pallets')
+    expect(totals).toHaveTextContent('Declarados')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    await waitFor(() =>
+      expect(ordersApiMocks.createOrder).toHaveBeenCalledWith(
+        'company-1',
+        expect.objectContaining({ declaredWeightKg: 1200, declaredPallets: 2, lines: [] }),
+      ),
+    )
+  })
+
+  it('prefers the lines over a declared figure once a line describes the measure', async () => {
+    mockLookups()
+    renderModal()
+
+    await userEvent.type(screen.getByLabelText(/^peso declarado/i), '999')
+    expect(screen.getByText(/Totales estimados/).closest('div')).toHaveTextContent('999 kg')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar línea' }))
+    await userEvent.clear(screen.getByLabelText('Cantidad de la línea 1'))
+    await userEvent.type(screen.getByLabelText('Cantidad de la línea 1'), '2')
+    await userEvent.type(screen.getByLabelText('Peso unitario de la línea 1'), '10')
+
+    const totals = screen.getByText(/Totales estimados/).closest('div')
+    expect(totals).toHaveTextContent('20 kg')
+    expect(totals).toHaveTextContent('Calculados desde las líneas')
+    // Volume: no line describes it, so the declared value - here absent - still fills the gap.
+    expect(totals).toHaveTextContent('0 m³')
+  })
+
+  it('pre-fills the declared totals of an existing order', async () => {
+    mockLookups()
+    ordersApiMocks.fetchOrder.mockResolvedValue({
+      ...ORDER_DETAIL, lines: [], declaredWeightKg: 1200, declaredPallets: 2, totalsSource: 'DECLARED',
+    })
+    renderModal({ orderId: 'order-1' })
+
+    expect(await screen.findByLabelText(/^peso declarado/i)).toHaveValue(1200)
+    expect(screen.getByLabelText(/^pallets declarados/i)).toHaveValue(2)
+    expect(screen.getByLabelText(/^volumen declarado/i)).toHaveValue(null)
   })
 
   it('closes when Cancel is clicked', async () => {

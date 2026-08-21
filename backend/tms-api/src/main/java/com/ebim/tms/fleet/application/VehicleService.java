@@ -12,7 +12,10 @@ import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
+import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.audit.AuditAggregateType;
+import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.util.HashMap;
 import java.util.List;
@@ -53,15 +56,17 @@ public class VehicleService {
     private final VehicleTypeRepository vehicleTypeRepository;
     private final EffectiveCapacityResolver capacityResolver;
     private final AuditActorProvider auditActorProvider;
+    private final AuditRecorder auditRecorder;
 
     public VehicleService(VehicleRepository vehicleRepository, CarrierRepository carrierRepository,
             VehicleTypeRepository vehicleTypeRepository, EffectiveCapacityResolver capacityResolver,
-            AuditActorProvider auditActorProvider) {
+            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder) {
         this.vehicleRepository = vehicleRepository;
         this.carrierRepository = carrierRepository;
         this.vehicleTypeRepository = vehicleTypeRepository;
         this.capacityResolver = capacityResolver;
         this.auditActorProvider = auditActorProvider;
+        this.auditRecorder = auditRecorder;
     }
 
     @Transactional(readOnly = true)
@@ -105,8 +110,12 @@ public class VehicleService {
         UUID actorId = auditActorProvider.requireAppUserId();
         Vehicle vehicle = new Vehicle(scope.companyId(), code, licensePlate, request.carrierId(),
                 request.vehicleTypeId(), request.maxWeightOverrideKg(), request.maxVolumeOverrideM3(),
-                request.maxPalletsOverride(), request.availabilityStatus(), actorId);
-        return toView(saveOrConflict(vehicle, code, licensePlate), carrier, type);
+                request.maxPalletsOverride(), request.availabilityStatus(), blankToNull(request.externalReference()),
+                actorId);
+        Vehicle saved = saveOrConflict(vehicle, code, licensePlate);
+        auditRecorder.record(scope, AuditAggregateType.VEHICLE, saved.id(), AuditAction.CREATE,
+                Map.of("code", saved.code(), "licensePlate", saved.licensePlate()));
+        return toView(saved, carrier, type);
     }
 
     @Transactional
@@ -126,8 +135,11 @@ public class VehicleService {
         UUID actorId = auditActorProvider.requireAppUserId();
         vehicle.applyChanges(code, licensePlate, request.carrierId(), request.vehicleTypeId(),
                 request.maxWeightOverrideKg(), request.maxVolumeOverrideM3(), request.maxPalletsOverride(),
-                request.availabilityStatus(), actorId);
-        return toView(saveOrConflict(vehicle, code, licensePlate), carrier, type);
+                request.availabilityStatus(), blankToNull(request.externalReference()), actorId);
+        Vehicle saved = saveOrConflict(vehicle, code, licensePlate);
+        auditRecorder.record(scope, AuditAggregateType.VEHICLE, saved.id(), AuditAction.UPDATE,
+                Map.of("code", saved.code(), "licensePlate", saved.licensePlate()));
+        return toView(saved, carrier, type);
     }
 
     @Transactional
@@ -135,6 +147,8 @@ public class VehicleService {
         Vehicle vehicle = find(scope, id);
         vehicle.activate(auditActorProvider.requireAppUserId());
         Vehicle saved = vehicleRepository.save(vehicle);
+        auditRecorder.record(scope, AuditAggregateType.VEHICLE, saved.id(), AuditAction.ACTIVATE,
+                Map.of("code", saved.code()));
         return toView(saved, resolveCarrier(scope, saved.carrierId()), resolveType(scope, saved.vehicleTypeId()));
     }
 
@@ -143,6 +157,8 @@ public class VehicleService {
         Vehicle vehicle = find(scope, id);
         vehicle.deactivate(auditActorProvider.requireAppUserId());
         Vehicle saved = vehicleRepository.save(vehicle);
+        auditRecorder.record(scope, AuditAggregateType.VEHICLE, saved.id(), AuditAction.DEACTIVATE,
+                Map.of("code", saved.code()));
         return toView(saved, resolveCarrier(scope, saved.carrierId()), resolveType(scope, saved.vehicleTypeId()));
     }
 
@@ -239,6 +255,10 @@ public class VehicleService {
 
     private static String normalizePlate(String licensePlate) {
         return licensePlate.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private static String blankToNull(String value) {
+        return (value == null || value.isBlank()) ? null : value.trim();
     }
 
     private static Pageable toPageable(PageQuery pageQuery) {

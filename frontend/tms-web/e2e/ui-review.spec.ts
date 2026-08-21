@@ -183,8 +183,12 @@ test('captures the planning board with a loaded trip', async ({ page }) => {
   // A board with an empty trip proves nothing about the capacity bars, so load one first.
   await page.getByRole('button', { name: 'Nuevo viaje' }).click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByRole('option', { name: /VH-001/ })).toBeAttached()
-  await dialog.getByLabel('Vehículo').selectOption('veh-1')
+  // `Select` is a button + listbox, not a native `<select>`: open it, then click the option. The
+  // listbox is portalled to the document body, so the option is looked up unscoped rather than
+  // through `dialog`, and only exists once opened.
+  await dialog.getByLabel('Vehículo').click()
+  await expect(page.getByRole('option', { name: /VH-001/ })).toBeVisible()
+  await page.getByRole('option', { name: /VH-001/ }).click()
   await dialog.getByRole('button', { name: 'Crear viaje' }).click()
   await expect(dialog).toBeHidden()
   await page.getByRole('button', { name: 'Asignar' }).first().click()

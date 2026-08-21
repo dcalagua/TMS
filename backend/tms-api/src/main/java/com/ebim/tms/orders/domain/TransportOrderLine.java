@@ -138,7 +138,12 @@ public class TransportOrderLine {
         return palletQuantity;
     }
 
-    /** Recomputes {@code lineWeightKg}/{@code lineVolumeM3} from {@code quantity * unit*} - never client-supplied. */
+    /**
+     * Persists the line, deriving {@code lineWeightKg}/{@code lineVolumeM3} through
+     * {@link OrderLineInput#lineWeightKg()}/{@link OrderLineInput#lineVolumeM3()} - the same
+     * methods {@link OrderTotals} sums, so a line row and the header snapshot cannot disagree
+     * about the formula. Never client-supplied.
+     */
     void applyInput(OrderLineInput input, UUID actorId) {
         this.materialCode = input.materialCode();
         this.materialDescription = input.materialDescription();
@@ -146,8 +151,8 @@ public class TransportOrderLine {
         this.uom = input.uom();
         this.unitWeightKg = input.unitWeightKg();
         this.unitVolumeM3 = input.unitVolumeM3();
-        this.lineWeightKg = input.unitWeightKg() == null ? null : input.quantity().multiply(input.unitWeightKg());
-        this.lineVolumeM3 = input.unitVolumeM3() == null ? null : input.quantity().multiply(input.unitVolumeM3());
+        this.lineWeightKg = input.lineWeightKg();
+        this.lineVolumeM3 = input.lineVolumeM3();
         this.palletQuantity = input.palletQuantity();
         this.updatedBy = actorId;
     }

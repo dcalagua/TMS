@@ -11,12 +11,14 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -40,6 +42,10 @@ import org.hibernate.annotations.UuidGenerator;
  * picked up immediately. {@link #confirm} freezes the three numbers into
  * {@code snapshotMax*}, after which a later fleet edit can no longer change what a confirmed plan
  * was validated against. See {@code docs/domain/CAPACITY_MODEL.md}.
+ *
+ * <p>A trip is also the internal name of what an external system calls a <em>Shipment</em>
+ * ({@code docs/domain/SHIPMENT_V2.md}). {@link #shipmentNumber} is its identity out there;
+ * {@link #tripNumber} stays its identity inside one planning run and means nothing without it.
  */
 @Entity
 @Table(name = "trip")
@@ -57,8 +63,33 @@ public class Trip {
     @Column(name = "planning_run_id", updatable = false, nullable = false)
     private UUID planningRunId;
 
+    /**
+     * Denormalized from {@code planningRunId}'s {@link PlanningRun#planningDate()} at
+     * construction time (migration V16, rule 7) - never changes afterwards, since nothing on
+     * {@link PlanningRun} mutates its own planning date. Exists so the database can enforce "one
+     * active trip per vehicle per planning date" ({@code uq_trip_vehicle_active_planning_date})
+     * without a join back to {@code planning_run}.
+     */
+    @Column(name = "planning_date", updatable = false, nullable = false)
+    private LocalDate planningDate;
+
     @Column(name = "trip_number", updatable = false, nullable = false)
     private int tripNumber;
+
+    /**
+     * The stable, installation-wide identity of this trip as an external Shipment (migration
+     * V19). Assigned once at construction from {@code tms.shipment_number_seq} and never
+     * reissued - {@code updatable = false} so no code path can even try.
+     */
+    @Column(name = "shipment_number", updatable = false, nullable = false)
+    private String shipmentNumber;
+
+    /**
+     * The master route this shipment was built from, or null - a suggestion, never a constraint.
+     * See {@link #applyRoute} and {@code docs/domain/SHIPMENT_V2.md}, "Route master interaction".
+     */
+    @Column(name = "route_id")
+    private UUID routeId;
 
     @Column(name = "vehicle_id")
     private UUID vehicleId;
@@ -125,11 +156,13 @@ public class Trip {
         // JPA
     }
 
-    public Trip(UUID companyId, UUID planningRunId, int tripNumber, UUID vehicleId, UUID carrierId,
-            OffsetDateTime plannedDepartureAt, UUID actorId) {
+    public Trip(UUID companyId, UUID planningRunId, LocalDate planningDate, int tripNumber, String shipmentNumber,
+            UUID vehicleId, UUID carrierId, OffsetDateTime plannedDepartureAt, UUID actorId) {
         this.companyId = companyId;
         this.planningRunId = planningRunId;
+        this.planningDate = planningDate;
         this.tripNumber = tripNumber;
+        this.shipmentNumber = shipmentNumber;
         this.vehicleId = vehicleId;
         this.carrierId = carrierId;
         this.plannedDepartureAt = plannedDepartureAt;
@@ -150,8 +183,20 @@ public class Trip {
         return planningRunId;
     }
 
+    public LocalDate planningDate() {
+        return planningDate;
+    }
+
     public int tripNumber() {
         return tripNumber;
+    }
+
+    public String shipmentNumber() {
+        return shipmentNumber;
+    }
+
+    public UUID routeId() {
+        return routeId;
     }
 
     public UUID vehicleId() {
@@ -320,11 +365,72 @@ public class Trip {
         this.updatedBy = actorId;
     }
 
+    /**
+     * Points this shipment at a master route, or clears the pointer when {@code routeId} is null.
+     *
+     * <p>{@code routeDestinationOrder} is the master's own stop order and is used only to
+     * <em>reorder what the shipment already has</em>: destinations the route names keep the
+     * route's relative order and move to the front, and every other stop keeps its relative order
+     * behind them. Nothing is created and nothing is removed - a stop exists because an order is
+     * going there ({@link #syncStops}), never because a corridor mentions it, and a route that
+     * omits a served destination must not be able to drop it from the plan. Pass an empty list to
+     * record the route without touching the sequence.
+     *
+     * <p>Legality (route is active, in this company, and departs from the run's origin) is
+     * {@code TripService.updateRoute}'s concern.
+     */
+    public void applyRoute(UUID routeId, List<UUID> routeDestinationOrder, UUID actorId) {
+        this.routeId = routeId;
+        if (!routeDestinationOrder.isEmpty()) {
+            Map<UUID, TripStop> byDestination = stops.stream()
+                    .collect(Collectors.toMap(TripStop::destinationId, stop -> stop));
+            List<TripStop> ordered = new ArrayList<>();
+            routeDestinationOrder.stream().distinct()
+                    .map(byDestination::get)
+                    .filter(Objects::nonNull)
+                    .forEach(ordered::add);
+            stops.stream().sorted(Comparator.comparingInt(TripStop::sequence))
+                    .filter(stop -> !ordered.contains(stop))
+                    .forEach(ordered::add);
+            renumber(ordered, actorId);
+        }
+        this.updatedBy = actorId;
+    }
+
+    /**
+     * The stop-sequence invariant, asserted rather than assumed: positions are exactly 1..N, each
+     * used once, and one destination appears once.
+     *
+     * <p>{@link #renumber} is the only writer of a sequence and cannot produce anything else, so
+     * a failure here means the list was mutated by a path that bypassed it - which is precisely
+     * what this catches, in the transaction that did it, instead of leaving a shipment whose stop
+     * 3 is missing for a driver to discover. Deliberately Java and not a database trigger: V11's
+     * header rules out triggers carrying planning logic, and {@code uq_trip_stop_trip_sequence}
+     * already covers the declarative half (uniqueness), leaving only contiguity to check here.
+     *
+     * @throws IllegalStateException if the list is not a contiguous 1..N sequence
+     */
+    public void assertStopSequenceIntegrity() {
+        List<Integer> sequences = stops.stream().map(TripStop::sequence).sorted().toList();
+        for (int index = 0; index < sequences.size(); index++) {
+            if (sequences.get(index) != index + 1) {
+                throw new IllegalStateException("trip " + shipmentNumber + " has a broken stop sequence "
+                        + sequences + " for " + sequences.size() + " stops");
+            }
+        }
+        long distinctDestinations = stops.stream().map(TripStop::destinationId).distinct().count();
+        if (distinctDestinations != stops.size()) {
+            throw new IllegalStateException(
+                    "trip " + shipmentNumber + " stops at the same destination more than once");
+        }
+    }
+
     private void renumber(List<TripStop> ordered, UUID actorId) {
         int sequence = 1;
         for (TripStop stop : ordered) {
             stop.applySequence(sequence++, actorId);
         }
+        assertStopSequenceIntegrity();
     }
 
     /**

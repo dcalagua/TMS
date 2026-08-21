@@ -15,8 +15,8 @@ public final class OriginSpecifications {
 
     private OriginSpecifications() {}
 
-    public static Specification<Origin> matching(UUID companyId, String code, String name, OriginType type,
-            Boolean active) {
+    public static Specification<Origin> matching(UUID companyId, String code, String name, String search,
+            OriginType type, Boolean active) {
         Specification<Origin> specification =
                 (root, query, cb) -> cb.equal(root.get("companyId"), companyId);
 
@@ -27,6 +27,14 @@ public final class OriginSpecifications {
         if (name != null && !name.isBlank()) {
             String pattern = "%" + name.trim().toLowerCase(Locale.ROOT) + "%";
             specification = specification.and((root, query, cb) -> cb.like(cb.lower(root.get("name")), pattern));
+        }
+        if (search != null && !search.isBlank()) {
+            // OR across code and name - the autocomplete term, see OriginFilter. Lower-cased on both
+            // sides because `name` is not normalised the way `code` is.
+            String pattern = "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
+            specification = specification.and((root, query, cb) -> cb.or(
+                    cb.like(cb.lower(root.get("code")), pattern),
+                    cb.like(cb.lower(root.get("name")), pattern)));
         }
         if (type != null) {
             specification = specification.and((root, query, cb) -> cb.equal(root.get("type"), type));

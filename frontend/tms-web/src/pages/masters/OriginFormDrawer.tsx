@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useForm, type Validate } from 'react-hook-form'
+import { Controller, useForm, type Validate } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { applyApiFieldErrors } from '../../shared/api/formErrors'
 import type { ApiError } from '../../shared/api/httpClient'
@@ -13,6 +13,7 @@ import {
 } from '../../shared/api/originsApi'
 import { useEnumLabels } from '../../shared/i18n/enums'
 import { FormField } from '../../shared/ui/components/FormField'
+import { Select } from '../../shared/ui/components/Select'
 import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'origin-form'
@@ -68,6 +69,7 @@ export function OriginFormDrawer({ companyId, origin, onClose, onSaved }: Origin
   const [formError, setFormError] = useState<string | null>(null)
   const {
     register,
+    control,
     handleSubmit,
     setError,
     formState: { errors, isDirty, isSubmitting },
@@ -187,13 +189,25 @@ export function OriginFormDrawer({ companyId, origin, onClose, onSaved }: Origin
             </div>
             <div className="col-12 col-sm-6">
               <FormField label={tc('columns.type')} htmlFor="origin-type" error={errors.type?.message} required>
-                <select id="origin-type" className="form-select" {...register('type', { required: true })}>
-                  {ORIGIN_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {enumLabels.originType(type)}
-                    </option>
-                  ))}
-                </select>
+                {/* Controller rather than `register`: the control is a button plus a listbox, so
+                    there is no native change event for react-hook-form to hook into. */}
+                <Controller
+                  control={control}
+                  name="type"
+                  rules={{ required: true }}
+                  render={({ field }) => (
+                    <Select
+                      id="origin-type"
+                      value={field.value}
+                      onChange={(next) => field.onChange(next as OriginType)}
+                      invalid={Boolean(errors.type)}
+                      options={ORIGIN_TYPES.map((type) => ({
+                        value: type,
+                        label: enumLabels.originType(type),
+                      }))}
+                    />
+                  )}
+                />
               </FormField>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import { describeApiError } from '../../shared/api/problemMessages'
 import { useEnumLabels } from '../../shared/i18n/enums'
+import { useFormat } from '../../shared/i18n/format'
 import { useCompany } from '../../shared/company/CompanyContext'
 import { fetchCarriers } from '../../shared/api/carriersApi'
 import { fetchVehicleTypes } from '../../shared/api/vehicleTypesApi'
@@ -12,18 +13,22 @@ import {
   deactivateVehicle,
   fetchVehicles,
   VEHICLE_AVAILABILITY_STATUSES,
+  VEHICLE_IMPORT_BASE_PATH,
   type VehicleAvailabilityStatus,
+  type VehicleImportPreview,
   type VehicleView,
 } from '../../shared/api/vehiclesApi'
 import {
   confirmDialog,
   DataTable,
   FilterBar,
+  ImportDrawer,
   PageHeader,
   Pagination,
   ActionMenu,
   ActiveBadge,
   StatusBadge,
+  Select,
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
@@ -59,6 +64,7 @@ export function VehiclesPage() {
   const { t: tc } = useTranslation('common')
   const { t: td } = useTranslation('dialogs')
   const enumLabels = useEnumLabels()
+  const format = useFormat()
   const { selected, hasPermission } = useCompany()
   const companyId = selected?.id ?? ''
   const canManage = hasPermission('fleet.vehicle:manage')
@@ -68,6 +74,7 @@ export function VehiclesPage() {
   const [draftFilters, setDraftFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
   const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
   const [modal, setModal] = useState<ModalState>(null)
+  const [showImport, setShowImport] = useState(false)
 
   const vehiclesQuery = useQuery({
     queryKey: ['vehicles', companyId, page, filters],
@@ -153,15 +160,15 @@ export function VehiclesPage() {
         </div>
       ),
     },
-    { key: 'carrier', header: tc('columns.carrier'), render: (vehicle) => vehicle.carrierBusinessName ?? 'Owned fleet' },
+    { key: 'carrier', header: tc('columns.carrier'), render: (vehicle) => vehicle.carrierBusinessName ?? t('vehicles.ownedFleet') },
     { key: 'type', header: tc('columns.type'), render: (vehicle) => vehicle.vehicleTypeName ?? '—' },
     {
       key: 'capacity',
-      header: 'Effective capacity',
+      header: t('vehicles.columns.effectiveCapacity'),
       render: (vehicle) => (
         <span>
-          {vehicle.effectiveMaxWeightKg} kg &middot; {vehicle.effectiveMaxVolumeM3} m³ &middot;{' '}
-          {vehicle.effectiveMaxPallets} pallets
+          {format.weight(vehicle.effectiveMaxWeightKg)} &middot; {format.volume(vehicle.effectiveMaxVolumeM3)}{' '}
+          &middot; {format.quantity(vehicle.effectiveMaxPallets)} {t('vehicles.palletsUnit')}
         </span>
       ),
     },
@@ -221,10 +228,20 @@ export function VehiclesPage() {
         description={t('vehicles.description')}
         actions={
           canManage && (
-            <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setModal({ mode: 'create' })}>
-              <i className="bi bi-plus-lg" aria-hidden="true" />
-              {t('vehicles.new')}
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
+                onClick={() => setShowImport(true)}
+              >
+                <i className="bi bi-upload" aria-hidden="true" />
+                {tc('actions.import')}
+              </button>
+              <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setModal({ mode: 'create' })}>
+                <i className="bi bi-plus-lg" aria-hidden="true" />
+                {t('vehicles.new')}
+              </button>
+            </>
           )
         }
       />
@@ -256,72 +273,64 @@ export function VehiclesPage() {
           <label htmlFor="vehicle-filter-carrier" className="form-label small mb-1">
             {tc('columns.carrier')}
           </label>
-          <select
+          <Select
             id="vehicle-filter-carrier"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.carrierId}
-            onChange={(event) => setDraftFilters({ ...draftFilters, carrierId: event.target.value })}
-          >
-            <option value="">{tc('filters.allCarriers')}</option>
-            {carriers.map((carrier) => (
-              <option key={carrier.id} value={carrier.id}>
-                {carrier.businessName}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => setDraftFilters({ ...draftFilters, carrierId: next })}
+            options={[
+              { value: '', label: tc('filters.allCarriers') },
+              ...carriers.map((carrier) => ({ value: carrier.id, label: carrier.businessName })),
+            ]}
+          />
         </div>
         <div>
           <label htmlFor="vehicle-filter-type" className="form-label small mb-1">
             {tc('columns.type')}
           </label>
-          <select
+          <Select
             id="vehicle-filter-type"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.vehicleTypeId}
-            onChange={(event) => setDraftFilters({ ...draftFilters, vehicleTypeId: event.target.value })}
-          >
-            <option value="">{tc('filters.allTypes')}</option>
-            {vehicleTypes.map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.name}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => setDraftFilters({ ...draftFilters, vehicleTypeId: next })}
+            options={[
+              { value: '', label: tc('filters.allTypes') },
+              ...vehicleTypes.map((type) => ({ value: type.id, label: type.name })),
+            ]}
+          />
         </div>
         <div>
           <label htmlFor="vehicle-filter-availability" className="form-label small mb-1">
             {tc('columns.availability')}
           </label>
-          <select
+          <Select
             id="vehicle-filter-availability"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.availabilityStatus}
-            onChange={(event) =>
-              setDraftFilters({ ...draftFilters, availabilityStatus: event.target.value as VehicleAvailabilityStatus | '' })
+            onChange={(next) =>
+              setDraftFilters({ ...draftFilters, availabilityStatus: next as VehicleAvailabilityStatus | '' })
             }
-          >
-            <option value="">{tc('filters.allAvailability')}</option>
-            {VEHICLE_AVAILABILITY_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {enumLabels.vehicleAvailability(status)}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: '', label: tc('filters.allAvailability') },
+              ...VEHICLE_AVAILABILITY_STATUSES.map((status) => ({ value: status, label: enumLabels.vehicleAvailability(status) })),
+            ]}
+          />
         </div>
         <div>
           <label htmlFor="vehicle-filter-active" className="form-label small mb-1">
             {tc('columns.status')}
           </label>
-          <select
+          <Select
             id="vehicle-filter-active"
-            className="form-select form-select-sm"
+            size="sm"
             value={draftFilters.active}
-            onChange={(event) => setDraftFilters({ ...draftFilters, active: event.target.value as ActiveFilter })}
-          >
-            <option value="active">{tc('filters.statusActive')}</option>
-            <option value="inactive">{tc('filters.statusInactive')}</option>
-            <option value="all">{tc('filters.statusAll')}</option>
-          </select>
+            onChange={(next) => setDraftFilters({ ...draftFilters, active: next as ActiveFilter })}
+            options={[
+              { value: 'active', label: tc('filters.statusActive') },
+              { value: 'inactive', label: tc('filters.statusInactive') },
+              { value: 'all', label: tc('filters.statusAll') },
+            ]}
+          />
         </div>
       </FilterBar>
 
@@ -348,6 +357,92 @@ export function VehiclesPage() {
             notifySuccess(modal.mode === 'edit' ? td('updated') : td('created'))
             refresh()
           }}
+        />
+      )}
+
+      {showImport && (
+        <ImportDrawer<VehicleImportPreview>
+          apiBasePath={VEHICLE_IMPORT_BASE_PATH}
+          companyId={companyId}
+          onClose={() => setShowImport(false)}
+          onImported={refresh}
+          strings={{
+            title: t('vehicles.import.title'),
+            subtitle: t('vehicles.import.subtitle'),
+            templateSection: t('vehicles.import.templateSection'),
+            templateHelp: t('vehicles.import.templateHelp'),
+            downloadXlsx: t('vehicles.import.downloadXlsx'),
+            downloadCsv: t('vehicles.import.downloadCsv'),
+            downloadError: t('vehicles.import.downloadError'),
+            fileSection: t('vehicles.import.fileSection'),
+            file: t('vehicles.import.file'),
+            fileHelp: (mb, rows) => t('vehicles.import.fileHelp', { mb, rows }),
+            previewSection: t('vehicles.import.previewSection'),
+            validate: t('vehicles.import.validate'),
+            previewing: t('vehicles.import.previewing'),
+            apply: t('vehicles.import.apply'),
+            applying: t('vehicles.import.applying'),
+            applied: (created, skipped) => `${t('vehicles.import.applied')}: ${t('vehicles.import.appliedText', { created, skipped })}`,
+            confirmTitle: t('vehicles.import.confirmTitle'),
+            confirmText: (count) => t('vehicles.import.confirmText', { count }),
+            blocked: t('vehicles.import.blocked'),
+            readyToApply: t('vehicles.import.readyToApply'),
+            nothingToCreate: t('vehicles.import.nothingToCreate'),
+            reset: t('vehicles.import.reset'),
+            issuesTitle: t('vehicles.import.issuesTitle'),
+            issuesTruncated: (shown, total) => t('vehicles.import.issuesTruncated', { shown, total }),
+            downloadIssuesReport: t('vehicles.import.downloadIssuesReport'),
+            itemsTitle: t('vehicles.import.itemsTitle'),
+            columnRow: t('vehicles.import.columnRow'),
+            columnColumn: t('vehicles.import.columnColumn'),
+            columnIdentifier: t('vehicles.import.columnIdentifier'),
+            columnMessage: t('vehicles.import.columnMessage'),
+            countRows: t('vehicles.import.countRows'),
+            countItems: t('vehicles.import.countItems'),
+            countCreate: t('vehicles.import.countCreate'),
+            countDuplicates: t('vehicles.import.countDuplicates'),
+            countRejected: t('vehicles.import.countRejected'),
+            countIssues: t('vehicles.import.countIssues'),
+            outcomeCreate: t('vehicles.import.outcomeCreate'),
+            outcomeSkipped: t('vehicles.import.outcomeSkipped'),
+            outcomeRejected: t('vehicles.import.outcomeRejected'),
+            cancel: t('vehicles.import.cancel'),
+            close: t('vehicles.import.close'),
+          }}
+          renderItems={(items, outcomeLabel) => (
+            <div className="tms-table-scroll">
+              <table className="table table-sm align-middle">
+                <caption className="visually-hidden">{t('vehicles.import.itemsTitle')}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{tc('columns.status')}</th>
+                    <th scope="col">{tc('columns.code')}</th>
+                    <th scope="col">{t('vehicles.import.columns.plate')}</th>
+                    <th scope="col">{t('vehicles.import.columns.carrier')}</th>
+                    <th scope="col">{t('vehicles.import.columns.type')}</th>
+                    <th scope="col">{t('vehicles.import.columns.status')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, index) => (
+                    <tr key={`${item.code}-${index}`}>
+                      <td>
+                        <StatusBadge
+                          label={outcomeLabel(item.outcome)}
+                          tone={item.outcome === 'CREATE' ? 'success' : item.outcome === 'REJECTED' ? 'danger' : 'neutral'}
+                        />
+                      </td>
+                      <td className="tms-code">{item.code}</td>
+                      <td className="tms-code">{item.licensePlate}</td>
+                      <td className="tms-code">{item.carrierCode ?? '—'}</td>
+                      <td className="tms-code">{item.vehicleTypeCode ?? '—'}</td>
+                      <td>{enumLabels.vehicleAvailability(item.availabilityStatus)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         />
       )}
     </div>

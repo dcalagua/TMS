@@ -1,5 +1,6 @@
 package com.ebim.tms.shared.reference;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -17,4 +18,7 @@ public interface DestinationLookupPort {
 
     /** See {@link OriginLookupPort#findAllInCompany(Set, UUID)}. */
     Map<UUID, MasterReference> findAllInCompany(Set<UUID> ids, UUID companyId);
+
+    /** See {@link OriginLookupPort#findActiveByCodesInCompany(Collection, UUID)}. */
+    Map<String, MasterReference> findActiveByCodesInCompany(Collection<String> codes, UUID companyId);
 }

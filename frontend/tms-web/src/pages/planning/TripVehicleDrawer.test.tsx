@@ -26,7 +26,11 @@ function page<T>(content: T[]) {
 
 function trip(overrides: Partial<TripView> = {}): TripView {
   return {
-    id: 'trip-1', planningRunId: 'run-1', tripNumber: 1, status: 'DRAFT', vehicleId: null, vehicleCode: null,
+    id: 'trip-1', companyId: 'company-1', planningRunId: 'run-1', planNumber: 'PL-00000001',
+    planningDate: '2026-03-01', shipmentNumber: 'SH-00000001', originId: 'origin-1',
+    originCode: 'LIM-01', originName: 'Lima depot', originLatitude: null, originLongitude: null,
+    vehicleTypeCode: null, routeId: null, routeCode: null, routeName: null,
+    tripNumber: 1, status: 'DRAFT', vehicleId: null, vehicleCode: null,
     vehicleLicensePlate: null, carrierId: null, carrierName: null, plannedDepartureAt: null,
     capacity: {
       tripId: 'trip-1', source: 'NONE', orderCount: 0,
@@ -38,6 +42,12 @@ function trip(overrides: Partial<TripView> = {}): TripView {
     stopCount: 0, orderCount: 0, version: 5, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
     ...overrides,
   }
+}
+
+/** `Select` is a button + listbox, not a native `<select>`: open it, then click the option. */
+async function pickOption(comboboxName: RegExp | string, optionName: RegExp | string) {
+  await userEvent.click(screen.getByRole('combobox', { name: comboboxName }))
+  await userEvent.click(await screen.findByRole('option', { name: optionName }))
 }
 
 function renderModal(tripFixture: TripView, onUpdated = vi.fn(), onClose = vi.fn()) {
@@ -62,8 +72,7 @@ describe('TripVehicleDrawer', () => {
     planningApiMocks.updateTripVehicle.mockResolvedValue(detail)
     const { onUpdated } = renderModal(trip())
 
-    await screen.findByRole('option', { name: 'VH-1 — ABC-123' })
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: /^Vehículo/ }), 'vehicle-1')
+    await pickOption(/^Vehículo/, 'VH-1 — ABC-123')
     await userEvent.click(screen.getByRole('button', { name: 'Guardar vehículo' }))
 
     await waitFor(() =>
@@ -83,8 +92,9 @@ describe('TripVehicleDrawer', () => {
     )
     renderModal(trip({ vehicleId: 'vehicle-2', vehicleCode: 'VH-2' }))
 
-    await screen.findByRole('option', { name: 'VH-2 — XYZ-999' })
-    expect(screen.getByRole('combobox', { name: /^Vehículo/ })).toHaveValue('vehicle-2')
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: /^Vehículo/ })).toHaveTextContent('VH-2 — XYZ-999'),
+    )
   })
 
   it('shows the backend refusal verbatim when a downgrade no longer fits the current load', async () => {
@@ -94,8 +104,7 @@ describe('TripVehicleDrawer', () => {
     )
     const { onUpdated } = renderModal(trip())
 
-    await screen.findByRole('option', { name: 'VH-1 — ABC-123' })
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: /^Vehículo/ }), 'vehicle-1')
+    await pickOption(/^Vehículo/, 'VH-1 — ABC-123')
     await userEvent.click(screen.getByRole('button', { name: 'Guardar vehículo' }))
 
     expect(await screen.findByText('Trip 1 would exceed capacity: weight 1200.00/1000.00 kg.')).toBeInTheDocument()
@@ -130,6 +139,7 @@ describe('TripVehicleDrawer', () => {
     renderModal(trip())
 
     expect(await screen.findByRole('button', { name: 'Save vehicle' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Select a vehicle' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('combobox', { name: /^Vehicle/ }))
+    expect(await screen.findByRole('option', { name: 'Select a vehicle' })).toBeInTheDocument()
   })
 })

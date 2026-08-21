@@ -92,13 +92,7 @@ export function DataTable<T>({
     )
   }
 
-  if (rows.length === 0) {
-    return (
-      <div className="tms-table-wrap">
-        <EmptyState title={emptyTitle ?? t('states.noRecords')} message={emptyMessage} action={emptyAction} />
-      </div>
-    )
-  }
+  const isEmpty = rows.length === 0
 
   return (
     <div className="tms-table-wrap">
@@ -121,15 +115,31 @@ export function DataTable<T>({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={rowKey(row)}>
-                {columns.map((column) => (
-                  <td key={column.key} className={columnClass(column)}>
-                    {column.render(row)}
-                  </td>
-                ))}
+            {isEmpty ? (
+              /* The empty message goes inside the table rather than replacing it. Swapping the
+                 whole panel for a message removes the column headers - the thing that tells the
+                 user what this list is - and makes the screen appear to change identity between
+                 one search and the next. */
+              <tr className="tms-table-empty-row">
+                <td colSpan={columns.length}>
+                  <EmptyState
+                    title={emptyTitle ?? t('states.noRecords')}
+                    message={emptyMessage}
+                    action={emptyAction}
+                  />
+                </td>
               </tr>
-            ))}
+            ) : (
+              rows.map((row) => (
+                <tr key={rowKey(row)}>
+                  {columns.map((column) => (
+                    <td key={column.key} className={columnClass(column)}>
+                      {column.render(row)}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

@@ -1,6 +1,6 @@
 import { useEnumLabels } from '../../shared/i18n/enums'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import {
@@ -9,15 +9,26 @@ import {
   moveOrderToTrip,
   removeOrderFromTrip,
   reorderTripStops,
+  updateTripRoute,
   type TripDetailView,
   type TripView,
 } from '../../shared/api/planningApi'
 import { describePlanningError } from '../../shared/api/problemMessages'
+import { fetchRoutes } from '../../shared/api/routesApi'
 import { useFormat } from '../../shared/i18n/format'
-import { CapacityBar, confirmDialog, StatusBadge, type StatusTone, TmsDrawer } from '../../shared/ui/components'
+import { TripStopMap, type TripStopMapOrigin, type TripStopMapStop } from '../../shared/maps/TripStopMap'
+import { CapacityBar, confirmDialog, Select, StatusBadge, type StatusTone, TmsDrawer } from '../../shared/ui/components'
 import { LoadingState } from '../../shared/ui/components/LoadingState'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
 import { TripVehicleDrawer } from './TripVehicleDrawer'
+
+/** `LocalTime` strings from the backend ("HH:mm" or "HH:mm:ss") trimmed to "HH:mm" for display. */
+function formatServiceWindow(start: string | null, end: string | null): string | null {
+  if (!start && !end) return null
+  const short = (value: string) => value.slice(0, 5)
+  if (start && end) return `${short(start)}–${short(end)}`
+  return short(start ?? end ?? '')
+}
 
 const STATUS_TONE: Record<TripView['status'], StatusTone> = {
   DRAFT: 'info',
@@ -46,10 +57,15 @@ function moveItem<T>(items: T[], from: number, to: number): T[] {
 }
 
 /**
- * The board's detail drawer: one trip's assignments (remove, move to another trip) and its stop
- * sequence, plus vehicle assignment and trip cancellation. Everything here mutates through the
- * trip endpoints and repaints from their response - `docs/overnight/10_MANUAL_PLANNING_BACKEND.md`
- * section 8 point 4: every mutation returns the updated `TripDetailView`.
+ * The board's detail drawer: the shipment header, one trip's assignments (remove, move to another
+ * trip), its suggested route and its stop sequence, plus vehicle assignment and trip cancellation.
+ * Everything here mutates through the trip endpoints and repaints from their response -
+ * `docs/overnight/10_MANUAL_PLANNING_BACKEND.md` section 8 point 4: every mutation returns the
+ * updated `TripDetailView`.
+ *
+ * The header is read-only and resolved entirely server-side (`docs/domain/SHIPMENT_V2.md`): the
+ * browser never joins an origin, a carrier or a route to a trip itself, so what a planner reads
+ * here is what an outbound integration would publish.
  */
 export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, onClose, onChanged }: TripDetailDrawerProps) {
   const { t } = useTranslation('planning')
@@ -64,12 +80,18 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
     queryFn: ({ signal }) => fetchTrip(companyId, tripId, signal),
   })
   const detail = tripQuery.data ?? null
+  const editable = detail !== null && canManage && detail.trip.status === 'DRAFT'
 
   const [moveTargets, setMoveTargets] = useState<Record<string, string>>({})
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null)
   const [showVehicleModal, setShowVehicleModal] = useState(false)
   const [stopOrder, setStopOrder] = useState<string[]>([])
   const [savingStops, setSavingStops] = useState(false)
+  const [routeId, setRouteId] = useState<string>('')
+  const [applyRouteSequence, setApplyRouteSequence] = useState(true)
+  const [savingRoute, setSavingRoute] = useState(false)
+  const [selectedStopId, setSelectedStopId] = useState<string | null>(null)
+  const [mobileStopTab, setMobileStopTab] = useState<'map' | 'list'>('list')
 
   const serverStopIds = detail ? detail.stops.slice().sort((a, b) => a.sequence - b.sequence).map((s) => s.destinationId) : []
   const serverStopsKey = serverStopIds.join('|')
@@ -82,6 +104,61 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
     setStopOrder(serverStopIds)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverStopsKey])
+
+  // A selection that fell off the set (the destination was removed/moved elsewhere) would
+  // otherwise keep highlighting a marker/list row that no longer exists.
+  useEffect(() => {
+    if (selectedStopId && !stopOrder.includes(selectedStopId)) {
+      setSelectedStopId(null)
+    }
+  }, [stopOrder, selectedStopId])
+
+  const mapOrigin = useMemo<TripStopMapOrigin | null>(() => {
+    if (!detail || !detail.trip.originId) return null
+    return {
+      latitude: detail.trip.originLatitude,
+      longitude: detail.trip.originLongitude,
+      label: detail.trip.originName ?? detail.trip.originCode ?? t('drawer.header.origin'),
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail?.trip.originId, detail?.trip.originLatitude, detail?.trip.originLongitude, detail?.trip.originName, detail?.trip.originCode])
+
+  // Numbered from the planner's current (possibly unsaved) order, not the last-saved sequence, so
+  // the map reflects an up/down move immediately instead of only after "Guardar el orden".
+  const mapStops = useMemo<TripStopMapStop[]>(() => {
+    const stops = detail?.stops
+    if (!stops) return []
+    return stopOrder.map((destinationId, index) => {
+      const stop = stops.find((s) => s.destinationId === destinationId)
+      return {
+        id: destinationId,
+        sequence: index + 1,
+        latitude: stop?.latitude ?? null,
+        longitude: stop?.longitude ?? null,
+        label: stop?.destinationName ?? stop?.destinationCode ?? destinationId,
+      }
+    })
+  }, [stopOrder, detail?.stops])
+
+  const selectedStop = detail?.stops.find((s) => s.destinationId === selectedStopId) ?? null
+  const selectedStopPosition = selectedStopId ? stopOrder.indexOf(selectedStopId) + 1 : 0
+
+  const serverRouteId = detail?.trip.routeId ?? ''
+  useEffect(() => {
+    setRouteId(serverRouteId)
+  }, [serverRouteId])
+
+  // Only the corridors that actually depart from this shipment's origin: the backend refuses any
+  // other with a 400, so offering them would be offering a guaranteed error. Skipped entirely
+  // while the trip cannot be edited - a confirmed shipment's route is a fact, not a choice.
+  const originId = detail?.trip.originId ?? null
+  const routesQuery = useQuery({
+    queryKey: ['routes', companyId, 'for-origin', originId],
+    enabled: editable && originId !== null,
+    queryFn: ({ signal }) =>
+      fetchRoutes({ companyId, originId: originId ?? undefined, active: true, size: 200, sort: 'code,asc', signal }),
+  })
+  const routes = routesQuery.data?.content ?? []
 
   function applyDetail(next: TripDetailView) {
     queryClient.setQueryData(queryKey, next)
@@ -132,6 +209,29 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
     }
   }
 
+  /**
+   * Saves the route reference. `applySequence` is what turns a suggestion into a one-time
+   * reordering; without it the corridor is only recorded. Either way the set of stops is the
+   * backend's to decide and does not change here.
+   */
+  async function saveRoute(nextRouteId: string | null) {
+    if (!detail) return
+    setSavingRoute(true)
+    try {
+      const next = await updateTripRoute(companyId, tripId, {
+        routeId: nextRouteId,
+        applySequence: nextRouteId !== null && applyRouteSequence,
+        version: detail.trip.version,
+      })
+      applyDetail(next)
+      notifySuccess(nextRouteId === null ? t('drawer.route.cleared') : t('drawer.route.saved'))
+    } catch (error) {
+      notifyError(t('drawer.route.error'), describePlanningError(error as ApiError))
+    } finally {
+      setSavingRoute(false)
+    }
+  }
+
   async function cancelThisTrip() {
     if (!detail) return
     const confirmed = await confirmDialog({
@@ -152,16 +252,17 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
   }
 
   const stopsDirty = stopOrder.join('|') !== serverStopsKey
+  const routeDirty = routeId !== serverRouteId
 
   return (
     <TmsDrawer
       open
       title={detail ? t('card.title', { number: detail.trip.tripNumber }) : t('drawer.titleFallback')}
       subtitle={t('drawer.subtitle')}
-      size="lg"
+      size="xl"
       onClose={onClose}
-      // Stops reordered but not yet saved are unsaved work like any edited field.
-      dirty={stopsDirty}
+      // Stops reordered or a route picked but not yet saved are unsaved work like any edited field.
+      dirty={stopsDirty || routeDirty}
     >
       <div>
         {detail && (
@@ -178,8 +279,8 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
 
         {detail && (
           <>
-            <div className="d-flex justify-content-between align-items-start mb-3">
-              <div>
+            <div className="d-flex justify-content-between align-items-start mb-3 gap-2">
+              <div className="tms-min-w-0">
                 <p className="mb-1">
                   {detail.trip.vehicleCode ? (
                     <>
@@ -191,8 +292,8 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
                 </p>
                 <p className="small text-body-secondary mb-0">{detail.trip.carrierName ?? t('card.noCarrier')}</p>
               </div>
-              {canManage && detail.trip.status === 'DRAFT' && (
-                <div className="btn-group btn-group-sm">
+              {editable && (
+                <div className="btn-group btn-group-sm flex-shrink-0">
                   <button type="button" className="btn btn-outline-secondary" onClick={() => setShowVehicleModal(true)}>
                     {detail.trip.vehicleId ? t('drawer.changeVehicle') : t('drawer.assignVehicle')}
                   </button>
@@ -202,6 +303,37 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
                 </div>
               )}
             </div>
+
+            <h3 className="tms-section-title mb-2">{t('drawer.header.title')}</h3>
+            {/* One definition list rather than a table: this is a set of labelled facts about one
+                shipment, and on a phone it has to wrap into a single readable column. */}
+            <dl className="row g-2 small mb-4">
+              <ShipmentFact label={t('drawer.header.shipment')} value={detail.trip.shipmentNumber} code />
+              <ShipmentFact label={t('drawer.header.plan')} value={detail.trip.planNumber} code />
+              <ShipmentFact label={t('drawer.header.planningDate')} value={format.date(detail.trip.planningDate)} />
+              <ShipmentFact
+                label={t('drawer.header.origin')}
+                value={detail.trip.originName ?? detail.trip.originCode}
+              />
+              <ShipmentFact label={t('drawer.header.carrier')} value={detail.trip.carrierName} />
+              <ShipmentFact
+                label={t('drawer.header.vehicle')}
+                value={
+                  detail.trip.vehicleCode
+                    ? `${detail.trip.vehicleCode} · ${detail.trip.vehicleLicensePlate ?? ''}`.trim()
+                    : null
+                }
+              />
+              <ShipmentFact label={t('drawer.header.vehicleType')} value={detail.trip.vehicleTypeCode} />
+              <ShipmentFact
+                label={t('drawer.header.departure')}
+                value={detail.trip.plannedDepartureAt ? format.dateTime(detail.trip.plannedDepartureAt) : null}
+              />
+              <ShipmentFact
+                label={t('drawer.header.route')}
+                value={detail.trip.routeCode ? `${detail.trip.routeCode} — ${detail.trip.routeName ?? ''}`.trim() : null}
+              />
+            </dl>
 
             <CapacityBar kind="weight" dimension={detail.trip.capacity.weight} />
             <CapacityBar kind="volume" dimension={detail.trip.capacity.volume} />
@@ -217,7 +349,7 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
                       <th scope="col">{tc('columns.orderNumber')}</th>
                       <th scope="col">{tc('columns.destination')}</th>
                       <th scope="col">{t('drawer.amounts')}</th>
-                      {canManage && detail.trip.status === 'DRAFT' && <th scope="col" />}
+                      {editable && <th scope="col" />}
                     </tr>
                   </thead>
                   <tbody>
@@ -229,26 +361,30 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
                           {format.weight(assignment.assignedWeightKg)} · {format.volume(assignment.assignedVolumeM3)} ·{' '}
                           {format.decimal(assignment.assignedPallets)} {t('capacity.palletsUnit')}
                         </td>
-                        {canManage && detail.trip.status === 'DRAFT' && (
+                        {editable && (
                           <td>
-                            <div className="d-flex gap-1 justify-content-end">
-                              <select
-                                className="form-select form-select-sm"
-                                style={{ width: '10rem' }}
-                                aria-label={t('drawer.moveAria', { number: assignment.orderNumber })}
-                                value={moveTargets[assignment.orderId] ?? targetTrips[0]?.id ?? ''}
-                                disabled={targetTrips.length === 0}
-                                onChange={(event) =>
-                                  setMoveTargets({ ...moveTargets, [assignment.orderId]: event.target.value })
-                                }
-                              >
-                                {targetTrips.length === 0 && <option value="">{t('drawer.noOtherTrips')}</option>}
-                                {targetTrips.map((trip) => (
-                                  <option key={trip.id} value={trip.id}>
-                                    {t('drawer.tripOption', { number: trip.tripNumber })}
-                                  </option>
-                                ))}
-                              </select>
+                            <div className="d-flex gap-1 justify-content-end align-items-start">
+                              <div style={{ width: '10rem' }}>
+                                {/* `aria-label`, not a visible `<label>`: this text repeats the
+                                    order number already on screen in the row, and a real DOM
+                                    label (even visually hidden) would make it match twice
+                                    wherever a test looks that text up. */}
+                                <Select
+                                  aria-label={t('drawer.moveAria', { number: assignment.orderNumber })}
+                                  size="sm"
+                                  value={moveTargets[assignment.orderId] ?? targetTrips[0]?.id ?? ''}
+                                  onChange={(next) => setMoveTargets({ ...moveTargets, [assignment.orderId]: next })}
+                                  disabled={targetTrips.length === 0}
+                                  options={
+                                    targetTrips.length === 0
+                                      ? [{ value: '', label: t('drawer.noOtherTrips') }]
+                                      : targetTrips.map((trip) => ({
+                                          value: trip.id,
+                                          label: t('drawer.tripOption', { number: trip.tripNumber }),
+                                        }))
+                                  }
+                                />
+                              </div>
                               <button
                                 type="button"
                                 className="btn btn-sm btn-outline-secondary"
@@ -275,50 +411,193 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
               </div>
             )}
 
+            {editable && (
+              <>
+                <h3 className="tms-section-title mt-4 mb-1">{t('drawer.route.title')}</h3>
+                <p className="small text-body-secondary mb-2">{t('drawer.route.subtitle')}</p>
+                <div className="d-flex flex-column flex-sm-row gap-2 align-items-sm-end mb-2">
+                  <div className="flex-grow-1">
+                    <label className="form-label small mb-1" htmlFor="trip-route">
+                      {t('drawer.header.route')}
+                    </label>
+                    <Select
+                      id="trip-route"
+                      size="sm"
+                      value={routeId}
+                      disabled={savingRoute || routesQuery.isPending}
+                      onChange={(next) => setRouteId(next)}
+                      options={[
+                        { value: '', label: t('drawer.route.none') },
+                        ...routes.map((route) => ({ value: route.id, label: `${route.code} — ${route.name}` })),
+                      ]}
+                    />
+                  </div>
+                  <div className="d-flex gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-primary"
+                      disabled={savingRoute || routeId === '' || !routeDirty}
+                      onClick={() => void saveRoute(routeId)}
+                    >
+                      {savingRoute ? t('drawer.saving') : t('drawer.route.apply')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-secondary"
+                      disabled={savingRoute || serverRouteId === ''}
+                      onClick={() => void saveRoute(null)}
+                    >
+                      {t('drawer.route.clear')}
+                    </button>
+                  </div>
+                </div>
+                <div className="form-check small mb-3">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    id="trip-route-sequence"
+                    checked={applyRouteSequence}
+                    onChange={(event) => setApplyRouteSequence(event.target.checked)}
+                  />
+                  <label className="form-check-label" htmlFor="trip-route-sequence">
+                    {t('drawer.route.applySequence')}
+                  </label>
+                  <p className="text-body-secondary mb-0">{t('drawer.route.applySequenceHelp')}</p>
+                </div>
+              </>
+            )}
+
             <h3 className="tms-section-title mt-4 mb-2">{t('drawer.stopSequence')}</h3>
             {stopOrder.length === 0 && <p className="small text-body-secondary">{t('drawer.noStops')}</p>}
             {stopOrder.length > 0 && (
-              <ol className="list-group list-group-numbered mb-2">
-                {stopOrder.map((destinationId, index) => {
-                  const stop = detail.stops.find((s) => s.destinationId === destinationId)
-                  return (
-                    <li key={destinationId} className="list-group-item d-flex justify-content-between align-items-center">
-                      <span>
-                        {stop?.destinationName ?? stop?.destinationCode ?? destinationId}
-                        <span className="text-body-secondary small ms-2">
-                          {stop?.orderCount ?? 0} order{stop?.orderCount === 1 ? '' : 's'}
-                        </span>
-                      </span>
-                      {canManage && detail.trip.status === 'DRAFT' && (
-                        <div className="btn-group btn-group-sm">
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary"
-                            aria-label={`Move stop ${index + 1} up`}
-                            disabled={index === 0}
-                            onClick={() => setStopOrder(moveItem(stopOrder, index, index - 1))}
+              <>
+                {/* Below md a map and a full stop list cannot both fit usefully, so a phone gets
+                    tabs instead of one or the other being squeezed unreadably small. */}
+                <ul className="nav nav-pills nav-fill mb-2 d-md-none" role="tablist">
+                  <li className="nav-item" role="presentation">
+                    <button
+                      type="button"
+                      className={`nav-link ${mobileStopTab === 'map' ? 'active' : ''}`}
+                      onClick={() => setMobileStopTab('map')}
+                    >
+                      {t('drawer.map.tabMap')}
+                    </button>
+                  </li>
+                  <li className="nav-item" role="presentation">
+                    <button
+                      type="button"
+                      className={`nav-link ${mobileStopTab === 'list' ? 'active' : ''}`}
+                      onClick={() => setMobileStopTab('list')}
+                    >
+                      {t('drawer.map.tabList')}
+                    </button>
+                  </li>
+                </ul>
+
+                <div className="tms-trip-stop-layout mb-2">
+                  <div className={`${mobileStopTab === 'map' ? 'd-block' : 'd-none'} d-md-block`}>
+                    <TripStopMap
+                      origin={mapOrigin}
+                      stops={mapStops}
+                      selectedStopId={selectedStopId}
+                      onSelectStop={setSelectedStopId}
+                    />
+                    {selectedStop ? (
+                      <div className="border rounded p-2 small">
+                        <p className="fw-semibold mb-1 tms-truncate">
+                          {selectedStop.destinationName ?? selectedStop.destinationCode ?? selectedStop.destinationId}
+                        </p>
+                        <p className="text-body-secondary mb-2">
+                          {t('drawer.map.sequenceLabel', { position: selectedStopPosition, total: stopOrder.length })}
+                        </p>
+                        <dl className="row g-1 mb-0">
+                          <dt className="col-4 fw-normal text-body-secondary">{t('drawer.map.address')}</dt>
+                          <dd className="col-8 mb-0">{selectedStop.address ?? t('drawer.map.noAddress')}</dd>
+                          <dt className="col-4 fw-normal text-body-secondary">{t('drawer.map.serviceWindow')}</dt>
+                          <dd className="col-8 mb-0">
+                            {formatServiceWindow(selectedStop.serviceWindowStart, selectedStop.serviceWindowEnd) ??
+                              t('drawer.map.noServiceWindow')}
+                          </dd>
+                          <dt className="col-4 fw-normal text-body-secondary">{t('drawer.map.orders')}</dt>
+                          <dd className="col-8 mb-0">{t('drawer.stopOrders', { count: selectedStop.orderCount })}</dd>
+                        </dl>
+                      </div>
+                    ) : (
+                      <p className="small text-body-secondary mb-0">{t('drawer.map.selectHint')}</p>
+                    )}
+                  </div>
+
+                  <div className={`${mobileStopTab === 'list' ? 'd-block' : 'd-none'} d-md-block`}>
+                    <ol className="list-group list-group-numbered mb-2">
+                      {stopOrder.map((destinationId, index) => {
+                        const stop = detail.stops.find((s) => s.destinationId === destinationId)
+                        const mappable = stop?.latitude !== null && stop?.longitude !== null
+                        return (
+                          <li
+                            key={destinationId}
+                            className={`list-group-item d-flex justify-content-between align-items-center gap-2 ${
+                              destinationId === selectedStopId ? 'active' : ''
+                            }`}
                           >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary"
-                            aria-label={`Move stop ${index + 1} down`}
-                            disabled={index === stopOrder.length - 1}
-                            onClick={() => setStopOrder(moveItem(stopOrder, index, index + 1))}
-                          >
-                            ↓
-                          </button>
-                        </div>
-                      )}
-                    </li>
-                  )
-                })}
-              </ol>
+                            <button
+                              type="button"
+                              className="btn btn-link p-0 text-start text-decoration-none text-reset tms-min-w-0 flex-grow-1"
+                              aria-pressed={destinationId === selectedStopId}
+                              onClick={() => setSelectedStopId(destinationId)}
+                            >
+                              <span className="tms-truncate d-block">
+                                {stop?.destinationName ?? stop?.destinationCode ?? destinationId}
+                              </span>
+                              <span className="small">
+                                {t('drawer.stopOrders', { count: stop?.orderCount ?? 0 })}
+                                {/* A stop with no coordinate is not an error - it simply cannot be put on
+                                    a map, and saying so beats a marker at (0, 0) in the Atlantic. */}
+                                {!mappable && (
+                                  <>
+                                    {' · '}
+                                    <span title={t('drawer.coordinatesMissingHint')}>{t('drawer.coordinatesMissing')}</span>
+                                  </>
+                                )}
+                              </span>
+                            </button>
+                            {editable && (
+                              <div className="btn-group btn-group-sm flex-shrink-0">
+                                <button
+                                  type="button"
+                                  className="btn btn-outline-secondary"
+                                  aria-label={t('drawer.moveStopUp', { position: index + 1 })}
+                                  disabled={index === 0}
+                                  onClick={() => setStopOrder(moveItem(stopOrder, index, index - 1))}
+                                >
+                                  ↑
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline-secondary"
+                                  aria-label={t('drawer.moveStopDown', { position: index + 1 })}
+                                  disabled={index === stopOrder.length - 1}
+                                  onClick={() => setStopOrder(moveItem(stopOrder, index, index + 1))}
+                                >
+                                  ↓
+                                </button>
+                              </div>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ol>
+                  </div>
+                </div>
+              </>
             )}
-            {canManage && detail.trip.status === 'DRAFT' && stopOrder.length > 0 && (
-              <button type="button" className="btn btn-sm btn-primary" disabled={!stopsDirty || savingStops} onClick={() => void saveStopOrder()}>
-                {savingStops ? 'Saving...' : 'Save stop order'}
+            {editable && stopOrder.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-sm btn-primary"
+                disabled={!stopsDirty || savingStops}
+                onClick={() => void saveStopOrder()}
+              >
+                {savingStops ? t('drawer.saving') : t('drawer.saveStopOrder')}
               </button>
             )}
           </>
@@ -333,10 +612,24 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
           onUpdated={(next) => {
             setShowVehicleModal(false)
             applyDetail(next)
-            notifySuccess('Vehicle saved')
+            notifySuccess(t('drawer.vehicleSaved'))
           }}
         />
       )}
     </TmsDrawer>
+  )
+}
+
+/**
+ * One labelled fact of the shipment header. A value the backend could not resolve renders as an
+ * em dash rather than being hidden: "this shipment has no carrier yet" is information a planner
+ * needs, and a row that silently disappears makes the header a different shape every time.
+ */
+function ShipmentFact({ label, value, code = false }: { label: string; value: string | null; code?: boolean }) {
+  return (
+    <>
+      <dt className="col-5 col-sm-4 fw-normal text-body-secondary">{label}</dt>
+      <dd className={`col-7 col-sm-8 mb-0 tms-truncate${code ? ' tms-code' : ''}`}>{value ?? '—'}</dd>
+    </>
   )
 }

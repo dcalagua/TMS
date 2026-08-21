@@ -8,7 +8,11 @@ import { TripCard } from './TripCard'
 
 function trip(overrides: Partial<TripView> = {}): TripView {
   return {
-    id: 'trip-1', planningRunId: 'run-1', tripNumber: 3, status: 'DRAFT', vehicleId: null, vehicleCode: null,
+    id: 'trip-1', companyId: 'company-1', planningRunId: 'run-1', planNumber: 'PL-00000001',
+    planningDate: '2026-03-01', shipmentNumber: 'SH-00000001', originId: 'origin-1',
+    originCode: 'LIM-01', originName: 'Lima depot', originLatitude: null, originLongitude: null,
+    vehicleTypeCode: null, routeId: null, routeCode: null, routeName: null,
+    tripNumber: 3, status: 'DRAFT', vehicleId: null, vehicleCode: null,
     vehicleLicensePlate: null, carrierId: null, carrierName: null, plannedDepartureAt: null,
     capacity: {
       tripId: 'trip-1', source: 'NONE', orderCount: 0,
@@ -23,7 +27,7 @@ function trip(overrides: Partial<TripView> = {}): TripView {
 }
 
 /** A vehicle with real limits, so the card renders three measurable capacity bars. */
-function loadedTrip(): TripView {
+function loadedTrip(overrides: Partial<TripView> = {}): TripView {
   return trip({
     vehicleCode: 'VH-1',
     vehicleLicensePlate: 'ABC-123',
@@ -38,6 +42,7 @@ function loadedTrip(): TripView {
       pallets: { used: 18, limit: 20, remaining: 2, percentUsed: 90, exceeded: false, unlimited: false },
       withinCapacity: true,
     },
+    ...overrides,
   })
 }
 
@@ -52,6 +57,23 @@ describe('TripCard', () => {
     expect(screen.getByText('Viaje 3')).toBeInTheDocument()
     expect(screen.getByText('Sin vehículo asignado')).toBeInTheDocument()
     expect(screen.getByText('Sin transportista')).toBeInTheDocument()
+  })
+
+  it('shows the shipment number alongside the run-local trip number', () => {
+    render(<TripCard trip={trip()} onOpen={vi.fn()} />)
+
+    // The trip number identifies it inside its planning run; the shipment number identifies it
+    // everywhere else, so a card that showed only the first would be unusable off the board.
+    expect(screen.getByText('Viaje 3')).toBeInTheDocument()
+    expect(screen.getByText('SH-00000001')).toBeInTheDocument()
+  })
+
+  it('shows the vehicle type and the suggested route when the shipment has them', () => {
+    render(<TripCard trip={loadedTrip({ vehicleTypeCode: 'TRAILER', routeCode: 'RTE-1' })} onOpen={vi.fn()} />)
+
+    expect(screen.getByText('TRAILER', { exact: false })).toBeInTheDocument()
+    expect(screen.getByText('Ruta')).toBeInTheDocument()
+    expect(screen.getByText('RTE-1')).toBeInTheDocument()
   })
 
   it('shows the vehicle, carrier, departure and the order/destination counts once assigned', () => {

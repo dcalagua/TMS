@@ -128,6 +128,30 @@ class FleetConstraintIntegrationTest {
     }
 
     @Test
+    @DisplayName("carrier external_reference, when present, must not be blank")
+    void carrierExternalReferenceIsValidatedWhenPresent() throws SQLException {
+        UUID organization = insertOrganization("FL-ORG");
+        UUID company = insertCompany(organization, "FL-A");
+
+        assertViolates(CHECK_VIOLATION, () -> execute(
+                "INSERT INTO tms.carrier (company_id, code, business_name, tax_id_type, tax_id_value,"
+                        + " external_reference) VALUES ('" + company + "', 'BAD-EXTREF', 'Bad Extref Carrier', 'RUC',"
+                        + " '20100000010', '   ')"));
+
+        execute("INSERT INTO tms.carrier (company_id, code, business_name, tax_id_type, tax_id_value,"
+                + " external_reference) VALUES ('" + company + "', 'GOOD-EXTREF', 'Good Extref Carrier', 'RUC',"
+                + " '20100000011', 'ERP-CARR-001')");
+        assertThat(count("SELECT count(*) FROM tms.carrier WHERE code = 'GOOD-EXTREF'"
+                + " AND external_reference = 'ERP-CARR-001'")).isOne();
+
+        // no external reference at all is legitimate
+        execute("INSERT INTO tms.carrier (company_id, code, business_name, tax_id_type, tax_id_value)"
+                + " VALUES ('" + company + "', 'NO-EXTREF', 'No Extref Carrier', 'RUC', '20100000012')");
+        assertThat(count("SELECT count(*) FROM tms.carrier WHERE code = 'NO-EXTREF' AND external_reference IS NULL"))
+                .isOne();
+    }
+
+    @Test
     @DisplayName("carrier defaults to active and records who changed it")
     void carrierDefaultsAndActorColumns() throws SQLException {
         UUID organization = insertOrganization("FL-ORG");
@@ -322,6 +346,23 @@ class FleetConstraintIntegrationTest {
                 + " VALUES ('" + company + "', 'ZERO-PALLETS-OK', 'ZPO-001', '" + type + "', 0, 'IN_MAINTENANCE')");
         assertThat(count("SELECT count(*) FROM tms.vehicle WHERE code = 'ZERO-PALLETS-OK'"
                 + " AND max_pallets_override = 0 AND availability_status = 'IN_MAINTENANCE'")).isOne();
+    }
+
+    @Test
+    @DisplayName("vehicle external_reference, when present, must not be blank")
+    void vehicleExternalReferenceIsValidatedWhenPresent() throws SQLException {
+        UUID organization = insertOrganization("FL-ORG");
+        UUID company = insertCompany(organization, "FL-A");
+        UUID type = insertVehicleType(company, "TYPE-A", "10000.00", "40.000");
+
+        assertViolates(CHECK_VIOLATION, () -> execute(
+                "INSERT INTO tms.vehicle (company_id, code, license_plate, vehicle_type_id, external_reference)"
+                        + " VALUES ('" + company + "', 'BAD-EXTREF', 'BXR-001', '" + type + "', '')"));
+
+        execute("INSERT INTO tms.vehicle (company_id, code, license_plate, vehicle_type_id, external_reference)"
+                + " VALUES ('" + company + "', 'GOOD-EXTREF', 'GXR-001', '" + type + "', 'ERP-VEH-001')");
+        assertThat(count("SELECT count(*) FROM tms.vehicle WHERE code = 'GOOD-EXTREF'"
+                + " AND external_reference = 'ERP-VEH-001'")).isOne();
     }
 
     @Test

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { ThemeProvider } from '../shared/theme/ThemeProvider'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { appRoutes } from './router'
 
@@ -48,6 +49,7 @@ vi.mock('../shared/company/CompanyContext', () => ({
 const NAV_TARGETS = [
   // The dashboard greets the signed-in user rather than repeating the menu label.
   { link: 'Inicio', path: '/', heading: /^Hola,/ },
+  { link: 'Ubicaciones', path: '/masters/locations', heading: 'Ubicaciones' },
   { link: 'Orígenes', path: '/masters/origins', heading: 'Orígenes' },
   { link: 'Destinos', path: '/masters/destinations', heading: 'Destinos' },
   { link: 'Zonas', path: '/masters/zones', heading: 'Zonas' },
@@ -91,9 +93,11 @@ function renderApp(initialPath = '/') {
   const router = createMemoryRouter(appRoutes, { initialEntries: [initialPath] })
 
   render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </ThemeProvider>,
   )
 
   return router

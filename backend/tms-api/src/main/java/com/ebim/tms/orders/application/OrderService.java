@@ -1,7 +1,10 @@
 package com.ebim.tms.orders.application;
 
+import com.ebim.tms.orders.domain.DeclaredTotals;
 import com.ebim.tms.orders.domain.OrderLineInput;
+import com.ebim.tms.orders.domain.OrderNumbers;
 import com.ebim.tms.orders.domain.OrderStatus;
+import com.ebim.tms.orders.domain.OrderTotals;
 import com.ebim.tms.orders.domain.TransportOrder;
 import com.ebim.tms.orders.infrastructure.TransportOrderLineRepository;
 import com.ebim.tms.orders.infrastructure.TransportOrderRepository;
@@ -11,11 +14,15 @@ import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
+import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.audit.AuditAggregateType;
+import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
+import java.math.BigDecimal;
 import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
@@ -52,15 +59,18 @@ public class OrderService {
     private final OriginLookupPort originLookupPort;
     private final DestinationLookupPort destinationLookupPort;
     private final AuditActorProvider auditActorProvider;
+    private final AuditRecorder auditRecorder;
 
     public OrderService(TransportOrderRepository transportOrderRepository,
             TransportOrderLineRepository transportOrderLineRepository, OriginLookupPort originLookupPort,
-            DestinationLookupPort destinationLookupPort, AuditActorProvider auditActorProvider) {
+            DestinationLookupPort destinationLookupPort, AuditActorProvider auditActorProvider,
+            AuditRecorder auditRecorder) {
         this.transportOrderRepository = transportOrderRepository;
         this.transportOrderLineRepository = transportOrderLineRepository;
         this.originLookupPort = originLookupPort;
         this.destinationLookupPort = destinationLookupPort;
         this.auditActorProvider = auditActorProvider;
+        this.auditRecorder = auditRecorder;
     }
 
     @Transactional(readOnly = true)
@@ -103,13 +113,19 @@ public class OrderService {
             throw duplicateExternalReference(externalSource, externalReference);
         }
 
-        UUID actorId = auditActorProvider.requireAppUserId();
+        List<OrderLineInput> lines = toLineInputs(request.lines());
+        DeclaredTotals declared = toDeclaredTotals(request);
+        requireConsistentTotals(lines, declared);
+
+        UUID actorId = auditActorProvider.writerAppUserId();
         TransportOrder order = new TransportOrder(scope.companyId(), generateOrderNumber(), externalSource, externalReference,
                 request.originId(), request.destinationId(), blankToNull(request.customerName()),
                 blankToNull(request.customerReference()), request.serviceDate(), request.priority(),
                 request.requestedWindowStart(), request.requestedWindowEnd(), actorId);
-        order.applyLines(toLineInputs(request.lines()), actorId);
+        order.applyLines(lines, declared, actorId);
         TransportOrder saved = saveOrConflict(order);
+        auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.CREATE,
+                Map.of("orderNumber", saved.orderNumber()));
         return OrderDetailView.from(saved, origin, destination);
     }
 
@@ -130,20 +146,33 @@ public class OrderService {
             throw duplicateExternalReference(externalSource, externalReference);
         }
 
-        UUID actorId = auditActorProvider.requireAppUserId();
+        List<OrderLineInput> lines = toLineInputs(request.lines());
+        DeclaredTotals declared = toDeclaredTotals(request);
+        requireConsistentTotals(lines, declared);
+
+        UUID actorId = auditActorProvider.writerAppUserId();
         order.applyChanges(externalSource, externalReference, request.originId(), request.destinationId(),
                 blankToNull(request.customerName()), blankToNull(request.customerReference()), request.serviceDate(),
                 request.priority(), request.requestedWindowStart(), request.requestedWindowEnd(), actorId);
-        order.applyLines(toLineInputs(request.lines()), actorId);
+        order.applyLines(lines, declared, actorId);
         TransportOrder saved = saveOrConflict(order);
+        auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.UPDATE,
+                Map.of("orderNumber", saved.orderNumber()));
         return OrderDetailView.from(saved, origin, destination);
     }
 
     /**
-     * Promotes {@code NOT_READY} to {@code READY_FOR_PLANNING} after the completeness checks
-     * the step brief asks for: the header fields alone (origin, destination, service date,
-     * priority) are already mandatory at write time, so the only genuinely optional-until-now
-     * facts are the lines and the capacity totals they produce.
+     * Promotes {@code NOT_READY} to {@code READY_FOR_PLANNING} after a completeness check. The
+     * header fields (origin, destination, service date, priority) are already mandatory at write
+     * time, so the only genuinely optional-until-now fact is the capacity the planner will fill a
+     * vehicle with.
+     *
+     * <p>What that check is <em>not</em> is "the order must have lines". Since V17 an order whose
+     * sender declared 1,200 kg and no line detail carries a real, plannable capacity figure (see
+     * {@link OrderTotals}), and refusing it would leave the bulk import unable to produce a
+     * plannable order from the most common integration payload there is. The requirement is
+     * therefore stated directly: at least one of weight, volume or pallets must be known, however
+     * it became known.
      */
     @Transactional
     public OrderDetailView markReadyForPlanning(CompanyScope scope, UUID id) {
@@ -152,15 +181,12 @@ public class OrderService {
             throw new ConflictException(
                     "Only a not-ready order can be marked ready for planning (current status: " + order.status() + ").");
         }
-        if (order.lines().isEmpty()) {
-            throw new ConflictException("An order needs at least one line before it can be marked ready for planning.");
-        }
         if (order.totalWeightKg().signum() == 0 && order.totalVolumeM3().signum() == 0 && order.totalPallets().signum() == 0) {
-            throw new ConflictException(
-                    "An order needs at least one of weight, volume or pallets known before it can be marked ready for planning.");
+            throw new ConflictException("An order needs at least one of weight, volume or pallets - from its lines or "
+                    + "declared on the header - before it can be marked ready for planning.");
         }
 
-        order.markReadyForPlanning(auditActorProvider.requireAppUserId());
+        order.markReadyForPlanning(auditActorProvider.writerAppUserId());
         return toDetailView(scope, saveOrConflict(order));
     }
 
@@ -180,8 +206,11 @@ public class OrderService {
             throw new ConflictException("A planned order cannot be cancelled directly; unassign it from its trip first.");
         }
 
-        order.cancel(blankToNull(reason), auditActorProvider.requireAppUserId());
-        return toDetailView(scope, saveOrConflict(order));
+        order.cancel(blankToNull(reason), auditActorProvider.writerAppUserId());
+        TransportOrder saved = saveOrConflict(order);
+        auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.CANCEL,
+                Map.of("orderNumber", saved.orderNumber()));
+        return toDetailView(scope, saved);
     }
 
     private OrderDetailView toDetailView(CompanyScope scope, TransportOrder order) {
@@ -238,6 +267,42 @@ public class OrderService {
         }
     }
 
+    private static DeclaredTotals toDeclaredTotals(OrderRequest request) {
+        return new DeclaredTotals(request.declaredWeightKg(), request.declaredVolumeM3(), request.declaredPallets());
+    }
+
+    /**
+     * Refuses a declaration that contradicts the lines. A 400 rather than a silent preference for
+     * one of the two numbers: when a sender says 1,200 kg and the lines add up to 120, one of them
+     * is wrong, and guessing which would put a fabricated figure in front of a planner. See
+     * {@link OrderTotals} for the tolerance and {@code docs/domain/ORDER_TOTALS_V1.md} for the rule.
+     */
+    private static void requireConsistentTotals(List<OrderLineInput> lines, DeclaredTotals declared) {
+        List<OrderTotals.Mismatch> mismatches = OrderTotals.mismatches(lines, declared);
+        if (mismatches.isEmpty()) {
+            return;
+        }
+        String detail = mismatches.stream()
+                .map(mismatch -> describeMeasure(mismatch.measure()) + " declared as " + plain(mismatch.declared())
+                        + " but the lines add up to " + plain(mismatch.calculated()))
+                .collect(Collectors.joining("; "));
+        throw new InvalidRequestException("The declared totals do not match the lines (" + detail
+                + "). Correct the lines or the declared figures, or leave the declared figures blank.");
+    }
+
+    private static String describeMeasure(OrderTotals.Measure measure) {
+        return switch (measure) {
+            case WEIGHT_KG -> "weight (kg)";
+            case VOLUME_M3 -> "volume (m3)";
+            case PALLETS -> "pallets";
+        };
+    }
+
+    /** {@code toPlainString}, so a scaled BigDecimal never reaches an operator as {@code 1.2E+3}. */
+    private static String plain(BigDecimal value) {
+        return value.stripTrailingZeros().toPlainString();
+    }
+
     private static List<OrderLineInput> toLineInputs(List<OrderRequest.OrderLineRequest> lines) {
         return lines.stream()
                 .map(line -> new OrderLineInput(line.materialCode().trim(), line.materialDescription().trim(),
@@ -247,8 +312,7 @@ public class OrderService {
     }
 
     private String generateOrderNumber() {
-        long sequence = transportOrderRepository.nextOrderNumberValue();
-        return "TO-" + String.format(Locale.ROOT, "%08d", sequence);
+        return OrderNumbers.format(transportOrderRepository.nextOrderNumberValue());
     }
 
     /** One batched {@code GROUP BY} query for the whole page, never one COUNT per order row. */

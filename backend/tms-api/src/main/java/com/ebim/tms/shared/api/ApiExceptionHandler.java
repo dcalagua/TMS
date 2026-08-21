@@ -3,6 +3,7 @@ package com.ebim.tms.shared.api;
 import com.ebim.tms.shared.security.CompanyScopeDeniedException;
 import com.ebim.tms.shared.security.CompanyScopeInvalidException;
 import com.ebim.tms.shared.security.CompanyScopeRequiredException;
+import com.ebim.tms.shared.security.MachineCredentialException;
 import com.ebim.tms.shared.security.UnprovisionedPrincipalException;
 import com.ebim.tms.shared.web.CorrelationId;
 import jakarta.validation.ConstraintViolation;
@@ -70,6 +71,27 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
                 request);
     }
 
+    /**
+     * An inbound integration credential that did not verify.
+     *
+     * <p>Separate from the handler above because the advice differs: a partner has no Supabase
+     * token and must never be issued one, so telling them to send one would send them down a
+     * dead end. The message is the one the integration authenticator chose, and it is identical
+     * for every rejection reason on purpose - see {@link MachineCredentialException}.
+     */
+    @ExceptionHandler(MachineCredentialException.class)
+    public ResponseEntity<ProblemDetail> handleMachineCredential(
+            MachineCredentialException failure, WebRequest request) {
+        ProblemDetail problem = ApiProblems.of(ProblemType.UNAUTHENTICATED, failure.getMessage());
+        setInstance(problem, request);
+        return ResponseEntity.status(problem.getStatus())
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                // RFC 6750: a 401 on a bearer-authenticated resource says how to authenticate.
+                // The challenge names no error code, so a caller cannot probe which part failed.
+                .header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
+                .body(problem);
+    }
+
     /** A verified token whose identity has no active TMS profile: 403, because re-authenticating will not help. */
     @ExceptionHandler(UnprovisionedPrincipalException.class)
     public ResponseEntity<ProblemDetail> handleUnprovisioned(
@@ -120,6 +142,17 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ProblemDetail> handleConflict(ConflictException failure, WebRequest request) {
         return respond(ApiProblems.of(ProblemType.CONFLICT, failure.getMessage()), request);
+    }
+
+    /**
+     * Declared after {@link #handleConflict} but matched before it: Spring picks the most
+     * specific handler for the thrown type, so an {@link IdempotencyConflictException} - which is
+     * a {@link ConflictException} - still gets its own machine code.
+     */
+    @ExceptionHandler(IdempotencyConflictException.class)
+    public ResponseEntity<ProblemDetail> handleIdempotencyConflict(
+            IdempotencyConflictException failure, WebRequest request) {
+        return respond(ApiProblems.of(ProblemType.IDEMPOTENCY_KEY_REUSED, failure.getMessage()), request);
     }
 
     /**

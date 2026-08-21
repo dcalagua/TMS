@@ -1,5 +1,7 @@
 {
+  "atLeastOneRole": "Select at least one role",
   "codePattern": "Letters, digits, underscore or hyphen only",
+  "externalIdentityPair": "Provide both the external system and reference, or leave both blank",
   "highlightedFields": "Please correct the highlighted fields.",
   "invalidEmail": "Enter a valid email address",
   "invalidNumber": "Enter a valid number",

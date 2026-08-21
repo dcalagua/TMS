@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useForm, type Validate } from 'react-hook-form'
+import { Controller, useForm, type Validate } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { applyApiFieldErrors } from '../../shared/api/formErrors'
 import type { ApiError } from '../../shared/api/httpClient'
@@ -13,6 +13,7 @@ import {
 } from '../../shared/api/vehicleTypesApi'
 import { useEnumLabels } from '../../shared/i18n/enums'
 import { FormField } from '../../shared/ui/components/FormField'
+import { Select } from '../../shared/ui/components/Select'
 import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'vehicle-type-form'
@@ -61,6 +62,7 @@ export function VehicleTypeFormDrawer({ companyId, vehicleType, onClose, onSaved
 
   const {
     register,
+    control,
     handleSubmit,
     setError,
     formState: { errors, isDirty, isSubmitting },
@@ -195,14 +197,21 @@ export function VehicleTypeFormDrawer({ companyId, vehicleType, onClose, onSaved
             </div>
             <div className="col-12 col-sm-6">
               <FormField label={tc('fields.bodyType')} htmlFor="vehicle-type-body-type" error={errors.bodyType?.message}>
-                <select id="vehicle-type-body-type" className="form-select" {...register('bodyType')}>
-                  <option value="">{t('vehicleTypes.form.noBodyType')}</option>
-                  {VEHICLE_BODY_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {enumLabels.vehicleBodyType(type)}
-                    </option>
-                  ))}
-                </select>
+                <Controller
+                  control={control}
+                  name="bodyType"
+                  render={({ field }) => (
+                    <Select
+                      id="vehicle-type-body-type"
+                      value={field.value}
+                      onChange={(value) => field.onChange(value as VehicleBodyType | '')}
+                      options={[
+                        { value: '', label: t('vehicleTypes.form.noBodyType') },
+                        ...VEHICLE_BODY_TYPES.map((type) => ({ value: type, label: enumLabels.vehicleBodyType(type) })),
+                      ]}
+                    />
+                  )}
+                />
               </FormField>
             </div>
           </div>

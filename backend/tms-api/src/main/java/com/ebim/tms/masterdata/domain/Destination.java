@@ -85,6 +85,17 @@ public class Destination {
     @Column(name = "external_reference")
     private String externalReference;
 
+    /**
+     * The canonical {@code tms.location} this destination projects (migration V14), and the
+     * authoritative mapping for the later unification - see
+     * {@code docs/architecture/ADR_LOCATION_MODEL.md} sections 3 and 4. For pre-V14 rows it
+     * equals this destination's own id, unless the backfill merged it with a same-code origin.
+     * Nullable because the constraint suites seed destinations with direct SQL;
+     * {@code LocationCompatibilityProjector} is the only writer in the application.
+     */
+    @Column(name = "location_id")
+    private UUID locationId;
+
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
@@ -211,6 +222,15 @@ public class Destination {
 
     public UUID updatedBy() {
         return updatedBy;
+    }
+
+    public UUID locationId() {
+        return locationId;
+    }
+
+    /** Set once, by {@code LocationCompatibilityProjector}, when the canonical location exists. */
+    public void linkToLocation(UUID locationId) {
+        this.locationId = locationId;
     }
 
     public void applyChanges(String code, String name, DestinationType type, String address,

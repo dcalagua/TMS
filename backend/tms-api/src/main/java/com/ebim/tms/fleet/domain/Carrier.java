@@ -55,6 +55,9 @@ public class Carrier {
     @Column(name = "email")
     private String email;
 
+    @Column(name = "external_reference")
+    private String externalReference;
+
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
@@ -77,7 +80,7 @@ public class Carrier {
     }
 
     public Carrier(UUID companyId, String code, String businessName, String taxIdType, String taxIdValue,
-            String contactName, String phone, String email, UUID actorId) {
+            String contactName, String phone, String email, String externalReference, UUID actorId) {
         this.companyId = companyId;
         this.code = code;
         this.businessName = businessName;
@@ -86,6 +89,7 @@ public class Carrier {
         this.contactName = contactName;
         this.phone = phone;
         this.email = email;
+        this.externalReference = externalReference;
         this.createdBy = actorId;
         this.updatedBy = actorId;
     }
@@ -126,6 +130,10 @@ public class Carrier {
         return email;
     }
 
+    public String externalReference() {
+        return externalReference;
+    }
+
     public boolean active() {
         return active;
     }
@@ -147,7 +155,7 @@ public class Carrier {
     }
 
     public void applyChanges(String code, String businessName, String taxIdType, String taxIdValue,
-            String contactName, String phone, String email, UUID actorId) {
+            String contactName, String phone, String email, String externalReference, UUID actorId) {
         this.code = code;
         this.businessName = businessName;
         this.taxIdType = taxIdType;
@@ -155,6 +163,7 @@ public class Carrier {
         this.contactName = contactName;
         this.phone = phone;
         this.email = email;
+        this.externalReference = externalReference;
         this.updatedBy = actorId;
     }
 

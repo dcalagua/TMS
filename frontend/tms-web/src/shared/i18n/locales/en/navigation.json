@@ -14,9 +14,11 @@
   },
   "home": "Home",
   "items": {
+    "account": "My account",
     "carriers": "Carriers",
     "destinations": "Destinations",
     "frequencies": "Frequencies",
+    "locations": "Locations",
     "orders": "Orders",
     "origins": "Origins",
     "planning": "Planning",
@@ -29,6 +31,9 @@
   },
   "mainNavigation": "Main navigation",
   "menu": "Menu",
+  "notifications": "Alerts",
+  "notificationsEmpty": "No alerts",
+  "notificationsEmptyHint": "Alerts from your operation will appear here.",
   "search": {
     "empty": "No matches",
     "label": "Search for a screen",

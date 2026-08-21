@@ -20,6 +20,12 @@
     "title": "¿Desactivar {{name}}?"
   },
   "deactivated": "Registro desactivado",
+  "delete": {
+    "confirm": "Eliminar",
+    "text": "Esta acción no se puede deshacer.",
+    "title": "¿Eliminar {{name}}?"
+  },
+  "deleted": "Registro eliminado",
   "errorTitle": "No se pudo completar la acción",
   "saved": "Cambios guardados",
   "updated": "Registro actualizado"

@@ -28,4 +28,9 @@ public interface VehicleRepository extends JpaRepository<Vehicle, UUID>, JpaSpec
     boolean existsByCompanyIdAndLicensePlate(UUID companyId, String licensePlate);
 
     boolean existsByCompanyIdAndLicensePlateAndIdNot(UUID companyId, String licensePlate, UUID id);
+
+    /** Which of a bulk import file's codes/plates this company already holds - see {@code VehicleImportService}. */
+    List<Vehicle> findByCompanyIdAndCodeIn(UUID companyId, Collection<String> codes);
+
+    List<Vehicle> findByCompanyIdAndLicensePlateIn(UUID companyId, Collection<String> licensePlates);
 }

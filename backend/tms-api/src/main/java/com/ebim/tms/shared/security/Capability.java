@@ -23,12 +23,14 @@ import java.util.Set;
 public enum Capability {
 
     MASTER_DATA_VIEW(
+            Permission.MASTERDATA_LOCATION_READ,
             Permission.MASTERDATA_ORIGIN_READ,
             Permission.MASTERDATA_ZONE_READ,
             Permission.MASTERDATA_DESTINATION_READ,
             Permission.MASTERDATA_FREQUENCY_READ,
             Permission.MASTERDATA_ROUTE_READ),
     MASTER_DATA_MANAGE(
+            Permission.MASTERDATA_LOCATION_MANAGE,
             Permission.MASTERDATA_ORIGIN_MANAGE,
             Permission.MASTERDATA_ZONE_MANAGE,
             Permission.MASTERDATA_DESTINATION_MANAGE,
@@ -54,6 +56,13 @@ public enum Capability {
     TRIPS_MANAGE(Permission.PLANNING_TRIP_MANAGE),
 
     TRANSPORT_MONITOR_VIEW(Permission.MONITORING_TRANSPORT_READ),
+
+    /**
+     * Deliberately separate from {@code IAM_*}: issuing a machine credential is not the same
+     * decision as inviting a person, and an installation may well want the two in different hands.
+     */
+    INTEGRATION_VIEW(Permission.INTEGRATION_CLIENT_READ),
+    INTEGRATION_MANAGE(Permission.INTEGRATION_CLIENT_MANAGE),
 
     IAM_VIEW(
             Permission.IAM_ORGANIZATION_READ,

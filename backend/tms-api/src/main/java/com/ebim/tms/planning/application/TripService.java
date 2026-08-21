@@ -4,6 +4,7 @@ import com.ebim.tms.planning.domain.AssignmentStatus;
 import com.ebim.tms.planning.domain.PlanningRun;
 import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.planning.domain.TripOrderAssignment;
+import com.ebim.tms.planning.domain.TripStatus;
 import com.ebim.tms.planning.domain.TripStop;
 import com.ebim.tms.planning.infrastructure.PlanningRunRepository;
 import com.ebim.tms.planning.infrastructure.TripOrderAssignmentRepository;
@@ -11,18 +12,27 @@ import com.ebim.tms.planning.infrastructure.TripRepository;
 import com.ebim.tms.shared.api.ConflictException;
 import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
+import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.audit.AuditAggregateType;
+import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
+import com.ebim.tms.shared.reference.RouteTemplate;
+import com.ebim.tms.shared.reference.RouteTemplateLookupPort;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,24 +64,28 @@ public class TripService {
     private final TripAssignmentService assignments;
     private final OrderPlanningPort orderPlanningPort;
     private final VehicleLookupPort vehicleLookupPort;
+    private final RouteTemplateLookupPort routeTemplateLookupPort;
     private final PlanningCapacityService capacityService;
     private final TripViewAssembler assembler;
     private final AuditActorProvider auditActorProvider;
+    private final AuditRecorder auditRecorder;
 
     public TripService(TripRepository tripRepository, PlanningRunRepository planningRunRepository,
             TripOrderAssignmentRepository assignmentRepository, TripAssignmentService assignments,
             OrderPlanningPort orderPlanningPort, VehicleLookupPort vehicleLookupPort,
-            PlanningCapacityService capacityService, TripViewAssembler assembler,
-            AuditActorProvider auditActorProvider) {
+            RouteTemplateLookupPort routeTemplateLookupPort, PlanningCapacityService capacityService,
+            TripViewAssembler assembler, AuditActorProvider auditActorProvider, AuditRecorder auditRecorder) {
         this.tripRepository = tripRepository;
         this.planningRunRepository = planningRunRepository;
         this.assignmentRepository = assignmentRepository;
         this.assignments = assignments;
         this.orderPlanningPort = orderPlanningPort;
         this.vehicleLookupPort = vehicleLookupPort;
+        this.routeTemplateLookupPort = routeTemplateLookupPort;
         this.capacityService = capacityService;
         this.assembler = assembler;
         this.auditActorProvider = auditActorProvider;
+        this.auditRecorder = auditRecorder;
     }
 
     @Transactional(readOnly = true)
@@ -89,14 +103,23 @@ public class TripService {
         PlanningRun run = requireDraftRun(scope, runId);
         requireCurrentVersion("planning run", run.version(), request.version());
 
+        ShipmentTimeRules.requireDepartureOnPlanningDate(request.plannedDepartureAt(), run.planningDate(),
+                scope.timeZone(), "This trip");
+
         UUID actorId = auditActorProvider.requireAppUserId();
         UUID carrierId = null;
         if (request.vehicleId() != null) {
             carrierId = requireAssignableVehicle(scope, request.vehicleId()).carrierId();
+            // No trip id exists yet to exclude, and none ever will collide with a random one.
+            requireVehicleNotDoubleBooked(scope, request.vehicleId(), run.planningDate(), UUID.randomUUID());
         }
-        Trip trip = new Trip(scope.companyId(), run.id(), tripRepository.maxTripNumber(run.id()) + 1,
-                request.vehicleId(), carrierId, request.plannedDepartureAt(), actorId);
-        return assembler.toDetail(save(trip), scope.companyId());
+        Trip trip = new Trip(scope.companyId(), run.id(), run.planningDate(),
+                tripRepository.maxTripNumber(run.id()) + 1, generateShipmentNumber(), request.vehicleId(), carrierId,
+                request.plannedDepartureAt(), actorId);
+        Trip saved = saveWithDoubleBookingBackstop(trip);
+        auditRecorder.record(scope, AuditAggregateType.TRIP, saved.id(), AuditAction.CREATE,
+                Map.of("shipmentNumber", saved.shipmentNumber()));
+        return assembler.toDetail(saved, scope.companyId());
     }
 
     /**
@@ -109,15 +132,22 @@ public class TripService {
         Trip trip = lockedDraftTrip(scope, tripId);
         requireCurrentVersion("trip", trip.version(), request.version());
 
+        ShipmentTimeRules.requireDepartureOnPlanningDate(request.plannedDepartureAt(), trip.planningDate(),
+                scope.timeZone(), "Trip " + trip.tripNumber());
+
         VehicleCapacityReference vehicle = requireAssignableVehicle(scope, request.vehicleId());
         CapacityLoad load = assignments.currentLoad(trip.id());
         capacityService.requireWithinCapacity(
                 "Vehicle " + vehicle.code() + " cannot take what is already planned on trip " + trip.tripNumber(),
                 CapacityLimits.of(vehicle), load);
+        requireVehicleNotDoubleBooked(scope, vehicle.id(), trip.planningDate(), trip.id());
 
         trip.assignVehicle(vehicle.id(), vehicle.carrierId(), request.plannedDepartureAt(),
                 auditActorProvider.requireAppUserId());
-        return assembler.toDetail(save(trip), scope.companyId());
+        Trip saved = saveWithDoubleBookingBackstop(trip);
+        auditRecorder.record(scope, AuditAggregateType.TRIP, saved.id(), AuditAction.VEHICLE_CHANGE,
+                Map.of("vehicleId", vehicle.id().toString()));
+        return assembler.toDetail(saved, scope.companyId());
     }
 
     @Transactional
@@ -140,7 +170,10 @@ public class TripService {
         orderPlanningPort.markPlanned(order.id(), scope.companyId());
         assignments.refreshStops(trip, scope.companyId(), actorId);
         trip.touch(actorId);
-        return assembler.toDetail(save(trip), scope.companyId());
+        Trip saved = save(trip);
+        auditRecorder.record(scope, AuditAggregateType.TRIP, saved.id(), AuditAction.ASSIGN_ORDER,
+                Map.of("orderNumber", order.orderNumber()));
+        return assembler.toDetail(saved, scope.companyId());
     }
 
     @Transactional
@@ -152,7 +185,10 @@ public class TripService {
         assignments.closeAndRelease(assignment, blankToNull(reason), actorId);
         assignments.refreshStops(trip, scope.companyId(), actorId);
         trip.touch(actorId);
-        return assembler.toDetail(save(trip), scope.companyId());
+        Trip saved = save(trip);
+        auditRecorder.record(scope, AuditAggregateType.TRIP, saved.id(), AuditAction.REMOVE_ORDER,
+                Map.of("orderId", orderId.toString()));
+        return assembler.toDetail(saved, scope.companyId());
     }
 
     /**
@@ -198,7 +234,45 @@ public class TripService {
         source.touch(actorId);
         target.touch(actorId);
         save(target);
-        return assembler.toDetail(save(source), scope.companyId());
+        Trip savedSource = save(source);
+        auditRecorder.record(scope, AuditAggregateType.TRIP, savedSource.id(), AuditAction.MOVE_ORDER,
+                Map.of("orderNumber", order.orderNumber(), "targetTripId", target.id().toString()));
+        return assembler.toDetail(savedSource, scope.companyId());
+    }
+
+    /**
+     * Points the shipment at a master route, or clears the pointer.
+     *
+     * <p>Everything this does <em>not</em> do is the design: it does not create a stop for a
+     * destination the route names and nothing is delivered to, does not remove a stop the route
+     * omits, and does not re-apply itself when the route master is later edited. A master route
+     * is a reusable corridor and a shipment is one dated instance of real orders; the link
+     * between them is a planner's note about where the shape came from, plus an optional
+     * one-time reordering of the stops the shipment already has. See
+     * {@code docs/domain/SHIPMENT_V2.md}, "Route master interaction", and {@link Trip#applyRoute}.
+     */
+    @Transactional
+    public TripDetailView updateRoute(CompanyScope scope, UUID tripId, TripRouteRequest request) {
+        Trip trip = lockedDraftTrip(scope, tripId);
+        requireCurrentVersion("trip", trip.version(), request.version());
+
+        UUID actorId = auditActorProvider.requireAppUserId();
+        if (request.routeId() == null) {
+            trip.applyRoute(null, List.of(), actorId);
+            return assembler.toDetail(save(trip), scope.companyId());
+        }
+
+        RouteTemplate route = routeTemplateLookupPort.findActiveInCompany(request.routeId(), scope.companyId())
+                .orElseThrow(() -> new InvalidRequestException(
+                        "routeId does not reference an active route in this company."));
+        PlanningRun run = requireDraftRun(scope, trip.planningRunId());
+        if (!route.originId().equals(run.originId())) {
+            throw new InvalidRequestException("Route " + route.code()
+                    + " departs from a different origin than planning run " + run.planNumber() + ".");
+        }
+
+        trip.applyRoute(route.id(), request.applySequence() ? route.destinationIds() : List.of(), actorId);
+        return assembler.toDetail(save(trip), scope.companyId());
     }
 
     /**
@@ -237,7 +311,10 @@ public class TripService {
         String reason = blankToNull(request.reason());
         assignments.releaseAll(trip, reason == null ? "Trip cancelled" : reason, actorId);
         trip.cancel(reason, actorId);
-        return assembler.toDetail(save(trip), scope.companyId());
+        Trip saved = save(trip);
+        auditRecorder.record(scope, AuditAggregateType.TRIP, saved.id(), AuditAction.CANCEL,
+                Map.of("shipmentNumber", saved.shipmentNumber()));
+        return assembler.toDetail(saved, scope.companyId());
     }
 
     private Trip find(CompanyScope scope, UUID tripId) {
@@ -321,6 +398,23 @@ public class TripService {
     }
 
     /**
+     * The V1 double-booking invariant (docs/database/DATA_MODEL.md section 10, migration V16):
+     * one active (DRAFT or CONFIRMED) trip per vehicle per planning date. Checked here with a
+     * caller-facing message before every write that sets a trip's vehicle; the database's own
+     * copy, {@code uq_trip_vehicle_active_planning_date}, is the concurrency backstop for two
+     * planners racing to book the same vehicle on the same day - the same relationship
+     * {@link #requireNotAlreadyAssigned} has with the assignment table's partial unique index.
+     */
+    private void requireVehicleNotDoubleBooked(CompanyScope scope, UUID vehicleId, LocalDate planningDate,
+            UUID excludedTripId) {
+        if (tripRepository.existsByCompanyIdAndVehicleIdAndPlanningDateAndStatusNotAndIdNot(
+                scope.companyId(), vehicleId, planningDate, TripStatus.CANCELLED, excludedTripId)) {
+            throw new ConflictException(
+                    "This vehicle is already booked on another active trip for " + planningDate + ".");
+        }
+    }
+
+    /**
      * The limits a <em>draft</em> trip is checked against: the attached vehicle's current
      * effective capacity, or unlimited when no vehicle is attached yet.
      *
@@ -354,6 +448,33 @@ public class TripService {
         } catch (ObjectOptimisticLockingFailureException raced) {
             throw new ConflictException("This trip was changed by someone else since it was loaded. Reload and try again.");
         }
+    }
+
+    /**
+     * {@link #save} plus a translation for {@code uq_trip_vehicle_active_planning_date}: the
+     * concurrency backstop for {@link #requireVehicleNotDoubleBooked}, the moment two planners who
+     * each passed their own pre-check both try to book the same vehicle on the same day. Used only
+     * by the two writes that set a trip's vehicle ({@code create}, {@code updateVehicle}) - every
+     * other {@code save(trip)} call cannot touch that index.
+     */
+    private Trip saveWithDoubleBookingBackstop(Trip trip) {
+        try {
+            return save(trip);
+        } catch (DataIntegrityViolationException raced) {
+            throw new ConflictException(
+                    "This vehicle is already booked on another active trip for " + trip.planningDate() + ".");
+        }
+    }
+
+    /**
+     * The shipment's external identity, formatted from {@code tms.shipment_number_seq} - the same
+     * idiom {@code PlanningRunService.generatePlanNumber} uses. Drawn from a sequence rather than
+     * from {@code MAX(shipment_number) + 1} so two planners creating a trip at the same instant
+     * cannot be handed the same number; the {@code uq_trip_shipment_number} constraint is there
+     * for the case a raw insert bypasses this method entirely.
+     */
+    private String generateShipmentNumber() {
+        return "SH-" + String.format(Locale.ROOT, "%08d", tripRepository.nextShipmentNumberValue());
     }
 
     private static String blankToNull(String value) {

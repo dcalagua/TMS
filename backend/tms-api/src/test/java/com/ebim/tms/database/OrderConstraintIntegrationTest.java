@@ -18,9 +18,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 
 /**
- * Proves the V10 order constraints hold at the database level, independent of the Java
- * validation in {@code OrderService} - the same defense-in-depth proof
- * {@link MasterDataRouteConstraintIntegrationTest} gives V8's tables, extended to orders.
+ * Proves the V10 order constraints - and V17's declared-totals and import-batch additions - hold
+ * at the database level, independent of the Java validation in {@code OrderService}: the same
+ * defense-in-depth proof {@link MasterDataRouteConstraintIntegrationTest} gives V8's tables,
+ * extended to orders.
  */
 @EnabledIf(value = DockerAvailability.CONDITION, disabledReason = DockerAvailability.DISABLED_REASON)
 class OrderConstraintIntegrationTest {
@@ -358,6 +359,89 @@ class OrderConstraintIntegrationTest {
     }
 
     // --- helpers -----------------------------------------------------------------
+
+    // --- V17: declared totals -------------------------------------------------------
+
+    @Test
+    @DisplayName("a declared figure may be zero but never negative")
+    void declaredFiguresAreNonNegative() throws SQLException {
+        UUID organization = insertOrganization("ORD-ORG");
+        UUID company = insertCompany(organization, "ORD-A");
+        UUID origin = insertOrigin(company, "ORIGIN-A");
+        UUID destination = insertDestination(company, "DEST-A");
+
+        // Zero is a statement ("this order has no pallets"), which is why it is allowed while
+        // NULL means something different again ("nothing was said about pallets").
+        execute("INSERT INTO tms.transport_order (company_id, order_number, origin_id, destination_id,"
+                + " service_date, declared_pallets) VALUES ('" + company + "', 'TO-DEC-0001', '" + origin + "', '"
+                + destination + "', '2026-01-01', 0)");
+
+        assertViolates(CHECK_VIOLATION, () -> execute("INSERT INTO tms.transport_order (company_id, order_number,"
+                + " origin_id, destination_id, service_date, declared_weight_kg) VALUES ('" + company
+                + "', 'TO-DEC-0002', '" + origin + "', '" + destination + "', '2026-01-01', -1)"));
+    }
+
+    @Test
+    @DisplayName("totals_source accepts only the two strategies, and defaults to DECLARED")
+    void totalsSourceIsConstrained() throws SQLException {
+        UUID organization = insertOrganization("ORD-ORG");
+        UUID company = insertCompany(organization, "ORD-A");
+        UUID origin = insertOrigin(company, "ORIGIN-A");
+        UUID destination = insertDestination(company, "DEST-A");
+
+        UUID orderId = insertOrder(company, "TO-SRC-0001", origin, destination);
+        // A raw insert - a fixture, a future data migration - gets DECLARED, which is correct for
+        // the header-with-no-lines row such an insert almost always creates. See V17.
+        assertThat(queryText("SELECT totals_source FROM tms.transport_order WHERE id = '" + orderId + "'"))
+                .isEqualTo("DECLARED");
+
+        assertViolates(CHECK_VIOLATION, () -> execute("UPDATE tms.transport_order SET totals_source = 'GUESSED'"
+                + " WHERE id = '" + orderId + "'"));
+    }
+
+    // --- V17: the import batch audit row ----------------------------------------------
+
+    @Test
+    @DisplayName("an import batch is company-scoped, format-checked and carries a real SHA-256")
+    void importBatchIsConstrained() throws SQLException {
+        UUID organization = insertOrganization("ORD-ORG");
+        UUID company = insertCompany(organization, "ORD-A");
+        String digest = "a".repeat(64);
+
+        insertImportBatch(company, "XLSX", digest);
+
+        assertViolates(CHECK_VIOLATION, () -> insertImportBatch(company, "PDF", digest));
+        // Not hexadecimal, and not 64 characters: both are a sign the column was filled with
+        // something other than a digest, which is the one thing it is for.
+        assertViolates(CHECK_VIOLATION, () -> insertImportBatch(company, "CSV", "not-a-digest"));
+        assertViolates(CHECK_VIOLATION, () -> insertImportBatch(company, "CSV", "A".repeat(64)));
+        assertViolates(FOREIGN_KEY_VIOLATION, () -> insertImportBatch(UUID.randomUUID(), "CSV", digest));
+    }
+
+    @Test
+    @DisplayName("import batch counts cannot be negative")
+    void importBatchCountsAreNonNegative() throws SQLException {
+        UUID organization = insertOrganization("ORD-ORG");
+        UUID company = insertCompany(organization, "ORD-A");
+
+        assertViolates(CHECK_VIOLATION, () -> execute("INSERT INTO tms.order_import_batch (company_id,"
+                + " external_source, file_name, file_format, file_sha256, row_count, created_count, skipped_count)"
+                + " VALUES ('" + company + "', 'ERP', 'orders.csv', 'CSV', '" + "a".repeat(64) + "', -1, 0, 0)"));
+    }
+
+    private void insertImportBatch(UUID companyId, String format, String digest) throws SQLException {
+        execute("INSERT INTO tms.order_import_batch (company_id, external_source, file_name, file_format,"
+                + " file_sha256, row_count, created_count, skipped_count) VALUES ('" + companyId
+                + "', 'ERP', 'orders.csv', '" + format + "', '" + digest + "', 3, 2, 1)");
+    }
+
+    private String queryText(String sql) throws SQLException {
+        try (Statement statement = connection.createStatement();
+                ResultSet resultSet = statement.executeQuery(sql)) {
+            resultSet.next();
+            return resultSet.getString(1);
+        }
+    }
 
     private UUID insertOrganization(String code) throws SQLException {
         return insertReturningId("INSERT INTO tms.organization (code, name) VALUES ('" + code + "', '" + code

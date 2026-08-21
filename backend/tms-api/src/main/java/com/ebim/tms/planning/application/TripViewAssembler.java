@@ -1,16 +1,22 @@
 package com.ebim.tms.planning.application;
 
 import com.ebim.tms.planning.domain.AssignmentStatus;
+import com.ebim.tms.planning.domain.PlanningRun;
 import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.planning.domain.TripOrderAssignment;
 import com.ebim.tms.planning.domain.TripStatus;
 import com.ebim.tms.planning.domain.TripStop;
+import com.ebim.tms.planning.infrastructure.PlanningRunRepository;
 import com.ebim.tms.planning.infrastructure.TripOrderAssignmentRepository;
 import com.ebim.tms.planning.infrastructure.TripStopRepository;
+import com.ebim.tms.shared.reference.CarrierLookupPort;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
+import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
+import com.ebim.tms.shared.reference.RouteTemplate;
+import com.ebim.tms.shared.reference.RouteTemplateLookupPort;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import java.util.HashMap;
@@ -20,6 +26,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
@@ -28,27 +35,43 @@ import org.springframework.stereotype.Service;
  * <em>which</em> capacity a trip is reporting (live from its vehicle while draft, the frozen
  * snapshot once confirmed).
  *
- * <p>Everything here is batched. A board of N trips costs one grouped load query, one batched
- * vehicle lookup and one batched destination lookup - never N of anything. A trip detail adds one
- * assignment query and one batched order lookup, and touches no order line at all.
+ * <p>It is also the single place the shipment header is assembled
+ * ({@code docs/domain/SHIPMENT_V2.md}): a trip stores only what cannot be derived, and everything
+ * else on {@link TripView} - plan number, planning date, origin, carrier name, vehicle type,
+ * route - is resolved here from the module that owns it.
+ *
+ * <p>Everything is batched. A board of N trips costs a fixed number of queries - one grouped
+ * load, one grouped stop count, and the five lookups behind {@link ShipmentReferences} - never N
+ * of anything. A trip detail adds one assignment query and one batched order lookup, and touches
+ * no order line at all.
  */
 @Service
 public class TripViewAssembler {
 
+    private final PlanningRunRepository planningRunRepository;
     private final TripOrderAssignmentRepository assignmentRepository;
     private final TripStopRepository tripStopRepository;
+    private final OriginLookupPort originLookupPort;
     private final VehicleLookupPort vehicleLookupPort;
+    private final CarrierLookupPort carrierLookupPort;
+    private final RouteTemplateLookupPort routeTemplateLookupPort;
     private final DestinationLookupPort destinationLookupPort;
     private final OrderPlanningPort orderPlanningPort;
     private final PlanningCapacityService capacityService;
 
-    public TripViewAssembler(TripOrderAssignmentRepository assignmentRepository,
-            TripStopRepository tripStopRepository, VehicleLookupPort vehicleLookupPort,
+    public TripViewAssembler(PlanningRunRepository planningRunRepository,
+            TripOrderAssignmentRepository assignmentRepository, TripStopRepository tripStopRepository,
+            OriginLookupPort originLookupPort, VehicleLookupPort vehicleLookupPort,
+            CarrierLookupPort carrierLookupPort, RouteTemplateLookupPort routeTemplateLookupPort,
             DestinationLookupPort destinationLookupPort, OrderPlanningPort orderPlanningPort,
             PlanningCapacityService capacityService) {
+        this.planningRunRepository = planningRunRepository;
         this.assignmentRepository = assignmentRepository;
         this.tripStopRepository = tripStopRepository;
+        this.originLookupPort = originLookupPort;
         this.vehicleLookupPort = vehicleLookupPort;
+        this.carrierLookupPort = carrierLookupPort;
+        this.routeTemplateLookupPort = routeTemplateLookupPort;
         this.destinationLookupPort = destinationLookupPort;
         this.orderPlanningPort = orderPlanningPort;
         this.capacityService = capacityService;
@@ -59,13 +82,13 @@ public class TripViewAssembler {
         if (trips.isEmpty()) {
             return List.of();
         }
+        ShipmentReferences references = referencesOf(trips, companyId);
         Map<UUID, CapacityLoad> loads = loadsOf(trips);
-        Map<UUID, VehicleCapacityReference> vehicles = vehiclesOf(trips, companyId);
         // Counted in one grouped query rather than read from trip.stops(): that collection is
         // lazy, so asking a board of 300 trips how many stops each has would issue 300 selects.
         Map<UUID, Long> stopCounts = stopCountsOf(trips);
         return trips.stream()
-                .map(trip -> toView(trip, loads.getOrDefault(trip.id(), CapacityLoad.EMPTY), vehicles,
+                .map(trip -> toView(trip, loads.getOrDefault(trip.id(), CapacityLoad.EMPTY), references,
                         stopCounts.getOrDefault(trip.id(), 0L)))
                 .toList();
     }
@@ -86,7 +109,7 @@ public class TripViewAssembler {
                 assignmentRepository.loadByTripId(trip.id(), AssignmentStatus.ACTIVE));
         // One trip: its stops are already being rendered below, so counting them in memory
         // costs nothing extra - unlike the board above, this is not an N+1.
-        TripView view = toView(trip, load, vehiclesOf(List.of(trip), companyId), trip.stops().size());
+        TripView view = toView(trip, load, referencesOf(List.of(trip), companyId), trip.stops().size());
 
         List<TripAssignmentView> assignmentViews = assignments.stream()
                 .map(assignment -> toAssignmentView(assignment, orders.get(assignment.orderId()), destinations))
@@ -128,6 +151,34 @@ public class TripViewAssembler {
         return vehicleIds.isEmpty() ? Map.of() : vehicleLookupPort.findAllInCompany(vehicleIds, companyId);
     }
 
+    /**
+     * The five batched lookups behind a shipment header, for a whole set of trips at once.
+     *
+     * <p>The runs come first and are read company-scoped, not by id alone: the origin of a
+     * shipment is its run's origin, so resolving it means resolving the run, and a run belonging
+     * to another tenant must not be loadable even though the trips that named it were already
+     * scoped.
+     */
+    private ShipmentReferences referencesOf(List<Trip> trips, UUID companyId) {
+        if (trips.isEmpty()) {
+            return ShipmentReferences.EMPTY;
+        }
+        Map<UUID, PlanningRun> runs = planningRunRepository
+                .findByIdInAndCompanyId(idsOf(trips, Trip::planningRunId), companyId).stream()
+                .collect(Collectors.toMap(PlanningRun::id, Function.identity()));
+        Map<UUID, MasterReference> origins = originLookupPort.findAllInCompany(
+                runs.values().stream().map(PlanningRun::originId).collect(Collectors.toSet()), companyId);
+        Map<UUID, MasterReference> carriers =
+                carrierLookupPort.findAllInCompany(idsOf(trips, Trip::carrierId), companyId);
+        Map<UUID, RouteTemplate> routes =
+                routeTemplateLookupPort.findAllInCompany(idsOf(trips, Trip::routeId), companyId);
+        return new ShipmentReferences(runs, origins, vehiclesOf(trips, companyId), carriers, routes);
+    }
+
+    private static Set<UUID> idsOf(List<Trip> trips, Function<Trip, UUID> extractor) {
+        return trips.stream().map(extractor).filter(Objects::nonNull).collect(Collectors.toSet());
+    }
+
     private Map<UUID, CapacityLoad> loadsOf(List<Trip> trips) {
         Map<UUID, CapacityLoad> loads = new HashMap<>();
         List<UUID> tripIds = trips.stream().map(Trip::id).toList();
@@ -138,14 +189,26 @@ public class TripViewAssembler {
         return loads;
     }
 
-    private TripView toView(Trip trip, CapacityLoad load, Map<UUID, VehicleCapacityReference> vehicles,
-            long stopCount) {
-        VehicleCapacityReference vehicle = trip.vehicleId() == null ? null : vehicles.get(trip.vehicleId());
-        return new TripView(trip.id(), trip.planningRunId(), trip.tripNumber(), trip.status(), trip.vehicleId(),
-                vehicle == null ? null : vehicle.code(), vehicle == null ? null : vehicle.licensePlate(),
-                trip.carrierId(), vehicle == null ? null : vehicle.carrierName(), trip.plannedDepartureAt(),
-                summarize(trip, load, vehicles), (int) stopCount, load.orderCount(), trip.version(),
-                trip.createdAt(), trip.updatedAt());
+    private TripView toView(Trip trip, CapacityLoad load, ShipmentReferences references, long stopCount) {
+        PlanningRun run = references.runs().get(trip.planningRunId());
+        MasterReference origin = run == null ? null : references.origins().get(run.originId());
+        VehicleCapacityReference vehicle = trip.vehicleId() == null ? null : references.vehicles().get(trip.vehicleId());
+        // Resolved from the trip's own carrier_id, not from the vehicle: see CarrierLookupPort.
+        MasterReference carrier = trip.carrierId() == null ? null : references.carriers().get(trip.carrierId());
+        RouteTemplate route = trip.routeId() == null ? null : references.routes().get(trip.routeId());
+
+        return new TripView(trip.id(), trip.companyId(), trip.planningRunId(),
+                run == null ? null : run.planNumber(), trip.planningDate(), trip.tripNumber(), trip.shipmentNumber(),
+                trip.status(),
+                run == null ? null : run.originId(), origin == null ? null : origin.code(),
+                origin == null ? null : origin.name(), origin == null ? null : origin.latitude(),
+                origin == null ? null : origin.longitude(),
+                trip.vehicleId(), vehicle == null ? null : vehicle.code(),
+                vehicle == null ? null : vehicle.licensePlate(), vehicle == null ? null : vehicle.vehicleTypeCode(),
+                trip.carrierId(), carrier == null ? null : carrier.name(),
+                trip.routeId(), route == null ? null : route.code(), route == null ? null : route.name(),
+                trip.plannedDepartureAt(), summarize(trip, load, references.vehicles()), (int) stopCount,
+                load.orderCount(), trip.version(), trip.createdAt(), trip.updatedAt());
     }
 
     private Map<UUID, Long> stopCountsOf(List<Trip> trips) {
@@ -173,6 +236,8 @@ public class TripViewAssembler {
     private static TripStopView toStopView(TripStop stop, MasterReference destination, long orderCount) {
         return new TripStopView(stop.id(), stop.sequence(), stop.destinationId(),
                 destination == null ? null : destination.code(), destination == null ? null : destination.name(),
+                destination == null ? null : destination.latitude(), destination == null ? null : destination.longitude(),
+                destination == null ? null : destination.address(),
                 stop.serviceWindowStart(), stop.serviceWindowEnd(), orderCount);
     }
 }

@@ -32,6 +32,12 @@ import java.util.UUID;
  * <p>{@code status} is deliberately absent: it is server-controlled exclusively through the
  * {@code mark-ready} and {@code cancel} endpoints, the same way {@code RouteRequest} excludes
  * {@code active} in favour of dedicated activate/deactivate endpoints.
+ *
+ * <p>So are {@code totalWeightKg}/{@code totalVolumeM3}/{@code totalPallets}. A caller may state
+ * what it believes the order weighs - {@code declaredWeightKg} and its two siblings - but the
+ * figures planning reads are always produced by {@code OrderTotals} from those declarations and
+ * the lines together. A request that could set the effective totals directly would make
+ * "totals are never trusted from the browser" a comment rather than a property.
  */
 public record OrderRequest(
         @Size(max = 64) String externalSource,
@@ -44,6 +50,9 @@ public record OrderRequest(
         @NotNull OrderPriority priority,
         LocalTime requestedWindowStart,
         LocalTime requestedWindowEnd,
+        @DecimalMin(value = "0", message = "must be zero or greater") BigDecimal declaredWeightKg,
+        @DecimalMin(value = "0", message = "must be zero or greater") BigDecimal declaredVolumeM3,
+        @DecimalMin(value = "0", message = "must be zero or greater") BigDecimal declaredPallets,
         Long version,
         @NotNull List<@Valid @NotNull OrderLineRequest> lines) {
 

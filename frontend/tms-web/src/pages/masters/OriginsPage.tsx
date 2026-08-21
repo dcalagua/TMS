@@ -21,12 +21,16 @@ import {
   Pagination,
   ActionMenu,
   ActiveBadge,
+  FilterField,
+  FilterChips,
+  Select,
+  type FilterChip,
   type DataTableColumn,
 } from '../../shared/ui/components'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
 import { OriginFormDrawer } from './OriginFormDrawer'
 
-const PAGE_SIZE = 25
+const DEFAULT_PAGE_SIZE = 25
 
 type ActiveFilter = 'active' | 'inactive' | 'all'
 
@@ -52,17 +56,18 @@ export function OriginsPage() {
   const queryClient = useQueryClient()
 
   const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [draftFilters, setDraftFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
   const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
   const [modal, setModal] = useState<ModalState>(null)
 
   const originsQuery = useQuery({
-    queryKey: ['origins', companyId, page, filters],
+    queryKey: ['origins', companyId, page, pageSize, filters],
     queryFn: ({ signal }) =>
       fetchOrigins({
         companyId,
         page,
-        size: PAGE_SIZE,
+        size: pageSize,
         sort: 'code,asc',
         code: filters.code || undefined,
         name: filters.name || undefined,
@@ -114,11 +119,26 @@ export function OriginsPage() {
   }
 
   const columns: DataTableColumn<OriginView>[] = [
-    { key: 'code', header: tc('columns.code'), render: (origin) => <span className="fw-semibold">{origin.code}</span> },
-    { key: 'name', header: tc('columns.name'), render: (origin) => origin.name },
+    { key: 'code', header: tc('columns.code'), render: (origin) => <span className="tms-code">{origin.code}</span> },
+    {
+      key: 'name',
+      header: tc('columns.name'),
+      // Name and address in one cell rather than two columns. They are one fact - which place
+      // this is - and splitting them made the eye cross the table to assemble it, while the
+      // address column sat mostly empty because it is optional.
+      render: (origin) => (
+        <span className="tms-cell-stack">
+          <span className="tms-cell-primary">{origin.name}</span>
+          {origin.address && <span className="tms-cell-sub">{origin.address}</span>}
+        </span>
+      ),
+    },
     { key: 'type', header: tc('columns.type'), render: (origin) => enumLabels.originType(origin.type) },
-    { key: 'address', header: tc('columns.address'), render: (origin) => origin.address ?? '—' },
-    { key: 'timeZone', header: tc('columns.timeZone'), render: (origin) => origin.timeZone },
+    {
+      key: 'timeZone',
+      header: tc('columns.timeZone'),
+      render: (origin) => <span className="tms-cell-sub">{origin.timeZone}</span>,
+    },
     {
       key: 'active',
       header: tc('columns.status'),
@@ -157,6 +177,23 @@ export function OriginsPage() {
 
   const pageData = originsQuery.data
 
+  /* What is actually narrowing the list right now. `active` only counts when it is not the
+     default: "Activos" is the resting state of the screen, not a filter the user chose. */
+  const activeChips: FilterChip[] = [
+    filters.code && { key: 'code', label: tc('columns.code'), value: filters.code,
+      onClear: () => { const next = { ...filters, code: '' }; setDraftFilters(next); setFilters(next); setPage(0) } },
+    filters.name && { key: 'name', label: tc('columns.name'), value: filters.name,
+      onClear: () => { const next = { ...filters, name: '' }; setDraftFilters(next); setFilters(next); setPage(0) } },
+    filters.type && { key: 'type', label: tc('columns.type'), value: enumLabels.originType(filters.type),
+      onClear: () => { const next = { ...filters, type: '' as const }; setDraftFilters(next); setFilters(next); setPage(0) } },
+    filters.active !== DEFAULT_FILTERS.active && {
+      key: 'active', label: tc('columns.status'),
+      value: filters.active === 'all' ? tc('filters.statusAll') : tc('filters.statusInactive'),
+      onClear: () => { const next = { ...filters, active: DEFAULT_FILTERS.active }; setDraftFilters(next); setFilters(next); setPage(0) } },
+  ].filter(Boolean) as FilterChip[]
+
+  const isFiltered = activeChips.length > 0
+
   return (
     <div>
       <PageHeader
@@ -174,62 +211,58 @@ export function OriginsPage() {
       />
 
       <FilterBar onSubmit={applyFilters} onReset={resetFilters}>
-        <div>
-          <label htmlFor="filter-code" className="form-label small mb-1">
-            {tc('columns.code')}
-          </label>
-          <input
-            id="filter-code"
-            className="form-control form-control-sm"
-            value={draftFilters.code}
-            onChange={(event) => setDraftFilters({ ...draftFilters, code: event.target.value })}
-          />
-        </div>
-        <div>
-          <label htmlFor="filter-name" className="form-label small mb-1">
-            {tc('columns.name')}
-          </label>
-          <input
-            id="filter-name"
-            className="form-control form-control-sm"
-            value={draftFilters.name}
-            onChange={(event) => setDraftFilters({ ...draftFilters, name: event.target.value })}
-          />
-        </div>
-        <div>
-          <label htmlFor="filter-type" className="form-label small mb-1">
-            {tc('columns.type')}
-          </label>
-          <select
-            id="filter-type"
-            className="form-select form-select-sm"
-            value={draftFilters.type}
-            onChange={(event) => setDraftFilters({ ...draftFilters, type: event.target.value as OriginType | '' })}
-          >
-            <option value="">{tc('filters.allTypes')}</option>
-            {ORIGIN_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {enumLabels.originType(type)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="filter-active" className="form-label small mb-1">
-            {tc('columns.status')}
-          </label>
-          <select
-            id="filter-active"
-            className="form-select form-select-sm"
-            value={draftFilters.active}
-            onChange={(event) => setDraftFilters({ ...draftFilters, active: event.target.value as ActiveFilter })}
-          >
-            <option value="active">{tc('filters.statusActive')}</option>
-            <option value="inactive">{tc('filters.statusInactive')}</option>
-            <option value="all">{tc('filters.statusAll')}</option>
-          </select>
-        </div>
+        <FilterField label={tc('columns.code')}>
+          {(id) => (
+            <input
+              id={id}
+              className="form-control form-control-sm"
+              value={draftFilters.code}
+              onChange={(event) => setDraftFilters({ ...draftFilters, code: event.target.value })}
+            />
+          )}
+        </FilterField>
+        <FilterField label={tc('columns.name')}>
+          {(id) => (
+            <input
+              id={id}
+              className="form-control form-control-sm"
+              value={draftFilters.name}
+              onChange={(event) => setDraftFilters({ ...draftFilters, name: event.target.value })}
+            />
+          )}
+        </FilterField>
+        <FilterField label={tc('columns.type')}>
+          {(id) => (
+            <Select
+              id={id}
+              size="sm"
+              value={draftFilters.type}
+              onChange={(next) => setDraftFilters({ ...draftFilters, type: next as OriginType | '' })}
+              options={[
+                { value: '', label: tc('filters.allTypes') },
+                ...ORIGIN_TYPES.map((type) => ({ value: type, label: enumLabels.originType(type) })),
+              ]}
+            />
+          )}
+        </FilterField>
+        <FilterField label={tc('columns.status')}>
+          {(id) => (
+            <Select
+              id={id}
+              size="sm"
+              value={draftFilters.active}
+              onChange={(next) => setDraftFilters({ ...draftFilters, active: next as ActiveFilter })}
+              options={[
+                { value: 'active', label: tc('filters.statusActive') },
+                { value: 'inactive', label: tc('filters.statusInactive') },
+                { value: 'all', label: tc('filters.statusAll') },
+              ]}
+            />
+          )}
+        </FilterField>
       </FilterBar>
+
+      <FilterChips chips={activeChips} onClearAll={resetFilters} />
 
       <DataTable
         columns={columns}
@@ -239,9 +272,40 @@ export function OriginsPage() {
         isLoading={originsQuery.isPending}
         error={originsQuery.isError ? describeApiError(originsQuery.error as ApiError) : null}
         onRetry={() => void originsQuery.refetch()}
-        emptyTitle={t('origins.empty.title')}
-        emptyMessage={t('origins.empty.message')}
-        footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
+        /* Two different situations, two different exits: nothing has ever been created here, or
+           the filters have narrowed everything away. Offering "create" to someone whose filter
+           is simply too tight sends them to the wrong place. */
+        emptyTitle={isFiltered ? tc('filters.noResultsTitle') : t('origins.empty.title')}
+        emptyMessage={isFiltered ? tc('filters.noResultsMessage') : t('origins.empty.message')}
+        emptyAction={
+          isFiltered ? (
+            <button type="button" className="btn btn-sm btn-outline-secondary" onClick={resetFilters}>
+              {tc('actions.clear')}
+            </button>
+          ) : canManage ? (
+            <button
+              type="button"
+              className="btn btn-sm btn-primary d-inline-flex align-items-center gap-2"
+              onClick={() => setModal({ mode: 'create' })}
+            >
+              <i className="bi bi-plus-lg" aria-hidden="true" />
+              {t('origins.new')}
+            </button>
+          ) : undefined
+        }
+        footer={
+          pageData ? (
+            <Pagination
+              page={pageData}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size)
+                // Back to the first page: page 4 of the old size may not exist under the new one.
+                setPage(0)
+              }}
+            />
+          ) : undefined
+        }
       />
 
       {modal && (

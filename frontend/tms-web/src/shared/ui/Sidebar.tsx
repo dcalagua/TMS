@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { NavLink } from 'react-router-dom'
 import { useCompany } from '../company/CompanyContext'
-import { HOME_NAV, NAV_GROUPS, type NavLeaf } from './navConfig'
+import { CompanySelector } from './CompanySelector'
+import { ADMIN_NAV, HOME_NAV, NAV_GROUPS, type NavLeaf } from './navConfig'
 
 export const SIDEBAR_ID = 'tms-sidebar'
 
@@ -35,7 +36,7 @@ export interface SidebarProps {
  */
 export function Sidebar({ open, collapsed, onRequestClose }: SidebarProps) {
   const { t } = useTranslation('navigation')
-  const { hasCapability, status, selected } = useCompany()
+  const { hasCapability, status } = useCompany()
 
   const visibleGroups = NAV_GROUPS.filter(
     (group) => !group.capability || status !== 'ready' || hasCapability(group.capability),
@@ -76,10 +77,8 @@ export function Sidebar({ open, collapsed, onRequestClose }: SidebarProps) {
           TMS
         </span>
         <span className="tms-sidebar-brand-text">
-          <span className="tms-sidebar-brand-name">
-            TMS <span className="tms-brand-accent">by EBIM</span>
-          </span>
-          {selected && <span className="tms-sidebar-brand-tenant">{selected.name}</span>}
+          <span className="tms-sidebar-brand-name">TMS</span>
+          <span className="tms-sidebar-brand-owner">by EBIM</span>
         </span>
       </div>
 
@@ -97,6 +96,13 @@ export function Sidebar({ open, collapsed, onRequestClose }: SidebarProps) {
         </button>
       </div>
 
+      {/* The tenant sits above the menu rather than inside the brand block: it is a control,
+          not a wordmark, and "which company am I in?" is answered by the thing you also click
+          to change it. Outside the scrolling body so a long menu cannot push it out of view. */}
+      <div className="tms-sidebar-workspace">
+        <CompanySelector variant="sidebar" />
+      </div>
+
       <div className="offcanvas-body tms-sidebar-body d-flex flex-column p-0 pb-3">
         <nav className="d-flex flex-column pt-2" aria-label={t('mainNavigation')}>
           {renderLink(HOME_NAV, true)}
@@ -109,6 +115,10 @@ export function Sidebar({ open, collapsed, onRequestClose }: SidebarProps) {
               {group.items.map((item) => renderLink(item))}
             </div>
           ))}
+
+          {(!ADMIN_NAV.capability || status !== 'ready' || hasCapability(ADMIN_NAV.capability)) && (
+            <div className="tms-nav-trailing">{renderLink(ADMIN_NAV)}</div>
+          )}
         </nav>
       </div>
     </div>

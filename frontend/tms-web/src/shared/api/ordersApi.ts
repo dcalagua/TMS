@@ -1,4 +1,4 @@
-import { apiRequest } from './httpClient'
+import { apiDownload, apiRequest, apiUpload, type DownloadedFile } from './httpClient'
 import type { PageResponse } from './pageResponse'
 
 /** Mirrors the backend's `OrderStatus` enum (`orders/domain/OrderStatus.java`). See
@@ -6,6 +6,14 @@ import type { PageResponse } from './pageResponse'
 export type OrderStatus = 'NOT_READY' | 'READY_FOR_PLANNING' | 'PLANNED' | 'CANCELLED'
 
 export const ORDER_STATUSES: OrderStatus[] = ['NOT_READY', 'READY_FOR_PLANNING', 'PLANNED', 'CANCELLED']
+
+/** Mirrors the backend's `TotalsSource` enum (`orders/domain/TotalsSource.java`).
+ *
+ * `CALCULATED` means the effective totals were summed from the lines; `DECLARED` means the order
+ * has no lines and the figures are the ones its sender asserted. See
+ * `docs/domain/ORDER_TOTALS_V1.md` - and note that the browser never sends the effective totals
+ * under either strategy, only `declared*`. */
+export type TotalsSource = 'CALCULATED' | 'DECLARED'
 
 /** Mirrors the backend's `OrderPriority` enum (`orders/domain/OrderPriority.java`). */
 export type OrderPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT'
@@ -35,6 +43,10 @@ export interface OrderView {
   totalWeightKg: number
   totalVolumeM3: number
   totalPallets: number
+  declaredWeightKg: number | null
+  declaredVolumeM3: number | null
+  declaredPallets: number | null
+  totalsSource: TotalsSource
   lineCount: number
   version: number
   createdAt: string
@@ -85,6 +97,11 @@ export interface OrderRequest {
   priority: OrderPriority
   requestedWindowStart?: string | null
   requestedWindowEnd?: string | null
+  /** What the operator asserts the order weighs/occupies, independent of the lines. Where the
+   * lines also state a measure the two must agree within 1% or the backend answers 400. */
+  declaredWeightKg?: number | null
+  declaredVolumeM3?: number | null
+  declaredPallets?: number | null
   version?: number | null
   lines: OrderLineRequest[]
 }
@@ -128,5 +145,106 @@ export function markOrderReadyForPlanning(companyId: string, id: string): Promis
 export function cancelOrder(companyId: string, id: string, reason?: string): Promise<OrderDetailView> {
   return apiRequest<OrderDetailView>(`/orders/${id}/cancel`, {
     method: 'POST', companyId, query: reason ? { reason } : undefined,
+  })
+}
+
+// --- bulk import -----------------------------------------------------------------------
+
+/** Mirrors the backend's `OrderImportFormat` enum. */
+export type OrderImportFormat = 'XLSX' | 'CSV'
+
+/** Mirrors `OrderImportReport.Outcome` - what the import decided about one order. */
+export type OrderImportOutcome = 'CREATE' | 'SKIPPED_DUPLICATE' | 'REJECTED'
+
+/** Mirrors `OrderImportReport.OrderPreview`. */
+export interface OrderImportPreview {
+  externalReference: string
+  outcome: OrderImportOutcome
+  firstRowNumber: number
+  originCode: string | null
+  originName: string | null
+  destinationCode: string | null
+  destinationName: string | null
+  customerName: string | null
+  serviceDate: string | null
+  priority: OrderPriority
+  lineCount: number
+  totalWeightKg: number | null
+  totalVolumeM3: number | null
+  totalPallets: number | null
+  totalsSource: TotalsSource
+  /** Present only on an applied import. */
+  orderNumber: string | null
+}
+
+/** Mirrors `OrderImportReport.Issue` - one reason a row cannot be accepted. */
+export interface OrderImportIssue {
+  rowNumber: number
+  column: string | null
+  externalReference: string | null
+  message: string
+}
+
+/**
+ * Mirrors the backend's `OrderImportReport`. One shape for the preview and for the applied
+ * result, so the table an operator approves and the confirmation they get are the same
+ * rendering - `applied` is the only thing that differs.
+ *
+ * A file with issues comes back as HTTP 200 with `applied: false` and nothing written, so a
+ * caller must branch on `applied` rather than on the request having succeeded.
+ */
+export interface OrderImportReport {
+  dryRun: boolean
+  applied: boolean
+  batchId: string | null
+  fileName: string | null
+  format: OrderImportFormat
+  externalSource: string
+  rowCount: number
+  orderCount: number
+  createdCount: number
+  skippedCount: number
+  rejectedCount: number
+  issueCount: number
+  issuesTruncated: boolean
+  orders: OrderImportPreview[]
+  issues: OrderImportIssue[]
+}
+
+export function downloadOrderImportTemplate(
+  companyId: string,
+  format: OrderImportFormat,
+  signal?: AbortSignal,
+): Promise<DownloadedFile> {
+  return apiDownload('/orders/import/template', { companyId, query: { format }, signal })
+}
+
+function importForm(externalSource: string, file: File): FormData {
+  const form = new FormData()
+  form.append('externalSource', externalSource)
+  form.append('file', file)
+  return form
+}
+
+/** Validates the file and reports what applying it would do. Writes nothing. */
+export function previewOrderImport(
+  companyId: string,
+  externalSource: string,
+  file: File,
+  signal?: AbortSignal,
+): Promise<OrderImportReport> {
+  return apiUpload<OrderImportReport>('/orders/import/preview', {
+    companyId, formData: importForm(externalSource, file), signal,
+  })
+}
+
+/** Applies the file in one transaction, or writes nothing at all if any row has an issue. */
+export function applyOrderImport(
+  companyId: string,
+  externalSource: string,
+  file: File,
+): Promise<OrderImportReport> {
+  return apiUpload<OrderImportReport>('/orders/import', {
+    companyId, formData: importForm(externalSource, file),
   })
 }

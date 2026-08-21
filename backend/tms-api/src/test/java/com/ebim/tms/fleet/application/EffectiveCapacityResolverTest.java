@@ -27,7 +27,7 @@ class EffectiveCapacityResolverTest {
     private static Vehicle vehicle(UUID companyId, BigDecimal weightOverride, BigDecimal volumeOverride,
             Integer palletsOverride) {
         return new Vehicle(companyId, "VEH", "ABC-123", null, UUID.randomUUID(), weightOverride, volumeOverride,
-                palletsOverride, VehicleAvailabilityStatus.AVAILABLE, UUID.randomUUID());
+                palletsOverride, VehicleAvailabilityStatus.AVAILABLE, null, UUID.randomUUID());
     }
 
     @Test

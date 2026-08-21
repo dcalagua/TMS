@@ -10,6 +10,26 @@
     "STORE": "Store"
   },
   "inactive": "Inactive",
+  "locationRole": {
+    "DC": "Distribution center",
+    "HUB": "Hub",
+    "ORIGIN": "Origin",
+    "OTHER": "Other",
+    "PLANT": "Plant",
+    "SHIP_TO": "Ship to",
+    "STORE": "Store"
+  },
+  "locationType": {
+    "BRANCH": "Branch",
+    "CUSTOMER": "Customer",
+    "DELIVERY_POINT": "Delivery point",
+    "DISTRIBUTION_CENTER": "Distribution center",
+    "HUB": "Hub",
+    "OTHER": "Other",
+    "PLANT": "Plant",
+    "STORE": "Store",
+    "WAREHOUSE": "Warehouse"
+  },
   "maintenance": "Maintenance",
   "orderPriority": {
     "HIGH": "High",

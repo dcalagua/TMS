@@ -24,4 +24,7 @@ public interface VehicleTypeRepository extends JpaRepository<VehicleType, UUID>,
     boolean existsByCompanyIdAndCode(UUID companyId, String code);
 
     boolean existsByCompanyIdAndCodeAndIdNot(UUID companyId, String code, UUID id);
+
+    /** Which of a bulk import file's codes this company already holds - see {@code VehicleTypeImportService}. */
+    List<VehicleType> findByCompanyIdAndCodeIn(UUID companyId, Collection<String> codes);
 }

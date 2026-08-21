@@ -1,0 +1,14 @@
+{
+  "advancedCoordinates": "Exact coordinates",
+  "helpText": "Click the map or drag the marker to adjust the location.",
+  "loading": "Loading the map...",
+  "mapAriaLabel": "Map to pick the location",
+  "search": "Search",
+  "searchFailed": "Could not search the address. Try again.",
+  "searchNoResults": "No results found for that address.",
+  "searchPlaceholder": "Search an address",
+  "someStopsNotMapped_one": "{{count}} destination has no coordinates and does not appear on the map.",
+  "someStopsNotMapped_other": "{{count}} destinations have no coordinates and do not appear on the map.",
+  "stopsAriaLabel": "Stops map",
+  "unavailable": "The map is unavailable. You can enter latitude and longitude manually."
+}

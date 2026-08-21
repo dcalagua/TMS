@@ -71,7 +71,12 @@ h6 {
 
 /* ---- Top bar ------------------------------------------------------------ */
 .tms-topbar {
+  /* The bar carries the navigation shell's colour rather than the page's white.
+     A white bar between a dark column and a grey page reads as a third surface
+     that belongs to neither; giving it the shell tone makes the chrome one
+     continuous frame and lets the content be the only bright thing on screen. */
   background-color: var(--tms-topbar-bg);
+  color: var(--tms-topbar-text);
   border-bottom: 1px solid var(--tms-topbar-border);
   height: var(--tms-topbar-height);
   position: sticky;
@@ -99,20 +104,25 @@ h6 {
 }
 
 .tms-breadcrumb-item {
-  color: var(--tms-muted);
+  color: var(--tms-topbar-muted);
   white-space: nowrap;
 }
 
+/* The current screen is the title of the bar, not the last link of a trail: it
+   is set larger and in full white, and the ancestors stay quiet beside it. */
 .tms-breadcrumb-item:last-child {
-  color: var(--tms-text);
-  font-weight: 600;
+  color: var(--tms-topbar-text);
+  font-size: var(--tms-font-lg);
+  font-weight: 650;
+  letter-spacing: var(--tms-tracking-tight);
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .tms-breadcrumb-sep {
-  color: var(--tms-border-strong);
+  color: var(--tms-topbar-muted);
   font-size: 0.625rem;
+  opacity: 0.65;
 }
 
 @media (min-width: 768px) {
@@ -248,6 +258,301 @@ h6 {
   box-shadow: inset 2px 0 0 var(--tms-ink);
 }
 
+/* ---- Account panel ------------------------------------------------------
+   Wider and more elevated than a plain dropdown, because it is a panel rather
+   than a list: it carries an identity, two settings and two actions. It also
+   drops the outer padding so the identity block can run to the panel's edges. */
+.tms-menu-account {
+  min-width: 19rem;
+  padding: 0;
+  border-radius: var(--tms-radius-lg);
+  box-shadow: var(--tms-shadow-lg);
+  overflow: hidden;
+}
+
+.tms-menu-body {
+  padding: 0.375rem;
+}
+
+/* The identity block that heads the user menu: who is signed in, under which
+   address, in which organization. Three facts, one glance, before any action.
+
+   It gets its own tinted ground so it reads as a header rather than as the first
+   row of the list - which is what made the panel look like an undifferentiated
+   stack of text. */
+.tms-menu-identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 0.875rem 0.8125rem;
+  background-color: var(--tms-surface-alt);
+  border-bottom: 1px solid var(--tms-border);
+}
+
+.tms-menu-identity-text {
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.tms-menu-identity-name {
+  display: block;
+  font-size: var(--tms-font-md);
+  font-weight: 650;
+  color: var(--tms-text);
+}
+
+.tms-menu-identity-email {
+  display: block;
+  font-size: var(--tms-font-base);
+  color: var(--tms-muted);
+}
+
+/* The organization, badged rather than set as another grey line: it is the scope
+   everything else in the session hangs from, and it should not read as metadata. */
+.tms-menu-identity-org {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  margin-top: 0.375rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--tms-radius-pill);
+  background-color: var(--tms-primary-subtle);
+  border: 1px solid var(--tms-primary-border-subtle);
+  font-size: var(--tms-font-xs);
+  font-weight: 600;
+  color: var(--tms-text-secondary);
+}
+
+/* Compound selector on purpose: `.tms-avatar` is declared later in this file, so
+   a single class here loses the border-radius to it and the circle comes out a
+   square. */
+.tms-avatar.tms-avatar-lg {
+  width: 2.375rem;
+  height: 2.375rem;
+  border-radius: var(--tms-radius-pill);
+  font-size: var(--tms-font-lg);
+}
+
+/* The same tile the navigation uses, on a light ground: one icon language across
+   the product rather than bare glyphs here and framed ones there. */
+.tms-menu-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: none;
+  border-radius: var(--tms-radius-pill);
+  background-color: var(--tms-surface-alt);
+  border: 1px solid var(--tms-border);
+  color: var(--tms-text-secondary);
+  font-size: 0.875rem;
+  transition: background-color var(--tms-motion-fast) ease, color var(--tms-motion-fast) ease;
+}
+
+/* A row that is also a control: tile, two lines of text, and a caret when it
+   leads somewhere. Replaces the stacked menu item, which had the label and its
+   hint sharing the left edge with nothing to anchor them. */
+.tms-menu-action {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.5rem 0.5rem;
+  border: 0;
+  border-radius: var(--tms-radius-md);
+  background: none;
+  text-align: left;
+  transition: background-color var(--tms-motion-fast) ease;
+}
+
+.tms-menu-action:hover {
+  background-color: var(--tms-surface-hover);
+}
+
+.tms-menu-action:hover .tms-menu-tile {
+  background-color: var(--tms-surface);
+  color: var(--tms-text);
+}
+
+.tms-menu-action-text {
+  min-width: 0;
+  flex: 1 1 auto;
+  line-height: 1.3;
+}
+
+.tms-menu-action-title {
+  display: block;
+  font-size: var(--tms-font-md);
+  font-weight: 600;
+  color: var(--tms-text);
+}
+
+.tms-menu-action-meta {
+  display: block;
+  font-size: var(--tms-font-base);
+  color: var(--tms-muted);
+}
+
+.tms-menu-action-caret {
+  flex: none;
+  font-size: 0.75rem;
+  color: var(--tms-muted);
+}
+
+/* Sign-out is the one destructive action here, so it carries the tone - but on
+   the tile and the title, not as a red block. A filled red row in a menu you
+   open to change your language reads as an alarm. */
+.tms-menu-action.is-danger .tms-menu-action-title {
+  color: var(--tms-danger);
+}
+
+.tms-menu-action.is-danger .tms-menu-tile {
+  background-color: var(--tms-danger-soft);
+  border-color: var(--tms-danger-border);
+  color: var(--tms-danger);
+}
+
+.tms-menu-action.is-danger:hover {
+  background-color: var(--tms-danger-soft);
+}
+
+.tms-menu-section {
+  padding: 0.25rem 0.625rem;
+  margin: 0;
+  font-size: var(--tms-font-xs);
+  font-weight: 650;
+  letter-spacing: var(--tms-tracking-wide);
+  text-transform: uppercase;
+  color: var(--tms-muted);
+}
+
+/* A row that holds a control rather than being one - it must not look clickable
+   itself, so it gets no hover and no pointer. */
+.tms-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.625rem 0.5rem;
+}
+
+.tms-menu-row-icon {
+  flex: none;
+  font-size: 1rem;
+  color: var(--tms-muted);
+}
+
+.tms-menu-account .tms-menu-row {
+  padding: 0.375rem 0.5rem 0.5rem;
+  gap: 0.625rem;
+}
+
+.tms-menu-row-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--tms-font-md);
+  font-weight: 550;
+  color: var(--tms-text);
+}
+
+/* The theme row stacks: two labelled swatches do not fit beside a label on the
+   same line at the menu's width, and squeezing them would shrink the swatch to
+   the point where it stops previewing anything. */
+.tms-menu-row-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.375rem;
+}
+
+.tms-menu-row-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tms-segmented-theme {
+  width: 100%;
+}
+
+.tms-segmented-theme .tms-segmented-option {
+  flex: 1 1 0;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+/* A two-tone chip: the shell colour the theme paints its navigation with, and
+   the accent it uses for actions. Those two are what actually changes. */
+.tms-theme-swatch {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+  border-radius: var(--tms-radius-pill);
+  border: 1px solid rgba(var(--tms-shadow-rgb), 0.25);
+}
+
+.tms-theme-swatch-neutral {
+  background-image: linear-gradient(135deg, #131519 0 50%, #6b717b 50% 100%);
+}
+
+.tms-theme-swatch-ebim {
+  background-image: linear-gradient(135deg, #0a3f33 0 50%, #2f8159 50% 100%);
+}
+
+.tms-menu-item-danger .tms-menu-item-title {
+  color: var(--tms-danger);
+}
+
+/* ---- Empty menu panel (alerts) ------------------------------------------ */
+.tms-menu-empty {
+  padding: 1.25rem 0.75rem 1.5rem;
+  text-align: center;
+}
+
+.tms-menu-empty-icon {
+  font-size: 1.5rem;
+  color: var(--tms-border-strong);
+}
+
+.tms-menu-empty-title {
+  margin: 0.5rem 0 0.125rem;
+  font-size: var(--tms-font-md);
+  font-weight: 600;
+  color: var(--tms-text);
+}
+
+.tms-menu-empty-hint {
+  margin: 0;
+  font-size: var(--tms-font-base);
+  color: var(--tms-muted);
+}
+
+/* ---- Identity chip in the bar ------------------------------------------- */
+.tms-topbar-user-text {
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.tms-topbar-user-name {
+  display: block;
+  max-width: 100%;
+  font-weight: 600;
+  color: var(--tms-topbar-text);
+}
+
+.tms-topbar-user-scope {
+  display: block;
+  max-width: 100%;
+  font-size: var(--tms-font-xs);
+  color: var(--tms-topbar-muted);
+}
+
 .tms-menu-header {
   padding: 0.4375rem 0.625rem 0.3125rem;
   margin: 0;
@@ -280,33 +585,32 @@ h6 {
   max-width: 14rem;
   /* Truncates its label rather than pushing the controls beside it off the bar. */
   flex: 0 1 auto;
-  height: 2.125rem;
-  padding: 0 0.625rem;
-  border: 1px solid var(--tms-border);
-  border-radius: var(--tms-radius-md);
-  background-color: var(--tms-surface);
-  color: var(--tms-text);
+  height: 2.375rem;
+  padding: 0 0.5rem 0 0.375rem;
+  border: 1px solid var(--tms-topbar-control-border);
+  border-radius: var(--tms-radius-pill);
+  background-color: var(--tms-topbar-control-bg);
+  color: var(--tms-topbar-text);
   font-size: var(--tms-font-base);
   font-weight: 500;
   line-height: 1;
   min-width: 0;
-  transition: background-color 0.12s ease, border-color 0.12s ease;
+  transition: background-color var(--tms-motion-fast) ease, border-color var(--tms-motion-fast) ease;
 }
 
 .tms-topbar-control:hover,
 .tms-topbar-control.is-open {
-  background-color: var(--tms-surface-alt);
-  border-color: var(--tms-border-strong);
+  background-color: var(--tms-topbar-control-hover-bg);
 }
 
 .tms-topbar-control-icon {
-  color: var(--tms-muted);
+  color: var(--tms-topbar-muted);
   font-size: var(--tms-font-md);
   flex: none;
 }
 
 .tms-topbar-control-caret {
-  color: var(--tms-muted);
+  color: var(--tms-topbar-muted);
   font-size: 0.6875rem;
   flex: none;
   margin-left: auto;
@@ -388,12 +692,16 @@ h6 {
    knowing the name of one should be faster than remembering which group holds
    it. Centred, because the bar reads as balanced only when its middle carries
    something. */
-/* Left-aligned, next to the navigation toggles: search is something the operator
-   reaches for, and a control they reach for belongs where the eye starts, not
-   floating in the middle of the bar. */
+/* Centred and wide. The bar now carries the shell colour, and on a coloured
+   ground the middle is the strongest position there is - which is where the one
+   control that reaches all twenty screens belongs. Auto margins do the centring
+   so it stays centred on the bar regardless of how long the screen title or the
+   account name happen to be. */
 .tms-navsearch {
   position: relative;
-  flex: 0 1 22rem;
+  flex: 1 1 auto;
+  max-width: 34rem;
+  margin-inline: auto;
   min-width: 0;
   display: none;
 }
@@ -406,39 +714,54 @@ h6 {
 
 .tms-navsearch-icon {
   position: absolute;
-  left: 0.75rem;
+  left: 1rem;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--tms-muted);
+  color: var(--tms-topbar-muted);
   font-size: var(--tms-font-md);
   pointer-events: none;
+  transition: color var(--tms-motion-fast) ease;
 }
 
 .tms-navsearch-input {
   width: 100%;
-  height: 2.125rem;
-  padding: 0 0.75rem 0 2.25rem;
-  font-size: var(--tms-font-base);
-  color: var(--tms-text);
-  background-color: var(--tms-surface-alt);
-  border: 1px solid var(--tms-border);
-  border-radius: var(--tms-radius-md);
-  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  height: 2.375rem;
+  padding: 0 1rem 0 2.5rem;
+  font-size: var(--tms-font-md);
+  color: var(--tms-topbar-text);
+  background-color: var(--tms-topbar-control-bg);
+  border: 1px solid var(--tms-topbar-control-border);
+  border-radius: var(--tms-radius-pill);
+  transition: background-color var(--tms-motion-fast) ease, border-color var(--tms-motion-fast) ease,
+    box-shadow var(--tms-motion-fast) ease;
 }
 
 .tms-navsearch-input::placeholder {
-  color: var(--tms-muted);
+  color: var(--tms-topbar-muted);
 }
 
 .tms-navsearch-input:hover {
-  background-color: var(--tms-surface);
+  background-color: var(--tms-topbar-control-hover-bg);
 }
 
+/* On focus the field turns into a normal white input: it is about to hold typed
+   text, and text is read fastest on the surface colour the rest of the product
+   uses. The ring is the inverse one, because the theme ring is tuned for a light
+   ground and disappears against the bar. */
 .tms-navsearch-input:focus {
   outline: none;
+  color: var(--tms-text);
   background-color: var(--tms-surface);
-  border-color: var(--tms-ink);
-  box-shadow: var(--tms-focus-ring);
+  border-color: var(--tms-surface);
+  box-shadow: var(--tms-focus-ring-inverse);
+}
+
+.tms-navsearch-input:focus::placeholder {
+  color: var(--tms-muted);
+}
+
+.tms-navsearch:focus-within .tms-navsearch-icon {
+  color: var(--tms-muted);
 }
 
 .tms-navsearch-list {
@@ -507,10 +830,44 @@ h6 {
   flex: 0 1 auto;
 }
 
+/* The group shrinking is only half of it: a flex item defaults to `min-width: auto`,
+   which refuses to go below its own content. One such child - the user menu, whose
+   root carries no class of its own - would then overflow the group it sits in rather
+   than truncate, and the page grew a horizontal scrollbar at 1024px. Letting every
+   control shrink keeps the truncation where it belongs, inside the control. */
+.tms-topbar-actions > * {
+  min-width: 0;
+}
+
+/* And the control inside that child: it is a block in a plain div, so without a cap it
+   keeps its content width and overflows anyway. With both rules the name ellipsizes. */
+.tms-topbar-actions .tms-topbar-control {
+  max-width: 100%;
+}
+
+/* Icon buttons that live on the shell bar: the same control, re-tinted for a
+   dark ground. Scoped to the bar so the identical class keeps its light-surface
+   treatment everywhere else in the product. */
+.tms-topbar .tms-icon-btn {
+  color: var(--tms-topbar-muted);
+  border-color: transparent;
+  background-color: transparent;
+}
+
+.tms-topbar .tms-icon-btn:hover,
+.tms-topbar .tms-icon-btn.is-open {
+  color: var(--tms-topbar-text);
+  background-color: var(--tms-topbar-control-hover-bg);
+}
+
+.tms-topbar .tms-icon-btn:focus-visible {
+  box-shadow: var(--tms-focus-ring-inverse);
+}
+
 .tms-topbar-divider {
   width: 1px;
   height: 1.5rem;
-  background-color: var(--tms-border);
+  background-color: var(--tms-topbar-divider-color);
   flex: none;
 }
 
@@ -549,6 +906,8 @@ h6 {
    light background - a contrast failure, not a cosmetic one. This is the documented way to opt
    a responsive offcanvas out of that rule. */
 .tms-sidebar {
+  display: flex;
+  flex-direction: column;
   background-color: var(--tms-sidebar-bg) !important;
   color: var(--tms-sidebar-text);
   width: var(--tms-sidebar-width);
@@ -605,6 +964,92 @@ h6 {
   color: var(--tms-sidebar-muted);
 }
 
+/* Ownership set under the product name rather than beside it, so the wordmark
+   reads as one lockup and the eye does not have to parse "TMS by EBIM" as a
+   single long string. */
+.tms-sidebar-brand-owner {
+  display: block;
+  margin-top: 0.0625rem;
+  font-size: var(--tms-font-xs);
+  font-weight: 600;
+  letter-spacing: var(--tms-tracking-wide);
+  text-transform: uppercase;
+  color: var(--tms-sidebar-muted);
+  white-space: nowrap;
+}
+
+/* ---- Workspace (company) control ---------------------------------------- */
+.tms-sidebar-workspace {
+  flex: none;
+  padding: 0.75rem 0.625rem 0.25rem;
+}
+
+.tms-workspace {
+  min-width: 0;
+}
+
+.tms-workspace-control {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--tms-radius-lg);
+  border: 1px solid var(--tms-workspace-border);
+  background-color: var(--tms-workspace-bg);
+  color: var(--tms-sidebar-text-strong);
+  text-align: start;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.tms-workspace-control:hover,
+.tms-workspace-control.is-open {
+  background-color: var(--tms-workspace-hover-bg);
+}
+
+.tms-workspace-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  flex: none;
+  border-radius: var(--tms-radius-pill);
+  background-color: var(--tms-workspace-avatar-bg);
+  color: var(--tms-workspace-avatar-text);
+  font-size: var(--tms-font-md);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.tms-workspace-text {
+  min-width: 0;
+  flex: 1 1 auto;
+  line-height: 1.2;
+}
+
+.tms-workspace-overline {
+  display: block;
+  font-size: var(--tms-font-xs);
+  font-weight: 650;
+  letter-spacing: var(--tms-tracking-wide);
+  text-transform: uppercase;
+  color: var(--tms-sidebar-muted);
+}
+
+.tms-workspace-name {
+  display: block;
+  font-size: var(--tms-font-md);
+  font-weight: 600;
+  color: var(--tms-sidebar-text-strong);
+}
+
+.tms-workspace-caret {
+  flex: none;
+  font-size: 0.875rem;
+  color: var(--tms-sidebar-muted);
+}
+
 /* The tenant, set as a small caps line under the product name. An operator who
    works across two companies checks this before acting, so it has to be legible
    rather than decorative. */
@@ -622,6 +1067,10 @@ h6 {
 }
 
 .tms-sidebar-body {
+  /* Without this the menu does not scroll: a flex child refuses to shrink below
+     its content, so a navigation taller than the window overflowed past the
+     bottom of the dark column and the last group was drawn over the page. */
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   flex: 1 1 auto;
@@ -654,6 +1103,14 @@ h6 {
   color: var(--tms-sidebar-muted);
   padding: 0.875rem 1rem 0;
   margin: 0.5rem 0.625rem 0.25rem;
+  border-top: 1px solid var(--tms-sidebar-border);
+}
+
+/* Separated from the module groups by space and a rule, because it is not part of
+   the day's work - but still an ordinary entry, not a pinned footer. */
+.tms-nav-trailing {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
   border-top: 1px solid var(--tms-sidebar-border);
 }
 
@@ -693,33 +1150,55 @@ h6 {
 }
 
 /* Fixed box and centred glyph: bootstrap-icons vary in width, and without this
-   the labels sat on a ragged left edge down the column. */
+   the labels sat on a ragged left edge down the column. The box is a visible
+   tile rather than a bare glyph - it holds the left edge steady and gives each
+   entry a mark the eye can find before it has read the word. */
 .tms-nav-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.75rem;
+  height: 1.75rem;
   flex: none;
-  font-size: 1rem;
-  opacity: 0.7;
+  font-size: 0.9375rem;
+  border-radius: var(--tms-radius-sm);
+  background-color: var(--tms-sidebar-tile-bg);
+  border: 1px solid var(--tms-sidebar-tile-border);
+  color: var(--tms-sidebar-tile-icon);
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 
 .tms-nav-link:hover .tms-nav-icon {
-  opacity: 1;
+  background-color: var(--tms-sidebar-tile-hover-bg);
+  color: var(--tms-sidebar-text-strong);
 }
 
 .tms-nav-link.active .tms-nav-icon {
-  opacity: 1;
-  color: var(--tms-sidebar-active-text);
+  background-color: var(--tms-sidebar-tile-active-bg);
+  border-color: var(--tms-sidebar-tile-active-bg);
+  color: var(--tms-sidebar-tile-active-icon);
 }
 
 /* Collapsed rail: icons only, labels removed from the layout but kept for
    assistive technology through the link's `title`. */
 .tms-sidebar-rail .tms-nav-label,
 .tms-sidebar-rail .tms-nav-group-label-text,
-.tms-sidebar-rail .tms-sidebar-brand-text {
+.tms-sidebar-rail .tms-sidebar-brand-text,
+.tms-sidebar-rail .tms-workspace-text,
+.tms-sidebar-rail .tms-workspace-caret {
   display: none;
+}
+
+/* The rail keeps the company control as its avatar alone. Dropping it entirely
+   would remove the only answer to "which company am I in?" from a collapsed
+   column, and the initial still opens the same menu. */
+.tms-sidebar-rail .tms-sidebar-workspace {
+  padding-inline: 0.5rem;
+}
+
+.tms-sidebar-rail .tms-workspace-control {
+  justify-content: center;
+  padding-inline: 0.25rem;
 }
 
 .tms-sidebar-rail .tms-sidebar-brand {
@@ -869,6 +1348,67 @@ h6 {
   font-size: 0.875rem;
 }
 
+/* ---- Async lookup (LookupField) ----------------------------------------
+   An editable combobox over master data. Unlike `.tms-menu`'s other users this
+   panel is *not* portalled: it belongs to a form field inside a drawer that
+   scrolls, and a fixed-position panel would stay put while its field scrolled
+   away from underneath it. Absolute positioning inside the field keeps the two
+   together, which is the behaviour that matters here; nothing in a drawer form
+   clips it the way a table's overflow container would. */
+.tms-lookup {
+  position: relative;
+}
+
+.tms-lookup-control {
+  position: relative;
+}
+
+/* Room for the clear button, so a long "CODE - Name" selection does not run
+   underneath it. */
+.tms-lookup-control .form-control {
+  padding-right: 2.25rem;
+}
+
+.tms-lookup-clear {
+  position: absolute;
+  right: 0.375rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--tms-radius-sm);
+  background: none;
+  color: var(--tms-muted);
+  font-size: 0.6875rem;
+}
+
+.tms-lookup-clear:hover,
+.tms-lookup-clear:focus-visible {
+  background-color: var(--tms-surface-alt);
+  color: var(--tms-text);
+}
+
+.tms-lookup-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  /* About six entries before it scrolls: enough to show that the list continues,
+     short enough not to cover the rest of the form. */
+  max-height: 17rem;
+}
+
+.tms-lookup-empty {
+  padding: 0.5rem 0.625rem;
+  font-size: var(--tms-font-base);
+  color: var(--tms-muted);
+}
+
 .tms-filter-field {
   display: flex;
   flex-direction: column;
@@ -910,6 +1450,7 @@ h6 {
 /* `:not(.tms-filterbar-actions)` matters: the action group is a direct child div
    too, and the field cap was shrinking it to 16rem, which stopped it filling the
    row once it wrapped onto a line of its own. */
+.tms-filter-field,
 .tms-filterbar > div:not(.tms-filterbar-actions) {
   flex: 1 1 11rem;
   min-width: 9rem;
@@ -924,6 +1465,592 @@ h6 {
   text-transform: uppercase;
   color: var(--tms-muted);
   margin-bottom: 0.3125rem;
+}
+
+/* ---- KPI card ------------------------------------------------------------
+   A figure, what it counts, and a way to act on it. Deliberately restrained:
+   the tone lives on the icon tile and the number, never as a filled panel, so a
+   row of four does not turn the dashboard into a traffic light. */
+.tms-kpi {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  padding: 1rem;
+  background-color: var(--tms-surface);
+  border: 1px solid var(--tms-border);
+  border-radius: var(--tms-radius-lg);
+  box-shadow: var(--tms-shadow-xs);
+  text-decoration: none;
+  transition: border-color var(--tms-motion-fast) ease, box-shadow var(--tms-motion-fast) ease,
+    transform var(--tms-motion-fast) ease;
+}
+
+.tms-kpi-link:hover {
+  border-color: var(--tms-border-strong);
+  box-shadow: var(--tms-shadow-sm);
+  /* One pixel, not four: it should feel like the card lifted, not like it moved. */
+  transform: translateY(-1px);
+}
+
+.tms-kpi-link:focus-visible {
+  outline: none;
+  border-color: var(--tms-primary);
+  box-shadow: var(--tms-focus-ring);
+}
+
+.tms-kpi-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: none;
+  border-radius: var(--tms-radius-md);
+  font-size: 1.125rem;
+}
+
+.tms-kpi-tile-neutral {
+  background-color: var(--tms-neutral-soft);
+  color: var(--tms-neutral);
+}
+.tms-kpi-tile-success {
+  background-color: var(--tms-success-soft);
+  color: var(--tms-success);
+}
+.tms-kpi-tile-warning {
+  background-color: var(--tms-warning-soft);
+  color: var(--tms-warning);
+}
+.tms-kpi-tile-danger {
+  background-color: var(--tms-danger-soft);
+  color: var(--tms-danger);
+}
+.tms-kpi-tile-info {
+  background-color: var(--tms-info-soft);
+  color: var(--tms-info);
+}
+
+.tms-kpi-text {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.tms-kpi-label {
+  font-size: var(--tms-font-xs);
+  font-weight: 700;
+  letter-spacing: var(--tms-tracking-wide);
+  text-transform: uppercase;
+  color: var(--tms-muted);
+}
+
+/* Tabular figures so a column of counts lines up digit under digit. */
+.tms-kpi-value {
+  font-size: var(--tms-font-3xl);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: var(--tms-tracking-tight);
+  font-variant-numeric: tabular-nums;
+  color: var(--tms-text);
+}
+
+.tms-kpi-value-warning {
+  color: var(--tms-warning);
+}
+.tms-kpi-value-danger {
+  color: var(--tms-danger);
+}
+
+/* A bar the width of a plausible figure, so the card does not resize when the
+   number arrives and shove the row below it. */
+.tms-kpi-value-loading {
+  display: block;
+  width: 3rem;
+  height: 2rem;
+  border-radius: var(--tms-radius-sm);
+  background: linear-gradient(90deg, var(--tms-skeleton-base), var(--tms-skeleton-sheen), var(--tms-skeleton-base));
+  background-size: 200% 100%;
+  animation: tms-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.tms-kpi-hint {
+  font-size: var(--tms-font-base);
+  color: var(--tms-muted);
+}
+
+.tms-kpi-go {
+  flex: none;
+  align-self: center;
+  font-size: 0.875rem;
+  color: var(--tms-border-strong);
+  transition: color var(--tms-motion-fast) ease, transform var(--tms-motion-fast) ease;
+}
+
+.tms-kpi-link:hover .tms-kpi-go {
+  color: var(--tms-primary);
+  transform: translateX(2px);
+}
+
+/* Four across on a wide screen, two on a laptop, one on a phone - without a
+   media query per breakpoint. */
+.tms-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+/* ---- Module tiles (quick access) -----------------------------------------
+   A grid of destinations, each with its module's accent on the icon. Replaces a
+   row of outline buttons: those read as actions on the current screen, when what
+   these actually are is places to go. */
+.tms-modules {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.tms-modules-group-label {
+  margin: 0 0 0.625rem;
+  font-size: var(--tms-font-xs);
+  font-weight: 700;
+  letter-spacing: var(--tms-tracking-wide);
+  text-transform: uppercase;
+  color: var(--tms-muted);
+}
+
+.tms-modules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+  gap: 0.625rem;
+}
+
+.tms-module {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--tms-border);
+  border-radius: var(--tms-radius-md);
+  background-color: var(--tms-surface);
+  text-decoration: none;
+  transition: background-color var(--tms-motion-fast) ease, border-color var(--tms-motion-fast) ease,
+    transform var(--tms-motion-fast) ease;
+}
+
+.tms-module:hover {
+  background-color: var(--tms-surface-hover);
+  border-color: var(--tms-border-strong);
+  transform: translateY(-1px);
+}
+
+.tms-module:focus-visible {
+  outline: none;
+  border-color: var(--tms-primary);
+  box-shadow: var(--tms-focus-ring);
+}
+
+.tms-module-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.125rem;
+  height: 2.125rem;
+  flex: none;
+  border-radius: var(--tms-radius-md);
+  font-size: 1rem;
+}
+
+.tms-module-label {
+  min-width: 0;
+  font-size: var(--tms-font-md);
+  font-weight: 600;
+  color: var(--tms-text);
+}
+
+/* The six categorical accents, as a fill and a glyph colour. */
+.tms-accent-1 { background-color: var(--tms-accent-1-soft); color: var(--tms-accent-1-fg); }
+.tms-accent-2 { background-color: var(--tms-accent-2-soft); color: var(--tms-accent-2-fg); }
+.tms-accent-3 { background-color: var(--tms-accent-3-soft); color: var(--tms-accent-3-fg); }
+.tms-accent-4 { background-color: var(--tms-accent-4-soft); color: var(--tms-accent-4-fg); }
+.tms-accent-5 { background-color: var(--tms-accent-5-soft); color: var(--tms-accent-5-fg); }
+.tms-accent-6 { background-color: var(--tms-accent-6-soft); color: var(--tms-accent-6-fg); }
+
+/* ---- Session strip -------------------------------------------------------
+   Four facts about the session, set as a footer rather than as a card. They are
+   reference, not work, and a full panel gave them the same weight as the
+   operational counters above. */
+.tms-session-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.75rem 1.5rem;
+  margin: 1.25rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--tms-border);
+}
+
+.tms-session-strip > div {
+  min-width: 0;
+}
+
+.tms-session-strip dt {
+  font-size: var(--tms-font-xs);
+  font-weight: 700;
+  letter-spacing: var(--tms-tracking-wide);
+  text-transform: uppercase;
+  color: var(--tms-muted);
+  margin-bottom: 0.125rem;
+}
+
+.tms-session-strip dd {
+  margin: 0;
+  font-size: var(--tms-font-md);
+  color: var(--tms-text);
+}
+
+/* ---- Table pager ---------------------------------------------------------
+   Sits on the table panel's own footer strip: size on the left, range in the
+   middle, steps on the right. Three jobs, three positions, so the eye goes
+   straight to the one it wants. */
+.tms-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+  width: 100%;
+}
+
+.tms-pager-size {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: none;
+}
+
+.tms-pager-size-label,
+.tms-pager-range {
+  font-size: var(--tms-font-base);
+  color: var(--tms-muted);
+  white-space: nowrap;
+}
+
+/* Narrow enough for two digits and the caret, so the control does not read as a
+   filter field parked in the footer. */
+.tms-pager-size .tms-select {
+  width: 5.25rem;
+}
+
+.tms-pager-range {
+  margin-inline: auto;
+}
+
+.tms-pager-steps {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: none;
+}
+
+.tms-pager-count {
+  font-size: var(--tms-font-base);
+  color: var(--tms-text-secondary);
+  padding-inline: 0.5rem;
+  white-space: nowrap;
+}
+
+.tms-pager-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  border: 1px solid var(--tms-border);
+  border-radius: var(--tms-radius-md);
+  background-color: var(--tms-surface);
+  color: var(--tms-text-secondary);
+  font-size: 0.875rem;
+  transition: background-color var(--tms-motion-fast) ease, border-color var(--tms-motion-fast) ease,
+    color var(--tms-motion-fast) ease;
+}
+
+.tms-pager-step:hover:not(:disabled) {
+  background-color: var(--tms-surface-hover);
+  border-color: var(--tms-border-strong);
+  color: var(--tms-text);
+}
+
+/* Dimmed rather than hidden: an edge of the range is information, and a control
+   that vanishes makes the pair jump sideways. */
+.tms-pager-step:disabled {
+  color: var(--tms-border-strong);
+  background-color: var(--tms-surface-muted);
+}
+
+@media (max-width: 575.98px) {
+  .tms-pager-range {
+    margin-inline: 0;
+    order: 3;
+    width: 100%;
+  }
+}
+
+/* ---- Select --------------------------------------------------------------
+   Matches the height, radius, border and focus of `.form-control`, because it
+   stands beside real inputs in every filter bar and form: a control that is a
+   few pixels off reads as broken long before anyone works out why. */
+.tms-select {
+  position: relative;
+}
+
+.tms-select-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  background-color: var(--tms-surface);
+  border: 1px solid var(--tms-border-strong);
+  border-radius: var(--tms-radius-md);
+  color: var(--tms-text);
+  transition: border-color var(--tms-motion-fast) ease, box-shadow var(--tms-motion-fast) ease,
+    background-color var(--tms-motion-fast) ease;
+}
+
+.tms-select-md {
+  height: 2.375rem;
+  padding: 0 0.75rem;
+  font-size: var(--tms-font-md);
+}
+
+.tms-select-sm {
+  height: 2rem;
+  padding: 0 0.625rem;
+  font-size: var(--tms-font-base);
+}
+
+.tms-select-trigger:hover:not(:disabled) {
+  border-color: var(--tms-text-secondary);
+}
+
+.tms-select-trigger:focus-visible,
+.tms-select-trigger.is-open {
+  outline: none;
+  border-color: var(--tms-primary);
+  box-shadow: var(--tms-focus-ring);
+}
+
+.tms-select-trigger:disabled {
+  background-color: var(--tms-surface-muted);
+  color: var(--tms-muted);
+  border-color: var(--tms-border);
+}
+
+.tms-select-trigger.is-invalid {
+  border-color: var(--tms-danger);
+}
+
+.tms-select-trigger.is-invalid:focus-visible,
+.tms-select-trigger.is-invalid.is-open {
+  box-shadow: 0 0 0 3px rgba(var(--tms-danger-rgb), 0.14);
+}
+
+.tms-select-value {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tms-select-value.is-placeholder {
+  color: var(--tms-muted);
+}
+
+.tms-select-caret {
+  flex: none;
+  font-size: 0.75rem;
+  color: var(--tms-muted);
+  transition: transform var(--tms-motion-fast) ease;
+}
+
+.tms-select-trigger.is-open .tms-select-caret {
+  transform: rotate(180deg);
+}
+
+/* The panel the operating system used to draw. Same elevation and radius as the
+   product's other floating surfaces, so it belongs to the application rather
+   than to Windows. */
+.tms-select-list {
+  /* Width comes from the trigger (set inline). The floor is only for the case where the
+     field is unusually narrow. */
+  min-width: 8rem;
+  max-height: 18rem;
+  padding: 0.25rem;
+  background-color: var(--tms-surface-raised);
+  border: 1px solid var(--tms-border);
+  border-radius: var(--tms-radius-md);
+  box-shadow: var(--tms-shadow-md);
+  z-index: 1080;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  animation: tms-menu-in var(--tms-motion-fast) var(--tms-easing);
+}
+
+.tms-select-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4375rem 0.5rem;
+  border: 0;
+  border-radius: var(--tms-radius-sm);
+  background: none;
+  color: var(--tms-text);
+  font-size: var(--tms-font-md);
+  text-align: left;
+  line-height: 1.35;
+  transition: background-color var(--tms-motion-fast) ease;
+}
+
+/* Long labels wrap instead of being cut. An option the user cannot read in full is an
+   option they cannot choose with confidence, and a category name is exactly the kind of
+   text that runs long in Spanish. */
+.tms-select-option-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+
+.tms-select-option:hover:not(:disabled),
+.tms-select-option:focus-visible {
+  outline: none;
+  background-color: var(--tms-surface-hover);
+}
+
+/* Selection is the theme's primary tint plus a check - never the browser's blue
+   fill, which is the whole reason this control exists. */
+.tms-select-option.is-selected {
+  background-color: var(--tms-primary-soft);
+  color: var(--tms-primary);
+  font-weight: 600;
+}
+
+.tms-select-option:disabled {
+  color: var(--tms-muted);
+}
+
+.tms-select-check {
+  margin-left: auto;
+  flex: none;
+  font-size: 0.875rem;
+  /* Nudged onto the first line, so a two-line option keeps the tick beside its start. */
+  margin-top: 0.125rem;
+}
+
+/* ---- Applied filters ----------------------------------------------------
+   A quiet strip between the bar and the table: it only exists while something is
+   filtering, and it has to read as an annotation on the list rather than as a
+   second toolbar competing with the first. */
+.tms-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  margin: -0.5rem 0 0.875rem;
+  padding-inline: 0.125rem;
+}
+
+.tms-filter-chips-label {
+  font-size: var(--tms-font-xs);
+  font-weight: 700;
+  letter-spacing: var(--tms-tracking-wide);
+  text-transform: uppercase;
+  color: var(--tms-muted);
+  margin-right: 0.125rem;
+}
+
+.tms-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  max-width: 16rem;
+  padding: 0.1875rem 0.25rem 0.1875rem 0.5rem;
+  border-radius: var(--tms-radius-pill);
+  background-color: var(--tms-surface);
+  border: 1px solid var(--tms-border-strong);
+  font-size: var(--tms-font-base);
+  line-height: 1.2;
+}
+
+.tms-filter-chip-label {
+  color: var(--tms-muted);
+  flex: none;
+}
+
+.tms-filter-chip-value {
+  color: var(--tms-text);
+  font-weight: 600;
+  min-width: 0;
+}
+
+.tms-filter-chip-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  flex: none;
+  border: 0;
+  border-radius: var(--tms-radius-pill);
+  background: none;
+  color: var(--tms-muted);
+  font-size: 0.75rem;
+  line-height: 1;
+  transition: background-color var(--tms-motion-fast) ease, color var(--tms-motion-fast) ease;
+}
+
+.tms-filter-chip-clear:hover {
+  background-color: var(--tms-surface-hover);
+  color: var(--tms-text);
+}
+
+.tms-filter-chips-clear-all {
+  border: 0;
+  background: none;
+  padding: 0.1875rem 0.375rem;
+  border-radius: var(--tms-radius-sm);
+  font-size: var(--tms-font-base);
+  font-weight: 600;
+  color: var(--tms-text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tms-filter-chips-clear-all:hover {
+  color: var(--tms-text);
+  background-color: var(--tms-surface-hover);
+}
+
+/* ---- Stacked table cell -------------------------------------------------
+   A primary line with its supporting detail underneath, so one record is one
+   block the eye takes in at once instead of two columns it has to join up. */
+.tms-cell-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.0625rem;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.tms-cell-primary {
+  font-weight: 600;
+  color: var(--tms-text);
+}
+
+.tms-cell-sub {
+  font-size: var(--tms-font-base);
+  color: var(--tms-muted);
 }
 
 .tms-filterbar-actions {
@@ -999,6 +2126,17 @@ h6 {
 
 
 .tms-table > tbody > tr:last-child > td {
+  border-bottom: 0;
+}
+
+/* The empty message occupies the body of the table, so it must not inherit the
+   row rhythm or the hover of a real record. */
+.tms-table > tbody > tr.tms-table-empty-row:hover > td {
+  background-color: transparent;
+}
+
+.tms-table > tbody > tr.tms-table-empty-row > td {
+  padding: 0;
   border-bottom: 0;
 }
 
@@ -1100,6 +2238,15 @@ h6 {
   --bs-btn-hover-border-color: var(--tms-primary-hover);
   --bs-btn-active-bg: var(--tms-primary-active);
   --bs-btn-active-border-color: var(--tms-primary-active);
+  /* The label colour has to be a token too, not Bootstrap's compiled-in white. In a theme
+     where the primary is light - the dark mode's near-white ink - white on white is an
+     invisible button, and the fill alone gives no hint that anything is wrong. */
+  --bs-btn-color: var(--tms-on-primary);
+  --bs-btn-hover-color: var(--tms-on-primary);
+  --bs-btn-active-color: var(--tms-on-primary);
+  --bs-btn-disabled-bg: var(--tms-primary);
+  --bs-btn-disabled-border-color: var(--tms-primary);
+  --bs-btn-disabled-color: var(--tms-on-primary);
 }
 
 .tms-icon-btn {
@@ -1143,6 +2290,29 @@ h6 {
   border-color: var(--tms-border-strong);
   border-radius: var(--tms-radius-sm);
   font-size: var(--tms-font-md);
+  /* Explicit, and not optional. Bootstrap fills a control with `--bs-body-bg`, which this
+     product remaps to the grey the page sits on - so every editable field rendered in the
+     same grey as a disabled one. A filled grey field reads as "you cannot type here" long
+     before anyone tries, and it is the one convention a data-entry screen must not break. */
+  background-color: var(--tms-surface);
+  color: var(--tms-text);
+}
+
+/* Disabled is where the grey belongs, and it also loses the border contrast so the two
+   states are told apart by more than one signal. */
+.form-control:disabled,
+.form-select:disabled,
+.form-control[readonly] {
+  background-color: var(--tms-surface-muted);
+  border-color: var(--tms-border);
+  color: var(--tms-muted);
+}
+
+/* Hover on an editable field: a small darkening of the edge, which is what tells the user
+   the control is live before they commit to clicking it. */
+.form-control:hover:not(:disabled):not([readonly]),
+.form-select:hover:not(:disabled) {
+  border-color: var(--tms-text-secondary);
 }
 
 .form-control-sm,
@@ -1158,7 +2328,8 @@ h6 {
 
 .form-control:focus,
 .form-select:focus {
-  border-color: var(--tms-ink);
+  background-color: var(--tms-surface);
+  border-color: var(--tms-primary);
   box-shadow: var(--tms-focus-ring);
 }
 
@@ -1167,7 +2338,7 @@ h6 {
 .form-control.is-invalid:focus,
 .form-select.is-invalid:focus {
   border-color: var(--tms-danger);
-  box-shadow: 0 0 0 3px rgba(169, 45, 45, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--tms-danger-rgb), 0.14);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1250,7 +2421,7 @@ h6 {
 
 /* Reached by the `.focus-ring` utility and by any component that reads it. */
 :root {
-  --bs-focus-ring-color: rgba(22, 24, 29, 0.14);
+  --bs-focus-ring-color: rgba(var(--tms-focus-rgb), 0.18);
 }
 
 .form-label {
@@ -1289,17 +2460,65 @@ h6 {
   border-top: 1px solid var(--tms-border);
 }
 
+/* The section name and a rule that runs to the edge of the panel: it groups the
+   fields under it without drawing a box around them, which is what keeps a form
+   of four sections from reading as four stacked cards. */
 .tms-fieldset-legend {
   float: none;
-  width: auto;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
   font-size: var(--tms-font-xs);
   font-weight: 700;
   letter-spacing: var(--tms-tracking-wide);
   text-transform: uppercase;
-  color: var(--tms-muted);
-  padding-bottom: 0.375rem;
-  margin-bottom: 0.75rem;
-  border-bottom: 1px solid var(--tms-border);
+  color: var(--tms-text-secondary);
+  padding-bottom: 0;
+  margin-bottom: 0.875rem;
+  border-bottom: 0;
+}
+
+.tms-fieldset-legend::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background-color: var(--tms-border);
+}
+
+/* A visible-by-default disclosure for a field a form must expose without letting it compete
+   with the primary control above it, e.g. exact coordinates under a map picker. */
+.tms-details-compact > summary {
+  cursor: pointer;
+  font-size: var(--tms-font-xs);
+  font-weight: 700;
+  letter-spacing: var(--tms-tracking-wide);
+  text-transform: uppercase;
+  color: var(--tms-text-secondary);
+}
+
+.tms-details-compact[open] > summary {
+  margin-bottom: 0.625rem;
+}
+
+.tms-map-picker-canvas,
+.tms-stops-map-canvas {
+  background-color: var(--tms-surface-muted);
+}
+
+/* Trip detail: the stop map and the stop list. Stacked on a phone (a tab switches which one
+   shows); side by side from md up, where both are useful to keep in view together. */
+@media (min-width: 768px) {
+  .tms-trip-stop-layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .tms-trip-stop-layout > * {
+    flex: 1 1 0;
+    min-width: 0;
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -1308,7 +2527,7 @@ h6 {
 .tms-overlay {
   position: fixed;
   inset: 0;
-  background-color: rgba(22, 24, 29, 0.38);
+  background-color: rgba(var(--tms-scrim-rgb), var(--tms-scrim-alpha));
   z-index: 1050;
 }
 
@@ -1541,7 +2760,11 @@ h6 {
   gap: 0.5rem;
   padding: 0.875rem 1.25rem;
   border-top: 1px solid var(--tms-border);
-  background-color: var(--tms-surface-muted);
+  background-color: var(--tms-surface-raised);
+  /* Cast upward, so the footer sits above the form rather than beside it. It is
+     the one part of a scrolling panel that must never look like content the user
+     has already scrolled past. */
+  box-shadow: 0 -6px 16px -12px rgba(var(--tms-shadow-rgb), 0.5);
   position: sticky;
   bottom: 0;
   flex: none;
@@ -1595,7 +2818,7 @@ h6 {
   background-color: var(--tms-body-bg);
   /* A barely-there vignette so the card has something to sit on rather than
      floating in flat grey. */
-  background-image: radial-gradient(120% 90% at 50% 0%, #ffffff 0%, var(--tms-body-bg) 55%);
+  background-image: radial-gradient(120% 90% at 50% 0%, var(--tms-surface) 0%, var(--tms-body-bg) 55%);
 }
 
 .tms-login-utility {
@@ -1632,7 +2855,7 @@ h6 {
   gap: 2rem;
   padding: 2.5rem;
   color: var(--tms-sidebar-text);
-  background: linear-gradient(155deg, var(--tms-ink-hover) 0%, var(--tms-ink) 55%, #0b0d10 100%);
+  background: linear-gradient(155deg, var(--tms-brand-panel-from) 0%, var(--tms-brand-panel-via) 55%, var(--tms-brand-panel-to) 100%);
 }
 
 .tms-login-logo {

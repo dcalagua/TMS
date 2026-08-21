@@ -5,7 +5,8 @@
 | `architecture/` | Architecture of record, ownership matrix and ADRs. **Read before changing schema, security or module boundaries.** |
 | `database/` | Schema notes, tenancy model and migration conventions |
 | `api/` | HTTP contract: base path, company scope header, error format, paging |
-| `domain/` | Business contracts per module: lifecycles, planning rules, capacity semantics |
+| `domain/` | Business contracts per module: lifecycles, planning rules, capacity semantics, imports, audit trail |
+| `integrations/` | Inbound (machine-to-machine intake) and outbound (shipment pull/change feed) contracts, Google Maps configuration |
 | `security/` | Security baseline, authentication and authorization model, and the review record |
 | `performance/` | Measured query-shape and query-count baseline against the design target |
 | `overnight/` | Step-by-step reports produced by the unattended build sequence |
@@ -44,18 +45,35 @@ silently diverging.
 15. [`domain/CAPACITY_MODEL.md`](domain/CAPACITY_MODEL.md) - how weight/volume/pallet utilisation
     is computed, when it is live and when it is frozen, and why a null limit and a zero limit are
     different answers.
+16. [`domain/ORDER_TOTALS_V1.md`](domain/ORDER_TOTALS_V1.md) - where an order's weight, volume and
+    pallet figures come from, which of the lines and the sender's declaration wins, and why the
+    browser may never send the effective totals.
+17. [`domain/MASTER_DATA_OVERVIEW_V1.md`](domain/MASTER_DATA_OVERVIEW_V1.md) - orientation map of
+    the master-data modules (Location, Zone, Route, Carrier, Vehicle, Vehicle Type) and how a
+    master gets created.
+18. [`domain/IMPORT_FLOW_V1.md`](domain/IMPORT_FLOW_V1.md) - the bulk spreadsheet import flow for
+    orders and master data: dry-run/apply, idempotency, batch records, audit trail.
+19. [`domain/AUDIT_TRAIL_V1.md`](domain/AUDIT_TRAIL_V1.md) - the append-only business audit trail
+    (`tms.audit_event`): what is recorded, the `AuditRecorder` module-boundary port, append-only
+    enforcement, metrics.
+20. [`integrations/INBOUND_API_V1.md`](integrations/INBOUND_API_V1.md) - machine-to-machine intake
+    of Locations and Transport Orders: credentials, idempotency, the integration inbox.
+21. [`integrations/OUTBOUND_SHIPMENT_V1.md`](integrations/OUTBOUND_SHIPMENT_V1.md) - machine-to-
+    machine read access to confirmed shipments and the change-feed outbox.
+22. [`integrations/GOOGLE_MAPS.md`](integrations/GOOGLE_MAPS.md) - the browser-side Google Maps
+    integration: configuration, key restrictions, graceful degradation with no key.
 
 ## Review records
 
-16. [`security/SECURITY_REVIEW.md`](security/SECURITY_REVIEW.md) - what was checked in the Step 12
+23. [`security/SECURITY_REVIEW.md`](security/SECURITY_REVIEW.md) - what was checked in the Step 12
     security review, what was found and fixed, and the gaps deliberately left open.
-17. [`performance/PERFORMANCE_BASELINE.md`](performance/PERFORMANCE_BASELINE.md) - measured query
+24. [`performance/PERFORMANCE_BASELINE.md`](performance/PERFORMANCE_BASELINE.md) - measured query
     shape and query count against 10,000+ orders/day, and the accepted scale ceilings.
-18. [`overnight/TEST_EVIDENCE.md`](overnight/TEST_EVIDENCE.md) - the Step 13 verification record:
+25. [`overnight/TEST_EVIDENCE.md`](overnight/TEST_EVIDENCE.md) - the Step 13 verification record:
     exact commands, test counts, migration replay, the eleven-step API smoke flow, tenant
     isolation, repository hygiene, and what was blocked and why.
-19. [`overnight/FINAL_REPORT.md`](overnight/FINAL_REPORT.md) - the Step 14 audit and morning
+26. [`overnight/FINAL_REPORT.md`](overnight/FINAL_REPORT.md) - the Step 14 audit and morning
     handoff: what exists, what is scaffold, the module inventory, the data model, the security
     posture, the test and Git evidence, the P0-P3 findings and the recommended next work.
-20. [`overnight/NEXT_STEPS.md`](overnight/NEXT_STEPS.md) - the short actionable roadmap with an
+27. [`overnight/NEXT_STEPS.md`](overnight/NEXT_STEPS.md) - the short actionable roadmap with an
     acceptance gate per item.

@@ -8,10 +8,14 @@ import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
+import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.audit.AuditAggregateType;
+import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -36,10 +40,13 @@ public class CarrierService {
 
     private final CarrierRepository carrierRepository;
     private final AuditActorProvider auditActorProvider;
+    private final AuditRecorder auditRecorder;
 
-    public CarrierService(CarrierRepository carrierRepository, AuditActorProvider auditActorProvider) {
+    public CarrierService(CarrierRepository carrierRepository, AuditActorProvider auditActorProvider,
+            AuditRecorder auditRecorder) {
         this.carrierRepository = carrierRepository;
         this.auditActorProvider = auditActorProvider;
+        this.auditRecorder = auditRecorder;
     }
 
     @Transactional(readOnly = true)
@@ -72,8 +79,12 @@ public class CarrierService {
 
         UUID actorId = auditActorProvider.requireAppUserId();
         Carrier carrier = new Carrier(scope.companyId(), code, request.businessName().trim(), taxIdType, taxIdValue,
-                blankToNull(request.contactName()), blankToNull(request.phone()), email, actorId);
-        return CarrierView.from(saveOrConflict(carrier, code));
+                blankToNull(request.contactName()), blankToNull(request.phone()), email,
+                blankToNull(request.externalReference()), actorId);
+        Carrier saved = saveOrConflict(carrier, code);
+        auditRecorder.record(scope, AuditAggregateType.CARRIER, saved.id(), AuditAction.CREATE,
+                Map.of("code", saved.code()));
+        return CarrierView.from(saved);
     }
 
     @Transactional
@@ -94,22 +105,32 @@ public class CarrierService {
 
         UUID actorId = auditActorProvider.requireAppUserId();
         carrier.applyChanges(code, request.businessName().trim(), taxIdType, taxIdValue,
-                blankToNull(request.contactName()), blankToNull(request.phone()), email, actorId);
-        return CarrierView.from(saveOrConflict(carrier, code));
+                blankToNull(request.contactName()), blankToNull(request.phone()), email,
+                blankToNull(request.externalReference()), actorId);
+        Carrier saved = saveOrConflict(carrier, code);
+        auditRecorder.record(scope, AuditAggregateType.CARRIER, saved.id(), AuditAction.UPDATE,
+                Map.of("code", saved.code()));
+        return CarrierView.from(saved);
     }
 
     @Transactional
     public CarrierView activate(CompanyScope scope, UUID id) {
         Carrier carrier = find(scope, id);
         carrier.activate(auditActorProvider.requireAppUserId());
-        return CarrierView.from(carrierRepository.save(carrier));
+        Carrier saved = carrierRepository.save(carrier);
+        auditRecorder.record(scope, AuditAggregateType.CARRIER, saved.id(), AuditAction.ACTIVATE,
+                Map.of("code", saved.code()));
+        return CarrierView.from(saved);
     }
 
     @Transactional
     public CarrierView deactivate(CompanyScope scope, UUID id) {
         Carrier carrier = find(scope, id);
         carrier.deactivate(auditActorProvider.requireAppUserId());
-        return CarrierView.from(carrierRepository.save(carrier));
+        Carrier saved = carrierRepository.save(carrier);
+        auditRecorder.record(scope, AuditAggregateType.CARRIER, saved.id(), AuditAction.DEACTIVATE,
+                Map.of("code", saved.code()));
+        return CarrierView.from(saved);
     }
 
     Carrier find(CompanyScope scope, UUID id) {

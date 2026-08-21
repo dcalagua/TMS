@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { useForm, type Validate } from 'react-hook-form'
+import { Controller, useForm, type Validate } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { applyApiFieldErrors } from '../../shared/api/formErrors'
 import type { ApiError } from '../../shared/api/httpClient'
@@ -16,6 +16,7 @@ import {
 } from '../../shared/api/vehiclesApi'
 import { useEnumLabels } from '../../shared/i18n/enums'
 import { FormField } from '../../shared/ui/components/FormField'
+import { Select } from '../../shared/ui/components/Select'
 import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'vehicle-form'
@@ -33,6 +34,7 @@ interface VehicleFormValues {
   maxVolumeOverrideM3: string
   maxPalletsOverride: string
   availabilityStatus: VehicleAvailabilityStatus
+  externalReference: string
 }
 
 interface VehicleFormDrawerProps {
@@ -45,7 +47,7 @@ interface VehicleFormDrawerProps {
 
 const KNOWN_FIELDS = new Set<keyof VehicleFormValues>([
   'code', 'licensePlate', 'carrierId', 'vehicleTypeId', 'maxWeightOverrideKg', 'maxVolumeOverrideM3',
-  'maxPalletsOverride', 'availabilityStatus',
+  'maxPalletsOverride', 'availabilityStatus', 'externalReference',
 ])
 
 /**
@@ -75,6 +77,7 @@ export function VehicleFormDrawer({ companyId, vehicle, onClose, onSaved }: Vehi
 
   const {
     register,
+    control,
     handleSubmit,
     setError,
     formState: { errors, isDirty, isSubmitting },
@@ -88,6 +91,7 @@ export function VehicleFormDrawer({ companyId, vehicle, onClose, onSaved }: Vehi
       maxVolumeOverrideM3: vehicle?.maxVolumeOverrideM3?.toString() ?? '',
       maxPalletsOverride: vehicle?.maxPalletsOverride?.toString() ?? '',
       availabilityStatus: vehicle?.availabilityStatus ?? 'AVAILABLE',
+      externalReference: vehicle?.externalReference ?? '',
     },
   })
 
@@ -114,6 +118,7 @@ export function VehicleFormDrawer({ companyId, vehicle, onClose, onSaved }: Vehi
       maxVolumeOverrideM3: values.maxVolumeOverrideM3.trim() === '' ? null : Number(values.maxVolumeOverrideM3),
       maxPalletsOverride: values.maxPalletsOverride.trim() === '' ? null : Number(values.maxPalletsOverride),
       availabilityStatus: values.availabilityStatus,
+      externalReference: values.externalReference.trim() || null,
     }
 
     try {
@@ -203,36 +208,51 @@ export function VehicleFormDrawer({ companyId, vehicle, onClose, onSaved }: Vehi
                 error={errors.vehicleTypeId?.message}
                 required
               >
-                <select
-                  id="vehicle-type"
-                  className={`form-select${errors.vehicleTypeId ? ' is-invalid' : ''}`}
-                  {...register('vehicleTypeId', { required: tv('required') })}
-                >
-                  <option value="">{t('vehicles.form.selectType')}</option>
-                  {vehicle?.vehicleTypeId && !vehicleTypes.some((type) => type.id === vehicle.vehicleTypeId) && (
-                    <option value={vehicle.vehicleTypeId}>{vehicle.vehicleTypeCode ?? vehicle.vehicleTypeId}</option>
+                <Controller
+                  control={control}
+                  name="vehicleTypeId"
+                  rules={{ required: tv('required') }}
+                  render={({ field }) => (
+                    <Select
+                      id="vehicle-type"
+                      value={field.value}
+                      onChange={field.onChange}
+                      invalid={Boolean(errors.vehicleTypeId)}
+                      options={[
+                        { value: '', label: t('vehicles.form.selectType') },
+                        ...(vehicle?.vehicleTypeId && !vehicleTypes.some((type) => type.id === vehicle.vehicleTypeId)
+                          ? [{ value: vehicle.vehicleTypeId, label: vehicle.vehicleTypeCode ?? vehicle.vehicleTypeId }]
+                          : []),
+                        ...vehicleTypes.map((type) => ({ value: type.id, label: `${type.code} — ${type.name}` })),
+                      ]}
+                    />
                   )}
-                  {vehicleTypes.map((type) => (
-                    <option key={type.id} value={type.id}>
-                      {type.code} — {type.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </FormField>
             </div>
             <div className="col-12 col-sm-6">
               <FormField label={tc('columns.carrier')} htmlFor="vehicle-carrier" error={errors.carrierId?.message}>
-                <select id="vehicle-carrier" className="form-select" {...register('carrierId')}>
-                  <option value="">{t('vehicles.form.noCarrier')}</option>
-                  {vehicle?.carrierId && !carriers.some((carrier) => carrier.id === vehicle.carrierId) && (
-                    <option value={vehicle.carrierId}>{vehicle.carrierCode ?? vehicle.carrierId}</option>
+                <Controller
+                  control={control}
+                  name="carrierId"
+                  render={({ field }) => (
+                    <Select
+                      id="vehicle-carrier"
+                      value={field.value}
+                      onChange={field.onChange}
+                      options={[
+                        { value: '', label: t('vehicles.form.noCarrier') },
+                        ...(vehicle?.carrierId && !carriers.some((carrier) => carrier.id === vehicle.carrierId)
+                          ? [{ value: vehicle.carrierId, label: vehicle.carrierCode ?? vehicle.carrierId }]
+                          : []),
+                        ...carriers.map((carrier) => ({
+                          value: carrier.id,
+                          label: `${carrier.code} — ${carrier.businessName}`,
+                        })),
+                      ]}
+                    />
                   )}
-                  {carriers.map((carrier) => (
-                    <option key={carrier.id} value={carrier.id}>
-                      {carrier.code} — {carrier.businessName}
-                    </option>
-                  ))}
-                </select>
+                />
               </FormField>
             </div>
             <div className="col-12 col-sm-6">
@@ -242,17 +262,38 @@ export function VehicleFormDrawer({ companyId, vehicle, onClose, onSaved }: Vehi
                 error={errors.availabilityStatus?.message}
                 required
               >
-                <select
-                  id="vehicle-availability"
-                  className="form-select"
-                  {...register('availabilityStatus', { required: true })}
-                >
-                  {VEHICLE_AVAILABILITY_STATUSES.map((status) => (
-                    <option key={status} value={status}>
-                      {enumLabels.vehicleAvailability(status)}
-                    </option>
-                  ))}
-                </select>
+                <Controller
+                  control={control}
+                  name="availabilityStatus"
+                  rules={{ required: true }}
+                  render={({ field }) => (
+                    <Select
+                      id="vehicle-availability"
+                      value={field.value}
+                      onChange={(value) => field.onChange(value as VehicleAvailabilityStatus)}
+                      options={VEHICLE_AVAILABILITY_STATUSES.map((status) => ({
+                        value: status,
+                        label: enumLabels.vehicleAvailability(status),
+                      }))}
+                    />
+                  )}
+                />
+              </FormField>
+            </div>
+            <div className="col-12 col-sm-6">
+              <FormField
+                label={tc('fields.externalReference')}
+                htmlFor="vehicle-external-reference"
+                error={errors.externalReference?.message}
+              >
+                <input
+                  id="vehicle-external-reference"
+                  placeholder={tc('placeholders.externalReference')}
+                  className={`form-control${errors.externalReference ? ' is-invalid' : ''}`}
+                  {...register('externalReference', {
+                    maxLength: { value: 200, message: tv('maxLength', { count: 200 }) },
+                  })}
+                />
               </FormField>
             </div>
           </div>

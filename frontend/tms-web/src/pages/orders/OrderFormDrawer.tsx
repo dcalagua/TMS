@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { useFieldArray, useForm, useWatch } from 'react-hook-form'
+import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { applyApiFieldErrors } from '../../shared/api/formErrors'
 import type { ApiError } from '../../shared/api/httpClient'
@@ -20,16 +20,16 @@ import { useEnumLabels } from '../../shared/i18n/enums'
 import { useFormat } from '../../shared/i18n/format'
 import { FormField } from '../../shared/ui/components/FormField'
 import { LoadingState } from '../../shared/ui/components/LoadingState'
+import { LookupField, type LookupOption } from '../../shared/ui/components/LookupField'
+import { Select } from '../../shared/ui/components/Select'
 import { StatusBadge } from '../../shared/ui/components/StatusBadge'
 import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'order-form'
 
-interface SelectOption {
-  id: string
-  code: string
-  name: string
-}
+/** How many masters one lookup keystroke asks for. A page, not a catalogue: the operator is
+ * narrowing by typing, and a list longer than this is a sign the term is still too broad. */
+const LOOKUP_PAGE_SIZE = 20
 
 interface OrderLineFormValues {
   materialCode: string
@@ -52,6 +52,9 @@ interface OrderFormValues {
   priority: OrderPriority
   requestedWindowStart: string
   requestedWindowEnd: string
+  declaredWeightKg: string
+  declaredVolumeM3: string
+  declaredPallets: string
   lines: OrderLineFormValues[]
 }
 
@@ -67,44 +70,75 @@ interface OrderFormDrawerProps {
 const KNOWN_FIELDS = new Set<keyof OrderFormValues>([
   'externalSource', 'externalReference', 'originId', 'destinationId', 'customerName', 'customerReference',
   'serviceDate', 'priority', 'requestedWindowStart', 'requestedWindowEnd',
+  'declaredWeightKg', 'declaredVolumeM3', 'declaredPallets',
 ])
 
 const BLANK_LINE: OrderLineFormValues = {
   materialCode: '', materialDescription: '', quantity: '1', uom: 'EA', unitWeightKg: '', unitVolumeM3: '', palletQuantity: '',
 }
 
-/** Prepends the currently assigned option if it fell out of the active-only list fetched for the
- * dropdown - the same "deactivating does not silently break the editor" invariant `RouteFormDrawer`
- * uses for its origin/zone/frequency selects. */
-function withCurrentValue(options: SelectOption[], id: string, code: string | null, name: string | null) {
-  if (id === '' || options.some((option) => option.id === id)) {
-    return options
-  }
-  return [{ id, code: code ?? id, name: name ?? code ?? id }, ...options]
+/** How the order's current origin/destination reads in its lookup before anything is typed.
+ * Taken from the order itself rather than re-fetched, and kept even when the master has since
+ * been deactivated - the same "deactivating does not silently break the editor" invariant the
+ * old select's `withCurrentValue` provided. */
+function assignedOption(id: string | null, code: string | null, name: string | null): LookupOption | null {
+  if (id === null || id === '') return null
+  return { id, code: code ?? id, name: name ?? code ?? id }
 }
 
 function toNumberOrUndefined(value: string): number | undefined {
   return value.trim() === '' ? undefined : Number(value)
 }
 
-/** Client-side preview only, mirroring `TransportOrderLine.applyInput`'s formula - never sent to
- * the backend and never trusted as the authoritative total. The server always recomputes and
- * returns the real totals (`OrderDetailView.totalWeightKg`/...) after save. */
-function previewTotals(lines: OrderLineFormValues[]) {
-  let weight = 0;
-  let volume = 0;
-  let pallets = 0;
+/** A declared figure as the API wants it: `null` for "not stated", never `0` for it. The
+ * distinction is the whole point of the declared columns - see `docs/domain/ORDER_TOTALS_V1.md`. */
+function toDeclared(value: string): number | null {
+  return toNumberOrUndefined(value) ?? null
+}
+
+function fromDeclared(value: number | null | undefined): string {
+  return value === null || value === undefined ? '' : String(value)
+}
+
+/**
+ * Client-side preview only, mirroring `OrderTotals.resolve` and `TransportOrderLine.applyInput`
+ * - never sent to the backend and never trusted as the authoritative total. The server always
+ * recomputes and returns the real totals (`OrderDetailView.totalWeightKg`/...) after save.
+ *
+ * The rule it reproduces (`docs/domain/ORDER_TOTALS_V1.md`): with lines, each measure is their
+ * sum, falling back to the declared figure for a measure not a single line describes; with no
+ * lines at all, the declared figures stand on their own. Reproduced here rather than only shown
+ * after saving so that an operator can see, while typing, which of the two numbers in front of
+ * them is the one that will be planned.
+ */
+function previewTotals(lines: OrderLineFormValues[], declared: DeclaredFormValues) {
+  let weight: number | null = null
+  let volume: number | null = null
+  let pallets: number | null = null
   for (const line of lines) {
     const quantity = Number(line.quantity) || 0
     const unitWeight = toNumberOrUndefined(line.unitWeightKg)
     const unitVolume = toNumberOrUndefined(line.unitVolumeM3)
     const palletQuantity = toNumberOrUndefined(line.palletQuantity)
-    if (unitWeight !== undefined) weight += quantity * unitWeight
-    if (unitVolume !== undefined) volume += quantity * unitVolume
-    if (palletQuantity !== undefined) pallets += palletQuantity
+    if (unitWeight !== undefined) weight = (weight ?? 0) + quantity * unitWeight
+    if (unitVolume !== undefined) volume = (volume ?? 0) + quantity * unitVolume
+    if (palletQuantity !== undefined) pallets = (pallets ?? 0) + palletQuantity
   }
-  return { weight, volume, pallets }
+
+  const declaredWeight = toNumberOrUndefined(declared.declaredWeightKg)
+  const declaredVolume = toNumberOrUndefined(declared.declaredVolumeM3)
+  const declaredPallets = toNumberOrUndefined(declared.declaredPallets)
+
+  return {
+    calculated: lines.length > 0,
+    weight: weight ?? declaredWeight ?? 0,
+    volume: volume ?? declaredVolume ?? 0,
+    pallets: pallets ?? declaredPallets ?? 0,
+  }
 }
+
+/** Just the declared inputs, so `previewTotals` reads three fields rather than the whole form. */
+type DeclaredFormValues = Pick<OrderFormValues, 'declaredWeightKg' | 'declaredVolumeM3' | 'declaredPallets'>
 
 export function OrderFormDrawer({ companyId, orderId, onClose, onSaved }: OrderFormDrawerProps) {
   const { t } = useTranslation('orders')
@@ -152,22 +186,31 @@ function OrderForm({
   const isEditable = order === null || order.status === 'NOT_READY' || order.status === 'READY_FOR_PLANNING'
   const [formError, setFormError] = useState<string | null>(null)
 
-  const originsQuery = useQuery({
-    queryKey: ['origins-for-order-form', companyId],
-    queryFn: ({ signal }) => fetchOrigins({ companyId, size: 200, active: true, sort: 'code,asc', signal }),
-  })
-  const destinationsQuery = useQuery({
-    queryKey: ['destinations-for-order-form', companyId],
-    queryFn: ({ signal }) => fetchDestinations({ companyId, size: 200, active: true, sort: 'code,asc', signal }),
-  })
+  // Held here rather than derived from the form, because the id alone cannot render "LIM-01 -
+  // Lima warehouse": the lookup hands back the whole record when the operator picks one, and
+  // this is where that label lives until the drawer closes.
+  const [origin, setOrigin] = useState<LookupOption | null>(
+    assignedOption(order?.originId ?? null, order?.originCode ?? null, order?.originName ?? null),
+  )
+  const [destination, setDestination] = useState<LookupOption | null>(
+    assignedOption(order?.destinationId ?? null, order?.destinationCode ?? null, order?.destinationName ?? null),
+  )
 
-  const originOptions = withCurrentValue(
-    originsQuery.data?.content ?? [], order?.originId ?? '', order?.originCode ?? null, order?.originName ?? null,
-  )
-  const destinationOptions = withCurrentValue(
-    destinationsQuery.data?.content ?? [], order?.destinationId ?? '', order?.destinationCode ?? null,
-    order?.destinationName ?? null,
-  )
+  async function searchOrigins(term: string, signal: AbortSignal): Promise<LookupOption[]> {
+    const page = await fetchOrigins({
+      companyId, size: LOOKUP_PAGE_SIZE, active: true, sort: 'code,asc',
+      search: term === '' ? undefined : term, signal,
+    })
+    return page.content.map(({ id, code, name }) => ({ id, code, name }))
+  }
+
+  async function searchDestinations(term: string, signal: AbortSignal): Promise<LookupOption[]> {
+    const page = await fetchDestinations({
+      companyId, size: LOOKUP_PAGE_SIZE, active: true, sort: 'code,asc',
+      search: term === '' ? undefined : term, signal,
+    })
+    return page.content.map(({ id, code, name }) => ({ id, code, name }))
+  }
 
   const {
     register,
@@ -187,6 +230,9 @@ function OrderForm({
       priority: order?.priority ?? 'NORMAL',
       requestedWindowStart: order?.requestedWindowStart?.slice(0, 5) ?? '',
       requestedWindowEnd: order?.requestedWindowEnd?.slice(0, 5) ?? '',
+      declaredWeightKg: fromDeclared(order?.declaredWeightKg),
+      declaredVolumeM3: fromDeclared(order?.declaredVolumeM3),
+      declaredPallets: fromDeclared(order?.declaredPallets),
       lines: (order?.lines ?? []).map((line) => ({
         materialCode: line.materialCode,
         materialDescription: line.materialDescription,
@@ -200,9 +246,14 @@ function OrderForm({
   })
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' })
   const watchedLines = useWatch({ control, name: 'lines' }) ?? []
+  const watchedDeclared: DeclaredFormValues = {
+    declaredWeightKg: useWatch({ control, name: 'declaredWeightKg' }) ?? '',
+    declaredVolumeM3: useWatch({ control, name: 'declaredVolumeM3' }) ?? '',
+    declaredPallets: useWatch({ control, name: 'declaredPallets' }) ?? '',
+  }
   // useWatch already returns a fresh array every render, so a useMemo here would recompute on
   // every render anyway - it would only add a dependency-array footgun for no benefit.
-  const totals = previewTotals(watchedLines)
+  const totals = previewTotals(watchedLines, watchedDeclared)
 
   async function onSubmit(values: OrderFormValues) {
     setFormError(null)
@@ -218,6 +269,9 @@ function OrderForm({
       priority: values.priority,
       requestedWindowStart: values.requestedWindowStart.trim() === '' ? null : values.requestedWindowStart,
       requestedWindowEnd: values.requestedWindowEnd.trim() === '' ? null : values.requestedWindowEnd,
+      declaredWeightKg: toDeclared(values.declaredWeightKg),
+      declaredVolumeM3: toDeclared(values.declaredVolumeM3),
+      declaredPallets: toDeclared(values.declaredPallets),
       version: order?.version,
       lines: values.lines.map((line) => ({
         materialCode: line.materialCode.trim(),
@@ -320,18 +374,27 @@ function OrderForm({
             <div className="row">
               <div className="col-12 col-sm-6">
                 <FormField label={tc('columns.origin')} htmlFor="order-origin" error={errors.originId?.message} required>
-                  <select
-                    id="order-origin"
-                    className={`form-select${errors.originId ? ' is-invalid' : ''}`}
-                    {...register('originId', { required: tv('required') })}
-                  >
-                    <option value="">{t('form.selectOrigin')}</option>
-                    {originOptions.map((origin) => (
-                      <option key={origin.id} value={origin.id}>
-                        {origin.name}
-                      </option>
-                    ))}
-                  </select>
+                  <Controller
+                    control={control}
+                    name="originId"
+                    rules={{ required: tv('required') }}
+                    render={({ field }) => (
+                      <LookupField
+                        id="order-origin"
+                        value={field.value}
+                        selected={origin}
+                        queryKey={['origin-lookup', companyId]}
+                        search={searchOrigins}
+                        placeholder={t('form.searchOrigin')}
+                        disabled={!isEditable}
+                        invalid={errors.originId !== undefined}
+                        onChange={(option) => {
+                          setOrigin(option)
+                          field.onChange(option?.id ?? '')
+                        }}
+                      />
+                    )}
+                  />
                 </FormField>
               </div>
               <div className="col-12 col-sm-6">
@@ -341,18 +404,27 @@ function OrderForm({
                   error={errors.destinationId?.message}
                   required
                 >
-                  <select
-                    id="order-destination"
-                    className={`form-select${errors.destinationId ? ' is-invalid' : ''}`}
-                    {...register('destinationId', { required: tv('required') })}
-                  >
-                    <option value="">{t('form.selectDestination')}</option>
-                    {destinationOptions.map((destination) => (
-                      <option key={destination.id} value={destination.id}>
-                        {destination.name}
-                      </option>
-                    ))}
-                  </select>
+                  <Controller
+                    control={control}
+                    name="destinationId"
+                    rules={{ required: tv('required') }}
+                    render={({ field }) => (
+                      <LookupField
+                        id="order-destination"
+                        value={field.value}
+                        selected={destination}
+                        queryKey={['destination-lookup', companyId]}
+                        search={searchDestinations}
+                        placeholder={t('form.searchDestination')}
+                        disabled={!isEditable}
+                        invalid={errors.destinationId !== undefined}
+                        onChange={(option) => {
+                          setDestination(option)
+                          field.onChange(option?.id ?? '')
+                        }}
+                      />
+                    )}
+                  />
                 </FormField>
               </div>
               <div className="col-6 col-sm-2">
@@ -372,13 +444,23 @@ function OrderForm({
               </div>
               <div className="col-6 col-sm-2">
                 <FormField label={tc('fields.priority')} htmlFor="order-priority" required>
-                  <select id="order-priority" className="form-select" {...register('priority')}>
-                    {ORDER_PRIORITIES.map((priority) => (
-                      <option key={priority} value={priority}>
-                        {enumLabels.orderPriority(priority)}
-                      </option>
-                    ))}
-                  </select>
+                  <Controller
+                    control={control}
+                    name="priority"
+                    rules={{ required: true }}
+                    render={({ field }) => (
+                      <Select
+                        id="order-priority"
+                        value={field.value}
+                        onChange={(next) => field.onChange(next)}
+                        invalid={Boolean(errors.priority)}
+                        options={ORDER_PRIORITIES.map((priority) => ({
+                          value: priority,
+                          label: enumLabels.orderPriority(priority),
+                        }))}
+                      />
+                    )}
+                  />
                 </FormField>
               </div>
               <div className="col-6 col-sm-1">
@@ -410,6 +492,64 @@ function OrderForm({
                 </FormField>
               </div>
             </div>
+          </fieldset>
+
+          <fieldset className="tms-fieldset">
+            <legend className="tms-fieldset-legend">{t('form.declaredTotals')}</legend>
+            <p className="text-body-secondary small mb-3">{t('form.declaredHelp')}</p>
+            <div className="row">
+              <div className="col-6 col-sm-4">
+                <FormField
+                  label={t('form.declaredWeight')}
+                  htmlFor="order-declared-weight"
+                  error={errors.declaredWeightKg?.message}
+                >
+                  <input
+                    id="order-declared-weight"
+                    type="number"
+                    min={0}
+                    step="0.001"
+                    className={`form-control${errors.declaredWeightKg ? ' is-invalid' : ''}`}
+                    {...register('declaredWeightKg', { min: { value: 0, message: tv('nonNegative') } })}
+                  />
+                </FormField>
+              </div>
+              <div className="col-6 col-sm-4">
+                <FormField
+                  label={t('form.declaredVolume')}
+                  htmlFor="order-declared-volume"
+                  error={errors.declaredVolumeM3?.message}
+                >
+                  <input
+                    id="order-declared-volume"
+                    type="number"
+                    min={0}
+                    step="0.0001"
+                    className={`form-control${errors.declaredVolumeM3 ? ' is-invalid' : ''}`}
+                    {...register('declaredVolumeM3', { min: { value: 0, message: tv('nonNegative') } })}
+                  />
+                </FormField>
+              </div>
+              <div className="col-6 col-sm-4">
+                <FormField
+                  label={t('form.declaredPallets')}
+                  htmlFor="order-declared-pallets"
+                  error={errors.declaredPallets?.message}
+                >
+                  <input
+                    id="order-declared-pallets"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className={`form-control${errors.declaredPallets ? ' is-invalid' : ''}`}
+                    {...register('declaredPallets', { min: { value: 0, message: tv('nonNegative') } })}
+                  />
+                </FormField>
+              </div>
+            </div>
+            <p className="text-body-secondary small mb-0">
+              {watchedLines.length > 0 ? t('form.declaredWithLines') : t('form.declaredWithoutLines')}
+            </p>
           </fieldset>
 
           <fieldset className="tms-fieldset mb-0">
@@ -530,13 +670,18 @@ function OrderForm({
               {t('form.addLine')}
             </button>
 
-            <p className="alert alert-light border small mt-3 mb-0">
-              {t('form.totalsLabel')}: <strong>{format.weight(totals.weight)}</strong> ·{' '}
-              <strong>{format.volume(totals.volume)}</strong> ·{' '}
-              <strong>
-                {format.decimal(totals.pallets)} {t('form.palletsUnit')}
-              </strong>
-            </p>
+            <div className="alert alert-light border small mt-3 mb-0">
+              <p className="mb-1">
+                {t('form.totalsLabel')}: <strong>{format.weight(totals.weight)}</strong> ·{' '}
+                <strong>{format.volume(totals.volume)}</strong> ·{' '}
+                <strong>
+                  {format.decimal(totals.pallets)} {t('form.palletsUnit')}
+                </strong>
+              </p>
+              <p className="text-body-secondary mb-0">
+                {totals.calculated ? t('form.totalsSourceCalculated') : t('form.totalsSourceDeclared')}
+              </p>
+            </div>
           </fieldset>
         </fieldset>
       </form>

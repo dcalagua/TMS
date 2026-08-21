@@ -31,9 +31,13 @@ import org.hibernate.annotations.UuidGenerator;
  * goes through {@link #applyLines(List, UUID)}, which - unlike {@code Route.replaceStops} - does
  * not diff against what is persisted, because an order line has no natural key that survives an
  * edit (see {@link TransportOrderLine}'s class comment). {@code totalWeightKg}/{@code
- * totalVolumeM3}/{@code totalPallets} are a transactional snapshot recomputed by the same method,
- * in the same transaction as every line change - see the migration's comment on why persisting
- * them is safe (the backend, specifically this class, is the only writer).
+ * totalVolumeM3}/{@code totalPallets} are a transactional snapshot re-resolved by the same
+ * method, in the same transaction as every line change - see the migration's comment on why
+ * persisting them is safe (the backend, specifically this class, is the only writer).
+ *
+ * <p>Since V17 those totals are not necessarily the line sums: {@link OrderTotals} decides
+ * between the lines and the sender's {@link DeclaredTotals}, and {@code totalsSource} records
+ * which strategy produced them. See {@code docs/domain/ORDER_TOTALS_V1.md}.
  */
 @Entity
 @Table(name = "transport_order")
@@ -97,6 +101,22 @@ public class TransportOrder {
 
     @Column(name = "total_pallets", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalPallets = BigDecimal.ZERO;
+
+    // The declared (asserted) figures, kept next to the effective totals rather than instead of
+    // them - migration V17 and OrderTotals' class comment explain why both are persisted.
+    // Nullable, and "not stated" is genuinely different from "stated as zero".
+    @Column(name = "declared_weight_kg", precision = 14, scale = 3)
+    private BigDecimal declaredWeightKg;
+
+    @Column(name = "declared_volume_m3", precision = 14, scale = 4)
+    private BigDecimal declaredVolumeM3;
+
+    @Column(name = "declared_pallets", precision = 12, scale = 2)
+    private BigDecimal declaredPallets;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "totals_source", nullable = false)
+    private TotalsSource totalsSource = TotalsSource.DECLARED;
 
     @Version
     @Column(name = "version", nullable = false)
@@ -215,6 +235,22 @@ public class TransportOrder {
         return totalPallets;
     }
 
+    public BigDecimal declaredWeightKg() {
+        return declaredWeightKg;
+    }
+
+    public BigDecimal declaredVolumeM3() {
+        return declaredVolumeM3;
+    }
+
+    public BigDecimal declaredPallets() {
+        return declaredPallets;
+    }
+
+    public TotalsSource totalsSource() {
+        return totalsSource;
+    }
+
     public long version() {
         return version;
     }
@@ -266,38 +302,33 @@ public class TransportOrder {
     }
 
     /**
-     * Replaces the whole line set and recomputes the header totals in the same pass. Unlike
+     * Replaces the whole line set and re-resolves the header totals in the same pass. Unlike
      * {@code Route.replaceStops}, this does not diff against what is persisted - see
      * {@link TransportOrderLine}'s class comment for why no natural key survives an edit here.
+     *
+     * <p>The totals are not summed here: {@link OrderTotals#resolve} owns the precedence between
+     * the lines and {@code declared}, and this method only stores what it returns. A caller that
+     * cares whether the two contradicted each other asks {@link OrderTotals#mismatches} before
+     * calling - {@code OrderService} turns one into a 400 and the bulk import into a row error.
      */
-    public void applyLines(List<OrderLineInput> inputs, UUID actorId) {
+    public void applyLines(List<OrderLineInput> inputs, DeclaredTotals declared, UUID actorId) {
         lines.clear();
         int lineNumber = 1;
         for (OrderLineInput input : inputs) {
             lines.add(new TransportOrderLine(this, lineNumber++, input, actorId));
         }
-        recomputeTotals();
-        this.updatedBy = actorId;
-    }
 
-    private void recomputeTotals() {
-        BigDecimal weight = BigDecimal.ZERO;
-        BigDecimal volume = BigDecimal.ZERO;
-        BigDecimal pallets = BigDecimal.ZERO;
-        for (TransportOrderLine line : lines) {
-            if (line.lineWeightKg() != null) {
-                weight = weight.add(line.lineWeightKg());
-            }
-            if (line.lineVolumeM3() != null) {
-                volume = volume.add(line.lineVolumeM3());
-            }
-            if (line.palletQuantity() != null) {
-                pallets = pallets.add(line.palletQuantity());
-            }
-        }
-        this.totalWeightKg = weight;
-        this.totalVolumeM3 = volume;
-        this.totalPallets = pallets;
+        DeclaredTotals safeDeclared = declared == null ? DeclaredTotals.none() : declared;
+        this.declaredWeightKg = safeDeclared.weightKg();
+        this.declaredVolumeM3 = safeDeclared.volumeM3();
+        this.declaredPallets = safeDeclared.pallets();
+
+        OrderTotals totals = OrderTotals.resolve(inputs, safeDeclared);
+        this.totalWeightKg = totals.weightKg();
+        this.totalVolumeM3 = totals.volumeM3();
+        this.totalPallets = totals.pallets();
+        this.totalsSource = totals.source();
+        this.updatedBy = actorId;
     }
 
     /** Legality of this transition is {@code OrderService.markReadyForPlanning}'s concern, not this entity's. */

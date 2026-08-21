@@ -90,6 +90,12 @@ function mockLookups() {
   destinationsApiMocks.fetchDestinations.mockResolvedValue(page([DESTINATION_A, DESTINATION_B]))
 }
 
+/** `Select` is a button + listbox, not a native `<select>`: open it, then click the option. */
+async function pickOption(comboboxName: RegExp | string, optionName: RegExp | string) {
+  await userEvent.click(screen.getByRole('combobox', { name: comboboxName }))
+  await userEvent.click(await screen.findByRole('option', { name: optionName }))
+}
+
 function renderModal(props: Partial<ComponentProps<typeof RouteFormDrawer>> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -125,7 +131,7 @@ describe('RouteFormDrawer', () => {
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'NO-STOPS')
     await userEvent.type(screen.getByLabelText(/^nombre/i), 'No Stops')
-    await userEvent.selectOptions(screen.getByLabelText(/^origen/i), 'origin-1')
+    await pickOption(/^origen/i, 'Origin A')
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     expect(await screen.findByText('Agrega al menos una parada de destino.')).toBeInTheDocument()
@@ -137,9 +143,8 @@ describe('RouteFormDrawer', () => {
     renderModal()
 
     expect(await screen.findByText('Aún no hay paradas.')).toBeInTheDocument()
-    await screen.findByRole('option', { name: 'DEST-A — Destination A' })
 
-    await userEvent.selectOptions(screen.getByLabelText('Destino a agregar'), 'dest-1')
+    await pickOption('Destino a agregar', 'DEST-A — Destination A')
     await userEvent.click(screen.getByRole('button', { name: 'Agregar parada' }))
 
     expect(await screen.findByText('DEST-A — Destination A')).toBeInTheDocument()
@@ -154,10 +159,9 @@ describe('RouteFormDrawer', () => {
     mockLookups()
     renderModal()
 
-    await screen.findByRole('option', { name: 'DEST-B — Destination B' })
-    await userEvent.selectOptions(screen.getByLabelText('Destino a agregar'), 'dest-1')
+    await pickOption('Destino a agregar', 'DEST-A — Destination A')
     await userEvent.click(screen.getByRole('button', { name: 'Agregar parada' }))
-    await userEvent.selectOptions(screen.getByLabelText('Destino a agregar'), 'dest-2')
+    await pickOption('Destino a agregar', 'DEST-B — Destination B')
     await userEvent.click(screen.getByRole('button', { name: 'Agregar parada' }))
 
     const items = screen.getAllByRole('listitem')
@@ -179,10 +183,10 @@ describe('RouteFormDrawer', () => {
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'new-route')
     await userEvent.type(screen.getByLabelText(/^nombre/i), 'New Route')
-    await userEvent.selectOptions(screen.getByLabelText(/^origen/i), 'origin-1')
-    await userEvent.selectOptions(await screen.findByLabelText('Destino a agregar'), 'dest-2')
+    await pickOption(/^origen/i, 'Origin A')
+    await pickOption('Destino a agregar', 'DEST-B — Destination B')
     await userEvent.click(screen.getByRole('button', { name: 'Agregar parada' }))
-    await userEvent.selectOptions(screen.getByLabelText('Destino a agregar'), 'dest-1')
+    await pickOption('Destino a agregar', 'DEST-A — Destination A')
     await userEvent.click(screen.getByRole('button', { name: 'Agregar parada' }))
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
@@ -242,8 +246,8 @@ describe('RouteFormDrawer', () => {
 
     await userEvent.type(screen.getByLabelText(/^código/i), 'DUP')
     await userEvent.type(screen.getByLabelText(/^nombre/i), 'Duplicate')
-    await userEvent.selectOptions(screen.getByLabelText(/^origen/i), 'origin-1')
-    await userEvent.selectOptions(await screen.findByLabelText('Destino a agregar'), 'dest-1')
+    await pickOption(/^origen/i, 'Origin A')
+    await pickOption('Destino a agregar', 'DEST-A — Destination A')
     await userEvent.click(screen.getByRole('button', { name: 'Agregar parada' }))
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 

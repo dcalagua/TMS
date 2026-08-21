@@ -41,6 +41,9 @@ export interface OriginListParams {
   sort?: string
   code?: string
   name?: string
+  /** One free-text term matched against the code OR the name - what the lookup field sends.
+   * `code`/`name` narrow one field each and remain what the filter bar uses. */
+  search?: string
   type?: OriginType
   active?: boolean
   signal?: AbortSignal

@@ -12,6 +12,12 @@ export interface AppEnv {
   readonly supabaseUrl: string
   /** Supabase anon (publishable) key. Authentication only; never a service-role key. */
   readonly supabaseAnonKey: string
+  /**
+   * Google Maps JavaScript API key, or `null` when unset. `null` is a supported, non-error
+   * state: the location map picker degrades to manual latitude/longitude entry instead of
+   * failing to load. See `docs/integrations/GOOGLE_MAPS.md`.
+   */
+  readonly googleMapsApiKey: string | null
 }
 
 const DEFAULT_API_BASE_URL = 'http://localhost:8080/api/v1'
@@ -28,6 +34,7 @@ function readEnv(): AppEnv {
     apiBaseUrl: (raw.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/+$/, ''),
     supabaseUrl: raw.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL,
     supabaseAnonKey: raw.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY,
+    googleMapsApiKey: raw.VITE_GOOGLE_MAPS_API_KEY?.trim() || null,
   }
 }
 

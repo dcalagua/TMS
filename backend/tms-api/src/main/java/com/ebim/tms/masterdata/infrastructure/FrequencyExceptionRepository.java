@@ -21,4 +21,7 @@ public interface FrequencyExceptionRepository extends JpaRepository<FrequencyExc
     Optional<FrequencyException> findByIdAndFrequencyId(UUID id, UUID frequencyId);
 
     boolean existsByFrequencyIdAndExceptionDate(UUID frequencyId, LocalDate exceptionDate);
+
+    /** The single override, if any, {@code LocationEligibilityService} must check before the weekly rule. */
+    Optional<FrequencyException> findByFrequencyIdAndExceptionDate(UUID frequencyId, LocalDate exceptionDate);
 }

@@ -29,4 +29,7 @@ public interface CarrierRepository extends JpaRepository<Carrier, UUID>, JpaSpec
 
     boolean existsByCompanyIdAndTaxIdTypeAndTaxIdValueAndIdNot(
             UUID companyId, String taxIdType, String taxIdValue, UUID id);
+
+    /** Which of a bulk import file's codes this company already holds - see {@code CarrierImportService}. */
+    List<Carrier> findByCompanyIdAndCodeIn(UUID companyId, Collection<String> codes);
 }

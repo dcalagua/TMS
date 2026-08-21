@@ -32,6 +32,7 @@ public record VehicleView(
         BigDecimal effectiveMaxVolumeM3,
         int effectiveMaxPallets,
         VehicleAvailabilityStatus availabilityStatus,
+        String externalReference,
         boolean active,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt) {
@@ -49,6 +50,6 @@ public record VehicleView(
                 vehicle.vehicleTypeId(), type == null ? null : type.code(), type == null ? null : type.name(),
                 vehicle.maxWeightOverrideKg(), vehicle.maxVolumeOverrideM3(), vehicle.maxPalletsOverride(),
                 capacity.maxWeightKg(), capacity.maxVolumeM3(), capacity.maxPallets(), vehicle.availabilityStatus(),
-                vehicle.active(), vehicle.createdAt(), vehicle.updatedAt());
+                vehicle.externalReference(), vehicle.active(), vehicle.createdAt(), vehicle.updatedAt());
     }
 }

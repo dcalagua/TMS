@@ -14,6 +14,7 @@ import enDashboard from './locales/en/dashboard.json'
 import enDialogs from './locales/en/dialogs.json'
 import enErrors from './locales/en/errors.json'
 import enFleet from './locales/en/fleet.json'
+import enMaps from './locales/en/maps.json'
 import enMasters from './locales/en/masters.json'
 import enNavigation from './locales/en/navigation.json'
 import enOrders from './locales/en/orders.json'
@@ -29,6 +30,7 @@ import esDashboard from './locales/es/dashboard.json'
 import esDialogs from './locales/es/dialogs.json'
 import esErrors from './locales/es/errors.json'
 import esFleet from './locales/es/fleet.json'
+import esMaps from './locales/es/maps.json'
 import esMasters from './locales/es/masters.json'
 import esNavigation from './locales/es/navigation.json'
 import esOrders from './locales/es/orders.json'
@@ -51,6 +53,7 @@ export const resources = {
     dialogs: esDialogs,
     errors: esErrors,
     fleet: esFleet,
+    maps: esMaps,
     masters: esMasters,
     navigation: esNavigation,
     orders: esOrders,
@@ -67,6 +70,7 @@ export const resources = {
     dialogs: enDialogs,
     errors: enErrors,
     fleet: enFleet,
+    maps: enMaps,
     masters: enMasters,
     navigation: enNavigation,
     orders: enOrders,

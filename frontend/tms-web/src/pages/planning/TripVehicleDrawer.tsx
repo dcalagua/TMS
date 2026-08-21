@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import type { ApiError } from '../../shared/api/httpClient'
 import { fetchVehicles } from '../../shared/api/vehiclesApi'
 import { updateTripVehicle, type TripDetailView, type TripVehicleRequest, type TripView } from '../../shared/api/planningApi'
 import { describePlanningError } from '../../shared/api/problemMessages'
 import { FormField } from '../../shared/ui/components/FormField'
+import { Select } from '../../shared/ui/components/Select'
 import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
 
 const FORM_ID = 'trip-vehicle-form'
@@ -66,6 +67,7 @@ export function TripVehicleDrawer({ companyId, trip, onClose, onUpdated }: TripV
 
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<TripVehicleFormValues>({
@@ -120,18 +122,25 @@ export function TripVehicleDrawer({ companyId, trip, onClose, onUpdated }: TripV
         )}
 
         <FormField label={t('trip.form.vehicle')} htmlFor="trip-vehicle-select" error={errors.vehicleId?.message} required>
-          <select
-            id="trip-vehicle-select"
-            className={`form-select${errors.vehicleId ? ' is-invalid' : ''}`}
-            {...register('vehicleId', { required: tv('required') })}
-          >
-            <option value="">{t('trip.form.selectVehicle')}</option>
-            {vehicles.map((vehicle) => (
-              <option key={vehicle.id} value={vehicle.id}>
-                {vehicle.code} — {vehicle.licensePlate}
-              </option>
-            ))}
-          </select>
+          {/* Controller rather than `register`: the control is a button plus a listbox, so
+              there is no native change event for react-hook-form to hook into. */}
+          <Controller
+            control={control}
+            name="vehicleId"
+            rules={{ required: tv('required') }}
+            render={({ field }) => (
+              <Select
+                id="trip-vehicle-select"
+                value={field.value}
+                onChange={(next) => field.onChange(next)}
+                invalid={Boolean(errors.vehicleId)}
+                options={[
+                  { value: '', label: t('trip.form.selectVehicle') },
+                  ...vehicles.map((vehicle) => ({ value: vehicle.id, label: `${vehicle.code} — ${vehicle.licensePlate}` })),
+                ]}
+              />
+            )}
+          />
         </FormField>
 
         <FormField label={t('trip.form.departure')} htmlFor="trip-vehicle-departure">

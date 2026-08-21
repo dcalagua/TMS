@@ -461,7 +461,7 @@ individually through its own sub-resource (`POST`/`DELETE
 /masterdata/frequencies/{id}/exceptions`), because a calendar override is an independent fact
 about one date, not a slot in a fixed weekly grid.
 
-### 8.3 A destination-frequency association table was deliberately not added
+### 8.3 A destination-frequency association table was deliberately not added in V7
 
 The "Frequency model" brief recommends an explicit destination-frequency association (rather
 than a rigid single FK) so multiple schedules can be modeled later. V7 does not add that
@@ -473,6 +473,10 @@ already made for zone geometry ("no geometry in V1... a future migration can add
 changing this shape"). When Orders/Planning defines what "which frequency serves this
 destination" needs to look like, add the table then; `destination`/`frequency` are already
 shaped so a later join table can reference both without any change to either.
+
+**Superseded by section 15.** Job 03 of the overnight-v3 pack is that concrete requirement, and
+`tms.location_frequency` (migration V15) is that table - associating the canonical `tms.location`
+(V14) rather than the legacy `tms.destination`, since V14 postdates this paragraph.
 
 ### 8.4 Indexes added by V7
 
@@ -636,6 +640,7 @@ erDiagram
         text contact_name "optional"
         text phone "optional"
         text email "optional, normalized lower, shape-checked"
+        text external_reference "optional, free text - see 16.1"
         bool active
         timestamptz created_at
         timestamptz updated_at
@@ -675,6 +680,7 @@ erDiagram
         numeric max_volume_override_m3 "10,3 - optional, positive when present"
         integer max_pallets_override "optional, nonnegative when present"
         text availability_status "AVAILABLE | IN_MAINTENANCE | OUT_OF_SERVICE - see 10.3"
+        text external_reference "optional, free text - see 16.1"
         bool active
         timestamptz created_at
         timestamptz updated_at
@@ -1079,3 +1085,213 @@ additive `ALTER TABLE` - applied migrations stay immutable (rule: never edit V9)
 | `ix_trip_order_assignment_order` (full) | the audit path: everywhere this order has been planned, closed rows included |
 | `ix_trip_order_assignment_company` | company-scoped reads |
 | `uq_vehicle_id_company` (on `tms.vehicle`) | see 14.7 |
+
+## 15. Location service calendar: `tms.location_frequency` (job 03 overnight-v3, migration V15)
+
+Section 8.3 deliberately did not add a destination-frequency association table in V7: "when
+Orders/Planning defines what 'which frequency serves this destination' needs to look like, add
+the table then." Job 03 of the overnight-v3 pack is that concrete requirement - a location/store
+must be able to answer "can I be serviced/dispatched on this date?" independently of whether it
+also happens to be a stop on some `tms.route`, because `route.frequency_id` (V8) only ever
+describes the route's own planning cadence, not any one stop's.
+
+```mermaid
+erDiagram
+    LOCATION  ||--o{ LOCATION_FREQUENCY : "has a calendar of"
+    FREQUENCY ||--o{ LOCATION_FREQUENCY : "governs"
+
+    LOCATION_FREQUENCY {
+        uuid id PK
+        uuid company_id FK
+        uuid location_id FK "composite FK guarantees same company as location"
+        uuid frequency_id FK "composite FK guarantees same company as frequency"
+        date effective_from "nullable - no start boundary"
+        date effective_to "nullable - no end boundary, effective_to >= effective_from when both present"
+        bool active "pauses the association without losing its date range"
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+        uuid updated_by FK
+    }
+```
+
+### 15.1 Associates `tms.location`, not `tms.destination`
+
+`tms.location` (V14) is the forward-looking canonical master, and every location with a SHIP_TO
+role already has a `location_id`-linked `tms.destination` projection
+(`docs/architecture/ADR_LOCATION_MODEL.md`), so attaching the calendar to `tms.location` loses no
+reach today and needs no rework when the legacy projections eventually retire (ADR-006 debt D-1).
+
+### 15.2 Deliberately independent of `tms.route.frequency_id`
+
+A route may reference a frequency (V8) for its own planning cadence; a location may independently
+reference one or more frequencies for its own service calendar. Neither implies the other - the
+job brief is explicit: "do not hard-wire frequency solely to a route if that prevents a store from
+having its own calendar." A location's eligibility is evaluated purely from its own
+`location_frequency` associations, never through any route it might also be a stop on.
+
+### 15.3 One or multiple schedules per location, each independently pausable and time-boxed
+
+A location may hold several associations (a store served by two independent schedules is eligible
+if *either* one runs on the evaluated date - `LocationEligibilityEvaluator`). `effective_from`/
+`effective_to` are both optional, matching a seasonal or contract-bound calendar without forcing
+every association to declare boundaries it does not need. `active` is separate from the date
+range for the same reason `frequency_weekly_rule.enabled` is separate from row presence (V7): an
+operator can pause an association without losing its configured dates.
+
+The one thing V1 deliberately does not model: two *active* associations between the same location
+and the same frequency (`LocationFrequencyService` rejects the second with a 409) - an operator
+who wants to reassign a period edits the existing association's dates rather than creating a
+second row that means the same thing.
+
+### 15.4 Carries its own `company_id`, unlike `frequency_weekly_rule`
+
+Like `tms.route_stop` (section 9.1) and unlike `tms.frequency_weekly_rule` (a pure child with no
+`company_id` of its own), `location_frequency` cross-references two independently company-scoped
+masters (`tms.location` and `tms.frequency`), so both composite tenant FKs need a `company_id` on
+this row to be checked against. The RLS policy is the direct `company_id = current_company_id()`
+form (section 3 of the RLS migration), not the EXISTS-through-parent form, for the same reason.
+
+### 15.5 The eligibility question is answered in Java, not SQL
+
+`LocationEligibilityEvaluator` (pure, no repository access, unit-tested without a database) takes
+already-resolved candidates - each a `location_frequency` row, its `Frequency` and, if one exists,
+the `FrequencyException` for the evaluated date - and decides in the same precedence
+`FrequencyCalendar.runsOn` already gives `FrequencyService`: an exception always overrides the
+weekly rule, and a day with no configured row or a disabled row both mean "does not run". This
+matches `CLAUDE.md`'s "Java owns business rules" and the job brief's "do not yet build an
+optimizer" - the service makes one yes/no decision for one date, nothing more.
+
+### 15.6 Indexes added by V15
+
+| Index | Purpose |
+|---|---|
+| `ix_location_frequency_company` | company-scoped reads (ADR-003) |
+| `ix_location_frequency_location` | "this location's calendar" - the eligibility service's own lookup |
+| `ix_location_frequency_frequency` | "which locations use this frequency" - a future Frequency detail screen |
+
+## 16. Fleet hardening: external references and vehicle double-booking (job 04 overnight-v3, migration V16)
+
+Two independent, additive changes to the V9 fleet masters and the V11 trip table - no existing
+column, constraint or index from either migration is touched.
+
+### 16.1 `carrier.external_reference` / `vehicle.external_reference`
+
+Both are optional free text, unindexed and unnormalized, the same shape as
+`transport_order.external_reference` (section 12) minus its `external_source` sibling: a fleet
+master is not (yet) written through an inbound idempotency flow, so there is no "who sent this" to
+pair it with - just "what does the external fleet/ERP system call this row." Integration matching
+on the value is the connector's job, not a database constraint.
+
+### 16.2 The vehicle double-booking invariant: one active trip per vehicle per planning date
+
+`tms.trip` gained `planning_date date NOT NULL`, denormalized from `tms.planning_run.planning_date`
+at trip creation (rule 7 - the same idiom `trip.company_id` already uses, for the same reason: the
+partial index below needs the value on `trip` itself, not reachable only through a join). The copy
+can never drift because nothing on `PlanningRun` mutates `planningDate` after construction.
+
+```sql
+CREATE UNIQUE INDEX uq_trip_vehicle_active_planning_date
+    ON tms.trip (company_id, vehicle_id, planning_date)
+    WHERE status <> 'CANCELLED' AND vehicle_id IS NOT NULL;
+```
+
+The step brief allows either an interval reservation (if planned start/end times are reliable) or a
+documented one-trip-per-vehicle-per-day rule (if the domain only has a planning date). `tms.trip`
+has `planned_departure_at` but no planned arrival/end - Step 10 built manual planning around a
+single planning date per run, not a per-trip time window - so an interval is not a fact the schema
+holds today. The per-day rule is therefore the simplest invariant the current data actually
+supports; revisit if/when trips gain a reliable planned duration.
+
+The index is partial in both directions, mirroring `uq_trip_order_assignment_open_whole_order`
+(section 14.4): `status <> 'CANCELLED'` so a cancelled trip releases its vehicle for the same day,
+and `vehicle_id IS NOT NULL` so a still-unassigned draft trip reserves nothing. Both `DRAFT` and
+`CONFIRMED` count as "active" - a draft already represents a planner's intent to run that vehicle
+that day.
+
+`TripService.requireVehicleNotDoubleBooked` runs the same check in Java first, with a
+caller-facing message, before every write that sets a trip's vehicle (`create`, `updateVehicle`);
+the index is the concurrency backstop for two planners racing to book the same vehicle on the same
+day, translated back to a 409 by `TripService.saveWithDoubleBookingBackstop` - the same
+pre-check-then-index-backstop relationship section 14.4 documents for order assignment.
+
+
+## 17. Planning/Shipment V2: shipment number and the route suggestion (job 07 overnight-v3, migration V19)
+
+Two columns on `tms.trip`, and a deliberately short list. The design record is
+[`docs/domain/SHIPMENT_V2.md`](../domain/SHIPMENT_V2.md); migration V19's header enumerates every
+field of the shipment header that is *not* stored and why.
+
+### 17.1 `trip.shipment_number`: the identity a trip has outside its planning board
+
+`trip_number` is unique inside one `planning_run` ("trip 2 of PL-00000017") and useless outside it:
+two runs on the same day both have a trip 2. An outbound integration, a printed manifest or a
+support call needs a stable, installation-wide handle, so V19 adds one.
+
+```sql
+CREATE SEQUENCE tms.shipment_number_seq AS bigint INCREMENT BY 1 START WITH 1 NO CYCLE;
+ALTER TABLE tms.trip ADD COLUMN shipment_number text;   -- backfilled, then NOT NULL
+ALTER TABLE tms.trip ALTER COLUMN shipment_number
+    SET DEFAULT 'SH-' || lpad(nextval('tms.shipment_number_seq')::text, 8, '0');
+ALTER TABLE tms.trip ADD CONSTRAINT uq_trip_shipment_number UNIQUE (shipment_number);
+```
+
+The uniqueness is global rather than company-scoped, which section 12.1 flags as normally a
+cross-tenant enumeration risk. The exception is the same one `plan_number` (V11) and `order_number`
+(V10) take, for the same reason: this is a system-generated opaque number nobody types, guesses or
+quotes from another tenant's document.
+
+The `DEFAULT` is what makes "every trip has a shipment number" a property of the *table* rather
+than of the one service that writes it. `TripService.generateShipmentNumber()` still assigns the
+value explicitly - Hibernate always names the column, so the default never fires from the
+application - but a raw `INSERT` (a data fix, a test fixture, a future SQL bulk import) now draws a
+collision-free number instead of failing `NOT NULL`. Same sequence, same format, one source of
+truth.
+
+### 17.2 `trip.route_id`: a suggestion, not a constraint
+
+```sql
+ALTER TABLE tms.trip ADD COLUMN route_id uuid;
+ALTER TABLE tms.trip ADD CONSTRAINT fk_trip_route FOREIGN KEY (route_id)
+    REFERENCES tms.route (id) ON DELETE RESTRICT;
+ALTER TABLE tms.trip ADD CONSTRAINT fk_trip_route_company FOREIGN KEY (route_id, company_id)
+    REFERENCES tms.route (id, company_id);
+CREATE INDEX ix_trip_route ON tms.trip (route_id) WHERE route_id IS NOT NULL;
+```
+
+`MATCH SIMPLE` (the default) so the reference is unchecked while null and enforced otherwise - the
+same idiom `trip.vehicle_id` (V11) and `destination.zone_id` (V7) use. The composite half is rule
+6's tenant guarantee: a shipment of company A can never point at a route of company B, whatever the
+service layer does.
+
+Section 9 introduced `tms.route` as "a named, reusable sequence a planner can point a Trip at
+later". This is that pointer, and it stays weak on purpose: the shipment's stops are not required
+to equal the route's, are not re-synchronised when the master is edited, and are never *created*
+from it - `tms.trip_stop` always follows the trip's own active assignments (section 14.6). The
+strongest thing applying a route may do is reorder the stops the shipment already has. See
+`SHIPMENT_V2.md`, "Route master interaction", for why a materialised copy was rejected.
+
+### 17.3 What V19 deliberately does not add
+
+- **No per-stop planned arrival/service time.** `tms.trip` has one optional `planned_departure_at`
+  and no travel-time model; a stored ETA would be inventing the routing that `CLAUDE.md` defers by
+  decision. Section 16.2 documents the same limitation for the double-booking rule.
+- **No stored used-weight/volume/pallet totals on `tms.trip`.** They are one grouped `SUM` over
+  active `trip_order_assignment` rows; a stored copy is a second source of truth a concurrent
+  assignment can leave stale (section 14.2's reasoning, applied to a trip).
+- **No coordinate copy on `tms.trip_stop`.** Read live from `tms.destination`: a corrected store
+  coordinate must reach an open plan immediately, and a frozen wrong one would be undetectable.
+- **No contiguity trigger on `trip_stop.sequence`.** Section 14's migration rules out triggers
+  carrying planning logic, and `uq_trip_stop_trip_sequence` already covers uniqueness. Contiguity
+  and stop/assignment coverage stay Java invariants (`Trip.assertStopSequenceIntegrity`,
+  `TripAssignmentService.requireStopsCoverAssignments`), both asserted on every mutation.
+
+### 17.4 Indexes and constraints added by V19
+
+| Object | Purpose |
+|---|---|
+| `tms.shipment_number_seq` | feeds `trip.shipment_number`; global, like the plan and order sequences |
+| `uq_trip_shipment_number` | one shipment number per installation |
+| `ck_trip_shipment_number_not_blank` | the usual blank-text guard |
+| `fk_trip_route` / `fk_trip_route_company` | the route reference and rule 6's tenant guarantee |
+| `ix_trip_route` | partial (`route_id IS NOT NULL`): "which shipments used this corridor" |

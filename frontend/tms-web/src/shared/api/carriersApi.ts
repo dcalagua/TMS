@@ -11,6 +11,7 @@ export interface CarrierView {
   contactName: string | null
   phone: string | null
   email: string | null
+  externalReference: string | null
   active: boolean
   createdAt: string
   updatedAt: string
@@ -25,6 +26,7 @@ export interface CarrierRequest {
   contactName?: string | null
   phone?: string | null
   email?: string | null
+  externalReference?: string | null
 }
 
 export interface CarrierListParams {
@@ -62,4 +64,23 @@ export function activateCarrier(companyId: string, id: string): Promise<CarrierV
 
 export function deactivateCarrier(companyId: string, id: string): Promise<CarrierView> {
   return apiRequest<CarrierView>(`/fleet/carriers/${id}/deactivate`, { method: 'POST', companyId })
+}
+
+// --- bulk import -----------------------------------------------------------------------
+
+/** The `CarrierImportController`'s `@RequestMapping` - shared by template/preview/apply. */
+export const CARRIER_IMPORT_BASE_PATH = '/fleet/carriers/import'
+
+/** Mirrors the backend's `CarrierImportPreview` record. */
+export interface CarrierImportPreview {
+  code: string
+  outcome: 'CREATE' | 'SKIPPED_DUPLICATE' | 'REJECTED'
+  rowNumber: number
+  businessName: string
+  taxIdType: string | null
+  taxIdValue: string | null
+  contactName: string | null
+  phone: string | null
+  email: string | null
+  externalReference: string | null
 }

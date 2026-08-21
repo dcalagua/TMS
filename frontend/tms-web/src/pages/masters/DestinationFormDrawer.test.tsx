@@ -114,6 +114,8 @@ describe('DestinationFormDrawer', () => {
     })
     renderModal()
 
+    // `Select` is a button + listbox, not a native `<select>`: its options only render once open.
+    await userEvent.click(screen.getByRole('combobox', { name: /^zona/i }))
     expect(await screen.findByRole('option', { name: 'Zone A' })).toBeInTheDocument()
   })
 

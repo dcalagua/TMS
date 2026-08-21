@@ -29,5 +29,6 @@ public record VehicleRequest(
         @DecimalMin(value = "0.0", inclusive = false, message = "must be greater than zero") BigDecimal maxWeightOverrideKg,
         @DecimalMin(value = "0.0", inclusive = false, message = "must be greater than zero") BigDecimal maxVolumeOverrideM3,
         @Min(value = 0, message = "must be zero or greater") Integer maxPalletsOverride,
-        @NotNull VehicleAvailabilityStatus availabilityStatus) {
+        @NotNull VehicleAvailabilityStatus availabilityStatus,
+        @Size(max = 200) String externalReference) {
 }
