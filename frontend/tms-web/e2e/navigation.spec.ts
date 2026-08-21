@@ -33,11 +33,6 @@ function navLink(page: Page, name: string) {
 
 test.describe('sidebar navigation on desktop', () => {
   test('every entry navigates and mounts its screen', async ({ page }) => {
-    // One test, nineteen navigations, and each screen is now code-split - so a first visit costs
-    // a chunk request that the dev server transforms on demand. The default 30s covers a single
-    // interaction, not a walk through the whole menu; this raises the budget rather than
-    // shortening the walk, because the walk is the assertion.
-    test.slow()
     await page.setViewportSize({ width: 1440, height: 900 })
     await stubServices(page)
     await signIn(page)
