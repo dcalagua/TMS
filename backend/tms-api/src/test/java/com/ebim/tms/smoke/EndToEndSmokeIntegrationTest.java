@@ -266,7 +266,7 @@ class EndToEndSmokeIntegrationTest {
                         .content("""
                                 {"code":"SMK-ROUTE","name":"Smoke Route","originId":"%s","zoneId":"%s",
                                  "frequencyId":"%s","referenceDistanceKm":42.5,"referenceDurationMinutes":75,
-                                 "destinationIds":["%s"]}
+                                 "stops":[{"destinationId":"%s"}]}
                                 """.formatted(originId, zoneId, frequencyId, destinationId))), id -> routeId = id)
                 .andExpect(jsonPath("$.originId").value(originId))
                 .andExpect(jsonPath("$.stops.length()").value(1));

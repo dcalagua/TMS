@@ -4,6 +4,7 @@ import com.ebim.tms.masterdata.domain.Route;
 import com.ebim.tms.masterdata.domain.RouteStop;
 import com.ebim.tms.shared.reference.RouteTemplate;
 import com.ebim.tms.shared.reference.RouteTemplateLookupPort;
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,6 +57,12 @@ class RouteTemplateLookupAdapter implements RouteTemplateLookupPort {
             byId.put(route.id(), toTemplate(route));
         }
         return byId;
+    }
+
+    @Override
+    public Optional<BigDecimal> findReferenceDistanceKm(UUID routeId, UUID companyId) {
+        return routeRepository.findByIdAndCompanyId(routeId, companyId)
+                .map(Route::referenceDistanceKm);
     }
 
     /**

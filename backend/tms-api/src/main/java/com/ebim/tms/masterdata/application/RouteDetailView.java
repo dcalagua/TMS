@@ -56,10 +56,27 @@ public record RouteDetailView(
                 route.createdAt(), route.updatedAt());
     }
 
-    public record RouteStopView(UUID destinationId, String destinationCode, String destinationName, int sequence) {
+    /**
+     * Service time is returned three ways on purpose, because an editor has to show all three:
+     * what this stop overrides ({@code serviceTimeOverrideMinutes}, null when it overrides
+     * nothing), what it would inherit ({@code destinationServiceTimeMinutes}, so the field can
+     * show the location's value as its placeholder rather than an empty box), and what actually
+     * applies ({@code effectiveServiceTimeMinutes}). The client never recomputes the third from
+     * the first two - {@code RouteStop.effectiveServiceTimeMinutes} owns that rule.
+     *
+     * @param destinationServiceTimeMinutes {@code null} only when the destination could not be
+     *     resolved at all; the column itself is NOT NULL on {@code tms.location}.
+     */
+    public record RouteStopView(UUID destinationId, String destinationCode, String destinationName, int sequence,
+            Integer serviceTimeOverrideMinutes, Integer destinationServiceTimeMinutes,
+            Integer effectiveServiceTimeMinutes) {
+
         static RouteStopView from(RouteStop stop, Location destination) {
             return new RouteStopView(stop.destinationId(), destination == null ? null : destination.code(),
-                    destination == null ? null : destination.name(), stop.sequence());
+                    destination == null ? null : destination.name(), stop.sequence(),
+                    stop.serviceTimeOverrideMinutes(),
+                    destination == null ? null : destination.serviceTimeMinutes(),
+                    stop.effectiveServiceTimeMinutes(destination));
         }
     }
 }

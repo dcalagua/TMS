@@ -50,7 +50,15 @@ class CapabilityTest {
         assertThat(Capability.PLANNING_MANAGE.permissions())
                 .isNotEqualTo(Capability.TRIPS_MANAGE.permissions())
                 .containsExactly(Permission.PLANNING_PLAN_MANAGE);
-        assertThat(Capability.TRIPS_MANAGE.permissions()).containsExactly(Permission.PLANNING_TRIP_MANAGE);
+        // Three permissions and one capability: building a plan, operating a trip (V25) and
+        // tendering it (V31) are separate authorities that share the trip workspace. What this
+        // asserts is that none of them leaks into PLANNING_MANAGE, which is the split that matters.
+        assertThat(Capability.TRIPS_MANAGE.permissions()).containsExactlyInAnyOrder(
+                Permission.PLANNING_TRIP_MANAGE,
+                Permission.PLANNING_TRIP_EXECUTE,
+                Permission.PLANNING_TENDER_MANAGE);
+        assertThat(Capability.TRIPS_MANAGE.permissions())
+                .doesNotContain(Permission.PLANNING_PLAN_MANAGE, Permission.PLANNING_PLAN_READ);
     }
 
     @Test

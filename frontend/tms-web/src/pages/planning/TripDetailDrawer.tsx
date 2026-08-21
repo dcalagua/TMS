@@ -17,9 +17,11 @@ import { describePlanningError } from '../../shared/api/problemMessages'
 import { fetchRoutes } from '../../shared/api/routesApi'
 import { useFormat } from '../../shared/i18n/format'
 import { TripStopMap, type TripStopMapOrigin, type TripStopMapStop } from '../../shared/maps/TripStopMap'
-import { CapacityBar, confirmDialog, Select, StatusBadge, type StatusTone, TmsDrawer } from '../../shared/ui/components'
+import { CapacityBar, confirmDialog, Select, StatusBadge, TmsDrawer } from '../../shared/ui/components'
 import { LoadingState } from '../../shared/ui/components/LoadingState'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
+import { TRIP_STATUS_TONE } from '../../shared/ui/statusTones'
+import { TripDriverDrawer } from './TripDriverDrawer'
 import { TripVehicleDrawer } from './TripVehicleDrawer'
 
 /** `LocalTime` strings from the backend ("HH:mm" or "HH:mm:ss") trimmed to "HH:mm" for display. */
@@ -28,12 +30,6 @@ function formatServiceWindow(start: string | null, end: string | null): string |
   const short = (value: string) => value.slice(0, 5)
   if (start && end) return `${short(start)}–${short(end)}`
   return short(start ?? end ?? '')
-}
-
-const STATUS_TONE: Record<TripView['status'], StatusTone> = {
-  DRAFT: 'info',
-  CONFIRMED: 'success',
-  CANCELLED: 'danger',
 }
 
 interface TripDetailDrawerProps {
@@ -85,6 +81,7 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
   const [moveTargets, setMoveTargets] = useState<Record<string, string>>({})
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null)
   const [showVehicleModal, setShowVehicleModal] = useState(false)
+  const [showDriverModal, setShowDriverModal] = useState(false)
   const [stopOrder, setStopOrder] = useState<string[]>([])
   const [savingStops, setSavingStops] = useState(false)
   const [routeId, setRouteId] = useState<string>('')
@@ -267,7 +264,7 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
       <div>
         {detail && (
           <p className="mb-3">
-            <StatusBadge label={enumLabels.tripStatus(detail.trip.status)} tone={STATUS_TONE[detail.trip.status]} />
+            <StatusBadge label={enumLabels.tripStatus(detail.trip.status)} tone={TRIP_STATUS_TONE[detail.trip.status]} />
           </p>
         )}
         {tripQuery.isError && (
@@ -291,11 +288,15 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
                   )}
                 </p>
                 <p className="small text-body-secondary mb-0">{detail.trip.carrierName ?? t('card.noCarrier')}</p>
+                <p className="small text-body-secondary mb-0">{detail.trip.driverName ?? t('card.noDriver')}</p>
               </div>
               {editable && (
                 <div className="btn-group btn-group-sm flex-shrink-0">
                   <button type="button" className="btn btn-outline-secondary" onClick={() => setShowVehicleModal(true)}>
                     {detail.trip.vehicleId ? t('drawer.changeVehicle') : t('drawer.assignVehicle')}
+                  </button>
+                  <button type="button" className="btn btn-outline-secondary" onClick={() => setShowDriverModal(true)}>
+                    {detail.trip.driverId ? t('drawer.changeDriver') : t('drawer.assignDriver')}
                   </button>
                   <button type="button" className="btn btn-outline-danger" onClick={() => void cancelThisTrip()}>
                     {t('drawer.cancelTrip')}
@@ -325,6 +326,17 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
                 }
               />
               <ShipmentFact label={t('drawer.header.vehicleType')} value={detail.trip.vehicleTypeCode} />
+              <ShipmentFact label={t('drawer.header.driver')} value={detail.trip.driverName} />
+              <ShipmentFact
+                label={t('drawer.header.driverLicense')}
+                value={
+                  detail.trip.driverLicenseNumber === null
+                    ? null
+                    : `${detail.trip.driverLicenseNumber} · ${enumLabels.driverLicenseStatus(
+                        detail.trip.driverLicenseStatus ?? 'UNRECORDED',
+                      )}`
+                }
+              />
               <ShipmentFact
                 label={t('drawer.header.departure')}
                 value={detail.trip.plannedDepartureAt ? format.dateTime(detail.trip.plannedDepartureAt) : null}
@@ -613,6 +625,19 @@ export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, o
             setShowVehicleModal(false)
             applyDetail(next)
             notifySuccess(t('drawer.vehicleSaved'))
+          }}
+        />
+      )}
+
+      {showDriverModal && detail && (
+        <TripDriverDrawer
+          companyId={companyId}
+          trip={detail.trip}
+          onClose={() => setShowDriverModal(false)}
+          onUpdated={(next) => {
+            setShowDriverModal(false)
+            applyDetail(next)
+            notifySuccess(t('drawer.driverSaved'))
           }}
         />
       )}

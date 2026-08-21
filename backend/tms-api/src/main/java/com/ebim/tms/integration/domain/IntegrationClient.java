@@ -58,6 +58,20 @@ public class IntegrationClient {
     @Column(name = "description")
     private String description;
 
+    /**
+     * The carrier this credential answers for, or null for an ordinary partner credential
+     * (migration V31).
+     *
+     * <p>Mutable, unlike {@link #companyId}, and the asymmetry is the point. The company is what
+     * makes a credential a tenant's and must never move; the carrier is an attribute of what the
+     * credential is <em>for</em>, and an administrator who bound a key to the wrong haulier has to
+     * be able to fix it without re-issuing a secret their partner has already deployed. Every
+     * change goes through {@link #assignCarrier}, which is audited by
+     * {@code IntegrationClientService}.
+     */
+    @Column(name = "carrier_id")
+    private UUID carrierId;
+
     @Column(name = "secret_hash", nullable = false)
     private String secretHash;
 
@@ -136,6 +150,23 @@ public class IntegrationClient {
 
     public String description() {
         return description;
+    }
+
+    public UUID carrierId() {
+        return carrierId;
+    }
+
+    /**
+     * Binds this credential to one carrier, or unbinds it when {@code carrierId} is null.
+     *
+     * <p>Whether that carrier exists, is active and belongs to this company is
+     * {@code IntegrationClientService}'s check, made before this is called - the entity cannot see
+     * the fleet master, which {@code integration} reaches only through {@code CarrierLookupPort}.
+     * {@code fk_integration_client_carrier_company} is the database's own copy of the tenant half.
+     */
+    public void assignCarrier(UUID carrierId, UUID actorId) {
+        this.carrierId = carrierId;
+        this.updatedBy = actorId;
     }
 
     public String secretAlgorithm() {

@@ -1,6 +1,42 @@
 {
   "active": "Activo",
   "available": "Disponible",
+  "costComponentReason": {
+    "DISTANCE_UNKNOWN": "Sin distancia conocida",
+    "PALLETS_UNKNOWN": "Sin pallets declarados",
+    "VOLUME_UNKNOWN": "Sin volumen declarado",
+    "WEIGHT_UNKNOWN": "Sin peso declarado"
+  },
+  "costQuantitySource": {
+    "ORDER_DECLARED_TOTALS": "Totales declarados de los pedidos",
+    "ROUTE_REFERENCE": "Distancia de referencia de la ruta"
+  },
+  "deliveryResult": {
+    "DELIVERED": "Entregado",
+    "FAILED": "Entrega fallida",
+    "NOT_ATTEMPTED": "No intentada",
+    "PARTIAL": "Entrega parcial",
+    "REJECTED": "Rechazado"
+  },
+  "departureTimeliness": {
+    "LATE": "Salió tarde",
+    "NOT_APPLICABLE": "No aplica",
+    "NOT_SCHEDULED": "Sin salida planificada",
+    "ON_TIME": "A tiempo",
+    "OVERDUE": "Salida vencida",
+    "SCHEDULED": "Programado"
+  },
+  "driverLicenseStatus": {
+    "EXPIRED": "Vencida",
+    "EXPIRING_SOON": "Por vencer",
+    "UNRECORDED": "Sin registrar",
+    "VALID": "Vigente"
+  },
+  "evidenceType": {
+    "DOCUMENT": "Documento",
+    "PHOTO": "Foto",
+    "SIGNATURE": "Firma"
+  },
   "inactive": "Inactivo",
   "locationRole": {
     "DESTINATION": "Destino",
@@ -18,6 +54,14 @@
     "WAREHOUSE": "Almacén"
   },
   "maintenance": "Mantenimiento",
+  "orderFulfillmentStatus": {
+    "DELIVERED": "Entregado",
+    "FAILED": "Fallido",
+    "NOT_ATTEMPTED": "No intentado",
+    "PARTIALLY_DELIVERED": "Entrega parcial",
+    "PENDING": "Pendiente",
+    "REJECTED": "Rechazado"
+  },
   "orderPriority": {
     "HIGH": "Alta",
     "LOW": "Baja",
@@ -36,10 +80,79 @@
     "CONFIRMED": "Confirmada",
     "DRAFT": "Borrador"
   },
+  "rateCardScope": {
+    "CARRIER": "Transportista",
+    "ORIGIN": "Origen",
+    "ROUTE": "Ruta"
+  },
+  "rateComponent": {
+    "BASE": "Base",
+    "DISTANCE": "Distancia",
+    "MINIMUM_ADJUSTMENT": "Ajuste al mínimo",
+    "PALLETS": "Pallets",
+    "VOLUME": "Volumen",
+    "WEIGHT": "Peso"
+  },
+  "stopExecutionStatus": {
+    "ARRIVED": "En el punto",
+    "COMPLETED": "Atendida",
+    "FAILED": "No atendida",
+    "IN_SERVICE": "En atención",
+    "PENDING": "Sin iniciar",
+    "SKIPPED": "Omitida"
+  },
+  "tenderResponseSource": {
+    "INTEGRATION": "Confirmado por el transportista",
+    "OPERATOR": "Registrado por nosotros"
+  },
+  "tenderStatus": {
+    "ACCEPTED": "Aceptada",
+    "CANCELLED": "Retirada",
+    "DRAFT": "Borrador",
+    "EXPIRED": "Vencida",
+    "REJECTED": "Rechazada",
+    "SENT": "Esperando respuesta"
+  },
+  "transportEventType": {
+    "ARRIVED_AT_STOP": "Llegada a la parada",
+    "DELIVERY_RECORDED": "Entrega registrada",
+    "EXCEPTION_REPORTED": "Incidencia reportada",
+    "EXCEPTION_RESOLVED": "Incidencia resuelta",
+    "SERVICE_STARTED": "Inicio de atención",
+    "STOP_COMPLETED": "Parada atendida",
+    "STOP_FAILED": "Parada no atendida",
+    "STOP_SKIPPED": "Parada omitida",
+    "TENDER_ACCEPTED": "Oferta aceptada",
+    "TENDER_CANCELLED": "Oferta retirada",
+    "TENDER_EXPIRED": "Oferta vencida",
+    "TENDER_REJECTED": "Oferta rechazada",
+    "TENDER_SENT": "Oferta enviada al transportista",
+    "TRIP_CANCELLED": "Viaje cancelado",
+    "TRIP_COMPLETED": "Viaje cerrado",
+    "TRIP_CONFIRMED": "Viaje confirmado",
+    "TRIP_DISPATCHED": "Salida",
+    "TRIP_READY": "Listo para salir"
+  },
+  "tripExceptionStatus": {
+    "OPEN": "Abierta",
+    "RESOLVED": "Resuelta"
+  },
+  "tripExceptionType": {
+    "ADDRESS_NOT_FOUND": "Dirección no encontrada",
+    "CUSTOMER_CLOSED": "Cliente cerrado",
+    "DELIVERY_FAILED": "Entrega fallida",
+    "DELIVERY_REJECTED": "Entrega rechazada",
+    "OTHER": "Otra",
+    "TRAFFIC_DELAY": "Demora por tráfico",
+    "VEHICLE_BREAKDOWN": "Avería del vehículo"
+  },
   "tripStatus": {
     "CANCELLED": "Cancelado",
+    "COMPLETED": "Completado",
     "CONFIRMED": "Confirmado",
-    "DRAFT": "Borrador"
+    "DRAFT": "Borrador",
+    "IN_TRANSIT": "En ruta",
+    "READY_FOR_DISPATCH": "Listo para salir"
   },
   "vehicleAvailability": {
     "AVAILABLE": "Disponible",

@@ -1,6 +1,42 @@
 {
   "active": "Active",
   "available": "Available",
+  "costComponentReason": {
+    "DISTANCE_UNKNOWN": "No known distance",
+    "PALLETS_UNKNOWN": "No pallets declared",
+    "VOLUME_UNKNOWN": "No volume declared",
+    "WEIGHT_UNKNOWN": "No weight declared"
+  },
+  "costQuantitySource": {
+    "ORDER_DECLARED_TOTALS": "Declared order totals",
+    "ROUTE_REFERENCE": "Route reference distance"
+  },
+  "deliveryResult": {
+    "DELIVERED": "Delivered",
+    "FAILED": "Delivery failed",
+    "NOT_ATTEMPTED": "Not attempted",
+    "PARTIAL": "Partial delivery",
+    "REJECTED": "Rejected"
+  },
+  "departureTimeliness": {
+    "LATE": "Departed late",
+    "NOT_APPLICABLE": "Not applicable",
+    "NOT_SCHEDULED": "No planned departure",
+    "ON_TIME": "On time",
+    "OVERDUE": "Departure overdue",
+    "SCHEDULED": "Scheduled"
+  },
+  "driverLicenseStatus": {
+    "EXPIRED": "Expired",
+    "EXPIRING_SOON": "Expiring soon",
+    "UNRECORDED": "Not recorded",
+    "VALID": "Valid"
+  },
+  "evidenceType": {
+    "DOCUMENT": "Document",
+    "PHOTO": "Photo",
+    "SIGNATURE": "Signature"
+  },
   "inactive": "Inactive",
   "locationRole": {
     "DESTINATION": "Destination",
@@ -18,6 +54,14 @@
     "WAREHOUSE": "Warehouse"
   },
   "maintenance": "Maintenance",
+  "orderFulfillmentStatus": {
+    "DELIVERED": "Delivered",
+    "FAILED": "Failed",
+    "NOT_ATTEMPTED": "Not attempted",
+    "PARTIALLY_DELIVERED": "Partially delivered",
+    "PENDING": "Pending",
+    "REJECTED": "Rejected"
+  },
   "orderPriority": {
     "HIGH": "High",
     "LOW": "Low",
@@ -36,10 +80,79 @@
     "CONFIRMED": "Confirmed",
     "DRAFT": "Draft"
   },
+  "rateCardScope": {
+    "CARRIER": "Carrier",
+    "ORIGIN": "Origin",
+    "ROUTE": "Route"
+  },
+  "rateComponent": {
+    "BASE": "Base",
+    "DISTANCE": "Distance",
+    "MINIMUM_ADJUSTMENT": "Minimum adjustment",
+    "PALLETS": "Pallets",
+    "VOLUME": "Volume",
+    "WEIGHT": "Weight"
+  },
+  "stopExecutionStatus": {
+    "ARRIVED": "Arrived",
+    "COMPLETED": "Served",
+    "FAILED": "Not served",
+    "IN_SERVICE": "In service",
+    "PENDING": "Not started",
+    "SKIPPED": "Skipped"
+  },
+  "tenderResponseSource": {
+    "INTEGRATION": "Confirmed by the carrier",
+    "OPERATOR": "Recorded by us"
+  },
+  "tenderStatus": {
+    "ACCEPTED": "Accepted",
+    "CANCELLED": "Withdrawn",
+    "DRAFT": "Draft",
+    "EXPIRED": "Expired",
+    "REJECTED": "Rejected",
+    "SENT": "Awaiting reply"
+  },
+  "transportEventType": {
+    "ARRIVED_AT_STOP": "Arrived at stop",
+    "DELIVERY_RECORDED": "Delivery recorded",
+    "EXCEPTION_REPORTED": "Problem reported",
+    "EXCEPTION_RESOLVED": "Problem resolved",
+    "SERVICE_STARTED": "Service started",
+    "STOP_COMPLETED": "Stop served",
+    "STOP_FAILED": "Stop not served",
+    "STOP_SKIPPED": "Stop skipped",
+    "TENDER_ACCEPTED": "Offer accepted",
+    "TENDER_CANCELLED": "Offer withdrawn",
+    "TENDER_EXPIRED": "Offer expired",
+    "TENDER_REJECTED": "Offer rejected",
+    "TENDER_SENT": "Offered to the carrier",
+    "TRIP_CANCELLED": "Trip cancelled",
+    "TRIP_COMPLETED": "Trip closed",
+    "TRIP_CONFIRMED": "Trip confirmed",
+    "TRIP_DISPATCHED": "Departed",
+    "TRIP_READY": "Ready for dispatch"
+  },
+  "tripExceptionStatus": {
+    "OPEN": "Open",
+    "RESOLVED": "Resolved"
+  },
+  "tripExceptionType": {
+    "ADDRESS_NOT_FOUND": "Address not found",
+    "CUSTOMER_CLOSED": "Customer closed",
+    "DELIVERY_FAILED": "Delivery failed",
+    "DELIVERY_REJECTED": "Delivery rejected",
+    "OTHER": "Other",
+    "TRAFFIC_DELAY": "Traffic delay",
+    "VEHICLE_BREAKDOWN": "Vehicle breakdown"
+  },
   "tripStatus": {
     "CANCELLED": "Cancelled",
+    "COMPLETED": "Completed",
     "CONFIRMED": "Confirmed",
-    "DRAFT": "Draft"
+    "DRAFT": "Draft",
+    "IN_TRANSIT": "In transit",
+    "READY_FOR_DISPATCH": "Ready for dispatch"
   },
   "vehicleAvailability": {
     "AVAILABLE": "Available",

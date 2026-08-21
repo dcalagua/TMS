@@ -16,6 +16,7 @@ import com.jayway.jsonpath.JsonPath;
 import jakarta.persistence.EntityManagerFactory;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -1287,9 +1288,212 @@ class PlanningApiIntegrationTest {
         applyRoute(trip, routeB, false, 0).andExpect(status().isBadRequest());
     }
 
+    // --- trip execution (V25, docs/domain/TRIP_EXECUTION_V1.md) --------------------
+
+    @Test
+    @DisplayName("a confirmed trip walks ready -> dispatched -> completed, recording an actual time at each step")
+    void executionLifecycleRecordsActualTimes() throws Exception {
+        String trip = confirmedTrip("EXEC-HAPPY");
+
+        long version = versionOf(execute(trip, "ready", null, versionOfTrip(trip))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.status").value("READY_FOR_DISPATCH"))
+                .andExpect(jsonPath("$.trip.readyAt").isNotEmpty()));
+        version = versionOf(execute(trip, "dispatch", null, version)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.status").value("IN_TRANSIT"))
+                .andExpect(jsonPath("$.trip.actualDepartureAt").isNotEmpty()));
+        execute(trip, "complete", null, version)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.trip.actualCompletionAt").isNotEmpty())
+                // Terminal: the UI renders its buttons from this, so an empty list is the contract.
+                .andExpect(jsonPath("$.trip.allowedTransitions").isEmpty());
+
+        // The plan is never rewritten by what happened - the whole point of two columns.
+        assertThat(queryLong("SELECT count(*) FROM tms.trip WHERE id = '" + trip
+                + "' AND planned_departure_at IS NOT NULL AND actual_departure_at IS NOT NULL"
+                + " AND ready_by IS NOT NULL AND dispatched_by IS NOT NULL AND completed_by IS NOT NULL"))
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("an illegal transition is refused with 409 naming both states, and changes nothing")
+    void illegalTransitionIsRefused() throws Exception {
+        String trip = confirmedTrip("EXEC-SKIP");
+
+        // CONFIRMED -> IN_TRANSIT skips READY_FOR_DISPATCH.
+        execute(trip, "dispatch", null, versionOfTrip(trip)).andExpect(status().isConflict());
+
+        assertThat(queryString("SELECT status FROM tms.trip WHERE id = '" + trip + "'")).isEqualTo("CONFIRMED");
+        assertThat(queryLong("SELECT count(*) FROM tms.shipment_outbox_event WHERE trip_id = '" + trip
+                + "' AND event_type = 'SHIPMENT_DISPATCHED'")).isZero();
+    }
+
+    @Test
+    @DisplayName("a retry of a transition that already succeeded is answered, not conflicted, and emits no second event")
+    void executionIsIdempotent() throws Exception {
+        String trip = confirmedTrip("EXEC-RETRY");
+        execute(trip, "ready", null, versionOfTrip(trip)).andExpect(status().isOk());
+
+        // Version 0 is stale by now - which is exactly the state a retried request is in.
+        execute(trip, "ready", null, 0)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.status").value("READY_FOR_DISPATCH"));
+
+        assertThat(queryLong("SELECT count(*) FROM tms.shipment_outbox_event WHERE trip_id = '" + trip
+                + "' AND event_type = 'SHIPMENT_READY'")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a stale version on a state not yet reached is still refused with 409")
+    void staleVersionIsStillRefused() throws Exception {
+        String trip = confirmedTrip("EXEC-STALE");
+        execute(trip, "ready", null, versionOfTrip(trip)).andExpect(status().isOk());
+
+        execute(trip, "dispatch", null, 0).andExpect(status().isConflict());
+
+        assertThat(queryString("SELECT status FROM tms.trip WHERE id = '" + trip + "'"))
+                .isEqualTo("READY_FOR_DISPATCH");
+    }
+
+    @Test
+    @DisplayName("an actual time in the future is refused with 400")
+    void aFutureActualTimeIsRefused() throws Exception {
+        String trip = confirmedTrip("EXEC-FUTURE");
+
+        execute(trip, "ready", OffsetDateTime.now().plusDays(1).toString(), versionOfTrip(trip))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("each execution transition writes exactly one outbox event and one audit event")
+    void everyTransitionIsPublishedAndAudited() throws Exception {
+        String trip = confirmedTrip("EXEC-EVENTS");
+        long version = versionOf(execute(trip, "ready", null, versionOfTrip(trip)).andExpect(status().isOk()));
+        execute(trip, "dispatch", null, version).andExpect(status().isOk());
+
+        assertThat(queryLong("SELECT count(*) FROM tms.shipment_outbox_event WHERE trip_id = '" + trip + "'"))
+                .isEqualTo(3); // CONFIRMED, READY, DISPATCHED
+        assertThat(queryLong("SELECT count(*) FROM tms.audit_event WHERE aggregate_id = '" + trip
+                + "' AND action IN ('SHIPMENT_READY', 'SHIPMENT_DISPATCHED')")).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("cancelling a confirmed trip needs a reason, releases its orders and publishes SHIPMENT_CANCELLED")
+    void cancellingAConfirmedTripPublishesAndReleases() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("EXEC-CANCEL", "10000", "40", 20));
+        String orderId = order(COMPANY_A, originA, destinationA1, date, "100", "1", "1", "READY_FOR_PLANNING");
+        assign(trip, orderId).andExpect(status().isOk());
+        confirm(run).andExpect(status().isOk());
+
+        long version = versionOfTrip(trip);
+        mockMvc.perform(asAdmin(post(TRIPS + "/" + trip + "/cancel"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":" + version + "}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(asAdmin(post(TRIPS + "/" + trip + "/cancel"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":" + version + ",\"reason\":\"Customer closed\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.status").value("CANCELLED"));
+
+        assertThat(orderStatus(orderId)).isEqualTo("READY_FOR_PLANNING");
+        assertThat(queryLong("SELECT count(*) FROM tms.shipment_outbox_event WHERE trip_id = '" + trip
+                + "' AND event_type = 'SHIPMENT_CANCELLED'")).isEqualTo(1);
+        // Cancelled after confirmation, so it keeps both the confirmation and its capacity snapshot.
+        assertThat(queryLong("SELECT count(*) FROM tms.trip WHERE id = '" + trip
+                + "' AND confirmed_at IS NOT NULL AND capacity_snapshot_at IS NOT NULL")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a trip that has departed can no longer be cancelled")
+    void aDepartedTripCannotBeCancelled() throws Exception {
+        String trip = confirmedTrip("EXEC-GONE");
+        long version = versionOf(execute(trip, "ready", null, versionOfTrip(trip)).andExpect(status().isOk()));
+        execute(trip, "dispatch", null, version).andExpect(status().isOk());
+
+        mockMvc.perform(asAdmin(post(TRIPS + "/" + trip + "/cancel"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":" + versionOfTrip(trip) + ",\"reason\":\"Too late\"}"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("execution endpoints refuse a caller without planning.trip:execute and a trip of another company")
+    void executionIsScopedAndAuthorized() throws Exception {
+        String trip = confirmedTrip("EXEC-AUTH");
+
+        mockMvc.perform(asViewer(post(TRIPS + "/" + trip + "/ready"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"version\":0}"))
+                .andExpect(status().isForbidden());
+        // Company B's admin holds the authority but not the trip: 404, never 403 - the existence
+        // of another tenant's shipment is not something to confirm.
+        mockMvc.perform(asAdmin(post(TRIPS + "/" + trip + "/ready"), COMPANY_B)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"version\":0}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("the trips list spans planning runs, is company-scoped and filters by status")
+    void tripListSpansRunsAndFilters() throws Exception {
+        String confirmed = confirmedTrip("LIST-A");
+        LocalDate date = nextDate();
+        Run otherRun = newRun(date);
+        String draft = newTrip(otherRun, vehicle("LIST-B", "10000", "40", 20));
+
+        String all = mockMvc.perform(asAdmin(get(TRIPS + "?size=200"), COMPANY_A))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<String> ids = JsonPath.read(all, "$.content[*].id");
+        assertThat(ids).contains(confirmed, draft);
+
+        String drafts = mockMvc.perform(asAdmin(get(TRIPS + "?size=200&status=DRAFT"), COMPANY_A))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<String> draftIds = JsonPath.read(drafts, "$.content[*].id");
+        assertThat(draftIds).contains(draft).doesNotContain(confirmed);
+
+        // Another tenant's board never leaks in, whatever the filters say.
+        String otherCompany = mockMvc.perform(asAdmin(get(TRIPS + "?size=200"), COMPANY_B))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<String> otherIds = JsonPath.read(otherCompany, "$.content[*].id");
+        assertThat(otherIds).doesNotContain(confirmed, draft);
+    }
+
     // --- helpers ------------------------------------------------------------------
 
     private record Run(String id, LocalDate date) {
+    }
+
+    /** A trip with one order on it, confirmed - the state every execution test starts from. */
+    private String confirmedTrip(String vehicleCode) throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle(vehicleCode, "10000", "40", 20));
+        assign(trip, order(COMPANY_A, originA, destinationA1, date, "100", "1", "1", "READY_FOR_PLANNING"))
+                .andExpect(status().isOk());
+        confirm(run).andExpect(status().isOk());
+        return trip;
+    }
+
+    private org.springframework.test.web.servlet.ResultActions execute(
+            String tripId, String action, String occurredAt, long version) throws Exception {
+        String body = occurredAt == null
+                ? "{\"version\":" + version + "}"
+                : "{\"version\":" + version + ",\"occurredAt\":\"" + occurredAt + "\"}";
+        return mockMvc.perform(asAdmin(post(TRIPS + "/" + tripId + "/" + action), COMPANY_A)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
+    }
+
+    private long versionOfTrip(String tripId) throws Exception {
+        return versionOf(mockMvc.perform(asAdmin(get(TRIPS + "/" + tripId), COMPANY_A))
+                .andExpect(status().isOk()));
     }
 
     private Callable<Integer> assignConcurrently(String tripId, String orderId, CyclicBarrier barrier) {

@@ -122,10 +122,15 @@ class MigrationConventionTest {
         for (Path script : SCRIPTS) {
             String sql = MigrationScripts.withoutComments(MigrationScripts.read(script)).toLowerCase(Locale.ROOT);
             for (String table : TENANT_DATA_TABLES) {
-                assertThat(sql)
+                // Matched as a whole identifier, not as a substring: `tms.company_settings` is a
+                // different table from `tms.company`, and a plain contains() check reads the
+                // first as a violation of a rule about the second. The rule is about seeding
+                // tenants and users, so it has to end where the table name ends.
+                Pattern insert = Pattern.compile("insert\\s+into\\s+" + Pattern.quote(table) + "\\b(?!_)");
+                assertThat(insert.matcher(sql).find())
                         .as("%s must not insert into %s - demo and local fixtures belong to "
                                 + "supabase/seeds or to test code", script.getFileName(), table)
-                        .doesNotContain("insert into " + table);
+                        .isFalse();
             }
             assertThat(sql)
                     .as("%s must not contain a credential", script.getFileName())

@@ -98,7 +98,11 @@ public class IntegrationAuthenticationService {
         // row. Doing it on use rather than on a schedule keeps it free of a job.
         client.expireRotationWindow(now);
 
-        return new IntegrationPrincipal(client.id(), client.clientId(), client.name(), scope, client.scopeValues());
+        // The carrier travels on the principal for the same reason the company does: it decides
+        // whose data the caller may reach, so it is resolved from the credential here and never
+        // read from anything the caller sends (migration V31).
+        return new IntegrationPrincipal(client.id(), client.clientId(), client.name(), scope, client.carrierId(),
+                client.scopeValues());
     }
 
     private void touch(IntegrationClient client, OffsetDateTime now) {

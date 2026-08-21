@@ -5,7 +5,14 @@
     "markReady": "Marcar listo",
     "view": "Ver"
   },
+  "columns": {
+    "fulfillment": "Entrega"
+  },
   "description": "Pedidos de transporte: cabecera más líneas, con un ciclo de estados mínimo en V1 (no listo, listo para planificar, planificado o cancelado). Los totales siempre los calcula y controla el backend.",
+  "detail": {
+    "fulfillment": "Estado de entrega",
+    "fulfillmentHelp": "Lo que ocurrió con la mercancía en el punto de entrega. Es independiente del estado de planificación."
+  },
   "dialogs": {
     "cancelError": "No se pudo cancelar el pedido",
     "cancelText": "{{number}} quedará cancelado y ya no podrá editarse ni planificarse.",
@@ -22,10 +29,12 @@
   },
   "filters": {
     "allDestinations": "Todos los destinos",
+    "allFulfillment": "Todos los estados de entrega",
     "allPriorities": "Todas las prioridades",
     "allStatuses": "Todos los estados",
     "dateFrom": "Desde",
-    "dateTo": "Hasta"
+    "dateTo": "Hasta",
+    "fulfillment": "Entrega"
   },
   "form": {
     "addLine": "Agregar línea",

@@ -144,7 +144,7 @@ public class VehicleLookupService implements VehicleLookupPort {
     private VehicleCapacityReference toReference(Vehicle vehicle, VehicleType type, String carrierName) {
         EffectiveCapacity capacity = effectiveCapacityResolver.resolve(vehicle, type);
         return new VehicleCapacityReference(vehicle.id(), vehicle.code(), vehicle.licensePlate(), vehicle.carrierId(),
-                carrierName, type.code(), capacity.maxWeightKg(), capacity.maxVolumeM3(), capacity.maxPallets(),
-                vehicle.active(), vehicle.availabilityStatus().name());
+                carrierName, type.id(), type.code(), capacity.maxWeightKg(), capacity.maxVolumeM3(),
+                capacity.maxPallets(), vehicle.active(), vehicle.availabilityStatus().name());
     }
 }

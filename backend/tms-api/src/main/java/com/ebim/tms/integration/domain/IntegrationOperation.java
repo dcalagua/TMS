@@ -13,7 +13,27 @@ public enum IntegrationOperation {
     LOCATION_UPSERT("location.upsert", IntegrationScope.LOCATION_WRITE),
     LOCATION_BATCH("location.batch", IntegrationScope.LOCATION_WRITE),
     ORDER_UPSERT("order.upsert", IntegrationScope.ORDER_WRITE),
-    ORDER_BATCH("order.batch", IntegrationScope.ORDER_WRITE);
+    ORDER_BATCH("order.batch", IntegrationScope.ORDER_WRITE),
+
+    /**
+     * A run of reported positions (migration V29). There is no single-position sibling, unlike the
+     * two pairs above: a device reporting one ping sends a batch of one, and a second operation
+     * would be a second shape of the same thing for no gain - see
+     * {@code IntegrationTrackingController}.
+     */
+    TRACKING_BATCH("tracking.batch", IntegrationScope.TRACKING_WRITE),
+
+    /**
+     * A carrier's answer to one tender (migration V31). Singular and with no batch sibling: a
+     * carrier answers the shipment in front of them, one commercial decision at a time, and a
+     * batch form would invite a client to accept twenty loads with one call and then have to be
+     * told which four of them failed.
+     *
+     * <p>The read side - "which offers am I holding" - is not an operation at all, for the reason
+     * {@code IntegrationShipmentController} gives: it has no payload to fingerprint and no
+     * idempotency key to honour, so there is nothing to record beyond the access log.
+     */
+    TENDER_RESPONSE("tender.response", IntegrationScope.TENDER_RESPOND);
 
     private final String code;
     private final IntegrationScope requiredScope;

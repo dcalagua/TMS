@@ -33,5 +33,26 @@
  * into a table the UI validates carefully.
  *
  * <p>Contract, examples and the credential threat model: {@code docs/integrations/INBOUND_API_V1.md}.
+ *
+ * <h2>Outbound: polling, and since V35, push</h2>
+ *
+ * <p>The outbound half rests on one table, {@code tms.shipment_outbox_event} (V20), written in the
+ * same transaction as the trip state change it records. There are two ways to consume it and they
+ * describe the same facts with the same identifiers:
+ *
+ * <ul>
+ *   <li><b>Polling</b> - {@code GET /integration/v1/shipments/events?since=...}, authenticated with
+ *       an integration credential holding {@code integration.shipment:read}. Unchanged since V20 and
+ *       still the simplest thing for a partner who already runs a scheduler.</li>
+ *   <li><b>Webhooks</b> (migration V35) - a company administrator registers an endpoint from the
+ *       Integration Hub and TMS POSTs each selected event to it, signed with HMAC-SHA-256, retried
+ *       on a published schedule, with every attempt recorded. The fan-out happens in the business
+ *       transaction; the HTTP call never does. Contract, signature scheme and runbook:
+ *       {@code docs/integrations/WEBHOOKS_V1.md}.</li>
+ * </ul>
+ *
+ * <p>A webhook subscription is deliberately <em>not</em> an {@code integration_client}: a
+ * credential is how a partner authenticates into TMS, and a subscription is an address the customer
+ * owns. The receiving system may have no reason to ever call TMS at all.
  */
 package com.ebim.tms.integration;

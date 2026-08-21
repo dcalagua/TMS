@@ -189,19 +189,27 @@ public class Route {
     }
 
     /**
-     * Replaces the whole ordered stop list with {@code destinationIds} in one pass: sequence is
+     * Replaces the whole ordered stop list with {@code requestedStops} in one pass: sequence is
      * assigned from list order (1..N), a destination present in both the new list and what is
-     * persisted is updated in place (its sequence only), a newly present destination is added,
-     * and a persisted destination absent from {@code destinationIds} is removed (deleted on
-     * flush via {@code orphanRemoval}). The caller must have already rejected a duplicate
-     * destination id within {@code destinationIds} - a {@link Map} would otherwise silently drop
-     * one, exactly as {@link Frequency#replaceWeeklyRules} requires for {@code dayOfWeek}.
+     * persisted is updated in place (its sequence and service-time override), a newly present
+     * destination is added, and a persisted destination absent from {@code requestedStops} is
+     * removed (deleted on flush via {@code orphanRemoval}). The caller must have already
+     * rejected a duplicate destination id within {@code requestedStops} - a {@link Map} would
+     * otherwise silently drop one, exactly as {@link Frequency#replaceWeeklyRules} requires for
+     * {@code dayOfWeek}.
+     *
+     * <p>Whole-list semantics apply to the override too: a stop that keeps its position but
+     * arrives with no override loses the one it had. That is what "the request is the wanted
+     * state, not a delta" has to mean for it to stay predictable - the same reason the weekly
+     * grid is always sent in full.
      */
-    public void replaceStops(List<UUID> destinationIds, UUID actorId) {
+    public void replaceStops(List<RouteStopInput> requestedStops, UUID actorId) {
+        Map<UUID, RouteStopInput> targetByDestination = new LinkedHashMap<>();
         Map<UUID, Integer> targetSequenceByDestination = new LinkedHashMap<>();
         int sequence = 1;
-        for (UUID destinationId : destinationIds) {
-            targetSequenceByDestination.put(destinationId, sequence++);
+        for (RouteStopInput requested : requestedStops) {
+            targetByDestination.put(requested.destinationId(), requested);
+            targetSequenceByDestination.put(requested.destinationId(), sequence++);
         }
 
         stops.removeIf(stop -> !targetSequenceByDestination.containsKey(stop.destinationId()));
@@ -212,11 +220,13 @@ public class Route {
         }
 
         for (Map.Entry<UUID, Integer> entry : targetSequenceByDestination.entrySet()) {
+            RouteStopInput requested = targetByDestination.get(entry.getKey());
             RouteStop existing = existingByDestination.get(entry.getKey());
             if (existing != null) {
-                existing.applyChanges(entry.getValue(), actorId);
+                existing.applyChanges(entry.getValue(), requested.serviceTimeOverrideMinutes(), actorId);
             } else {
-                stops.add(new RouteStop(this, companyId, entry.getKey(), entry.getValue(), actorId));
+                stops.add(new RouteStop(this, companyId, entry.getKey(), entry.getValue(),
+                        requested.serviceTimeOverrideMinutes(), actorId));
             }
         }
     }

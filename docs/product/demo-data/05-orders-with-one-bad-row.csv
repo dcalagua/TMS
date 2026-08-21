@@ -1,0 +1,5 @@
+externalReference,originCode,destinationCode,customerName,customerReference,serviceDate,priority,windowStart,windowEnd,declaredWeightKg,declaredVolumeM3,declaredPallets,materialCode,materialDescription,quantity,uom,unitWeightKg,unitVolumeM3,palletQuantity
+SO-2026-000106,CD-LIMA,ST-4716,Retail Demo S.A.C.,PO-88316,2026-08-25,NORMAL,,,,,,MAT-1001,Bebida gaseosa 500 ml - caja x24,40,CJ,14.500,0.0280,1
+SO-2026-000106,CD-LIMA,ST-4716,Retail Demo S.A.C.,PO-88316,2026-08-25,NORMAL,,,,,,MAT-3001,Galletas surtidas - caja x40,60,CJ,8.400,0.0350,2
+SO-2026-000107,CD-LIMA,ST-9999,Industrias Demo S.A.,PO-77120,2026-08-25,NORMAL,08:00,16:00,,,,MAT-5001,Pallet de insumos industriales,10,PAL,680.000,2.2000,10
+SO-2026-000108,CD-LIMA,ST-4711,Retail Demo S.A.C.,PO-88317,2026-08-25,URGENTE,,,,,,MAT-2001,Detergente 900 g - caja x12,30,CJ,11.200,0.0250,1

@@ -1,0 +1,74 @@
+{
+  "byStatus": "Envíos por estado:",
+  "charts": {
+    "noData": "Sin datos",
+    "onTime": "Salidas a tiempo por día",
+    "onTimeHint": "Sobre las salidas registradas de cada día. Los días en gris no tienen ninguna medición.",
+    "trips": "Envíos por día",
+    "tripsHint": "Todos los envíos planificados del día, anulados incluidos."
+  },
+  "columns": {
+    "actual": "Real",
+    "cancelled": "Anulados",
+    "comparable": "Comparables",
+    "completed": "Completados",
+    "currency": "Moneda",
+    "date": "Día",
+    "deliveries": "Entregas completas / registradas",
+    "deliverySuccess": "% entregas completas",
+    "departures": "Salidas tarde / medidas",
+    "estimated": "Estimado",
+    "exceptions": "Incidencias",
+    "onTimeDeparture": "% salidas a tiempo",
+    "trips": "Envíos",
+    "variance": "Diferencia"
+  },
+  "description": "Cómo fue la operación en un rango de días, con el detalle diario y su exportación.",
+  "empty": {
+    "costMessage": "Cuando se estimen o registren costos de los envíos del rango, aparecerán aquí.",
+    "costTitle": "Sin costos en el rango",
+    "dailyMessage": "Elige otro rango de fechas para ver el detalle día a día.",
+    "dailyTitle": "Sin días que mostrar"
+  },
+  "exceptionCell": "{{total}} ({{open}} abiertas)",
+  "exportCsv": "Exportar CSV",
+  "exportError": "No se pudo exportar el reporte",
+  "filters": {
+    "from": "Desde",
+    "to": "Hasta"
+  },
+  "kpi": {
+    "deliverySuccess": "Entregas completas",
+    "deliverySuccessHint": "{{delivered}} de {{recorded}} entregas registradas",
+    "exceptions": "Incidencias",
+    "exceptionsHint": "{{open}} abiertas · {{per100}} por cada 100 envíos",
+    "notPermitted": "No disponible con tus permisos",
+    "nothingMeasured": "Ninguna salida registrada en el rango",
+    "nothingRecorded": "Ninguna entrega registrada en el rango",
+    "onTimeDeparture": "Salidas a tiempo",
+    "onTimeDepartureHint": "Sobre {{measured}} salidas registradas",
+    "onTimeService": "Ventanas cumplidas",
+    "onTimeServiceHint": "Sobre {{measured}} paradas con llegada y ventana",
+    "plannedOrders": "Pedidos planificados",
+    "plannedOrdersHint": "{{planned}} de {{input}} pedidos del rango",
+    "tenderAcceptance": "Aceptación de transportistas",
+    "tenderAcceptanceHint": "{{answered}} respondidas de {{attempts}} ofertas",
+    "trips": "Envíos",
+    "tripsHint": "{{run}} realizados, {{cancelled}} anulados",
+    "utilization": "Ocupación por peso",
+    "utilizationHint": "Sobre {{trips}} envíos con capacidad congelada"
+  },
+  "overTrips": "{{amount}} en {{trips}} envíos",
+  "rangeBadge": "{{from}} a {{to}} ({{days}} días)",
+  "refresh": "Actualizar",
+  "scopeNote": "Todo el reporte cubre el mismo rango. Un guion significa que no hubo nada que medir, no que el resultado fuera cero.",
+  "sections": {
+    "cost": "Costo estimado contra real",
+    "costHint": "Una fila por moneda: no hay conversión entre monedas. La diferencia se calcula solo sobre los envíos que tienen las dos cifras.",
+    "daily": "Día a día",
+    "detail": "Detalle diario",
+    "detailHint": "Cada valor de los gráficos es una fila de esta tabla, y esta tabla es lo que exporta el CSV.",
+    "headline": "El rango completo"
+  },
+  "title": "Reportes y KPIs"
+}

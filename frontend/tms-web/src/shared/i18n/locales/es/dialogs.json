@@ -27,6 +27,9 @@
   },
   "deleted": "Registro eliminado",
   "errorTitle": "No se pudo completar la acción",
+  "prompt": {
+    "required": "Este campo es obligatorio."
+  },
   "saved": "Cambios guardados",
   "updated": "Registro actualizado"
 }

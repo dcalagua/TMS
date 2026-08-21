@@ -2,6 +2,7 @@ package com.ebim.tms.shared.reference;
 
 import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -58,4 +59,23 @@ public interface OrderPlanningPort {
      * {@code docs/overnight/09_ORDERS.md} section 8, point 2.
      */
     void releaseFromPlanning(UUID orderId, UUID companyId);
+
+    /**
+     * How many of the orders serviced between {@code from} and {@code to} (both inclusive) are on a
+     * shipment and how many are not - the KPI report's planned-versus-unplanned figure, counted in
+     * one grouped query.
+     *
+     * <p>A read, on a port whose other read methods resolve orders one page or one id at a time.
+     * It belongs here rather than on a port of its own for the reason this one exists at all: it is
+     * planning asking about orders, the lifecycle it is counting is
+     * {@code docs/domain/ORDER_LIFECYCLE_V1.md}'s, and a second port with a single method would
+     * give the same conversation two doors.
+     *
+     * <p>Ranged over {@code service_date} - the day the customer is owed the goods - and never over
+     * {@code created_at}. The report's other half is ranged over the shipments' planning date, and
+     * the whole point of putting the two side by side is that they are about the same operating
+     * days. Counting orders by when they were typed would compare a week's plan against whatever
+     * happened to be entered that week.
+     */
+    OrderBacklogTotals backlogTotals(UUID companyId, LocalDate from, LocalDate to);
 }

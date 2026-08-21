@@ -2,6 +2,7 @@
 
 | Directory | Contents |
 |---|---|
+| `product/` | What the product can be sold and demonstrated as doing today, what it cannot, and how to run a demo. **Start here if you are preparing a customer conversation.** |
 | `architecture/` | Architecture of record, ownership matrix and ADRs. **Read before changing schema, security or module boundaries.** |
 | `database/` | Schema notes, tenancy model and migration conventions |
 | `api/` | HTTP contract: base path, company scope header, error format, paging |
@@ -10,6 +11,25 @@
 | `security/` | Security baseline, authentication and authorization model, and the review record |
 | `performance/` | Measured query-shape and query-count baseline against the design target |
 | `overnight/` | Step-by-step reports produced by the unattended build sequence |
+
+## Product and demo
+
+Written for a customer conversation rather than for a change to the code. Every claim in them was
+re-derived from the working tree, and the limitations are stated at the same volume as the
+capabilities.
+
+- [`product/SELLABLE_CAPABILITIES.md`](product/SELLABLE_CAPABILITIES.md) - what exists today, marked
+  IMPLEMENTED / PARTIAL / ENVIRONMENT BLOCKED / FUTURE, with where each lives.
+- [`product/DEMO_SCRIPT.md`](product/DEMO_SCRIPT.md) - a rehearsable end-to-end walkthrough, its
+  setup, what to say, and what to do when something goes wrong.
+- [`product/ARCHITECTURE_OVERVIEW.md`](product/ARCHITECTURE_OVERVIEW.md) - the summary for the
+  technical person in the room.
+- [`product/KNOWN_LIMITATIONS.md`](product/KNOWN_LIMITATIONS.md) - blockers, defects, gaps and scale
+  ceilings, each with what closing it needs.
+- [`product/ROADMAP_NEXT.md`](product/ROADMAP_NEXT.md) - what comes next, and what was declined.
+- [`product/API_EXAMPLES.md`](product/API_EXAMPLES.md) - runnable inbound/outbound calls, no real
+  secrets.
+- [`product/demo-data/`](product/demo-data/) - **local/demo only** import fixtures.
 
 ## Start here
 

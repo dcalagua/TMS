@@ -18,6 +18,8 @@ export type ProblemCode =
   | 'malformed-request'
   | 'resource-not-found'
   | 'conflict'
+  /** An optional capability this deployment has not been configured for - outbound webhooks today. */
+  | 'feature-not-configured'
   | 'internal-error'
 
 export interface ProblemFieldError {

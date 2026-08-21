@@ -37,6 +37,12 @@ function renderDrawer(ui: React.ReactElement) {
   return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
 }
 
+/** `Select` is a button + listbox, not a native `<select>`: open it, then click the option. */
+async function pickOption(comboboxName: RegExp | string, optionName: RegExp | string) {
+  await userEvent.click(screen.getByRole('combobox', { name: comboboxName }))
+  await userEvent.click(await screen.findByRole('option', { name: optionName }))
+}
+
 const FREQUENCY: FrequencyView = {
   id: 'frequency-1',
   code: 'MON-WED-FRI',
@@ -147,10 +153,10 @@ describe('FrequencyFormDrawer', () => {
 
   it('lists the date exceptions of a saved frequency, each with its kind', async () => {
     frequenciesApiMocks.fetchFrequencyExceptions.mockResolvedValue([
-      { id: 'exc-1', exceptionDate: '2026-12-25', serviceOverride: false, note: 'Navidad',
-        createdAt: '2026-01-01T00:00:00Z' },
-      { id: 'exc-2', exceptionDate: '2026-12-19', serviceOverride: true, note: null,
-        createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'exc-1', exceptionDate: '2026-12-25', serviceOverride: false, cutoffTimeOverride: null,
+        note: 'Navidad', createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'exc-2', exceptionDate: '2026-12-19', serviceOverride: true, cutoffTimeOverride: null,
+        note: null, createdAt: '2026-01-01T00:00:00Z' },
     ])
 
     renderDrawer(
@@ -170,8 +176,8 @@ describe('FrequencyFormDrawer', () => {
   it('adds a closed date and refreshes the list', async () => {
     frequenciesApiMocks.fetchFrequencyExceptions.mockResolvedValue([])
     frequenciesApiMocks.createFrequencyException.mockResolvedValue({
-      id: 'exc-1', exceptionDate: '2026-12-25', serviceOverride: false, note: null,
-      createdAt: '2026-01-01T00:00:00Z',
+      id: 'exc-1', exceptionDate: '2026-12-25', serviceOverride: false, cutoffTimeOverride: null,
+      note: null, createdAt: '2026-01-01T00:00:00Z',
     })
 
     renderDrawer(
@@ -180,14 +186,75 @@ describe('FrequencyFormDrawer', () => {
     await screen.findByText('Sin excepciones registradas.')
 
     fireEvent.change(screen.getByLabelText('Fecha'), { target: { value: '2026-12-25' } })
+    // A closed date has no cutoff, so the field is not even offered for one.
+    expect(screen.queryByLabelText('Corte')).not.toBeInTheDocument()
+
     await userEvent.click(screen.getByRole('button', { name: 'Agregar excepción' }))
 
     await waitFor(() =>
       expect(frequenciesApiMocks.createFrequencyException).toHaveBeenCalledWith('company-1', 'frequency-1', {
         exceptionDate: '2026-12-25',
         serviceOverride: false,
+        cutoffTimeOverride: null,
         note: null,
       }),
+    )
+  })
+
+  it('adds an open date that closes earlier than the weekly rule', async () => {
+    frequenciesApiMocks.fetchFrequencyExceptions.mockResolvedValue([])
+    frequenciesApiMocks.createFrequencyException.mockResolvedValue({
+      id: 'exc-1', exceptionDate: '2026-12-24', serviceOverride: true, cutoffTimeOverride: '11:00:00',
+      note: null, createdAt: '2026-01-01T00:00:00Z',
+    })
+
+    renderDrawer(
+      <FrequencyFormDrawer companyId="company-1" frequency={FREQUENCY} onClose={vi.fn()} onSaved={vi.fn()} />,
+    )
+    await screen.findByText('Sin excepciones registradas.')
+
+    fireEvent.change(screen.getByLabelText('Fecha'), { target: { value: '2026-12-24' } })
+    await pickOption('Tipo', 'Abierto')
+    fireEvent.change(await screen.findByLabelText('Corte'), { target: { value: '11:00' } })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar excepción' }))
+
+    await waitFor(() =>
+      expect(frequenciesApiMocks.createFrequencyException).toHaveBeenCalledWith('company-1', 'frequency-1', {
+        exceptionDate: '2026-12-24',
+        serviceOverride: true,
+        // HH:MM from the input, widened to the LocalTime the API takes.
+        cutoffTimeOverride: '11:00:00',
+        note: null,
+      }),
+    )
+  })
+
+  it('drops a typed cutoff when the date is switched back to closed', async () => {
+    frequenciesApiMocks.fetchFrequencyExceptions.mockResolvedValue([])
+    frequenciesApiMocks.createFrequencyException.mockResolvedValue({
+      id: 'exc-1', exceptionDate: '2026-12-25', serviceOverride: false, cutoffTimeOverride: null,
+      note: null, createdAt: '2026-01-01T00:00:00Z',
+    })
+
+    renderDrawer(
+      <FrequencyFormDrawer companyId="company-1" frequency={FREQUENCY} onClose={vi.fn()} onSaved={vi.fn()} />,
+    )
+    await screen.findByText('Sin excepciones registradas.')
+
+    fireEvent.change(screen.getByLabelText('Fecha'), { target: { value: '2026-12-25' } })
+    await pickOption('Tipo', 'Abierto')
+    fireEvent.change(await screen.findByLabelText('Corte'), { target: { value: '11:00' } })
+    await pickOption('Tipo', 'Cerrado')
+
+    expect(screen.queryByLabelText('Corte')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar excepción' }))
+
+    // The backend would refuse it anyway; the point is that a hidden field can never be
+    // submitted behind the operator's back.
+    await waitFor(() =>
+      expect(frequenciesApiMocks.createFrequencyException).toHaveBeenCalledWith('company-1', 'frequency-1',
+        expect.objectContaining({ serviceOverride: false, cutoffTimeOverride: null })),
     )
   })
 

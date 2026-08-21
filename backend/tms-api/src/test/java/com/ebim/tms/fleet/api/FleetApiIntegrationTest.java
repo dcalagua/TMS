@@ -588,4 +588,177 @@ class FleetApiIntegrationTest {
                     .andExpect(jsonPath("$.totalElements").value(org.hamcrest.Matchers.greaterThanOrEqualTo(3)));
         }
     }
+
+    /**
+     * The driver master (migration V26), proved against the real schema: normalization and the
+     * three uniqueness rules that depend on it, the derived licence status, tenant isolation, and
+     * the {@code fleet.driver:*} permission split.
+     */
+    @Nested
+    @DisplayName("drivers")
+    class Drivers {
+
+        private static final String BASE = "/api/v1/fleet/drivers";
+
+        private String driverRequest(String code, String documentNumber, String licenseNumber, String expiresOn) {
+            return """
+                    {"code":"%s","firstName":"Ana","lastName":"Quispe","documentType":"dni",
+                     "documentNumber":"%s","phone":"+51 999 111 222","licenseNumber":"%s",
+                     "licenseCategory":"a-iib"%s}
+                    """.formatted(code, documentNumber, licenseNumber,
+                    expiresOn == null ? "" : ",\"licenseExpiresOn\":\"" + expiresOn + "\"");
+        }
+
+        @Test
+        @DisplayName("create normalizes code, document and licence, and derives fullName")
+        void createNormalizesAndDerives() throws Exception {
+            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(driverRequest("dr-ana", "10000001", "q-100001", null)))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.code").value("DR-ANA"))
+                    .andExpect(jsonPath("$.documentType").value("DNI"))
+                    .andExpect(jsonPath("$.licenseNumber").value("Q-100001"))
+                    .andExpect(jsonPath("$.licenseCategory").value("A-IIB"))
+                    // Names are trimmed, never upper-cased: they are printed on a manifest.
+                    .andExpect(jsonPath("$.firstName").value("Ana"))
+                    .andExpect(jsonPath("$.fullName").value("Quispe, Ana"))
+                    // No expiry on file is UNRECORDED, and that never blocks anything.
+                    .andExpect(jsonPath("$.licenseStatus").value("UNRECORDED"))
+                    .andExpect(jsonPath("$.active").value(true));
+
+            mockMvc.perform(asAdmin(get(BASE), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content[?(@.code == 'DR-ANA')]").exists());
+        }
+
+        @Test
+        @DisplayName("licence status is derived from the expiry date, with the last valid day inclusive")
+        void licenceStatusIsDerived() throws Exception {
+            java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("America/Lima"));
+
+            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(driverRequest("dr-expired", "10000002", "q-100002", today.minusDays(1).toString())))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.licenseStatus").value("EXPIRED"));
+
+            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(driverRequest("dr-today", "10000003", "q-100003", today.toString())))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.licenseStatus").value("EXPIRING_SOON"));
+
+            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(driverRequest("dr-valid", "10000004", "q-100004", today.plusYears(2).toString())))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.licenseStatus").value("VALID"));
+
+            mockMvc.perform(asAdmin(get(BASE), COMPANY_A).param("licenseStatus", "EXPIRED"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content[?(@.code == 'DR-EXPIRED')]").exists())
+                    .andExpect(jsonPath("$.content[?(@.code == 'DR-VALID')]").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("code, document and licence number are unique per company and free in another one")
+        void uniquenessIsCompanyScoped() throws Exception {
+            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(driverRequest("dr-dup", "10000010", "q-100010", null)))
+                    .andExpect(status().isCreated());
+
+            // The same person driving for two tenant companies is two rows (ADR-003).
+            mockMvc.perform(asAdmin(post(BASE), COMPANY_B)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(driverRequest("dr-dup", "10000010", "q-100010", null)))
+                    .andExpect(status().isCreated());
+
+            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(driverRequest("dr-dup", "10000011", "q-100011", null)))
+                    .andExpect(status().isConflict());
+
+            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(driverRequest("dr-other", "10000010", "q-100012", null)))
+                    .andExpect(status().isConflict());
+
+            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(driverRequest("dr-third", "10000013", "q-100010", null)))
+                    .andExpect(status().isConflict());
+        }
+
+        @Test
+        @DisplayName("a driver of one company cannot be read through another company's scope")
+        void crossCompanyAccessIsBlocked() throws Exception {
+            String response = mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(driverRequest("dr-isolated", "10000020", "q-100020", null)))
+                    .andExpect(status().isCreated())
+                    .andReturn().getResponse().getContentAsString();
+
+            mockMvc.perform(asAdmin(get(BASE + "/" + idOf(response)), COMPANY_B))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("resource-not-found"));
+        }
+
+        @Test
+        @DisplayName("a carrier of another company cannot be attached to a driver")
+        void carrierMustBeInTheSameCompany() throws Exception {
+            String carrier = mockMvc.perform(asAdmin(post("/api/v1/fleet/carriers"), COMPANY_B)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"code":"dr-foreign-carrier","businessName":"Foreign Transport S.A.",
+                                     "taxIdType":"RUC","taxIdValue":"20100000700"}
+                                    """))
+                    .andExpect(status().isCreated())
+                    .andReturn().getResponse().getContentAsString();
+
+            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"code":"dr-cross","firstName":"Ana","lastName":"Quispe","documentType":"DNI",
+                                     "documentNumber":"10000030","licenseNumber":"Q-100030","carrierId":"%s"}
+                                    """.formatted(idOf(carrier))))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("deactivation keeps the row readable - a retired driver still renders on their trips")
+        void deactivationKeepsTheRecord() throws Exception {
+            String response = mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(driverRequest("dr-retired", "10000040", "q-100040", null)))
+                    .andExpect(status().isCreated())
+                    .andReturn().getResponse().getContentAsString();
+            String id = idOf(response);
+
+            mockMvc.perform(asAdmin(post(BASE + "/" + id + "/deactivate"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.active").value(false));
+
+            mockMvc.perform(asAdmin(get(BASE + "/" + id), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.fullName").value("Quispe, Ana"));
+
+            mockMvc.perform(asAdmin(post(BASE + "/" + id + "/activate"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.active").value(true));
+        }
+
+        @Test
+        @DisplayName("a read-only role may list but not create")
+        void readOnlyRoleCannotManage() throws Exception {
+            mockMvc.perform(asViewer(get(BASE), COMPANY_A)).andExpect(status().isOk());
+
+            mockMvc.perform(asViewer(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(driverRequest("dr-forbidden", "10000050", "q-100050", null)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("access-denied"));
+        }
+    }
 }

@@ -113,6 +113,9 @@ Every error, from a filter or a controller, is one `application/problem+json` do
 | `malformed-request` | 400 | unreadable body, wrong parameter type, unsupported sort, wrong method or media type |
 | `resource-not-found` | 404 | no such resource **inside the caller's company scope** |
 | `conflict` | 409 | a business invariant or optimistic-locking check refused the change |
+| `idempotency-key-reused` | 409 | an `Idempotency-Key` was replayed with a **different** payload. Distinct from `conflict` because the caller's correct reaction is different in kind: not "reload and retry" but "your client sent two bodies under one key" |
+| `storage-unavailable` | 503 | proof-of-delivery evidence was requested of a deployment with no object store configured (ADR-006). Nothing is broken and no retry helps until an administrator configures it |
+| `feature-not-configured` | 503 | the generalisation of the above, for every other optional capability - today, outbound webhooks with no signing key (migration V35). Same reading: stop offering the feature rather than retrying |
 | `internal-error` | 500 | unexpected failure; quote `correlationId` |
 
 ### 4.2 Validation failures

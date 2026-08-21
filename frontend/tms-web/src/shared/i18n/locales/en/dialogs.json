@@ -27,6 +27,9 @@
   },
   "deleted": "Record deleted",
   "errorTitle": "The action could not be completed",
+  "prompt": {
+    "required": "This field is required."
+  },
   "saved": "Changes saved",
   "updated": "Record updated"
 }

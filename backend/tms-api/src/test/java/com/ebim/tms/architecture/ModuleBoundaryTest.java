@@ -22,7 +22,13 @@ class ModuleBoundaryTest {
     static final String ROOT = "com.ebim.tms";
 
     private static final List<String> BUSINESS_MODULES =
-            List.of("iam", "masterdata", "fleet", "orders", "planning", "audit", "integration");
+            List.of("iam", "masterdata", "fleet", "orders", "planning", "rates", "audit", "integration", "tracking",
+                    // Owns tms.notification (V32). Listed here, and not left as an unconstrained
+                    // package, precisely because it is the module every other one has a reason to
+                    // call: an alert is a by-product of half the writes in the product. The rule
+                    // forces those calls through com.ebim.tms.shared.notification.
+                    // NotificationPublisher, the same way audit is reached through AuditRecorder.
+                    "notification");
 
     @ArchTest
     static final ArchRule modules_are_free_of_cycles =

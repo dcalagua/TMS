@@ -323,8 +323,21 @@ function OrderForm({
     >
       <form id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
         {order && (
-          <p className="mb-3">
-            <StatusBadge label={statusLabel} tone="info" />
+          // Two badges, labelled, rather than one: an order can be PLANNED and REJECTED at the
+          // same time and both are true. A single badge would have to pick one and would be
+          // telling the reader the other did not happen.
+          <p className="mb-3 d-flex flex-wrap align-items-center gap-3">
+            <span className="d-inline-flex align-items-center gap-2">
+              <span className="small text-body-secondary">{tc('columns.status')}</span>
+              <StatusBadge label={statusLabel} tone="info" />
+            </span>
+            <span className="d-inline-flex align-items-center gap-2">
+              <span className="small text-body-secondary">{t('detail.fulfillment')}</span>
+              <StatusBadge
+                label={enumLabels.orderFulfillmentStatus(order.fulfillmentStatus)}
+                tone={order.fulfillmentStatus === 'PENDING' ? 'neutral' : 'info'}
+              />
+            </span>
           </p>
         )}
 

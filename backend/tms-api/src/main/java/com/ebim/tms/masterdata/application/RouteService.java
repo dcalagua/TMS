@@ -4,6 +4,7 @@ import com.ebim.tms.masterdata.domain.Frequency;
 import com.ebim.tms.masterdata.domain.Location;
 import com.ebim.tms.masterdata.domain.LocationRole;
 import com.ebim.tms.masterdata.domain.Route;
+import com.ebim.tms.masterdata.domain.RouteStopInput;
 import com.ebim.tms.masterdata.domain.Zone;
 import com.ebim.tms.masterdata.infrastructure.FrequencyRepository;
 import com.ebim.tms.masterdata.infrastructure.LocationRepository;
@@ -18,6 +19,7 @@ import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.security.CompanyScope;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -107,8 +109,8 @@ public class RouteService {
         Location origin = requireOriginLocation(scope, request.originId());
         Zone zone = requireZoneInScope(scope, request.zoneId());
         Frequency frequency = requireFrequencyInScope(scope, request.frequencyId());
-        List<UUID> destinationIds = distinctOrThrow(request.destinationIds());
-        Map<UUID, Location> destinationsById = requireDestinationLocations(scope, destinationIds);
+        List<RouteStopInput> stops = distinctOrThrow(request.stops());
+        Map<UUID, Location> destinationsById = requireDestinationLocations(scope, destinationIdsOf(stops));
         if (routeRepository.existsByCompanyIdAndCode(scope.companyId(), code)) {
             throw duplicateCode(code);
         }
@@ -116,7 +118,7 @@ public class RouteService {
         UUID actorId = auditActorProvider.requireAppUserId();
         Route route = new Route(scope.companyId(), code, request.name().trim(), request.originId(), request.zoneId(),
                 request.frequencyId(), request.referenceDistanceKm(), request.referenceDurationMinutes(), actorId);
-        route.replaceStops(destinationIds, actorId);
+        route.replaceStops(stops, actorId);
         Route saved = saveOrConflict(route, code);
         return RouteDetailView.from(saved, origin, zone, frequency, destinationsById);
     }
@@ -128,8 +130,8 @@ public class RouteService {
         Location origin = requireOriginLocation(scope, request.originId());
         Zone zone = requireZoneInScope(scope, request.zoneId());
         Frequency frequency = requireFrequencyInScope(scope, request.frequencyId());
-        List<UUID> destinationIds = distinctOrThrow(request.destinationIds());
-        Map<UUID, Location> destinationsById = requireDestinationLocations(scope, destinationIds);
+        List<RouteStopInput> stops = distinctOrThrow(request.stops());
+        Map<UUID, Location> destinationsById = requireDestinationLocations(scope, destinationIdsOf(stops));
         if (routeRepository.existsByCompanyIdAndCodeAndIdNot(scope.companyId(), code, id)) {
             throw duplicateCode(code);
         }
@@ -137,7 +139,7 @@ public class RouteService {
         UUID actorId = auditActorProvider.requireAppUserId();
         route.applyChanges(code, request.name().trim(), request.originId(), request.zoneId(), request.frequencyId(),
                 request.referenceDistanceKm(), request.referenceDurationMinutes(), actorId);
-        route.replaceStops(destinationIds, actorId);
+        route.replaceStops(stops, actorId);
         Route saved = saveOrConflict(route, code);
         return RouteDetailView.from(saved, origin, zone, frequency, destinationsById);
     }
@@ -217,7 +219,7 @@ public class RouteService {
         }
         for (UUID destinationId : destinationIds) {
             if (!byId.containsKey(destinationId)) {
-                throw new InvalidRequestException("destinationIds contains an id that is not an active location "
+                throw new InvalidRequestException("stops contains a destination that is not an active location "
                         + "in this company enabled as a destination: " + destinationId);
             }
         }
@@ -287,15 +289,26 @@ public class RouteService {
         return byId;
     }
 
-    /** Rejects a duplicate destination id before it ever reaches {@code Route.replaceStops}, which would silently drop it. */
-    private static List<UUID> distinctOrThrow(List<UUID> destinationIds) {
+    /**
+     * Rejects a duplicate destination id before it ever reaches {@code Route.replaceStops}, which
+     * would silently drop one of the two - and, worse now that a stop carries a service-time
+     * override, would keep whichever of the conflicting values happened to be last.
+     */
+    private static List<RouteStopInput> distinctOrThrow(List<RouteRequest.RouteStopRequest> stops) {
         Set<UUID> seen = new LinkedHashSet<>();
-        for (UUID destinationId : destinationIds) {
-            if (!seen.add(destinationId)) {
-                throw new InvalidRequestException("destinationIds contains a repeated destination: " + destinationId);
+        List<RouteStopInput> inputs = new ArrayList<>(stops.size());
+        for (RouteRequest.RouteStopRequest stop : stops) {
+            if (!seen.add(stop.destinationId())) {
+                throw new InvalidRequestException(
+                        "stops contains a repeated destination: " + stop.destinationId());
             }
+            inputs.add(new RouteStopInput(stop.destinationId(), stop.serviceTimeOverrideMinutes()));
         }
-        return List.copyOf(seen);
+        return List.copyOf(inputs);
+    }
+
+    private static List<UUID> destinationIdsOf(List<RouteStopInput> stops) {
+        return stops.stream().map(RouteStopInput::destinationId).toList();
     }
 
     /** Saves and translates a race with a concurrent duplicate write into the same conflict a pre-check would give. */

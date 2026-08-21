@@ -1,7 +1,7 @@
 # Rutas maestras
 
 Contrato de dominio. Migración: `V8__masterdata_routes.sql`; sus referencias apuntan a
-`tms.location` desde `V23`.
+`tms.location` desde `V23`, y `V24` agrega el tiempo de atención por parada.
 
 ---
 
@@ -39,16 +39,37 @@ Route
   active
 
 RouteStop
-  location             tms.location con rol DESTINATION
-  sequence             1..N, contiguo
+  location                     tms.location con rol DESTINATION
+  sequence                     1..N, contiguo
+  serviceTimeOverrideMinutes   opcional — sólo para esta ruta
 ```
 
 `referenceDistanceKm` y `referenceDurationMinutes` son **pistas capturadas a mano**. No se copian
 a un shipment: publicar una cifra que nadie midió como si fuera del viaje sería inventar datos.
 
-`RouteStop` no tiene `serviceTimeOverride`. El tiempo de atención vive en la ubicación
-(`location.service_time_minutes`), que es donde un operador espera encontrarlo; una excepción por
-ruta es una columna nueva el día que haya un corredor que realmente la necesite.
+### Tiempo de atención por parada (V24)
+
+El tiempo de atención sigue viviendo en la ubicación (`location.service_time_minutes`), que es
+donde un operador espera encontrarlo y lo correcto en el caso normal. Lo que no podía decir es
+que **un corredor concreto es distinto**: la misma tienda atendida fuera de horario en la ruta
+nocturna necesita 40 minutos y no sus 15 habituales.
+
+```text
+effectiveServiceTime = routeStop.serviceTimeOverride ?? location.serviceTimeMinutes
+```
+
+- nullable; nulo significa *usar el de la ubicación*, y es el caso normal;
+- `0` es un valor real (parada de dejar y seguir), no un sinónimo de nulo;
+- nunca escribe de vuelta en la ubicación: la ruta no redefine el sitio, sólo su propia parada;
+- la regla vive en un solo lugar, `RouteStop.effectiveServiceTimeMinutes`, probado sin base de
+  datos.
+
+`RouteDetailView` devuelve los tres números —el override, el heredado y el efectivo— para que el
+editor no tenga que recalcular el tercero.
+
+**Planificación todavía no lo consume.** No hay aritmética de ETA ni de ventanas de servicio en
+la que gastarlo; el dato se captura y se resuelve, y conectarlo a un cálculo de horarios es el
+paso de ese cálculo, no de éste.
 
 ---
 
@@ -61,7 +82,12 @@ originLocation      existe, de la compañía, activa, con rol ORIGIN
 cada parada         existe, de la compañía, activa, con rol DESTINATION
 zona / frecuencia   si se indican, de la compañía
 paradas             sin duplicados; una ubicación aparece como máximo una vez por ruta
+override            si se indica, >= 0
 ```
+
+`stops` es la lista completa, no un delta: una parada reenviada sin override pierde el que
+tenía. Es lo que "la petición es el estado deseado" tiene que significar para seguir siendo
+predecible — la misma razón por la que la grilla semanal de una frecuencia se envía entera.
 
 `uq_route_stop_route_destination` lo garantiza también en base de datos. Una ruta maestra es un
 corredor de paradas distintas; visitar dos veces el mismo sitio es un itinerario de viaje, no una
@@ -86,11 +112,15 @@ estado. El conteo viene de un `GROUP BY` por página, nunca de cargar las parada
 
 ```text
 IDENTIFICACIÓN     código, nombre, origen, zona, frecuencia
-PARADAS            1 Tienda A · 2 Tienda B · 3 Tienda C
-                   subir / bajar / eliminar / agregar
+PARADAS            1 Tienda A · [15] min · subir / bajar / eliminar
+                   2 Tienda B · [40] min
+                   agregar
 REFERENCIA         distancia, duración
 ESTADO             activo
 ```
+
+El campo de minutos de cada parada muestra como *placeholder* el tiempo de la ubicación: vacío
+nunca es un hueco que el operador tenga que ir a averiguar, es el valor que va a regir.
 
 Botones arriba/abajo en lugar de arrastrar y soltar: más robustos, accesibles por teclado sin
 trabajo extra, y comprensibles en móvil. Drag & drop puede añadirse encima más adelante; no puede

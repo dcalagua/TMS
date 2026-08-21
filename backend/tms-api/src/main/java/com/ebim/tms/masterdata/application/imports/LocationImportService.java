@@ -19,6 +19,7 @@ import com.ebim.tms.shared.imports.ImportRow;
 import com.ebim.tms.shared.imports.ImportSupport;
 import com.ebim.tms.shared.imports.infrastructure.ImportBatchRepository;
 import com.ebim.tms.shared.security.CompanyScope;
+import com.ebim.tms.shared.settings.CompanySettingsPort;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -54,16 +55,19 @@ public class LocationImportService {
     private final LocationRepository locationRepository;
     private final ZoneRepository zoneRepository;
     private final ImportBatchRepository importBatchRepository;
+    private final CompanySettingsPort companySettingsPort;
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
 
     public LocationImportService(LocationImportParser parser, LocationRepository locationRepository,
             ZoneRepository zoneRepository, ImportBatchRepository importBatchRepository,
-            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder) {
+            CompanySettingsPort companySettingsPort, AuditActorProvider auditActorProvider,
+            AuditRecorder auditRecorder) {
         this.parser = parser;
         this.locationRepository = locationRepository;
         this.zoneRepository = zoneRepository;
         this.importBatchRepository = importBatchRepository;
+        this.companySettingsPort = companySettingsPort;
         this.auditActorProvider = auditActorProvider;
         this.auditRecorder = auditRecorder;
     }
@@ -111,8 +115,12 @@ public class LocationImportService {
                 resolveZoneCodes(scope, LocationImportValidator.referencedZoneCodes(rows)),
                 existingCodes(scope, rows));
 
-        LocationImportValidator.Result result =
-                LocationImportValidator.validate(rows, snapshot, scope.timeZone());
+        // The two blank-cell defaults come from the tenant, not from the launch market: the zone
+        // from tms.company.time_zone and the country from tms.company_settings (migration V34).
+        // Both are resolved once for the file, and both are applied only to a cell the operator
+        // left empty - an import never overwrites a country somebody typed.
+        LocationImportValidator.Result result = LocationImportValidator.validate(rows, snapshot,
+                scope.timeZone(), companySettingsPort.settingsOf(scope.companyId()).defaultCountry());
         int issueCount = result.issues().size();
         List<ImportIssue> reported = ImportSupport.truncate(result.issues(), limits.maxReportedIssues());
 

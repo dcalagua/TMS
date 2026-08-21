@@ -39,6 +39,10 @@ function trip(overrides: Partial<TripView> = {}): TripView {
     vehicleTypeCode: null, routeId: null, routeCode: null, routeName: null,
     tripNumber: 1, status: 'DRAFT', vehicleId: null, vehicleCode: null,
     vehicleLicensePlate: null, carrierId: null, carrierName: null, plannedDepartureAt: null,
+    driverId: null, driverCode: null, driverName: null, driverPhone: null,
+    driverLicenseNumber: null, driverLicenseExpiresOn: null, driverLicenseStatus: null,
+    readyAt: null, actualDepartureAt: null, actualCompletionAt: null,
+    cancelledAt: null, cancelReason: null, allowedTransitions: ['CONFIRMED', 'CANCELLED'],
     capacity: {
       tripId: 'trip-1', source: 'NONE', orderCount: 0,
       weight: { used: 0, limit: null, remaining: null, percentUsed: null, exceeded: false, unlimited: true },
@@ -129,7 +133,7 @@ describe('EligibleOrdersPanel', () => {
   it('assigns an order to the selected trip and reports the updated trip detail', async () => {
     destinationsApiMocks.fetchDestinations.mockResolvedValue(page([]))
     planningApiMocks.fetchEligibleOrders.mockResolvedValue(page([ORDER]))
-    const detail = { trip: trip({ orderCount: 1 }), assignments: [], stops: [] }
+    const detail = { trip: trip({ orderCount: 1 }), assignments: [], stops: [], exceptions: [], deliveries: [] }
     planningApiMocks.assignOrderToTrip.mockResolvedValue(detail)
     const { onAssigned } = renderPanel()
 

@@ -49,8 +49,22 @@ describe('Sidebar', () => {
 
     expect(screen.getByText('Maestros')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Pedidos' })).toBeInTheDocument()
-    // Security is a plain entry now rather than a group of its own, so the assertion is on
-    // the link instead of on a section heading that no longer exists.
-    expect(screen.getByRole('link', { name: 'Seguridad' })).toBeInTheDocument()
+    // Configuración is a group again since job 12 - two screens, in the trailing slot below the
+    // modules - so the assertion is on its heading and on one of its entries.
+    expect(screen.getByText('Configuración')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Usuarios y accesos' })).toBeInTheDocument()
+  })
+
+  it('hides Configuración from a company with no IAM capability', () => {
+    companyMocks.useCompany.mockReturnValue({
+      ...switcherSlice,
+      status: 'ready',
+      hasCapability: (capability: string) => capability === 'ORDERS_VIEW',
+    })
+
+    renderSidebar()
+
+    expect(screen.queryByText('Configuración')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Compañía' })).not.toBeInTheDocument()
   })
 })

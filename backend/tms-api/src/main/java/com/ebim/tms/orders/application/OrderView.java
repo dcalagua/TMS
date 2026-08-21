@@ -5,6 +5,7 @@ import com.ebim.tms.orders.domain.OrderStatus;
 import com.ebim.tms.orders.domain.TotalsSource;
 import com.ebim.tms.orders.domain.TransportOrder;
 import com.ebim.tms.shared.reference.MasterReference;
+import com.ebim.tms.shared.reference.OrderFulfillmentStatus;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -36,6 +37,13 @@ public record OrderView(
         LocalTime requestedWindowStart,
         LocalTime requestedWindowEnd,
         OrderStatus status,
+        /**
+         * What happened to the goods, which {@code status} deliberately does not say. An order is
+         * {@code PLANNED} while it is delivered, refused or brought back; see
+         * {@link OrderFulfillmentStatus} for why the two are separate columns rather than one
+         * enum with more values.
+         */
+        OrderFulfillmentStatus fulfillmentStatus,
         String cancelReason,
         BigDecimal totalWeightKg,
         BigDecimal totalVolumeM3,
@@ -49,13 +57,14 @@ public record OrderView(
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt) {
 
-    public static OrderView from(TransportOrder order, MasterReference origin, MasterReference destination, long lineCount) {
+    public static OrderView from(TransportOrder order, MasterReference origin, MasterReference destination,
+            long lineCount, OrderFulfillmentStatus fulfillmentStatus) {
         return new OrderView(order.id(), order.orderNumber(), order.externalSource(), order.externalReference(),
                 order.originId(), origin == null ? null : origin.code(), origin == null ? null : origin.name(),
                 order.destinationId(), destination == null ? null : destination.code(),
                 destination == null ? null : destination.name(), order.customerName(), order.customerReference(),
                 order.serviceDate(), order.priority(), order.requestedWindowStart(), order.requestedWindowEnd(),
-                order.status(), order.cancelReason(), order.totalWeightKg(), order.totalVolumeM3(),
+                order.status(), fulfillmentStatus, order.cancelReason(), order.totalWeightKg(), order.totalVolumeM3(),
                 order.totalPallets(), order.declaredWeightKg(), order.declaredVolumeM3(), order.declaredPallets(),
                 order.totalsSource(),
                 (int) lineCount, order.version(), order.createdAt(), order.updatedAt());

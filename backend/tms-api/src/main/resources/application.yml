@@ -39,13 +39,15 @@ spring:
     clean-disabled: true
   servlet:
     multipart:
-      # The bulk order import is the only multipart endpoint. Both limits mirror
-      # OrderImportLimits.MAX_FILE_BYTES, and this is the half that matters most: it rejects an
-      # oversized upload while it is still streaming, before the request is fully buffered.
-      # OrderImportService checks the received bytes again, so the limit does not depend on this
-      # file alone being right.
-      max-file-size: 2MB
-      max-request-size: 3MB
+      # Two kinds of upload now: the bulk imports (2 MB, OrderImportLimits.MAX_FILE_BYTES) and
+      # proof-of-delivery evidence (tms.storage.evidence.max-file-size, 5 MB by default). This is
+      # the outer envelope for both - it rejects an oversized upload while it is still streaming,
+      # before the request is fully buffered - and it is deliberately the looser of the two limits,
+      # because each endpoint enforces its own afterwards: OrderImportService checks the bytes it
+      # received, and LocalFilesystemEvidenceStorage stops writing the moment its own ceiling is
+      # passed. Neither depends on this number alone being right.
+      max-file-size: 6MB
+      max-request-size: 8MB
   threads:
     virtual:
       enabled: true
@@ -119,6 +121,86 @@ tms:
     rotation-grace: ${TMS_INTEGRATION_ROTATION_GRACE:168h}
     # The largest number of objects one batch request may carry.
     max-batch-size: ${TMS_INTEGRATION_MAX_BATCH_SIZE:200}
+    webhooks:
+      # Outbound webhooks (migration V35, docs/integrations/WEBHOOKS_V1.md). There is deliberately
+      # no `enabled` flag: the feature is on exactly when this key is set, because without a key
+      # TMS cannot store a signing secret and therefore cannot have a subscription to deliver to.
+      # A deployment that leaves it unset keeps the polling change feed and nothing else changes.
+      #
+      # At least 32 characters of high-entropy random material from the secret store - NOT a
+      # passphrase, and not somewhere a database dump could reach, since the two together are what
+      # would undo the encryption. Losing it does not lose the subscriptions, only their secrets:
+      # rotating each one re-issues a secret under the new key.
+      secret-key: ${TMS_WEBHOOK_SECRET_KEY:}
+      # How many times one delivery is tried before it is given up on, and the ladder between
+      # tries. Six attempts from one minute, doubling, capped at thirty, spans a little over an
+      # hour: long enough to ride out a deployment on the receiving side, short enough that a dead
+      # endpoint shows up on the screen instead of being retried all week.
+      max-attempts: ${TMS_WEBHOOK_MAX_ATTEMPTS:6}
+      retry-base-delay: ${TMS_WEBHOOK_RETRY_BASE_DELAY:1m}
+      retry-max-delay: ${TMS_WEBHOOK_RETRY_MAX_DELAY:30m}
+      # One HTTP call's budget. Short on purpose: a receiver that needs longer is doing work inside
+      # the request instead of acknowledging and queueing, and the right answer is to time out and
+      # retry rather than to hold a worker.
+      request-timeout: ${TMS_WEBHOOK_REQUEST_TIMEOUT:10s}
+      # How much one dispatcher pass claims, and how often a pass runs. A bound on the work of one
+      # tick rather than a throughput setting - the tick simply runs again.
+      batch-size: ${TMS_WEBHOOK_BATCH_SIZE:50}
+      poll-interval: ${TMS_WEBHOOK_POLL_INTERVAL:15s}
+      # After this many deliveries in a row have exhausted their attempts, the endpoint is switched
+      # off and says so on the screen. Any delivered attempt resets the count.
+      suspend-after-consecutive-failures: ${TMS_WEBHOOK_SUSPEND_AFTER:10}
+      # Both DEVELOPMENT ONLY, and both are refusals of a security control rather than preferences.
+      # http:// sends this company's operational data in clear; a private/loopback target turns an
+      # administrator's text field into a server-side request forgery primitive. The application
+      # warns loudly on startup when either is on.
+      allow-insecure-targets: ${TMS_WEBHOOK_ALLOW_INSECURE_TARGETS:false}
+      allow-private-network-targets: ${TMS_WEBHOOK_ALLOW_PRIVATE_TARGETS:false}
+  storage:
+    evidence:
+      # Where proof-of-delivery artefacts (signatures, photos, delivery notes) are stored.
+      # DISABLED by default, and that default is the decision: a deployment that has not said where
+      # a customer's signed delivery note goes must not have somewhere guessed for it. Delivery
+      # *results* are recorded either way - the result is the fact, the artefact is corroboration -
+      # so this only turns the attachments on. See docs/domain/PROOF_OF_DELIVERY_V1.md.
+      #
+      # LOCAL writes to a private directory on the application's own volume: fine for a single node
+      # or a container with a mounted volume, not an answer for two instances behind a balancer.
+      # Supabase Storage is the next implementation of EvidenceStoragePort and needs no change to
+      # any caller, because a storage key is opaque.
+      mode: ${TMS_EVIDENCE_STORAGE_MODE:DISABLED}
+      # Required when mode is LOCAL. Must be absolute, and must be a directory no web server
+      # serves - the only route to these bytes is an authenticated, company-scoped API request.
+      root: ${TMS_EVIDENCE_STORAGE_ROOT:}
+      # Enough for a phone photo of a pallet, far short of a video. The schema refuses anything
+      # over 25 MB regardless (ck_delivery_evidence_size).
+      max-file-size: ${TMS_EVIDENCE_MAX_FILE_SIZE:5MB}
+      # An allow-list, deliberately short: a proof of delivery is an image or a PDF, and every
+      # other type is somebody using the store for something else. Never read as "allow
+      # everything" when empty - see EvidenceStorageProperties.
+      allowed-content-types: image/jpeg,image/png,image/webp,application/pdf
+  tracking:
+    # Vehicle positions (migration V29, docs/domain/TRACKING_V1.md). There is deliberately no
+    # `enabled` flag: intake is gated by the integration.tracking:write scope, which an
+    # administrator grants to a named credential and can revoke in one click - a better switch
+    # than a property, because it is per-partner and audited.
+    #
+    # The sampling floor. TMS keeps at most one position per this interval per (shipment, feed);
+    # anything denser is accepted and dropped rather than refused, so a partner never has to
+    # reconfigure their equipment to talk to us. 60s is roughly 500 points per vehicle-day and is
+    # the resolution at which "where is my delivery" is answerable. Halving it doubles the table.
+    min-interval: ${TMS_TRACKING_MIN_INTERVAL:60s}
+    # How far back a reported position may be. A feed replaying its buffer after an outage is
+    # normal; a feed replaying last month is misconfigured, and storing what retention is about
+    # to remove helps nobody.
+    max-age: ${TMS_TRACKING_MAX_AGE:24h}
+    # How far ahead of this clock a position may claim to be - an allowance for an unsynchronised
+    # device, not for a wrong one. Past this the timestamp is wrong, and accepting it would park a
+    # vehicle at the top of every "latest position" query until real time caught up.
+    max-future-skew: ${TMS_TRACKING_MAX_FUTURE_SKEW:5m}
+    # The most positions one read returns. The map draws a recent trail, not a forensic
+    # reconstruction; the application clamps this to 2000 whatever is configured.
+    track-limit: ${TMS_TRACKING_TRACK_LIMIT:200}
 
 logging:
   # The correlation id is on every line, so a request can be followed across log entries and

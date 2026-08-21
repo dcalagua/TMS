@@ -1,10 +1,36 @@
 # -*- coding: utf-8 -*-
-"""Job 09 (Import Center) locale additions, applied through the shared upsert helpers.
+"""Job 09 (Control Tower V1) locale additions.
 
-Adds the strings the new master-data bulk import drawers need: one generic `actions.import`
-verb in `common`, and one `<entity>.import` section per entity in `masters` (locations) and
-`fleet` (carriers, vehicleTypes, vehicles), mirroring `orders.import`'s existing shape so the
-four new screens read like siblings of the order import rather than a different feature.
+Writes one brand-new namespace and layers two keys onto existing ones:
+
+  * `controlTower.*`                - the whole screen: counters, panels, table, filters;
+  * `statuses.departureTimeliness.*` - the six departure verdicts the backend can send;
+  * `navigation.items.controlTower`  - the sidebar entry.
+
+`controlTower` is a namespace of its own rather than a section of `trips`. The two screens answer
+different questions - "what is this shipment doing" against "what is the day doing" - and a
+translator working on one needs the other's wording out of the way.
+
+Wording notes that are product decisions, not translation choices:
+
+  * `departureTimeliness.OVERDUE` is "Salida vencida" / "Departure overdue", never "Retrasado" /
+    "Delayed". A truck already out and running behind and a truck still in the yard that should
+    have left are two different phone calls, and the enum exists precisely so the screen does not
+    have to merge them into one word. `LATE` is "Salio tarde" / "Departed late" for the same
+    reason: it names the fact, not a severity.
+  * `departureTimeliness.NOT_SCHEDULED` is "Sin salida planificada" and is shown, not hidden. A
+    trip planned for today with no departure time is a planning gap somebody has to close.
+  * `kpi.unplannedDenied` replaces the number when the caller does not hold `orders.order:read`.
+    Never "0": the backlog was not looked at, and calling it empty would be a claim the response
+    is not entitled to make.
+  * `scopeNote` is a full sentence and is not shortened. It states the one thing about this screen
+    an operator could otherwise get wrong without noticing - the counters cover the whole day and
+    only the table narrows - and a caption nobody can misread is worth the line it costs.
+  * `wholeDay` labels the counter strip for the same reason. Read together they make the scope a
+    stated design rather than a discovery made during an incident.
+  * nothing anywhere says "alerta" / "alert". The tower is read; it pages nobody, and a word
+    promising notifications would promise a product that does not exist
+    (docs/domain/CONTROL_TOWER_V1.md section 8).
 
 Run from the repo root:  python scripts/i18n/upsert_locale_keys_job09.py
 Then, from frontend/tms-web:  npx tsc -b --noEmit
@@ -19,200 +45,220 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from upsert_locale_keys import deep_merge, read_namespace, write_namespace  # noqa: E402
 
 
-def _generic_import_strings(es_entity_plural, es_entity_article, en_entity_plural, en_entity_singular):
-    """The ~30 keys every `<entity>.import` section shares, parameterised by wording only."""
-    es = {
-        "apply": "Importar %s" % es_entity_plural,
-        "applied": "Importación completa",
-        "appliedText": "{{created}} creados y {{skipped}} omitidos por ya existir.",
-        "applying": "Importando...",
-        "blocked": "El archivo tiene errores y no se importó nada. Corrige las filas indicadas "
-                   "y valida de nuevo.",
-        "cancel": "Cancelar",
-        "close": "Cerrar",
-        "columnColumn": "Columna",
-        "columnIdentifier": "Código",
-        "columnMessage": "Problema",
-        "columnRow": "Fila",
-        "confirmText": "Se crearán {{count}} %s en una sola operación. Si algo falla, no se "
-                       "guarda nada." % es_entity_plural,
-        "confirmTitle": "¿Importar %s?" % es_entity_plural,
-        "countCreate": "Se crearán",
-        "countDuplicates": "Ya existen",
-        "countIssues": "Problemas",
-        "countItems": es_entity_plural.capitalize(),
-        "countRejected": "Rechazados",
-        "countRows": "Filas leídas",
-        "downloadCsv": "Plantilla CSV",
-        "downloadError": "No se pudo descargar la plantilla",
-        "downloadIssuesReport": "Descargar reporte de errores",
-        "downloadXlsx": "Plantilla XLSX",
-        "file": "Archivo",
-        "fileHelp": ".xlsx o .csv, hasta {{mb}} MB y {{rows}} filas.",
-        "fileSection": "2. Archivo",
-        "issuesTitle": "Filas con problemas",
-        "issuesTruncated": "Mostrando los primeros {{shown}} de {{total}} problemas.",
-        "nothingToCreate": "Nada nuevo: todos los códigos del archivo ya existen en esta empresa.",
-        "outcomeCreate": "Se creará",
-        "outcomeRejected": "Rechazado",
-        "outcomeSkipped": "Ya existe",
-        "previewSection": "3. Validación",
-        "previewing": "Validando...",
-        "readyToApply": "El archivo es válido. Aún no se ha guardado nada.",
-        "reset": "Empezar de nuevo",
-        "templateSection": "1. Plantilla",
-        "validate": "Validar el archivo",
-    }
-    en = {
-        "apply": "Import %s" % en_entity_plural,
-        "applied": "Import complete",
-        "appliedText": "{{created}} created and {{skipped}} skipped as duplicates.",
-        "applying": "Importing...",
-        "blocked": "The file has errors and nothing was imported. Fix the rows listed below "
-                   "and validate it again.",
-        "cancel": "Cancel",
-        "close": "Close",
-        "columnColumn": "Column",
-        "columnIdentifier": "Code",
-        "columnMessage": "Problem",
-        "columnRow": "Row",
-        "confirmText": "{{count}} %s will be created in a single operation. If anything fails, "
-                       "nothing is saved." % en_entity_plural,
-        "confirmTitle": "Import %s?" % en_entity_plural,
-        "countCreate": "Will be created",
-        "countDuplicates": "Already exist",
-        "countIssues": "Problems",
-        "countItems": en_entity_plural.capitalize(),
-        "countRejected": "Rejected",
-        "countRows": "Rows read",
-        "downloadCsv": "CSV template",
-        "downloadError": "Could not download the template",
-        "downloadIssuesReport": "Download error report",
-        "downloadXlsx": "XLSX template",
-        "file": "File",
-        "fileHelp": ".xlsx or .csv, up to {{mb}} MB and {{rows}} rows.",
-        "fileSection": "2. File",
-        "issuesTitle": "Rows with problems",
-        "issuesTruncated": "Showing the first {{shown}} of {{total}} problems.",
-        "nothingToCreate": "Nothing new: every code in the file already exists in this company.",
-        "outcomeCreate": "Will be created",
-        "outcomeRejected": "Rejected",
-        "outcomeSkipped": "Already exists",
-        "previewSection": "3. Validation",
-        "previewing": "Validating...",
-        "readyToApply": "The file is valid. Nothing has been saved yet.",
-        "reset": "Start over",
-        "templateSection": "1. Template",
-        "validate": "Validate the file",
-    }
-    return es, en
-
-
-UPDATES = {
-    "common": {
-        "es": {"actions": {"import": "Importar"}},
-        "en": {"actions": {"import": "Import"}},
-    },
-    "masters": {
-        "es": {},
-        "en": {},
-    },
-    "fleet": {
-        "es": {},
-        "en": {},
+# Written from scratch: namespace -> language -> the whole tree.
+NEW_NAMESPACES = {
+    "controlTower": {
+        "es": {
+            "arrivedAt": "Llegó {{time}}",
+            "board": {
+                "emptyMessage": "No hay viajes para este día con los filtros aplicados.",
+                "emptyTitle": "Sin viajes",
+                "title": "Viajes del día",
+            },
+            "columns": {
+                "capacity": "Ocupación",
+                "carrier": "Transportista",
+                "departure": "Salida",
+                "exceptions": "Incidencias",
+                "nextStop": "Próxima parada",
+                "progress": "Paradas",
+                "shipment": "Envío",
+                "status": "Estado",
+                "vehicle": "Vehículo",
+            },
+            "delayMinutes": "+{{minutes}} min",
+            "description": "El día del transporte: qué sale, qué va tarde y qué sigue sin resolverse.",
+            "dueBy": "Hasta {{time}}",
+            "filters": {
+                "allCarriers": "Todos los transportistas",
+                "allOrigins": "Todos los orígenes",
+                "allStatuses": "Todos los estados",
+                "carrier": "Transportista",
+                "date": "Día",
+                "origin": "Origen",
+                "status": "Estado",
+            },
+            "generatedAt": "Datos de las {{time}}",
+            "kpi": {
+                "completed": "Completados",
+                "completedHint": "Viajes cerrados en el día",
+                "delayed": "Con retraso",
+                "delayedHint": "{{late}} salieron tarde, {{overdue}} aún no salen",
+                "draft": "Sin confirmar",
+                "draftHint": "Planificados para hoy y todavía en borrador",
+                "exceptions": "Incidencias abiertas",
+                "exceptionsHint": "Problemas del día que nadie ha cerrado",
+                "inTransit": "En ruta",
+                "inTransitHint": "Vehículos fuera en este momento",
+                "lateStops": "Paradas demoradas",
+                "lateStopsHint": "De {{outstanding}} pendientes en ruta",
+                "scheduled": "Por salir",
+                "scheduledHint": "Confirmados o listos, todavía en patio",
+                "unplanned": "Pedidos sin planificar",
+                "unplannedDenied": "Requiere permiso de lectura de pedidos",
+                "unplannedHint": "Con fecha de servicio de este día",
+            },
+            "noWindow": "Sin ventana",
+            "open": "Abrir",
+            "panels": {
+                "exceptions": {
+                    "empty": "Ninguna incidencia abierta.",
+                    "more": "Mostrando {{shown}} de {{total}}.",
+                    "title": "Incidencias abiertas",
+                },
+                "stops": {
+                    "empty": "Ninguna parada pendiente en ruta.",
+                    "more": "Mostrando {{shown}} de {{total}}.",
+                    "title": "Paradas pendientes",
+                },
+                "workload": {
+                    "empty": "Ningún viaje con ocupación conocida.",
+                    "hint": "Por la dimensión de capacidad más ajustada",
+                    "title": "Vehículos más cargados",
+                },
+            },
+            "pastWindowMinutes": "{{minutes}} min fuera de ventana",
+            "refresh": "Actualizar",
+            "scopeNote": (
+                "Los indicadores y los paneles cubren el día completo. Origen, transportista y "
+                "estado acotan únicamente la tabla de abajo, para que un filtro no pueda esconder "
+                "un problema del resumen."
+            ),
+            "stopProgress": "{{done}} de {{total}}",
+            "stopsLate": "{{value}} fuera de ventana",
+            "title": "Torre de control",
+            "wholeDay": "El día completo",
+        },
+        "en": {
+            "arrivedAt": "Arrived {{time}}",
+            "board": {
+                "emptyMessage": "No trips for this day with the filters applied.",
+                "emptyTitle": "No trips",
+                "title": "The day's trips",
+            },
+            "columns": {
+                "capacity": "Utilisation",
+                "carrier": "Carrier",
+                "departure": "Departure",
+                "exceptions": "Exceptions",
+                "nextStop": "Next stop",
+                "progress": "Stops",
+                "shipment": "Shipment",
+                "status": "Status",
+                "vehicle": "Vehicle",
+            },
+            "delayMinutes": "+{{minutes}} min",
+            "description": (
+                "The transport day: what is leaving, what is running late and what nobody has "
+                "closed out."
+            ),
+            "dueBy": "By {{time}}",
+            "filters": {
+                "allCarriers": "All carriers",
+                "allOrigins": "All origins",
+                "allStatuses": "All statuses",
+                "carrier": "Carrier",
+                "date": "Day",
+                "origin": "Origin",
+                "status": "Status",
+            },
+            "generatedAt": "Data as of {{time}}",
+            "kpi": {
+                "completed": "Completed",
+                "completedHint": "Trips closed out today",
+                "delayed": "Running late",
+                "delayedHint": "{{late}} left late, {{overdue}} have not left",
+                "draft": "Unconfirmed",
+                "draftHint": "Planned for today and still a draft",
+                "exceptions": "Open exceptions",
+                "exceptionsHint": "Today's problems nobody has closed",
+                "inTransit": "On the road",
+                "inTransitHint": "Vehicles out right now",
+                "lateStops": "Stops past window",
+                "lateStopsHint": "Of {{outstanding}} outstanding out there",
+                "scheduled": "Still to leave",
+                "scheduledHint": "Confirmed or loaded, still in the yard",
+                "unplanned": "Unplanned orders",
+                "unplannedDenied": "Needs the order read permission",
+                "unplannedHint": "With this service date",
+            },
+            "noWindow": "No window",
+            "open": "Open",
+            "panels": {
+                "exceptions": {
+                    "empty": "No open exceptions.",
+                    "more": "Showing {{shown}} of {{total}}.",
+                    "title": "Open exceptions",
+                },
+                "stops": {
+                    "empty": "No outstanding stops on the road.",
+                    "more": "Showing {{shown}} of {{total}}.",
+                    "title": "Outstanding stops",
+                },
+                "workload": {
+                    "empty": "No trip with a known utilisation.",
+                    "hint": "By the tightest capacity dimension",
+                    "title": "Fullest vehicles",
+                },
+            },
+            "pastWindowMinutes": "{{minutes}} min past window",
+            "refresh": "Refresh",
+            "scopeNote": (
+                "The counters and panels cover the whole day. Origin, carrier and status narrow "
+                "only the table below, so a filter can never hide a problem from the summary."
+            ),
+            "stopProgress": "{{done}} of {{total}}",
+            "stopsLate": "{{value}} past window",
+            "title": "Control tower",
+            "wholeDay": "The whole day",
+        },
     },
 }
 
-_LOC_ES, _LOC_EN = _generic_import_strings("ubicaciones", "las", "locations", "location")
-_LOC_ES.update({
-    "title": "Importar ubicaciones",
-    "subtitle": "Carga masiva de ubicaciones desde XLSX o CSV, validada antes de guardar nada.",
-    "templateHelp": "Descarga la plantilla, complétala y súbela. code es obligatorio y único "
-                     "por empresa; roles acepta varios valores separados por comas.",
-    "itemsTitle": "Ubicaciones en el archivo",
-    "columns": {
-        "type": "Tipo", "roles": "Roles", "zone": "Zona", "coordinates": "Coordenadas",
+
+# Layered over what is already in the file; only the branches named here are touched.
+UPDATES = {
+    # The enum lives in `statuses` with every other value the API transports, because
+    # `enums.test.ts` walks that bundle and fails if a value the client can receive has no label -
+    # which is what stops NOT_SCHEDULED reaching an operator.
+    "statuses": {
+        "es": {
+            "departureTimeliness": {
+                "LATE": "Salió tarde",
+                "NOT_APPLICABLE": "No aplica",
+                "NOT_SCHEDULED": "Sin salida planificada",
+                "ON_TIME": "A tiempo",
+                "OVERDUE": "Salida vencida",
+                "SCHEDULED": "Programado",
+            },
+        },
+        "en": {
+            "departureTimeliness": {
+                "LATE": "Departed late",
+                "NOT_APPLICABLE": "Not applicable",
+                "NOT_SCHEDULED": "No planned departure",
+                "ON_TIME": "On time",
+                "OVERDUE": "Departure overdue",
+                "SCHEDULED": "Scheduled",
+            },
+        },
     },
-})
-_LOC_EN.update({
-    "title": "Import locations",
-    "subtitle": "Bulk location upload from XLSX or CSV, validated before anything is saved.",
-    "templateHelp": "Download the template, fill it in and upload it. code is required and "
-                     "unique per company; roles accepts several values separated by commas.",
-    "itemsTitle": "Locations in the file",
-    "columns": {
-        "type": "Type", "roles": "Roles", "zone": "Zone", "coordinates": "Coordinates",
+    # An item and no group: the control tower stands beside the dashboard rather than inside a
+    # module group, because it owns nothing and describes everything - see navConfig.
+    "navigation": {
+        "es": {"items": {"controlTower": "Torre de control"}},
+        "en": {"items": {"controlTower": "Control tower"}},
     },
-})
-UPDATES["masters"]["es"]["locations"] = {"import": _LOC_ES}
-UPDATES["masters"]["en"]["locations"] = {"import": _LOC_EN}
-
-_CARR_ES, _CARR_EN = _generic_import_strings("transportistas", "los", "carriers", "carrier")
-_CARR_ES.update({
-    "title": "Importar transportistas",
-    "subtitle": "Carga masiva de transportistas desde XLSX o CSV, validada antes de guardar nada.",
-    "templateHelp": "Descarga la plantilla, complétala y súbela. code es obligatorio y único "
-                     "por empresa; taxIdType y taxIdValue juntos también deben ser únicos.",
-    "itemsTitle": "Transportistas en el archivo",
-    "columns": {"businessName": "Razón social", "taxId": "Documento", "contact": "Contacto"},
-})
-_CARR_EN.update({
-    "title": "Import carriers",
-    "subtitle": "Bulk carrier upload from XLSX or CSV, validated before anything is saved.",
-    "templateHelp": "Download the template, fill it in and upload it. code is required and "
-                     "unique per company; taxIdType and taxIdValue together must be unique too.",
-    "itemsTitle": "Carriers in the file",
-    "columns": {"businessName": "Business name", "taxId": "Tax id", "contact": "Contact"},
-})
-UPDATES["fleet"]["es"]["carriers"] = {"import": _CARR_ES}
-UPDATES["fleet"]["en"]["carriers"] = {"import": _CARR_EN}
-
-_VT_ES, _VT_EN = _generic_import_strings("tipos de vehículo", "los", "vehicle types", "vehicle type")
-_VT_ES.update({
-    "title": "Importar tipos de vehículo",
-    "subtitle": "Carga masiva de tipos de vehículo desde XLSX o CSV, validada antes de guardar nada.",
-    "templateHelp": "Descarga la plantilla, complétala y súbela. Las unidades son explícitas: "
-                     "kilogramos, metros cúbicos, metros, Celsius. code es único por empresa.",
-    "itemsTitle": "Tipos de vehículo en el archivo",
-    "columns": {"capacity": "Capacidad", "dimensions": "Dimensiones", "temperature": "Temperatura"},
-})
-_VT_EN.update({
-    "title": "Import vehicle types",
-    "subtitle": "Bulk vehicle type upload from XLSX or CSV, validated before anything is saved.",
-    "templateHelp": "Download the template, fill it in and upload it. Units are explicit: "
-                     "kilograms, cubic meters, meters, Celsius. code is unique per company.",
-    "itemsTitle": "Vehicle types in the file",
-    "columns": {"capacity": "Capacity", "dimensions": "Dimensions", "temperature": "Temperature"},
-})
-UPDATES["fleet"]["es"]["vehicleTypes"] = {"import": _VT_ES}
-UPDATES["fleet"]["en"]["vehicleTypes"] = {"import": _VT_EN}
-
-_VEH_ES, _VEH_EN = _generic_import_strings("vehículos", "los", "vehicles", "vehicle")
-_VEH_ES.update({
-    "title": "Importar vehículos",
-    "subtitle": "Carga masiva de vehículos desde XLSX o CSV, validada antes de guardar nada.",
-    "templateHelp": "Descarga la plantilla, complétala y súbela. vehicleTypeCode debe existir "
-                     "en esta empresa; carrierCode es opcional (vacío = flota propia).",
-    "itemsTitle": "Vehículos en el archivo",
-    "columns": {"plate": "Placa", "carrier": "Transportista", "type": "Tipo", "status": "Estado"},
-})
-_VEH_EN.update({
-    "title": "Import vehicles",
-    "subtitle": "Bulk vehicle upload from XLSX or CSV, validated before anything is saved.",
-    "templateHelp": "Download the template, fill it in and upload it. vehicleTypeCode must "
-                     "exist in this company; carrierCode is optional (blank = owned fleet).",
-    "itemsTitle": "Vehicles in the file",
-    "columns": {"plate": "Plate", "carrier": "Carrier", "type": "Type", "status": "Status"},
-})
-UPDATES["fleet"]["es"]["vehicles"] = {"import": _VEH_ES}
-UPDATES["fleet"]["en"]["vehicles"] = {"import": _VEH_EN}
+}
 
 
 def main():
-    for name, langs in UPDATES.items():
+    for name in sorted(NEW_NAMESPACES):
+        write_namespace(name, NEW_NAMESPACES[name]["es"], NEW_NAMESPACES[name]["en"])
+    for name in sorted(UPDATES):
         merged = {}
         for lang in ("es", "en"):
-            merged[lang] = deep_merge(read_namespace(name, lang), langs[lang])
+            merged[lang] = deep_merge(read_namespace(name, lang), UPDATES[name][lang])
         write_namespace(name, merged["es"], merged["en"])
 
 

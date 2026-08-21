@@ -118,7 +118,8 @@ public class FrequencyController {
     @PostMapping("/{id}/exceptions")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAuthority('masterdata.frequency:manage')")
-    @Operation(summary = "Add a date exception (an extra service date or a blackout)")
+    @Operation(summary = "Add a date exception (an extra service date or a blackout), optionally "
+            + "with its own cutoff time for that date")
     @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
             description = "Id of a company the caller is a member of")
     public FrequencyExceptionView createException(

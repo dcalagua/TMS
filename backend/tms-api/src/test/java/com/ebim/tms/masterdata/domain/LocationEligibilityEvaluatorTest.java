@@ -28,12 +28,17 @@ class LocationEligibilityEvaluatorTest {
     }
 
     private static Candidate candidate(Frequency frequency, LocalDate from, LocalDate to, boolean associationActive) {
+        return candidate(frequency, from, to, associationActive, null);
+    }
+
+    private static Candidate candidate(Frequency frequency, LocalDate from, LocalDate to, boolean associationActive,
+            FrequencyException exceptionOnDate) {
         LocationFrequency association =
                 new LocationFrequency(UUID.randomUUID(), UUID.randomUUID(), frequency.id(), from, to, UUID.randomUUID());
         if (!associationActive) {
             association.deactivate(UUID.randomUUID());
         }
-        return new Candidate(association, frequency, null);
+        return new Candidate(association, frequency, exceptionOnDate);
     }
 
     @Test
@@ -67,6 +72,36 @@ class LocationEligibilityEvaluatorTest {
         assertThat(decision.matchedFrequencyId()).isEqualTo(frequency.id());
         assertThat(decision.cutoffTime()).isEqualTo(LocalTime.of(15, 0));
         assertThat(decision.leadTimeDays()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("a date exception's cutoff override is the cutoff the decision reports")
+    void exceptionCutoffOverrideReachesTheDecision() {
+        Frequency frequency = mondayOnlyFrequency();
+        FrequencyException earlyClose = new FrequencyException(
+                UUID.randomUUID(), MONDAY, true, LocalTime.of(11, 0), "Closes early", UUID.randomUUID());
+
+        EligibilityDecision decision = LocationEligibilityEvaluator.evaluate(
+                true, List.of(candidate(frequency, null, null, true, earlyClose)), MONDAY);
+
+        assertThat(decision.eligible()).isTrue();
+        assertThat(decision.cutoffTime()).isEqualTo(LocalTime.of(11, 0));
+        // Lead time has no per-date override and keeps coming from the weekly rule: one date
+        // closing earlier does not change how far ahead this location takes orders.
+        assertThat(decision.leadTimeDays()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("an open exception that states no cutoff leaves the weekly rule's cutoff in the decision")
+    void exceptionWithoutOverrideKeepsTheWeeklyCutoff() {
+        FrequencyException extraRun =
+                new FrequencyException(UUID.randomUUID(), MONDAY, true, null, "Extra run", UUID.randomUUID());
+
+        EligibilityDecision decision = LocationEligibilityEvaluator.evaluate(
+                true, List.of(candidate(mondayOnlyFrequency(), null, null, true, extraRun)), MONDAY);
+
+        assertThat(decision.eligible()).isTrue();
+        assertThat(decision.cutoffTime()).isEqualTo(LocalTime.of(15, 0));
     }
 
     @Test

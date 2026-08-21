@@ -3,22 +3,38 @@ package com.ebim.tms.planning.api;
 import com.ebim.tms.planning.application.AssignOrderRequest;
 import com.ebim.tms.planning.application.MoveOrderRequest;
 import com.ebim.tms.planning.application.PlanningActionRequest;
+import com.ebim.tms.planning.application.TransportEventView;
 import com.ebim.tms.planning.application.TripCapacityView;
 import com.ebim.tms.planning.application.TripDetailView;
+import com.ebim.tms.planning.application.TripDriverRequest;
+import com.ebim.tms.planning.application.TripExceptionRequest;
+import com.ebim.tms.planning.application.TripExceptionResolutionRequest;
+import com.ebim.tms.planning.application.TripExceptionService;
+import com.ebim.tms.planning.application.TripExecutionRequest;
+import com.ebim.tms.planning.application.TripExecutionService;
+import com.ebim.tms.planning.application.TripFilter;
 import com.ebim.tms.planning.application.TripRouteRequest;
 import com.ebim.tms.planning.application.TripService;
+import com.ebim.tms.planning.application.TripStopExecutionRequest;
+import com.ebim.tms.planning.application.TripStopExecutionService;
+import com.ebim.tms.planning.application.TripStopFailureRequest;
 import com.ebim.tms.planning.application.TripStopOrderRequest;
 import com.ebim.tms.planning.application.TripVehicleRequest;
+import com.ebim.tms.planning.application.TripView;
+import com.ebim.tms.shared.api.PageQuery;
+import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.security.CompanyScope;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -28,7 +44,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Everything done to one trip: its vehicle, the orders on it and the order of its stops.
+ * Everything done to one trip - its vehicle, the orders on it, the order of its stops - plus the
+ * execution transitions that move it through a day, and the cross-run list the Trips screen reads.
+ *
+ * <p><b>Two write authorities, not one.</b> {@code planning.trip:manage} is planning: what a trip
+ * carries and who runs it, and only while it is a draft. {@code planning.trip:execute} (migration
+ * V25) is operating one: ready, dispatch, complete. Neither implies the other, so a dispatcher
+ * cannot reopen a plan and a planner cannot report a departure they did not see. Both are granted
+ * together to the seeded roles today; splitting them is a customer's choice, and the API is what
+ * makes the choice possible.
  *
  * <p>Creating a trip is not here - it belongs to the run that contains it
  * ({@code PlanningRunController.createTrip}). There is no delete endpoint either: a trip is
@@ -52,9 +76,26 @@ import org.springframework.web.bind.annotation.RestController;
 public class TripController {
 
     private final TripService tripService;
+    private final TripExecutionService executionService;
+    private final TripStopExecutionService stopExecutionService;
+    private final TripExceptionService exceptionService;
 
-    public TripController(TripService tripService) {
+    public TripController(TripService tripService, TripExecutionService executionService,
+            TripStopExecutionService stopExecutionService, TripExceptionService exceptionService) {
         this.tripService = tripService;
+        this.executionService = executionService;
+        this.stopExecutionService = stopExecutionService;
+        this.exceptionService = exceptionService;
+    }
+
+    @GetMapping
+    @PreAuthorize("hasAuthority('planning.trip:read')")
+    @Operation(summary = "List this company's trips across planning runs - the execution board")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public PageResponse<TripView> list(
+            CompanyScope scope, @ModelAttribute TripFilter filter, @ModelAttribute PageQuery pageQuery) {
+        return tripService.list(scope, filter, pageQuery);
     }
 
     @GetMapping("/{id}")
@@ -83,6 +124,23 @@ public class TripController {
     public TripDetailView updateVehicle(
             CompanyScope scope, @PathVariable UUID id, @Valid @RequestBody TripVehicleRequest request) {
         return tripService.updateVehicle(scope, id, request);
+    }
+
+    /**
+     * {@code planning.trip:manage} <em>or</em> {@code planning.trip:execute}, like cancellation and
+     * for the same reason: naming the driver is a decision both halves of the day make. A planner
+     * assigns one when they build the shipment; a dispatcher swaps one at 05:00 when the person
+     * who was going to drive calls in sick. Which states still allow it is {@code TripService}'s
+     * answer, not this method's.
+     */
+    @PutMapping("/{id}/driver")
+    @PreAuthorize("hasAuthority('planning.trip:manage') or hasAuthority('planning.trip:execute')")
+    @Operation(summary = "Name, swap or clear the trip's driver, checking licence and carrier compatibility")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TripDetailView updateDriver(
+            CompanyScope scope, @PathVariable UUID id, @Valid @RequestBody TripDriverRequest request) {
+        return tripService.updateDriver(scope, id, request);
     }
 
     @PostMapping("/{id}/assignments")
@@ -135,9 +193,141 @@ public class TripController {
         return tripService.reorderStops(scope, id, request);
     }
 
+    @PostMapping("/{id}/ready")
+    @PreAuthorize("hasAuthority('planning.trip:execute')")
+    @Operation(summary = "Declare a confirmed trip loaded and ready for dispatch")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TripDetailView markReady(
+            CompanyScope scope, @PathVariable UUID id, @Valid @RequestBody TripExecutionRequest request) {
+        return executionService.markReadyForDispatch(scope, id, request);
+    }
+
+    @PostMapping("/{id}/dispatch")
+    @PreAuthorize("hasAuthority('planning.trip:execute')")
+    @Operation(summary = "Send the vehicle out, recording the actual departure time")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TripDetailView dispatch(
+            CompanyScope scope, @PathVariable UUID id, @Valid @RequestBody TripExecutionRequest request) {
+        return executionService.dispatch(scope, id, request);
+    }
+
+    @PostMapping("/{id}/complete")
+    @PreAuthorize("hasAuthority('planning.trip:execute')")
+    @Operation(summary = "Close a trip that is in transit, recording when it finished")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TripDetailView complete(
+            CompanyScope scope, @PathVariable UUID id, @Valid @RequestBody TripExecutionRequest request) {
+        return executionService.complete(scope, id, request);
+    }
+
+    // --- stop execution (migration V27) --------------------------------------------------
+    //
+    // Five actions on one stop, all under planning.trip:execute, all refused unless the trip is
+    // IN_TRANSIT. None takes a version - see TripStopExecutionRequest for why the trip's row lock
+    // and the stop transition table are the guard here, exactly as they are for assignments.
+
+    @PostMapping("/{id}/stops/{stopId}/arrive")
+    @PreAuthorize("hasAuthority('planning.trip:execute')")
+    @Operation(summary = "Record that the vehicle reached this stop")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TripDetailView arriveAtStop(CompanyScope scope, @PathVariable UUID id, @PathVariable UUID stopId,
+            @Valid @RequestBody TripStopExecutionRequest request) {
+        return stopExecutionService.arrive(scope, id, stopId, request);
+    }
+
+    @PostMapping("/{id}/stops/{stopId}/service")
+    @PreAuthorize("hasAuthority('planning.trip:execute')")
+    @Operation(summary = "Record that loading or unloading has started at this stop")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TripDetailView startStopService(CompanyScope scope, @PathVariable UUID id, @PathVariable UUID stopId,
+            @Valid @RequestBody TripStopExecutionRequest request) {
+        return stopExecutionService.startService(scope, id, stopId, request);
+    }
+
+    @PostMapping("/{id}/stops/{stopId}/complete")
+    @PreAuthorize("hasAuthority('planning.trip:execute')")
+    @Operation(summary = "Record that this stop was served and the vehicle left")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TripDetailView completeStop(CompanyScope scope, @PathVariable UUID id, @PathVariable UUID stopId,
+            @Valid @RequestBody TripStopExecutionRequest request) {
+        return stopExecutionService.complete(scope, id, stopId, request);
+    }
+
+    /**
+     * Skipping and failing take a typed reason and open a {@code TripException} with it, which is
+     * what makes "how many deliveries did we miss, and why" a query. See
+     * {@code TripStopFailureRequest}.
+     */
+    @PostMapping("/{id}/stops/{stopId}/skip")
+    @PreAuthorize("hasAuthority('planning.trip:execute')")
+    @Operation(summary = "Record that this stop was never attempted, with the reason why")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TripDetailView skipStop(CompanyScope scope, @PathVariable UUID id, @PathVariable UUID stopId,
+            @Valid @RequestBody TripStopFailureRequest request) {
+        return stopExecutionService.skip(scope, id, stopId, request);
+    }
+
+    @PostMapping("/{id}/stops/{stopId}/fail")
+    @PreAuthorize("hasAuthority('planning.trip:execute')")
+    @Operation(summary = "Record that this stop was attempted and could not be served, with the reason why")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TripDetailView failStop(CompanyScope scope, @PathVariable UUID id, @PathVariable UUID stopId,
+            @Valid @RequestBody TripStopFailureRequest request) {
+        return stopExecutionService.fail(scope, id, stopId, request);
+    }
+
+    // --- timeline and exceptions (migration V27) -----------------------------------------
+
+    /**
+     * Reading the timeline is a read of the trip, so it carries {@code planning.trip:read} and not
+     * the execute authority: a supervisor who may not touch a shipment must still be able to see
+     * what happened to it.
+     */
+    @GetMapping("/{id}/events")
+    @PreAuthorize("hasAuthority('planning.trip:read')")
+    @Operation(summary = "The trip's operational timeline, oldest first")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public List<TransportEventView> events(CompanyScope scope, @PathVariable UUID id) {
+        return exceptionService.events(scope, id);
+    }
+
+    @PostMapping("/{id}/exceptions")
+    @PreAuthorize("hasAuthority('planning.trip:execute')")
+    @Operation(summary = "Report an operational problem on the trip or at one of its stops")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TripDetailView reportException(
+            CompanyScope scope, @PathVariable UUID id, @Valid @RequestBody TripExceptionRequest request) {
+        return exceptionService.report(scope, id, request);
+    }
+
+    @PostMapping("/{id}/exceptions/{exceptionId}/resolve")
+    @PreAuthorize("hasAuthority('planning.trip:execute')")
+    @Operation(summary = "Close an open problem, recording what was done about it")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TripDetailView resolveException(CompanyScope scope, @PathVariable UUID id,
+            @PathVariable UUID exceptionId, @Valid @RequestBody TripExceptionResolutionRequest request) {
+        return exceptionService.resolve(scope, id, exceptionId, request);
+    }
+
+    /**
+     * Cancellation is the one lifecycle action a planner and a dispatcher share, so it accepts
+     * either authority rather than forcing a company to grant both to whoever pulls a shipment.
+     * Which states it may still be reached from is {@code TripStatus}'s answer, not this method's.
+     */
     @PostMapping("/{id}/cancel")
-    @PreAuthorize("hasAuthority('planning.trip:manage')")
-    @Operation(summary = "Cancel a draft trip, releasing every order on it back to the eligible pool")
+    @PreAuthorize("hasAuthority('planning.trip:manage') or hasAuthority('planning.trip:execute')")
+    @Operation(summary = "Cancel a trip before it departs, releasing every order on it back to the eligible pool")
     @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
             description = "Id of a company the caller is a member of")
     public TripDetailView cancel(

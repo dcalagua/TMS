@@ -1,7 +1,7 @@
 package com.ebim.tms.planning.application;
 
 import com.ebim.tms.shared.api.InvalidRequestException;
-import java.time.DateTimeException;
+import com.ebim.tms.shared.security.CompanyScope;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -54,13 +54,6 @@ final class ShipmentTimeRules {
     }
 
     private static ZoneId zoneOf(String companyTimeZone) {
-        if (companyTimeZone == null || companyTimeZone.isBlank()) {
-            return ZoneId.systemDefault();
-        }
-        try {
-            return ZoneId.of(companyTimeZone);
-        } catch (DateTimeException unknown) {
-            return ZoneId.systemDefault();
-        }
+        return CompanyScope.zoneOf(companyTimeZone);
     }
 }

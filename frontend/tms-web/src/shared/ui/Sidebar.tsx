@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { NavLink } from 'react-router-dom'
 import { useCompany } from '../company/CompanyContext'
 import { CompanySelector } from './CompanySelector'
-import { ADMIN_NAV, HOME_NAV, NAV_GROUPS, type NavLeaf } from './navConfig'
+import { HOME_NAV, NAV_GROUPS, OVERVIEW_NAV, SETTINGS_NAV, type NavLeaf } from './navConfig'
 
 export const SIDEBAR_ID = 'tms-sidebar'
 
@@ -106,6 +106,11 @@ export function Sidebar({ open, collapsed, onRequestClose }: SidebarProps) {
       <div className="offcanvas-body tms-sidebar-body d-flex flex-column p-0 pb-3">
         <nav className="d-flex flex-column pt-2" aria-label={t('mainNavigation')}>
           {renderLink(HOME_NAV, true)}
+          {/* Above the module groups, beside the dashboard: the screens that describe the days the
+              modules produced rather than owning a piece of them - today's, and the quarter's. */}
+          {OVERVIEW_NAV.filter(
+            (item) => !item.capability || status !== 'ready' || hasCapability(item.capability),
+          ).map((item) => renderLink(item))}
 
           {visibleGroups.map((group) => (
             <div key={group.labelKey}>
@@ -116,8 +121,17 @@ export function Sidebar({ open, collapsed, onRequestClose }: SidebarProps) {
             </div>
           ))}
 
-          {(!ADMIN_NAV.capability || status !== 'ready' || hasCapability(ADMIN_NAV.capability)) && (
-            <div className="tms-nav-trailing">{renderLink(ADMIN_NAV)}</div>
+          {/* Configuración, in the trailing slot the single Seguridad link used to hold. A group
+              rather than a leaf since job 12, because there are two screens behind it - and it
+              stays out of NAV_GROUPS so the rule above it keeps separating administration from the
+              modules the day's work happens in. */}
+          {(!SETTINGS_NAV.capability || status !== 'ready' || hasCapability(SETTINGS_NAV.capability)) && (
+            <div className="tms-nav-trailing">
+              <p className="tms-nav-group-label">
+                <span className="tms-nav-group-label-text">{t(SETTINGS_NAV.labelKey)}</span>
+              </p>
+              {SETTINGS_NAV.items.map((item) => renderLink(item))}
+            </div>
           )}
         </nav>
       </div>

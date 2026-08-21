@@ -21,6 +21,7 @@ const KNOWN_CODES: readonly ProblemCode[] = [
   'malformed-request',
   'resource-not-found',
   'conflict',
+  'feature-not-configured',
   'internal-error',
 ]
 

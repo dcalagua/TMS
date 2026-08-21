@@ -137,14 +137,17 @@ public class AutoPlanningService {
         auditActorProvider.requireAppUserId();
 
         List<TripDetailView> created = new ArrayList<>();
+        List<ProposedTrip> applied = new ArrayList<>();
         List<UnplannedOrder> rejected = new ArrayList<>();
         for (ProposedTrip proposed : proposal.trips()) {
             TripDetailView trip = tripService.create(scope, run.id(),
                     new TripCreateRequest(proposed.vehicleId(), null, run.version()));
             UUID tripId = trip.trip().id();
+            List<UUID> accepted = new ArrayList<>();
             for (UUID orderId : proposed.orderIds()) {
                 try {
                     trip = tripService.assignOrder(scope, tripId, new AssignOrderRequest(orderId));
+                    accepted.add(orderId);
                 } catch (InvalidRequestException | ConflictException refused) {
                     // The snapshot was taken a moment ago and another planner may have moved
                     // faster. That is a report, not a failure: the trip keeps what it did get,
@@ -152,9 +155,22 @@ public class AutoPlanningService {
                     log.info("auto-plan: order {} refused on trip {}: {}",
                             orderId, tripId, refused.getMessage());
                     rejected.add(new UnplannedOrder(orderId, snapshot.orderNumbers().get(orderId),
-                            UnplannedReason.NO_VEHICLE_AVAILABLE));
+                            UnplannedReason.TAKEN_WHILE_PLANNING));
                 }
             }
+            if (accepted.isEmpty()) {
+                // Every order this load was built from went elsewhere while we were writing it.
+                // What is left is a draft trip with nothing on it that still holds its vehicle
+                // for the day - so the next run would be told the fleet is busy, by a trip that
+                // exists only because this one failed. Cancelled through the same use case a
+                // planner's own delete goes through, which is what releases the booking.
+                log.info("auto-plan: trip {} kept no orders and was cancelled", tripId);
+                tripService.cancel(scope, tripId, new PlanningActionRequest(trip.trip().version(),
+                        "Automatic planning: every order on this trip was taken before it could be assigned."));
+                continue;
+            }
+            applied.add(new ProposedTrip(proposed.vehicleId(), proposed.routeId(), accepted,
+                    trip.stops().stream().map(TripStopView::destinationId).toList()));
             created.add(trip);
         }
 
@@ -163,9 +179,14 @@ public class AutoPlanningService {
                         "tripsCreated", String.valueOf(created.size()),
                         "ordersConsidered", String.valueOf(snapshot.orderNumbers().size())));
 
+        // Built from `applied`, never from `proposal.trips()`. The proposal is what we intended;
+        // once it has been written, the only honest report is what the writes actually achieved.
+        // Reusing the proposal here is how an order that was refused ends up listed on a trip and
+        // in `unplanned` at the same time - the planner sees it as handled, and it is not.
         List<UnplannedOrder> unplanned = new ArrayList<>(proposal.unplanned());
         unplanned.addAll(rejected);
-        PlanningProposal outcome = new PlanningProposal(proposal.engine(), proposal.trips(), unplanned);
+        PlanningProposal outcome = new PlanningProposal(proposal.engine(), applied, unplanned);
+        assertEveryOrderAccountedFor(snapshot, outcome);
         return AutoPlanView.applied(outcome, created, snapshot.orderNumbers(), snapshot.vehicleCodes());
     }
 
@@ -235,7 +256,8 @@ public class AutoPlanningService {
         for (UUID orderId : snapshot.orderNumbers().keySet()) {
             boolean isPlanned = planned.contains(orderId);
             if (isPlanned == reported.contains(orderId)) {
-                throw new IllegalStateException("planning engine " + proposal.engine() + " left order " + orderId
+                throw new IllegalStateException("automatic planning with engine " + proposal.engine()
+                        + " left order " + orderId
                         + (isPlanned ? " both planned and unplanned" : " neither planned nor reported"));
             }
         }
@@ -276,9 +298,8 @@ public class AutoPlanningService {
      */
     private List<VehicleCapacityReference> loadFreeVehicles(CompanyScope scope, PlanningRun run) {
         return vehicleLookupPort.findAssignableInCompany(scope.companyId()).stream()
-                .filter(vehicle -> !tripRepository.existsByCompanyIdAndVehicleIdAndPlanningDateAndStatusNotAndIdNot(
-                        scope.companyId(), vehicle.id(), run.planningDate(), TripStatus.CANCELLED,
-                        UUID.randomUUID()))
+                .filter(vehicle -> !tripRepository.existsByCompanyIdAndVehicleIdAndPlanningDateAndStatusNot(
+                        scope.companyId(), vehicle.id(), run.planningDate(), TripStatus.CANCELLED))
                 .toList();
     }
 

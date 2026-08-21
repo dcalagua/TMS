@@ -1,0 +1,34 @@
+{
+  "markAllRead": "Marcar todo como leído",
+  "resolved": "Resuelto",
+  "types": {
+    "DELIVERY_FAILED": {
+      "message": "Pedido {{orderNumber}} del envío {{shipmentNumber}}, parada {{stopSequence}}: {{result}}.",
+      "title": "El cliente no recibió todo"
+    },
+    "DRIVER_LICENSE_EXPIRING": {
+      "message": "La licencia de {{driverName}} vence el {{expiresOn}}. Va asignado al envío {{shipmentNumber}}.",
+      "title": "Licencia por vencer"
+    },
+    "EXCEPTION_OPENED": {
+      "message": "{{exceptionType}} en el envío {{shipmentNumber}}.",
+      "title": "Incidencia abierta"
+    },
+    "TENDER_EXPIRED": {
+      "message": "Nadie respondió el intento {{attempt}} del envío {{shipmentNumber}} antes del plazo.",
+      "title": "Oferta vencida sin respuesta"
+    },
+    "TENDER_REJECTED": {
+      "message": "El transportista rechazó el intento {{attempt}} del envío {{shipmentNumber}}.",
+      "title": "Oferta rechazada"
+    },
+    "TRIP_COMPLETED": {
+      "message": "El envío {{shipmentNumber}} quedó cerrado.",
+      "title": "Envío completado"
+    },
+    "TRIP_DELAYED": {
+      "message": "El envío {{shipmentNumber}} salió {{minutes}} minutos después de lo planificado.",
+      "title": "Salió tarde"
+    }
+  }
+}

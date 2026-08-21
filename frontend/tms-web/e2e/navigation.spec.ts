@@ -4,6 +4,7 @@ import { signIn, stubServices } from './support/app'
 /** Every sidebar entry, with the URL it must reach and the `h1` its screen renders. */
 const ENTRIES = [
   { link: 'Inicio', path: '/', heading: /^Hola,/ },
+  { link: 'Torre de control', path: '/control-tower', heading: 'Torre de control' },
   { link: 'Orígenes', path: '/masters/origins', heading: 'Orígenes' },
   { link: 'Destinos', path: '/masters/destinations', heading: 'Destinos' },
   { link: 'Zonas', path: '/masters/zones', heading: 'Zonas' },
@@ -12,6 +13,7 @@ const ENTRIES = [
   { link: 'Transportistas', path: '/fleet/carriers', heading: 'Transportistas' },
   { link: 'Tipos de vehículo', path: '/fleet/vehicle-types', heading: 'Tipos de vehículo' },
   { link: 'Vehículos', path: '/fleet/vehicles', heading: 'Vehículos' },
+  { link: 'Conductores', path: '/fleet/drivers', heading: 'Conductores' },
   { link: 'Pedidos', path: '/orders', heading: 'Pedidos' },
   { link: 'Planificación', path: '/planning', heading: 'Planificación' },
   { link: 'Viajes', path: '/trips', heading: 'Viajes' },

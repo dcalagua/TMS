@@ -110,7 +110,10 @@ class RouteApiIntegrationTest {
                 "INSERT INTO tms.zone (company_id, code, name) VALUES ('" + COMPANY_A + "', 'ZONE-A', 'Zone A')");
         frequencyInCompanyA = insertReturningId("INSERT INTO tms.frequency (company_id, code, name) VALUES ('"
                 + COMPANY_A + "', 'FREQ-A', 'Frequency A')");
-        destinationA1 = insertLocation(COMPANY_A, "DEST-A1", "Destination A1", "DESTINATION");
+        // A store that normally takes 15 minutes to serve, so the per-stop override tests can
+        // tell an inherited value apart from an overridden one. The rest default to 0.
+        destinationA1 = insertLocation(COMPANY_A, "DEST-A1", "Destination A1", "DESTINATION",
+                ", service_time_minutes", ", 15");
         destinationA2 = insertLocation(COMPANY_A, "DEST-A2", "Destination A2", "DESTINATION");
         destinationA3 = insertLocation(COMPANY_A, "DEST-A3", "Destination A3", "DESTINATION");
         destinationInCompanyB = insertLocation(COMPANY_B, "DEST-B1", "Destination B1", "DESTINATION");
@@ -189,12 +192,27 @@ class RouteApiIntegrationTest {
         return JsonPath.read(jsonResponse, "$.id");
     }
 
+    /** Every stop inheriting its location's service time - the ordinary case most tests here need. */
     private String routeRequest(String code, String originId, String zoneId, String frequencyId, String... destinationIds) {
-        String stops = String.join(",", java.util.Arrays.stream(destinationIds).map(id -> "\"" + id + "\"").toList());
+        String stops = String.join(",",
+                java.util.Arrays.stream(destinationIds).map(id -> stopJson(id, null)).toList());
+        return routeRequestWithStops(code, originId, zoneId, frequencyId, stops);
+    }
+
+    private String routeRequestWithStops(String code, String originId, String zoneId, String frequencyId,
+            String stopsJson) {
         return """
                 {"code":"%s","name":"%s Name","originId":"%s","zoneId":%s,"frequencyId":%s,
-                 "referenceDistanceKm":12.5,"referenceDurationMinutes":45,"destinationIds":[%s]}
-                """.formatted(code, code, originId, quoteOrNull(zoneId), quoteOrNull(frequencyId), stops);
+                 "referenceDistanceKm":12.5,"referenceDurationMinutes":45,"stops":[%s]}
+                """.formatted(code, code, originId, quoteOrNull(zoneId), quoteOrNull(frequencyId), stopsJson);
+    }
+
+    /** {@code serviceTimeOverrideMinutes} omitted entirely when null - not sent as an explicit null. */
+    private static String stopJson(String destinationId, Integer serviceTimeOverrideMinutes) {
+        return serviceTimeOverrideMinutes == null
+                ? "{\"destinationId\":\"" + destinationId + "\"}"
+                : "{\"destinationId\":\"" + destinationId + "\",\"serviceTimeOverrideMinutes\":"
+                        + serviceTimeOverrideMinutes + "}";
     }
 
     private static String quoteOrNull(String value) {
@@ -306,6 +324,55 @@ class RouteApiIntegrationTest {
                         .content(routeRequest("dup-dest", originInCompanyA, null, null, destinationA1, destinationA1)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("malformed-request"));
+    }
+
+    @Test
+    @DisplayName("a stop's service time comes from its location unless the stop overrides it (V24)")
+    void perStopServiceTimeOverrideRoundTrips() throws Exception {
+        String response = mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(routeRequestWithStops("night-corridor", originInCompanyA, null, null,
+                                stopJson(destinationA1, null) + "," + stopJson(destinationA2, 40))))
+                .andExpect(status().isCreated())
+                // DEST-A1 inherits its location's 15 minutes; DEST-A2 overrides its location's 0
+                // with 40, and the view reports all three numbers so an editor need not re-derive.
+                .andExpect(jsonPath("$.stops[0].serviceTimeOverrideMinutes").doesNotExist())
+                .andExpect(jsonPath("$.stops[0].destinationServiceTimeMinutes").value(15))
+                .andExpect(jsonPath("$.stops[0].effectiveServiceTimeMinutes").value(15))
+                .andExpect(jsonPath("$.stops[1].serviceTimeOverrideMinutes").value(40))
+                .andExpect(jsonPath("$.stops[1].destinationServiceTimeMinutes").value(0))
+                .andExpect(jsonPath("$.stops[1].effectiveServiceTimeMinutes").value(40))
+                .andReturn().getResponse().getContentAsString();
+        String id = idOf(response);
+
+        mockMvc.perform(asAdmin(get(BASE + "/" + id), COMPANY_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stops[1].effectiveServiceTimeMinutes").value(40));
+
+        // The request is the wanted state, not a delta: re-sent without the override, the stop
+        // goes back to inheriting - and the location it overrode is untouched throughout.
+        mockMvc.perform(asAdmin(put(BASE + "/" + id), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(routeRequestWithStops("night-corridor", originInCompanyA, null, null,
+                                stopJson(destinationA1, 0) + "," + stopJson(destinationA2, null))))
+                .andExpect(status().isOk())
+                // Zero is a real override - a drop-and-go stop - not a synonym for "inherit".
+                .andExpect(jsonPath("$.stops[0].serviceTimeOverrideMinutes").value(0))
+                .andExpect(jsonPath("$.stops[0].destinationServiceTimeMinutes").value(15))
+                .andExpect(jsonPath("$.stops[0].effectiveServiceTimeMinutes").value(0))
+                .andExpect(jsonPath("$.stops[1].serviceTimeOverrideMinutes").doesNotExist())
+                .andExpect(jsonPath("$.stops[1].effectiveServiceTimeMinutes").value(0));
+    }
+
+    @Test
+    @DisplayName("a negative service time override is rejected")
+    void negativeServiceTimeOverrideIsRejected() throws Exception {
+        mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(routeRequestWithStops("negative-service", originInCompanyA, null, null,
+                                stopJson(destinationA1, -1))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation-failed"));
     }
 
     @Test

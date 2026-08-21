@@ -18,11 +18,26 @@ import org.springframework.context.annotation.Configuration;
  * states that every operation needs a token unless it says otherwise. That matches the filter
  * chain, which is deny-by-default: a contract that implied the opposite would be a
  * documentation bug with security consequences.
+ *
+ * <h2>Two surfaces, two schemes</h2>
+ *
+ * <p>There are two authentication schemes here because there are two audiences, and until they were
+ * both declared the document said something false about half the API: {@code /integration/v1} does
+ * not accept a Supabase token at all, and no user-facing endpoint accepts an integration credential.
+ * The global requirement covers the browser API; every controller under {@code /integration/v1}
+ * overrides it with {@link #INTEGRATION_SCHEME} through {@code @SecurityRequirement}, which is what
+ * makes "try it out" in Swagger UI reflect what the filter chain will actually do.
  */
 @Configuration
 public class OpenApiConfig {
 
     private static final String BEARER_SCHEME = "supabaseJwt";
+
+    /**
+     * Named in {@code @SecurityRequirement} on every {@code /integration/v1} controller. Public so
+     * those annotations reference the constant rather than repeating a string that would drift.
+     */
+    public static final String INTEGRATION_SCHEME = "integrationCredential";
 
     @Bean
     public OpenAPI tmsOpenApi(TmsApiProperties properties) {
@@ -33,20 +48,64 @@ public class OpenApiConfig {
                         .description("""
                                 Transport Management System backend API.
 
-                                Every business operation is authenticated with a Supabase-issued JWT and \
-                                authorized server-side against the caller's organization/company scope.
+                                ## Two surfaces
 
-                                Company-scoped endpoints require the `%s` header carrying the id of a \
-                                company the caller is a member of; the membership is validated on the \
-                                server and the header is never trusted on its own. Errors are RFC 9457 \
-                                `application/problem+json` documents. See docs/api/API_CONVENTIONS.md."""
-                                .formatted(ApiHeaders.COMPANY_ID))
+                                **The application API** (`%s`) is what the browser client calls. Every operation \
+                                is authenticated with a Supabase-issued JWT and authorized server-side against \
+                                the caller's organization/company scope. Company-scoped endpoints require the \
+                                `%s` header carrying the id of a company the caller is a member of; the \
+                                membership is validated on the server and the header is never trusted on its own.
+
+                                **The integration API** (`/integration/v1`) is the machine-to-machine surface for \
+                                partner systems - an ERP, a WMS, a store system, a telematics feed, a carrier. \
+                                It is authenticated with an integration credential issued from the Integration \
+                                Hub and presented as `Authorization: Bearer <clientId>.<secret>`. It carries no \
+                                company header: the tenant is a property of the credential. Its URL space is \
+                                deliberately outside the application base path, because a partner's release \
+                                schedule is not ours - see `docs/integrations/INBOUND_API_V1.md`.
+
+                                ## Versioning
+
+                                Both surfaces are versioned in the path. Within a version, fields may be added \
+                                and a client must ignore what it does not recognise; a field is never removed \
+                                or given a new meaning. A breaking change is a new version served alongside the \
+                                old one, not an edit to this one.
+
+                                ## Conventions
+
+                                Errors are RFC 9457 `application/problem+json` documents whose `type` and `code` \
+                                are stable - branch on those, never on `detail`. Every request may carry \
+                                `%s` (or `%s`), which is echoed on the response and appears on every log line \
+                                and in every error document. Write operations on the integration API accept \
+                                `%s`. See `docs/api/API_CONVENTIONS.md`, \
+                                `docs/integrations/INBOUND_API_V1.md`, `docs/integrations/OUTBOUND_SHIPMENT_V1.md` \
+                                and `docs/integrations/WEBHOOKS_V1.md`."""
+                                .formatted(properties.basePath(), ApiHeaders.COMPANY_ID, ApiHeaders.CORRELATION_ID,
+                                        ApiHeaders.REQUEST_ID, ApiHeaders.IDEMPOTENCY_KEY))
                         .license(new License().name("Proprietary - EBIM")))
-                .components(new Components().addSecuritySchemes(BEARER_SCHEME, new SecurityScheme()
-                        .type(SecurityScheme.Type.HTTP)
-                        .scheme("bearer")
-                        .bearerFormat("JWT")
-                        .description("Supabase Auth access token. Base path: " + properties.basePath())))
+                .components(new Components()
+                        .addSecuritySchemes(BEARER_SCHEME, new SecurityScheme()
+                                .type(SecurityScheme.Type.HTTP)
+                                .scheme("bearer")
+                                .bearerFormat("JWT")
+                                .description("Supabase Auth access token. Base path: " + properties.basePath()))
+                        .addSecuritySchemes(INTEGRATION_SCHEME, new SecurityScheme()
+                                .type(SecurityScheme.Type.HTTP)
+                                .scheme("bearer")
+                                .bearerFormat("clientId.secret")
+                                .description("""
+                                        Integration credential for the machine-to-machine API at \
+                                        `/integration/v1`. Issued from the Integration Hub and presented whole: \
+                                        `Authorization: Bearer tmsc_….tmss_…`.
+
+                                        The secret is shown once, at creation or rotation, and is never \
+                                        recoverable - only its hash is stored. A rotation keeps the superseded \
+                                        secret working for a grace window so a partner can redeploy without a \
+                                        coordinated cutover; a revocation is immediate and terminal.
+
+                                        The credential carries its own company and its own scopes. It is not \
+                                        accepted anywhere outside `/integration/v1`, and a Supabase token is \
+                                        not accepted inside it.""")))
                 .addSecurityItem(new SecurityRequirement().addList(BEARER_SCHEME));
     }
 }

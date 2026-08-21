@@ -2,7 +2,9 @@ package com.ebim.tms.integration.api;
 
 import com.ebim.tms.integration.application.IntegrationPrincipal;
 import com.ebim.tms.integration.domain.IntegrationScope;
+import com.ebim.tms.shared.config.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping(IntegrationApiPaths.V1)
 @Tag(name = "Integration v1 - Identity", description = "Credential self-check")
+@SecurityRequirement(name = OpenApiConfig.INTEGRATION_SCHEME)
 public class IntegrationIdentityController {
 
     @GetMapping("/ping")

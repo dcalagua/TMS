@@ -214,6 +214,32 @@ class MasterDataDestinationFrequencyConstraintIntegrationTest {
     }
 
     @Test
+    @DisplayName("only an open exception date may carry a cutoff override (V24)")
+    void exceptionCutoffOverrideRequiresService() throws SQLException {
+        UUID organization = insertOrganization("MDF-ORG");
+        UUID company = insertCompany(organization, "MDF-A");
+        UUID frequency = insertFrequency(company, "CUTOFFS");
+
+        // Open, closing early - the case the column exists for.
+        execute("INSERT INTO tms.frequency_exception"
+                + " (frequency_id, exception_date, service_override, cutoff_time_override) VALUES ('" + frequency
+                + "', '2026-12-24', true, '11:00')");
+        // Open with no opinion about the cutoff, and closed with none - both ordinary.
+        execute("INSERT INTO tms.frequency_exception (frequency_id, exception_date, service_override)"
+                + " VALUES ('" + frequency + "', '2026-12-19', true)");
+        execute("INSERT INTO tms.frequency_exception (frequency_id, exception_date, service_override)"
+                + " VALUES ('" + frequency + "', '2026-12-25', false)");
+
+        // A blackout has no cutoff: nothing is dispatched, so there is no last moment to order.
+        assertViolates(CHECK_VIOLATION, () -> execute("INSERT INTO tms.frequency_exception"
+                + " (frequency_id, exception_date, service_override, cutoff_time_override) VALUES ('" + frequency
+                + "', '2026-12-26', false, '11:00')"));
+        // And it cannot be reached by toggling an existing open date closed either.
+        assertViolates(CHECK_VIOLATION, () -> execute("UPDATE tms.frequency_exception SET service_override = false"
+                + " WHERE frequency_id = '" + frequency + "' AND exception_date = '2026-12-24'"));
+    }
+
+    @Test
     @DisplayName("destinations and frequencies default to active and record who changed them")
     void defaultsAndActorColumns() throws SQLException {
         UUID organization = insertOrganization("MDF-ORG");

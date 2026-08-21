@@ -155,10 +155,41 @@ Conventions for the modules that follow:
 - `read` for anything that returns data, `manage` for create/update/deactivate;
 - a new resource adds its permissions in the migration that creates its tables, adds the
   matching `Permission` constants, and grants them to the system roles in the same migration;
-- every company-scoped endpoint takes a `CompanyScope` parameter and carries a `@PreAuthorize`;
+- every company-scoped endpoint takes a `CompanyScope` parameter and carries a `@PreAuthorize`
+  (enforced over the whole controller layer by `EndpointContractTest` - see section 9);
 - every vertical slice ships a cross-tenant isolation test (ADR-003 compliance rule).
 
-## 7. What is deliberately not in V1
+## 7. The administration surface (job 12, migration V34)
+
+Sections 2 and 4 above describe the catalogue as of migration V5; later migrations added
+`fleet.driver:*` (V26), `rates.*` (V30), `planning.tender:*` (V31) and `planning.trip:execute`
+(V25), and the counts in those tables were not updated with them. **`Permission` and `Capability`
+in `com.ebim.tms.shared.security` are the source of truth**, and `PermissionCatalogueIntegrationTest`
+proves the enum matches the database.
+
+What job 12 changed is not the catalogue - it minted **no new permission** - but who finally checks
+it. `iam.company:*`, `iam.user:*` and `iam.membership:*` had existed since V3 with no endpoint behind
+them; there are now ten, under `/admin/companies` and `/admin/users`. Full contract in
+`docs/domain/SAAS_ADMINISTRATION_V1.md`. The parts that belong here:
+
+- **the grants of V3 are the authorization design of that surface, restated.** ORGANIZATION_ADMIN
+  holds everything; COMPANY_ADMIN holds everything except `iam.organization:manage`, so it
+  administers its own company and the people in it and cannot rename the organization above it;
+  PLANNER and VIEWER hold `iam.company:read` alone, so they can read the company screen and are
+  refused by the people screen at the endpoint, not merely hidden from it by the menu;
+- **reading the person and granting authority are two permissions on purpose.** Correcting a display
+  name is `iam.user:manage`; giving, changing or revoking access is `iam.membership:manage`. An
+  installation can let a supervisor keep the directory tidy without letting them hand out authority;
+- **one condition in that surface is not a permission at all.** Creating a company reaches outside
+  the scope the request resolved, so `iam.company:manage` is necessary and not sufficient: the
+  service additionally requires an active organization-wide membership. That is a fact about the
+  shape of the caller's membership rather than about their permissions, so it cannot be an authority
+  expression and lives in the service, which asks the database and answers 403 otherwise;
+- **tenancy is still not a permission.** A company administrator cannot reach another company because
+  `CompanyScope` is resolved from their own active memberships, exactly as section 5 describes - not
+  because of anything the administration endpoints check.
+
+## 8. What is deliberately not in V1
 
 - **per-organization custom roles** - schema direction recorded above, no requirement yet;
 - **record-level or field-level authorization** (for example "this planner may only see zone
@@ -167,3 +198,43 @@ Conventions for the modules that follow:
   authentication path, not a borrowed user token;
 - **permission grants directly on a membership**, bypassing roles. Roles are the only grant
   mechanism, which keeps "who can do what" answerable by reading four rows.
+
+## 9. Endpoint contract enforcement (job 15)
+
+Section 6's convention was written down and followed by hand for eleven jobs. Job 15 checked it
+mechanically for the first time, over all 182 handler methods, and found one deviation:
+`WebhookController.eventTypes` carried its `@PreAuthorize` and documented `X-Company-Id` as
+required, but did not declare the `CompanyScope` parameter that makes the header required in fact.
+
+The consequence was not a hole. An unscoped token carries no permission authorities at all
+(`TmsAuthenticationToken`), so a caller omitting the header was refused - just with
+`403 access-denied` rather than the `400 company-scope-required` every other company-scoped
+endpoint answers. It worked in the product because the browser client always sends the header. That
+is precisely why a convention needs a test: the failure mode is invisible from the UI and only
+appears to whoever integrates against the API next.
+
+`EndpointContractTest` now holds three rules over every `@RestController`:
+
+1. **a `@PreAuthorize`-guarded user-facing handler declares a `CompanyScope` parameter.**
+   Machine-to-machine handlers are excluded, because their tenant comes from the credential and
+   never from a header (`IntegrationAuthenticationFilter`). They are recognised by taking an
+   `IntegrationPrincipal` rather than by their package - `WebhookController` lives in
+   `integration.api` and is a browser endpoint;
+2. **every handler is permission-guarded or named in `UNGUARDED_BY_DESIGN`** with the sentence that
+   justifies it. Six are: the public service-identification endpoint, `/me`, the three notification
+   endpoints (the alert bell is a top-bar control no role can hide, and the disclosure is filtered
+   per alert type inside `NotificationService`), and the integration credential self-check;
+3. **no handler declares both a `CompanyScope` and an `IntegrationPrincipal`.** They are two
+   tenancy models on two security chains, and a method claiming both belongs to neither.
+
+What the audit did **not** change, and why:
+
+- **no rate limiting was added.** Integration secrets carry 256 bits of entropy and are compared in
+  constant time against a stored digest, so the credential endpoint is not brute-forceable; what a
+  limiter would defend is request volume, which is an infrastructure concern and belongs in front of
+  the application. Adding an in-process counter would suggest a protection the second instance does
+  not share. It needs a concrete requirement and an ADR, like everything else on the deferred list;
+- **child-of-aggregate queries keep taking only the parent id** (`TripStopRepository.findByTripIds`
+  and friends). The parent was already resolved company-scoped, RLS covers the `tms_app` role
+  underneath (ADR-005), and adding a redundant predicate to one of them and not the rest would make
+  the convention harder to read rather than safer.

@@ -37,8 +37,12 @@ public enum LocationImportColumn {
     PROVINCE("province", false, "Optional."),
     DEPARTMENT("department", false, "Optional."),
 
-    /** Blank defaults to {@code PE}, the same default {@code tms.location.country} has in the database. */
-    COUNTRY("country", false, "Optional. Defaults to PE if left blank."),
+    /**
+     * Blank defaults to the company's {@code defaultCountry} (migration V34), which is itself
+     * {@code PE} until a tenant changes it - the same default {@code tms.location.country} has in
+     * the database.
+     */
+    COUNTRY("country", false, "Optional. Defaults to the company's default country if left blank."),
 
     /** Blank defaults to the caller's company time zone. */
     TIME_ZONE("timeZone", false, "Optional IANA time zone, e.g. America/Lima. Defaults to the company's time zone."),

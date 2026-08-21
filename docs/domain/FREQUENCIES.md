@@ -4,7 +4,8 @@ Contrato de dominio: qué días puede atenderse una ubicación, con qué corte y
 anticipación, y qué pasa en las fechas que se apartan de esa cadencia.
 
 Migraciones: `V7__masterdata_destinations_frequencies.sql` (frecuencia, reglas semanales,
-excepciones) y `V15__masterdata_location_frequency.sql` (la asociación con la ubicación).
+excepciones), `V15__masterdata_location_frequency.sql` (la asociación con la ubicación) y
+`V24__frequency_exception_cutoff_and_route_stop_service_time.sql` (corte por fecha).
 
 ---
 
@@ -86,13 +87,36 @@ cadencia — cambiarla cambiaría todas las semanas.
 19/12   ABIERTO   Refuerzo pre-navideño
 ```
 
-### Lo que todavía no existe
+### Corte propio de una fecha (V24)
 
-Un **corte distinto para una fecha concreta** (`24/12 corte 11:00`) no es representable: la
-excepción es booleana y no lleva hora. La ayuda del editor lo dice explícitamente, en vez de
-dejar que un operador lo descubra al no encontrar el campo. Añadirlo es una columna
-`cutoff_time` nullable en una migración futura más su lectura en `FrequencyCalendar`; no se
-implementó aquí porque no se puede verificar contra una base de datos en este entorno.
+Una fecha abierta puede además **cerrar a otra hora**. Es lo tercero que la cadencia no puede
+decir: mover el corte del miércoles movería el de todos los miércoles del año.
+
+```text
+Cadencia normal   corte 15:00
+24/12  ABIERTO    corte 11:00
+25/12  CERRADO
+```
+
+`cutoff_time_override` es nullable y el nulo significa *no opino*:
+
+```text
+effectiveCutoff = exception.cutoffTimeOverride ?? weeklyRule.cutoffTime
+```
+
+Esa precedencia vive en un solo lugar, `FrequencyCalendar.effectiveCutoff`, y es una función
+pura probada sin base de datos. Un `null` como resultado significa **no rige ningún corte** —
+por ejemplo un día extra sobre un día de la semana que la cadencia nunca atiende — nunca
+"ya cerró".
+
+**Una fecha cerrada no lleva corte.** No se despacha nada, así que no existe una "última hora
+para pedir"; guardarla sería un dato que nadie puede usar y que sobreviviría como hora fantasma
+si más tarde la fecha se reabre. La regla se sostiene en tres capas: el servicio responde 400,
+el constructor de `FrequencyException` la rechaza, y
+`ck_frequency_exception_cutoff_requires_service` la rechaza contra SQL directo.
+
+`leadTimeDays` **no** tiene excepción por fecha: describe con cuánta anticipación se toman los
+pedidos de esa cadencia, y que un día cierre antes no cambia esa ventana.
 
 ---
 
@@ -110,8 +134,11 @@ Orden de resolución para una fecha:
 3. Para cada candidata, en orden:
      ¿hay excepción para esa fecha?  → la excepción manda (abierto/cerrado)
      si no                           → manda la regla semanal
-4. La primera que atienda gana, y devuelve su corte y anticipación.
+4. La primera que atienda gana, y devuelve su corte efectivo y su anticipación.
 ```
+
+El corte que devuelve es el efectivo: si la excepción de esa fecha trae `cutoffTimeOverride`,
+es el suyo; si no, el de la regla semanal.
 
 Una ubicación servida por dos calendarios sólo necesita que **uno** atienda la fecha.
 
@@ -153,9 +180,13 @@ exactamente cuando su padre lo es.
 ```text
 IDENTIFICACIÓN        código, nombre, descripción
 CADENCIA SEMANAL      los 7 días en una grilla, con corte y anticipación por día
-EXCEPCIONES           fechas cerradas/abiertas, con nota  (sólo al editar)
+EXCEPCIONES           fechas cerradas/abiertas, con corte propio y nota  (sólo al editar)
 ESTADO                activo
 ```
+
+El campo de corte aparece **sólo** cuando el tipo es abierto, y cambiar a cerrado borra lo que
+se hubiera escrito: un campo oculto no puede enviarse a espaldas del operador. Vacío no es "sin
+corte" sino "rige el de la regla semanal", y la ayuda del campo lo dice.
 
 Las excepciones son un sub-recurso con endpoints propios, así que son un panel y no campos del
 formulario: cada fila es una llamada a la API y necesita una frecuencia guardada de la que

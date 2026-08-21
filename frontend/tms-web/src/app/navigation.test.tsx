@@ -49,6 +49,7 @@ vi.mock('../shared/company/CompanyContext', () => ({
 const NAV_TARGETS = [
   // The dashboard greets the signed-in user rather than repeating the menu label.
   { link: 'Inicio', path: '/', heading: /^Hola,/ },
+  { link: 'Torre de control', path: '/control-tower', heading: 'Torre de control' },
   { link: 'Ubicaciones', path: '/masters/locations', heading: 'Ubicaciones' },
   { link: 'Orígenes', path: '/masters/origins', heading: 'Orígenes' },
   { link: 'Destinos', path: '/masters/destinations', heading: 'Destinos' },
@@ -61,7 +62,9 @@ const NAV_TARGETS = [
   { link: 'Pedidos', path: '/orders', heading: 'Pedidos' },
   { link: 'Planificación', path: '/planning', heading: 'Planificación' },
   { link: 'Viajes', path: '/trips', heading: 'Viajes' },
-  { link: 'Seguridad', path: '/admin/security', heading: 'Seguridad' },
+  // Configuración replaced the single "Seguridad" placeholder in job 12.
+  { link: 'Compañía', path: '/settings/company', heading: 'Compañía' },
+  { link: 'Usuarios y accesos', path: '/settings/users', heading: 'Usuarios y accesos' },
 ]
 
 function json(body: unknown): Response {
@@ -72,6 +75,54 @@ function json(body: unknown): Response {
  * routing, so each endpoint answers with a well-formed empty result. */
 function stubBackend(input: RequestInfo | URL): Response {
   const url = String(input instanceof Request ? input.url : input)
+
+  // The control tower's overview is not a page envelope, so the blanket empty page below would
+  // not describe it. It gets its own well-formed empty day; `/control-tower/trips` falls through
+  // to the page stub, which is the right shape for it.
+  if (url.includes('/control-tower') && !url.includes('/control-tower/trips')) {
+    return json({
+      date: '2026-08-19',
+      generatedAt: '2026-08-19T12:00:00Z',
+      summary: {
+        tripsDraft: 0,
+        tripsScheduled: 0,
+        tripsInTransit: 0,
+        tripsCompleted: 0,
+        tripsCancelled: 0,
+        tripsDepartedLate: 0,
+        tripsOverdue: 0,
+        openExceptions: 0,
+        outstandingStops: 0,
+        stopsPastWindow: 0,
+        ordersUnplanned: 0,
+      },
+      workload: [],
+      openExceptions: [],
+      outstandingStops: [],
+    })
+  }
+
+  // The company settings screen reads a profile, not a page of rows, and it renders its form from
+  // that object - so the blanket empty page below would leave it with no `settings` to read.
+  if (url.includes('/admin/companies/current')) {
+    return json({
+      id: 'company-1',
+      code: 'C1',
+      name: 'EBIM Logistics',
+      taxIdentifier: null,
+      timeZone: 'America/Lima',
+      active: true,
+      organization: { id: 'org-1', code: 'EBIM', name: 'EBIM' },
+      organizationActive: true,
+      canCreateCompany: false,
+      settings: { defaultCountry: 'PE', orderNumberPrefix: 'TO-', shipmentNumberPrefix: 'SH-' },
+    })
+  }
+
+  // The role catalogue is a bare array; the page stub's envelope would break `roles.map`.
+  if (url.includes('/admin/users/roles')) {
+    return json([])
+  }
 
   if (url.includes('/system/info')) {
     return json({

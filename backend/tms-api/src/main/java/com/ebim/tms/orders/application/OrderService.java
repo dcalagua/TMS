@@ -20,8 +20,11 @@ import com.ebim.tms.shared.audit.AuditAggregateType;
 import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
+import com.ebim.tms.shared.reference.OrderFulfillmentPort;
+import com.ebim.tms.shared.reference.OrderFulfillmentStatus;
 import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
+import com.ebim.tms.shared.settings.CompanySettingsPort;
 import java.math.BigDecimal;
 import java.time.LocalTime;
 import java.util.HashMap;
@@ -58,17 +61,22 @@ public class OrderService {
     private final TransportOrderLineRepository transportOrderLineRepository;
     private final OriginLookupPort originLookupPort;
     private final DestinationLookupPort destinationLookupPort;
+    private final OrderFulfillmentPort orderFulfillmentPort;
+    private final CompanySettingsPort companySettingsPort;
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
 
     public OrderService(TransportOrderRepository transportOrderRepository,
             TransportOrderLineRepository transportOrderLineRepository, OriginLookupPort originLookupPort,
-            DestinationLookupPort destinationLookupPort, AuditActorProvider auditActorProvider,
+            DestinationLookupPort destinationLookupPort, OrderFulfillmentPort orderFulfillmentPort,
+            CompanySettingsPort companySettingsPort, AuditActorProvider auditActorProvider,
             AuditRecorder auditRecorder) {
         this.transportOrderRepository = transportOrderRepository;
         this.transportOrderLineRepository = transportOrderLineRepository;
         this.originLookupPort = originLookupPort;
         this.destinationLookupPort = destinationLookupPort;
+        this.orderFulfillmentPort = orderFulfillmentPort;
+        this.companySettingsPort = companySettingsPort;
         this.auditActorProvider = auditActorProvider;
         this.auditRecorder = auditRecorder;
     }
@@ -86,10 +94,16 @@ public class OrderService {
         Map<UUID, MasterReference> origins = originLookupPort.findAllInCompany(originIds, scope.companyId());
         Map<UUID, MasterReference> destinations = destinationLookupPort.findAllInCompany(destinationIds, scope.companyId());
         Map<UUID, Long> lineCounts = loadLineCounts(orders);
+        // One call for the whole page, like the two lookups above it. What happened to the goods
+        // is planning's to answer (OrderFulfillmentPort), and it is a second dimension beside
+        // `status`, never a replacement for it - see OrderFulfillmentStatus.
+        Map<UUID, OrderFulfillmentStatus> fulfillment = orderFulfillmentPort.fulfillmentOf(
+                orders.stream().map(TransportOrder::id).collect(Collectors.toSet()), scope.companyId());
 
         List<OrderView> content = orders.stream()
                 .map(order -> OrderView.from(order, origins.get(order.originId()), destinations.get(order.destinationId()),
-                        lineCounts.getOrDefault(order.id(), 0L)))
+                        lineCounts.getOrDefault(order.id(), 0L),
+                        fulfillment.getOrDefault(order.id(), OrderFulfillmentStatus.PENDING)))
                 .toList();
         return new PageResponse<>(content, pageQuery.pageNumber(), pageQuery.pageSize(), page.getTotalElements());
     }
@@ -118,7 +132,7 @@ public class OrderService {
         requireConsistentTotals(lines, declared);
 
         UUID actorId = auditActorProvider.writerAppUserId();
-        TransportOrder order = new TransportOrder(scope.companyId(), generateOrderNumber(), externalSource, externalReference,
+        TransportOrder order = new TransportOrder(scope.companyId(), generateOrderNumber(scope), externalSource, externalReference,
                 request.originId(), request.destinationId(), blankToNull(request.customerName()),
                 blankToNull(request.customerReference()), request.serviceDate(), request.priority(),
                 request.requestedWindowStart(), request.requestedWindowEnd(), actorId);
@@ -126,7 +140,8 @@ public class OrderService {
         TransportOrder saved = saveOrConflict(order);
         auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.CREATE,
                 Map.of("orderNumber", saved.orderNumber()));
-        return OrderDetailView.from(saved, origin, destination);
+        // Nothing can have been delivered against an order that did not exist a moment ago.
+        return OrderDetailView.from(saved, origin, destination, OrderFulfillmentStatus.PENDING);
     }
 
     @Transactional
@@ -158,7 +173,7 @@ public class OrderService {
         TransportOrder saved = saveOrConflict(order);
         auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.UPDATE,
                 Map.of("orderNumber", saved.orderNumber()));
-        return OrderDetailView.from(saved, origin, destination);
+        return OrderDetailView.from(saved, origin, destination, fulfillmentOf(scope, saved.id()));
     }
 
     /**
@@ -218,7 +233,17 @@ public class OrderService {
                 .get(order.originId());
         MasterReference destination = destinationLookupPort
                 .findAllInCompany(Set.of(order.destinationId()), scope.companyId()).get(order.destinationId());
-        return OrderDetailView.from(order, origin, destination);
+        return OrderDetailView.from(order, origin, destination, fulfillmentOf(scope, order.id()));
+    }
+
+    /**
+     * One order's fulfilment state. The batch port asked for a single id rather than a second
+     * per-order method on it: a detail screen is one row, and adding a singular overload would be
+     * the thing the next list screen reached for by mistake.
+     */
+    private OrderFulfillmentStatus fulfillmentOf(CompanyScope scope, UUID orderId) {
+        return orderFulfillmentPort.fulfillmentOf(Set.of(orderId), scope.companyId())
+                .getOrDefault(orderId, OrderFulfillmentStatus.PENDING);
     }
 
     private TransportOrder find(CompanyScope scope, UUID id) {
@@ -311,8 +336,15 @@ public class OrderService {
                 .toList();
     }
 
-    private String generateOrderNumber() {
-        return OrderNumbers.format(transportOrderRepository.nextOrderNumberValue());
+    /**
+     * The prefix is the company's ({@code tms.company_settings.order_number_prefix}, migration V34);
+     * the digits are the installation-wide sequence, which is what makes the value unique whatever
+     * any tenant chooses to call its documents.
+     */
+    private String generateOrderNumber(CompanyScope scope) {
+        return OrderNumbers.format(
+                companySettingsPort.settingsOf(scope.companyId()).orderNumberPrefix(),
+                transportOrderRepository.nextOrderNumberValue());
     }
 
     /** One batched {@code GROUP BY} query for the whole page, never one COUNT per order row. */

@@ -9,6 +9,7 @@ import {
   cancelOrder,
   fetchOrders,
   markOrderReadyForPlanning,
+  type OrderFulfillmentStatus,
   type OrderPriority,
   type OrderStatus,
   type OrderView,
@@ -41,6 +42,21 @@ const STATUS_TONE: Record<OrderStatus, StatusTone> = {
   READY_FOR_PLANNING: 'info',
   PLANNED: 'success',
   CANCELLED: 'danger',
+}
+
+/**
+ * The delivery outcome's colours, kept apart from `STATUS_TONE` above because the two columns
+ * answer different questions: one says whether the order may go on a truck, the other says what
+ * happened when it did. `PENDING` is neutral rather than amber - an order nobody has delivered
+ * yet is the normal state of most of the list, not a problem.
+ */
+const FULFILLMENT_TONE: Record<OrderFulfillmentStatus, StatusTone> = {
+  PENDING: 'neutral',
+  DELIVERED: 'success',
+  PARTIALLY_DELIVERED: 'warning',
+  REJECTED: 'danger',
+  FAILED: 'danger',
+  NOT_ATTEMPTED: 'neutral',
 }
 
 const PRIORITY_TONE: Record<OrderPriority, StatusTone> = {
@@ -232,6 +248,19 @@ export function OrdersPage() {
       key: 'status',
       header: tc('columns.status'),
       render: (order) => <StatusBadge label={enumLabels.orderStatus(order.status)} tone={STATUS_TONE[order.status]} />,
+    },
+    {
+      // Its own column, beside the planning status rather than replacing it. An order that was
+      // refused at the dock is still a planned order, and a list that showed only "Planificado"
+      // was telling a dispatcher the job was done.
+      key: 'fulfillment',
+      header: t('columns.fulfillment'),
+      render: (order) => (
+        <StatusBadge
+          label={enumLabels.orderFulfillmentStatus(order.fulfillmentStatus)}
+          tone={FULFILLMENT_TONE[order.fulfillmentStatus]}
+        />
+      ),
     },
   ]
 

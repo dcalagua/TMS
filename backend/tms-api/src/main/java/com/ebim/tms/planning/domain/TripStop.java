@@ -2,6 +2,8 @@ package com.ebim.tms.planning.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
@@ -27,6 +29,13 @@ import org.hibernate.annotations.UuidGenerator;
  *
  * <p>Never created directly by a caller: {@link Trip#syncStops} maintains the list from the
  * trip's active assignments, and {@link Trip#reorderStops} applies an explicit planner ordering.
+ *
+ * <p><b>Two halves.</b> Everything above {@code executionStatus} is the <em>plan</em> - where to
+ * go, in what order, inside which window - and is written only while the trip is a draft.
+ * Everything from {@code executionStatus} down is what actually happened there (migration V27),
+ * written only once the trip is on the road. The two never overwrite each other: the planned
+ * window stays exactly as planned however late the vehicle arrived, because the gap between the
+ * two is the number a report wants.
  */
 @Entity
 @Table(name = "trip_stop")
@@ -56,6 +65,27 @@ public class TripStop {
 
     @Column(name = "service_window_end")
     private LocalTime serviceWindowEnd;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "execution_status", nullable = false)
+    private StopExecutionStatus executionStatus = StopExecutionStatus.PENDING;
+
+    @Column(name = "actual_arrival_at")
+    private OffsetDateTime actualArrivalAt;
+
+    @Column(name = "service_started_at")
+    private OffsetDateTime serviceStartedAt;
+
+    /** When the vehicle left this stop - the far end of the dwell time, not a second "completed at". */
+    @Column(name = "actual_departure_at")
+    private OffsetDateTime actualDepartureAt;
+
+    /**
+     * Free text from whoever worked the stop. Never the reason a stop was skipped or failed - that
+     * is typed and lives in {@link TripException}, so it can be counted and reported on.
+     */
+    @Column(name = "execution_notes")
+    private String executionNotes;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false, nullable = false)
@@ -91,6 +121,24 @@ public class TripStop {
         return id;
     }
 
+    /**
+     * The trip this stop belongs to, for the two control tower reads that hold stops without
+     * holding their trips.
+     *
+     * <p>The parent itself stays unexposed: a stop is reached <em>through</em> its trip everywhere
+     * else in the module, and handing callers the aggregate root from inside it would make the
+     * boundary meaningless. An id is not a way back in - it is what a caller batches its own
+     * company-scoped lookup with.
+     *
+     * <p>{@code trip} is a lazy association, so this initializes the proxy unless the trip is
+     * already in the persistence context or was fetched with the stop. Both queries that call it
+     * ({@code TripStopRepository.findByTripIds} and {@code findOutstandingForDay}) fetch it - the
+     * whole point of the method is to keep a board of stops from becoming one select per row.
+     */
+    public UUID tripId() {
+        return trip.id();
+    }
+
     public UUID companyId() {
         return companyId;
     }
@@ -111,12 +159,74 @@ public class TripStop {
         return serviceWindowEnd;
     }
 
+    public StopExecutionStatus executionStatus() {
+        return executionStatus;
+    }
+
+    public OffsetDateTime actualArrivalAt() {
+        return actualArrivalAt;
+    }
+
+    public OffsetDateTime serviceStartedAt() {
+        return serviceStartedAt;
+    }
+
+    public OffsetDateTime actualDepartureAt() {
+        return actualDepartureAt;
+    }
+
+    public String executionNotes() {
+        return executionNotes;
+    }
+
     public OffsetDateTime createdAt() {
         return createdAt;
     }
 
     public OffsetDateTime updatedAt() {
         return updatedAt;
+    }
+
+    /**
+     * Records what happened at this stop, moving it to {@code outcome} and writing the one
+     * timestamp that outcome is about.
+     *
+     * <p>One method rather than five, because the five differ only in which column the operator's
+     * time lands in: the transition check, the actor and the notes are identical, and splitting
+     * them would be four more places for those three to drift. Which outcome may follow which is
+     * {@link StopExecutionStatus}'s answer, asserted here as the last line of defense -
+     * {@code TripStopExecutionService} refuses first, with a sentence a dispatcher can read.
+     *
+     * <p>{@code notes} <em>replaces</em> what is on the row, and loses nothing by doing so: every
+     * note is also written to that transition's {@link TransportEvent}, which is append-only, so
+     * the column here is a convenience - "the sentence that explains this stop's current state",
+     * readable without opening the timeline - rather than a second, growing copy of it. Appending
+     * instead would eventually collide with the column's 500-character ceiling and force a
+     * truncation rule nobody asked for.
+     *
+     * @param occurredAt the operator's own time for the fact, already validated by the service
+     * @param notes optional free text, null to leave what is there
+     */
+    void recordOutcome(StopExecutionStatus outcome, OffsetDateTime occurredAt, String notes, UUID actorId) {
+        if (!executionStatus.canTransitionTo(outcome)) {
+            throw new IllegalStateException(
+                    "stop " + sequence + " cannot move from " + executionStatus + " to " + outcome);
+        }
+        switch (outcome) {
+            case ARRIVED -> this.actualArrivalAt = occurredAt;
+            case IN_SERVICE -> this.serviceStartedAt = occurredAt;
+            case COMPLETED -> this.actualDepartureAt = occurredAt;
+            // SKIPPED and FAILED write no timestamp at all: a stop that was never attempted has
+            // no arrival, and one that was attempted and refused has whatever arrival it already
+            // recorded. Migration V27's ck_trip_stop_skipped_has_no_times is the backstop.
+            case SKIPPED, FAILED -> { }
+            case PENDING -> throw new IllegalStateException("a stop cannot be moved back to PENDING");
+        }
+        this.executionStatus = outcome;
+        if (notes != null && !notes.isBlank()) {
+            this.executionNotes = notes;
+        }
+        this.updatedBy = actorId;
     }
 
     void applySequence(int sequence, UUID actorId) {

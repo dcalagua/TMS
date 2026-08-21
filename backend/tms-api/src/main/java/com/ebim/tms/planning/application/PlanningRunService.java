@@ -4,13 +4,11 @@ import com.ebim.tms.planning.domain.AssignmentStatus;
 import com.ebim.tms.planning.domain.PlanningRun;
 import com.ebim.tms.planning.domain.PlanningRunStatus;
 import com.ebim.tms.planning.domain.ShipmentEventType;
-import com.ebim.tms.planning.domain.ShipmentOutboxEvent;
 import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.planning.domain.TripOrderAssignment;
 import com.ebim.tms.planning.domain.TripStatus;
 import com.ebim.tms.planning.infrastructure.PlanningRunRepository;
 import com.ebim.tms.planning.infrastructure.PlanningRunSpecifications;
-import com.ebim.tms.planning.infrastructure.ShipmentOutboxEventRepository;
 import com.ebim.tms.planning.infrastructure.TripOrderAssignmentRepository;
 import com.ebim.tms.planning.infrastructure.TripRepository;
 import com.ebim.tms.shared.api.ConflictException;
@@ -28,6 +26,7 @@ import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.PlannableOrderQuery;
+import com.ebim.tms.shared.reference.TripCostEstimationPort;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
@@ -68,33 +67,36 @@ public class PlanningRunService {
     private final PlanningRunRepository planningRunRepository;
     private final TripRepository tripRepository;
     private final TripOrderAssignmentRepository assignmentRepository;
-    private final ShipmentOutboxEventRepository outboxRepository;
+    private final ShipmentEventPublisher events;
     private final TripAssignmentService assignments;
     private final OriginLookupPort originLookupPort;
     private final DestinationLookupPort destinationLookupPort;
     private final OrderPlanningPort orderPlanningPort;
     private final VehicleLookupPort vehicleLookupPort;
     private final PlanningCapacityService capacityService;
+    private final TripCostEstimationPort tripCostEstimationPort;
     private final TripViewAssembler assembler;
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
 
     public PlanningRunService(PlanningRunRepository planningRunRepository, TripRepository tripRepository,
-            TripOrderAssignmentRepository assignmentRepository, ShipmentOutboxEventRepository outboxRepository,
+            TripOrderAssignmentRepository assignmentRepository, ShipmentEventPublisher events,
             TripAssignmentService assignments, OriginLookupPort originLookupPort,
             DestinationLookupPort destinationLookupPort, OrderPlanningPort orderPlanningPort,
-            VehicleLookupPort vehicleLookupPort, PlanningCapacityService capacityService, TripViewAssembler assembler,
+            VehicleLookupPort vehicleLookupPort, PlanningCapacityService capacityService,
+            TripCostEstimationPort tripCostEstimationPort, TripViewAssembler assembler,
             AuditActorProvider auditActorProvider, AuditRecorder auditRecorder) {
         this.planningRunRepository = planningRunRepository;
         this.tripRepository = tripRepository;
         this.assignmentRepository = assignmentRepository;
-        this.outboxRepository = outboxRepository;
+        this.events = events;
         this.assignments = assignments;
         this.originLookupPort = originLookupPort;
         this.destinationLookupPort = destinationLookupPort;
         this.orderPlanningPort = orderPlanningPort;
         this.vehicleLookupPort = vehicleLookupPort;
         this.capacityService = capacityService;
+        this.tripCostEstimationPort = tripCostEstimationPort;
         this.assembler = assembler;
         this.auditActorProvider = auditActorProvider;
         this.auditRecorder = auditRecorder;
@@ -288,12 +290,18 @@ public class PlanningRunService {
         // outbox is that the event and the state change it describes share one atomic unit, so a
         // rollback anywhere else in this loop (a sibling trip failing confirmTrip) takes this row
         // down with it too. See tms.shipment_outbox_event's migration V20 comment and
-        // docs/integrations/OUTBOUND_SHIPMENT_V1.md, "Change feed".
-        outboxRepository.saveAndFlush(new ShipmentOutboxEvent(
-                scope.companyId(), trip.id(), trip.shipmentNumber(), ShipmentEventType.SHIPMENT_CONFIRMED,
-                OffsetDateTime.now()));
-        auditRecorder.record(scope, AuditAggregateType.SHIPMENT, trip.id(), AuditAction.SHIPMENT_CONFIRMED,
-                Map.of("shipmentNumber", trip.shipmentNumber()));
+        // docs/integrations/OUTBOUND_SHIPMENT_V1.md, "Change feed". ShipmentEventPublisher is the
+        // one place that pairs the outbox row with its audit event, shared with the execution
+        // transitions so the two cannot drift.
+        events.publish(scope, trip, ShipmentEventType.SHIPMENT_CONFIRMED, OffsetDateTime.now(),
+                Map.of("planNumber", run.planNumber(), "tripNumber", trip.tripNumber()));
+
+        // Priced here because this is the moment the plan becomes binding, so it is the moment the
+        // tariff in force should be recorded against it - a cost estimated tomorrow would be
+        // estimated against whatever the rate cards say tomorrow. Best effort by contract
+        // (TripCostEstimationPort): a company that has entered no tariffs, or a shipment no card
+        // covers, still confirms. A real failure rolls this transaction back with everything else.
+        tripCostEstimationPort.estimateOnConfirmation(scope, trip.id(), actorId);
     }
 
     /**

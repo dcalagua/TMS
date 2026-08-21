@@ -7,8 +7,10 @@ import com.ebim.tms.integration.application.ShipmentPlanHeaderV1;
 import com.ebim.tms.integration.application.ShipmentPlanV1;
 import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
+import com.ebim.tms.shared.config.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.OffsetDateTime;
 import java.util.Set;
@@ -37,6 +39,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Integration v1 - Shipments",
         description = "Machine-to-machine read access to confirmed/cancelled shipments. "
                 + "Authenticated with an integration credential, never a user token.")
+@SecurityRequirement(name = OpenApiConfig.INTEGRATION_SCHEME)
 public class IntegrationShipmentController {
 
     private final IntegrationShipmentService service;

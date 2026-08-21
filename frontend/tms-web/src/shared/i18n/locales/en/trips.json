@@ -1,4 +1,278 @@
 {
-  "description": "Trips produced by planning.",
-  "title": "Trips"
+  "columns": {
+    "capacity": "Capacity",
+    "carrier": "Carrier",
+    "date": "Date",
+    "driver": "Driver",
+    "orders": "Orders",
+    "origin": "Origin",
+    "plate": "Plate",
+    "shipment": "Trip",
+    "status": "Status",
+    "stops": "Stops"
+  },
+  "description": "Confirmed trips and how they run: loading, departure and closing.",
+  "empty": {
+    "message": "Trips appear here once a plan is confirmed. Open Planning to build one.",
+    "title": "No trips"
+  },
+  "filters": {
+    "allCarriers": "All carriers",
+    "allDrivers": "All drivers",
+    "allOrigins": "All origins",
+    "allStatuses": "All statuses",
+    "carrier": "Carrier",
+    "dateFrom": "Date from",
+    "dateTo": "Date to",
+    "driver": "Driver",
+    "origin": "Origin",
+    "shipmentNumber": "Shipment #",
+    "status": "Status"
+  },
+  "open": "Open",
+  "tender": {
+    "acceptedAt": "Accepted {{at}}",
+    "actions": {
+      "accept": "Record acceptance",
+      "offer": "Offer to the carrier",
+      "offerAgain": "Offer again",
+      "reject": "Record refusal",
+      "send": "Send offer",
+      "withdraw": "Withdraw offer"
+    },
+    "attempt": "Attempt {{number}}",
+    "confirm": {
+      "acceptText": "It will be recorded that {{carrier}} accepted the shipment. This is the final answer for this attempt.",
+      "acceptTitle": "Record the acceptance?",
+      "reasonRequired": "A reason is required.",
+      "rejectText": "Give the reason the carrier gave: it is what the planner needs in order to decide what to do next.",
+      "rejectTitle": "Record the refusal?",
+      "sendText": "{{carrier}} will be able to see it and answer. Its terms cannot be changed afterwards.",
+      "sendTitle": "Send the offer?",
+      "withdrawText": "Say why it is being withdrawn. The carrier will no longer be able to answer it.",
+      "withdrawTitle": "Withdraw the offer?"
+    },
+    "expiresAt": "Expires {{at}}",
+    "fields": {
+      "reason": "Reason"
+    },
+    "form": {
+      "currency": "Currency",
+      "currencyHelp": "Three letters, ISO 4217 (PEN, USD, EUR).",
+      "editTitle": "Edit the offer",
+      "expiresAt": "Answer before",
+      "expiresAtHelp": "Optional. After this moment the offer can no longer be accepted.",
+      "intro": "The offer goes to the carrier of the planned vehicle and cannot be changed here. Everything else is optional.",
+      "notes": "Instructions",
+      "notesHelp": "What the carrier needs to know: loading time, gate, equipment.",
+      "offeredAmount": "Offered amount",
+      "offeredAmountHelp": "Leave it empty when the shipment is billed under an agreed rate.",
+      "title": "Offer the shipment"
+    },
+    "none": "This shipment has not been offered to its carrier yet.",
+    "notOfferable": "A shipment can only be offered while it is confirmed and has not left.",
+    "notify": {
+      "accepted": "Acceptance recorded",
+      "rejected": "Refusal recorded",
+      "sent": "Offer sent",
+      "withdrawn": "Offer withdrawn"
+    },
+    "rejectedAt": "Rejected {{at}}",
+    "sentAt": "Sent {{at}}",
+    "title": "Carrier tender"
+  },
+  "title": "Trips",
+  "workspace": {
+    "actions": {
+      "assignDriver": "Assign driver",
+      "cancel": "Cancel trip",
+      "changeDriver": "Change driver",
+      "complete": "Close trip",
+      "dispatch": "Record departure",
+      "ready": "Mark ready"
+    },
+    "back": "Back to Trips",
+    "deliveries": {
+      "attach": "Attach",
+      "correct": "Correct",
+      "correctTitle": "Correct the delivery",
+      "deliveredAt": "Delivered at",
+      "deliveredAtHelp": "When the goods changed hands, not when this is typed. The server refuses a future time, or one before the vehicle arrived.",
+      "deliveredAtRequired": "Say when the goods changed hands.",
+      "notRecorded": "Not recorded",
+      "notes": "Notes",
+      "notesHelp": "Required for a partial, rejected or failed delivery: it is what gets read when the customer calls.",
+      "notesRequired": "Explain what happened to the goods.",
+      "receivedBy": "Received by {{name}}",
+      "receiverDocument": "Identity document",
+      "receiverDocumentHelp": "Optional. Kept only so a disputed delivery can be settled.",
+      "receiverName": "Received by",
+      "record": "Record delivery",
+      "recordTitle": "Record the delivery",
+      "result": "Result",
+      "submit": "Save delivery",
+      "subtitle": "Order {{order}} at stop {{stop}}."
+    },
+    "dialogs": {
+      "cancelReasonLabel": "Cancellation reason",
+      "cancelReasonPlaceholder": "Why this trip is not running",
+      "cancelReasonRequired": "Enter the reason: it is the only record of why a confirmed shipment was withdrawn.",
+      "cancelText": "{{number}} is cancelled and its orders return to the planning pool.",
+      "cancelTitle": "Cancel the trip?",
+      "completeText": "{{number}} becomes completed. This is the final state and cannot be undone.",
+      "completeTitle": "Close the trip?",
+      "dispatchText": "{{number}} moves to In transit and the actual departure time is stored.",
+      "dispatchTitle": "Record the departure?",
+      "readyText": "{{number}} becomes ready for dispatch. The vehicle is re-checked right now.",
+      "readyTitle": "Mark the trip as ready?",
+      "resolveNotesLabel": "What was done",
+      "resolveNotesPlaceholder": "Customer called, redelivery agreed for tomorrow",
+      "resolveNotesRequired": "Say what was done: \"resolved\" on its own records a click, not an outcome.",
+      "resolveText": "Closing the problem “{{type}}”. It stays on the trip as history.",
+      "resolveTitle": "Close the problem?"
+    },
+    "evidence": {
+      "capturedAt": "Captured at",
+      "capturedAtHelp": "Optional, when the photo or signature was taken at another time.",
+      "file": "File",
+      "fileHelp": "An image or a PDF. The file is only reachable from the authenticated TMS.",
+      "fileRequired": "Choose a file.",
+      "submit": "Attach",
+      "subtitle": "Proof of delivery for order {{order}}.",
+      "title": "Attach evidence",
+      "type": "Type"
+    },
+    "fields": {
+      "carrier": "Carrier",
+      "driver": "Driver",
+      "driverLicense": "Licence",
+      "driverPhone": "Driver phone",
+      "none": "Unassigned",
+      "origin": "Origin",
+      "plate": "Plate",
+      "route": "Route",
+      "vehicle": "Vehicle",
+      "vehicleType": "Type"
+    },
+    "lifecycle": {
+      "cancelled": "Cancelled",
+      "completed": "Closed",
+      "confirmed": "Confirmed",
+      "delayEarly": "{{minutes}} min early",
+      "delayLate": "{{minutes}} min late",
+      "departed": "Actual departure",
+      "onTime": "On time",
+      "pending": "Pending",
+      "planned": "Planned departure",
+      "ready": "Ready",
+      "reason": "Reason"
+    },
+    "loading": "Loading the trip…",
+    "noOrders": "This trip has no orders.",
+    "noStops": "This trip has no stops.",
+    "ordersCount": "{{count}} order",
+    "ordersCount_other": "{{count}} orders",
+    "plan": "Plan",
+    "problems": {
+      "empty": "Nothing has gone wrong on this trip.",
+      "notes": "What happened",
+      "notesHelp": "Required when the reason is Other, which says nothing on its own.",
+      "notesRequired": "Describe what happened.",
+      "openCount": "{{count}} open",
+      "openCount_other": "{{count}} open",
+      "report": "Report a problem",
+      "resolution": "Resolved",
+      "resolve": "Close problem",
+      "stop": "Stop",
+      "stopHelp": "Leave on the whole trip when the problem is not about one delivery.",
+      "stopRequired": "This reason is about a delivery: choose the stop it happened at.",
+      "submit": {
+        "fail": "Record as not served",
+        "report": "Report problem",
+        "skip": "Skip the stop"
+      },
+      "subtitles": {
+        "fail": "The stop was attempted and could not be served. The reason is kept with the trip.",
+        "report": "A delay or a breakdown that has not changed any delivery yet.",
+        "skip": "The stop was never attempted. The reason is kept with the trip."
+      },
+      "titles": {
+        "fail": "Stop not served",
+        "report": "Report a problem",
+        "skip": "Skip the stop"
+      },
+      "type": "Reason",
+      "wholeTrip": "Whole trip"
+    },
+    "sections": {
+      "assignment": "Vehicle and carrier",
+      "lifecycle": "Execution",
+      "orders": "Orders",
+      "problems": "Problems",
+      "stops": "Stops",
+      "timeline": "Timeline",
+      "tracking": "Location"
+    },
+    "stops": {
+      "actions": {
+        "arrive": "Arrived",
+        "complete": "Served",
+        "fail": "Not served",
+        "skip": "Skip",
+        "startService": "Start service"
+      },
+      "arrived": "Arrived",
+      "departed": "Left",
+      "dwell": "{{minutes}} min at the stop",
+      "openProblems": "{{count}} problem",
+      "openProblems_other": "{{count}} problems",
+      "serviceStarted": "Service"
+    },
+    "stopsCount": "{{count}} stop",
+    "stopsCount_other": "{{count}} stops",
+    "time": {
+      "hint": "Leave empty to record the current time.",
+      "label": "Actual time"
+    },
+    "timeline": {
+      "atStop": "Stop {{sequence}} · {{name}}",
+      "empty": "Nothing has been recorded on this trip yet.",
+      "failed": "The timeline could not be loaded. Everything that has already happened on the trip is still recorded.",
+      "loading": "Loading the timeline…",
+      "recordedLater": "recorded {{minutes}} min later",
+      "unknownActor": "Unknown"
+    },
+    "toasts": {
+      "cancelled": "Trip cancelled",
+      "completed": "Trip closed",
+      "deliveryRecorded": "Delivery recorded",
+      "dispatched": "Departure recorded",
+      "driverSaved": "Driver updated.",
+      "error": "The trip could not be updated",
+      "evidenceAttached": "Evidence attached",
+      "problemReported": "Problem reported",
+      "problemResolved": "Problem closed",
+      "ready": "Trip ready for dispatch",
+      "stopArrived": "Arrival recorded",
+      "stopCompleted": "Stop served",
+      "stopFailed": "Stop recorded as not served",
+      "stopInService": "Service started",
+      "stopSkipped": "Stop skipped"
+    },
+    "tracking": {
+      "age": "{{minutes}} min ago",
+      "ageJustNow": "less than a minute ago",
+      "failed": "The location could not be checked. The rest of the trip is up to date.",
+      "loading": "Checking the location...",
+      "noProvider": "This installation has no tracking provider configured.",
+      "noneReported": "The provider has reported no position for this trip.",
+      "notOnTheRoad": "The trip has not left yet, so there are no positions to show.",
+      "openInMaps": "Open in maps",
+      "reportedAt": "Reported at {{at}}",
+      "source": "via {{provider}}",
+      "speed": "{{speed}} km/h",
+      "trackPoints_one": "{{count}} point in the recent track",
+      "trackPoints_other": "{{count}} points in the recent track"
+    }
+  }
 }

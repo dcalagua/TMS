@@ -1,0 +1,77 @@
+{
+  "arrivedAt": "Arrived {{time}}",
+  "board": {
+    "emptyMessage": "No trips for this day with the filters applied.",
+    "emptyTitle": "No trips",
+    "title": "The day's trips"
+  },
+  "columns": {
+    "capacity": "Utilisation",
+    "carrier": "Carrier",
+    "departure": "Departure",
+    "exceptions": "Exceptions",
+    "nextStop": "Next stop",
+    "progress": "Stops",
+    "shipment": "Shipment",
+    "status": "Status",
+    "vehicle": "Vehicle"
+  },
+  "delayMinutes": "+{{minutes}} min",
+  "description": "The transport day: what is leaving, what is running late and what nobody has closed out.",
+  "dueBy": "By {{time}}",
+  "filters": {
+    "allCarriers": "All carriers",
+    "allOrigins": "All origins",
+    "allStatuses": "All statuses",
+    "carrier": "Carrier",
+    "date": "Day",
+    "origin": "Origin",
+    "status": "Status"
+  },
+  "generatedAt": "Data as of {{time}}",
+  "kpi": {
+    "completed": "Completed",
+    "completedHint": "Trips closed out today",
+    "delayed": "Running late",
+    "delayedHint": "{{late}} left late, {{overdue}} have not left",
+    "draft": "Unconfirmed",
+    "draftHint": "Planned for today and still a draft",
+    "exceptions": "Open exceptions",
+    "exceptionsHint": "Today's problems nobody has closed",
+    "inTransit": "On the road",
+    "inTransitHint": "Vehicles out right now",
+    "lateStops": "Stops past window",
+    "lateStopsHint": "Of {{outstanding}} outstanding out there",
+    "scheduled": "Still to leave",
+    "scheduledHint": "Confirmed or loaded, still in the yard",
+    "unplanned": "Unplanned orders",
+    "unplannedDenied": "Needs the order read permission",
+    "unplannedHint": "With this service date"
+  },
+  "noWindow": "No window",
+  "open": "Open",
+  "panels": {
+    "exceptions": {
+      "empty": "No open exceptions.",
+      "more": "Showing {{shown}} of {{total}}.",
+      "title": "Open exceptions"
+    },
+    "stops": {
+      "empty": "No outstanding stops on the road.",
+      "more": "Showing {{shown}} of {{total}}.",
+      "title": "Outstanding stops"
+    },
+    "workload": {
+      "empty": "No trip with a known utilisation.",
+      "hint": "By the tightest capacity dimension",
+      "title": "Fullest vehicles"
+    }
+  },
+  "pastWindowMinutes": "{{minutes}} min past window",
+  "refresh": "Refresh",
+  "scopeNote": "The counters and panels cover the whole day. Origin, carrier and status narrow only the table below, so a filter can never hide a problem from the summary.",
+  "stopProgress": "{{done}} of {{total}}",
+  "stopsLate": "{{value}} past window",
+  "title": "Control tower",
+  "wholeDay": "The whole day"
+}

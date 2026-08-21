@@ -1,0 +1,90 @@
+{
+  "orders": [
+    {
+      "externalSource": "DEMO-ERP",
+      "externalReference": "SO-2026-000101",
+      "originCode": "CD-LIMA",
+      "destinationCode": "ST-4711",
+      "customerName": "Retail Demo S.A.C.",
+      "customerReference": "PO-88311",
+      "serviceDate": "2026-08-25",
+      "priority": "NORMAL",
+      "requestedWindowStart": "08:00",
+      "requestedWindowEnd": "12:00",
+      "lines": [
+        { "materialCode": "MAT-1001", "materialDescription": "Bebida gaseosa 500 ml - caja x24",
+          "quantity": 60, "uom": "CJ", "unitWeightKg": 14.5, "unitVolumeM3": 0.028, "palletQuantity": 2 },
+        { "materialCode": "MAT-1002", "materialDescription": "Agua mineral 625 ml - caja x15",
+          "quantity": 80, "uom": "CJ", "unitWeightKg": 9.8, "unitVolumeM3": 0.022, "palletQuantity": 2 }
+      ],
+      "markReadyForPlanning": true
+    },
+    {
+      "externalSource": "DEMO-ERP",
+      "externalReference": "SO-2026-000102",
+      "originCode": "CD-LIMA",
+      "destinationCode": "ST-4712",
+      "customerName": "Retail Demo S.A.C.",
+      "customerReference": "PO-88312",
+      "serviceDate": "2026-08-25",
+      "priority": "HIGH",
+      "requestedWindowStart": "09:00",
+      "requestedWindowEnd": "13:00",
+      "lines": [
+        { "materialCode": "MAT-2001", "materialDescription": "Detergente 900 g - caja x12",
+          "quantity": 120, "uom": "CJ", "unitWeightKg": 11.2, "unitVolumeM3": 0.025, "palletQuantity": 3 },
+        { "materialCode": "MAT-2002", "materialDescription": "Suavizante 1 L - caja x12",
+          "quantity": 90, "uom": "CJ", "unitWeightKg": 13.0, "unitVolumeM3": 0.031, "palletQuantity": 3 }
+      ],
+      "markReadyForPlanning": true
+    },
+    {
+      "externalSource": "DEMO-ERP",
+      "externalReference": "SO-2026-000103",
+      "originCode": "CD-LIMA",
+      "destinationCode": "ST-4713",
+      "customerName": "Retail Demo S.A.C.",
+      "customerReference": "PO-88313",
+      "serviceDate": "2026-08-25",
+      "priority": "NORMAL",
+      "lines": [
+        { "materialCode": "MAT-3001", "materialDescription": "Galletas surtidas - caja x40",
+          "quantity": 70, "uom": "CJ", "unitWeightKg": 8.4, "unitVolumeM3": 0.035, "palletQuantity": 2 },
+        { "materialCode": "MAT-3002", "materialDescription": "Snacks salados - caja x30",
+          "quantity": 50, "uom": "CJ", "unitWeightKg": 5.6, "unitVolumeM3": 0.042, "palletQuantity": 1 }
+      ],
+      "markReadyForPlanning": true
+    },
+    {
+      "externalSource": "DEMO-ERP",
+      "externalReference": "SO-2026-000104",
+      "originCode": "CD-LIMA",
+      "destinationCode": "ST-4714",
+      "customerName": "Retail Demo S.A.C.",
+      "customerReference": "PO-88314",
+      "serviceDate": "2026-08-25",
+      "priority": "NORMAL",
+      "declaredWeightKg": 3200.0,
+      "declaredVolumeM3": 11.0,
+      "declaredPallets": 5,
+      "markReadyForPlanning": true
+    },
+    {
+      "externalSource": "DEMO-ERP",
+      "externalReference": "SO-2026-000105",
+      "originCode": "CD-LIMA",
+      "destinationCode": "ST-4715",
+      "customerName": "Retail Demo S.A.C.",
+      "customerReference": "PO-88315",
+      "serviceDate": "2026-08-25",
+      "priority": "URGENT",
+      "requestedWindowStart": "07:00",
+      "requestedWindowEnd": "10:00",
+      "lines": [
+        { "materialCode": "MAT-4001", "materialDescription": "Leche evaporada - caja x48",
+          "quantity": 45, "uom": "CJ", "unitWeightKg": 20.0, "unitVolumeM3": 0.033, "palletQuantity": 2 }
+      ],
+      "markReadyForPlanning": true
+    }
+  ]
+}

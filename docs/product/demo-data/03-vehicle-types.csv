@@ -1,0 +1,5 @@
+code,name,maxWeightKg,maxVolumeM3,maxPallets,lengthM,widthM,heightM,bodyType,temperatureControlled,minTemperatureCelsius,maxTemperatureCelsius,axles
+VT-FUR,Furgon 3.5 t,3500,18,6,4.2,2.0,2.1,DRY_VAN,FALSE,,,2
+VT-CAM,Camion 8 t,8000,42,14,6.5,2.4,2.6,DRY_VAN,FALSE,,,2
+VT-REF,Furgon refrigerado 3 t,3000,16,6,4.0,2.0,2.0,REFRIGERATED,TRUE,2,8,2
+VT-TRA,Tracto y semirremolque 30 t,30000,80,26,13.6,2.5,2.7,CURTAIN_SIDER,FALSE,,,3

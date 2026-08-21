@@ -10,6 +10,7 @@ import {
 
 import enAuth from './locales/en/auth.json'
 import enCommon from './locales/en/common.json'
+import enControlTower from './locales/en/controlTower.json'
 import enDashboard from './locales/en/dashboard.json'
 import enDialogs from './locales/en/dialogs.json'
 import enErrors from './locales/en/errors.json'
@@ -17,15 +18,20 @@ import enFleet from './locales/en/fleet.json'
 import enMaps from './locales/en/maps.json'
 import enMasters from './locales/en/masters.json'
 import enNavigation from './locales/en/navigation.json'
+import enNotifications from './locales/en/notifications.json'
 import enOrders from './locales/en/orders.json'
 import enPlanning from './locales/en/planning.json'
+import enRates from './locales/en/rates.json'
+import enReporting from './locales/en/reporting.json'
 import enSecurity from './locales/en/security.json'
+import enSettings from './locales/en/settings.json'
 import enStatuses from './locales/en/statuses.json'
 import enTrips from './locales/en/trips.json'
 import enValidations from './locales/en/validations.json'
 
 import esAuth from './locales/es/auth.json'
 import esCommon from './locales/es/common.json'
+import esControlTower from './locales/es/controlTower.json'
 import esDashboard from './locales/es/dashboard.json'
 import esDialogs from './locales/es/dialogs.json'
 import esErrors from './locales/es/errors.json'
@@ -33,9 +39,13 @@ import esFleet from './locales/es/fleet.json'
 import esMaps from './locales/es/maps.json'
 import esMasters from './locales/es/masters.json'
 import esNavigation from './locales/es/navigation.json'
+import esNotifications from './locales/es/notifications.json'
 import esOrders from './locales/es/orders.json'
 import esPlanning from './locales/es/planning.json'
+import esRates from './locales/es/rates.json'
+import esReporting from './locales/es/reporting.json'
 import esSecurity from './locales/es/security.json'
+import esSettings from './locales/es/settings.json'
 import esStatuses from './locales/es/statuses.json'
 import esTrips from './locales/es/trips.json'
 import esValidations from './locales/es/validations.json'
@@ -49,6 +59,7 @@ export const resources = {
   es: {
     auth: esAuth,
     common: esCommon,
+    controlTower: esControlTower,
     dashboard: esDashboard,
     dialogs: esDialogs,
     errors: esErrors,
@@ -56,9 +67,13 @@ export const resources = {
     maps: esMaps,
     masters: esMasters,
     navigation: esNavigation,
+    notifications: esNotifications,
     orders: esOrders,
     planning: esPlanning,
+    rates: esRates,
+    reporting: esReporting,
     security: esSecurity,
+    settings: esSettings,
     statuses: esStatuses,
     trips: esTrips,
     validations: esValidations,
@@ -66,6 +81,7 @@ export const resources = {
   en: {
     auth: enAuth,
     common: enCommon,
+    controlTower: enControlTower,
     dashboard: enDashboard,
     dialogs: enDialogs,
     errors: enErrors,
@@ -73,9 +89,13 @@ export const resources = {
     maps: enMaps,
     masters: enMasters,
     navigation: enNavigation,
+    notifications: enNotifications,
     orders: enOrders,
     planning: enPlanning,
+    rates: enRates,
+    reporting: enReporting,
     security: enSecurity,
+    settings: enSettings,
     statuses: enStatuses,
     trips: enTrips,
     validations: enValidations,

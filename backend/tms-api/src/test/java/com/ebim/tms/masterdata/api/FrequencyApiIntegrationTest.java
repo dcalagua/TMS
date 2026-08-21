@@ -1,5 +1,6 @@
 package com.ebim.tms.masterdata.api;
 
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -356,6 +357,54 @@ class FrequencyApiIntegrationTest {
                 mockMvc.perform(asAdmin(get(exceptionsPath), COMPANY_A))
                         .andExpect(status().isOk())
                         .andExpect(jsonPath("$.length()").value(0));
+            }
+
+            /** The worked example from the V24 migration header, end to end. */
+            @Test
+            @DisplayName("an open date may carry its own cutoff; a closed one may not")
+            void cutoffOverrideIsAcceptedOnOpenDatesOnly() throws Exception {
+                String weeklyRules = """
+                        [{"dayOfWeek":4,"enabled":true,"cutoffTime":"15:00:00","leadTimeDays":1}]
+                        """;
+                String response = mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(frequencyRequest("christmas-week", weeklyRules)))
+                        .andExpect(status().isCreated())
+                        .andReturn().getResponse().getContentAsString();
+                String exceptionsPath = BASE + "/" + idOf(response) + "/exceptions";
+
+                // 24/12/2026 is a Thursday: open, but closing at 11:00 rather than the usual 15:00.
+                mockMvc.perform(asAdmin(post(exceptionsPath), COMPANY_A)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {"exceptionDate":"2026-12-24","serviceOverride":true,
+                                         "cutoffTimeOverride":"11:00:00","note":"Closes early"}
+                                        """))
+                        .andExpect(status().isCreated())
+                        // startsWith, not an exact string: whether Jackson renders a whole-minute
+                        // LocalTime as "11:00" or "11:00:00" is a serializer detail, and this test
+                        // is about the value surviving the round trip, not about that detail.
+                        .andExpect(jsonPath("$.cutoffTimeOverride").value(startsWith("11:00")));
+
+                // A blackout has no cutoff: nothing is dispatched, so there is no last moment to
+                // order. Rejected as a 400 by the service, not as a 500 from the database CHECK.
+                mockMvc.perform(asAdmin(post(exceptionsPath), COMPANY_A)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {"exceptionDate":"2026-12-25","serviceOverride":false,
+                                         "cutoffTimeOverride":"11:00:00"}
+                                        """))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.code").value("malformed-request"));
+
+                // An exception with no override at all stays the ordinary case.
+                mockMvc.perform(asAdmin(post(exceptionsPath), COMPANY_A)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {"exceptionDate":"2026-12-25","serviceOverride":false,"note":"Christmas"}
+                                        """))
+                        .andExpect(status().isCreated())
+                        .andExpect(jsonPath("$.cutoffTimeOverride").doesNotExist());
             }
 
             @Test

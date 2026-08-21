@@ -56,6 +56,7 @@ const ORDER_DETAIL: OrderDetailView = {
   requestedWindowStart: null,
   requestedWindowEnd: null,
   status: 'NOT_READY',
+  fulfillmentStatus: 'PENDING',
   cancelReason: null,
   totalWeightKg: 20,
   totalVolumeM3: 1,

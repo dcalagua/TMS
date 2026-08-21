@@ -103,6 +103,7 @@ const REASON_KEY = {
   EXCEEDS_LARGEST_VEHICLE: 'autoPlan.reasons.exceedsLargestVehicle',
   NO_VEHICLE_AVAILABLE: 'autoPlan.reasons.noVehicleAvailable',
   NO_FLEET: 'autoPlan.reasons.noFleet',
+  TAKEN_WHILE_PLANNING: 'autoPlan.reasons.takenWhilePlanning',
   NOT_SERVICEABLE_ON_DATE: 'autoPlan.reasons.notServiceableOnDate',
 } as const satisfies Record<UnplannedOrderView['reason'], string>
 

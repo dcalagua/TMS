@@ -9,9 +9,12 @@ import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.reference.OrderBacklogTotals;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.PlannableOrderQuery;
+import java.time.LocalDate;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -116,6 +119,27 @@ public class OrderPlanningService implements OrderPlanningPort {
         }
         order.markReadyForPlanning(auditActorProvider.requireAppUserId());
         save(order);
+    }
+
+    /**
+     * The planned-versus-unplanned figure, counted in one grouped query.
+     *
+     * <p>Read back through a map keyed on the enum rather than by position, so a state the range
+     * happens to contain none of defaults to zero instead of shifting every count one place along.
+     * A fifth {@code OrderStatus} would still need a line here, which is why
+     * {@code OrderBacklogTotals} names all four rather than carrying a total and a residue.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public OrderBacklogTotals backlogTotals(UUID companyId, LocalDate from, LocalDate to) {
+        Map<OrderStatus, Long> byStatus = new EnumMap<>(OrderStatus.class);
+        transportOrderRepository.countByStatusForServiceDates(companyId, from, to)
+                .forEach(count -> byStatus.put(count.getStatus(), count.getOrderCount()));
+        return new OrderBacklogTotals(
+                byStatus.getOrDefault(OrderStatus.PLANNED, 0L),
+                byStatus.getOrDefault(OrderStatus.READY_FOR_PLANNING, 0L),
+                byStatus.getOrDefault(OrderStatus.NOT_READY, 0L),
+                byStatus.getOrDefault(OrderStatus.CANCELLED, 0L));
     }
 
     private TransportOrder require(UUID orderId, UUID companyId) {

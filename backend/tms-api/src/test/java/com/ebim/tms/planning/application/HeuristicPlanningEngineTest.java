@@ -56,8 +56,9 @@ class HeuristicPlanningEngineTest {
 
     private static VehicleCapacityReference vehicle(String suffix, double maxWeightKg, double maxVolumeM3,
             int maxPallets) {
-        return new VehicleCapacityReference(id(suffix), "VEH-" + suffix, "PLT-" + suffix, null, null, "TYPE",
-                BigDecimal.valueOf(maxWeightKg), BigDecimal.valueOf(maxVolumeM3), maxPallets, true, "AVAILABLE");
+        return new VehicleCapacityReference(id(suffix), "VEH-" + suffix, "PLT-" + suffix, null, null,
+                id("type-" + suffix), "TYPE", BigDecimal.valueOf(maxWeightKg), BigDecimal.valueOf(maxVolumeM3),
+                maxPallets, true, "AVAILABLE");
     }
 
     private static RouteTemplate route(String suffix, UUID... destinations) {

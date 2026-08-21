@@ -31,8 +31,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class IntegrationShipmentService {
 
-    /** Mirrors {@code ck_shipment_outbox_event_type} minus the value nothing ever publishes as a filter. */
-    private static final Set<String> PUBLISHABLE_STATUSES = Set.of("CONFIRMED", "CANCELLED");
+    /**
+     * The trip states a partner may ask for: every one except {@code DRAFT}, which is a plan being
+     * built and is not a shipment yet. Mirrors {@code ShipmentPublicationAdapter.PUBLISHABLE}.
+     *
+     * <p>Widened by migration V25 with the execution states. A partner that only ever asks for
+     * {@code CONFIRMED} sees no change - the default below is unchanged, and a shipment that moves
+     * to {@code IN_TRANSIT} simply stops matching that filter, which is what "give me what is
+     * still only planned" should mean.
+     */
+    private static final Set<String> PUBLISHABLE_STATUSES =
+            Set.of("CONFIRMED", "READY_FOR_DISPATCH", "IN_TRANSIT", "COMPLETED", "CANCELLED");
 
     private final ShipmentPublicationPort port;
 
@@ -93,7 +102,8 @@ public class IntegrationShipmentService {
                 shipment.id(), principal.companyScope().companyCode(), principal.companyScope().companyName(),
                 shipment.shipmentNumber(), shipment.planNumber(), shipment.planningDate(), shipment.status(),
                 shipment.originCode(), shipment.originName(), shipment.originLatitude(), shipment.originLongitude(),
-                shipment.plannedDepartureAt(), shipment.carrierCode(), shipment.carrierName(), shipment.vehicleCode(),
+                shipment.plannedDepartureAt(), shipment.readyAt(), shipment.actualDepartureAt(),
+                shipment.actualCompletionAt(), shipment.carrierCode(), shipment.carrierName(), shipment.vehicleCode(),
                 shipment.vehicleLicensePlate(), shipment.vehicleTypeCode(), shipment.capacitySource(),
                 shipment.maxWeightKg(), shipment.maxVolumeM3(), shipment.maxPallets(), shipment.usedWeightKg(),
                 shipment.usedVolumeM3(), shipment.usedPallets(), shipment.weightUtilizationPct(),
@@ -108,6 +118,8 @@ public class IntegrationShipmentService {
 
     private static ShipmentPlanOrderV1 toOrder(PublishedShipmentOrder order) {
         return new ShipmentPlanOrderV1(order.orderId(), order.orderNumber(), order.externalSource(),
-                order.externalReference(), order.destinationCode(), order.weightKg(), order.volumeM3(), order.pallets());
+                order.externalReference(), order.destinationCode(), order.weightKg(), order.volumeM3(),
+                order.pallets(), order.deliveryResult(), order.deliveredAt(), order.deliveryReceiverName(),
+                order.deliveryNotes(), order.evidenceCount());
     }
 }

@@ -53,8 +53,9 @@ public record PlanningProposal(String engine, List<ProposedTrip> trips, List<Unp
     }
 
     /**
-     * Why an order was left out. Three causes, because they need three different responses:
-     * find another truck, split the order, or nothing (there was simply no capacity left today).
+     * Why an order was left out. Each cause needs a different response from a dispatcher - find
+     * another truck, split the order, reload the board, or nothing at all - which is why they are
+     * separate values and not one "could not plan".
      */
     public enum UnplannedReason {
 
@@ -66,6 +67,16 @@ public record PlanningProposal(String engine, List<ProposedTrip> trips, List<Unp
 
         /** No vehicle was offered at all - an empty or fully booked fleet for this date. */
         NO_FLEET,
+
+        /**
+         * The order was planned by somebody else between the snapshot and the write. Emitted by
+         * {@code AutoPlanningService.apply} only - a preview cannot produce it, because nothing
+         * has been attempted yet - and it is deliberately its own reason rather than
+         * {@link #NO_VEHICLE_AVAILABLE}: the fix is to reload, not to find another truck, and
+         * telling a planner their fleet was full when in fact a colleague was faster sends them
+         * looking for capacity they already have.
+         */
+        TAKEN_WHILE_PLANNING,
 
         /**
          * The destination's service calendar does not cover the planning date. Emitted by

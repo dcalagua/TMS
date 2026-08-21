@@ -21,6 +21,8 @@ display, hint at, or reinforce it, but they never replace the primary owner.
 | Orders | UI | Primary owner | Persistence + invariants |
 | Planning / trips | UI | Primary owner | Persistence + invariants |
 | Capacity checks | Display only | Primary owner | Deterministic checks only |
+| Rates and trip costing | Display + data entry | Primary owner (selection, calculation, snapshot) | Persistence + invariants |
+| Carrier tendering | Display + data entry | Primary owner (lifecycle, expiry, one-acceptance rule) | Persistence + the two partial unique indexes |
 | Concurrency on assignment | No | Primary owner | Locking / unique constraints |
 | Pagination, filtering, sorting | Requests it | Primary owner (server-side) | Indexes |
 | Validation | UX validation | Primary owner | Hard invariants |
@@ -32,6 +34,7 @@ display, hint at, or reinforce it, but they never replace the primary owner.
 | Extensions (PostGIS, pgcrypto) | No | Declared in Flyway | Provides capability |
 | RLS policies | No | Authored in Flyway | Enforces at runtime |
 | Audit | Display / search | Primary owner | Append-only storage |
+| Operational alerts | Bell + panel; renders the sentence from a type and its arguments | Primary owner (what is raised, what makes it one fact, who may be told) | Persistence + the dedupe unique index the `ON CONFLICT` insert targets |
 | Observability | UI errors | Backend metrics/logs/traces | Platform metrics |
 | Secrets | Never | Runtime env only | Platform-managed keys |
 
@@ -71,7 +74,10 @@ display, hint at, or reinforce it, but they never replace the primary owner.
 | `planning_run` | `company_id` | |
 | `trip` | `company_id` | Own stops/snapshots |
 | `trip_order_assignment` | `company_id` (via trip) | Explicit assignment aggregate + line allocations |
+| `rate_card` | `company_id` | A commercial agreement with one carrier, valid between two dates (V30) |
+| `trip_cost` | `company_id` (via trip) | Estimate and actual side by side, plus the lines behind the estimate |
 | `audit_*` | `company_id` where applicable | Append-only |
+| `notification` | `company_id` | One operational alert (V32). Acknowledged by the company, not per user - see `docs/domain/ALERTS_NOTIFICATIONS_V1.md` section 5 |
 
 Default rule: **Company owns operational business masters and transactions** unless an
 explicit, documented reason places an entity at organization or platform level.

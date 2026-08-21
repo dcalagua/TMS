@@ -40,11 +40,13 @@ public enum Capability {
     FLEET_VIEW(
             Permission.FLEET_CARRIER_READ,
             Permission.FLEET_VEHICLE_TYPE_READ,
-            Permission.FLEET_VEHICLE_READ),
+            Permission.FLEET_VEHICLE_READ,
+            Permission.FLEET_DRIVER_READ),
     FLEET_MANAGE(
             Permission.FLEET_CARRIER_MANAGE,
             Permission.FLEET_VEHICLE_TYPE_MANAGE,
-            Permission.FLEET_VEHICLE_MANAGE),
+            Permission.FLEET_VEHICLE_MANAGE,
+            Permission.FLEET_DRIVER_MANAGE),
 
     ORDERS_VIEW(Permission.ORDERS_ORDER_READ),
     ORDERS_MANAGE(Permission.ORDERS_ORDER_MANAGE),
@@ -52,17 +54,45 @@ public enum Capability {
     PLANNING_VIEW(Permission.PLANNING_PLAN_READ),
     PLANNING_MANAGE(Permission.PLANNING_PLAN_MANAGE),
 
-    TRIPS_VIEW(Permission.PLANNING_TRIP_READ),
-    TRIPS_MANAGE(Permission.PLANNING_TRIP_MANAGE),
+    /**
+     * Tendering joins the trips group rather than getting a capability of its own (migration V31):
+     * it has no screen of its own, it is a card on the trip workspace, and a role that may answer
+     * tenders needs that screen. The finer question - may this account see the offered price -
+     * stays where it is enforced, on {@code planning.tender:read}.
+     */
+    TRIPS_VIEW(Permission.PLANNING_TRIP_READ, Permission.PLANNING_TENDER_READ),
+    TRIPS_MANAGE(
+            Permission.PLANNING_TRIP_MANAGE,
+            // Operating a trip (V25) and tendering it (V31) are separate authorities and stay
+            // separate where they are enforced. They share this capability because they share a
+            // screen: all three open the trip workspace, and a capability answers "should this menu
+            // entry be visible", never "may this caller do it".
+            Permission.PLANNING_TRIP_EXECUTE,
+            Permission.PLANNING_TENDER_MANAGE),
 
     TRANSPORT_MONITOR_VIEW(Permission.MONITORING_TRANSPORT_READ),
 
     /**
+     * Tariffs and what a shipment cost (migration V30). One capability over both resources: they
+     * share a screen group, and the finer question - may this account see the <em>agreement</em>
+     * as well as the figure - stays where it is enforced, on the two permissions.
+     */
+    RATES_VIEW(Permission.RATES_RATE_CARD_READ, Permission.RATES_TRIP_COST_READ),
+    RATES_MANAGE(Permission.RATES_RATE_CARD_MANAGE, Permission.RATES_TRIP_COST_MANAGE),
+
+    /**
      * Deliberately separate from {@code IAM_*}: issuing a machine credential is not the same
      * decision as inviting a person, and an installation may well want the two in different hands.
+     *
+     * <p>Webhook subscriptions (migration V35) join it rather than getting a capability of their
+     * own, because they share the screen: the Integration Hub answers "what is connected to us"
+     * with inbound credentials on one tab and outbound endpoints on the other. The finer question -
+     * may this account configure where our data is <em>sent</em>, as opposed to who may write into
+     * us - stays where it is enforced, on the two {@code integration.webhook:*} permissions, and
+     * the tab a caller cannot read simply does not appear.
      */
-    INTEGRATION_VIEW(Permission.INTEGRATION_CLIENT_READ),
-    INTEGRATION_MANAGE(Permission.INTEGRATION_CLIENT_MANAGE),
+    INTEGRATION_VIEW(Permission.INTEGRATION_CLIENT_READ, Permission.INTEGRATION_WEBHOOK_READ),
+    INTEGRATION_MANAGE(Permission.INTEGRATION_CLIENT_MANAGE, Permission.INTEGRATION_WEBHOOK_MANAGE),
 
     IAM_VIEW(
             Permission.IAM_ORGANIZATION_READ,

@@ -83,6 +83,14 @@ Authoritative documents live under `docs/architecture/`:
   current transaction for the non-owner `tms_app` role, so a query missing its company
   predicate stops being a cross-tenant leak. Supersedes ADR-004's "no policies" for business
   tables only.
+- `ADR-006-evidence-object-storage-port.md` - proof-of-delivery artefacts go to a private object
+  store behind `EvidenceStoragePort`, never into a column and never behind a public URL. Disabled
+  by default; a local-volume implementation ships for deployments that want it, and Supabase
+  Storage becomes one more implementation with no change to any caller.
+- `ADR-007-tracking-provider-port.md` - vehicle tracking is a normalised contract behind two ports
+  (`TrackingIntakePort` for feeds that push, `TrackingProviderPort` for those that poll), with no
+  vendor adapter in V1. Positions inform people and never move a lifecycle, so losing them costs a
+  map and no business fact.
 
 Database and security detail lives in `docs/database/DATA_MODEL.md`,
 `docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.
@@ -97,4 +105,9 @@ Read these before changing schema, security or module boundaries. If an implemen
 
 ## Deferred by decision (do not introduce early)
 
-OR-Tools/route optimization, GPS/telematics, EWM integration, ERP integration, Kafka/microservices/event sourcing, Supabase Realtime, Storage, and live map tracking. Add them only when a concrete requirement and an ADR justify them.
+OR-Tools/route optimization, EWM integration, ERP integration, Kafka/microservices/event sourcing, Supabase Realtime, Storage, and live map tracking. Add them only when a concrete requirement and an ADR justify them.
+
+GPS/telematics has left this list under ADR-007, and only as far as the ADR goes: TMS owns a
+normalised position contract, its storage and its sampling policy, and ships **no vendor adapter**.
+Writing one against a specific telematics provider still needs a concrete customer requirement. ETA
+calculation, geofencing and automatic arrival detection remain deferred.

@@ -33,11 +33,21 @@ export const TEST_COMPANY = {
     'fleet.carrier:manage',
     'fleet.vehicle_type:manage',
     'fleet.vehicle:manage',
+    'fleet.driver:manage',
     'orders.order:manage',
     'planning.plan:manage',
     'planning.trip:manage',
+    'monitoring.transport:read',
   ],
-  capabilities: ['MASTER_DATA_VIEW', 'FLEET_VIEW', 'ORDERS_VIEW', 'PLANNING_VIEW', 'TRIPS_VIEW', 'IAM_VIEW'],
+  capabilities: [
+    'MASTER_DATA_VIEW',
+    'FLEET_VIEW',
+    'ORDERS_VIEW',
+    'PLANNING_VIEW',
+    'TRIPS_VIEW',
+    'TRANSPORT_MONITOR_VIEW',
+    'IAM_VIEW',
+  ],
 }
 
 function session(accessToken: string) {
@@ -143,6 +153,32 @@ export async function stubServices(page: Page, options: StubOptions = {}) {
       return json(route, {
         user: { id: TEST_USER.id, email: TEST_USER.email, fullName: 'Planner de Prueba' },
         companies: [TEST_COMPANY],
+      })
+    }
+
+    // The control tower's overview is not a page envelope, so the catch-all at the bottom would
+    // not describe it. A well-formed empty day, which is what the navigation suite needs; a test
+    // about the tower's own numbers passes its own body through `options.responses`.
+    if (path.endsWith('/control-tower')) {
+      return json(route, {
+        date: '2026-08-19',
+        generatedAt: '2026-08-19T12:00:00Z',
+        summary: {
+          tripsDraft: 0,
+          tripsScheduled: 0,
+          tripsInTransit: 0,
+          tripsCompleted: 0,
+          tripsCancelled: 0,
+          tripsDepartedLate: 0,
+          tripsOverdue: 0,
+          openExceptions: 0,
+          outstandingStops: 0,
+          stopsPastWindow: 0,
+          ordersUnplanned: 0,
+        },
+        workload: [],
+        openExceptions: [],
+        outstandingStops: [],
       })
     }
 

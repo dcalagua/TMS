@@ -19,6 +19,11 @@ interface FrequencyExceptionsPanelProps {
   canManage: boolean
 }
 
+/** `<input type="time">` gives HH:MM; the API takes a LocalTime, which wants HH:MM:SS. */
+function toApiTime(value: string) {
+  return value.length === 5 ? `${value}:00` : value
+}
+
 /**
  * Date exceptions on a service calendar: the two answers the weekly cadence cannot give.
  *
@@ -28,8 +33,12 @@ interface FrequencyExceptionsPanelProps {
  *
  * Two kinds, because the model has exactly two (`frequency_exception.service_override`):
  * **cerrado** removes a date the cadence would have served, **abierto** adds one it would not.
- * Anything more elaborate - a different cutoff for one date, say - is not representable yet, and
- * the help text says so rather than letting an operator discover it.
+ *
+ * An open date may also close earlier than usual - 24/12 open until 11:00 rather than the usual
+ * 15:00 - which is the third thing the cadence cannot say. The cutoff field appears only for an
+ * open date: a closed one dispatches nothing, so there is no last moment to order, and the
+ * backend refuses the combination rather than storing a time nobody could act on. Leave it empty
+ * and the weekly rule's cutoff still applies.
  *
  * A sub-resource with its own endpoints, so it is its own panel and not fields on the frequency
  * form: each row here is one API call, and it needs a saved frequency to hang from - the same
@@ -43,6 +52,7 @@ export function FrequencyExceptionsPanel({ companyId, frequencyId, canManage }: 
 
   const [date, setDate] = useState('')
   const [kind, setKind] = useState<'closed' | 'open'>('closed')
+  const [cutoff, setCutoff] = useState('')
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -63,9 +73,13 @@ export function FrequencyExceptionsPanel({ companyId, frequencyId, canManage }: 
       await createFrequencyException(companyId, frequencyId, {
         exceptionDate: date,
         serviceOverride: kind === 'open',
+        // A closed date can never carry one, whatever is left in the field - the input is
+        // hidden for it, but the request is what the backend judges.
+        cutoffTimeOverride: kind === 'open' && cutoff !== '' ? toApiTime(cutoff) : null,
         note: note.trim() === '' ? null : note.trim(),
       })
       setDate('')
+      setCutoff('')
       setNote('')
       notifySuccess(td('created'))
       refresh()
@@ -114,6 +128,7 @@ export function FrequencyExceptionsPanel({ companyId, frequencyId, canManage }: 
               <tr>
                 <th scope="col">{t('frequencies.form.exceptionDate')}</th>
                 <th scope="col">{t('frequencies.form.exceptionKind')}</th>
+                <th scope="col">{t('frequencies.form.exceptionCutoff')}</th>
                 <th scope="col">{t('frequencies.form.exceptionNote')}</th>
                 {canManage && <th scope="col" className="text-end">{tc('columns.actions')}</th>}
               </tr>
@@ -129,6 +144,13 @@ export function FrequencyExceptionsPanel({ companyId, frequencyId, canManage }: 
                         : t('frequencies.form.exceptionClosed')}
                       tone={exception.serviceOverride ? 'success' : 'danger'}
                     />
+                  </td>
+                  {/* An em dash means "the weekly rule's cutoff still applies", which is what
+                      an empty override actually means - not "no cutoff". */}
+                  <td className="tms-code">
+                    {exception.cutoffTimeOverride === null
+                      ? '—'
+                      : exception.cutoffTimeOverride.slice(0, 5)}
                   </td>
                   <td className="small">{exception.note ?? '—'}</td>
                   {canManage && (
@@ -152,7 +174,7 @@ export function FrequencyExceptionsPanel({ companyId, frequencyId, canManage }: 
 
       {canManage && (
         <div className="row g-2 align-items-end">
-          <div className="col-12 col-sm-4">
+          <div className="col-12 col-sm-3">
             <FormField label={t('frequencies.form.exceptionDate')} htmlFor="frequency-exception-date">
               <input
                 id="frequency-exception-date"
@@ -163,13 +185,19 @@ export function FrequencyExceptionsPanel({ companyId, frequencyId, canManage }: 
               />
             </FormField>
           </div>
-          <div className="col-12 col-sm-4">
+          <div className="col-12 col-sm-3">
             <FormField label={t('frequencies.form.exceptionKind')} htmlFor="frequency-exception-kind">
               <Select
                 id="frequency-exception-kind"
                 size="sm"
                 value={kind}
-                onChange={(next) => setKind(next as 'closed' | 'open')}
+                onChange={(next) => {
+                  const nextKind = next as 'closed' | 'open'
+                  setKind(nextKind)
+                  // Switching to closed drops whatever was typed, so a hidden field can never
+                  // be submitted behind the operator's back.
+                  if (nextKind === 'closed') setCutoff('')
+                }}
                 options={[
                   { value: 'closed', label: t('frequencies.form.exceptionClosed') },
                   { value: 'open', label: t('frequencies.form.exceptionOpen') },
@@ -177,7 +205,26 @@ export function FrequencyExceptionsPanel({ companyId, frequencyId, canManage }: 
               />
             </FormField>
           </div>
-          <div className="col-12 col-sm-4">
+          <div className="col-12 col-sm-3">
+            {/* Only for an open date: a closed one has no cutoff. Rendered as nothing rather
+                than as a disabled box, which would suggest a value could be filled in later. */}
+            {kind === 'open' && (
+              <FormField
+                label={t('frequencies.form.exceptionCutoff')}
+                htmlFor="frequency-exception-cutoff"
+                help={t('frequencies.form.exceptionCutoffHint')}
+              >
+                <input
+                  id="frequency-exception-cutoff"
+                  type="time"
+                  className="form-control form-control-sm"
+                  value={cutoff}
+                  onChange={(event) => setCutoff(event.target.value)}
+                />
+              </FormField>
+            )}
+          </div>
+          <div className="col-12 col-sm-3">
             <FormField label={t('frequencies.form.exceptionNote')} htmlFor="frequency-exception-note">
               <input
                 id="frequency-exception-note"

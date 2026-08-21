@@ -62,6 +62,46 @@
     "new": "Nuevo transportista",
     "title": "Transportistas"
   },
+  "drivers": {
+    "columns": {
+      "document": "Documento",
+      "license": "Licencia",
+      "name": "Conductor"
+    },
+    "description": "Personas habilitadas para conducir. Un conductor con licencia vencida no puede asignarse a un viaje.",
+    "empty": {
+      "message": "Registra a las personas que conducirán las unidades para poder asignarlas a un viaje.",
+      "title": "Sin conductores"
+    },
+    "filters": {
+      "allLicenseStatuses": "Todos los estados",
+      "license": "Licencia",
+      "name": "Nombre"
+    },
+    "form": {
+      "carrier": "Transportista",
+      "create": "Nuevo conductor",
+      "documentNumber": "Número de documento",
+      "documentType": "Tipo de documento",
+      "edit": "Editar conductor",
+      "firstName": "Nombres",
+      "lastName": "Apellidos",
+      "licenseCategory": "Categoría",
+      "licenseExpiresHelp": "Se valida contra la fecha de planificación del viaje: una licencia que vence el fin de semana impide planificar el lunes.",
+      "licenseExpiresOn": "Vence el",
+      "licenseNumber": "Número de licencia",
+      "ownStaff": "Personal propio (sin transportista)",
+      "sections": {
+        "employment": "Vínculo laboral",
+        "license": "Licencia de conducir"
+      },
+      "subtitle": "Los datos de licencia se validan contra la fecha del viaje, no contra hoy."
+    },
+    "licenseNoExpiry": "Sin fecha",
+    "new": "Nuevo conductor",
+    "ownStaff": "Personal propio",
+    "title": "Conductores"
+  },
   "vehicleTypes": {
     "description": "Capacidades por defecto y características físicas de una clase de vehículo.",
     "empty": {

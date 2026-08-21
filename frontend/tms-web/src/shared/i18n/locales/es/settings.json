@@ -1,0 +1,255 @@
+{
+  "company": {
+    "code": "Código",
+    "codeHelp": "Identifica la compañía en toda la instalación. No se puede cambiar después de crearla.",
+    "countryPattern": "Usa el código ISO de dos letras, por ejemplo PE.",
+    "created": "Compañía creada",
+    "defaultCountry": "País por defecto",
+    "defaultCountryHelp": "Se aplica a las ubicaciones importadas que dejan el país en blanco. Nunca modifica una ubicación existente.",
+    "description": "Datos de la compañía, zona horaria y numeración de documentos.",
+    "identity": "Identificación",
+    "newCompany": "Nueva compañía",
+    "newCompanyNote": "La nueva compañía queda disponible en tu selector de compañías, porque tu rol alcanza toda la organización.",
+    "newCompanySubtitle": "Se creará dentro de {{organization}}.",
+    "numbering": "Numeración de documentos",
+    "numberingHelp": "El prefijo es de esta compañía; los dígitos vienen de un contador único de la instalación, así que cambiarlo no renumera nada ni puede generar duplicados.",
+    "operation": "Operación",
+    "orderPrefix": "Prefijo de pedidos",
+    "organization": "Organización",
+    "organizationInactive": "Organización inactiva",
+    "prefixPattern": "De una a seis letras o dígitos seguidos de un guion, por ejemplo TO-.",
+    "sample": "Ejemplo: {{value}}",
+    "saved": "Configuración guardada",
+    "shipmentPrefix": "Prefijo de embarques",
+    "taxIdentifier": "Identificación fiscal",
+    "timeZone": "Zona horaria",
+    "timeZoneHelp": "Define qué día es \"hoy\" para esta compañía. Usa un identificador IANA, por ejemplo America/Lima.",
+    "title": "Compañía"
+  },
+  "integrations": {
+    "clients": {
+      "bearerToken": "Token bearer (listo para pegar)",
+      "clientId": "Client id",
+      "description": "Credenciales de máquina con las que se autentican los sistemas socios. Cada una pertenece a esta compañía y no puede apuntar a otra.",
+      "empty": {
+        "message": "Emite una para que un sistema socio pueda enviarnos ubicaciones, pedidos o posiciones.",
+        "title": "Todavía no hay credenciales"
+      },
+      "form": {
+        "carrierHelp": "De qué transportista responde esta clave. Obligatorio para el alcance de ofertas y rechazado para cualquier otro, porque una clave que puede responder ofertas debe decir de quién.",
+        "carrierPlaceholder": "Buscar transportistas",
+        "carrierRequired": "Elige el transportista del que responde esta credencial.",
+        "create": "Emitir credencial",
+        "createSubtitle": "El secreto se genera ahora y se muestra una sola vez.",
+        "edit": "Editar credencial",
+        "editSubtitle": "Cambia el nombre y los alcances. El secreto no se ve afectado.",
+        "nameHelp": "Cómo se identifica esta clave en la lista y en la auditoría, por ejemplo \"WMS de tiendas\".",
+        "scopeRequired": "Elige al menos un alcance. Una credencial que no puede hacer nada igual se autentica."
+      },
+      "issue": "Emitir credencial",
+      "lastUsed": "Último uso",
+      "neverUsed": "Nunca usada",
+      "revoke": "Revocar",
+      "revokeText": "El secreto actual y cualquier secreto anterior dejan de funcionar de inmediato, y esto no se puede deshacer. El historial de la credencial se conserva.",
+      "revokeTitle": "¿Revocar {{name}}?",
+      "revoked": "Revocada",
+      "rotate": "Rotar secreto",
+      "rotateText": "Se emite un secreto nuevo ahora. El anterior sigue funcionando durante la ventana de gracia configurada para que el socio pueda redesplegar. Revoca en lugar de rotar si sospechas una filtración.",
+      "rotateTitle": "¿Rotar el secreto de {{name}}?",
+      "rotating": "Rotación en curso",
+      "scopes": "Alcances",
+      "secret": "Secreto",
+      "secretTitle": "Credencial emitida",
+      "terminal": "Revocada",
+      "title": "Credenciales"
+    },
+    "deliveries": {
+      "allEndpoints": "Todos los destinos",
+      "attempts_one": "{{count}} intento",
+      "attempts_other": "{{count}} intentos",
+      "description": "Lo que enviamos hacia afuera y lo que respondieron. Se conserva cada intento.",
+      "detail": {
+        "attempts": "Intentos",
+        "completedAt": "Finalizado",
+        "duration": "{{ms}} ms",
+        "eventId": "Id del evento",
+        "eventIdHelp": "Estable en todos los intentos y reenvíos. Tu sistema deduplica por este valor.",
+        "noAttempts": "En cola, todavía sin intentar.",
+        "noResponse": "Sin respuesta: la llamada nunca llegó a un servidor.",
+        "occurredAt": "Ocurrió",
+        "payload": "Cuerpo",
+        "payloadHelp": "Los bytes exactos que envió cada intento, congelados al encolar el envío para que un reintento sea idéntico al primero.",
+        "title": "Envío"
+      },
+      "empty": {
+        "message": "Los envíos aparecen aquí en cuanto ocurre un evento suscrito.",
+        "title": "Todavía no se ha enviado nada"
+      },
+      "event": "Evento",
+      "inspect": "Inspeccionar",
+      "nextAttempt": "Próximo intento {{when}}",
+      "outcome": "Resultado",
+      "outcomes": {
+        "DELIVERED": "Entregado",
+        "PERMANENT_FAILURE": "Rechazado",
+        "RETRYABLE_FAILURE": "Se reintentará"
+      },
+      "queuedAt": "En cola",
+      "requeued": "Encolado para otro intento",
+      "retry": "Reintentar ahora",
+      "statuses": {
+        "FAILED": "Fallido",
+        "PENDING": "Pendiente",
+        "PROCESSED": "Entregado"
+      },
+      "title": "Registro de envíos"
+    },
+    "description": "Qué está conectado a esta compañía: quién puede escribir en nosotros y a dónde van nuestros eventos.",
+    "inbox": {
+      "allClients": "Todas las credenciales",
+      "counts": "{{succeeded}} de {{total}} aceptados",
+      "description": "Cada envío que nos hizo un socio, con su resultado. Aquí no se guarda el contenido del cuerpo.",
+      "empty": {
+        "message": "Todavía no se ha enviado nada a esta compañía.",
+        "title": "Bandeja vacía"
+      },
+      "operation": "Operación",
+      "outcome": "Resultado",
+      "receivedAt": "Recibido",
+      "reference": "Referencia",
+      "statuses": {
+        "FAILED": "Fallido",
+        "PARTIAL": "Parcial",
+        "REJECTED": "Rechazado",
+        "SUCCEEDED": "Aceptado"
+      },
+      "title": "Actividad entrante"
+    },
+    "noAccess": {
+      "message": "Necesitas permisos de credenciales de integración o de webhooks para ver esta pantalla.",
+      "title": "No disponible para tu rol"
+    },
+    "scopes": {
+      "locationWrite": {
+        "help": "Crear y actualizar tiendas y ubicaciones. No puede leer nada.",
+        "label": "Escribir ubicaciones"
+      },
+      "orderWrite": {
+        "help": "Crear y actualizar pedidos de transporte sin supervisión. El alcance más potente: concédelo solo a un sistema al que dejarías crear pedidos sin que nadie mire.",
+        "label": "Escribir pedidos"
+      },
+      "shipmentRead": {
+        "help": "Leer embarques confirmados y consultar el feed de cambios. Solo lectura: no concede escritura en ningún sitio.",
+        "label": "Leer embarques"
+      },
+      "tenderRespond": {
+        "help": "Ver y responder las ofertas hechas a un transportista. Necesita un transportista y muestra solo sus ofertas.",
+        "label": "Responder ofertas"
+      },
+      "trackingWrite": {
+        "help": "Reportar posiciones de vehículos. Solo escritura: un proveedor de telemetría no aprende nada de los embarques contra los que reporta.",
+        "label": "Reportar posiciones"
+      }
+    },
+    "secret": {
+      "copied": "Copiado al portapapeles",
+      "done": "Ya lo guardé",
+      "hide": "Ocultar",
+      "reveal": "Mostrar",
+      "subtitle": "Se muestra una sola vez. Después no se puede recuperar."
+    },
+    "tabs": {
+      "inbound": "Entrante",
+      "outbound": "Saliente"
+    },
+    "title": "Centro de integraciones",
+    "webhooks": {
+      "add": "Añadir destino",
+      "description": "Destinos a los que enviamos los eventos de esta compañía, firmados y con reintentos. Consultar el feed de cambios sigue funcionando igual.",
+      "empty": {
+        "message": "Añade uno para que un sistema socio se entere en cuanto ocurra algo, en lugar de tener que consultarlo.",
+        "title": "Todavía no hay destinos"
+      },
+      "events": "Eventos",
+      "failureStreak_one": "{{count}} envío fallido seguido",
+      "failureStreak_other": "{{count}} envíos fallidos seguidos",
+      "form": {
+        "create": "Añadir destino",
+        "createSubtitle": "El secreto de firma se genera ahora y se muestra una sola vez.",
+        "edit": "Editar destino",
+        "editSubtitle": "Cambia el nombre, la URL y los eventos. El secreto y la pausa no se ven afectados.",
+        "eventRequired": "Elige al menos un evento. Un destino que no selecciona nada no recibe nada.",
+        "eventsHelp": "El mismo vocabulario que el feed de cambios. Los tipos nuevos aparecen aquí automáticamente.",
+        "nameHelp": "Cómo se identifica este destino en la lista y en el registro de envíos, por ejemplo \"ERP pedidos\".",
+        "selectAll": "Seleccionar todos",
+        "targetUrl": "URL de destino",
+        "targetUrlHelp": "Debe ser https y accesible desde internet. Se rechazan las direcciones internas y de loopback."
+      },
+      "health": "Estado",
+      "lastSuccess": "Último envío entregado {{when}}",
+      "neverDelivered": "Nunca se entregó nada",
+      "pause": "Pausar",
+      "pauseText": "Los envíos dejan de mandarse. No se descarta nada: los eventos siguen encolándose y salen cuando reanudes.",
+      "pauseTitle": "¿Pausar {{name}}?",
+      "paused": "En pausa",
+      "resume": "Reanudar",
+      "resumeText": "Se liberan los envíos en cola y se pone a cero el contador de fallos.",
+      "resumeTitle": "¿Reanudar {{name}}?",
+      "resumed": "Reanudado",
+      "rotate": "Rotar secreto",
+      "rotateText": "El secreto nuevo entra en vigor de inmediato y sin ventana de gracia, así que acepta ambos de tu lado mientras redespliegas. Los envíos firmados con el secreto anterior fallarán la verificación desde ahora.",
+      "rotateTitle": "¿Rotar el secreto de firma de {{name}}?",
+      "secretHint": "Secreto terminado en {{hint}}",
+      "secretTitle": "Secreto de firma emitido",
+      "signatureFormat": "Contenido firmado",
+      "signatureHeader": "Cabecera de firma",
+      "signingSecret": "Secreto de firma",
+      "suspended": "Suspendido automáticamente",
+      "title": "Destinos de webhooks"
+    }
+  },
+  "users": {
+    "accessRevoked": "Acceso revocado",
+    "accountDisabled": "Cuenta deshabilitada",
+    "companyScoped": "Esta compañía",
+    "description": "Quiénes pueden operar en esta compañía y con qué roles.",
+    "emailHelp": "Si el correo ya existe en la instalación, se reutiliza esa cuenta y solo se le da acceso a esta compañía.",
+    "emailImmutable": "El correo identifica la cuenta y no se edita. Para cambiarlo, revoca el acceso e invita al nuevo correo.",
+    "empty": {
+      "message": "Invita a alguien para que pueda operar en esta compañía.",
+      "title": "Sin personas todavía"
+    },
+    "form": {
+      "edit": "Editar acceso",
+      "editSubtitle": "Nombre y roles de esta persona en esta compañía.",
+      "invite": "Invitar a una persona",
+      "inviteSubtitle": "Le darás acceso a esta compañía con los roles que elijas.",
+      "sendInvite": "Dar acceso"
+    },
+    "fullName": "Nombre",
+    "hasAccess": "Con acceso",
+    "invite": "Invitar",
+    "invited": "Acceso otorgado",
+    "notEditableHere": "No editable aquí",
+    "organizationScoped": "rol de organización",
+    "organizationWide": "Toda la organización",
+    "permissionCount_one": "{{count}} permiso",
+    "permissionCount_other": "{{count}} permisos",
+    "restore": "Restablecer acceso",
+    "restoreText": "Volverá a operar en esta compañía con los roles que ya tenía.",
+    "restoreTitle": "¿Restablecer el acceso de {{name}}?",
+    "restored": "Acceso restablecido",
+    "revoke": "Revocar acceso",
+    "revokeText": "Dejará de operar en esta compañía. Su cuenta y su historial no se tocan.",
+    "revokeTitle": "¿Revocar el acceso de {{name}}?",
+    "revoked": "Acceso revocado",
+    "roleRequired": "Elige al menos un rol.",
+    "roles": "Roles",
+    "scope": "Alcance",
+    "searchLabel": "Buscar",
+    "searchPlaceholder": "Nombre o correo",
+    "selfRolesLocked": "No puedes cambiar tus propios roles. Pídeselo a otra persona que administre esta compañía.",
+    "title": "Usuarios y accesos",
+    "you": "tú"
+  }
+}

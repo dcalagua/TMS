@@ -7,6 +7,8 @@
     "clear": "Limpiar",
     "close": "Cerrar",
     "confirm": "Confirmar",
+    "copy": "Copiar",
+    "create": "Crear",
     "deactivate": "Desactivar",
     "delete": "Eliminar",
     "edit": "Editar",
@@ -215,6 +217,9 @@
   "table": {
     "results_one": "resultado",
     "results_other": "resultados"
+  },
+  "units": {
+    "minutesShort": "min"
   },
   "weekdays": {
     "friday": "Viernes",

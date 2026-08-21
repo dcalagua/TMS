@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useCompany } from '../company/CompanyContext'
 import type { NavigationKey } from '../i18n/keys'
-import { HOME_NAV, NAV_GROUPS, type NavLeaf } from './navConfig'
+import { ALL_NAV_GROUPS, HOME_NAV, OVERVIEW_NAV, type NavLeaf } from './navConfig'
 
 interface Entry {
   item: NavLeaf
@@ -34,7 +34,14 @@ export function NavSearch() {
 
   const entries = useMemo<Entry[]>(() => {
     const all: Entry[] = [{ item: HOME_NAV }]
-    for (const group of NAV_GROUPS) {
+    // Gated exactly like a group is, and for the same reason: the search must never offer a
+    // screen the menu is hiding.
+    for (const item of OVERVIEW_NAV) {
+      if (!item.capability || status !== 'ready' || hasCapability(item.capability)) {
+        all.push({ item })
+      }
+    }
+    for (const group of ALL_NAV_GROUPS) {
       if (group.capability && status === 'ready' && !hasCapability(group.capability)) {
         continue
       }
