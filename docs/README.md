@@ -9,8 +9,10 @@
 | `domain/` | Business contracts per module: lifecycles, planning rules, capacity semantics, imports, audit trail |
 | `integrations/` | Inbound (machine-to-machine intake) and outbound (shipment pull/change feed) contracts, Google Maps configuration |
 | `security/` | Security baseline, authentication and authorization model, and the review record |
+| `development/` | Working rules for a developer machine. **Read `DATABASE_SAFETY.md` before starting the backend for the first time.** |
 | `performance/` | Measured query-shape and query-count baseline against the design target |
-| `overnight/` | Step-by-step reports produced by the unattended build sequence |
+| `reviews/` | UX/UI audits and their remediation records |
+| `overnight/`, `overnight-v3/`, `overnight-sellable-v4/`, `hardening-v4/` | Reports from the unattended build and hardening sessions, newest last. Each states what it measured itself rather than repeating the one before it. |
 
 ## Product and demo
 
@@ -83,6 +85,20 @@ silently diverging.
 22. [`integrations/GOOGLE_MAPS.md`](integrations/GOOGLE_MAPS.md) - the browser-side Google Maps
     integration: configuration, key restrictions, graceful degradation with no key.
 
+The domain directory holds more contracts than are numbered above - execution, proof of delivery,
+tracking, tendering, rates, alerts, reporting, drivers and SaaS administration each have one. Read
+[`domain/MASTER_DATA_OVERVIEW_V1.md`](domain/MASTER_DATA_OVERVIEW_V1.md) first for the map, and the
+directory listing for the rest; they are named after the feature they describe.
+
+## Working on a developer machine
+
+- [`development/DATABASE_SAFETY.md`](development/DATABASE_SAFETY.md) - which database the backend is
+  about to migrate, the guard that refuses a non-local one on the `local` profile, and what to do if
+  you think a shared project was already touched.
+- [`development/OBSERVABILITY.md`](development/OBSERVABILITY.md) - what the application already
+  tells you about itself: health, build info, the business counters, and the correlation id that
+  ties a log line, an error document and an audit entry together.
+
 ## Review records
 
 23. [`security/SECURITY_REVIEW.md`](security/SECURITY_REVIEW.md) - what was checked in the Step 12
@@ -97,3 +113,12 @@ silently diverging.
     posture, the test and Git evidence, the P0-P3 findings and the recommended next work.
 27. [`overnight/NEXT_STEPS.md`](overnight/NEXT_STEPS.md) - the short actionable roadmap with an
     acceptance gate per item.
+28. [`hardening-v4/00_BASELINE.md`](hardening-v4/00_BASELINE.md) - what the Sellable V4 working
+    tree actually did when it was first built and tested: the branch, the counts, and the nine
+    backend failures and 130 frontend type errors that were found before anything was committed.
+29. [`hardening-v4/FINAL_REPORT.md`](hardening-v4/FINAL_REPORT.md) - the hardening session's
+    record: what was repaired, what was added, every gate re-run with real numbers, what is
+    blocked by the environment, and what to do next.
+
+Reports are listed oldest first. Where two disagree, the later one measured it again - see its own
+statement of what it re-derived rather than assuming the earlier figure still holds.

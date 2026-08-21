@@ -59,8 +59,10 @@ import org.springframework.transaction.annotation.Transactional;
  * indexes ({@code uq_trip_tender_live}, {@code uq_trip_tender_accepted}) are the backstop for what
  * a row lock cannot cover: two requests served by two application instances at the same instant.
  *
- * <p><b>Expiry, with no scheduler.</b> Nothing in this installation runs on a timer, so a lapse is
- * resolved in two places. Every read reports a sent offer past its deadline as
+ * <p><b>Expiry, with no scheduler.</b> Tendering has no timer of its own - the webhook dispatcher
+ * (migration V35) is the only scheduled task in the product, and it delivers, it does not expire
+ * anything. So a lapse is resolved in two places. Every read reports a sent offer past its deadline
+ * as
  * {@link TenderStatus#EXPIRED} ({@code TripTender.effectiveStatus}), which is what makes it
  * unanswerable; {@link #resolveLapse} materialises it into the table on the next write that touches
  * the trip's tenders <em>and succeeds</em>, which is what frees the live slot and puts it in the

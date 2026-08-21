@@ -14,7 +14,8 @@ import java.util.UUID;
  *
  * <p><b>{@code status} is the effective status, never the stored one.</b> A sent offer past its
  * deadline reports {@code EXPIRED} here even while the column still says {@code SENT}, because
- * there is no scheduler to materialise the lapse and a screen showing a dead offer as live would be
+ * nothing materialises the lapse on a timer - the webhook dispatcher is the product's only
+ * scheduled task and it does not touch tenders - and a screen showing a dead offer as live would be
  * the one place this feature could mislead somebody. The lag and its cost are documented in
  * migration V31, section 1b; {@code expiresAt} is carried so a screen can show the countdown that
  * produced the answer.
