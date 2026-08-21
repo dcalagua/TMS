@@ -155,6 +155,42 @@ class MigrationConventionTest {
         }
     }
 
+    /**
+     * Every application table has row-level security switched on.
+     *
+     * <p>Checked here, against the SQL text, because every other RLS assertion in this repository
+     * needs a container - and on a machine with no Docker those are all skipped, which is exactly
+     * the machine where a table gets added without its {@code ENABLE ROW LEVEL SECURITY} and
+     * nothing says so. RLS is defence in depth behind the service-layer company predicate
+     * (ADR-005); a table that quietly lacks it has one line of defence where the design says two,
+     * and nobody finds out until an application query forgets its predicate.
+     *
+     * <p>This proves the statement is present, not that the policy behind it is right. What the
+     * policy actually admits is {@code TenantRlsIsolationIntegrationTest}'s job, and that one does
+     * need a database.
+     */
+    @Test
+    @DisplayName("every table created by a migration has row-level security enabled")
+    void everyTableEnablesRowLevelSecurity() {
+        Pattern created = Pattern.compile("create\\s+table\\s+(?:if\\s+not\\s+exists\\s+)?tms\\.([a-z_]+)");
+        Pattern secured = Pattern.compile("alter\\s+table\\s+tms\\.([a-z_]+)\\s+enable\\s+row\\s+level\\s+security");
+
+        List<String> tables = new java.util.ArrayList<>();
+        java.util.Set<String> withRls = new java.util.LinkedHashSet<>();
+        for (Path script : SCRIPTS) {
+            String sql = MigrationScripts.withoutComments(MigrationScripts.read(script)).toLowerCase(Locale.ROOT);
+            created.matcher(sql).results().map(match -> match.group(1)).forEach(tables::add);
+            secured.matcher(sql).results().map(match -> match.group(1)).forEach(withRls::add);
+        }
+
+        assertThat(tables).as("the migration history is expected to create tables").isNotEmpty();
+        assertThat(tables)
+                .as("every tms table must ENABLE ROW LEVEL SECURITY somewhere in the migration history "
+                        + "(ADR-005). A table missing it is a tenant boundary with one line of defence "
+                        + "instead of two, and the tests that would catch it need Docker.")
+                .allSatisfy(table -> assertThat(withRls).contains(table));
+    }
+
     @Test
     @DisplayName("Flyway is the only migration history: supabase/migrations does not exist")
     void supabaseCarriesNoParallelMigrationHistory() {
