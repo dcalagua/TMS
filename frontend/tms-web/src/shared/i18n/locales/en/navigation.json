@@ -17,6 +17,7 @@
   "home": "Home",
   "items": {
     "account": "My account",
+    "audit": "Audit trail",
     "carriers": "Carriers",
     "companySettings": "Company",
     "controlTower": "Control tower",

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { AuditAction, AuditAggregateType } from '../api/auditApi'
 import type { DepartureTimeliness } from '../api/controlTowerApi'
 import type { DriverLicenseStatus } from '../api/driversApi'
 import type { LocationRole, LocationType } from '../api/locationsApi'
@@ -41,6 +42,8 @@ export interface EnumLabels {
   driverLicenseStatus: (value: DriverLicenseStatus) => string
   orderStatus: (value: OrderStatus) => string
   orderFulfillmentStatus: (value: OrderFulfillmentStatus) => string
+  auditAggregateType: (value: AuditAggregateType) => string
+  auditAction: (value: AuditAction) => string
   orderPriority: (value: OrderPriority) => string
   planningRunStatus: (value: PlanningRunStatus) => string
   tripStatus: (value: TripStatus) => string
@@ -72,6 +75,8 @@ export function useEnumLabels(): EnumLabels {
       driverLicenseStatus: (value) => t(`driverLicenseStatus.${value}`),
       orderStatus: (value) => t(`orderStatus.${value}`),
       orderFulfillmentStatus: (value) => t(`orderFulfillmentStatus.${value}`),
+      auditAggregateType: (value) => t(`auditAggregateType.${value}`),
+      auditAction: (value) => t(`auditAction.${value}`),
       orderPriority: (value) => t(`orderPriority.${value}`),
       planningRunStatus: (value) => t(`planningRunStatus.${value}`),
       tripStatus: (value) => t(`tripStatus.${value}`),

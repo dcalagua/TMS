@@ -212,7 +212,8 @@
     "errorTitle": "Something went wrong",
     "loading": "Loading...",
     "loadingRecords": "Loading records...",
-    "noRecords": "No records found"
+    "noRecords": "No records found",
+    "readOnly": "This record is read-only and cannot be changed."
   },
   "table": {
     "results_one": "result",

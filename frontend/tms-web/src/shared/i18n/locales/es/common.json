@@ -212,7 +212,8 @@
     "errorTitle": "Algo salió mal",
     "loading": "Cargando...",
     "loadingRecords": "Cargando registros...",
-    "noRecords": "Sin resultados"
+    "noRecords": "Sin resultados",
+    "readOnly": "Este registro es de solo lectura y no puede modificarse."
   },
   "table": {
     "results_one": "resultado",

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { AUDIT_ACTIONS, AUDIT_AGGREGATE_TYPES } from '../api/auditApi'
 import { DEPARTURE_TIMELINESS } from '../api/controlTowerApi'
 import { DRIVER_LICENSE_STATUSES } from '../api/driversApi'
 import { LOCATION_ROLES, LOCATION_TYPES } from '../api/locationsApi'
@@ -51,6 +52,8 @@ const GROUPS: [string, readonly string[]][] = [
   ['costQuantitySource', COST_QUANTITY_SOURCES],
   ['tenderStatus', TENDER_STATUSES],
   ['tenderResponseSource', TENDER_RESPONSE_SOURCES],
+  ['auditAggregateType', AUDIT_AGGREGATE_TYPES],
+  ['auditAction', AUDIT_ACTIONS],
 ]
 
 describe('enum labels', () => {

@@ -31,10 +31,12 @@ export const NAV_GROUPS: NavGroup[] = [
     accent: 1,
     capability: 'MASTER_DATA_VIEW',
     items: [
-      // First, and above Origins/Destinations on purpose: since migration V14 a location is
-      // the canonical record and those two are its compatibility projections, so this is where
-      // a place should be created. They stay in the menu because routes, orders and planning
-      // still speak their vocabulary (docs/architecture/ADR_LOCATION_MODEL.md).
+      // First, and above Origins/Destinations on purpose. Migration V14 introduced the location
+      // as the canonical record with those two as compatibility projections; V23 finished the
+      // job - there is one physical place, and "origin" and "destination" are operational *uses*
+      // of it, not records of their own. The two entries stay in the menu because that is how a
+      // planner still thinks about the work, and because routes, orders and planning speak that
+      // vocabulary (docs/architecture/ADR_LOCATION_MODEL.md, docs/domain/LOCATION_MODEL_V1.md).
       { to: '/masters/locations', labelKey: 'items.locations', icon: 'bi-geo-alt-fill' },
       { to: '/masters/origins', labelKey: 'items.origins', icon: 'bi-geo-alt' },
       { to: '/masters/destinations', labelKey: 'items.destinations', icon: 'bi-pin-map' },
@@ -169,6 +171,16 @@ export const SETTINGS_NAV: NavGroup = {
       capability: 'INTEGRATION_VIEW',
       labelKey: 'items.integrations',
       icon: 'bi-plug',
+    },
+    // Also its own capability, and for a sharper reason than the integration hub's: the audit
+    // trail names colleagues. A PLANNER holds `iam.company:read` and so passes the group's
+    // IAM_VIEW gate, but `audit.log:read` is granted to the two administrator roles only
+    // (migration V3), and the endpoint answers 403 to everyone else whatever the menu shows.
+    {
+      to: '/security/audit',
+      capability: 'AUDIT_VIEW',
+      labelKey: 'items.audit',
+      icon: 'bi-clock-history',
     },
   ],
 }

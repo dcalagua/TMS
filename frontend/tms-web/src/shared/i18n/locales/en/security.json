@@ -1,4 +1,34 @@
 {
+  "audit": {
+    "columns": {
+      "action": "Action",
+      "actor": "Actor",
+      "detail": "Detail",
+      "identifier": "Identifier",
+      "resource": "Resource",
+      "when": "When"
+    },
+    "description": "Who changed what, and when, within this company. A read-only record: it cannot be edited or deleted.",
+    "empty": {
+      "message": "No entries match these filters. Widen the date range or remove a filter.",
+      "title": "Nothing recorded"
+    },
+    "filters": {
+      "allActions": "All actions",
+      "allResources": "All resources",
+      "correlationHint": "Request id",
+      "correlationId": "Correlation",
+      "from": "From",
+      "identifierHint": "Exact resource id",
+      "to": "To"
+    },
+    "machineActor": "Integration credential",
+    "noActor": "No actor recorded",
+    "noDetail": "View",
+    "noDetailHint": "This entry recorded no further detail. The action and the resource are still the fact.",
+    "openDetailNamed": "View the detail of {{action}} on {{when}}",
+    "title": "Audit trail"
+  },
   "description": "Users, roles and permissions.",
   "title": "Security"
 }

@@ -1,4 +1,34 @@
 {
+  "audit": {
+    "columns": {
+      "action": "Acción",
+      "actor": "Usuario",
+      "detail": "Detalle",
+      "identifier": "Identificador",
+      "resource": "Recurso",
+      "when": "Fecha y hora"
+    },
+    "description": "Quién cambió qué y cuándo, dentro de esta empresa. Es un registro de solo lectura: no puede editarse ni borrarse.",
+    "empty": {
+      "message": "No hay entradas para estos filtros. Amplía el rango de fechas o quita algún filtro.",
+      "title": "Sin movimientos"
+    },
+    "filters": {
+      "allActions": "Todas las acciones",
+      "allResources": "Todos los recursos",
+      "correlationHint": "Id de la petición",
+      "correlationId": "Correlación",
+      "from": "Desde",
+      "identifierHint": "Id exacto del recurso",
+      "to": "Hasta"
+    },
+    "machineActor": "Credencial de integración",
+    "noActor": "Sin actor registrado",
+    "noDetail": "Ver",
+    "noDetailHint": "Esta entrada no registró detalles adicionales. La acción y el recurso siguen siendo el hecho.",
+    "openDetailNamed": "Ver el detalle de {{action}} del {{when}}",
+    "title": "Auditoría"
+  },
   "description": "Usuarios, roles y permisos.",
   "title": "Seguridad"
 }
