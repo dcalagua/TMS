@@ -1,32 +1,35 @@
 import { createBrowserRouter, type RouteObject } from 'react-router-dom'
-import { ControlTowerPage } from '../pages/control-tower/ControlTowerPage'
 import { DashboardPage } from '../pages/DashboardPage'
-import { CarriersPage } from '../pages/fleet/CarriersPage'
-import { DriversPage } from '../pages/fleet/DriversPage'
-import { VehicleTypesPage } from '../pages/fleet/VehicleTypesPage'
-import { VehiclesPage } from '../pages/fleet/VehiclesPage'
 import { LoginPage } from '../pages/LoginPage'
-import { DestinationsPage } from '../pages/masters/DestinationsPage'
-import { FrequenciesPage } from '../pages/masters/FrequenciesPage'
-import { LocationsPage } from '../pages/masters/LocationsPage'
-import { OriginsPage } from '../pages/masters/OriginsPage'
-import { RoutesPage } from '../pages/masters/RoutesPage'
-import { ZonesPage } from '../pages/masters/ZonesPage'
 import { NotFoundPage } from '../pages/NotFoundPage'
-import { OrdersPage } from '../pages/orders/OrdersPage'
-import { PlanningBoardPage } from '../pages/planning/PlanningBoardPage'
-import { PlanningRunsPage } from '../pages/planning/PlanningRunsPage'
 import { PlaceholderPage } from '../pages/PlaceholderPage'
-import { RateCardsPage } from '../pages/rates/RateCardsPage'
-import { ReportsPage } from '../pages/reporting/ReportsPage'
-import { CompanySettingsPage } from '../pages/settings/CompanySettingsPage'
-import { IntegrationsPage } from '../pages/settings/IntegrationsPage'
-import { UsersPage } from '../pages/settings/UsersPage'
-import { TripsPage } from '../pages/trips/TripsPage'
-import { TripWorkspacePage } from '../pages/trips/TripWorkspacePage'
 import { ProtectedRoute } from '../shared/auth/ProtectedRoute'
 import { RequireCompany } from '../shared/company/RequireCompany'
 import { AppLayout } from '../shared/ui/AppLayout'
+import {
+  AuditPage,
+  CarriersPage,
+  CompanySettingsPage,
+  ControlTowerPage,
+  DestinationsPage,
+  DriversPage,
+  FrequenciesPage,
+  IntegrationsPage,
+  LocationsPage,
+  OrdersPage,
+  OriginsPage,
+  PlanningBoardPage,
+  PlanningRunsPage,
+  RateCardsPage,
+  ReportsPage,
+  RoutesPage,
+  TripWorkspacePage,
+  TripsPage,
+  UsersPage,
+  VehicleTypesPage,
+  VehiclesPage,
+  ZonesPage,
+} from './lazyRoutes'
 
 /** The route table, separate from the browser router so tests can mount the very same routes
  * under a memory router. A navigation test that asserts against a hand-written copy of the
@@ -83,6 +86,9 @@ export const appRoutes: RouteObject[] = [
               // webhook endpoint both belong to one company, and both endpoints behind this screen
               // refuse a request with no X-Company-Id.
               { path: 'settings/integrations', element: <IntegrationsPage /> },
+              // The audit history, beside the user administration it mostly explains. Read-only,
+              // and behind its own permission: who did what is not something every planner needs.
+              { path: 'security/audit', element: <AuditPage /> },
             ],
           },
           { path: '*', element: <NotFoundPage /> },
