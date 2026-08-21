@@ -1166,6 +1166,27 @@ h6 {
   flex: 1 1 auto;
 }
 
+/* The rule above never applied on desktop, which is where it was needed.
+   Bootstrap ships `.offcanvas-lg .offcanvas-body { overflow-y: visible; flex-grow: 0 }`
+   above the lg breakpoint - it is undoing the drawer, because at that width the
+   sidebar is a static column and not an overlay - and two class selectors beat
+   one, so the column silently could not scroll.
+
+   Nothing looked wrong while the menu fitted in the window. The moment it did
+   not, the overflow was drawn past the bottom of the page instead of scrolling,
+   and the last entry could not be reached at all on a 900px-tall screen: not by
+   scrolling the column, which does not move, and not by scrolling the page,
+   which stops before it. Adding one item to the trailing group was enough.
+
+   Matched at the same specificity so it wins, and scoped to the sidebar so no
+   other offcanvas in the product is affected. */
+@media (min-width: 992px) {
+  .offcanvas-lg.tms-sidebar .tms-sidebar-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+  }
+}
+
 /* A thin, dark scrollbar: the default light one cuts a bright stripe down the
    charcoal column every time the navigation overflows. */
 .tms-sidebar-body {

@@ -38,6 +38,16 @@ export const TEST_COMPANY = {
     'planning.plan:manage',
     'planning.trip:manage',
     'monitoring.transport:read',
+    // The Configuración group. This fixture is a company administrator, because the navigation
+    // suite asserts that *every* menu entry reaches its screen - a fixture missing one of these
+    // hides the entry, and a hidden entry looks exactly like a passing test.
+    'iam.company:read',
+    'iam.company:manage',
+    'iam.user:read',
+    'iam.membership:manage',
+    'integration.client:read',
+    'integration.webhook:read',
+    'audit.log:read',
   ],
   capabilities: [
     'MASTER_DATA_VIEW',
@@ -47,6 +57,8 @@ export const TEST_COMPANY = {
     'TRIPS_VIEW',
     'TRANSPORT_MONITOR_VIEW',
     'IAM_VIEW',
+    'INTEGRATION_VIEW',
+    'AUDIT_VIEW',
   ],
 }
 
@@ -180,6 +192,25 @@ export async function stubServices(page: Page, options: StubOptions = {}) {
         openExceptions: [],
         outstandingStops: [],
       })
+    }
+
+    // The company profile is an object, not a page envelope, and the settings screen renders its
+    // form straight from `settings` - so the catch-all below would leave it reading
+    // `orderNumberPrefix` off undefined and the whole route would land in an error boundary.
+    if (path.endsWith('/admin/companies/current')) {
+      return json(route, {
+        ...TEST_COMPANY,
+        taxIdentifier: null,
+        active: true,
+        organizationActive: true,
+        canCreateCompany: false,
+        settings: { defaultCountry: 'PE', orderNumberPrefix: 'TO-', shipmentNumberPrefix: 'SH-' },
+      })
+    }
+
+    // The role catalogue is a bare array; the empty page envelope below would break `roles.map`.
+    if (path.endsWith('/admin/users/roles')) {
+      return json(route, [])
     }
 
     if (path.endsWith('/system/info')) {

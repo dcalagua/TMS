@@ -17,7 +17,13 @@ const ENTRIES = [
   { link: 'Pedidos', path: '/orders', heading: 'Pedidos' },
   { link: 'Planificación', path: '/planning', heading: 'Planificación' },
   { link: 'Viajes', path: '/trips', heading: 'Viajes' },
-  { link: 'Seguridad', path: '/admin/security', heading: 'Seguridad' },
+  // The old `/admin/security` placeholder is gone. These four are what it was a placeholder for,
+  // and each is a real screen rather than a stub - which is why they are asserted by their own
+  // heading and not by the group label above them.
+  { link: 'Compañía', path: '/settings/company', heading: 'Compañía' },
+  { link: 'Usuarios y accesos', path: '/settings/users', heading: 'Usuarios y accesos' },
+  { link: 'Integraciones', path: '/settings/integrations', heading: 'Centro de integraciones' },
+  { link: 'Auditoría', path: '/security/audit', heading: 'Auditoría' },
 ] as const
 
 /** Scoped to the menu: the dashboard also offers quick-access links with the same names. */
@@ -27,6 +33,11 @@ function navLink(page: Page, name: string) {
 
 test.describe('sidebar navigation on desktop', () => {
   test('every entry navigates and mounts its screen', async ({ page }) => {
+    // One test, nineteen navigations, and each screen is now code-split - so a first visit costs
+    // a chunk request that the dev server transforms on demand. The default 30s covers a single
+    // interaction, not a walk through the whole menu; this raises the budget rather than
+    // shortening the walk, because the walk is the assertion.
+    test.slow()
     await page.setViewportSize({ width: 1440, height: 900 })
     await stubServices(page)
     await signIn(page)

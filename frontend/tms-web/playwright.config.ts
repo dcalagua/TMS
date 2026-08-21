@@ -20,7 +20,13 @@ export default defineConfig({
   workers: process.env.CI ? 2 : 4,
   reporter: [['list'], ['html', { outputFolder: './artifacts/playwright-report', open: 'never' }]],
   timeout: 30_000,
-  expect: { timeout: 7_000 },
+  // 12s rather than 7s because every screen is now code-split: the first visit to a route in a
+  // run asks the dev server for a chunk it has not transformed yet, and with several workers
+  // asking for different ones at once that transform queues behind the others. It is a
+  // development-server cost and not a product one - a built bundle serves those chunks from disk -
+  // but the suite runs against the dev server, so the budget has to cover it. Still short enough
+  // that a screen which genuinely never renders fails the test rather than hanging it.
+  expect: { timeout: 12_000 },
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'retain-on-failure',
