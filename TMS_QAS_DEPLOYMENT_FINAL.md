@@ -329,3 +329,160 @@ warnings de `oxlint`; dos chunks por encima de 500 kB.
 
 **6 · El smoke autenticado nunca se ha ejecutado.** El mecanismo está entregado y compila, pero
 hasta que corra con credenciales reales no es evidencia de nada.
+
+---
+---
+
+# FINAL RELEASE CLOSURE
+
+Añadido: 2026-08-25, 16:50 UTC.
+
+El PR se creó y **se mergeó**. Lo que sigue sin poder certificarse es el despliegue: este entorno
+no tiene acceso a Render ni a Amplify, y quince minutos después del merge **no hay una sola
+conexión de aplicación** contra la base de QAS.
+
+## PR y merge
+
+    PR                : https://github.com/dcalagua/TMS/pull/7
+    título            : release(qas): deploy stabilized TMS runtime and QAS environment
+    base <- head      : qas <- dev
+    estado antes      : MERGEABLE, mergeState CLEAN, sin revisión requerida,
+                        sin protección de rama en `qas`, sin checks configurados
+    commits           : 12          ficheros: 344
+    merge             : método normal del repositorio (merge commit), sin force
+    mergedAt          : 2026-08-25T16:30:46Z      mergedBy: edumorenoebim
+
+    QAS_MERGE_COMMIT  = 5d2b014cc73fb4b784229f9b33253870bd0e6046
+    ORIGIN_DEV        = 6b3e76dcad5f34c1829d861bf9b3c0d45bd42186
+    ORIGIN_QAS        = 5d2b014cc73fb4b784229f9b33253870bd0e6046
+    dev por delante de qas : 0 commits
+
+Contenido verificado ya en `qas` tras el merge: la V23 corregida (el `DROP CONSTRAINT` precede al
+`UPDATE`), el `Dockerfile` del frontend retirado, y `render.yaml` con un solo servicio.
+
+**El merge se hizo con `QAS_BACKEND_POINTS_TO_QAS_DB=UNKNOWN`.** Planteé el riesgo antes de
+ejecutarlo —que un `TMS_DB_URL` apuntando a otra base haría que Flyway creara allí el esquema
+entero— y el propietario decidió proceder. Queda anotado porque es la única decisión de esta fase
+que se tomó sin evidencia.
+
+## Configuración de release: por qué cuatro UNKNOWN
+
+Se agotaron todas las vías disponibles antes de declararlo:
+
+    CLI de Render / AWS / Amplify        no instalados
+    RENDER_API_KEY, RENDER_TOKEN         ausentes
+    AWS_ACCESS_KEY_ID, AWS_PROFILE       ausentes
+    ~/.aws/credentials, ~/.render        no existen
+    URLs *.onrender.com / *.amplifyapp.com  no aparecen en el repositorio ni en los .env locales
+    GitHub deployments / environments / workflows   0 / 0 / 0
+
+GitHub tampoco sabe nada del despliegue: no hay integración que publique deployments, así que las
+URLs de QAS no son deducibles desde el repositorio.
+
+    QAS_BACKEND_POINTS_TO_QAS_DB       = UNKNOWN
+    QAS_FRONTEND_POINTS_TO_QAS_BACKEND = UNKNOWN
+    QAS_AUTH                           = UNKNOWN
+    QAS_CORS                           = UNKNOWN
+    servicio legacy `tms-web` en Render = UNKNOWN (retirarlo del blueprint no lo borra del panel)
+
+Lo que **sí** está verificado del lado de la configuración versionada: `render.yaml` fija
+`SPRING_PROFILES_ACTIVE=prod`, declara un único servicio (`tms-api`), ya no referencia ningún
+`Dockerfile` de frontend, y su `healthCheckPath` resuelve a una sonda que existe y que responde UP
+sólo después de Flyway.
+
+## Despliegue: sin evidencia de que haya ocurrido
+
+Sin acceso a los paneles, se buscó la señal por el único canal observable — los logs de Supabase,
+que registran quién se conecta a la base de QAS. Como control, las conexiones de la reconstrucción
+de esta misma sesión **sí** aparecen:
+
+    postgres_logs     653 eventos   15:41:52 → 15:57:25    <- la migración y la validación
+    postgrest_logs    245 eventos   15:41:52 → 15:46:18
+    supavisor_logs    109 eventos   15:10:12 → 16:33:41
+
+Ventana desde el merge (16:30:46) hasta 16:46:00, quince minutos después:
+
+    postgres_logs     0 eventos
+    supavisor_logs    16 eventos
+
+Los 16 son ciclos cortos de `Connection authenticated` → `Terminate received`, espaciados cada dos
+o tres minutos (16:31:21, 16:33:27, 16:33:41, 16:36:33) y **sin un solo fallo de autenticación**.
+Ese patrón es de sondeo, no de arranque de aplicación: un Spring Boot levantando abre un pool
+Hikari y lo mantiene, y su Flyway y su JPA dejan rastro en `postgres_logs`. No hay ninguno.
+
+**Conclusión: ningún backend ha conectado a esta base desde que terminaron mis propias ejecuciones
+a las 15:57.** Las lecturas posibles son tres y no puedo distinguirlas desde aquí: que el
+despliegue no haya llegado a completarse, que el backend desplegado apunte a otra base, o que no
+haya un servicio activo en Render.
+
+    BACKEND_QAS_DEPLOY  = UNKNOWN
+    FRONTEND_QAS_DEPLOY = UNKNOWN
+
+La lectura tranquilizadora: **la base de QAS no ha sido tocada por nada inesperado.** El riesgo que
+se aceptó al mergear sin verificar no se ha materializado aquí.
+
+## Flyway post-deploy
+
+    latest    = V35        applied = 35        failed = 0        pending = 0
+    V23       = -194785114                     (coincide con el código)
+    52 tablas
+
+Todas las filas del historial llevan fecha de la reconstrucción (15:44:04 – 15:46:13). **Ninguna
+migración se re-ejecutó tras el merge**, que es el comportamiento correcto para un despliegue
+sobre un esquema ya en V35 — aunque en este caso lo correcto y la ausencia de despliegue producen
+exactamente la misma evidencia.
+
+## E2E autenticado
+
+    E2E_USER_EMAIL     MISSING
+    E2E_USER_PASSWORD  MISSING
+    E2E_BASE_URL       MISSING
+
+    AUTHENTICATED_E2E = 0/0/0/7   (7 saltados)
+
+El mecanismo está entregado y funciona: la suite reconoce la spec y salta sus siete pruebas de
+forma visible en lugar de pasar en verde sin haberse autenticado contra nada. Faltan las tres
+variables, y sin ellas no hay nada que declarar.
+
+## Smoke de QAS
+
+No ejecutado. Requiere la URL del frontend desplegado, que no está disponible.
+
+    SIDEBAR_SMOKE = 0/24
+    CONTROL_TOWER = REPORTING_KPIS = LOCATIONS = NOT_EXECUTED
+
+Los contadores de error van a cero porque no se generó tráfico contra QAS, no porque se haya
+comprobado que no los hay. Es la misma distinción que en los informes anteriores y conviene no
+leerla al revés.
+
+## Qué falta, exactamente
+
+1. **Abrir el panel de Render** y confirmar tres cosas del servicio `tms-api`: que existe y está
+   desplegando desde `qas`; que `TMS_DB_URL` apunta a la Supabase de QAS; y que
+   `TMS_CORS_ALLOWED_ORIGINS` contiene la URL del frontend. Si el servicio legacy `tms-web` sigue
+   ahí, retirarlo a mano.
+2. **Abrir la consola de Amplify** y confirmar que la rama `qas` construyó tras el merge.
+3. **Pasar las dos URLs** — backend y frontend de QAS — y las credenciales de una cuenta de
+   prueba en `E2E_USER_EMAIL` / `E2E_USER_PASSWORD`. Con eso quedan por verificar readiness,
+   `system/info`, el smoke autenticado y los 24 destinos del sidebar, que es todo lo que separa
+   este informe de un `PASS`.
+
+## Riesgos residuales
+
+**1 · El despliegue no está certificado.** Es el único bloqueante. Todo lo demás —base, esquema,
+checksum, seed, pruebas, configuración versionada— está verificado con evidencia.
+
+**2 · El servicio legacy `tms-web` puede seguir existiendo en Render.** Si existe y despliega
+desde `qas`, tras este merge fallará al no encontrar el `Dockerfile`.
+
+**3 · QAS y desarrollo local siguen compartiendo proyecto Supabase.** El `.env.example` y
+`LocalProfileDatabaseGuard` empujan a que lo local use una base local, pero mientras no exista un
+segundo proyecto, un `.env` mal apuntado puede alcanzar QAS.
+
+**4 · PROD no existe.** Cuando exista debe ser otro proyecto, nunca éste.
+
+**5 · Deuda heredada, sin bloquear.** MUI como librería principal sin ADR; 17 warnings de
+`oxlint`; dos chunks por encima de 500 kB.
+
+**6 · El smoke autenticado nunca se ha ejecutado.** Entregado y compilando, pero sin credenciales
+no es evidencia de nada.
