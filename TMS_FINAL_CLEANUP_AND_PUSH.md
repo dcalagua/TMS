@@ -338,19 +338,26 @@ Cuatro, cada uno coherente por sí solo. No se reescribió historia, no hubo squ
                                               never actually run
     d6c77e58885a844f8e437a22025809c885baa37b  test(web): a regression and e2e baseline for a
                                               frontend that had neither
-    __DOCS_HASH__  docs(tms): record the verification, remediation and cleanup
+    865f6e4bd36728e8cfaa26e55e9415d5ad3186b8  docs(tms): record the verification, remediation and cleanup
 
 ## 17. Resultado del push
 
-__PUSH_RESULT__
+    git push origin dev
+
+       00f9386..865f6e4  dev -> dev        (fast-forward, 5 commits)
+
+Sin `--force`, sin `--force-with-lease`, sin rama nueva, sin merge a `main`, sin PR.
+Comprobado antes del push: `BEHIND=0`. Comprobado después: local y remoto en el mismo commit.
 
 ## 18. HEAD local
 
-    __LOCAL_HEAD__
+    865f6e4bd36728e8cfaa26e55e9415d5ad3186b8
 
 ## 19. HEAD remoto
 
-    __REMOTE_HEAD__
+    865f6e4bd36728e8cfaa26e55e9415d5ad3186b8   (origin/dev — idéntico)
+
+    AHEAD=0   BEHIND=0   WORKING_TREE_CLEAN=YES
 
 ## 20. Archivos NO commiteados deliberadamente
 
