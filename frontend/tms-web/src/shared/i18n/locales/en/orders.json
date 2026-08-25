@@ -5,7 +5,14 @@
     "markReady": "Mark ready",
     "view": "View"
   },
+  "columns": {
+    "fulfillment": "Delivery"
+  },
   "description": "Transport orders: header plus lines, with a minimal V1 status lifecycle (not ready, ready for planning, planned or cancelled). Totals are always computed and owned by the backend.",
+  "detail": {
+    "fulfillment": "Delivery state",
+    "fulfillmentHelp": "What happened to the goods at the delivery point. Independent of the planning status."
+  },
   "dialogs": {
     "cancelError": "Could not cancel the order",
     "cancelText": "{{number}} will be cancelled and can no longer be edited or planned.",
@@ -22,10 +29,12 @@
   },
   "filters": {
     "allDestinations": "All destinations",
+    "allFulfillment": "All delivery states",
     "allPriorities": "All priorities",
     "allStatuses": "All statuses",
     "dateFrom": "From",
-    "dateTo": "To"
+    "dateTo": "To",
+    "fulfillment": "Delivery"
   },
   "form": {
     "addLine": "Add line",

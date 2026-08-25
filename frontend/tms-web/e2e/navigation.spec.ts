@@ -4,6 +4,7 @@ import { signIn, stubServices } from './support/app'
 /** Every sidebar entry, with the URL it must reach and the `h1` its screen renders. */
 const ENTRIES = [
   { link: 'Inicio', path: '/', heading: /^Hola,/ },
+  { link: 'Torre de control', path: '/control-tower', heading: 'Torre de control' },
   { link: 'Orígenes', path: '/masters/origins', heading: 'Orígenes' },
   { link: 'Destinos', path: '/masters/destinations', heading: 'Destinos' },
   { link: 'Zonas', path: '/masters/zones', heading: 'Zonas' },
@@ -12,10 +13,17 @@ const ENTRIES = [
   { link: 'Transportistas', path: '/fleet/carriers', heading: 'Transportistas' },
   { link: 'Tipos de vehículo', path: '/fleet/vehicle-types', heading: 'Tipos de vehículo' },
   { link: 'Vehículos', path: '/fleet/vehicles', heading: 'Vehículos' },
+  { link: 'Conductores', path: '/fleet/drivers', heading: 'Conductores' },
   { link: 'Pedidos', path: '/orders', heading: 'Pedidos' },
   { link: 'Planificación', path: '/planning', heading: 'Planificación' },
   { link: 'Viajes', path: '/trips', heading: 'Viajes' },
-  { link: 'Seguridad', path: '/admin/security', heading: 'Seguridad' },
+  // The old `/admin/security` placeholder is gone. These four are what it was a placeholder for,
+  // and each is a real screen rather than a stub - which is why they are asserted by their own
+  // heading and not by the group label above them.
+  { link: 'Compañía', path: '/settings/company', heading: 'Compañía' },
+  { link: 'Usuarios y accesos', path: '/settings/users', heading: 'Usuarios y accesos' },
+  { link: 'Integraciones', path: '/settings/integrations', heading: 'Centro de integraciones' },
+  { link: 'Auditoría', path: '/security/audit', heading: 'Auditoría' },
 ] as const
 
 /** Scoped to the menu: the dashboard also offers quick-access links with the same names. */

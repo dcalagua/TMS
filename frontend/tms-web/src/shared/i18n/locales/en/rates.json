@@ -1,0 +1,106 @@
+{
+  "activateText": "The rate card will apply again to the shipments it covers.",
+  "anyVehicleType": "Any type",
+  "columns": {
+    "components": "Components",
+    "scope": "Scope",
+    "validity": "Validity"
+  },
+  "componentShort": {
+    "base": "Base",
+    "minimum": "Minimum",
+    "perKg": "/kg",
+    "perKm": "/km",
+    "perM3": "/m³",
+    "perPallet": "/pallet"
+  },
+  "deactivateText": "The rate card will stop applying. Costs already calculated from it do not change.",
+  "description": "What each carrier charges, for what, and between which dates.",
+  "empty": {
+    "message": "Create a rate card so TMS can estimate what each shipment costs.",
+    "title": "No rate cards"
+  },
+  "filters": {
+    "allScopes": "All scopes",
+    "onDate": "In force on"
+  },
+  "form": {
+    "amountPerKg": "Amount per kg",
+    "amountPerKm": "Amount per km",
+    "amountPerM3": "Amount per m³",
+    "amountPerPallet": "Amount per pallet",
+    "baseAmount": "Base amount",
+    "carrierLocked": "The carrier cannot be changed: that would be a different agreement. Create a new card.",
+    "componentsHelp": "The shipment is charged the sum of the components defined here. Leave the rest blank.",
+    "create": "New rate card",
+    "currency": "Currency",
+    "currencyHelp": "Three-letter ISO code, for example PEN or USD. There is no conversion between currencies.",
+    "edit": "Edit rate card",
+    "minimumAmount": "Minimum amount",
+    "minimumHelp": "The floor charged even when the components add up to less.",
+    "needsAComponent": "A rate card must define at least one component besides the minimum.",
+    "route": "Route",
+    "sections": {
+      "components": "Components",
+      "scope": "Scope",
+      "validity": "Validity and currency"
+    },
+    "selectCarrier": "Select a carrier",
+    "selectOrigin": "Select an origin",
+    "selectRoute": "Select a route",
+    "subtitle": "A commercial agreement with one carrier, in force between two dates.",
+    "validToHelp": "Blank means an open-ended agreement.",
+    "vehicleTypeHelp": "Blank applies to any vehicle type."
+  },
+  "new": "New rate card",
+  "noEndDate": "open-ended",
+  "scopeHint": {
+    "CARRIER": "Applies to anything this carrier runs.",
+    "ORIGIN": "Applies to anything leaving this origin.",
+    "ROUTE": "Applies only to shipments built from this master route."
+  },
+  "title": "Rate cards",
+  "tripCost": {
+    "actions": {
+      "close": "Close cost",
+      "estimate": "Estimate",
+      "reEstimate": "Re-estimate",
+      "recordActual": "Record actual",
+      "reopen": "Reopen"
+    },
+    "actual": "Actual",
+    "breakdown": {
+      "amount": "Amount",
+      "component": "Component",
+      "detail": "Calculation",
+      "notCalculable": "Not calculable",
+      "title": "Estimate breakdown"
+    },
+    "closedOn": "Cost closed on {{date}}",
+    "confirm": {
+      "closeText": "Once closed it cannot be changed until it is reopened.",
+      "closeTitle": "Close this cost?",
+      "reopenText": "The cost becomes editable again. Reopening is recorded in the audit trail.",
+      "reopenTitle": "Reopen this cost?"
+    },
+    "estimated": "Estimated",
+    "form": {
+      "amount": "Actual amount",
+      "currencyHelp": "This shipment has no estimate, so the currency has to be stated.",
+      "reference": "Carrier document",
+      "referenceHelp": "Invoice or settlement number, exactly as the carrier issued it.",
+      "subtitle": "What the carrier actually charged for this shipment.",
+      "title": "Actual cost"
+    },
+    "incomplete": "The estimate is incomplete: some components could not be calculated and add nothing.",
+    "notPriced": "This shipment has not been priced yet.",
+    "notify": {
+      "closed": "Cost closed",
+      "estimated": "Cost estimated",
+      "reopened": "Cost reopened"
+    },
+    "rateCard": "Rate card {{code}} — {{name}}",
+    "title": "Cost",
+    "variance": "Variance"
+  }
+}

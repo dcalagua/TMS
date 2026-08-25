@@ -1,7 +1,7 @@
 package com.ebim.tms.masterdata.application;
 
 import com.ebim.tms.masterdata.domain.Frequency;
-import com.ebim.tms.masterdata.domain.Origin;
+import com.ebim.tms.masterdata.domain.Location;
 import com.ebim.tms.masterdata.domain.Route;
 import com.ebim.tms.masterdata.domain.Zone;
 import java.math.BigDecimal;
@@ -35,7 +35,12 @@ public record RouteView(
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt) {
 
-    public static RouteView from(Route route, Origin origin, Zone zone, Frequency frequency, long stopCount) {
+    /**
+     * @param origin the canonical location the route departs from, or {@code null} when it no
+     *     longer resolves in this company - the view degrades to ids rather than failing, which
+     *     is what keeps a list page rendering while an operator fixes one bad row
+     */
+    public static RouteView from(Route route, Location origin, Zone zone, Frequency frequency, long stopCount) {
         return new RouteView(route.id(), route.code(), route.name(), route.originId(),
                 origin == null ? null : origin.code(), origin == null ? null : origin.name(), route.zoneId(),
                 zone == null ? null : zone.code(), zone == null ? null : zone.name(), route.frequencyId(),

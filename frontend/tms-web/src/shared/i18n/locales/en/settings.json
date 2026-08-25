@@ -1,0 +1,255 @@
+{
+  "company": {
+    "code": "Code",
+    "codeHelp": "Identifies the company across the installation. It cannot be changed after creation.",
+    "countryPattern": "Use the two-letter ISO code, for example PE.",
+    "created": "Company created",
+    "defaultCountry": "Default country",
+    "defaultCountryHelp": "Applied to imported locations that leave the country blank. It never changes an existing location.",
+    "description": "Company details, time zone and document numbering.",
+    "identity": "Identification",
+    "newCompany": "New company",
+    "newCompanyNote": "The new company appears in your company selector, because your role reaches the whole organization.",
+    "newCompanySubtitle": "It will be created inside {{organization}}.",
+    "numbering": "Document numbering",
+    "numberingHelp": "The prefix belongs to this company; the digits come from one installation-wide counter, so changing it renumbers nothing and cannot create a duplicate.",
+    "operation": "Operation",
+    "orderPrefix": "Order prefix",
+    "organization": "Organization",
+    "organizationInactive": "Organization inactive",
+    "prefixPattern": "One to six letters or digits followed by a hyphen, for example TO-.",
+    "sample": "Example: {{value}}",
+    "saved": "Settings saved",
+    "shipmentPrefix": "Shipment prefix",
+    "taxIdentifier": "Tax identifier",
+    "timeZone": "Time zone",
+    "timeZoneHelp": "Decides what \"today\" means for this company. Use an IANA id, for example America/Lima.",
+    "title": "Company"
+  },
+  "integrations": {
+    "clients": {
+      "bearerToken": "Bearer token (ready to paste)",
+      "clientId": "Client id",
+      "description": "Machine credentials partner systems authenticate with. Each one belongs to this company and cannot be pointed at another.",
+      "empty": {
+        "message": "Issue one so a partner system can send us locations, orders or positions.",
+        "title": "No credentials yet"
+      },
+      "form": {
+        "carrierHelp": "Which carrier's tenders this key answers. Required for the tender scope and refused for any other, because a key that may answer offers must say whose.",
+        "carrierPlaceholder": "Search carriers",
+        "carrierRequired": "Choose the carrier this credential answers for.",
+        "create": "Issue a credential",
+        "createSubtitle": "The secret is generated now and shown once.",
+        "edit": "Edit credential",
+        "editSubtitle": "Renaming and re-scoping. The secret is not affected.",
+        "nameHelp": "How this key is identified in the list and in the audit trail, for example \"Store WMS\".",
+        "scopeRequired": "Choose at least one scope. A credential that may do nothing still authenticates."
+      },
+      "issue": "Issue credential",
+      "lastUsed": "Last used",
+      "neverUsed": "Never used",
+      "revoke": "Revoke",
+      "revokeText": "Both the current and any superseded secret stop working at once, and this cannot be undone. The credential's history is kept.",
+      "revokeTitle": "Revoke {{name}}?",
+      "revoked": "Revoked",
+      "rotate": "Rotate secret",
+      "rotateText": "A new secret is issued now. The old one keeps working for the configured grace window so the partner can redeploy. Revoke instead if it may have leaked.",
+      "rotateTitle": "Rotate the secret of {{name}}?",
+      "rotating": "Rotation in progress",
+      "scopes": "Scopes",
+      "secret": "Secret",
+      "secretTitle": "Credential issued",
+      "terminal": "Revoked",
+      "title": "Credentials"
+    },
+    "deliveries": {
+      "allEndpoints": "All endpoints",
+      "attempts_one": "{{count}} attempt",
+      "attempts_other": "{{count}} attempts",
+      "description": "What we pushed out, and what came back. Every attempt is kept.",
+      "detail": {
+        "attempts": "Attempts",
+        "completedAt": "Finished",
+        "duration": "{{ms}} ms",
+        "eventId": "Event id",
+        "eventIdHelp": "Stable across every attempt and redelivery. Your system deduplicates on this.",
+        "noAttempts": "Queued, not attempted yet.",
+        "noResponse": "No response: the call never reached a server.",
+        "occurredAt": "Happened",
+        "payload": "Payload",
+        "payloadHelp": "The exact bytes every attempt sent, frozen when the delivery was queued so a retry is identical to the first try.",
+        "title": "Delivery"
+      },
+      "empty": {
+        "message": "Deliveries appear here as soon as a subscribed event happens.",
+        "title": "Nothing delivered yet"
+      },
+      "event": "Event",
+      "inspect": "Inspect",
+      "nextAttempt": "Next attempt {{when}}",
+      "outcome": "Outcome",
+      "outcomes": {
+        "DELIVERED": "Delivered",
+        "PERMANENT_FAILURE": "Refused",
+        "RETRYABLE_FAILURE": "Will retry"
+      },
+      "queuedAt": "Queued",
+      "requeued": "Queued for another attempt",
+      "retry": "Retry now",
+      "statuses": {
+        "FAILED": "Failed",
+        "PENDING": "Pending",
+        "PROCESSED": "Delivered"
+      },
+      "title": "Delivery log"
+    },
+    "description": "What is connected to this company: who may write into us, and where our events go.",
+    "inbox": {
+      "allClients": "All credentials",
+      "counts": "{{succeeded}} of {{total}} accepted",
+      "description": "Every delivery a partner sent us, whatever the outcome. No payload content is kept here.",
+      "empty": {
+        "message": "Nothing has been sent to this company yet.",
+        "title": "Inbox empty"
+      },
+      "operation": "Operation",
+      "outcome": "Outcome",
+      "receivedAt": "Received",
+      "reference": "Reference",
+      "statuses": {
+        "FAILED": "Failed",
+        "PARTIAL": "Partial",
+        "REJECTED": "Rejected",
+        "SUCCEEDED": "Accepted"
+      },
+      "title": "Inbound activity"
+    },
+    "noAccess": {
+      "message": "You need integration credential or webhook permissions to see this screen.",
+      "title": "Not available to your role"
+    },
+    "scopes": {
+      "locationWrite": {
+        "help": "Create and update stores and locations. Cannot read anything back.",
+        "label": "Write locations"
+      },
+      "orderWrite": {
+        "help": "Create and update transport orders unattended. The most powerful scope: grant it only to a system you would let place orders without a person looking.",
+        "label": "Write orders"
+      },
+      "shipmentRead": {
+        "help": "Read confirmed shipments and poll the change feed. Read-only: it grants no write anywhere.",
+        "label": "Read shipments"
+      },
+      "tenderRespond": {
+        "help": "See and answer the tenders offered to one carrier. Needs a carrier, and shows that carrier's offers only.",
+        "label": "Answer tenders"
+      },
+      "trackingWrite": {
+        "help": "Report vehicle positions. Write-only: a telematics feed learns nothing about the shipments it pushes against.",
+        "label": "Report positions"
+      }
+    },
+    "secret": {
+      "copied": "Copied to the clipboard",
+      "done": "I have stored it",
+      "hide": "Hide",
+      "reveal": "Reveal",
+      "subtitle": "Shown once. It cannot be recovered afterwards."
+    },
+    "tabs": {
+      "inbound": "Inbound",
+      "outbound": "Outbound"
+    },
+    "title": "Integration Hub",
+    "webhooks": {
+      "add": "Add endpoint",
+      "description": "Endpoints we push this company's events to, signed and retried. Polling the change feed keeps working either way.",
+      "empty": {
+        "message": "Add one so a partner system is told as soon as something happens, instead of polling for it.",
+        "title": "No endpoints yet"
+      },
+      "events": "Events",
+      "failureStreak_one": "{{count}} delivery failed in a row",
+      "failureStreak_other": "{{count}} deliveries failed in a row",
+      "form": {
+        "create": "Add endpoint",
+        "createSubtitle": "The signing secret is generated now and shown once.",
+        "edit": "Edit endpoint",
+        "editSubtitle": "Renaming, re-pointing and re-selecting events. The secret and the paused state are not affected.",
+        "eventRequired": "Choose at least one event. An endpoint that selects nothing receives nothing.",
+        "eventsHelp": "The same vocabulary as the change feed. New types appear here automatically.",
+        "nameHelp": "How this endpoint is identified in the list and in the delivery log, for example \"ERP orders\".",
+        "selectAll": "Select all",
+        "targetUrl": "Target URL",
+        "targetUrlHelp": "Must be https and publicly reachable. Internal and loopback addresses are refused."
+      },
+      "health": "Health",
+      "lastSuccess": "Last delivered {{when}}",
+      "neverDelivered": "Never delivered",
+      "pause": "Pause",
+      "pauseText": "Deliveries stop being sent. Nothing is discarded: events keep queueing and are released when you resume.",
+      "pauseTitle": "Pause {{name}}?",
+      "paused": "Paused",
+      "resume": "Resume",
+      "resumeText": "Queued deliveries are released and the failure count is cleared.",
+      "resumeTitle": "Resume {{name}}?",
+      "resumed": "Resumed",
+      "rotate": "Rotate secret",
+      "rotateText": "The new secret takes effect immediately and without a grace window, so accept both on your side while you redeploy. Deliveries signed with the old secret will fail verification from now on.",
+      "rotateTitle": "Rotate the signing secret of {{name}}?",
+      "secretHint": "Secret ending {{hint}}",
+      "secretTitle": "Signing secret issued",
+      "signatureFormat": "Signed payload",
+      "signatureHeader": "Signature header",
+      "signingSecret": "Signing secret",
+      "suspended": "Suspended automatically",
+      "title": "Webhook endpoints"
+    }
+  },
+  "users": {
+    "accessRevoked": "Access revoked",
+    "accountDisabled": "Account disabled",
+    "companyScoped": "This company",
+    "description": "Who can work in this company, and with which roles.",
+    "emailHelp": "If the address already exists in the installation, that account is reused and only given access to this company.",
+    "emailImmutable": "The address identifies the account and is not editable. To change it, revoke access and invite the new address.",
+    "empty": {
+      "message": "Invite somebody so they can work in this company.",
+      "title": "Nobody here yet"
+    },
+    "form": {
+      "edit": "Edit access",
+      "editSubtitle": "This person's name and roles in this company.",
+      "invite": "Invite somebody",
+      "inviteSubtitle": "They will get access to this company with the roles you choose.",
+      "sendInvite": "Grant access"
+    },
+    "fullName": "Name",
+    "hasAccess": "Has access",
+    "invite": "Invite",
+    "invited": "Access granted",
+    "notEditableHere": "Not editable here",
+    "organizationScoped": "organization role",
+    "organizationWide": "Whole organization",
+    "permissionCount_one": "{{count}} permission",
+    "permissionCount_other": "{{count}} permissions",
+    "restore": "Restore access",
+    "restoreText": "They will work in this company again with the roles they already had.",
+    "restoreTitle": "Restore access for {{name}}?",
+    "restored": "Access restored",
+    "revoke": "Revoke access",
+    "revokeText": "They will stop working in this company. Their account and their history are untouched.",
+    "revokeTitle": "Revoke access for {{name}}?",
+    "revoked": "Access revoked",
+    "roleRequired": "Choose at least one role.",
+    "roles": "Roles",
+    "scope": "Scope",
+    "searchLabel": "Search",
+    "searchPlaceholder": "Name or email",
+    "selfRolesLocked": "You cannot change your own roles. Ask another administrator of this company to do it.",
+    "title": "Users and access",
+    "you": "you"
+  }
+}

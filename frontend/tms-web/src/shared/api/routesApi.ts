@@ -24,12 +24,20 @@ export interface RouteView {
   updatedAt: string
 }
 
-/** Mirrors the backend's `RouteDetailView.RouteStopView` record. */
+/** Mirrors the backend's `RouteDetailView.RouteStopView` record.
+ *
+ * Service time arrives three ways because the editor shows all three: what this stop overrides
+ * (`serviceTimeOverrideMinutes`, null when it overrides nothing), what it would inherit
+ * (`destinationServiceTimeMinutes`, used as the field's placeholder), and what actually applies
+ * (`effectiveServiceTimeMinutes`). Never recompute the third here - the backend owns that rule. */
 export interface RouteStopView {
   destinationId: string
   destinationCode: string | null
   destinationName: string | null
   sequence: number
+  serviceTimeOverrideMinutes: number | null
+  destinationServiceTimeMinutes: number | null
+  effectiveServiceTimeMinutes: number | null
 }
 
 /** Mirrors the backend's `RouteDetailView` record - returned by get/create/update/activate/deactivate. */
@@ -54,8 +62,17 @@ export interface RouteDetailView {
   updatedAt: string
 }
 
+/** Mirrors the backend's `RouteRequest.RouteStopRequest` record. Omit
+ * `serviceTimeOverrideMinutes` to inherit the destination location's service time; `0` is a real
+ * override (a drop-and-go stop), not a synonym for omitting it. */
+export interface RouteStopRequest {
+  destinationId: string
+  serviceTimeOverrideMinutes?: number | null
+}
+
 /** Mirrors the backend's `RouteRequest` record - shared shape for create and update.
- * `destinationIds` order IS the stop sequence; the server assigns 1..N from array order. */
+ * `stops` order IS the stop sequence; the server assigns 1..N from array order. The whole list is
+ * sent every time, not a delta, so a stop re-sent without an override loses the one it had. */
 export interface RouteRequest {
   code: string
   name: string
@@ -64,7 +81,7 @@ export interface RouteRequest {
   frequencyId?: string | null
   referenceDistanceKm?: number | null
   referenceDurationMinutes?: number | null
-  destinationIds: string[]
+  stops: RouteStopRequest[]
 }
 
 export interface RouteListParams {

@@ -6,6 +6,7 @@ import com.ebim.tms.shared.imports.ImportIssue;
 import com.ebim.tms.shared.imports.ImportOutcome;
 import com.ebim.tms.shared.imports.ImportRow;
 import com.ebim.tms.shared.imports.ImportValues;
+import com.ebim.tms.shared.settings.CompanySettings;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -49,19 +50,36 @@ final class LocationImportValidator {
                 .collect(Collectors.toUnmodifiableSet());
     }
 
+    /**
+     * The product's own default country, for a caller that has no company settings to hand. Kept as
+     * an overload rather than a nullable parameter so the tests of the rules themselves - which are
+     * about codes, roles and coordinates, not about which market this is - do not each have to
+     * declare a country they do not care about.
+     */
     static Result validate(List<ImportRow> rows, MasterSnapshot snapshot, String defaultTimeZone) {
+        return validate(rows, snapshot, defaultTimeZone, CompanySettings.DEFAULT_COUNTRY);
+    }
+
+    /**
+     * @param defaultTimeZone the company's zone, applied to a row that left {@code timeZone} blank
+     * @param defaultCountry the company's {@code defaultCountry} (migration V34), applied to a row
+     *     that left {@code country} blank. Was the literal {@code "PE"} until then, which is right
+     *     for the launch market and wrong for the second one
+     */
+    static Result validate(List<ImportRow> rows, MasterSnapshot snapshot, String defaultTimeZone,
+            String defaultCountry) {
         List<ImportIssue> issues = new ArrayList<>();
         List<LocationImportCandidate> candidates = new ArrayList<>();
         Set<String> codesSeenInFile = new HashSet<>();
 
         for (ImportRow row : rows) {
-            candidates.add(validateRow(row, snapshot, defaultTimeZone, codesSeenInFile, issues));
+            candidates.add(validateRow(row, snapshot, defaultTimeZone, defaultCountry, codesSeenInFile, issues));
         }
         return new Result(List.copyOf(candidates), List.copyOf(issues));
     }
 
     private static LocationImportCandidate validateRow(ImportRow row, MasterSnapshot snapshot,
-            String defaultTimeZone, Set<String> codesSeenInFile, List<ImportIssue> issues) {
+            String defaultTimeZone, String defaultCountry, Set<String> codesSeenInFile, List<ImportIssue> issues) {
         int issuesBefore = issues.size();
 
         String rawCode = row.value(LocationImportColumn.CODE.header());
@@ -141,7 +159,8 @@ final class LocationImportValidator {
                 ImportValues.clean(row.value(LocationImportColumn.DISTRICT.header())),
                 ImportValues.clean(row.value(LocationImportColumn.PROVINCE.header())),
                 ImportValues.clean(row.value(LocationImportColumn.DEPARTMENT.header())),
-                country == null ? "PE" : country, timeZone == null ? defaultTimeZone : timeZone, latitude, longitude,
+                country == null ? defaultCountry : country,
+                timeZone == null ? defaultTimeZone : timeZone, latitude, longitude,
                 zoneCode, zoneId, serviceTimeMinutes == null ? 0 : serviceTimeMinutes, externalSystem,
                 externalReference);
     }
@@ -162,7 +181,7 @@ final class LocationImportValidator {
                 roles.add(LocationRole.valueOf(trimmed.toUpperCase(Locale.ROOT)));
             } catch (IllegalArgumentException unknown) {
                 issues.add(issue(row, LocationImportColumn.ROLES, code, "'" + trimmed + "' is not recognised. Use "
-                        + "one or more of ORIGIN, SHIP_TO, STORE, DC, PLANT, HUB, OTHER, separated by commas."));
+                        + "ORIGIN, DESTINATION, or both separated by a comma."));
             }
         }
         if (roles.isEmpty() && raw.isBlank()) {

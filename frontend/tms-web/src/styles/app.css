@@ -47,6 +47,12 @@ h6 {
   white-space: nowrap;
 }
 
+/* A numeric field inside a row of other content: wide enough for three digits and the
+   browser's spinner, narrow enough that it never competes with the row's own label. */
+.tms-w-numeric-sm {
+  width: 5.5rem;
+}
+
 /* ---------------------------------------------------------------------------
    Application shell
    ---------------------------------------------------------------------------
@@ -529,6 +535,90 @@ h6 {
   margin: 0;
   font-size: var(--tms-font-base);
   color: var(--tms-muted);
+}
+
+/* ---- Alerts bell and its panel (V32) ------------------------------------
+   The badge is a count and not a dot: "something happened" is not actionable,
+   and the difference between 1 and 40 is the difference between glancing and
+   stopping what you are doing. It caps at 99+ so a neglected desk cannot push
+   the bar's layout around. */
+.tms-bell {
+  position: relative;
+  overflow: visible;
+}
+
+.tms-bell-badge {
+  position: absolute;
+  top: -0.125rem;
+  right: -0.125rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  padding: 0 0.25rem;
+  border-radius: var(--tms-radius-pill);
+  /* Ringed in the bar's own background so the badge reads as sitting on top of
+     the bell rather than merging into it on a dark theme. */
+  border: 2px solid var(--tms-topbar-bg);
+  background-color: var(--tms-danger);
+  color: #fff;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Severity is carried by the tile's colour and the type by its icon, so "how
+   bad" and "what happened" are read from two channels instead of competing for
+   one. INFO deliberately gets no tone at all - a completed shipment that looked
+   like a warning would be the fastest way to teach people to ignore the panel. */
+.tms-alert-tile.is-warning {
+  background-color: var(--tms-warning-soft);
+  border-color: var(--tms-warning-border);
+  color: var(--tms-warning);
+}
+
+.tms-alert-tile.is-critical {
+  background-color: var(--tms-danger-soft);
+  border-color: var(--tms-danger-border);
+  color: var(--tms-danger);
+}
+
+.tms-alert-row {
+  align-items: flex-start;
+}
+
+.tms-alert-row .tms-menu-action-meta {
+  white-space: normal;
+}
+
+/* Unread is a weight and a rule down the left edge, not a filled row: a panel
+   of coloured blocks is unreadable at six entries, and the point of the marker
+   is to say which ones are new. */
+.tms-alert-row.is-unread {
+  box-shadow: inset 2px 0 0 0 var(--tms-primary);
+}
+
+.tms-alert-row.is-unread .tms-menu-action-title {
+  font-weight: 700;
+}
+
+/* A resolved alert stays on the board - "this happened and was dealt with" is
+   worth more than silence - but it stops competing for attention. */
+.tms-alert-row.is-resolved .tms-menu-action-title,
+.tms-alert-row.is-resolved .tms-menu-action-meta {
+  color: var(--tms-muted);
+}
+
+.tms-alert-time {
+  display: block;
+  margin-top: 0.125rem;
+  font-size: var(--tms-font-xs);
+  color: var(--tms-muted);
+}
+
+.tms-alert-readall:disabled {
+  opacity: 0.5;
 }
 
 /* ---- Identity chip in the bar ------------------------------------------- */
@@ -1074,6 +1164,27 @@ h6 {
   overflow-y: auto;
   overscroll-behavior: contain;
   flex: 1 1 auto;
+}
+
+/* The rule above never applied on desktop, which is where it was needed.
+   Bootstrap ships `.offcanvas-lg .offcanvas-body { overflow-y: visible; flex-grow: 0 }`
+   above the lg breakpoint - it is undoing the drawer, because at that width the
+   sidebar is a static column and not an overlay - and two class selectors beat
+   one, so the column silently could not scroll.
+
+   Nothing looked wrong while the menu fitted in the window. The moment it did
+   not, the overflow was drawn past the bottom of the page instead of scrolling,
+   and the last entry could not be reached at all on a 900px-tall screen: not by
+   scrolling the column, which does not move, and not by scrolling the page,
+   which stops before it. Adding one item to the trailing group was enough.
+
+   Matched at the same specificity so it wins, and scoped to the sidebar so no
+   other offcanvas in the product is affected. */
+@media (min-width: 992px) {
+  .offcanvas-lg.tms-sidebar .tms-sidebar-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+  }
 }
 
 /* A thin, dark scrollbar: the default light one cuts a bright stripe down the
@@ -3184,6 +3295,96 @@ h6 {
 
 .tms-capacity-fill-muted {
   background-color: var(--tms-border-strong);
+}
+
+/* ---------------------------------------------------------------------------
+   Charts - the reporting screen's inline SVG columns (DailyColumnChart).
+
+   Everything here is a token, never a literal colour, so dark mode is one
+   variable swap rather than a second stylesheet. The data is the only thing
+   allowed to be loud: the grid is a hairline one step off the surface, the axis
+   text wears the muted text token, and the column carries the only hue.
+   ------------------------------------------------------------------------- */
+.tms-chart {
+  margin: 0;
+  padding: 1rem 1rem 0.75rem;
+  background-color: var(--tms-surface);
+  border: 1px solid var(--tms-border);
+  border-radius: var(--tms-radius-lg);
+  box-shadow: var(--tms-shadow-xs);
+}
+
+.tms-chart-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  margin-bottom: 0.5rem;
+}
+
+/* The chart's own name. There is no legend - one series does not need one - so this
+   is what says which measure is plotted. */
+.tms-chart-title {
+  font-size: var(--tms-font-md);
+  font-weight: 600;
+  color: var(--tms-text);
+}
+
+.tms-chart-description {
+  font-size: var(--tms-font-sm);
+  color: var(--tms-text-secondary);
+}
+
+/* Height lives here and includes the x-axis band, so the card never grows a nested
+   scrollbar around labels its box was too short for. */
+.tms-chart-canvas {
+  display: block;
+  width: 100%;
+  height: 13rem;
+}
+
+.tms-chart-grid {
+  stroke: var(--tms-border);
+  stroke-width: 1;
+}
+
+/* Tabular figures because these are a column of numbers that must line up; the hero
+   figures on the KPI cards deliberately do not use them. */
+.tms-chart-tick {
+  fill: var(--tms-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* One hue for the one series, from the categorical accents the navigation already
+   uses, so a chart is not a second colour system. */
+.tms-chart-column {
+  fill: var(--tms-accent-6-fg);
+}
+
+/* A day nothing was measured on. A band behind the whole plot, never a mark at the
+   baseline: at the baseline it would read as a very small value, which is exactly
+   the lie the null exists to prevent. */
+.tms-chart-nodata {
+  fill: var(--tms-surface-muted);
+}
+
+.tms-chart-hit {
+  fill: transparent;
+}
+
+.tms-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+/* Held at reduced opacity while a new range loads, rather than replaced by a
+   skeleton: a chart that disappears and comes back shifts the page under the
+   cursor of somebody who is comparing two ranges. */
+.tms-chart-stale {
+  opacity: 0.55;
+  transition: opacity var(--tms-motion-base) var(--tms-easing);
 }
 
 /* ---------------------------------------------------------------------------

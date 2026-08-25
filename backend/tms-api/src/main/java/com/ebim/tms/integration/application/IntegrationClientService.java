@@ -15,6 +15,7 @@ import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.audit.AuditAggregateType;
 import com.ebim.tms.shared.audit.AuditRecorder;
+import com.ebim.tms.shared.reference.CarrierLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.time.Clock;
 import java.time.Duration;
@@ -57,16 +58,19 @@ public class IntegrationClientService {
     private final IntegrationClientRepository clientRepository;
     private final IntegrationRequestRepository requestRepository;
     private final IntegrationProperties properties;
+    private final CarrierLookupPort carrierLookupPort;
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
     private final Clock clock;
 
     public IntegrationClientService(IntegrationClientRepository clientRepository,
             IntegrationRequestRepository requestRepository, IntegrationProperties properties,
-            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder, Clock clock) {
+            CarrierLookupPort carrierLookupPort, AuditActorProvider auditActorProvider,
+            AuditRecorder auditRecorder, Clock clock) {
         this.clientRepository = clientRepository;
         this.requestRepository = requestRepository;
         this.properties = properties;
+        this.carrierLookupPort = carrierLookupPort;
         this.auditActorProvider = auditActorProvider;
         this.auditRecorder = auditRecorder;
         this.clock = clock;
@@ -97,6 +101,7 @@ public class IntegrationClientService {
             throw new ConflictException("An integration credential named '" + name + "' already exists in this company.");
         }
 
+        UUID carrierId = resolveCarrier(scope, request.carrierId(), scopes);
         UUID actorId = auditActorProvider.requireAppUserId();
         String clientId = IntegrationSecrets.newClientId();
         String secret = IntegrationSecrets.newSecret();
@@ -104,6 +109,7 @@ public class IntegrationClientService {
         IntegrationClient client = new IntegrationClient(scope.companyId(), clientId, name,
                 blankToNull(request.description()), IntegrationSecrets.hash(secret), actorId);
         client.replaceScopes(scopes, actorId);
+        client.assignCarrier(carrierId, actorId);
 
         IntegrationClient saved = clientRepository.saveAndFlush(client);
         auditRecorder.record(scope, AuditAggregateType.INTEGRATION_CLIENT, saved.id(), AuditAction.CREDENTIAL_CREATE,
@@ -126,9 +132,14 @@ public class IntegrationClientService {
             throw new ConflictException("An integration credential named '" + name + "' already exists in this company.");
         }
 
+        UUID carrierId = resolveCarrier(scope, request.carrierId(), scopes);
         UUID actorId = auditActorProvider.requireAppUserId();
         client.rename(name, blankToNull(request.description()), actorId);
         client.replaceScopes(scopes, actorId);
+        // Re-pointable, unlike the company: an administrator who bound a key to the wrong haulier
+        // has to be able to fix it without re-issuing a secret the partner has already deployed.
+        // See IntegrationClient.carrierId for why the two differ.
+        client.assignCarrier(carrierId, actorId);
         return IntegrationClientView.from(clientRepository.saveAndFlush(client));
     }
 
@@ -219,6 +230,42 @@ public class IntegrationClientService {
                     + properties.rotationGrace().toHours() + " hours.");
         }
         return requested;
+    }
+
+    /**
+     * The carrier a tender credential answers for (migration V31), resolved inside the
+     * administrator's own company scope so that a body naming another tenant's haulier is refused
+     * without ever revealing whether it exists.
+     *
+     * <p>Both directions of the pairing are enforced, and each refusal says something different. A
+     * credential holding {@code integration.tender:respond} with no carrier is the dangerous half -
+     * it would authenticate, hold the capability, and have no answer to "whose tenders", which is
+     * exactly the fallback-to-the-company the scope's own comment forbids. A carrier on a credential
+     * that cannot answer tenders is the harmless half, refused anyway because a field that means
+     * nothing is a field somebody will later assume means something.
+     *
+     * <p>{@code findActiveInCompany} and not the display lookup: this is a <em>new</em> reference,
+     * and a deactivated carrier must not acquire a working key - the same active/display split
+     * {@code RateCardService} draws for the same reason ({@code CarrierLookupPort}).
+     */
+    private UUID resolveCarrier(CompanyScope scope, UUID carrierId, Set<IntegrationScope> scopes) {
+        boolean answersTenders = scopes.contains(IntegrationScope.TENDER_RESPOND);
+        if (carrierId == null) {
+            if (answersTenders) {
+                throw new InvalidRequestException("carrierId is required for a credential holding "
+                        + IntegrationScope.TENDER_RESPOND.code()
+                        + ": a carrier key must say whose tenders it answers.");
+            }
+            return null;
+        }
+        if (!answersTenders) {
+            throw new InvalidRequestException("carrierId is only meaningful for a credential holding "
+                    + IntegrationScope.TENDER_RESPOND.code() + ".");
+        }
+        return carrierLookupPort.findActiveInCompany(carrierId, scope.companyId())
+                .orElseThrow(() -> new InvalidRequestException(
+                        "carrierId does not reference an active carrier in this company."))
+                .id();
     }
 
     private static Set<IntegrationScope> parseScopes(Set<String> codes) {

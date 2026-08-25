@@ -20,7 +20,14 @@ import java.util.UUID;
  *                              the same reasoning {@code IntegrationIdentityController}'s
  *                              {@code companyCode} field documents: publishing an internal id to
  *                              an external system invites it to be used as a key
- * @param status                {@code "CONFIRMED"} or {@code "CANCELLED"}
+ * @param status                {@code "CONFIRMED"}, {@code "READY_FOR_DISPATCH"},
+ *                              {@code "IN_TRANSIT"}, {@code "COMPLETED"} or {@code "CANCELLED"}.
+ *                              The last three arrived with migration V25 and are additive: a
+ *                              partner that filters on {@code CONFIRMED} keeps seeing exactly
+ *                              what it saw before
+ * @param actualDepartureAt     when the vehicle really left, or null - reported alongside
+ *                              {@code plannedDepartureAt}, which keeps meaning what the plan asked
+ *                              for
  * @param capacitySource        {@code "SNAPSHOT"} (a confirmed shipment's frozen capacity at
  *                              confirmation) or {@code "NONE"}
  * @param weightUtilizationPct  percentage used, one decimal place, or null when the limit is
@@ -39,6 +46,9 @@ public record ShipmentPlanHeaderV1(
         BigDecimal originLatitude,
         BigDecimal originLongitude,
         OffsetDateTime plannedDepartureAt,
+        OffsetDateTime readyAt,
+        OffsetDateTime actualDepartureAt,
+        OffsetDateTime actualCompletionAt,
         String carrierCode,
         String carrierName,
         String vehicleCode,

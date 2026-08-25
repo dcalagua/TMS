@@ -2,6 +2,7 @@ package com.ebim.tms.shared.web;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.slf4j.MDC;
 
 /**
@@ -25,6 +26,35 @@ public final class CorrelationId {
 
     public static Optional<String> current() {
         return Optional.ofNullable(MDC.get(MDC_KEY));
+    }
+
+    /**
+     * Runs background work under a correlation id of its own.
+     *
+     * <p>{@link CorrelationIdFilter} covers everything that starts as an HTTP request, which used to
+     * be everything. A scheduled worker - the webhook dispatcher, migration V35 - has no request to
+     * inherit from, so without this every line it logs reads {@code [no-correlation-id]} and a
+     * failed delivery cannot be traced back through the log at all. The identifier is also sent to
+     * the receiver as {@code X-Correlation-Id}, which is what lets a partner quote one value and
+     * have it mean something on both sides.
+     *
+     * <p>The previous value is restored rather than cleared, so this composes with an outer trace if
+     * one ever exists - a scheduled task triggered from a request, say.
+     *
+     * @return whatever {@code work} returns
+     */
+    public static <T> T withNewTrace(Supplier<T> work) {
+        String previous = MDC.get(MDC_KEY);
+        set(generate());
+        try {
+            return work.get();
+        } finally {
+            if (previous == null) {
+                clear();
+            } else {
+                set(previous);
+            }
+        }
     }
 
     static String generate() {

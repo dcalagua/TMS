@@ -20,12 +20,16 @@ already resolves internally, in the API's own frozen vocabulary.
 
 ## 1. Why pull, and why an outbox instead of a webhook
 
-**V1 is pull-only.** A partner calls `GET /integration/v1/shipments`, not the other way around.
-TMS never opens an outbound connection to a partner's system, which sidesteps an entire class of
-problems a push design would need to solve: destination allowlisting, retry/backoff, HMAC signing,
-what happens when the partner's endpoint is down for a day. Those are real problems and V1 does
-not pretend to have solved them - see [§8](#8-what-v1-deliberately-does-not-do) for what a webhook
-sender would still need before it could ship.
+**This API is pull-only, and stays that way.** A partner calls `GET /integration/v1/shipments`, not
+the other way around. That sidesteps an entire class of problems a push design has to solve:
+destination allowlisting, retry/backoff, HMAC signing, what happens when the partner's endpoint is
+down for a day.
+
+> **Since job 13 there is also a push option**, built on this same outbox and solving exactly those
+> problems: `docs/integrations/WEBHOOKS_V1.md`. It changes nothing here. A customer registers an
+> endpoint, TMS POSTs each selected event to it signed and retried, and the polling endpoints below
+> keep working identically - same facts, same event ids, so moving between them costs neither a gap
+> nor a duplicate. [§8](#8-what-v1-deliberately-does-not-do) records what the two designs traded.
 
 **Underneath the pull API is a transactional outbox**, not a query straight against `tms.trip`.
 `tms.shipment_outbox_event` (migration V20) gets one row in the *same* database transaction as the
@@ -78,13 +82,20 @@ board: a list must not fan out into one query per row for data nobody asked for.
 end-to-end, the same discipline `TripViewAssembler` already proves for the board
 (`boardQueryCountDoesNotGrowWithTheNumberOfTrips`).
 
-**Only `CONFIRMED` and `CANCELLED` shipments are ever returned.** A `DRAFT` trip is a planner's
-work in progress - it has no shipment number an ERP should plan around yet, and exposing one that
-might still be torn up would tell an external system about a commitment TMS itself has not made.
+**Every state except `DRAFT` is returned.** A `DRAFT` trip is a planner's work in progress - it has
+no shipment number an ERP should plan around yet, and exposing one that might still be torn up
+would tell an external system about a commitment TMS itself has not made. Everything else is an
+outcome of something already published.
+
+Migration V25 added `READY_FOR_DISPATCH`, `IN_TRANSIT` and `COMPLETED`
+(`docs/domain/TRIP_EXECUTION_V1.md`). The change is **additive and non-breaking**: the default
+below is unchanged, so a partner that never touched `status` keeps seeing exactly what it saw
+before. A shipment that moves to `IN_TRANSIT` simply stops matching `status=CONFIRMED`, which is
+what "give me what is still only planned" should mean.
 
 | Query parameter | Type | Notes |
 |---|---|---|
-| `status` | string, repeatable | One or more of `CONFIRMED`, `CANCELLED`. Defaults to `CONFIRMED` only - a partner that never asked for cancellations does not start seeing them the day one happens. |
+| `status` | string, repeatable | One or more of `CONFIRMED`, `READY_FOR_DISPATCH`, `IN_TRANSIT`, `COMPLETED`, `CANCELLED`. Defaults to `CONFIRMED` only - a partner that never asked for the rest does not start seeing them the day one happens. |
 | `updatedSince` | ISO-8601 instant | Only shipments touched at or after this instant. |
 | `page`, `size` | integer | Standard paging, `size` capped at 200. |
 
@@ -110,6 +121,9 @@ what a watermark-based poll needs - an arbitrary client-chosen sort would defeat
       "originLatitude": -12.046400,
       "originLongitude": -77.042800,
       "plannedDepartureAt": "2026-08-20T08:00:00-05:00",
+      "readyAt": null,
+      "actualDepartureAt": null,
+      "actualCompletionAt": null,
       "carrierCode": "CR-001",
       "carrierName": "Transportes Andinos S.A.C.",
       "vehicleCode": "VH-014",
@@ -171,6 +185,9 @@ same information a `DRAFT` status field would.
     "originLatitude": -12.046400,
     "originLongitude": -77.042800,
     "plannedDepartureAt": "2026-08-20T08:00:00-05:00",
+    "readyAt": null,
+    "actualDepartureAt": null,
+    "actualCompletionAt": null,
     "carrierCode": "CR-001",
     "carrierName": "Transportes Andinos S.A.C.",
     "vehicleCode": "VH-014",
@@ -223,7 +240,12 @@ same information a `DRAFT` status field would.
       "destinationCode": "ST-4711",
       "weightKg": 1560.00,
       "volumeM3": 5.200,
-      "pallets": 3.00
+      "pallets": 3.00,
+      "deliveryResult": "PARTIAL",
+      "deliveredAt": "2026-08-20T09:47:00Z",
+      "deliveryReceiverName": "R. Diaz",
+      "deliveryNotes": "One pallet refused, damaged film",
+      "evidenceCount": 2
     }
   ]
 }
@@ -234,6 +256,21 @@ been geocoded reports `null`, and a client renders it in the list without a map 
 inventing a position. `orders[].externalSource`/`externalReference` echo back the identity the
 sending system used in the inbound API (`docs/integrations/INBOUND_API_V1.md` section 6), when the
 order arrived that way; both are `null` for an order created by hand in TMS.
+
+### The five delivery fields (migration V28)
+
+Additive: a partner that integrated before them keeps seeing exactly what it saw.
+
+| Field | Notes |
+|---|---|
+| `deliveryResult` | `DELIVERED`, `PARTIAL`, `REJECTED`, `FAILED`, `NOT_ATTEMPTED`, or **`null`** when nobody has recorded the delivery yet - which is every order on a shipment that has not run. `null` means *not known* and never *not delivered*; `NOT_ATTEMPTED` is the value that means the goods never left the vehicle |
+| `deliveredAt` | When the goods changed hands. Always present for `DELIVERED`/`PARTIAL`, never for `NOT_ATTEMPTED`, optional for the rest |
+| `deliveryReceiverName` | Who took them, where a name was recorded. Only ever present on a result reached with somebody present |
+| `deliveryNotes` | Why it fell short. Always present for `PARTIAL`, `REJECTED` and `FAILED`, which TMS refuses to record without an explanation |
+| `evidenceCount` | How many proof-of-delivery artefacts are on file. A **count and not links**: the bytes are served only through an authenticated, company-scoped TMS request, and a URL in this payload would be a second, quieter way to reach a customer's signed delivery note |
+
+The receiver's identity **document** is deliberately not published. No partner has asked for it, and
+it is the more sensitive half of the pair - see `docs/domain/PROOF_OF_DELIVERY_V1.md`.
 
 ---
 
@@ -259,7 +296,7 @@ The same catalogue as `docs/integrations/INBOUND_API_V1.md` section 7, minus the
 
 | Status | `code` | Meaning |
 |---|---|---|
-| `400` | `malformed-request` | `status` named something other than `CONFIRMED`/`CANCELLED` |
+| `400` | `malformed-request` | `status` named something other than the five publishable states (`DRAFT`, notably, is refused rather than silently ignored) |
 | `404` | `resource-not-found` | No confirmed or cancelled shipment of that number exists in this company (or it does not exist at all, or it is still a draft - indistinguishable, see §3.2) |
 
 `401`/`403` follow the inbound API exactly: an unrecognised or scopeless credential is `401`; an
@@ -303,24 +340,49 @@ poll `.../events?since=<watermark>`, and for every row returned fetch
 source of truth for its own fields, and an event payload that duplicated them would be a second
 copy that could drift from it.
 
-### Only one event type has a source today
+### Six event types have a source; one still does not
 
-`eventType` is one of `SHIPMENT_CONFIRMED`, `SHIPMENT_CHANGED`, `SHIPMENT_CANCELLED` in the schema
-(`ck_shipment_outbox_event_type`), but **only `SHIPMENT_CONFIRMED` is ever written**, and this is
-not an oversight:
+`ck_shipment_outbox_event_type` (V20, widened by V25 and V28) accepts seven values. Six are
+written:
 
-- `SHIPMENT_CHANGED` would require a business rule that mutates a `CONFIRMED` trip. None exists -
-  `planning.domain.TripStatus`'s own class comment states a confirmed trip is locked against every
-  mutation (`docs/domain/PLANNING_MANUAL_V1.md`, "State rules").
-- `SHIPMENT_CANCELLED` would require cancelling a trip that was already published.
-  `TripService.cancel`/`PlanningRunService.cancel` only ever cancel a `DRAFT` trip - one that, by
-  `GET /shipments`' own rule, was never exposed in the first place.
+| `eventType` | Written by |
+|---|---|
+| `SHIPMENT_CONFIRMED` | `PlanningRunService.confirm` |
+| `SHIPMENT_READY` | `TripExecutionService.markReadyForDispatch` |
+| `SHIPMENT_DISPATCHED` | `TripExecutionService.dispatch` |
+| `SHIPMENT_COMPLETED` | `TripExecutionService.complete` |
+| `SHIPMENT_CANCELLED` | `TripService.cancel`, for a trip that had already been confirmed |
+| `DELIVERY_RESULT_RECORDED` | `TripDeliveryService.record` (V28) |
+| `SHIPMENT_CHANGED` | *nothing* |
 
-Both values are accepted by the schema and by this document's client contract anyway, so the day
-either business rule changes (a "recall a confirmed shipment" feature, for instance), emitting the
-event is an application change, not a migration or a partner-facing breaking change. A partner's
-deserializer should not reject an unrecognised `eventType` outright, for the same forward-
-compatibility reason.
+`DELIVERY_RESULT_RECORDED` is the first value that is **not** a trip-state change, and it is the
+reason this column was built as an event type rather than a status: a partner told a shipment is
+`IN_TRANSIT` learns nothing more until it completes, and "an order on it was refused" is exactly
+the fact an ERP has to act on before then - it is what triggers a credit note, a re-delivery or a
+customer call.
+
+It is deliberately **one** event and not one per result. The row carries the shipment number and
+nothing else, as every row here does; the partner re-reads the shipment and finds `deliveryResult`
+on the order it is about (§3.2). Freezing today's five results into the wire contract would buy
+nothing and cost a version bump the first time a sixth appeared.
+
+One event is written per recording, so a corrected delivery produces a second one - which is
+correct: the outcome a partner was told about has changed.
+
+`SHIPMENT_CANCELLED` is exactly the case this document predicted: "the day either business rule
+changes... emitting the event is an application change, not a migration". Cancelling a *confirmed*
+trip became legal in V25, so a partner that was handed a shipment now learns when it is withdrawn.
+`ShipmentEventPublisher` is the single place that pairs an outbox row with its audit event, so the
+feed and the audit trail cannot tell different stories.
+
+`SHIPMENT_CHANGED` still has no source: the committed states remain locked against edits to what a
+shipment *carries*, so TMS cannot yet produce a change to publish.
+
+A client must therefore already tolerate event types it has not seen before - a new one is added
+by an application change, not by a version bump of this contract.
+
+A partner's deserializer must not reject an unrecognised `eventType` outright, for that same
+forward-compatibility reason.
 
 ---
 
@@ -334,26 +396,23 @@ No new configuration. `GET /integration/v1/shipments*` shares `tms.integration.*
 
 ## 8. What V1 deliberately does not do
 
-**No webhook sender.** `CLAUDE.md`'s brief for this job allows implementing the outbox alone and
-documenting delivery as a next step rather than faking a system this scope has no room to build
-correctly. A production webhook sender still needs, at minimum:
+**No webhook sender - superseded by job 13.** This section originally listed the five things a
+production webhook sender would need before it could ship, and said `tms.shipment_outbox_event` was
+shaped so that adding one later would be additive. Migration V35 built it, and the prediction held:
+**no change to the write path was required.** `docs/integrations/WEBHOOKS_V1.md` is the contract; the
+five points are answered as follows.
 
-1. **Destination allowlisting/configuration per credential** - a URL to call, not just a scope to
-   hold.
-2. **HMAC signing** of the outgoing payload with a per-credential secret, so a receiver can verify
-   the call came from TMS.
-3. **Retry with backoff** independent of the confirming request - a partner endpoint being down for
-   an hour must not block planning, and a delivery attempt must never run inside the planning
-   transaction (`PlanningRunService.confirm` must stay fast and side-effect-free outside its own
-   database).
-4. **Delivery status per event** (`PENDING`/`DELIVERED`/`FAILED`, attempt count, last error) - the
-   outward-facing counterpart of `tms.integration_request`'s inbox for the inbound side.
-5. **A poison-message policy** - what happens to an event a receiver has rejected ten times running.
+| What §8 said was still needed | Where it lives now |
+|---|---|
+| 1. Destination configuration - a URL to call, not just a scope to hold | `tms.webhook_subscription`, configured from the Integration Hub. Deliberately *not* per credential: a receiving system may never call TMS at all (`WEBHOOKS_V1.md` §1) |
+| 2. HMAC signing with a per-destination secret | `X-TMS-Signature: t=…,v1=…`, HMAC-SHA-256 over `"<t>.<raw body>"` (§5). The timestamp is inside the MAC so a captured delivery cannot be replayed |
+| 3. Retry with backoff, never inside the planning transaction | Three phases, none of which spans the network (§6). The confirming transaction does two indexed inserts and returns; the dispatcher retries on a published ladder |
+| 4. Delivery status per event | `tms.webhook_delivery` (`PENDING`/`PROCESSED`/`FAILED`, attempt count, last error) plus `tms.webhook_delivery_attempt`, which keeps *every* attempt - the outward counterpart of the inbound inbox |
+| 5. A poison-message policy | The schedule is exhausted after `max-attempts`; a subscription whose deliveries keep exhausting is suspended after ten in a row, and an operator retries one at a time once their side is fixed (§6) |
 
-`tms.shipment_outbox_event` is deliberately shaped so that adding this later is additive: a
-delivery-status table can reference it by id, and a dispatcher can be introduced as a scheduled job
-that reads unconsumed rows - no change to the write path in `PlanningRunService` is required, since
-the outbox row already exists as soon as the trip is confirmed.
+The polling API in this document is unchanged and remains fully supported. Both mechanisms read the
+same outbox and use the same event ids, so a partner can move from polling to push, or run both
+during a cutover, without a gap or a duplicate.
 
 **No `SHIPMENT_CHANGED` producer.** See [§6](#6-the-change-feed).
 

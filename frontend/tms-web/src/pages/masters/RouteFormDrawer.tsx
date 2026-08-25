@@ -14,6 +14,7 @@ import {
   updateRoute,
   type RouteDetailView,
   type RouteRequest,
+  type RouteStopRequest,
 } from '../../shared/api/routesApi'
 import { describeApiError } from '../../shared/api/problemMessages'
 import { FormField } from '../../shared/ui/components/FormField'
@@ -40,7 +41,17 @@ interface RouteFormValues {
   frequencyId: string
   referenceDistanceKm: string
   referenceDurationMinutes: string
-  stops: { destinationId: string }[]
+  /** `serviceTimeOverrideMinutes` empty means "inherit the location's" - see `toStopRequest`. */
+  stops: { destinationId: string; serviceTimeOverrideMinutes: string }[]
+}
+
+/** Empty means inherit; `'0'` is a real override (a drop-and-go stop), so it must survive as 0. */
+function toStopRequest(stop: RouteFormValues['stops'][number]): RouteStopRequest {
+  const override = stop.serviceTimeOverrideMinutes.trim()
+  return {
+    destinationId: stop.destinationId,
+    serviceTimeOverrideMinutes: override === '' ? null : Number(override),
+  }
 }
 
 interface RouteFormDrawerProps {
@@ -146,18 +157,25 @@ function RouteForm({
   )
   const availableDestinations = useMemo(() => destinationsQuery.data?.content ?? [], [destinationsQuery.data])
 
-  /** Every stop's code/name, preferring the route's own (possibly-deactivated) destination data
-   * over the active-only fetch, so an existing stop always renders correctly even if the
-   * destination behind it was deactivated since - see the class comment above. */
+  /** Every stop's code/name and its location's own service time, preferring the route's own
+   * (possibly-deactivated) destination data over the active-only fetch, so an existing stop
+   * always renders correctly even if the destination behind it was deactivated since - see the
+   * class comment above. `serviceTimeMinutes` is what the override field shows as its
+   * placeholder: the value that applies when the operator leaves it empty. */
   const destinationLookup = useMemo(() => {
-    const map = new Map<string, { code: string; name: string }>()
+    const map = new Map<string, { code: string; name: string; serviceTimeMinutes: number | null }>()
     for (const destination of availableDestinations) {
-      map.set(destination.id, { code: destination.code, name: destination.name })
+      map.set(destination.id, {
+        code: destination.code,
+        name: destination.name,
+        serviceTimeMinutes: destination.serviceTimeMinutes,
+      })
     }
     for (const stop of route?.stops ?? []) {
       map.set(stop.destinationId, {
         code: stop.destinationCode ?? stop.destinationId,
         name: stop.destinationName ?? '',
+        serviceTimeMinutes: stop.destinationServiceTimeMinutes,
       })
     }
     return map
@@ -178,7 +196,10 @@ function RouteForm({
       frequencyId: route?.frequencyId ?? '',
       referenceDistanceKm: route?.referenceDistanceKm?.toString() ?? '',
       referenceDurationMinutes: route?.referenceDurationMinutes?.toString() ?? '',
-      stops: (route?.stops ?? []).map((stop) => ({ destinationId: stop.destinationId })),
+      stops: (route?.stops ?? []).map((stop) => ({
+        destinationId: stop.destinationId,
+        serviceTimeOverrideMinutes: stop.serviceTimeOverrideMinutes?.toString() ?? '',
+      })),
     },
   })
   const { fields, append, remove, move } = useFieldArray({ control, name: 'stops' })
@@ -189,7 +210,9 @@ function RouteForm({
 
   function addStop() {
     if (stopToAdd === '') return
-    append({ destinationId: stopToAdd })
+    // Added inheriting: a new stop takes as long as its location says until someone says
+    // otherwise, which is right far more often than not.
+    append({ destinationId: stopToAdd, serviceTimeOverrideMinutes: '' })
     setStopToAdd('')
   }
 
@@ -209,7 +232,7 @@ function RouteForm({
       referenceDistanceKm: values.referenceDistanceKm.trim() === '' ? null : Number(values.referenceDistanceKm),
       referenceDurationMinutes:
         values.referenceDurationMinutes.trim() === '' ? null : Number(values.referenceDurationMinutes),
-      destinationIds: values.stops.map((stop) => stop.destinationId),
+      stops: values.stops.map(toStopRequest),
     }
 
     try {
@@ -386,6 +409,10 @@ function RouteForm({
         <fieldset className="tms-fieldset mb-0">
           <legend className="tms-fieldset-legend">{t('routes.form.stopsLabel')}</legend>
 
+          <p className="text-body-secondary small" id="route-stops-service-time-help">
+            {t('routes.form.serviceTimeHelp')}
+          </p>
+
           {fields.length === 0 && <p className="text-body-secondary small">{t('routes.form.noStops')}</p>}
           {fields.length > 0 && (
             <ol className="list-group list-group-numbered mb-2">
@@ -393,9 +420,33 @@ function RouteForm({
                 const destination = destinationLookup.get(field.destinationId)
                 const position = index + 1
                 return (
-                  <li key={field.id} className="list-group-item d-flex justify-content-between align-items-center gap-2">
+                  <li
+                    key={field.id}
+                    className="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2"
+                  >
                     <span className="tms-min-w-0 tms-truncate">
                       {destination ? `${destination.code} — ${destination.name}` : field.destinationId}
+                    </span>
+                    {/* Empty means "inherit", and the placeholder is the value that would apply -
+                        so the box is never a blank the operator has to go and look up. */}
+                    <span className="flex-shrink-0 d-flex align-items-center gap-1">
+                      <label htmlFor={`route-stop-service-time-${field.id}`} className="visually-hidden">
+                        {t('routes.form.serviceTimeOverride', { position })}
+                      </label>
+                      <input
+                        id={`route-stop-service-time-${field.id}`}
+                        type="number"
+                        min={0}
+                        className={`form-control form-control-sm tms-w-numeric-sm${
+                          errors.stops?.[index]?.serviceTimeOverrideMinutes ? ' is-invalid' : ''
+                        }`}
+                        placeholder={destination?.serviceTimeMinutes?.toString() ?? '0'}
+                        aria-describedby="route-stops-service-time-help"
+                        {...register(`stops.${index}.serviceTimeOverrideMinutes` as const, {
+                          min: { value: 0, message: tv('nonNegative') },
+                        })}
+                      />
+                      <span className="text-body-secondary small">{tc('units.minutesShort')}</span>
                     </span>
                     <span className="btn-group btn-group-sm flex-shrink-0">
                       <button
@@ -425,6 +476,13 @@ function RouteForm({
                         {t('routes.form.remove')}
                       </button>
                     </span>
+                    {/* `w-100` inside the wrapping flex row: the message gets its own line
+                        rather than squeezing the stop's name out of the way. */}
+                    {errors.stops?.[index]?.serviceTimeOverrideMinutes && (
+                      <div className="invalid-feedback d-block w-100 mb-0" role="alert">
+                        {errors.stops?.[index]?.serviceTimeOverrideMinutes?.message}
+                      </div>
+                    )}
                   </li>
                 )
               })}

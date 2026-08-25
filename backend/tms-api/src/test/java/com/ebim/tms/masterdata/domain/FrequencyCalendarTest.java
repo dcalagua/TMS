@@ -64,7 +64,8 @@ class FrequencyCalendarTest {
     @Test
     @DisplayName("a blackout exception overrides an otherwise-enabled weekly rule")
     void blackoutExceptionOverridesEnabledDay() {
-        FrequencyException blackout = new FrequencyException(UUID.randomUUID(), MONDAY, false, "Holiday", UUID.randomUUID());
+        FrequencyException blackout =
+                new FrequencyException(UUID.randomUUID(), MONDAY, false, null, "Holiday", UUID.randomUUID());
         assertThat(FrequencyCalendar.runsOn(weekdayFrequency(), MONDAY, blackout)).isFalse();
     }
 
@@ -73,8 +74,59 @@ class FrequencyCalendarTest {
     void extraServiceExceptionOverridesDisabledDay() {
         LocalDate sunday = MONDAY.plusDays(6);
         FrequencyException extra =
-                new FrequencyException(UUID.randomUUID(), sunday, true, "Peak season", UUID.randomUUID());
+                new FrequencyException(UUID.randomUUID(), sunday, true, null, "Peak season", UUID.randomUUID());
         assertThat(FrequencyCalendar.runsOn(weekdayFrequency(), sunday, extra)).isTrue();
+    }
+
+    @Test
+    @DisplayName("with no exception at all, the cutoff is the weekly rule's")
+    void cutoffFallsBackToTheWeeklyRule() {
+        assertThat(FrequencyCalendar.effectiveCutoff(weekdayFrequency(), MONDAY, null))
+                .isEqualTo(LocalTime.of(14, 0));
+    }
+
+    @Test
+    @DisplayName("an exception that states no cutoff leaves the weekly rule's cutoff alone")
+    void exceptionWithoutOverrideKeepsTheWeeklyCutoff() {
+        FrequencyException openWithoutCutoff =
+                new FrequencyException(UUID.randomUUID(), MONDAY, true, null, "Extra run", UUID.randomUUID());
+
+        assertThat(FrequencyCalendar.effectiveCutoff(weekdayFrequency(), MONDAY, openWithoutCutoff))
+                .isEqualTo(LocalTime.of(14, 0));
+    }
+
+    /** The worked example from the V24 migration header: 24/12 open, but closing early. */
+    @Test
+    @DisplayName("an exception's cutoff override wins over the weekly rule for that date only")
+    void cutoffOverrideWinsForThatDate() {
+        Frequency frequency = weekdayFrequency();
+        LocalDate christmasEve = MONDAY.plusDays(2);
+        FrequencyException earlyClose = new FrequencyException(
+                UUID.randomUUID(), christmasEve, true, LocalTime.of(11, 0), "Christmas Eve", UUID.randomUUID());
+
+        assertThat(FrequencyCalendar.effectiveCutoff(frequency, christmasEve, earlyClose))
+                .isEqualTo(LocalTime.of(11, 0));
+        // The neighbouring Wednesday of any other week is untouched - that is the whole point of
+        // putting the override on the date instead of editing the weekly rule.
+        assertThat(FrequencyCalendar.effectiveCutoff(frequency, christmasEve.plusWeeks(1), null))
+                .isEqualTo(LocalTime.of(14, 0));
+    }
+
+    @Test
+    @DisplayName("an extra-service date on an unconfigured day has no cutoff unless the exception states one")
+    void extraServiceDateHasNoCutoffOfItsOwn() {
+        Frequency frequency = weekdayFrequency();
+        LocalDate sunday = MONDAY.plusDays(6);
+        FrequencyException extra =
+                new FrequencyException(UUID.randomUUID(), sunday, true, null, "Peak season", UUID.randomUUID());
+        FrequencyException extraClosingAtNoon = new FrequencyException(
+                UUID.randomUUID(), sunday, true, LocalTime.of(12, 0), "Peak season", UUID.randomUUID());
+
+        // Sunday has no weekly rule to fall back to: null means "no cutoff applies", never
+        // "already closed".
+        assertThat(FrequencyCalendar.effectiveCutoff(frequency, sunday, extra)).isNull();
+        assertThat(FrequencyCalendar.effectiveCutoff(frequency, sunday, extraClosingAtNoon))
+                .isEqualTo(LocalTime.of(12, 0));
     }
 
     @Test

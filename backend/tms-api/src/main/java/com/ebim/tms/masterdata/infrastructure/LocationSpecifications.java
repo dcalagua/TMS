@@ -8,7 +8,7 @@ import java.util.Locale;
 import java.util.UUID;
 import org.springframework.data.jpa.domain.Specification;
 
-/** Composes the optional list filters for {@link LocationRepository}. See {@code OriginSpecifications}. */
+/** Composes the optional list filters for {@link LocationRepository}. */
 public final class LocationSpecifications {
 
     private LocationSpecifications() {}

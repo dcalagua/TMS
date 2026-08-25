@@ -62,6 +62,46 @@
     "new": "New carrier",
     "title": "Carriers"
   },
+  "drivers": {
+    "columns": {
+      "document": "Document",
+      "license": "Licence",
+      "name": "Driver"
+    },
+    "description": "The people cleared to drive. A driver whose licence has expired cannot be assigned to a trip.",
+    "empty": {
+      "message": "Register the people who will drive your vehicles so they can be assigned to a trip.",
+      "title": "No drivers"
+    },
+    "filters": {
+      "allLicenseStatuses": "All statuses",
+      "license": "Licence",
+      "name": "Name"
+    },
+    "form": {
+      "carrier": "Carrier",
+      "create": "New driver",
+      "documentNumber": "Document number",
+      "documentType": "Document type",
+      "edit": "Edit driver",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "licenseCategory": "Category",
+      "licenseExpiresHelp": "Checked against the trip's planning date: a licence that lapses over the weekend blocks Monday's plan.",
+      "licenseExpiresOn": "Expires on",
+      "licenseNumber": "Licence number",
+      "ownStaff": "Own staff (no carrier)",
+      "sections": {
+        "employment": "Employment",
+        "license": "Driving licence"
+      },
+      "subtitle": "Licence details are checked against the trip date, not against today."
+    },
+    "licenseNoExpiry": "No date",
+    "new": "New driver",
+    "ownStaff": "Own staff",
+    "title": "Drivers"
+  },
   "vehicleTypes": {
     "description": "Default capacities and physical characteristics for a class of vehicle.",
     "empty": {

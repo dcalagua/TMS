@@ -37,18 +37,19 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Company-scoped CRUD for the canonical Location master. Follows the {@code OriginController}
- * template: the {@link CompanyScope} parameter is only ever supplied by the framework once
+ * Company-scoped CRUD for the Location master - the one physical-place API. The
+ * {@link CompanyScope} parameter is only ever supplied by the framework once
  * {@code CompanyScopeFilter} has validated {@code X-Company-Id} against an active membership.
  *
  * <p>There is no delete endpoint. Locations are deactivated, never removed - the same rule the
  * other masters follow, and here it is also a hard requirement: {@code route},
- * {@code transport_order} and {@code planning_run} reference the compatibility projections with
- * {@code ON DELETE RESTRICT}.
+ * {@code route_stop}, {@code transport_order}, {@code planning_run} and {@code trip_stop}
+ * reference this table with {@code ON DELETE RESTRICT}.
  *
- * <p>{@code /masterdata/origins} and {@code /masterdata/destinations} keep working unchanged.
- * They are compatibility surfaces now, kept in sync by
- * {@code LocationCompatibilityProjector} - see {@code docs/architecture/ADR_LOCATION_MODEL.md}.
+ * <p>There is no {@code /masterdata/origins} or {@code /masterdata/destinations} endpoint. An
+ * origin is a location holding the {@code ORIGIN} role and a destination one holding
+ * {@code DESTINATION}, so both screens are this endpoint with {@code ?role=} - see
+ * {@code docs/domain/LOCATIONS.md}.
  */
 @RestController
 @RequestMapping("${tms.api.base-path}/masterdata/locations")

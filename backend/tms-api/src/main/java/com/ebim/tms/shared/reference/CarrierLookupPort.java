@@ -1,6 +1,7 @@
 package com.ebim.tms.shared.reference;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -15,12 +16,21 @@ import java.util.UUID;
  * confirmed shipment display a carrier it was never planned with. So the id and the name come
  * from the same place: the carrier the trip points at.
  *
- * <p>No {@code findActive*} method: nothing validates a new carrier reference through this port.
- * A trip's carrier is always resolved from the vehicle being attached ({@code TripService}), so
- * the only remaining question is a display one, and display must resolve a deactivated carrier
- * too - see {@link MasterReference}.
+ * <p>{@link #findActiveInCompany} arrived later, with migration V30: a trip's carrier is still
+ * always resolved from the vehicle being attached ({@code TripService}) and never validated here,
+ * but a rate card names a carrier <em>directly</em> and must refuse a deactivated one. The two
+ * methods are the same active/display split every other lookup port draws, and for the same
+ * reason - display must resolve a deactivated carrier, a new reference must not create one
+ * (see {@link MasterReference}).
  */
 public interface CarrierLookupPort {
+
+    /**
+     * Resolves a carrier a caller may point a <em>new</em> reference at: same company and
+     * {@code active}. Empty for anything else, so a caller answers 400 without ever learning
+     * whether a carrier of another company exists.
+     */
+    Optional<MasterReference> findActiveInCompany(UUID id, UUID companyId);
 
     /** See {@link OriginLookupPort#findAllInCompany(Set, UUID)} - batched, active or not. */
     Map<UUID, MasterReference> findAllInCompany(Set<UUID> ids, UUID companyId);

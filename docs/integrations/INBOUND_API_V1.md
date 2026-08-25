@@ -109,6 +109,13 @@ A credential holds one or more scopes, and at least one is required:
 |---|---|
 | `integration.location:write` | `POST /integration/v1/locations`, `/locations/batch` |
 | `integration.order:write` | `POST /integration/v1/orders`, `/orders/batch` |
+| `integration.tracking:write` | `POST /integration/v1/tracking/positions` - see [§12](#12-vehicle-positions-migration-v29) |
+| `integration.tender:respond` | `GET /integration/v1/tenders`, `POST /integration/v1/tenders/{shipmentNumber}/response` - see [§13](#13-carrier-tendering-migration-v31) |
+
+`integration.tender:respond` is the one scope that is **not sufficient on its own**: the credential
+holding it must also be bound to a carrier (`carrierId`, §2.4). Read and write are one scope rather
+than a pair, because a carrier reading its own offers and answering them is one capability from one
+party's point of view.
 
 Scopes are a **different vocabulary** from user permissions on purpose. A partner credential is
 not a user with a role; mixing the namespaces would make it possible to grant a machine
@@ -142,6 +149,17 @@ the tenant.
 
 There is no delete. A credential is **revoked**, which keeps its inbox history intact and
 answerable, following the "deactivate, never delete" rule every master in TMS follows.
+
+Create and update take an optional `carrierId` (migration V31). It is **required** when `scopes`
+contains `integration.tender:respond` and **refused** otherwise: a carrier key must say whose tenders
+it answers, and a carrier on a key that cannot answer tenders would be a field that means nothing.
+The id is resolved through the fleet master inside the administrator's own company, so a body naming
+another tenant's carrier is refused without revealing whether it exists, and a deactivated carrier
+cannot acquire a working key. Unlike the company, it is re-pointable: an administrator who bound a
+key to the wrong haulier can fix it without re-issuing a secret the partner has already deployed.
+
+These endpoints have no screen yet - the integration module is API-only in V1 - so `carrierId` is set
+with the same `POST`/`PUT` calls above.
 
 Create, rotate and revoke each write an `INTEGRATION_CLIENT` row to `tms.audit_event`
 (`CREDENTIAL_CREATE`, `CREDENTIAL_ROTATE`, `CREDENTIAL_REVOKE`) - the credential's `name` and, for
@@ -587,7 +605,7 @@ Same contract as the location batch: independent items, `200` or `207`, per-item
       "index": 0,
       "reference": "SO-2026-000123",
       "result": { "id": "c92f7a13-0000-4000-8000-000000000123", "orderNumber": "ORD-2026-000512",
-                  "status": "DRAFT", "outcome": "CREATED" },
+                  "status": "NOT_READY", "outcome": "CREATED" },
       "error": null
     },
     {
@@ -800,3 +818,256 @@ and exist only as hashes in the database.
 5. The partner sends an `Idempotency-Key` per logical delivery and retries `5xx` with backoff.
 6. The administrator watches `GET /api/v1/integration-clients/requests` during the first days.
 7. A rotation schedule is agreed, and `graceHours=0` is understood as the leak response.
+
+---
+
+## 12. Vehicle positions (migration V29)
+
+Added after sections 7-11 were written and numbered here rather than as section 7, so that the
+cross-references other documents already make to "section 8.1", "section 9" and so on keep pointing
+at what they meant. Full design: `docs/domain/TRACKING_V1.md`. Decision:
+`docs/architecture/ADR-007-tracking-provider-port.md`.
+
+### 12.1 `POST /integration/v1/tracking/positions`
+
+Scope: `integration.tracking:write`. One endpoint, no single-position sibling - a device reporting
+live sends a batch of one, a device flushing a buffer sends a batch of two hundred, and both are the
+same operation.
+
+```http
+POST /integration/v1/tracking/positions
+Authorization: Bearer <clientId>.<secret>
+Content-Type: application/json
+
+{
+  "provider": "acme-telematics",
+  "positions": [
+    {
+      "shipmentNumber": "SH-00000042",
+      "occurredAt": "2026-08-21T09:56:00Z",
+      "latitude": -12.046374,
+      "longitude": -77.042793,
+      "speedKph": 62.5,
+      "headingDegrees": 183.4,
+      "externalVehicleReference": "TRK-0431",
+      "correlationReference": "ping-991"
+    }
+  ]
+}
+```
+
+```json
+{
+  "submitted": 1,
+  "accepted": 1,
+  "stored": 1,
+  "refused": 0,
+  "results": [
+    { "index": 0, "shipmentNumber": "SH-00000042", "outcome": "RECORDED", "error": null }
+  ]
+}
+```
+
+**Shipments are named by number, never by uuid.** A partner already holds shipment numbers from the
+outbound `ShipmentPlan V1` contract and from the paperwork; requiring our primary keys would force
+every telematics integration to keep a mapping table it has no other use for.
+
+**`provider` is a label, not an authority.** The tenant comes from the credential as everywhere else
+(§1). It is in the body rather than derived from the credential because one credential legitimately
+relays several upstream feeds - a 4PL forwarding two carriers' telematics - and a credential per
+feed would make onboarding a subcontractor a key-management exercise.
+
+### 12.2 Outcomes, and why "accepted" is not "stored"
+
+| `outcome` | Accepted | Meaning |
+|---|---|---|
+| `RECORDED` | yes | stored |
+| `DUPLICATE` | yes | this feed already reported this shipment at this instant |
+| `THINNED` | yes | closer to the last kept point than the sampling interval |
+| `STALE` | yes | older than the newest position already held for this shipment and feed |
+| `UNKNOWN_SHIPMENT` | no | this company has no such shipment |
+| `NOT_TRACKABLE` | no | the shipment exists but has not left, or was cancelled |
+| `INVALID` | no | coordinates out of range, a time in the future, a malformed provider slug |
+
+TMS keeps at most one position per configured interval per (shipment, feed) - 60 seconds by
+default. Denser points are **accepted and dropped**, never refused: a sender pushing every second is
+doing what its vendor's default does, and an API whose scalability depends on partners
+reconfiguring their equipment does not have a scalability story.
+
+`stored` is therefore usually lower than `accepted`, and that ratio is the number worth watching: a
+feed seeing 95% `THINNED` is spending bandwidth on nothing, and any `STALE` means it is delivering
+out of order, which retrying does not fix.
+
+Only the three refusals count as failed items, so a run answers **200** when everything was accepted
+and **207** when anything was refused - the same rule as `/orders/batch` (§6.2). A run whose every
+position names a shipment cancelled an hour ago still answers 207 with a reason per item, not 400: a
+feed doing exactly what it should must not be told it is broken.
+
+`UNKNOWN_SHIPMENT` says only that *this company* has no such shipment - never whether it exists
+elsewhere. A telematics credential is often held by a third party.
+
+### 12.3 Idempotency
+
+The ordinary pair (§4), with business identity being `(company, shipment, provider, occurredAt)` and
+enforced by `uq_tracking_position_feed_instant`. Redelivery is a no-op, so an at-least-once sender
+needs no cursor and no de-duplication of its own; `Idempotency-Key` remains available for the case
+where the sender never learned the outcome.
+
+### 12.4 Reading positions back
+
+There is none here. `integration.tracking:write` grants no read anywhere: a provider pushing
+positions learns nothing about the shipments it pushes against beyond whether the numbers are
+usable. Positions are read by a signed-in user at `GET /api/v1/tracking/trips/{tripId}` under
+`monitoring.transport:read`.
+
+### 12.5 Onboarding a tracking provider
+
+1. An administrator creates a credential holding `integration.tracking:write` **only**.
+2. The provider confirms `GET /integration/v1/ping`.
+3. The provider posts a batch of one against a shipment that is in transit and checks for
+   `"outcome": "RECORDED"`.
+4. `NOT_TRACKABLE` during the first tests almost always means the shipment has not been dispatched
+   in TMS yet - positions are accepted from dispatch onwards, and after completion, so a late
+   buffer flush is not lost.
+5. The deployment's `min-interval` is agreed, and the provider sizes its push rate to it rather
+   than the other way round.
+
+## 13. Carrier tendering (migration V31)
+
+Full design: `docs/domain/CARRIER_TENDERING_V1.md`.
+
+**This is the only part of the API where the authenticated party is not the tenant.** Every other
+endpoint here is a system acting *for* the company that issued the key. These two are a
+*counterparty* answering for itself, and everything about their shape follows from that.
+
+### 13.1 The credential
+
+A tender credential holds `integration.tender:respond` and is bound to exactly one carrier
+(`carrierId`, §2.4). The carrier is resolved from the credential on every call and never read from a
+payload or a header - the same discipline that makes the company unspoofable (§1).
+
+A credential that holds the scope with **no** carrier bound to it is refused with `409` and a message
+naming the misconfiguration. It is never allowed to fall back to the company, which would hand one
+partner every carrier's offers.
+
+Holding this scope grants **no other read**. It is deliberately not `integration.shipment:read`,
+which exposes every confirmed shipment of the company; a carrier learns about the shipments it was
+offered and no others.
+
+### 13.2 `GET /integration/v1/tenders`
+
+The offers this carrier is holding and can still answer, oldest first.
+
+```http
+GET /integration/v1/tenders
+Authorization: Bearer <clientId>.<secret>
+```
+
+```json
+[
+  {
+    "shipmentNumber": "SH-00000142",
+    "attempt": 2,
+    "status": "SENT",
+    "planningDate": "2026-08-24",
+    "plannedDepartureAt": "2026-08-24T06:00:00Z",
+    "originCode": "DC-LIM",
+    "originName": "Lima distribution centre",
+    "stopCount": 7,
+    "offeredAmount": 1240.00,
+    "currency": "PEN",
+    "notes": "Load 06:00, gate B, tail lift required",
+    "sentAt": "2026-08-21T14:10:00Z",
+    "expiresAt": "2026-08-22T12:00:00Z",
+    "respondedAt": null,
+    "responseNotes": null
+  }
+]
+```
+
+Optional `?shipmentNumber=SH-00000142` fetches the one offer instead of the whole queue.
+
+**An offer whose deadline has passed is absent, not listed as expired.** This is a work queue, and an
+offer that can no longer be accepted is not work. What happened to it is answerable from the shipment
+event feed.
+
+**Not paginated,** deliberately: the result is bounded by what one carrier has outstanding right now.
+A carrier with two hundred unanswered tenders has an operational problem that a page boundary would
+hide rather than solve.
+
+**What is deliberately absent** from the payload is the point: no vehicle, no licence plate, no
+driver, no capacity figures, no order numbers, no customer names, and no TMS uuid. The shipper
+planned a truck onto the shipment, but who the carrier sends is the carrier's decision; and the
+destinations a load is going to are the shipper's commercial relationships, learned when the carrier
+accepts and gets the manifest - not while they are deciding. `stopCount` is the coarsest honest
+measure of the job and the only one that discloses nothing.
+
+### 13.3 `POST /integration/v1/tenders/{shipmentNumber}/response`
+
+```http
+POST /integration/v1/tenders/SH-00000142/response
+Authorization: Bearer <clientId>.<secret>
+Content-Type: application/json
+
+{
+  "decision": "REJECTED",
+  "reason": "No 12t available on the 24th"
+}
+```
+
+Answers `200` with the same offer shape, now carrying `status`, `respondedAt` and `responseNotes`.
+
+| Field | Rules |
+|---|---|
+| `decision` | required, `ACCEPTED` or `REJECTED` (case-insensitive) |
+| `reason` | required on `REJECTED`, optional on `ACCEPTED`, at most 1000 characters |
+
+`reason` is required on a refusal because it is what the shipper's planner needs in order to decide
+what to do next; "they declined" with no reason is the answer that helps least.
+
+### 13.4 Failure modes
+
+| Status | When |
+|---|---|
+| `400` | `decision` missing or not one of the two values; `reason` missing on a rejection |
+| `404` | this carrier has no tender on that shipment number in this company |
+| `409` | the offer is no longer answerable - lapsed, withdrawn, or already answered the other way |
+| `409` | the credential holds the scope but is not bound to a carrier |
+
+**`404` is the same sentence a shipment that does not exist gets.** A carrier must not be able to
+tell the two apart, or this endpoint becomes a way to enumerate the shipper's business.
+
+An offer can stop being answerable without the carrier doing anything: the shipper withdraws it, the
+deadline passes, or the shipment is cancelled or dispatched (`TENDER_CANCELLED` /`TENDER_EXPIRED` on
+the shipment event feed). A `409` here is normal traffic, not a bug in the sender.
+
+### 13.5 Idempotency
+
+Re-sending the **same** decision returns the answer already recorded, so an at-least-once sender is
+safe with no key and no cursor. Sending the **opposite** decision is `409`: reversing a commitment is
+not a retry, and it needs a person on the shipper's side.
+
+`Idempotency-Key` behaves exactly as in §4.2. The shipment number travels in the path but is folded
+into the fingerprinted payload, so a key reused across two shipments with the same decision is a
+`409` naming the reuse rather than a silently replayed answer for the wrong shipment.
+
+### 13.6 Learning that there is something to answer
+
+Polling `GET /integration/v1/tenders` is enough and needs no other scope. A carrier that also holds
+`integration.shipment:read` can instead watch the shipment event feed, which since V31 carries five
+new event types: `TENDER_SENT`, `TENDER_ACCEPTED`, `TENDER_REJECTED`, `TENDER_EXPIRED` and
+`TENDER_CANCELLED`. `TENDER_SENT` is the arrival signal and `TENDER_CANCELLED` is the withdrawal
+signal; both matter, because an offer pulled back before it was answered would otherwise sit in the
+queue until the next poll noticed it was gone.
+
+### 13.7 Onboarding a carrier
+
+1. An administrator creates a credential holding `integration.tender:respond` **only**, with
+   `carrierId` set to that carrier's row in the fleet master.
+2. The carrier confirms `GET /integration/v1/ping`.
+3. The carrier polls `GET /integration/v1/tenders` and expects `[]` until the shipper offers
+   something.
+4. The shipper tenders a test shipment; the carrier answers `REJECTED` with a reason and checks that
+   the response echoes `"status": "REJECTED"`.
+5. Poll interval is agreed. There is no webhook - V1 stops at the transactional outbox, for the
+   reasons `docs/integrations/OUTBOUND_SHIPMENT_V1.md` sets out.

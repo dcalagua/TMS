@@ -28,7 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Frequency use cases, including the weekly-rule child collection and the date-exception
- * sub-resource. Takes a {@link CompanyScope}, never a company id - see {@code OriginService}
+ * sub-resource. Takes a {@link CompanyScope}, never a company id - see {@code LocationService}
  * for the contract this follows.
  */
 @Service
@@ -115,6 +115,12 @@ public class FrequencyService {
     @Transactional
     public FrequencyExceptionView createException(CompanyScope scope, UUID frequencyId, FrequencyExceptionRequest request) {
         find(scope, frequencyId);
+        // Before the duplicate check, so a request that is wrong in two ways is told about the
+        // one it can fix without first picking another date.
+        if (request.cutoffTimeOverride() != null && !request.serviceOverride()) {
+            throw new InvalidRequestException(
+                    "cutoffTimeOverride is only valid on an open date: a closed date has no cutoff.");
+        }
         if (frequencyExceptionRepository.existsByFrequencyIdAndExceptionDate(frequencyId, request.exceptionDate())) {
             throw new ConflictException(
                     "An exception for " + request.exceptionDate() + " already exists on this frequency.");
@@ -122,7 +128,7 @@ public class FrequencyService {
 
         UUID actorId = auditActorProvider.requireAppUserId();
         FrequencyException exception = new FrequencyException(frequencyId, request.exceptionDate(),
-                request.serviceOverride(), blankToNull(request.note()), actorId);
+                request.serviceOverride(), request.cutoffTimeOverride(), blankToNull(request.note()), actorId);
         try {
             return FrequencyExceptionView.from(frequencyExceptionRepository.saveAndFlush(exception));
         } catch (DataIntegrityViolationException raced) {

@@ -5,6 +5,7 @@
     "company-scope-invalid": "The selected company is invalid. Choose a company and try again.",
     "company-scope-required": "No company is selected. Choose a company and try again.",
     "conflict": "This change conflicts with another update. Reload and try again.",
+    "feature-not-configured": "This capability is not configured in this deployment. An administrator has to enable it before it can be used.",
     "internal-error": "Something went wrong on our side. Please try again.",
     "invalid-token": "Your session is no longer valid. Please sign in again.",
     "malformed-request": "The request could not be processed.",

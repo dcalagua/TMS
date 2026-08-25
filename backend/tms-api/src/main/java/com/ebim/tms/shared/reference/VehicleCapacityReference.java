@@ -13,6 +13,10 @@ import java.util.UUID;
  * <p>Carries no {@code fleet} type, so {@code planning} can use it without depending on
  * {@code fleet} ({@code ModuleBoundaryTest}). See {@link VehicleLookupPort}.
  *
+ * @param vehicleTypeId  the type's id beside its code, so a consumer that must <em>match</em> on
+ *                       the type rather than display it does not have to compare user-facing
+ *                       strings. A rate card narrowed to one vehicle type (migration V30) is the
+ *                       first such consumer; a code is renameable and an id is not.
  * @param maxPallets may be zero for a vehicle that carries none (a tanker); zero is a real limit,
  *                   not "unlimited" - see {@code docs/domain/CAPACITY_MODEL.md}
  */
@@ -22,6 +26,7 @@ public record VehicleCapacityReference(
         String licensePlate,
         UUID carrierId,
         String carrierName,
+        UUID vehicleTypeId,
         String vehicleTypeCode,
         BigDecimal maxWeightKg,
         BigDecimal maxVolumeM3,

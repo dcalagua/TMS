@@ -20,7 +20,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
  *       {@code TenantScopedDataSource} has no scope to apply yet.</li>
  *   <li>every other finder is an <em>administration</em> lookup, made by a signed-in user
  *       through the company-scoped admin API, and every one carries the company predicate in the
- *       query - the rule {@code OriginRepository} states for the whole codebase.</li>
+ *       query - the rule {@code LocationRepository} states for the whole codebase.</li>
  * </ul>
  */
 public interface IntegrationClientRepository extends JpaRepository<IntegrationClient, UUID> {

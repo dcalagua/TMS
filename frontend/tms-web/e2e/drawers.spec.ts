@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { horizontalOverflow, signIn, stubServices } from './support/app'
-import { stubOrigins } from './support/masters'
+import { stubLocations } from './support/masters'
 
 /**
  * The right-side drawer as the product's CRUD surface, checked end to end.
@@ -39,7 +39,7 @@ async function settled(drawer: Locator): Promise<void> {
 async function openOrigins(page: Page, viewport: { width: number; height: number }) {
   await page.setViewportSize(viewport)
   await stubServices(page)
-  await stubOrigins(page)
+  await stubLocations(page)
   await signIn(page)
   await page.goto('/masters/origins')
   await expect(page.getByRole('heading', { level: 1, name: 'Orígenes' })).toBeVisible()
@@ -53,7 +53,7 @@ test('the create drawer is anchored to the right edge and leaves the list visibl
 
   const drawer = page.getByRole('dialog')
   await expect(drawer).toBeVisible()
-  await expect(drawer).toHaveAccessibleName('Nuevo origen')
+  await expect(drawer).toHaveAccessibleName('Nueva ubicación')
   await settled(drawer)
 
   const box = await drawer.boundingBox()
@@ -96,7 +96,7 @@ test('editing an origin opens the same drawer prefilled and writes the change ba
   await page.getByRole('menuitem', { name: 'Editar' }).click()
 
   const drawer = page.getByRole('dialog')
-  await expect(drawer).toHaveAccessibleName('Editar origen')
+  await expect(drawer).toHaveAccessibleName('Editar ubicación')
   await expect(drawer.getByLabel(/^Código/)).toHaveValue('AQP-PL1')
 
   await drawer.getByLabel(/^Nombre/).fill('Planta Arequipa Sur')

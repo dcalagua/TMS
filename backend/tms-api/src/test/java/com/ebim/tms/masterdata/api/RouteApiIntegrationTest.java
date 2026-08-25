@@ -104,23 +104,19 @@ class RouteApiIntegrationTest {
         membership("rt.admin@example.invalid", COMPANY_B, "COMPANY_ADMIN");
         membership("rt.viewer@example.invalid", COMPANY_A, "VIEWER");
 
-        originInCompanyA = insertReturningId(
-                "INSERT INTO tms.origin (company_id, code, name) VALUES ('" + COMPANY_A + "', 'ORIGIN-A', 'Origin A')");
-        originInCompanyB = insertReturningId(
-                "INSERT INTO tms.origin (company_id, code, name) VALUES ('" + COMPANY_B + "', 'ORIGIN-B', 'Origin B')");
+        originInCompanyA = insertLocation(COMPANY_A, "ORIGIN-A", "Origin A", "ORIGIN");
+        originInCompanyB = insertLocation(COMPANY_B, "ORIGIN-B", "Origin B", "ORIGIN");
         zoneInCompanyA = insertReturningId(
                 "INSERT INTO tms.zone (company_id, code, name) VALUES ('" + COMPANY_A + "', 'ZONE-A', 'Zone A')");
         frequencyInCompanyA = insertReturningId("INSERT INTO tms.frequency (company_id, code, name) VALUES ('"
                 + COMPANY_A + "', 'FREQ-A', 'Frequency A')");
-        destinationA1 = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country) VALUES ('"
-                + COMPANY_A + "', 'DEST-A1', 'Destination A1', 'PE')");
-        destinationA2 = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country) VALUES ('"
-                + COMPANY_A + "', 'DEST-A2', 'Destination A2', 'PE')");
-        destinationA3 = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country) VALUES ('"
-                + COMPANY_A + "', 'DEST-A3', 'Destination A3', 'PE')");
-        destinationInCompanyB = insertReturningId(
-                "INSERT INTO tms.destination (company_id, code, name, country) VALUES ('" + COMPANY_B
-                        + "', 'DEST-B1', 'Destination B1', 'PE')");
+        // A store that normally takes 15 minutes to serve, so the per-stop override tests can
+        // tell an inherited value apart from an overridden one. The rest default to 0.
+        destinationA1 = insertLocation(COMPANY_A, "DEST-A1", "Destination A1", "DESTINATION",
+                ", service_time_minutes", ", 15");
+        destinationA2 = insertLocation(COMPANY_A, "DEST-A2", "Destination A2", "DESTINATION");
+        destinationA3 = insertLocation(COMPANY_A, "DEST-A3", "Destination A3", "DESTINATION");
+        destinationInCompanyB = insertLocation(COMPANY_B, "DEST-B1", "Destination B1", "DESTINATION");
     }
 
     private static void membership(String email, UUID companyId, String roleCode) {
@@ -135,6 +131,25 @@ class RouteApiIntegrationTest {
                 JOIN tms.role r ON r.code = '%s'
                 WHERE m.company_id = '%s';
                 """.formatted(ORGANIZATION, companyId, email, email, roleCode, companyId));
+    }
+
+    /**
+     * Seeds one canonical location holding one operational role. Since V23 an origin and a
+     * destination are not records of their own - they are {@code tms.location} rows holding
+     * {@code ORIGIN} or {@code DESTINATION} - and the role is what every assignment lookup
+     * filters on, so a location seeded without one is invisible to the API under test.
+     */
+    private static String insertLocation(UUID companyId, String code, String name, String role) {
+        return insertLocation(companyId, code, name, role, "", "");
+    }
+
+    /** {@link #insertLocation(UUID, String, String, String)} with extra columns, e.g. coordinates. */
+    private static String insertLocation(UUID companyId, String code, String name, String role,
+            String extraColumns, String extraValues) {
+        String id = insertReturningId("INSERT INTO tms.location (company_id, code, name" + extraColumns
+                + ") VALUES ('" + companyId + "', '" + code + "', '" + name + "'" + extraValues + ")");
+        execute("INSERT INTO tms.location_role (location_id, role) VALUES ('" + id + "', '" + role + "')");
+        return id;
     }
 
     private static String insertReturningId(String sql) {
@@ -177,12 +192,27 @@ class RouteApiIntegrationTest {
         return JsonPath.read(jsonResponse, "$.id");
     }
 
+    /** Every stop inheriting its location's service time - the ordinary case most tests here need. */
     private String routeRequest(String code, String originId, String zoneId, String frequencyId, String... destinationIds) {
-        String stops = String.join(",", java.util.Arrays.stream(destinationIds).map(id -> "\"" + id + "\"").toList());
+        String stops = String.join(",",
+                java.util.Arrays.stream(destinationIds).map(id -> stopJson(id, null)).toList());
+        return routeRequestWithStops(code, originId, zoneId, frequencyId, stops);
+    }
+
+    private String routeRequestWithStops(String code, String originId, String zoneId, String frequencyId,
+            String stopsJson) {
         return """
                 {"code":"%s","name":"%s Name","originId":"%s","zoneId":%s,"frequencyId":%s,
-                 "referenceDistanceKm":12.5,"referenceDurationMinutes":45,"destinationIds":[%s]}
-                """.formatted(code, code, originId, quoteOrNull(zoneId), quoteOrNull(frequencyId), stops);
+                 "referenceDistanceKm":12.5,"referenceDurationMinutes":45,"stops":[%s]}
+                """.formatted(code, code, originId, quoteOrNull(zoneId), quoteOrNull(frequencyId), stopsJson);
+    }
+
+    /** {@code serviceTimeOverrideMinutes} omitted entirely when null - not sent as an explicit null. */
+    private static String stopJson(String destinationId, Integer serviceTimeOverrideMinutes) {
+        return serviceTimeOverrideMinutes == null
+                ? "{\"destinationId\":\"" + destinationId + "\"}"
+                : "{\"destinationId\":\"" + destinationId + "\",\"serviceTimeOverrideMinutes\":"
+                        + serviceTimeOverrideMinutes + "}";
     }
 
     private static String quoteOrNull(String value) {
@@ -297,6 +327,55 @@ class RouteApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("a stop's service time comes from its location unless the stop overrides it (V24)")
+    void perStopServiceTimeOverrideRoundTrips() throws Exception {
+        String response = mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(routeRequestWithStops("night-corridor", originInCompanyA, null, null,
+                                stopJson(destinationA1, null) + "," + stopJson(destinationA2, 40))))
+                .andExpect(status().isCreated())
+                // DEST-A1 inherits its location's 15 minutes; DEST-A2 overrides its location's 0
+                // with 40, and the view reports all three numbers so an editor need not re-derive.
+                .andExpect(jsonPath("$.stops[0].serviceTimeOverrideMinutes").doesNotExist())
+                .andExpect(jsonPath("$.stops[0].destinationServiceTimeMinutes").value(15))
+                .andExpect(jsonPath("$.stops[0].effectiveServiceTimeMinutes").value(15))
+                .andExpect(jsonPath("$.stops[1].serviceTimeOverrideMinutes").value(40))
+                .andExpect(jsonPath("$.stops[1].destinationServiceTimeMinutes").value(0))
+                .andExpect(jsonPath("$.stops[1].effectiveServiceTimeMinutes").value(40))
+                .andReturn().getResponse().getContentAsString();
+        String id = idOf(response);
+
+        mockMvc.perform(asAdmin(get(BASE + "/" + id), COMPANY_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stops[1].effectiveServiceTimeMinutes").value(40));
+
+        // The request is the wanted state, not a delta: re-sent without the override, the stop
+        // goes back to inheriting - and the location it overrode is untouched throughout.
+        mockMvc.perform(asAdmin(put(BASE + "/" + id), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(routeRequestWithStops("night-corridor", originInCompanyA, null, null,
+                                stopJson(destinationA1, 0) + "," + stopJson(destinationA2, null))))
+                .andExpect(status().isOk())
+                // Zero is a real override - a drop-and-go stop - not a synonym for "inherit".
+                .andExpect(jsonPath("$.stops[0].serviceTimeOverrideMinutes").value(0))
+                .andExpect(jsonPath("$.stops[0].destinationServiceTimeMinutes").value(15))
+                .andExpect(jsonPath("$.stops[0].effectiveServiceTimeMinutes").value(0))
+                .andExpect(jsonPath("$.stops[1].serviceTimeOverrideMinutes").doesNotExist())
+                .andExpect(jsonPath("$.stops[1].effectiveServiceTimeMinutes").value(0));
+    }
+
+    @Test
+    @DisplayName("a negative service time override is rejected")
+    void negativeServiceTimeOverrideIsRejected() throws Exception {
+        mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(routeRequestWithStops("negative-service", originInCompanyA, null, null,
+                                stopJson(destinationA1, -1))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation-failed"));
+    }
+
+    @Test
     @DisplayName("a route with no destination stops is rejected")
     void emptyDestinationsAreRejected() throws Exception {
         mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
@@ -386,10 +465,9 @@ class RouteApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("deactivating a destination used by a route does not remove the route's stop history")
+    @DisplayName("deactivating a stop's location does not remove the route's stop history")
     void deactivatingADestinationPreservesRouteHistory() throws Exception {
-        String deactivatable = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country)"
-                + " VALUES ('" + COMPANY_A + "', 'DEACTIVATABLE', 'Deactivatable', 'PE')");
+        String deactivatable = insertLocation(COMPANY_A, "DEACTIVATABLE", "Deactivatable", "DESTINATION");
 
         String response = mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -398,7 +476,7 @@ class RouteApiIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         String id = idOf(response);
 
-        mockMvc.perform(asAdmin(post("/api/v1/masterdata/destinations/" + deactivatable + "/deactivate"), COMPANY_A))
+        mockMvc.perform(asAdmin(post("/api/v1/masterdata/locations/" + deactivatable + "/deactivate"), COMPANY_A))
                 .andExpect(status().isOk());
 
         mockMvc.perform(asAdmin(get(BASE + "/" + id), COMPANY_A))

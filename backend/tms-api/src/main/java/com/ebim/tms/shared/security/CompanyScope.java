@@ -1,5 +1,8 @@
 package com.ebim.tms.shared.security;
 
+import java.time.DateTimeException;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Set;
 import java.util.UUID;
 
@@ -38,5 +41,36 @@ public record CompanyScope(
 
     public boolean has(Permission permission) {
         return permissions.contains(permission);
+    }
+
+    /**
+     * The company's own zone, from {@code tms.company.time_zone} - what "today" and "which
+     * calendar day is this instant" mean for this tenant. A depot in {@code America/Lima} closing
+     * its day at 21:00 is still on the same date the plan calls it; judged in UTC it is already
+     * tomorrow.
+     *
+     * <p>An unrecognised or missing zone falls back to the system default rather than failing the
+     * request: a bad {@code time_zone} is a master-data defect, and making it un-plannable would
+     * turn a wrong label into an outage.
+     */
+    public ZoneId zoneId() {
+        return zoneOf(timeZone);
+    }
+
+    /** {@link #zoneId()} for callers that hold the raw column rather than a scope. */
+    public static ZoneId zoneOf(String timeZone) {
+        if (timeZone == null || timeZone.isBlank()) {
+            return ZoneId.systemDefault();
+        }
+        try {
+            return ZoneId.of(timeZone);
+        } catch (DateTimeException unknown) {
+            return ZoneId.systemDefault();
+        }
+    }
+
+    /** The current calendar day in this company's zone - never the server's. */
+    public LocalDate today() {
+        return LocalDate.now(zoneId());
     }
 }

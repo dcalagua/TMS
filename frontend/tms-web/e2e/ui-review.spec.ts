@@ -1,6 +1,6 @@
 import { expect, test, type ConsoleMessage, type Locator, type Page } from '@playwright/test'
 import { signIn, stubServices } from './support/app'
-import { stubOrigins } from './support/masters'
+import { stubLocations } from './support/masters'
 import { stubPlanning } from './support/planning'
 
 const SHOTS_DIR = 'artifacts/ui-review'
@@ -116,7 +116,9 @@ test('captures the review screenshots', async ({ page }) => {
   // full-screen sheet on a phone.
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/masters/destinations')
-  await page.getByRole('button', { name: 'Nuevo destino' }).click()
+  // The page header's button, not the one the empty state also offers: with no rows loaded both
+  // are on the screen and a bare getByRole matches two.
+  await page.locator('.tms-page-actions').getByRole('button', { name: 'Nuevo destino' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await settled(page.getByRole('dialog'))
   await page.screenshot({ path: `${SHOTS_DIR}/form-destination-desktop.png` })
@@ -139,7 +141,9 @@ test('captures the review screenshots', async ({ page }) => {
 
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/masters/destinations')
-  await page.getByRole('button', { name: 'Nuevo destino' }).click()
+  // The page header's button, not the one the empty state also offers: with no rows loaded both
+  // are on the screen and a bare getByRole matches two.
+  await page.locator('.tms-page-actions').getByRole('button', { name: 'Nuevo destino' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await settled(page.getByRole('dialog'))
   await page.screenshot({ path: `${SHOTS_DIR}/form-destination-mobile.png` })
@@ -150,7 +154,7 @@ test('captures the review screenshots', async ({ page }) => {
    count strip and the pager sit against the data. */
 test('captures a populated list screen', async ({ page }) => {
   await stubServices(page)
-  await stubOrigins(page)
+  await stubLocations(page)
   await signIn(page)
 
   await page.setViewportSize({ width: 1440, height: 900 })

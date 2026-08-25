@@ -438,12 +438,14 @@ class PlanningConstraintIntegrationTest {
                 + "', 'Organization') RETURNING id");
         UUID company = insertReturningId("INSERT INTO tms.company (organization_id, code, name) VALUES ('"
                 + organization + "', 'CO-" + prefix + "', 'Company') RETURNING id");
-        UUID origin = insertReturningId("INSERT INTO tms.origin (company_id, code, name) VALUES ('" + company
+        // Canonical locations: since V23 planning_run.origin_id and trip_stop.destination_id
+        // reference tms.location. No role rows - this suite proves constraints, not eligibility.
+        UUID origin = insertReturningId("INSERT INTO tms.location (company_id, code, name) VALUES ('" + company
                 + "', 'ORIGIN-" + prefix + "', 'Origin') RETURNING id");
-        UUID destination = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country) VALUES ('"
+        UUID destination = insertReturningId("INSERT INTO tms.location (company_id, code, name, country) VALUES ('"
                 + company + "', 'DEST1-" + prefix + "', 'Destination one', 'PE') RETURNING id");
         UUID secondDestination = insertReturningId(
-                "INSERT INTO tms.destination (company_id, code, name, country) VALUES ('" + company + "', 'DEST2-"
+                "INSERT INTO tms.location (company_id, code, name, country) VALUES ('" + company + "', 'DEST2-"
                         + prefix + "', 'Destination two', 'PE') RETURNING id");
         UUID vehicleType = insertReturningId("INSERT INTO tms.vehicle_type"
                 + " (company_id, code, name, max_weight_kg, max_volume_m3, max_pallets) VALUES ('" + company

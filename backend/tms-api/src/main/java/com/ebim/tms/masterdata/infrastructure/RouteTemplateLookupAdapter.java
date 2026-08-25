@@ -4,6 +4,7 @@ import com.ebim.tms.masterdata.domain.Route;
 import com.ebim.tms.masterdata.domain.RouteStop;
 import com.ebim.tms.shared.reference.RouteTemplate;
 import com.ebim.tms.shared.reference.RouteTemplateLookupPort;
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,13 @@ class RouteTemplateLookupAdapter implements RouteTemplateLookupPort {
     }
 
     @Override
+    public List<RouteTemplate> findActiveByOriginInCompany(UUID originId, UUID companyId) {
+        return routeRepository.findByCompanyIdAndOriginIdAndActiveTrueOrderByCodeAsc(companyId, originId).stream()
+                .map(RouteTemplateLookupAdapter::toTemplate)
+                .toList();
+    }
+
+    @Override
     public Map<UUID, RouteTemplate> findAllInCompany(Set<UUID> ids, UUID companyId) {
         Map<UUID, RouteTemplate> byId = new HashMap<>();
         if (ids.isEmpty()) {
@@ -49,6 +57,12 @@ class RouteTemplateLookupAdapter implements RouteTemplateLookupPort {
             byId.put(route.id(), toTemplate(route));
         }
         return byId;
+    }
+
+    @Override
+    public Optional<BigDecimal> findReferenceDistanceKm(UUID routeId, UUID companyId) {
+        return routeRepository.findByIdAndCompanyId(routeId, companyId)
+                .map(Route::referenceDistanceKm);
     }
 
     /**

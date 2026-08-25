@@ -1,6 +1,7 @@
 package com.ebim.tms.masterdata.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.util.EnumSet;
@@ -11,21 +12,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * The parts of the canonical Location model that hold without a database, so they are proved on
- * a machine where Docker is unavailable too.
+ * The parts of the Location model that hold without a database, so they are proved on a machine
+ * where Docker is unavailable too - which, on this host, is every machine (BASELINE E-1).
  *
- * <p>Three of these are load-bearing for {@code LocationCompatibilityProjector} and for the V14
- * backfill, and each would fail silently rather than loudly if it broke:
- *
- * <ul>
- *   <li>{@link LocationType} must be a superset of both legacy vocabularies, or the backfill
- *       loses a row's type;</li>
- *   <li>widening a legacy type and narrowing it back must be the identity for the values the
- *       legacy side owns, or an unrelated edit through the Origins API silently reclassifies a
- *       location;</li>
- *   <li>{@link Location#replaceRoles} must be a diff, not a replace, or every edit churns the
- *       {@code created_at} of roles the location already held.</li>
- * </ul>
+ * <p>What these pin down is the separation the whole domain rests on: a location's
+ * <em>type</em> says what the place is and admits exactly one value; its <em>roles</em> say how
+ * it may be used in a movement and admit a set. Before V23 the role vocabulary carried five
+ * values that were really types, and the screens showed "Type: Store / Roles: Store". The first
+ * test here is what stops that coming back.
  */
 class LocationModelTest {
 
@@ -37,61 +31,76 @@ class LocationModelTest {
     }
 
     @Test
-    @DisplayName("the canonical type vocabulary covers every legacy origin and destination type")
-    void canonicalTypeIsASupersetOfBothLegacyVocabularies() {
-        List<String> canonical = EnumSet.allOf(LocationType.class).stream().map(Enum::name).toList();
-
-        assertThat(canonical)
-                .as("a legacy origin type with no canonical counterpart cannot be backfilled")
-                .containsAll(EnumSet.allOf(OriginType.class).stream().map(Enum::name).toList());
-        assertThat(canonical)
-                .as("a legacy destination type with no canonical counterpart cannot be backfilled")
-                .containsAll(EnumSet.allOf(DestinationType.class).stream().map(Enum::name).toList());
+    @DisplayName("a role is an operational use and nothing else: exactly ORIGIN and DESTINATION")
+    void roleVocabularyCarriesNoClassification() {
+        assertThat(EnumSet.allOf(LocationRole.class))
+                .as("a value that names a kind of place belongs in LocationType, which already "
+                        + "has one - a role that classifies is how the Type/Roles duplication "
+                        + "V23 removed gets reintroduced")
+                .containsExactly(LocationRole.ORIGIN, LocationRole.DESTINATION);
     }
 
     @Test
-    @DisplayName("widening a legacy origin type and narrowing it back is the identity")
-    void originTypeRoundTrips() {
-        assertThat(EnumSet.allOf(OriginType.class)).allSatisfy(type ->
-                assertThat(LocationType.from(type).toOriginType()).isEqualTo(type));
+    @DisplayName("the retired role vocabulary no longer parses, so stale payloads fail loudly")
+    void retiredRolesAreRejected() {
+        for (String retired : List.of("SHIP_TO", "STORE", "DC", "PLANT", "HUB", "OTHER")) {
+            assertThatThrownBy(() -> LocationRole.valueOf(retired))
+                    .as("%s was a V14 role; a client still sending it must get an error, not a "
+                            + "silently dropped capability", retired)
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
     }
 
     @Test
-    @DisplayName("widening a legacy destination type and narrowing it back is the identity")
-    void destinationTypeRoundTrips() {
-        assertThat(EnumSet.allOf(DestinationType.class)).allSatisfy(type ->
-                assertThat(LocationType.from(type).toDestinationType()).isEqualTo(type));
+    @DisplayName("the type vocabulary still covers every kind of place the two legacy masters knew")
+    void typeVocabularyIsComplete() {
+        assertThat(EnumSet.allOf(LocationType.class).stream().map(Enum::name).toList())
+                .as("V14 built this as the union of the origin and destination type enums so its "
+                        + "backfill was lossless; narrowing it now would strand rows that carry "
+                        + "the dropped value")
+                .containsExactlyInAnyOrder("WAREHOUSE", "DISTRIBUTION_CENTER", "PLANT", "HUB", "OTHER",
+                        "CUSTOMER", "STORE", "BRANCH", "DELIVERY_POINT");
     }
 
     @Test
-    @DisplayName("narrowing a canonical type the legacy side cannot express falls back to its catch-all")
-    void narrowingUsesEachLegacyCatchAll() {
-        assertThat(LocationType.STORE.toOriginType()).isEqualTo(OriginType.OTHER);
-        assertThat(LocationType.CUSTOMER.toOriginType()).isEqualTo(OriginType.OTHER);
-        assertThat(LocationType.WAREHOUSE.toDestinationType()).isEqualTo(DestinationType.DELIVERY_POINT);
-        assertThat(LocationType.PLANT.toDestinationType()).isEqualTo(DestinationType.DELIVERY_POINT);
+    @DisplayName("one location may ship and receive, which is the entire point of the model")
+    void aLocationMayHoldBothRoles() {
+        Location store = location();
+
+        store.replaceRoles(Set.of(LocationRole.ORIGIN, LocationRole.DESTINATION));
+
+        assertThat(store.hasRole(LocationRole.ORIGIN)).isTrue();
+        assertThat(store.hasRole(LocationRole.DESTINATION)).isTrue();
+        assertThat(store.roles()).containsExactly(LocationRole.ORIGIN, LocationRole.DESTINATION);
     }
 
     @Test
-    @DisplayName("only ORIGIN and SHIP_TO project; the other roles classify and nothing else")
-    void onlyTwoRolesProject() {
-        assertThat(EnumSet.allOf(LocationRole.class).stream().filter(LocationRole::isProjecting))
-                .containsExactly(LocationRole.ORIGIN, LocationRole.SHIP_TO);
+    @DisplayName("a location may hold only ORIGIN, or only DESTINATION")
+    void aLocationMayHoldOneRole() {
+        Location plant = location();
+        plant.replaceRoles(Set.of(LocationRole.ORIGIN));
+        assertThat(plant.roles()).containsExactly(LocationRole.ORIGIN);
+        assertThat(plant.hasRole(LocationRole.DESTINATION)).isFalse();
+
+        Location deliveryPoint = location();
+        deliveryPoint.replaceRoles(Set.of(LocationRole.DESTINATION));
+        assertThat(deliveryPoint.roles()).containsExactly(LocationRole.DESTINATION);
+        assertThat(deliveryPoint.hasRole(LocationRole.ORIGIN)).isFalse();
     }
 
     @Test
     @DisplayName("replacing roles adds what is new, removes what is gone and keeps what is unchanged")
     void replaceRolesDiffsRatherThanRebuilding() {
         Location location = location();
-        location.replaceRoles(Set.of(LocationRole.ORIGIN, LocationRole.DC));
+        location.replaceRoles(Set.of(LocationRole.ORIGIN, LocationRole.DESTINATION));
         LocationRoleAssignment originAssignment = location.roleAssignments().stream()
                 .filter(assignment -> assignment.role() == LocationRole.ORIGIN)
                 .findFirst()
                 .orElseThrow();
 
-        location.replaceRoles(Set.of(LocationRole.ORIGIN, LocationRole.SHIP_TO));
+        location.replaceRoles(Set.of(LocationRole.ORIGIN));
 
-        assertThat(location.roles()).containsExactly(LocationRole.ORIGIN, LocationRole.SHIP_TO);
+        assertThat(location.roles()).containsExactly(LocationRole.ORIGIN);
         assertThat(location.roleAssignments())
                 .as("a role the location already held must keep its own assignment row, so its "
                         + "created_at keeps saying when the location first took that role")
@@ -103,10 +112,9 @@ class LocationModelTest {
     void rolesAreOrdered() {
         Location location = location();
 
-        location.replaceRoles(List.of(LocationRole.OTHER, LocationRole.SHIP_TO, LocationRole.ORIGIN));
+        location.replaceRoles(List.of(LocationRole.DESTINATION, LocationRole.ORIGIN));
 
-        assertThat(location.roles())
-                .containsExactly(LocationRole.ORIGIN, LocationRole.SHIP_TO, LocationRole.OTHER);
+        assertThat(location.roles()).containsExactly(LocationRole.ORIGIN, LocationRole.DESTINATION);
     }
 
     @Test
@@ -117,7 +125,27 @@ class LocationModelTest {
 
         location.replaceRoles(Set.of());
 
+        // The database permits this; the API does not (LocationRequest.roles is @NotEmpty). The
+        // entity stays permissive so the V23 migration's "a location left with no operational
+        // use" state is representable rather than un-loadable.
         assertThat(location.roles()).isEmpty();
         assertThat(location.hasRole(LocationRole.ORIGIN)).isFalse();
+    }
+
+    @Test
+    @DisplayName("deactivating is one flag on one row, so it applies to both ends of a movement")
+    void deactivationIsSingleSourced() {
+        Location location = location();
+        location.replaceRoles(Set.of(LocationRole.ORIGIN, LocationRole.DESTINATION));
+        UUID actor = UUID.randomUUID();
+
+        location.deactivate(actor);
+
+        assertThat(location.active()).isFalse();
+        assertThat(location.updatedBy()).isEqualTo(actor);
+        assertThat(location.roles())
+                .as("roles say what the place may be used for; active says whether it is in "
+                        + "service. Taking it out of service must not silently rewrite its uses")
+                .containsExactly(LocationRole.ORIGIN, LocationRole.DESTINATION);
     }
 }

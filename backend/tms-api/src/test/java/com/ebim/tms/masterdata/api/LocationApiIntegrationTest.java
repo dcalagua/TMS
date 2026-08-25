@@ -53,8 +53,6 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class LocationApiIntegrationTest {
 
     private static final String BASE = "/api/v1/masterdata/locations";
-    private static final String ORIGINS = "/api/v1/masterdata/origins";
-    private static final String DESTINATIONS = "/api/v1/masterdata/destinations";
 
     private static final UUID ORGANIZATION = UUID.fromString("44444444-0000-4000-8000-000000000001");
     private static final UUID COMPANY_A = UUID.fromString("44444444-0000-4000-8000-0000000000c1");
@@ -196,7 +194,7 @@ class LocationApiIntegrationTest {
         @DisplayName("a location of one company cannot be read through another company's scope")
         void crossCompanyReadIsBlocked() throws Exception {
             String id = JsonPath.read(
-                    create(COMPANY_A, locationRequest("ISOLATED", "STORE", "[\"SHIP_TO\"]", null, null, null)),
+                    create(COMPANY_A, locationRequest("ISOLATED", "STORE", "[\"DESTINATION\"]", null, null, null)),
                     "$.id");
 
             mockMvc.perform(asAdmin(get(BASE + "/" + id), COMPANY_B))
@@ -207,7 +205,7 @@ class LocationApiIntegrationTest {
         @Test
         @DisplayName("a location of one company never appears in another company's list")
         void crossCompanyListIsBlocked() throws Exception {
-            create(COMPANY_A, locationRequest("ONLY-IN-A", "STORE", "[\"SHIP_TO\"]", null, null, null));
+            create(COMPANY_A, locationRequest("ONLY-IN-A", "STORE", "[\"DESTINATION\"]", null, null, null));
 
             mockMvc.perform(asAdmin(get(BASE), COMPANY_B))
                     .andExpect(status().isOk())
@@ -221,7 +219,7 @@ class LocationApiIntegrationTest {
 
             mockMvc.perform(asViewer(post(BASE), COMPANY_A)
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(locationRequest("VIEWER-TRY", "STORE", "[\"SHIP_TO\"]", null, null, null)))
+                            .content(locationRequest("VIEWER-TRY", "STORE", "[\"DESTINATION\"]", null, null, null)))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.code").value("access-denied"));
         }
@@ -231,7 +229,7 @@ class LocationApiIntegrationTest {
         void zoneMustBelongToCallersCompany() throws Exception {
             mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(locationRequest("CROSS-ZONE", "STORE", "[\"SHIP_TO\"]",
+                            .content(locationRequest("CROSS-ZONE", "STORE", "[\"DESTINATION\"]",
                                     zoneInCompanyB, null, null)))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("malformed-request"));
@@ -245,12 +243,12 @@ class LocationApiIntegrationTest {
         @Test
         @DisplayName("the same code is allowed in a different company but conflicts inside the same one")
         void codeIsUniquePerCompany() throws Exception {
-            create(COMPANY_A, locationRequest("SHARED", "STORE", "[\"SHIP_TO\"]", null, null, null));
-            create(COMPANY_B, locationRequest("SHARED", "STORE", "[\"SHIP_TO\"]", null, null, null));
+            create(COMPANY_A, locationRequest("SHARED", "STORE", "[\"DESTINATION\"]", null, null, null));
+            create(COMPANY_B, locationRequest("SHARED", "STORE", "[\"DESTINATION\"]", null, null, null));
 
             mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(locationRequest("SHARED", "STORE", "[\"SHIP_TO\"]", null, null, null)))
+                            .content(locationRequest("SHARED", "STORE", "[\"DESTINATION\"]", null, null, null)))
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.code").value("conflict"));
         }
@@ -258,12 +256,12 @@ class LocationApiIntegrationTest {
         @Test
         @DisplayName("an external reference is an idempotency key: unique per company, reusable across them")
         void externalReferenceIsUniquePerCompany() throws Exception {
-            create(COMPANY_A, locationRequest("EXT-1", "STORE", "[\"SHIP_TO\"]", null, "EWM", "STORE-77"));
-            create(COMPANY_B, locationRequest("EXT-1", "STORE", "[\"SHIP_TO\"]", null, "EWM", "STORE-77"));
+            create(COMPANY_A, locationRequest("EXT-1", "STORE", "[\"DESTINATION\"]", null, "EWM", "STORE-77"));
+            create(COMPANY_B, locationRequest("EXT-1", "STORE", "[\"DESTINATION\"]", null, "EWM", "STORE-77"));
 
             mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(locationRequest("EXT-2", "STORE", "[\"SHIP_TO\"]", null, "EWM", "STORE-77")))
+                            .content(locationRequest("EXT-2", "STORE", "[\"DESTINATION\"]", null, "EWM", "STORE-77")))
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.code").value("conflict"));
         }
@@ -271,9 +269,9 @@ class LocationApiIntegrationTest {
         @Test
         @DisplayName("the same reference from a different system is a different identity")
         void externalReferenceIsScopedToItsSystem() throws Exception {
-            create(COMPANY_A, locationRequest("SYS-1", "STORE", "[\"SHIP_TO\"]", null, "EWM", "SHARED-REF"));
+            create(COMPANY_A, locationRequest("SYS-1", "STORE", "[\"DESTINATION\"]", null, "EWM", "SHARED-REF"));
 
-            create(COMPANY_A, locationRequest("SYS-2", "STORE", "[\"SHIP_TO\"]", null, "ERP", "SHARED-REF"));
+            create(COMPANY_A, locationRequest("SYS-2", "STORE", "[\"DESTINATION\"]", null, "ERP", "SHARED-REF"));
         }
 
         @Test
@@ -281,7 +279,7 @@ class LocationApiIntegrationTest {
         void externalIdentityMustBeComplete() throws Exception {
             mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(locationRequest("HALF-EXT", "STORE", "[\"SHIP_TO\"]", null, null, "ORPHAN")))
+                            .content(locationRequest("HALF-EXT", "STORE", "[\"DESTINATION\"]", null, null, "ORPHAN")))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("malformed-request"));
         }
@@ -291,13 +289,13 @@ class LocationApiIntegrationTest {
         void codeIsNormalized() throws Exception {
             mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(locationRequest("lower-code", "STORE", "[\"SHIP_TO\"]", null, null, null)))
+                            .content(locationRequest("lower-code", "STORE", "[\"DESTINATION\"]", null, null, null)))
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.code").value("LOWER-CODE"));
 
             mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(locationRequest("LOWER-CODE", "STORE", "[\"SHIP_TO\"]", null, null, null)))
+                            .content(locationRequest("LOWER-CODE", "STORE", "[\"DESTINATION\"]", null, null, null)))
                     .andExpect(status().isConflict());
         }
     }
@@ -312,7 +310,7 @@ class LocationApiIntegrationTest {
             mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
-                                    {"code":"BAD-LAT","name":"Bad","type":"STORE","roles":["SHIP_TO"],
+                                    {"code":"BAD-LAT","name":"Bad","type":"STORE","roles":["DESTINATION"],
                                      "country":"PE","timeZone":"America/Lima","latitude":200.0,
                                      "longitude":0.0,"serviceTimeMinutes":0}
                                     """))
@@ -327,7 +325,7 @@ class LocationApiIntegrationTest {
             mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
-                                    {"code":"BAD-PAIR","name":"Bad","type":"STORE","roles":["SHIP_TO"],
+                                    {"code":"BAD-PAIR","name":"Bad","type":"STORE","roles":["DESTINATION"],
                                      "country":"PE","timeZone":"America/Lima","latitude":10.0,
                                      "serviceTimeMinutes":0}
                                     """))
@@ -352,208 +350,11 @@ class LocationApiIntegrationTest {
             mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
-                                    {"code":"BAD-TZ","name":"Bad","type":"STORE","roles":["SHIP_TO"],
+                                    {"code":"BAD-TZ","name":"Bad","type":"STORE","roles":["DESTINATION"],
                                      "country":"PE","timeZone":"Mars/Olympus","serviceTimeMinutes":0}
                                     """))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("malformed-request"));
-        }
-    }
-
-    @Nested
-    @DisplayName("compatibility projections")
-    class Projections {
-
-        @Test
-        @DisplayName("a location with both roles gets one origin and one destination, both linked to it")
-        void bothRolesProjectBothWays() throws Exception {
-            String response = create(COMPANY_A,
-                    locationRequest("DUAL-DC", "DISTRIBUTION_CENTER", "[\"ORIGIN\",\"SHIP_TO\"]",
-                            zoneInCompanyA, null, null));
-            String id = JsonPath.read(response, "$.id");
-            String originId = JsonPath.read(response, "$.originId");
-            String destinationId = JsonPath.read(response, "$.destinationId");
-
-            assertThat(originId).isNotNull();
-            assertThat(destinationId).isNotNull();
-
-            mockMvc.perform(asAdmin(get(ORIGINS + "/" + originId), COMPANY_A))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.code").value("DUAL-DC"))
-                    .andExpect(jsonPath("$.type").value("DISTRIBUTION_CENTER"));
-
-            mockMvc.perform(asAdmin(get(DESTINATIONS + "/" + destinationId), COMPANY_A))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.code").value("DUAL-DC"))
-                    .andExpect(jsonPath("$.serviceTimeMinutes").value(25));
-
-            assertThat(singleValue("SELECT location_id::text FROM tms.origin WHERE id = '" + originId + "'"))
-                    .isEqualTo(id);
-            assertThat(singleValue(
-                    "SELECT location_id::text FROM tms.destination WHERE id = '" + destinationId + "'"))
-                    .isEqualTo(id);
-        }
-
-        @Test
-        @DisplayName("a canonical type the legacy enum cannot express narrows to that side's catch-all")
-        void narrowingUsesTheLegacyCatchAll() throws Exception {
-            String response = create(COMPANY_A,
-                    locationRequest("STORE-ORIGIN", "STORE", "[\"ORIGIN\",\"SHIP_TO\"]", null, null, null));
-
-            mockMvc.perform(asAdmin(get(ORIGINS + "/" + JsonPath.read(response, "$.originId")), COMPANY_A))
-                    .andExpect(jsonPath("$.type").value("OTHER"));
-            mockMvc.perform(asAdmin(get(DESTINATIONS + "/" + JsonPath.read(response, "$.destinationId")), COMPANY_A))
-                    .andExpect(jsonPath("$.type").value("STORE"));
-        }
-
-        @Test
-        @DisplayName("dropping the ORIGIN role deactivates the origin instead of deleting it")
-        void droppingARoleRetiresTheProjection() throws Exception {
-            String response = create(COMPANY_A,
-                    locationRequest("RETIRE-ME", "HUB", "[\"ORIGIN\",\"SHIP_TO\"]", null, null, null));
-            String id = JsonPath.read(response, "$.id");
-            String originId = JsonPath.read(response, "$.originId");
-
-            mockMvc.perform(asAdmin(put(BASE + "/" + id), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(locationRequest("RETIRE-ME", "HUB", "[\"SHIP_TO\"]", null, null, null)))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.roles").value(List.of("SHIP_TO")));
-
-            mockMvc.perform(asAdmin(get(ORIGINS + "/" + originId), COMPANY_A))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.active").value(false));
-        }
-
-        @Test
-        @DisplayName("deactivating a location deactivates its projections too")
-        void deactivationFlowsDown() throws Exception {
-            String response = create(COMPANY_A,
-                    locationRequest("OFF-SITE", "STORE", "[\"SHIP_TO\"]", null, null, null));
-            String id = JsonPath.read(response, "$.id");
-            String destinationId = JsonPath.read(response, "$.destinationId");
-
-            mockMvc.perform(asAdmin(post(BASE + "/" + id + "/deactivate"), COMPANY_A))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.active").value(false));
-
-            mockMvc.perform(asAdmin(get(DESTINATIONS + "/" + destinationId), COMPANY_A))
-                    .andExpect(jsonPath("$.active").value(false));
-
-            mockMvc.perform(asAdmin(post(BASE + "/" + id + "/activate"), COMPANY_A))
-                    .andExpect(status().isOk());
-            mockMvc.perform(asAdmin(get(DESTINATIONS + "/" + destinationId), COMPANY_A))
-                    .andExpect(jsonPath("$.active").value(true));
-        }
-
-        @Test
-        @DisplayName("editing the location updates the projection, so the two models cannot drift")
-        void canonicalEditFlowsDown() throws Exception {
-            String response = create(COMPANY_A,
-                    locationRequest("EDIT-DOWN", "STORE", "[\"SHIP_TO\"]", null, null, null));
-            String id = JsonPath.read(response, "$.id");
-            String destinationId = JsonPath.read(response, "$.destinationId");
-
-            mockMvc.perform(asAdmin(put(BASE + "/" + id), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    {"code":"EDIT-DOWN","name":"Renamed Store","type":"BRANCH",
-                                     "roles":["SHIP_TO"],"address":"Nueva 99","country":"PE",
-                                     "timeZone":"America/Lima","serviceTimeMinutes":40}
-                                    """))
-                    .andExpect(status().isOk());
-
-            mockMvc.perform(asAdmin(get(DESTINATIONS + "/" + destinationId), COMPANY_A))
-                    .andExpect(jsonPath("$.name").value("Renamed Store"))
-                    .andExpect(jsonPath("$.type").value("BRANCH"))
-                    .andExpect(jsonPath("$.serviceTimeMinutes").value(40));
-        }
-    }
-
-    @Nested
-    @DisplayName("the legacy APIs keep working and stay in step")
-    class LegacyCompatibility {
-
-        @Test
-        @DisplayName("creating an origin the old way also creates the canonical location it projects")
-        void legacyOriginCreateAdoptsALocation() throws Exception {
-            mockMvc.perform(asAdmin(post(ORIGINS), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    {"code":"LEGACY-ORG","name":"Legacy Origin","type":"WAREHOUSE",
-                                     "address":"Av. Legacy 1","timeZone":"America/Lima"}
-                                    """))
-                    .andExpect(status().isCreated());
-
-            mockMvc.perform(asAdmin(get(BASE + "?search=LEGACY-ORG"), COMPANY_A))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.content[0].code").value("LEGACY-ORG"))
-                    .andExpect(jsonPath("$.content[0].type").value("WAREHOUSE"))
-                    .andExpect(jsonPath("$.content[0].roles").value(List.of("ORIGIN")));
-        }
-
-        @Test
-        @DisplayName("creating a destination the old way also creates the canonical location it projects")
-        void legacyDestinationCreateAdoptsALocation() throws Exception {
-            mockMvc.perform(asAdmin(post(DESTINATIONS), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    {"code":"LEGACY-DST","name":"Legacy Destination","type":"CUSTOMER",
-                                     "address":"Av. Legacy 2","country":"PE","serviceTimeMinutes":10}
-                                    """))
-                    .andExpect(status().isCreated());
-
-            mockMvc.perform(asAdmin(get(BASE + "?search=LEGACY-DST"), COMPANY_A))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.content[0].type").value("CUSTOMER"))
-                    .andExpect(jsonPath("$.content[0].serviceTimeMinutes").value(10))
-                    .andExpect(jsonPath("$.content[0].roles").value(List.of("SHIP_TO")));
-        }
-
-        @Test
-        @DisplayName("editing a projection the old way is pushed up to the canonical location")
-        void legacyEditFlowsUp() throws Exception {
-            String response = create(COMPANY_A,
-                    locationRequest("UP-SYNC", "STORE", "[\"SHIP_TO\"]", null, null, null));
-            String id = JsonPath.read(response, "$.id");
-            String destinationId = JsonPath.read(response, "$.destinationId");
-
-            mockMvc.perform(asAdmin(put(DESTINATIONS + "/" + destinationId), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    {"code":"UP-SYNC","name":"Renamed Through Legacy","type":"STORE",
-                                     "address":"Otra 55","country":"PE","serviceTimeMinutes":55}
-                                    """))
-                    .andExpect(status().isOk());
-
-            mockMvc.perform(asAdmin(get(BASE + "/" + id), COMPANY_A))
-                    .andExpect(jsonPath("$.name").value("Renamed Through Legacy"))
-                    .andExpect(jsonPath("$.serviceTimeMinutes").value(55))
-                    .andExpect(jsonPath("$.timeZone")
-                            .value("America/Lima"));
-        }
-
-        @Test
-        @DisplayName("renaming an origin onto a code another location holds is refused, not silently dropped")
-        void legacyRenameOntoATakenCodeConflicts() throws Exception {
-            create(COMPANY_A, locationRequest("TAKEN-CODE", "STORE", "[\"SHIP_TO\"]", null, null, null));
-            String origin = mockMvc.perform(asAdmin(post(ORIGINS), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    {"code":"FREE-CODE","name":"Free","type":"WAREHOUSE",
-                                     "timeZone":"America/Lima"}
-                                    """))
-                    .andExpect(status().isCreated())
-                    .andReturn().getResponse().getContentAsString();
-
-            mockMvc.perform(asAdmin(put(ORIGINS + "/" + JsonPath.read(origin, "$.id")), COMPANY_A)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    {"code":"TAKEN-CODE","name":"Free","type":"WAREHOUSE",
-                                     "timeZone":"America/Lima"}
-                                    """))
-                    .andExpect(status().isConflict())
-                    .andExpect(jsonPath("$.code").value("conflict"));
         }
     }
 
@@ -564,7 +365,7 @@ class LocationApiIntegrationTest {
         @Test
         @DisplayName("the search box matches code, name and external reference")
         void searchSpansTheThreeIdentifiers() throws Exception {
-            create(COMPANY_A, locationRequest("FIND-ME", "STORE", "[\"SHIP_TO\"]", null, "EWM", "FINDABLE-REF"));
+            create(COMPANY_A, locationRequest("FIND-ME", "STORE", "[\"DESTINATION\"]", null, "EWM", "FINDABLE-REF"));
 
             mockMvc.perform(asAdmin(get(BASE + "?search=find-me"), COMPANY_A))
                     .andExpect(jsonPath("$.content[?(@.code == 'FIND-ME')]").exists());
@@ -578,12 +379,49 @@ class LocationApiIntegrationTest {
         @DisplayName("filtering by role returns each location once, however many roles it holds")
         void roleFilterDoesNotDuplicateRows() throws Exception {
             create(COMPANY_A, locationRequest("MULTI-ROLE", "HUB",
-                    "[\"ORIGIN\",\"SHIP_TO\",\"HUB\",\"DC\"]", null, null, null));
+                    "[\"ORIGIN\",\"DESTINATION\"]", null, null, null));
 
             mockMvc.perform(asAdmin(get(BASE + "?role=ORIGIN&search=MULTI-ROLE"), COMPANY_A))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalElements").value(1))
                     .andExpect(jsonPath("$.content.length()").value(1));
+        }
+
+        @Test
+        @DisplayName("the role filter is what the Origins and Destinations screens are")
+        void roleFilterIsTheOriginsAndDestinationsView() throws Exception {
+            // One store that receives deliveries and ships its own returns, one plant that only
+            // ships. There is one physical record each: the two screens are two queries over it.
+            create(COMPANY_A, locationRequest("VIEW-STORE", "STORE",
+                    "[\"ORIGIN\",\"DESTINATION\"]", null, null, null));
+            create(COMPANY_A, locationRequest("VIEW-PLANT", "PLANT", "[\"ORIGIN\"]", null, null, null));
+
+            mockMvc.perform(asAdmin(get(BASE + "?role=ORIGIN&search=VIEW-"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content[?(@.code == 'VIEW-STORE')]").exists())
+                    .andExpect(jsonPath("$.content[?(@.code == 'VIEW-PLANT')]").exists());
+
+            mockMvc.perform(asAdmin(get(BASE + "?role=DESTINATION&search=VIEW-"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content[?(@.code == 'VIEW-STORE')]").exists())
+                    .andExpect(jsonPath("$.content[?(@.code == 'VIEW-PLANT')]")
+                            .doesNotExist());
+        }
+
+        @Test
+        @DisplayName("a retired V14 role is refused rather than silently dropped")
+        void retiredRolesAreRejected() throws Exception {
+            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(locationRequest("OLD-ROLE", "STORE", "[\"DESTINATION\"]", null, null, null)))
+                    .andExpect(status().isBadRequest());
+
+            // A kind of place is what type says. Accepting it as a role too is the Type/Roles
+            // duplication V23 removed, so the enum no longer parses it.
+            mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(locationRequest("TYPE-AS-ROLE", "STORE", "[\"STORE\"]", null, null, null)))
+                    .andExpect(status().isBadRequest());
         }
 
         @Test

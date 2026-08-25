@@ -9,6 +9,7 @@ import com.ebim.tms.fleet.infrastructure.VehicleRepository;
 import com.ebim.tms.fleet.infrastructure.VehicleTypeRepository;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,30 @@ public class VehicleLookupService implements VehicleLookupPort {
                 .map(vehicle -> toReference(vehicle, requireType(vehicle, companyId), carrierName(vehicle, companyId)));
     }
 
+    /**
+     * The whole assignable fleet, resolved in the same three batched queries a page of trips
+     * costs. Sorted heaviest-first here rather than in the database because the sort key is the
+     * <em>effective</em> capacity - the vehicle's override where it has one, its type's default
+     * otherwise - and that resolution is a fleet rule, not a column.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<VehicleCapacityReference> findAssignableInCompany(UUID companyId) {
+        List<Vehicle> vehicles = vehicleRepository.findByCompanyIdAndActiveTrueAndAvailabilityStatus(
+                companyId, VehicleAvailabilityStatus.AVAILABLE);
+        if (vehicles.isEmpty()) {
+            return List.of();
+        }
+        return toReferences(vehicles, companyId).values().stream()
+                .sorted(Comparator
+                        .comparing(VehicleCapacityReference::maxWeightKg,
+                                Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(VehicleCapacityReference::maxVolumeM3,
+                                Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(VehicleCapacityReference::code))
+                .toList();
+    }
+
     @Override
     @Transactional(readOnly = true)
     public Map<UUID, VehicleCapacityReference> findAllInCompany(Set<UUID> ids, UUID companyId) {
@@ -71,7 +96,12 @@ public class VehicleLookupService implements VehicleLookupPort {
         if (vehicles.isEmpty()) {
             return byId;
         }
+        return toReferences(vehicles, companyId);
+    }
 
+    /** Resolves a batch of vehicles into references: three queries for the batch, never three per row. */
+    private Map<UUID, VehicleCapacityReference> toReferences(List<Vehicle> vehicles, UUID companyId) {
+        Map<UUID, VehicleCapacityReference> byId = new HashMap<>();
         Map<UUID, VehicleType> types = vehicleTypeRepository
                 .findByIdInAndCompanyId(vehicles.stream().map(Vehicle::vehicleTypeId).collect(Collectors.toSet()),
                         companyId).stream()
@@ -114,7 +144,7 @@ public class VehicleLookupService implements VehicleLookupPort {
     private VehicleCapacityReference toReference(Vehicle vehicle, VehicleType type, String carrierName) {
         EffectiveCapacity capacity = effectiveCapacityResolver.resolve(vehicle, type);
         return new VehicleCapacityReference(vehicle.id(), vehicle.code(), vehicle.licensePlate(), vehicle.carrierId(),
-                carrierName, type.code(), capacity.maxWeightKg(), capacity.maxVolumeM3(), capacity.maxPallets(),
-                vehicle.active(), vehicle.availabilityStatus().name());
+                carrierName, type.id(), type.code(), capacity.maxWeightKg(), capacity.maxVolumeM3(),
+                capacity.maxPallets(), vehicle.active(), vehicle.availabilityStatus().name());
     }
 }

@@ -5,6 +5,7 @@ import com.ebim.tms.shared.reference.CarrierLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -26,6 +27,13 @@ class CarrierLookupAdapter implements CarrierLookupPort {
 
     CarrierLookupAdapter(CarrierRepository carrierRepository) {
         this.carrierRepository = carrierRepository;
+    }
+
+    @Override
+    public Optional<MasterReference> findActiveInCompany(UUID id, UUID companyId) {
+        return carrierRepository.findByIdAndCompanyId(id, companyId)
+                .filter(Carrier::active)
+                .map(carrier -> MasterReference.of(carrier.id(), carrier.code(), carrier.businessName()));
     }
 
     @Override

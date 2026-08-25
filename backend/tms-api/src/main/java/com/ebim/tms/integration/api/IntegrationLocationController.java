@@ -10,9 +10,11 @@ import com.ebim.tms.integration.application.LocationUpsertRequest;
 import com.ebim.tms.integration.application.LocationUpsertResult;
 import com.ebim.tms.integration.domain.IntegrationOperation;
 import com.ebim.tms.shared.api.ApiHeaders;
+import com.ebim.tms.shared.config.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -44,6 +46,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Integration v1 - Locations",
         description = "Machine-to-machine intake of locations and stores. Authenticated with an "
                 + "integration credential, never a user token.")
+@SecurityRequirement(name = OpenApiConfig.INTEGRATION_SCHEME)
 public class IntegrationLocationController {
 
     private final IntegrationLocationService locationService;

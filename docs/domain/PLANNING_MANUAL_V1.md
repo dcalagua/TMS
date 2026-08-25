@@ -146,17 +146,24 @@ at `move` rather than telling the planner to remove and re-add.
 **Planning run**: `DRAFT` → `CONFIRMED`, or `DRAFT` → `CANCELLED`.
 
 - `DRAFT` is the only state in which anything below it may change.
-- `CONFIRMED` locks the run and every trip in it. Terminal in V1: there is no execution module to
-  hand it to yet, and inventing an "in transit" state now would be pretending an integration
-  exists.
+- `CONFIRMED` locks the run and the *plan* of every trip in it. Terminal for the run itself: a run
+  is a planning artefact, and what happens next happens to its trips, not to it.
 - `CANCELLED` cancels every trip and returns every order to `READY_FOR_PLANNING`, so no order is
   left stranded in `PLANNED` with no trip to run it.
 
-**Trip**: `DRAFT` → `CONFIRMED` (only through its run's confirmation), or `DRAFT` → `CANCELLED`.
+**Trip**: `DRAFT` → `CONFIRMED` (only through its run's confirmation), and from there through the
+execution lifecycle — `READY_FOR_DISPATCH` → `IN_TRANSIT` → `COMPLETED`, with `CANCELLED`
+reachable from every state before departure. The transition table, the actual times and the
+`planning.trip:execute` authority are documented in
+[`TRIP_EXECUTION_V1.md`](TRIP_EXECUTION_V1.md); this document stops where the plan does.
 
-- A confirmed trip refuses assignment, removal, move, vehicle change and cancellation - all with
-  409 and the trip's current status in the message.
-- Cancelling a draft trip releases its orders, exactly like cancelling the run does.
+- A confirmed trip refuses assignment, removal, move and vehicle change - all with 409 and the
+  trip's current status in the message. That has not changed: execution never edits *what* a
+  shipment carries, only what happened to it.
+- Cancellation is the one exception, and V25 widened it: a confirmed or ready trip may still be
+  cancelled (with a mandatory reason, and it publishes `SHIPMENT_CANCELLED`), because a shipment
+  that will not run has to be withdrawable before the truck leaves. Cancelling any trip releases
+  its orders, exactly like cancelling the run does.
 
 **Confirmation revalidates everything** rather than trusting the board the planner was looking at,
 because minutes may have passed. Each trip in turn (locked while it is checked) must have a

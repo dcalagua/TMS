@@ -1,0 +1,10 @@
+code,name,type,roles,address,addressReference,district,province,department,country,timeZone,latitude,longitude,zoneCode,serviceTimeMinutes,externalSystem,externalReference
+CD-LIMA,CD Lima Sur,DISTRIBUTION_CENTER,ORIGIN,Av. Separadora Industrial 2100,Puerta 3 - patio de carga,Villa El Salvador,Lima,Lima,PE,America/Lima,-12.213600,-76.936700,,45,DEMO-ERP,CD-01
+CD-CALLAO,CD Callao,DISTRIBUTION_CENTER,"ORIGIN,DESTINATION",Av. Nestor Gambetta 1450,Cruce con Av. Faucett,Callao,Callao,Callao,PE,America/Lima,-12.050800,-77.118100,,40,DEMO-ERP,CD-02
+ST-4711,Tienda Miraflores,STORE,DESTINATION,Av. Larco 1234,Frente al parque Kennedy,Miraflores,Lima,Lima,PE,America/Lima,-12.121500,-77.029700,,25,DEMO-ERP,4711
+ST-4712,Tienda Surco,STORE,DESTINATION,Av. Caminos del Inca 890,Galeria comercial - nivel -1,Santiago de Surco,Lima,Lima,PE,America/Lima,-12.145000,-76.993000,,25,DEMO-ERP,4712
+ST-4713,Tienda San Isidro,STORE,DESTINATION,Av. Javier Prado Este 560,Ingreso por la calle lateral,San Isidro,Lima,Lima,PE,America/Lima,-12.097700,-77.036500,,20,DEMO-ERP,4713
+ST-4714,Tienda La Molina,STORE,DESTINATION,Av. Raul Ferrero 1290,Centro comercial - muelle 2,La Molina,Lima,Lima,PE,America/Lima,-12.079700,-76.944700,,30,DEMO-ERP,4714
+ST-4715,Tienda Bellavista,STORE,DESTINATION,Av. Oscar R. Benavides 3400,Estacionamiento posterior,Bellavista,Callao,Callao,PE,America/Lima,-12.062000,-77.109000,,25,DEMO-ERP,4715
+ST-4716,Tienda San Juan de Lurigancho,STORE,DESTINATION,Av. Proceres de la Independencia 2050,Al costado del grifo,San Juan de Lurigancho,Lima,Lima,PE,America/Lima,-11.995000,-77.006000,,35,DEMO-ERP,4716
+CU-9001,Cliente Industrial Lurin,CUSTOMER,DESTINATION,Antigua Panamericana Sur Km 34,Planta - porteria principal,Lurin,Lima,Lima,PE,America/Lima,-12.274000,-76.876000,,60,DEMO-ERP,9001

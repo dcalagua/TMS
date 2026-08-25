@@ -103,16 +103,12 @@ class OrderApiIntegrationTest {
         membership("ord.admin@example.invalid", COMPANY_B, "COMPANY_ADMIN");
         membership("ord.viewer@example.invalid", COMPANY_A, "VIEWER");
 
-        originA = insertReturningId(
-                "INSERT INTO tms.origin (company_id, code, name) VALUES ('" + COMPANY_A + "', 'ORIGIN-A', 'Origin A')");
-        destinationA = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country) VALUES ('"
-                + COMPANY_A + "', 'DEST-A', 'Destination A', 'PE')");
-        inactiveOriginA = insertReturningId("INSERT INTO tms.origin (company_id, code, name, active) VALUES ('"
-                + COMPANY_A + "', 'ORIGIN-INACTIVE', 'Inactive Origin', false)");
-        originB = insertReturningId(
-                "INSERT INTO tms.origin (company_id, code, name) VALUES ('" + COMPANY_B + "', 'ORIGIN-B', 'Origin B')");
-        destinationB = insertReturningId("INSERT INTO tms.destination (company_id, code, name, country) VALUES ('"
-                + COMPANY_B + "', 'DEST-B', 'Destination B', 'PE')");
+        originA = insertLocation(COMPANY_A, "ORIGIN-A", "Origin A", "ORIGIN");
+        destinationA = insertLocation(COMPANY_A, "DEST-A", "Destination A", "DESTINATION");
+        inactiveOriginA = insertLocation(COMPANY_A, "ORIGIN-INACTIVE", "Inactive Origin", "ORIGIN",
+                ", active", ", false");
+        originB = insertLocation(COMPANY_B, "ORIGIN-B", "Origin B", "ORIGIN");
+        destinationB = insertLocation(COMPANY_B, "DEST-B", "Destination B", "DESTINATION");
     }
 
     private static void membership(String email, UUID companyId, String roleCode) {
@@ -127,6 +123,25 @@ class OrderApiIntegrationTest {
                 JOIN tms.role r ON r.code = '%s'
                 WHERE m.company_id = '%s';
                 """.formatted(ORGANIZATION, companyId, email, email, roleCode, companyId));
+    }
+
+    /**
+     * Seeds one canonical location holding one operational role. Since V23 an origin and a
+     * destination are not records of their own - they are {@code tms.location} rows holding
+     * {@code ORIGIN} or {@code DESTINATION} - and the role is what every assignment lookup
+     * filters on, so a location seeded without one is invisible to the API under test.
+     */
+    private static String insertLocation(UUID companyId, String code, String name, String role) {
+        return insertLocation(companyId, code, name, role, "", "");
+    }
+
+    /** {@link #insertLocation(UUID, String, String, String)} with extra columns, e.g. coordinates. */
+    private static String insertLocation(UUID companyId, String code, String name, String role,
+            String extraColumns, String extraValues) {
+        String id = insertReturningId("INSERT INTO tms.location (company_id, code, name" + extraColumns
+                + ") VALUES ('" + companyId + "', '" + code + "', '" + name + "'" + extraValues + ")");
+        execute("INSERT INTO tms.location_role (location_id, role) VALUES ('" + id + "', '" + role + "')");
+        return id;
     }
 
     private static String insertReturningId(String sql) {

@@ -39,6 +39,26 @@ export function formatDateTime(value: string | Date | null | undefined, language
   return new Intl.DateTimeFormat(localeFor(language), { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
+/**
+ * The clock time alone, for a screen whose date is already stated once at the top - a control
+ * tower row saying "14:00" rather than "21 ago 2026, 14:00" eleven times down a column.
+ *
+ * Rendered in the *browser's* zone, like every other instant the product prints. That is right
+ * for an operator sitting in the depot's own time zone and is worth knowing when they are not:
+ * the value on the wire carries its offset, and the backend has already done the one conversion
+ * that decides a business fact (which day a service window belongs to).
+ */
+export function formatTime(value: string | Date | null | undefined, language: string): string {
+  if (!value) {
+    return EMPTY
+  }
+  const date = value instanceof Date ? value : parseDate(value)
+  if (!date) {
+    return EMPTY
+  }
+  return new Intl.DateTimeFormat(localeFor(language), { timeStyle: 'short' }).format(date)
+}
+
 /** Accepts both an ISO instant and a bare `yyyy-mm-dd`, which the backend uses for plan dates.
  * A bare date is read as local time so it cannot shift a day across time zones. */
 function parseDate(value: string): Date | null {
@@ -102,6 +122,7 @@ export function formatPercent(value: number | null | undefined, language: string
 export interface Formatters {
   date: (value: string | Date | null | undefined) => string
   dateTime: (value: string | Date | null | undefined) => string
+  time: (value: string | Date | null | undefined) => string
   number: (value: number | null | undefined, options?: Intl.NumberFormatOptions) => string
   quantity: (value: number | null | undefined) => string
   decimal: (value: number | null | undefined, fractionDigits?: number) => string
@@ -119,6 +140,7 @@ export function useFormat(): Formatters {
     () => ({
       date: (value) => formatDate(value, language),
       dateTime: (value) => formatDateTime(value, language),
+      time: (value) => formatTime(value, language),
       number: (value, options) => formatNumber(value, language, options),
       quantity: (value) => formatQuantity(value, language),
       decimal: (value, fractionDigits) => formatDecimal(value, language, fractionDigits),

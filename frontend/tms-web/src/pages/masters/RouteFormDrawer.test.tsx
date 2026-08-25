@@ -54,7 +54,7 @@ const FREQUENCY = { id: 'freq-1', code: 'FREQ-A', name: 'Frequency A', descripti
 
 const DESTINATION_A = { id: 'dest-1', code: 'DEST-A', name: 'Destination A', type: 'CUSTOMER' as const,
   address: null, addressReference: null, district: null, province: null, department: null, country: 'PE',
-  latitude: null, longitude: null, zoneId: null, zoneCode: null, zoneName: null, serviceTimeMinutes: 0,
+  latitude: null, longitude: null, zoneId: null, zoneCode: null, zoneName: null, serviceTimeMinutes: 15,
   externalReference: null, active: true, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' }
 
 const DESTINATION_B = { ...DESTINATION_A, id: 'dest-2', code: 'DEST-B', name: 'Destination B' }
@@ -75,8 +75,11 @@ const ROUTE_DETAIL: RouteDetailView = {
   referenceDistanceKm: 12.5,
   referenceDurationMinutes: 45,
   stops: [
-    { destinationId: 'dest-1', destinationCode: 'DEST-A', destinationName: 'Destination A', sequence: 1 },
-    { destinationId: 'dest-2', destinationCode: 'DEST-B', destinationName: 'Destination B', sequence: 2 },
+    // DEST-A inherits its location's 15 minutes; DEST-B overrides its location's 15 with 40.
+    { destinationId: 'dest-1', destinationCode: 'DEST-A', destinationName: 'Destination A', sequence: 1,
+      serviceTimeOverrideMinutes: null, destinationServiceTimeMinutes: 15, effectiveServiceTimeMinutes: 15 },
+    { destinationId: 'dest-2', destinationCode: 'DEST-B', destinationName: 'Destination B', sequence: 2,
+      serviceTimeOverrideMinutes: 40, destinationServiceTimeMinutes: 15, effectiveServiceTimeMinutes: 40 },
   ],
   active: true,
   createdAt: '2026-01-01T00:00:00Z',
@@ -194,10 +197,62 @@ describe('RouteFormDrawer', () => {
       expect(routesApiMocks.createRoute).toHaveBeenCalledWith(
         'company-1',
         expect.objectContaining({ code: 'new-route', name: 'New Route', originId: 'origin-1',
-          destinationIds: ['dest-2', 'dest-1'] }),
+          // Added stops inherit until someone says otherwise.
+          stops: [
+            { destinationId: 'dest-2', serviceTimeOverrideMinutes: null },
+            { destinationId: 'dest-1', serviceTimeOverrideMinutes: null },
+          ] }),
       ),
     )
     expect(onSaved).toHaveBeenCalled()
+  })
+
+  it('sends a per-stop service time override, and 0 as a real value rather than as "inherit"', async () => {
+    mockLookups()
+    routesApiMocks.createRoute.mockResolvedValue(ROUTE_DETAIL)
+    renderModal()
+
+    await userEvent.type(screen.getByLabelText(/^código/i), 'night-route')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'Night Route')
+    await pickOption(/^origen/i, 'Origin A')
+    await pickOption('Destino a agregar', 'DEST-A — Destination A')
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar parada' }))
+    await pickOption('Destino a agregar', 'DEST-B — Destination B')
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar parada' }))
+
+    // The empty field shows what would apply instead of a blank the operator has to look up.
+    const first = screen.getByLabelText(/Tiempo de atención de la parada 1/i)
+    expect(first).toHaveAttribute('placeholder', '15')
+    await userEvent.type(first, '40')
+    await userEvent.type(screen.getByLabelText(/Tiempo de atención de la parada 2/i), '0')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    await waitFor(() =>
+      expect(routesApiMocks.createRoute).toHaveBeenCalledWith('company-1', expect.objectContaining({
+        stops: [
+          { destinationId: 'dest-1', serviceTimeOverrideMinutes: 40 },
+          { destinationId: 'dest-2', serviceTimeOverrideMinutes: 0 },
+        ],
+      })),
+    )
+  })
+
+  it('refuses a negative service time override without calling the API', async () => {
+    mockLookups()
+    renderModal()
+
+    await userEvent.type(screen.getByLabelText(/^código/i), 'bad-route')
+    await userEvent.type(screen.getByLabelText(/^nombre/i), 'Bad Route')
+    await pickOption(/^origen/i, 'Origin A')
+    await pickOption('Destino a agregar', 'DEST-A — Destination A')
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar parada' }))
+    await userEvent.type(screen.getByLabelText(/Tiempo de atención de la parada 1/i), '-5')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    expect(await screen.findByText('Debe ser cero o mayor')).toBeInTheDocument()
+    expect(routesApiMocks.createRoute).not.toHaveBeenCalled()
   })
 
   it('loads and pre-fills an existing route, and calls updateRoute with the route id', async () => {
@@ -213,12 +268,20 @@ describe('RouteFormDrawer', () => {
     expect(screen.getByLabelText(/^nombre/i)).toHaveValue('North Corridor')
     expect(screen.getByText('DEST-A — Destination A')).toBeInTheDocument()
     expect(screen.getByText('DEST-B — Destination B')).toBeInTheDocument()
+    // The stop that inherits shows an empty box; the one that overrides shows its own value.
+    expect(screen.getByLabelText(/Tiempo de atención de la parada 1/i)).toHaveValue(null)
+    expect(screen.getByLabelText(/Tiempo de atención de la parada 2/i)).toHaveValue(40)
 
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
       expect(routesApiMocks.updateRoute).toHaveBeenCalledWith(
-        'company-1', 'route-1', expect.objectContaining({ destinationIds: ['dest-1', 'dest-2'] }),
+        'company-1', 'route-1', expect.objectContaining({
+          stops: [
+            { destinationId: 'dest-1', serviceTimeOverrideMinutes: null },
+            { destinationId: 'dest-2', serviceTimeOverrideMinutes: 40 },
+          ],
+        }),
       ),
     )
     expect(onSaved).toHaveBeenCalled()

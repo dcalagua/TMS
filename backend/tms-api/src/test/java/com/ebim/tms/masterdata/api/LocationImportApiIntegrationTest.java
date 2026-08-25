@@ -358,7 +358,7 @@ class LocationImportApiIntegrationTest {
     @Test
     @DisplayName("a location with more than one role is accepted")
     void multipleRolesAccepted() throws Exception {
-        mockMvc.perform(apply(csv(location("MULTI-1", "ORIGIN,SHIP_TO", null)), COMPANY_A, adminToken))
+        mockMvc.perform(apply(csv(location("MULTI-1", "ORIGIN,DESTINATION", null)), COMPANY_A, adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.applied").value(true))
                 .andExpect(jsonPath("$.createdCount").value(1));

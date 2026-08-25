@@ -9,7 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 /**
- * Company-scoped persistence for {@link Route}. See {@code OriginRepository} for the isolation
+ * Company-scoped persistence for {@link Route}. See {@code LocationRepository} for the isolation
  * rule every finder here follows.
  */
 public interface RouteRepository extends JpaRepository<Route, UUID>, JpaSpecificationExecutor<Route> {
@@ -24,6 +24,13 @@ public interface RouteRepository extends JpaRepository<Route, UUID>, JpaSpecific
      * rule {@code CarrierRepository.findByIdInAndCompanyId} documents.
      */
     List<Route> findByIdInAndCompanyId(Collection<UUID> ids, UUID companyId);
+
+    /**
+     * The active corridors leaving one origin, for the automatic planning engine. Ordered by code
+     * in the query: a proposal must be reproducible, and grouping that depended on row order
+     * would make the same input plan differently on two runs.
+     */
+    List<Route> findByCompanyIdAndOriginIdAndActiveTrueOrderByCodeAsc(UUID companyId, UUID originId);
 
     boolean existsByCompanyIdAndCode(UUID companyId, String code);
 

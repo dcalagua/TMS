@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Outlet, useLocation } from 'react-router-dom'
+import { LoadingState } from './components/LoadingState'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 
@@ -101,7 +102,13 @@ export function AppLayout() {
 
         <main className="tms-main tms-min-w-0">
           <div className="tms-content">
-            <Outlet />
+            {/* Every screen below this point is code-split (see `appRoutes`), so the first visit
+                to one is a network fetch. One boundary here rather than one per route: the shell
+                - sidebar, top bar, company switcher - must stay on screen while it arrives, and
+                a boundary inside each page would unmount the shell instead. */}
+            <Suspense fallback={<LoadingState />}>
+              <Outlet />
+            </Suspense>
           </div>
         </main>
       </div>

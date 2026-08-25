@@ -1,0 +1,4 @@
+code,businessName,taxIdType,taxIdValue,contactName,phone,email,externalReference
+TR-ANDES,Transportes Andes S.A.C.,RUC,20512345678,Rosa Quispe,+51 1 555 0101,operaciones@transportes-andes.example,CARR-001
+TR-PACIFICO,Logistica Pacifico E.I.R.L.,RUC,20598765432,Luis Bravo,+51 1 555 0202,despacho@logistica-pacifico.example,CARR-002
+TR-COSTA,Costa Express S.A.C.,RUC,20533344455,Ana Mendoza,+51 1 555 0303,trafico@costa-express.example,CARR-003

@@ -25,16 +25,13 @@ import org.hibernate.annotations.UuidGenerator;
  * a distribution centre, a plant or a hub. What it <em>is</em> is {@link LocationType}; what it
  * may <em>do</em> is the set of {@link LocationRole}s it holds.
  *
- * <p>{@code tms.origin} and {@code tms.destination} are compatibility projections of this
- * entity, maintained by {@code LocationCompatibilityProjector}. See
- * {@code docs/architecture/ADR_LOCATION_MODEL.md}.
+ * <p>This is the only physical-place record. {@code tms.origin} and {@code tms.destination}
+ * were retired by V23, which repointed {@code route}, {@code route_stop},
+ * {@code transport_order}, {@code planning_run} and {@code trip_stop} at this table. See
+ * {@code docs/domain/LOCATIONS.md}.
  *
- * <p>The authoritative link to a projection is {@code origin.location_id} /
- * {@code destination.location_id}, not an id convention - which is what lets the eventual
- * unification repoint {@code route.origin_id} and friends with a plain
- * {@code UPDATE ... FROM origin o WHERE ... = o.id} regardless of how a row came to exist. The
- * V14 backfill additionally gives every pre-V14 row {@code location.id = origin.id} (or the
- * destination's, with no origin), so for that data the repoint is a no-op.
+ * <p>One store holds both roles: it is the destination of the delivery and the origin of the
+ * return, with one address, one pair of coordinates and one {@code active} flag.
  *
  * <p>{@code roles} is owned here: every mutation goes through {@link #replaceRoles}, which diffs
  * the incoming set against what is persisted and lets {@code orphanRemoval} delete the rest -
@@ -90,7 +87,11 @@ public class Location {
     @Column(name = "longitude", precision = 9, scale = 6)
     private BigDecimal longitude;
 
-    /** Plain UUID rather than a JPA association, for the reason {@code Destination.zoneId} documents. */
+    /**
+     * Plain UUID rather than a JPA association: a zone is a filter dimension a location carries,
+     * not a parent whose graph should be walked, and a lazy association here would put a proxy on
+     * every row of every list page.
+     */
     @Column(name = "zone_id")
     private UUID zoneId;
 

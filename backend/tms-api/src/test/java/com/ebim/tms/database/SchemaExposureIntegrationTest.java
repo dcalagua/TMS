@@ -41,13 +41,23 @@ class SchemaExposureIntegrationTest {
             "transport_order", "transport_order_line", "order_import_batch",
             "integration_client", "integration_client_scope", "integration_request",
             "planning_run", "trip", "trip_stop", "trip_order_assignment",
-            "shipment_outbox_event", "import_batch");
+            "shipment_outbox_event", "import_batch",
+            // Append-only logs: SELECT and INSERT only, UPDATE/DELETE revoked from tms_app.
+            "audit_event", "transport_event", "delivery_evidence",
+            "driver", "trip_exception", "order_delivery", "tracking_position",
+            "rate_card", "trip_cost", "trip_cost_component", "trip_tender", "notification");
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the
      * runtime role (ADR-005). Identity and authorization-catalogue tables are excluded on
      * purpose: they are read before a company scope exists, so they carry the explicit
      * {@code p_backend_managed} policy instead.
+     *
+     * <p>{@code audit_event} (V22), {@code transport_event} (V27) and {@code delivery_evidence}
+     * (V28) are absent for a different reason and are not an omission: all three are append-only,
+     * so instead of one {@code FOR ALL} policy they carry {@code p_tenant_company_scope_select} and
+     * {@code p_tenant_company_scope_insert}. The query below matches the exact name, so they
+     * cannot appear in its result - {@link #everyCompanyColumnIsPoliced()} is what covers them.
      */
     private static final List<String> TENANT_SCOPED_TABLES = List.of(
             "origin", "zone", "location", "location_role", "location_frequency",
@@ -56,7 +66,9 @@ class SchemaExposureIntegrationTest {
             "transport_order", "transport_order_line", "order_import_batch",
             "integration_client", "integration_client_scope", "integration_request",
             "planning_run", "trip", "trip_stop", "trip_order_assignment",
-            "shipment_outbox_event", "import_batch");
+            "shipment_outbox_event", "import_batch", "driver", "trip_exception",
+            "order_delivery", "tracking_position", "rate_card", "trip_cost", "trip_cost_component",
+            "trip_tender", "notification");
 
     /**
      * The only tables allowed to carry a {@code company_id} and <em>not</em> the tenant policy.
@@ -168,7 +180,13 @@ class SchemaExposureIntegrationTest {
                   AND c.relkind = 'r'
                   AND NOT EXISTS (SELECT 1 FROM pg_policies p
                                    WHERE p.schemaname = 'tms' AND p.tablename = c.relname
-                                     AND p.policyname = 'p_tenant_company_scope')
+                                     -- LIKE, not '=': an append-only table splits the policy into
+                                     -- p_tenant_company_scope_select and _insert because it has no
+                                     -- UPDATE/DELETE grant left for a FOR ALL policy to guard
+                                     -- (tms.audit_event V22, tms.transport_event V27). The filter
+                                     -- the tenant predicate applies is identical either way, which
+                                     -- is what this test is actually asking about.
+                                     AND p.policyname LIKE 'p_tenant_company_scope%')
                 ORDER BY 1
                 """);
 

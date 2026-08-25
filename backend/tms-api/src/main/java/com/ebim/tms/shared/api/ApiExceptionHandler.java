@@ -5,6 +5,8 @@ import com.ebim.tms.shared.security.CompanyScopeInvalidException;
 import com.ebim.tms.shared.security.CompanyScopeRequiredException;
 import com.ebim.tms.shared.security.MachineCredentialException;
 import com.ebim.tms.shared.security.UnprovisionedPrincipalException;
+import com.ebim.tms.shared.storage.EvidenceRejectedException;
+import com.ebim.tms.shared.storage.EvidenceStorageUnavailableException;
 import com.ebim.tms.shared.web.CorrelationId;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -153,6 +155,45 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     public ResponseEntity<ProblemDetail> handleIdempotencyConflict(
             IdempotencyConflictException failure, WebRequest request) {
         return respond(ApiProblems.of(ProblemType.IDEMPOTENCY_KEY_REUSED, failure.getMessage()), request);
+    }
+
+    /**
+     * Proof-of-delivery evidence was uploaded to, or requested from, a deployment with no store
+     * configured (migration V28).
+     *
+     * <p>503 and not 500: nothing failed, a feature is simply not turned on here, and no retry will
+     * change that until an administrator sets {@code tms.storage.evidence.mode}. The message is the
+     * store's own and is safe to show - it names no path and no configuration value, only the fact
+     * that a delivery result can still be recorded without an attachment.
+     */
+    @ExceptionHandler(EvidenceStorageUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleStorageUnavailable(
+            EvidenceStorageUnavailableException failure, WebRequest request) {
+        return respond(ApiProblems.of(ProblemType.STORAGE_UNAVAILABLE, failure.getMessage()), request);
+    }
+
+    /**
+     * The same answer as {@link #handleStorageUnavailable}, for every other optional capability a
+     * deployment has to switch on - outbound webhooks today (migration V35).
+     *
+     * <p>503 for the same reason: the endpoint exists, nothing is broken, and no retry helps until
+     * an administrator configures it. The message names the capability and never the setting's
+     * value.
+     */
+    @ExceptionHandler(FeatureNotConfiguredException.class)
+    public ResponseEntity<ProblemDetail> handleFeatureNotConfigured(
+            FeatureNotConfiguredException failure, WebRequest request) {
+        return respond(ApiProblems.of(ProblemType.FEATURE_NOT_CONFIGURED, failure.getMessage()), request);
+    }
+
+    /**
+     * The store refused the bytes for a reason the caller can fix - too large, or empty. A 400
+     * carrying the limit, so an operator knows to send a smaller photo rather than to try again.
+     */
+    @ExceptionHandler(EvidenceRejectedException.class)
+    public ResponseEntity<ProblemDetail> handleEvidenceRejected(
+            EvidenceRejectedException failure, WebRequest request) {
+        return respond(ApiProblems.of(ProblemType.MALFORMED_REQUEST, failure.getMessage()), request);
     }
 
     /**

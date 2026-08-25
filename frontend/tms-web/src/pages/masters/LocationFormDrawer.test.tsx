@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../shared/api/httpClient'
-import type { LocationView } from '../../shared/api/locationsApi'
+import type { LocationRole, LocationView } from '../../shared/api/locationsApi'
 import { LocationFormDrawer } from './LocationFormDrawer'
 
 const locationsApiMocks = vi.hoisted(() => ({
@@ -41,7 +41,7 @@ const LOCATION: LocationView = {
   code: 'LIM-DC',
   name: 'Lima Distribution Centre',
   type: 'DISTRIBUTION_CENTER',
-  roles: ['ORIGIN', 'SHIP_TO'],
+  roles: ['ORIGIN', 'DESTINATION'],
   address: 'Av. Argentina 1234',
   addressReference: 'Puerta azul',
   district: 'Callao',
@@ -57,21 +57,25 @@ const LOCATION: LocationView = {
   serviceTimeMinutes: 25,
   externalSystem: 'EWM',
   externalReference: 'DC-77',
-  originId: 'origin-1',
-  destinationId: 'destination-1',
   active: true,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
 }
 
-function renderDrawer(location: LocationView | null, onSaved = vi.fn()) {
+function renderDrawer(location: LocationView | null, presetRole?: LocationRole, onSaved = vi.fn()) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   zonesApiMocks.fetchZones.mockResolvedValue({ content: [], page: 0, size: 200, totalElements: 0 })
   frequenciesApiMocks.fetchFrequencies.mockResolvedValue({ content: [], page: 0, size: 200, totalElements: 0 })
   locationFrequenciesApiMocks.fetchLocationFrequencies.mockResolvedValue([])
   render(
     <QueryClientProvider client={queryClient}>
-      <LocationFormDrawer companyId="company-1" location={location} onClose={vi.fn()} onSaved={onSaved} />
+      <LocationFormDrawer
+        companyId="company-1"
+        location={location}
+        presetRole={presetRole}
+        onClose={vi.fn()}
+        onSaved={onSaved}
+      />
     </QueryClientProvider>,
   )
   return { onSaved }
@@ -82,12 +86,28 @@ afterEach(() => {
 })
 
 describe('LocationFormDrawer', () => {
-  it('opens in create mode with SHIP_TO preselected, the role a new place usually plays', () => {
+  it('opens in create mode able to receive, the use a new place usually has', () => {
     renderDrawer(null)
 
     expect(screen.getByRole('heading', { name: 'Nueva ubicación' })).toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: 'Destino' })).toBeChecked()
-    expect(screen.getByRole('checkbox', { name: 'Origen' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Puede utilizarse como destino' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Puede utilizarse como origen' })).not.toBeChecked()
+  })
+
+  it('offers exactly two operational uses - a kind of place is the type, never a use', () => {
+    renderDrawer(null)
+
+    expect(screen.getAllByRole('checkbox', { name: /^puede utilizarse como/i })).toHaveLength(2)
+    for (const type of ['Tienda', 'Hub', 'Planta', 'Centro de distribución', 'Otro']) {
+      expect(screen.queryByRole('checkbox', { name: type })).not.toBeInTheDocument()
+    }
+  })
+
+  it('pre-ticks the use the Origins and Destinations screens were opened from', () => {
+    renderDrawer(null, 'ORIGIN')
+
+    expect(screen.getByRole('checkbox', { name: 'Puede utilizarse como origen' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Puede utilizarse como destino' })).not.toBeChecked()
   })
 
   it('only offers the service-calendar panel once the location exists', async () => {
@@ -106,15 +126,15 @@ describe('LocationFormDrawer', () => {
     expect(screen.getByLabelText(/^código/i)).toHaveValue('LIM-DC')
     expect(screen.getByLabelText(/^zona horaria/i)).toHaveValue('America/Lima')
     expect(screen.getByLabelText(/tiempo de atención/i)).toHaveValue(25)
-    expect(screen.getByRole('checkbox', { name: 'Origen' })).toBeChecked()
-    expect(screen.getByRole('checkbox', { name: 'Destino' })).toBeChecked()
-    expect(screen.getByRole('checkbox', { name: 'Tienda' })).not.toBeChecked()
+    // One store, both uses: it receives the delivery and ships the return.
+    expect(screen.getByRole('checkbox', { name: 'Puede utilizarse como origen' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Puede utilizarse como destino' })).toBeChecked()
   })
 
   it('refuses to submit a location with no role at all', async () => {
     renderDrawer(null)
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Destino' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Puede utilizarse como destino' }))
     await userEvent.type(screen.getByLabelText(/^código/i), 'NO-ROLE')
     await userEvent.type(screen.getByLabelText(/^nombre/i), 'No Role')
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
@@ -151,10 +171,10 @@ describe('LocationFormDrawer', () => {
   })
 
   it('sends the selected roles and blanks the optional fields it did not collect', async () => {
-    const { onSaved } = renderDrawer(null)
+    const { onSaved } = renderDrawer(null, undefined)
     locationsApiMocks.createLocation.mockResolvedValue(LOCATION)
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Origen' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Puede utilizarse como origen' }))
     await userEvent.type(screen.getByLabelText(/^código/i), 'DUAL')
     await userEvent.type(screen.getByLabelText(/^nombre/i), 'Dual Site')
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }))
@@ -164,7 +184,7 @@ describe('LocationFormDrawer', () => {
         code: 'DUAL',
         name: 'Dual Site',
         type: 'STORE',
-        roles: ['SHIP_TO', 'ORIGIN'],
+        roles: ['DESTINATION', 'ORIGIN'],
         zoneId: null,
         address: null,
         addressReference: null,

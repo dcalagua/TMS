@@ -21,7 +21,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Zone use cases. See {@link OriginService} for the {@link CompanyScope} contract this follows. */
+/** Zone use cases. See {@code LocationService} for the {@link CompanyScope} contract this follows. */
 @Service
 public class ZoneService {
 

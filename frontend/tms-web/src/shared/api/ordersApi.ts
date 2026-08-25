@@ -7,6 +7,24 @@ export type OrderStatus = 'NOT_READY' | 'READY_FOR_PLANNING' | 'PLANNED' | 'CANC
 
 export const ORDER_STATUSES: OrderStatus[] = ['NOT_READY', 'READY_FOR_PLANNING', 'PLANNED', 'CANCELLED']
 
+/**
+ * What happened to the goods, which `OrderStatus` deliberately does not say: an order stays
+ * `PLANNED` while it is delivered, refused or brought back. Derived by the backend from the
+ * delivery rows (migration V28) rather than stored - see `OrderFulfillmentStatus` there.
+ */
+export type OrderFulfillmentStatus =
+  | 'PENDING'
+  | 'DELIVERED'
+  | 'PARTIALLY_DELIVERED'
+  | 'REJECTED'
+  | 'FAILED'
+  | 'NOT_ATTEMPTED'
+
+/** In the order a filter should offer them: nothing yet, then best to worst outcome. */
+export const ORDER_FULFILLMENT_STATUSES: OrderFulfillmentStatus[] = [
+  'PENDING', 'DELIVERED', 'PARTIALLY_DELIVERED', 'REJECTED', 'FAILED', 'NOT_ATTEMPTED',
+]
+
 /** Mirrors the backend's `TotalsSource` enum (`orders/domain/TotalsSource.java`).
  *
  * `CALCULATED` means the effective totals were summed from the lines; `DECLARED` means the order
@@ -39,6 +57,7 @@ export interface OrderView {
   requestedWindowStart: string | null
   requestedWindowEnd: string | null
   status: OrderStatus
+  fulfillmentStatus: OrderFulfillmentStatus
   cancelReason: string | null
   totalWeightKg: number
   totalVolumeM3: number

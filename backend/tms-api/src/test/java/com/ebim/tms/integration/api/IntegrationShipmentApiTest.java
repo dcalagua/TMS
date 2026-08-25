@@ -389,14 +389,19 @@ class IntegrationShipmentApiTest {
         void seedDetail(UUID companyId, String shipmentNumber) {
             PublishedShipment header = new PublishedShipment(UUID.randomUUID(), companyId, shipmentNumber,
                     "PL-00000001", LocalDate.of(2026, 8, 20), "CONFIRMED", "CD-LIMA", "Distribution Center Lima",
-                    null, null, null, "CR-1", "Carrier One", "VH-1", "ABC-123", "TRUCK-8T", "SNAPSHOT",
+                    null, null, null, null, null, null, "CR-1", "Carrier One", "VH-1", "ABC-123", "TRUCK-8T",
+                    "SNAPSHOT",
                     BigDecimal.valueOf(8000), BigDecimal.valueOf(32), BigDecimal.valueOf(18), BigDecimal.valueOf(100),
                     BigDecimal.valueOf(1), BigDecimal.ONE, BigDecimal.TEN, BigDecimal.TEN, BigDecimal.TEN, 1, 1L, 1L,
                     OffsetDateTime.now(), OffsetDateTime.now());
             var stop = new com.ebim.tms.shared.reference.PublishedShipmentStop(
                     UUID.randomUUID(), 1, "ST-1", "Store One", null, null, null, null);
+            // No delivery recorded: the shipment is CONFIRMED, so every delivery field is null and
+            // the evidence count is zero - which is what a partner must read as "not known yet"
+            // rather than as "not delivered" (migration V28).
             var order = new com.ebim.tms.shared.reference.PublishedShipmentOrder(
-                    UUID.randomUUID(), "ORD-1", "ACME-ERP", "SO-1", "ST-1", BigDecimal.TEN, BigDecimal.ONE, BigDecimal.ONE);
+                    UUID.randomUUID(), "ORD-1", "ACME-ERP", "SO-1", "ST-1", BigDecimal.TEN, BigDecimal.ONE,
+                    BigDecimal.ONE, null, null, null, null, 0);
             detailsByKey.put(companyId + "/" + shipmentNumber,
                     new PublishedShipmentDetail(header, List.of(stop), List.of(order)));
         }

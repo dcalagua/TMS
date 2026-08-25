@@ -2,27 +2,38 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError } from '../../shared/api/httpClient'
-import type { DestinationView } from '../../shared/api/destinationsApi'
+import type { LocationView } from '../../shared/api/locationsApi'
 import { DestinationsPage } from './DestinationsPage'
 
-const destinationsApiMocks = vi.hoisted(() => ({
-  fetchDestinations: vi.fn(),
-  createDestination: vi.fn(),
-  updateDestination: vi.fn(),
-  activateDestination: vi.fn(),
-  deactivateDestination: vi.fn(),
+/**
+ * The counterpart of `OriginsPage.test.tsx`. The case worth its own assertion here is the store
+ * that holds both uses: it must appear in this list *and* in Orígenes, as one record, because
+ * the same place receives the delivery and ships the return.
+ */
+
+const locationsApiMocks = vi.hoisted(() => ({
+  fetchLocations: vi.fn(),
+  createLocation: vi.fn(),
+  updateLocation: vi.fn(),
+  activateLocation: vi.fn(),
+  deactivateLocation: vi.fn(),
 }))
-vi.mock('../../shared/api/destinationsApi', async () => {
-  const actual =
-    await vi.importActual<typeof import('../../shared/api/destinationsApi')>('../../shared/api/destinationsApi')
-  return { ...actual, ...destinationsApiMocks }
+vi.mock('../../shared/api/locationsApi', async () => {
+  const actual = await vi.importActual<typeof import('../../shared/api/locationsApi')>('../../shared/api/locationsApi')
+  return { ...actual, ...locationsApiMocks }
 })
 
 const zonesApiMocks = vi.hoisted(() => ({ fetchZones: vi.fn() }))
 vi.mock('../../shared/api/zonesApi', async () => {
   const actual = await vi.importActual<typeof import('../../shared/api/zonesApi')>('../../shared/api/zonesApi')
   return { ...actual, fetchZones: zonesApiMocks.fetchZones }
+})
+
+const frequenciesApiMocks = vi.hoisted(() => ({ fetchFrequencies: vi.fn() }))
+vi.mock('../../shared/api/frequenciesApi', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../shared/api/frequenciesApi')>('../../shared/api/frequenciesApi')
+  return { ...actual, fetchFrequencies: frequenciesApiMocks.fetchFrequencies }
 })
 
 const companyMocks = vi.hoisted(() => ({ useCompany: vi.fn() }))
@@ -35,42 +46,48 @@ const alertMocks = vi.hoisted(() => ({
 }))
 vi.mock('../../shared/ui/alerts', () => alertMocks)
 
-const DESTINATION: DestinationView = {
-  id: 'destination-1',
-  code: 'NORTH-STORE',
-  name: 'North Store',
+/** Miraflores: destination of the delivery, origin of the return. One record, two uses. */
+const STORE: LocationView = {
+  id: 'location-1',
+  code: 'MIRAFLORES',
+  name: 'Tienda Miraflores',
   type: 'STORE',
-  address: '123 Main St',
-  addressReference: 'Blue gate',
+  roles: ['ORIGIN', 'DESTINATION'],
+  address: 'Av. Larco 400',
+  addressReference: 'Frente al parque',
   district: 'Miraflores',
   province: 'Lima',
   department: 'Lima',
   country: 'PE',
-  latitude: -12.046374,
-  longitude: -77.042793,
-  zoneId: 'zone-1',
-  zoneCode: 'ZONE-A',
-  zoneName: 'Zone A',
-  serviceTimeMinutes: 15,
+  timeZone: 'America/Lima',
+  latitude: -12.12,
+  longitude: -77.03,
+  zoneId: null,
+  zoneCode: null,
+  zoneName: null,
+  serviceTimeMinutes: 20,
+  externalSystem: null,
   externalReference: null,
   active: true,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
 }
 
-function page<T>(content: T[], overrides: Partial<{ page: number; size: number; totalElements: number }> = {}) {
-  return { content, page: overrides.page ?? 0, size: overrides.size ?? 25, totalElements: overrides.totalElements ?? content.length }
+function page<T>(content: T[], totalElements = content.length) {
+  return { content, page: 0, size: 25, totalElements }
 }
 
 function mockCompany(canManage: boolean) {
   companyMocks.useCompany.mockReturnValue({
     selected: { id: 'company-1', name: 'Acme Logistics' },
-    hasPermission: (permission: string) => (permission === 'masterdata.destination:manage' ? canManage : true),
+    hasPermission: (permission: string) => (permission === 'masterdata.location:manage' ? canManage : true),
   })
 }
 
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  zonesApiMocks.fetchZones.mockResolvedValue(page([]))
+  frequenciesApiMocks.fetchFrequencies.mockResolvedValue(page([]))
   return render(
     <QueryClientProvider client={queryClient}>
       <DestinationsPage />
@@ -83,130 +100,75 @@ afterEach(() => {
 })
 
 describe('DestinationsPage', () => {
-  it('shows a loading state while the first page is fetched', () => {
+  it('asks the Locations endpoint for the DESTINATION role', async () => {
     mockCompany(true)
-    destinationsApiMocks.fetchDestinations.mockReturnValue(new Promise(() => {}))
-    zonesApiMocks.fetchZones.mockResolvedValue(page([]))
+    locationsApiMocks.fetchLocations.mockResolvedValue(page([STORE]))
 
     renderPage()
 
-    expect(screen.getByText('Cargando registros...')).toBeInTheDocument()
-  })
-
-  it('shows an empty state when the company has no destinations yet', async () => {
-    mockCompany(true)
-    destinationsApiMocks.fetchDestinations.mockResolvedValue(page([]))
-    zonesApiMocks.fetchZones.mockResolvedValue(page([]))
-
-    renderPage()
-
-    expect(await screen.findByText('Sin destinos')).toBeInTheDocument()
-  })
-
-  it('shows an error state with a retry action when the request fails', async () => {
-    mockCompany(true)
-    destinationsApiMocks.fetchDestinations.mockRejectedValue(
-      new ApiError(500, { code: 'internal-error' }, 'corr-1', 'boom'),
+    await screen.findByText('MIRAFLORES')
+    expect(locationsApiMocks.fetchLocations).toHaveBeenCalledWith(
+      expect.objectContaining({ companyId: 'company-1', role: 'DESTINATION' }),
     )
-    zonesApiMocks.fetchZones.mockResolvedValue(page([]))
-
-    renderPage()
-
-    expect(await screen.findByText('Ocurrió un error de nuestro lado. Vuelve a intentarlo.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
   })
 
-  it('lists destinations returned by the backend and shows pagination once there is more than one page', async () => {
+  it('shows a store that also ships without duplicating it', async () => {
     mockCompany(true)
-    destinationsApiMocks.fetchDestinations.mockResolvedValue(page([DESTINATION], { totalElements: 60, size: 25 }))
-    zonesApiMocks.fetchZones.mockResolvedValue(page([]))
+    locationsApiMocks.fetchLocations.mockResolvedValue(page([STORE]))
 
     renderPage()
 
-    expect(await screen.findByText('NORTH-STORE')).toBeInTheDocument()
-    expect(screen.getByText('Zone A')).toBeInTheDocument()
-    expect(screen.getByText('Miraflores / Lima')).toBeInTheDocument()
-    expect(screen.getByText(/Página 1 de 3/)).toBeInTheDocument()
+    const rows = await screen.findAllByText('MIRAFLORES')
+    expect(rows).toHaveLength(1)
+    // Its type is what it is; its two uses are what it may do. Both are on the one row.
+    expect(screen.getByText('Tienda')).toBeInTheDocument()
+    expect(screen.getByText('Origen')).toBeInTheDocument()
+    expect(screen.getByText('Destino')).toBeInTheDocument()
   })
 
-  it('hides create and manage actions for a caller without masterdata.destination:manage', async () => {
-    mockCompany(false)
-    destinationsApiMocks.fetchDestinations.mockResolvedValue(page([DESTINATION]))
-    zonesApiMocks.fetchZones.mockResolvedValue(page([]))
-
-    renderPage()
-
-    await screen.findByText('NORTH-STORE')
-
-    expect(screen.queryByRole('button', { name: 'Nuevo destino' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Abrir menú de acciones' })).not.toBeInTheDocument()
-  })
-
-  it('creates a destination through the modal and refreshes the list', async () => {
+  it('is titled Destinos and does not offer the operational use as a filter', async () => {
     mockCompany(true)
-    destinationsApiMocks.fetchDestinations.mockResolvedValue(page([]))
-    zonesApiMocks.fetchZones.mockResolvedValue(page([]))
-    destinationsApiMocks.createDestination.mockResolvedValue({ ...DESTINATION, code: 'NEW-DEST' })
+    locationsApiMocks.fetchLocations.mockResolvedValue(page([STORE]))
+
+    renderPage()
+    await screen.findByText('MIRAFLORES')
+
+    expect(screen.getByRole('heading', { name: 'Destinos' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Uso operacional')).not.toBeInTheDocument()
+  })
+
+  it('creates through the Location drawer with the destination use already ticked', async () => {
+    mockCompany(true)
+    locationsApiMocks.fetchLocations.mockResolvedValue(page([]))
+    locationsApiMocks.createLocation.mockResolvedValue(STORE)
 
     renderPage()
     await screen.findByText('Sin destinos')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Nuevo destino' }))
+    await userEvent.click(screen.getAllByRole('button', { name: 'Nuevo destino' })[0] as HTMLElement)
     const dialog = within(screen.getByRole('dialog'))
-    await userEvent.type(dialog.getByLabelText(/^código/i), 'NEW-DEST')
-    await userEvent.type(dialog.getByLabelText(/^nombre/i), 'New Destination')
+    expect(dialog.getByRole('checkbox', { name: 'Puede utilizarse como destino' })).toBeChecked()
+    expect(dialog.getByRole('checkbox', { name: 'Puede utilizarse como origen' })).not.toBeChecked()
+
+    await userEvent.type(dialog.getByLabelText(/^código/i), 'SURCO')
+    await userEvent.type(dialog.getByLabelText(/^nombre/i), 'Tienda Surco')
     await userEvent.click(dialog.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() =>
-      expect(destinationsApiMocks.createDestination).toHaveBeenCalledWith(
+      expect(locationsApiMocks.createLocation).toHaveBeenCalledWith(
         'company-1',
-        expect.objectContaining({ code: 'NEW-DEST' }),
+        expect.objectContaining({ code: 'SURCO', roles: ['DESTINATION'] }),
       ),
     )
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Registro creado')
   })
 
-  it('deactivates a destination only after the confirmation dialog is accepted', async () => {
-    mockCompany(true)
-    destinationsApiMocks.fetchDestinations.mockResolvedValue(page([DESTINATION]))
-    zonesApiMocks.fetchZones.mockResolvedValue(page([]))
-    destinationsApiMocks.deactivateDestination.mockResolvedValue({ ...DESTINATION, active: false })
-
-    alertMocks.confirmAction.mockResolvedValueOnce(false)
-    renderPage()
-    await screen.findByText('NORTH-STORE')
-
-    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Desactivar' }))
-    await waitFor(() => expect(alertMocks.confirmAction).toHaveBeenCalled())
-    expect(destinationsApiMocks.deactivateDestination).not.toHaveBeenCalled()
-
-    alertMocks.confirmAction.mockResolvedValueOnce(true)
-    await userEvent.click(screen.getAllByRole('button', { name: 'Abrir menú de acciones' })[0] as HTMLElement)
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Desactivar' }))
-
-    await waitFor(() =>
-      expect(destinationsApiMocks.deactivateDestination).toHaveBeenCalledWith('company-1', 'destination-1'),
-    )
-    expect(alertMocks.notifySuccess).toHaveBeenCalledWith('Registro desactivado', 'North Store')
-  })
-
-  it('applies the code filter to the query', async () => {
-    mockCompany(true)
-    destinationsApiMocks.fetchDestinations.mockResolvedValue(page([DESTINATION]))
-    zonesApiMocks.fetchZones.mockResolvedValue(page([]))
+  it('hides create and manage actions without masterdata.location:manage', async () => {
+    mockCompany(false)
+    locationsApiMocks.fetchLocations.mockResolvedValue(page([STORE]))
 
     renderPage()
-    await screen.findByText('NORTH-STORE')
+    await screen.findByText('MIRAFLORES')
 
-    await userEvent.type(screen.getByLabelText(/^código$/i), 'north')
-    await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
-
-    await waitFor(() =>
-      expect(destinationsApiMocks.fetchDestinations).toHaveBeenLastCalledWith(
-        expect.objectContaining({ code: 'north' }),
-      ),
-    )
+    expect(screen.queryByRole('button', { name: 'Nuevo destino' })).not.toBeInTheDocument()
   })
 })

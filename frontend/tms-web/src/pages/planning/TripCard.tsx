@@ -1,15 +1,10 @@
 import { useTranslation } from 'react-i18next'
-import { type TripStatus, type TripView } from '../../shared/api/planningApi'
+import { type TripView } from '../../shared/api/planningApi'
 import { useEnumLabels } from '../../shared/i18n/enums'
 import { useFormat } from '../../shared/i18n/format'
 import { CapacityBar } from '../../shared/ui/components/CapacityBar'
-import { StatusBadge, type StatusTone } from '../../shared/ui/components/StatusBadge'
-
-const STATUS_TONE: Record<TripStatus, StatusTone> = {
-  DRAFT: 'info',
-  CONFIRMED: 'success',
-  CANCELLED: 'danger',
-}
+import { StatusBadge } from '../../shared/ui/components/StatusBadge'
+import { TRIP_STATUS_TONE } from '../../shared/ui/statusTones'
 
 interface TripCardProps {
   trip: TripView
@@ -46,7 +41,7 @@ export function TripCard({ trip, onOpen }: TripCardProps) {
             {t('card.shipment')} <span className="tms-code">{trip.shipmentNumber}</span>
           </span>
         </span>
-        <StatusBadge label={enumLabels.tripStatus(trip.status)} tone={STATUS_TONE[trip.status]} />
+        <StatusBadge label={enumLabels.tripStatus(trip.status)} tone={TRIP_STATUS_TONE[trip.status]} />
       </div>
 
       <div className="tms-card-body flex-grow-1">

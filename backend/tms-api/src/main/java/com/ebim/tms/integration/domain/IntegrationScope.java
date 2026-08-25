@@ -33,7 +33,36 @@ public enum IntegrationScope {
      * holding it grants no write anywhere, on purpose - see
      * {@code docs/integrations/OUTBOUND_SHIPMENT_V1.md}.
      */
-    SHIPMENT_READ("integration.shipment:read");
+    SHIPMENT_READ("integration.shipment:read"),
+
+    /**
+     * Report where a vehicle is (migration V29). Its own scope rather than part of any other,
+     * because the party holding it is a different one: a telematics vendor, or a customer's
+     * middleware relaying one, and neither has any business creating orders. Write-only in effect -
+     * holding it grants no read anywhere, so a provider pushing positions learns nothing about the
+     * shipments it pushes against.
+     */
+    TRACKING_WRITE("integration.tracking:write"),
+
+    /**
+     * See and answer the tenders offered to <em>one</em> carrier (migration V31).
+     *
+     * <p>One scope and not a read/write pair, unlike every {@link com.ebim.tms.shared.security.Permission}:
+     * a carrier reading its own offers and answering them is one capability from one party's point
+     * of view. There is no role that should see its offers and be unable to answer them, and none
+     * that should answer offers it cannot read, so splitting it would produce two scopes that are
+     * always granted together.
+     *
+     * <p><b>Meaningless without a carrier.</b> The credential holding this must have
+     * {@code integration_client.carrier_id} set, and the endpoints refuse it outright when it does
+     * not - never falling back to the company, which would hand one partner every carrier's
+     * tenders. That is the one scope in this enum whose grant is not sufficient on its own, and the
+     * asymmetry is deliberate: the alternative was a second, carrier-shaped credential type.
+     *
+     * <p>Deliberately not {@link #SHIPMENT_READ}, which exposes every confirmed shipment of the
+     * company. A carrier learns about the shipments it was offered and about no others.
+     */
+    TENDER_RESPOND("integration.tender:respond");
 
     private static final Map<String, IntegrationScope> BY_CODE = Arrays.stream(values())
             .collect(Collectors.toUnmodifiableMap(IntegrationScope::code, Function.identity()));

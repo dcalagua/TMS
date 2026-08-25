@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../shared/api/httpClient'
-import type { TripDetailView, TripView } from '../../shared/api/planningApi'
+import type { TripDetailView, TripStopView, TripView } from '../../shared/api/planningApi'
 import { TripDetailDrawer } from './TripDetailDrawer'
 
 const planningApiMocks = vi.hoisted(() => ({
@@ -47,6 +47,10 @@ function trip(overrides: Partial<TripView> = {}): TripView {
     tripNumber: 1, status: 'DRAFT', vehicleId: 'vehicle-1',
     vehicleCode: 'VH-1', vehicleLicensePlate: 'ABC-123', carrierId: 'carrier-1', carrierName: 'Acme Carriers',
     plannedDepartureAt: null,
+    driverId: null, driverCode: null, driverName: null, driverPhone: null,
+    driverLicenseNumber: null, driverLicenseExpiresOn: null, driverLicenseStatus: null,
+    readyAt: null, actualDepartureAt: null, actualCompletionAt: null,
+    cancelledAt: null, cancelReason: null, allowedTransitions: ['CONFIRMED', 'CANCELLED'],
     capacity: {
       tripId: 'trip-1', source: 'LIVE', orderCount: 2,
       weight: { used: 40, limit: 1000, remaining: 960, percentUsed: 4, exceeded: false, unlimited: false },
@@ -57,6 +61,28 @@ function trip(overrides: Partial<TripView> = {}): TripView {
     stopCount: 2, orderCount: 2, version: 1, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
     ...overrides,
   }
+}
+
+/** A stop nobody has worked yet - the shape every stop of a draft trip has (migration V27). */
+const UNWORKED: Pick<
+  TripStopView,
+  | 'executionStatus'
+  | 'allowedExecutionTransitions'
+  | 'actualArrivalAt'
+  | 'serviceStartedAt'
+  | 'actualDepartureAt'
+  | 'executionNotes'
+  | 'dwellMinutes'
+  | 'openExceptionCount'
+> = {
+  executionStatus: 'PENDING',
+  allowedExecutionTransitions: [],
+  actualArrivalAt: null,
+  serviceStartedAt: null,
+  actualDepartureAt: null,
+  executionNotes: null,
+  dwellMinutes: null,
+  openExceptionCount: 0,
 }
 
 function detail(overrides: Partial<TripDetailView> = {}): TripDetailView {
@@ -79,9 +105,13 @@ function detail(overrides: Partial<TripDetailView> = {}): TripDetailView {
     stops: [
       // dest-1 is geocoded, dest-2 is not: the drawer must say so for the second rather than
       // implying it can be mapped.
-      { id: 'stop-1', sequence: 1, destinationId: 'dest-1', destinationCode: 'DEST-A', destinationName: 'Destination A', latitude: -12.05, longitude: -77.04, address: 'Av. Uno 123', serviceWindowStart: '08:00:00', serviceWindowEnd: '10:00:00', orderCount: 1 },
-      { id: 'stop-2', sequence: 2, destinationId: 'dest-2', destinationCode: 'DEST-B', destinationName: 'Destination B', latitude: null, longitude: null, address: null, serviceWindowStart: null, serviceWindowEnd: null, orderCount: 1 },
+      { id: 'stop-1', sequence: 1, destinationId: 'dest-1', destinationCode: 'DEST-A', destinationName: 'Destination A', latitude: -12.05, longitude: -77.04, address: 'Av. Uno 123', serviceWindowStart: '08:00:00', serviceWindowEnd: '10:00:00', orderCount: 1, ...UNWORKED },
+      { id: 'stop-2', sequence: 2, destinationId: 'dest-2', destinationCode: 'DEST-B', destinationName: 'Destination B', latitude: null, longitude: null, address: null, serviceWindowStart: null, serviceWindowEnd: null, orderCount: 1, ...UNWORKED },
     ],
+    // This drawer is the *planning* view of a trip: it never shows execution, so the problems
+    // and delivery lists are empty here and exercised by the trip workspace instead.
+    exceptions: [],
+    deliveries: [],
     ...overrides,
   }
 }

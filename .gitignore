@@ -84,3 +84,10 @@ tmp/
 .tmp/
 *.pid
 .attach_pid*
+
+# ------------------------------------------------------- Overnight prompt packs
+# The generator packs are working material for a session, not part of the product,
+# and CLAUDE.md says not to stage them. Named here so that is enforced rather than
+# remembered - `git add -A` should never sweep them in.
+tms-overnight-sellable-v4/
+TMS-by-EBIM-Overnight-Sellable-v4*.zip

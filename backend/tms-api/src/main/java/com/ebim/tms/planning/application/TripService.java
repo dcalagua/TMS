@@ -2,6 +2,7 @@ package com.ebim.tms.planning.application;
 
 import com.ebim.tms.planning.domain.AssignmentStatus;
 import com.ebim.tms.planning.domain.PlanningRun;
+import com.ebim.tms.planning.domain.ShipmentEventType;
 import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.planning.domain.TripOrderAssignment;
 import com.ebim.tms.planning.domain.TripStatus;
@@ -9,13 +10,19 @@ import com.ebim.tms.planning.domain.TripStop;
 import com.ebim.tms.planning.infrastructure.PlanningRunRepository;
 import com.ebim.tms.planning.infrastructure.TripOrderAssignmentRepository;
 import com.ebim.tms.planning.infrastructure.TripRepository;
+import com.ebim.tms.planning.infrastructure.TripSpecifications;
 import com.ebim.tms.shared.api.ConflictException;
 import com.ebim.tms.shared.api.InvalidRequestException;
+import com.ebim.tms.shared.api.PageQuery;
+import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.audit.AuditAggregateType;
 import com.ebim.tms.shared.audit.AuditRecorder;
+import com.ebim.tms.shared.reference.DriverLicenseStatus;
+import com.ebim.tms.shared.reference.DriverLookupPort;
+import com.ebim.tms.shared.reference.DriverReference;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.RouteTemplate;
@@ -23,7 +30,9 @@ import com.ebim.tms.shared.reference.RouteTemplateLookupPort;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
+import com.ebim.tms.shared.settings.CompanySettingsPort;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -33,6 +42,10 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,34 +71,77 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class TripService {
 
+    private static final Set<String> SORTABLE_PROPERTIES =
+            Set.of("shipmentNumber", "planningDate", "tripNumber", "status", "plannedDepartureAt",
+                    "actualDepartureAt", "createdAt", "updatedAt");
+
+    /**
+     * The states in which the driver may still be named or swapped: everything up to the moment
+     * the vehicle leaves. Wider than the draft-only window vehicle and route edits get, and
+     * deliberately so - see {@link Trip#assignDriver}.
+     */
+    private static final Set<TripStatus> DRIVER_ASSIGNABLE_STATES =
+            Set.of(TripStatus.DRAFT, TripStatus.CONFIRMED, TripStatus.READY_FOR_DISPATCH);
+
     private final TripRepository tripRepository;
     private final PlanningRunRepository planningRunRepository;
     private final TripOrderAssignmentRepository assignmentRepository;
     private final TripAssignmentService assignments;
     private final OrderPlanningPort orderPlanningPort;
     private final VehicleLookupPort vehicleLookupPort;
+    private final DriverLookupPort driverLookupPort;
     private final RouteTemplateLookupPort routeTemplateLookupPort;
     private final PlanningCapacityService capacityService;
     private final TripViewAssembler assembler;
+    private final ShipmentEventPublisher events;
+    private final TripTenderService tenders;
+    private final TripAlertPublisher alerts;
+    private final CompanySettingsPort companySettingsPort;
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
 
     public TripService(TripRepository tripRepository, PlanningRunRepository planningRunRepository,
             TripOrderAssignmentRepository assignmentRepository, TripAssignmentService assignments,
             OrderPlanningPort orderPlanningPort, VehicleLookupPort vehicleLookupPort,
-            RouteTemplateLookupPort routeTemplateLookupPort, PlanningCapacityService capacityService,
-            TripViewAssembler assembler, AuditActorProvider auditActorProvider, AuditRecorder auditRecorder) {
+            DriverLookupPort driverLookupPort, RouteTemplateLookupPort routeTemplateLookupPort,
+            PlanningCapacityService capacityService, TripViewAssembler assembler, ShipmentEventPublisher events,
+            TripTenderService tenders, TripAlertPublisher alerts, CompanySettingsPort companySettingsPort,
+            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder) {
         this.tripRepository = tripRepository;
         this.planningRunRepository = planningRunRepository;
         this.assignmentRepository = assignmentRepository;
         this.assignments = assignments;
         this.orderPlanningPort = orderPlanningPort;
         this.vehicleLookupPort = vehicleLookupPort;
+        this.driverLookupPort = driverLookupPort;
         this.routeTemplateLookupPort = routeTemplateLookupPort;
         this.capacityService = capacityService;
         this.assembler = assembler;
+        this.events = events;
+        this.tenders = tenders;
+        this.alerts = alerts;
+        this.companySettingsPort = companySettingsPort;
         this.auditActorProvider = auditActorProvider;
         this.auditRecorder = auditRecorder;
+    }
+
+    /**
+     * The Trips screen's list: this company's trips across runs, filtered and paginated.
+     *
+     * <p>A planning run is the wrong entry point for execution - a dispatcher's day is "everything
+     * leaving today", which spans every run that produced a trip for that date, and the board can
+     * only ever show one. This is the same set of rows the board shows, indexed by day instead of
+     * by plan.
+     *
+     * <p>Costs a fixed number of queries for a whole page: the page itself plus
+     * {@link TripViewAssembler}'s batched lookups, never one query per trip.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<TripView> list(CompanyScope scope, TripFilter filter, PageQuery pageQuery) {
+        Page<Trip> page = tripRepository.findAll(
+                TripSpecifications.matching(scope.companyId(), filter), toPageable(pageQuery));
+        List<TripView> content = assembler.toViews(page.getContent(), scope.companyId());
+        return new PageResponse<>(content, pageQuery.pageNumber(), pageQuery.pageSize(), page.getTotalElements());
     }
 
     @Transactional(readOnly = true)
@@ -110,13 +166,13 @@ public class TripService {
         UUID carrierId = null;
         if (request.vehicleId() != null) {
             carrierId = requireAssignableVehicle(scope, request.vehicleId()).carrierId();
-            // No trip id exists yet to exclude, and none ever will collide with a random one.
-            requireVehicleNotDoubleBooked(scope, request.vehicleId(), run.planningDate(), UUID.randomUUID());
+            // No trip id exists yet, so nothing is excluded - the form of the check that says so.
+            requireVehicleNotDoubleBooked(scope, request.vehicleId(), run.planningDate());
         }
         Trip trip = new Trip(scope.companyId(), run.id(), run.planningDate(),
-                tripRepository.maxTripNumber(run.id()) + 1, generateShipmentNumber(), request.vehicleId(), carrierId,
+                tripRepository.maxTripNumber(run.id()) + 1, generateShipmentNumber(scope), request.vehicleId(), carrierId,
                 request.plannedDepartureAt(), actorId);
-        Trip saved = saveWithDoubleBookingBackstop(trip);
+        Trip saved = saveWithDoubleBookingBackstop(trip, "vehicle");
         auditRecorder.record(scope, AuditAggregateType.TRIP, saved.id(), AuditAction.CREATE,
                 Map.of("shipmentNumber", saved.shipmentNumber()));
         return assembler.toDetail(saved, scope.companyId());
@@ -141,12 +197,62 @@ public class TripService {
                 "Vehicle " + vehicle.code() + " cannot take what is already planned on trip " + trip.tripNumber(),
                 CapacityLimits.of(vehicle), load);
         requireVehicleNotDoubleBooked(scope, vehicle.id(), trip.planningDate(), trip.id());
+        requireDriverStillCompatible(scope, trip, vehicle.carrierId());
 
         trip.assignVehicle(vehicle.id(), vehicle.carrierId(), request.plannedDepartureAt(),
                 auditActorProvider.requireAppUserId());
-        Trip saved = saveWithDoubleBookingBackstop(trip);
+        Trip saved = saveWithDoubleBookingBackstop(trip, "vehicle");
         auditRecorder.record(scope, AuditAggregateType.TRIP, saved.id(), AuditAction.VEHICLE_CHANGE,
                 Map.of("vehicleId", vehicle.id().toString()));
+        return assembler.toDetail(saved, scope.companyId());
+    }
+
+    /**
+     * Names the driver who will run this shipment, or clears the name when {@code driverId} is
+     * null.
+     *
+     * <p>Allowed from {@code DRAFT}, {@code CONFIRMED} and {@code READY_FOR_DISPATCH}, unlike the
+     * vehicle and route edits above, which stop at the draft: a driver calling in sick at 05:00 on
+     * a shipment confirmed last night is the ordinary case, and nothing a plan was <em>validated
+     * against</em> changes when the person at the wheel does ({@link Trip#assignDriver} spells the
+     * asymmetry out). Once the vehicle has left, who is driving stops being a plan and becomes a
+     * fact, so it is refused.
+     *
+     * <p>Four rules, each with its own sentence for the caller: the driver must be active and in
+     * this company, their licence must not have run out by the day they are meant to drive, they
+     * must not already be out on another trip that day, and if both the trip and the driver name a
+     * carrier the two must be the same one.
+     */
+    @Transactional
+    public TripDetailView updateDriver(CompanyScope scope, UUID tripId, TripDriverRequest request) {
+        Trip trip = lockedDriverAssignableTrip(scope, tripId);
+        requireCurrentVersion("trip", trip.version(), request.version());
+
+        UUID actorId = auditActorProvider.requireAppUserId();
+        if (request.driverId() == null) {
+            trip.assignDriver(null, actorId);
+            Trip cleared = save(trip);
+            auditRecorder.record(scope, AuditAggregateType.TRIP, cleared.id(), AuditAction.DRIVER_CHANGE,
+                    Map.of("shipmentNumber", cleared.shipmentNumber(), "driverId", "none"));
+            return assembler.toDetail(cleared, scope.companyId());
+        }
+
+        DriverReference driver = driverLookupPort.findAssignable(request.driverId(), scope.companyId())
+                .orElseThrow(() -> new InvalidRequestException(
+                        "driverId does not reference an active driver in this company."));
+        requireValidLicenceOn(driver, trip.planningDate());
+        requireCarrierCompatible(driver, trip.carrierId());
+        requireDriverNotDoubleBooked(scope, driver.id(), trip.planningDate(), trip.id());
+
+        trip.assignDriver(driver.id(), actorId);
+        Trip saved = saveWithDoubleBookingBackstop(trip, "driver");
+        auditRecorder.record(scope, AuditAggregateType.TRIP, saved.id(), AuditAction.DRIVER_CHANGE,
+                Map.of("shipmentNumber", saved.shipmentNumber(), "driverId", driver.id().toString()));
+        // A licence that has run out was refused above; one that runs out inside the warning window
+        // is legal and is exactly what nobody notices (V32). Raised after the assignment succeeded,
+        // and keyed on the driver and their expiry date, so planning the same person all week is
+        // one warning - see TripAlertPublisher.driverAssigned.
+        alerts.driverAssigned(scope, saved, driver, OffsetDateTime.now());
         return assembler.toDetail(saved, scope.companyId());
     }
 
@@ -301,19 +407,69 @@ public class TripService {
         return assembler.toDetail(save(trip), scope.companyId());
     }
 
-    /** Cancels a draft trip and returns every order on it to the eligible pool. */
+    /**
+     * Cancels a trip and returns every order on it to the eligible pool.
+     *
+     * <p>Legal from {@code DRAFT}, {@code CONFIRMED} and {@code READY_FOR_DISPATCH} - the states
+     * before the vehicle leaves. {@code TripStatus} owns that list; this method only asks it.
+     *
+     * <p>Two things follow from a trip having been confirmed before it was cancelled, and both are
+     * conditional on {@code confirmedAt} rather than on the status the trip is in now, because by
+     * the time either runs the status is already {@code CANCELLED}:
+     *
+     * <ol>
+     *   <li>a reason is required. Discarding a sketch needs no explanation; withdrawing a shipment
+     *       a carrier was told about does, and it is the only record of why;</li>
+     *   <li>a {@code SHIPMENT_CANCELLED} event is published. A partner that was handed a confirmed
+     *       shipment has to be told it is not happening - the case migration V20 wrote its CHECK
+     *       for and could not yet produce.</li>
+     * </ol>
+     *
+     * <p>A third thing happens unconditionally: any live carrier tender is withdrawn (migration
+     * V31). Unconditional because it costs one indexed query on a shipment that has none, and
+     * because the alternative - a carrier accepting a shipment that is not happening - is the worst
+     * outcome this feature can produce.</p>
+     *
+     * <p>Lives here rather than in {@code TripExecutionService} because cancelling is where the
+     * order releases happen, and those are this class's ({@code TripAssignmentService}'s) business,
+     * not the lifecycle's. It is also one action from a user's point of view, and splitting it
+     * across two endpoints by the state it starts from would push the transition table into the
+     * frontend.
+     */
     @Transactional
     public TripDetailView cancel(CompanyScope scope, UUID tripId, PlanningActionRequest request) {
-        Trip trip = lockedDraftTrip(scope, tripId);
+        Trip trip = lockedCancellableTrip(scope, tripId);
+        // Before the version check: a retry of a cancellation that already succeeded is answered
+        // with the cancelled trip, not with "reload and try again". Same rule, same reasoning as
+        // TripExecutionService's other transitions.
+        if (trip.status() == TripStatus.CANCELLED) {
+            return assembler.toDetail(trip, scope.companyId());
+        }
         requireCurrentVersion("trip", trip.version(), request.version());
 
-        UUID actorId = auditActorProvider.requireAppUserId();
+        boolean wasCommitted = trip.confirmedAt() != null;
         String reason = blankToNull(request.reason());
+        if (wasCommitted && reason == null) {
+            throw new InvalidRequestException(
+                    "reason is required to cancel a trip that has already been confirmed.");
+        }
+
+        UUID actorId = auditActorProvider.requireAppUserId();
         assignments.releaseAll(trip, reason == null ? "Trip cancelled" : reason, actorId);
         trip.cancel(reason, actorId);
         Trip saved = save(trip);
         auditRecorder.record(scope, AuditAggregateType.TRIP, saved.id(), AuditAction.CANCEL,
                 Map.of("shipmentNumber", saved.shipmentNumber()));
+        if (wasCommitted) {
+            events.publish(scope, saved, ShipmentEventType.SHIPMENT_CANCELLED, saved.cancelledAt(),
+                    Map.of("reason", reason));
+        }
+        // After the cancellation and after its event, so the timeline reads cause then effect: the
+        // shipment was cancelled, therefore the offer on it was withdrawn. Load-bearing rather than
+        // tidy-up - without it a carrier could accept a shipment that is not happening, which is the
+        // one way tendering could produce a truck sent to a depot for nothing (migration V31).
+        tenders.withdrawOpen(scope, saved,
+                "Shipment " + saved.shipmentNumber() + " was cancelled" + (reason == null ? "." : ": " + reason));
         return assembler.toDetail(saved, scope.companyId());
     }
 
@@ -324,10 +480,42 @@ public class TripService {
 
     /** Locks a draft trip for an edit whose version the caller has already presented. */
     private Trip lockedDraftTrip(CompanyScope scope, UUID tripId) {
-        Trip trip = tripRepository.findByIdAndCompanyIdForUpdate(tripId, scope.companyId())
-                .orElseThrow(() -> new ResourceNotFoundException("Trip not found."));
+        Trip trip = lockedTrip(scope, tripId);
         requireDraft(trip);
         return trip;
+    }
+
+    /**
+     * Locks a trip that cancellation may still reach, deciding that from {@link TripStatus}'s own
+     * transition table rather than from a second list of states kept here. A trip already
+     * {@code CANCELLED} passes: {@link #cancel} answers a retry with the cancelled trip.
+     */
+    private Trip lockedCancellableTrip(CompanyScope scope, UUID tripId) {
+        Trip trip = lockedTrip(scope, tripId);
+        if (trip.status() != TripStatus.CANCELLED && !trip.status().canTransitionTo(TripStatus.CANCELLED)) {
+            throw new ConflictException(
+                    "Trip " + trip.tripNumber() + " is " + trip.status() + " and can no longer be cancelled.");
+        }
+        return trip;
+    }
+
+    /**
+     * Locks a trip whose driver may still be changed. Refused rather than silently ignored once
+     * the truck has left: a dispatcher who thinks they reassigned a driver on a shipment that is
+     * already on the road has a worse problem than a 409.
+     */
+    private Trip lockedDriverAssignableTrip(CompanyScope scope, UUID tripId) {
+        Trip trip = lockedTrip(scope, tripId);
+        if (!DRIVER_ASSIGNABLE_STATES.contains(trip.status())) {
+            throw new ConflictException("Trip " + trip.tripNumber() + " is " + trip.status()
+                    + " and its driver can no longer be changed.");
+        }
+        return trip;
+    }
+
+    private Trip lockedTrip(CompanyScope scope, UUID tripId) {
+        return tripRepository.findByIdAndCompanyIdForUpdate(tripId, scope.companyId())
+                .orElseThrow(() -> new ResourceNotFoundException("Trip not found."));
     }
 
     /**
@@ -415,6 +603,90 @@ public class TripService {
     }
 
     /**
+     * The same rule from a caller that is creating a trip, so there is no trip of its own to
+     * exclude. Separate from the four-argument form rather than passing a placeholder id: "there
+     * is nothing to exclude" is the fact, and a freshly generated UUID standing in for it reads
+     * as an exclusion that happens never to match.
+     */
+    private void requireVehicleNotDoubleBooked(CompanyScope scope, UUID vehicleId, LocalDate planningDate) {
+        if (tripRepository.existsByCompanyIdAndVehicleIdAndPlanningDateAndStatusNot(
+                scope.companyId(), vehicleId, planningDate, TripStatus.CANCELLED)) {
+            throw new ConflictException(
+                    "This vehicle is already booked on another active trip for " + planningDate + ".");
+        }
+    }
+
+    /**
+     * The driver double-booking invariant (migration V26): one active trip per driver per planning
+     * date. The same shape as {@link #requireVehicleNotDoubleBooked} and for a stricter physical
+     * reason - a truck could in principle be re-crewed and sent out twice in a day, a person
+     * cannot be in two cabs at once.
+     */
+    private void requireDriverNotDoubleBooked(CompanyScope scope, UUID driverId, LocalDate planningDate,
+            UUID excludedTripId) {
+        if (tripRepository.existsByCompanyIdAndDriverIdAndPlanningDateAndStatusNotAndIdNot(
+                scope.companyId(), driverId, planningDate, TripStatus.CANCELLED, excludedTripId)) {
+            throw new ConflictException(
+                    "This driver is already assigned to another active trip for " + planningDate + ".");
+        }
+    }
+
+    /**
+     * A licence has to be valid on the day it will be used, which is the trip's planning date and
+     * not today: a plan built on Friday for Monday must be refused if the licence lapses over the
+     * weekend, and accepting it because it is still valid at the moment of planning would put an
+     * illegal driver on the road on the one day it mattered.
+     *
+     * <p>A driver with no recorded expiry passes - see {@code DriverLicenseStatus}. Refused as a
+     * 400 rather than a 409 for the same reason an unavailable vehicle is: the request named
+     * something that cannot be used, which is not a race with another planner.
+     */
+    private static void requireValidLicenceOn(DriverReference driver, LocalDate planningDate) {
+        if (driver.licenseStatusOn(planningDate) == DriverLicenseStatus.EXPIRED) {
+            throw new InvalidRequestException("Driver " + driver.code() + " has a licence that expired on "
+                    + driver.licenseExpiresOn() + " and cannot be assigned to a trip planned for "
+                    + planningDate + ".");
+        }
+    }
+
+    /**
+     * A driver employed by one carrier must not be planned onto another carrier's vehicle.
+     *
+     * <p>Checked only when <em>both</em> sides name a carrier. A driver with none is a company's
+     * own staff member, and lending them a subcontracted truck for a day is a real arrangement
+     * that TMS has no business refusing; a trip with none has no vehicle attached yet, and the
+     * check runs again from {@link #updateVehicle} when one is. That "both non-null" shape is also
+     * why this is a service rule and not a database constraint - a composite foreign key cannot
+     * express it.
+     */
+    private static void requireCarrierCompatible(DriverReference driver, UUID tripCarrierId) {
+        if (driver.carrierId() == null || tripCarrierId == null || driver.carrierId().equals(tripCarrierId)) {
+            return;
+        }
+        throw new InvalidRequestException("Driver " + driver.code()
+                + " works for a different carrier than the vehicle planned on this trip.");
+    }
+
+    /**
+     * The other direction of {@link #requireCarrierCompatible}: swapping in a vehicle from another
+     * carrier must not quietly leave an incompatible driver on the trip. Resolved with the
+     * display-grade lookup rather than {@code findAssignable}, on purpose - a driver deactivated
+     * after being assigned should not make an unrelated vehicle swap impossible; only their
+     * <em>carrier</em> is at issue here, and {@code TripExecutionService} is where being inactive
+     * stops the shipment.
+     */
+    private void requireDriverStillCompatible(CompanyScope scope, Trip trip, UUID newCarrierId) {
+        if (trip.driverId() == null || newCarrierId == null) {
+            return;
+        }
+        DriverReference driver =
+                driverLookupPort.findAllInCompany(Set.of(trip.driverId()), scope.companyId()).get(trip.driverId());
+        if (driver != null) {
+            requireCarrierCompatible(driver, newCarrierId);
+        }
+    }
+
+    /**
      * The limits a <em>draft</em> trip is checked against: the attached vehicle's current
      * effective capacity, or unlimited when no vehicle is attached yet.
      *
@@ -451,18 +723,24 @@ public class TripService {
     }
 
     /**
-     * {@link #save} plus a translation for {@code uq_trip_vehicle_active_planning_date}: the
-     * concurrency backstop for {@link #requireVehicleNotDoubleBooked}, the moment two planners who
-     * each passed their own pre-check both try to book the same vehicle on the same day. Used only
-     * by the two writes that set a trip's vehicle ({@code create}, {@code updateVehicle}) - every
-     * other {@code save(trip)} call cannot touch that index.
+     * {@link #save} plus a translation for the two double-booking indexes
+     * ({@code uq_trip_vehicle_active_planning_date}, {@code uq_trip_driver_active_planning_date}):
+     * the concurrency backstop for {@link #requireVehicleNotDoubleBooked} and
+     * {@link #requireDriverNotDoubleBooked}, the moment two planners who each passed their own
+     * pre-check both try to book the same vehicle - or the same person - on the same day. Used
+     * only by the three writes that set one of those columns ({@code create},
+     * {@code updateVehicle}, {@code updateDriver}); every other {@code save(trip)} call cannot
+     * touch either index.
+     *
+     * @param subject which of the two the caller was writing, so the sentence names the thing the
+     *     planner actually chose rather than guessing from the constraint
      */
-    private Trip saveWithDoubleBookingBackstop(Trip trip) {
+    private Trip saveWithDoubleBookingBackstop(Trip trip, String subject) {
         try {
             return save(trip);
         } catch (DataIntegrityViolationException raced) {
-            throw new ConflictException(
-                    "This vehicle is already booked on another active trip for " + trip.planningDate() + ".");
+            throw new ConflictException("This " + subject + " is already booked on another active trip for "
+                    + trip.planningDate() + ".");
         }
     }
 
@@ -472,12 +750,36 @@ public class TripService {
      * from {@code MAX(shipment_number) + 1} so two planners creating a trip at the same instant
      * cannot be handed the same number; the {@code uq_trip_shipment_number} constraint is there
      * for the case a raw insert bypasses this method entirely.
+     *
+     * <p>The prefix became the company's with migration V34
+     * ({@code tms.company_settings.shipment_number_prefix}); the sequence behind it stayed
+     * installation-wide, which is what keeps the constraint satisfiable no matter what two tenants
+     * choose to call their shipments. A missing settings row resolves to {@code "SH-"} - the literal
+     * this line used to hold - so nothing an installation has already issued changes shape.
      */
-    private String generateShipmentNumber() {
-        return "SH-" + String.format(Locale.ROOT, "%08d", tripRepository.nextShipmentNumberValue());
+    private String generateShipmentNumber(CompanyScope scope) {
+        String prefix = companySettingsPort.settingsOf(scope.companyId()).shipmentNumberPrefix();
+        return prefix + String.format(Locale.ROOT, "%08d", tripRepository.nextShipmentNumberValue());
     }
 
     private static String blankToNull(String value) {
         return (value == null || value.isBlank()) ? null : value.trim();
+    }
+
+    /**
+     * Newest planning date first by default, with the trip number as the tie-breaker: a dispatcher
+     * opens the Trips screen to see today, and two trips of the same day should come back in the
+     * order the planner numbered them rather than in whatever order the page boundary produced.
+     */
+    private static Pageable toPageable(PageQuery pageQuery) {
+        List<PageQuery.SortTerm> terms = pageQuery.sortTerms(SORTABLE_PROPERTIES);
+        if (terms.isEmpty()) {
+            return PageRequest.of(pageQuery.pageNumber(), pageQuery.pageSize(),
+                    Sort.by(Sort.Order.desc("planningDate"), Sort.Order.asc("tripNumber")));
+        }
+        return PageRequest.of(pageQuery.pageNumber(), pageQuery.pageSize(), Sort.by(terms.stream()
+                .map(term -> new Sort.Order(
+                        term.descending() ? Sort.Direction.DESC : Sort.Direction.ASC, term.property()))
+                .toList()));
     }
 }

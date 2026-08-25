@@ -179,19 +179,28 @@ class CanonicalLocationConstraintIntegrationTest {
         }
 
         @Test
-        @DisplayName("a role may be held once, and only from the fixed vocabulary")
+        @DisplayName("a role is an operational use, held once, and only ORIGIN or DESTINATION")
         void rolesAreConstrained() throws SQLException {
             UUID organization = insertOrganization("LOC-ORG");
             UUID company = insertCompany(organization, "LOC-A");
             UUID location = insertLocation(company, "ROLES");
 
+            // One place that both ships and receives - the case the whole model exists for.
             executeRaw("INSERT INTO tms.location_role (location_id, role) VALUES ('" + location + "', 'ORIGIN')");
-            executeRaw("INSERT INTO tms.location_role (location_id, role) VALUES ('" + location + "', 'SHIP_TO')");
+            executeRaw("INSERT INTO tms.location_role (location_id, role) VALUES ('" + location
+                    + "', 'DESTINATION')");
 
             assertViolates(UNIQUE_VIOLATION, () -> executeRaw(
                     "INSERT INTO tms.location_role (location_id, role) VALUES ('" + location + "', 'ORIGIN')"));
+            // A kind of place is location_type's answer, never a role's. V23 removed the five
+            // classification values V14 shipped; the database is what stops them coming back.
+            for (String classification : new String[] {"WAREHOUSE", "STORE", "DC", "PLANT", "HUB", "OTHER"}) {
+                assertViolates(CHECK_VIOLATION, () -> executeRaw(
+                        "INSERT INTO tms.location_role (location_id, role) VALUES ('" + location + "', '"
+                                + classification + "')"));
+            }
             assertViolates(CHECK_VIOLATION, () -> executeRaw(
-                    "INSERT INTO tms.location_role (location_id, role) VALUES ('" + location + "', 'WAREHOUSE')"));
+                    "INSERT INTO tms.location_role (location_id, role) VALUES ('" + location + "', 'SHIP_TO')"));
         }
 
         @Test
@@ -201,7 +210,7 @@ class CanonicalLocationConstraintIntegrationTest {
             UUID companyA = insertCompany(organization, "LOC-A");
             UUID companyB = insertCompany(organization, "LOC-B");
             UUID inA = insertLocation(companyA, "RLS-A");
-            executeRaw("INSERT INTO tms.location_role (location_id, role) VALUES ('" + inA + "', 'SHIP_TO')");
+            executeRaw("INSERT INTO tms.location_role (location_id, role) VALUES ('" + inA + "', 'DESTINATION')");
             insertLocation(companyB, "RLS-B");
 
             // The application enters the runtime role and publishes its tenant exactly like
@@ -233,7 +242,8 @@ class CanonicalLocationConstraintIntegrationTest {
             UUID organization = insertOrganization("LOC-ORG");
             UUID company = insertCompany(organization, "LOC-A");
             UUID location = insertLocation(company, "CASCADE");
-            executeRaw("INSERT INTO tms.location_role (location_id, role) VALUES ('" + location + "', 'STORE')");
+            executeRaw("INSERT INTO tms.location_role (location_id, role) VALUES ('" + location
+                    + "', 'DESTINATION')");
 
             executeRaw("DELETE FROM tms.location WHERE id = '" + location + "'");
 
@@ -332,7 +342,7 @@ class CanonicalLocationConstraintIntegrationTest {
     }
 
     @Nested
-    @DisplayName("backfill of data that existed before V14")
+    @DisplayName("data migration of rows that existed before the canonical Location master")
     class Backfill {
 
         private static String jdbcUrl;
@@ -340,7 +350,11 @@ class CanonicalLocationConstraintIntegrationTest {
         private static UUID companyB;
 
         /**
-         * Migrate to V13, seed the four cases the backfill has to distinguish, then apply V14.
+         * Migrate to V13, seed data in the shape the product had then, and migrate to head - so
+         * this fixture proves V14's backfill and V23's unification as one chain, on rows that
+         * predate both.
+         *
+         * <p>The four cases V14's backfill has to distinguish:
          *
          * <ol>
          *   <li>an origin with no same-code destination;</li>
@@ -349,6 +363,10 @@ class CanonicalLocationConstraintIntegrationTest {
          *   <li>two rows of one company carrying the same {@code external_reference}, which V6/V7
          *       allowed and {@code uq_location_external} does not.</li>
          * </ol>
+         *
+         * <p>Plus the consumers V23 has to repoint: a route with a stop, and an order whose two
+         * ends are the same physical place recorded twice - which is the duplication this whole
+         * domain change removes, and the one case where the repoint is visible as an equality.
          */
         @BeforeAll
         static void seedThenMigrate() throws SQLException {
@@ -396,6 +414,27 @@ class CanonicalLocationConstraintIntegrationTest {
                             ('%2$s', 'ONLY-DST', 'Other Company Destination', 'CUSTOMER', NULL, NULL, NULL,
                              NULL, NULL, 'ES', NULL, NULL, 0, 'REF-DUPLICATE', true);
                         """.formatted(companyA, companyB));
+
+                // The consumers, in the shape they had at V13: pointing at tms.origin and
+                // tms.destination. V23 has to carry every one of them across without an operator
+                // touching anything.
+                statement.execute("""
+                        INSERT INTO tms.route (id, company_id, code, name, origin_id)
+                        SELECT '55555555-0000-4000-8000-0000000000r1', o.company_id, 'BF-ROUTE', 'Backfill route',
+                               o.id
+                        FROM tms.origin o WHERE o.company_id = '%1$s' AND o.code = 'ONLY-ORG';
+
+                        INSERT INTO tms.route_stop (route_id, company_id, destination_id, sequence)
+                        SELECT '55555555-0000-4000-8000-0000000000r1', d.company_id, d.id, 1
+                        FROM tms.destination d WHERE d.company_id = '%1$s' AND d.code = 'ONLY-DST';
+
+                        INSERT INTO tms.transport_order
+                            (company_id, order_number, origin_id, destination_id, service_date)
+                        SELECT o.company_id, 'BF-ORDER-1', o.id, d.id, DATE '2026-01-15'
+                        FROM tms.origin o
+                        JOIN tms.destination d ON d.company_id = o.company_id AND d.code = o.code
+                        WHERE o.company_id = '%1$s' AND o.code = 'BOTH';
+                        """.formatted(companyA));
             }
 
             PostgresTestDatabase.flyway(jdbcUrl).migrate();
@@ -424,7 +463,7 @@ class CanonicalLocationConstraintIntegrationTest {
 
             assertThat(strings("SELECT r.role FROM tms.location l JOIN tms.location_role r ON r.location_id = l.id"
                     + " WHERE l.company_id = '" + companyA + "' AND l.code = 'BOTH' ORDER BY 1"))
-                    .containsExactly("ORIGIN", "SHIP_TO");
+                    .containsExactly("DESTINATION", "ORIGIN");
 
             assertThat(value("SELECT l.id::text = o.id::text FROM tms.location l JOIN tms.origin o"
                     + " ON o.location_id = l.id WHERE l.company_id = '" + companyA + "' AND l.code = 'BOTH'"))
@@ -498,7 +537,99 @@ class CanonicalLocationConstraintIntegrationTest {
         }
 
         @Test
-        @DisplayName("replaying V14 on this database is a no-op, so the backfill cannot double-insert")
+        @DisplayName("a route and its stop follow their places to tms.location, unchanged in meaning")
+        void routesAreRepointed() throws SQLException {
+            assertThat(value("""
+                    SELECT (r.origin_id = l.id)::text
+                    FROM tms.route r JOIN tms.location l
+                      ON l.company_id = r.company_id AND l.code = 'ONLY-ORG'
+                    WHERE r.code = 'BF-ROUTE'
+                    """))
+                    .as("the route still departs from the same physical place, now named canonically")
+                    .isEqualTo("true");
+
+            assertThat(value("""
+                    SELECT (s.destination_id = l.id)::text
+                    FROM tms.route_stop s JOIN tms.route r ON r.id = s.route_id
+                    JOIN tms.location l ON l.company_id = s.company_id AND l.code = 'ONLY-DST'
+                    WHERE r.code = 'BF-ROUTE'
+                    """))
+                    .isEqualTo("true");
+        }
+
+        @Test
+        @DisplayName("an order whose two ends were one place becomes an order with one location at both ends")
+        void ordersAreRepointedAndDeduplicated() throws SQLException {
+            assertThat(value("""
+                    SELECT (t.origin_id = t.destination_id)::text
+                    FROM tms.transport_order t WHERE t.order_number = 'BF-ORDER-1'
+                    """))
+                    .as("BOTH was one distribution centre recorded twice - once as an origin, once "
+                            + "as a destination. After V23 there is one row, and the order points "
+                            + "at it from both ends, which is the entire claim of the model")
+                    .isEqualTo("true");
+
+            assertThat(value("""
+                    SELECT (t.origin_id = l.id)::text
+                    FROM tms.transport_order t JOIN tms.location l
+                      ON l.company_id = t.company_id AND l.code = 'BOTH'
+                    WHERE t.order_number = 'BF-ORDER-1'
+                    """))
+                    .isEqualTo("true");
+        }
+
+        @Test
+        @DisplayName("every consumer's foreign key now names tms.location, not a legacy projection")
+        void foreignKeysTargetTheCanonicalTable() throws SQLException {
+            assertThat(strings("""
+                    SELECT c.conrelid::regclass::text || '.' || c.conname
+                    FROM pg_constraint c
+                    WHERE c.contype = 'f'
+                      AND c.confrelid IN ('tms.origin'::regclass, 'tms.destination'::regclass)
+                      AND c.conrelid NOT IN ('tms.origin'::regclass, 'tms.destination'::regclass)
+                    ORDER BY 1
+                    """))
+                    .as("a foreign key still pointing at a legacy table would mean that table is "
+                            + "still a source of truth for somebody")
+                    .isEmpty();
+
+            assertThat(strings("""
+                    SELECT c.conrelid::regclass::text || '.' || c.conname
+                    FROM pg_constraint c
+                    WHERE c.contype = 'f' AND c.confrelid = 'tms.location'::regclass
+                      AND c.conrelid IN ('tms.route'::regclass, 'tms.route_stop'::regclass,
+                                         'tms.transport_order'::regclass, 'tms.planning_run'::regclass,
+                                         'tms.trip_stop'::regclass)
+                    ORDER BY 1
+                    """))
+                    .as("both the plain and the composite tenant key, for all six columns")
+                    .hasSize(12);
+        }
+
+        @Test
+        @DisplayName("the application role cannot write the frozen legacy tables at all")
+        void legacyTablesAreReadOnlyForTheRuntimeRole() throws SQLException {
+            assertThat(value("""
+                    SELECT count(*)::text FROM information_schema.role_table_grants
+                    WHERE grantee = 'tms_app' AND table_schema = 'tms'
+                      AND table_name IN ('origin', 'destination')
+                      AND privilege_type IN ('INSERT', 'UPDATE', 'DELETE')
+                    """))
+                    .as("'not a source of truth' is a grant after V23, not a convention")
+                    .isEqualTo("0");
+
+            assertThat(value("""
+                    SELECT count(*)::text FROM information_schema.role_table_grants
+                    WHERE grantee = 'tms_app' AND table_schema = 'tms'
+                      AND table_name IN ('origin', 'destination') AND privilege_type = 'SELECT'
+                    """))
+                    .as("kept readable: they are the recovery path for a V14 merge that united two "
+                            + "genuinely different places")
+                    .isEqualTo("2");
+        }
+
+        @Test
+        @DisplayName("replaying the migration history on this database is a no-op")
         void migrationIsIdempotent() {
             assertThat(PostgresTestDatabase.flyway(jdbcUrl).migrate().migrationsExecuted).isZero();
         }

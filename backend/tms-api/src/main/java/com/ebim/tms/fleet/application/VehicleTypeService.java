@@ -25,7 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Vehicle type use cases. Takes a {@link CompanyScope}, never a company id - see
- * {@code com.ebim.tms.masterdata.application.OriginService} for the contract this follows.
+ * {@code com.ebim.tms.masterdata.application.LocationService} for the contract this follows.
  */
 @Service
 public class VehicleTypeService {

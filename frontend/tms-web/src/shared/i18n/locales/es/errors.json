@@ -5,6 +5,7 @@
     "company-scope-invalid": "La compañía seleccionada no es válida. Elige una compañía e inténtalo de nuevo.",
     "company-scope-required": "No hay una compañía seleccionada. Elige una compañía e inténtalo de nuevo.",
     "conflict": "Este cambio entra en conflicto con otra actualización. Recarga e inténtalo de nuevo.",
+    "feature-not-configured": "Esta funcionalidad no está configurada en esta instalación. Un administrador debe habilitarla antes de poder usarla.",
     "internal-error": "Ocurrió un error de nuestro lado. Vuelve a intentarlo.",
     "invalid-token": "Tu sesión ya no es válida. Vuelve a iniciar sesión.",
     "malformed-request": "No se pudo procesar la solicitud.",

@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
 import type { NavigationKey } from '../i18n/keys'
-import { HOME_NAV, NAV_GROUPS } from './navConfig'
+import { ALL_NAV_GROUPS, HOME_NAV, OVERVIEW_NAV } from './navConfig'
 
 /**
  * Where the user is, derived from the navigation itself rather than from a per-page prop.
@@ -41,11 +41,17 @@ function resolveTrail(pathname: string): NavigationKey[] {
   if (pathname === HOME_NAV.to) {
     return [HOME_NAV.labelKey]
   }
+  // One level deep, like home: a leaf outside the groups has no group label to sit under, and
+  // inventing one would put a heading in the breadcrumb that appears nowhere in the menu.
+  const overview = OVERVIEW_NAV.find((item) => pathname === item.to)
+  if (overview) {
+    return [overview.labelKey]
+  }
 
   let best: NavigationKey[] = []
   let bestLength = 0
 
-  for (const group of NAV_GROUPS) {
+  for (const group of ALL_NAV_GROUPS) {
     for (const item of group.items) {
       if ((pathname === item.to || pathname.startsWith(`${item.to}/`)) && item.to.length > bestLength) {
         best = [group.labelKey, item.labelKey]

@@ -6,6 +6,8 @@ import com.ebim.tms.planning.application.PlanningActionRequest;
 import com.ebim.tms.planning.application.PlanningRunDetailView;
 import com.ebim.tms.planning.application.PlanningRunFilter;
 import com.ebim.tms.planning.application.PlanningRunRequest;
+import com.ebim.tms.planning.application.AutoPlanView;
+import com.ebim.tms.planning.application.AutoPlanningService;
 import com.ebim.tms.planning.application.PlanningRunService;
 import com.ebim.tms.planning.application.PlanningRunView;
 import com.ebim.tms.planning.application.TripCreateRequest;
@@ -50,8 +52,11 @@ public class PlanningRunController {
 
     private final PlanningRunService planningRunService;
     private final TripService tripService;
+    private final AutoPlanningService autoPlanningService;
 
-    public PlanningRunController(PlanningRunService planningRunService, TripService tripService) {
+    public PlanningRunController(PlanningRunService planningRunService, TripService tripService,
+            AutoPlanningService autoPlanningService) {
+        this.autoPlanningService = autoPlanningService;
         this.planningRunService = planningRunService;
         this.tripService = tripService;
     }
@@ -113,6 +118,34 @@ public class PlanningRunController {
     public PlanningRunDetailView cancel(
             CompanyScope scope, @PathVariable UUID id, @Valid @RequestBody PlanningActionRequest request) {
         return planningRunService.cancel(scope, id, request);
+    }
+
+    /**
+     * What automatic planning would do, without doing it. Read-only, so it is guarded by the read
+     * authorities and can be opened by a planner who is only looking.
+     */
+    @GetMapping("/runs/{id}/auto-plan/preview")
+    @PreAuthorize("hasAuthority('planning.plan:read') and hasAuthority('orders.order:read')")
+    @Operation(summary = "Preview an automatic plan for a draft run, writing nothing")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public AutoPlanView previewAutoPlan(CompanyScope scope, @PathVariable UUID id) {
+        return autoPlanningService.preview(scope, id);
+    }
+
+    /**
+     * Writes the proposal as draft trips. Requires the trip-management authority as well as the
+     * plan one, because that is exactly what it does on the planner's behalf - and it stops at
+     * draft: confirming stays a separate, deliberate act.
+     */
+    @PostMapping("/runs/{id}/auto-plan")
+    @PreAuthorize("hasAuthority('planning.plan:manage') and hasAuthority('planning.trip:manage')")
+    @Operation(summary = "Build draft trips for a run automatically; never confirms them")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public AutoPlanView autoPlan(
+            CompanyScope scope, @PathVariable UUID id, @Valid @RequestBody PlanningActionRequest request) {
+        return autoPlanningService.apply(scope, id, request);
     }
 
     /**

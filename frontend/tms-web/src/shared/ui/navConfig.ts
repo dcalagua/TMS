@@ -31,10 +31,12 @@ export const NAV_GROUPS: NavGroup[] = [
     accent: 1,
     capability: 'MASTER_DATA_VIEW',
     items: [
-      // First, and above Origins/Destinations on purpose: since migration V14 a location is
-      // the canonical record and those two are its compatibility projections, so this is where
-      // a place should be created. They stay in the menu because routes, orders and planning
-      // still speak their vocabulary (docs/architecture/ADR_LOCATION_MODEL.md).
+      // First, and above Origins/Destinations on purpose. Migration V14 introduced the location
+      // as the canonical record with those two as compatibility projections; V23 finished the
+      // job - there is one physical place, and "origin" and "destination" are operational *uses*
+      // of it, not records of their own. The two entries stay in the menu because that is how a
+      // planner still thinks about the work, and because routes, orders and planning speak that
+      // vocabulary (docs/architecture/ADR_LOCATION_MODEL.md, docs/domain/LOCATION_MODEL_V1.md).
       { to: '/masters/locations', labelKey: 'items.locations', icon: 'bi-geo-alt-fill' },
       { to: '/masters/origins', labelKey: 'items.origins', icon: 'bi-geo-alt' },
       { to: '/masters/destinations', labelKey: 'items.destinations', icon: 'bi-pin-map' },
@@ -51,6 +53,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/fleet/carriers', labelKey: 'items.carriers', icon: 'bi-building' },
       { to: '/fleet/vehicle-types', labelKey: 'items.vehicleTypes', icon: 'bi-diagram-3' },
       { to: '/fleet/vehicles', labelKey: 'items.vehicles', icon: 'bi-truck-front' },
+      // Last in the group, after the things they drive: a driver is only assignable once there
+      // is a vehicle to put them in, so this is also the order a fleet gets set up in.
+      { to: '/fleet/drivers', labelKey: 'items.drivers', icon: 'bi-person-badge' },
     ],
   },
   {
@@ -71,21 +76,121 @@ export const NAV_GROUPS: NavGroup[] = [
     capability: 'TRIPS_VIEW',
     items: [{ to: '/trips', labelKey: 'items.trips', icon: 'bi-map' }],
   },
+  // Last, and behind its own capability: tariffs are commercial information, and a role that
+  // runs the day does not automatically get to see what the day is worth (migration V30).
+  {
+    labelKey: 'groups.rates',
+    accent: 4,
+    capability: 'RATES_VIEW',
+    items: [{ to: '/rates/rate-cards', labelKey: 'items.rateCards', icon: 'bi-cash-coin' }],
+  },
 ]
 
 /** The dashboard entry, kept apart because it belongs to no group. */
 export const HOME_NAV: NavLeaf = { to: '/', labelKey: 'home', icon: 'bi-speedometer2' }
 
 /**
- * Security, likewise outside the groups.
+ * The control tower, directly under the dashboard and likewise outside the groups.
  *
- * It used to be a group of its own holding a single entry, which spent a section heading and a
- * rule on one link and left the column looking like it had a footer bolted on. It is simply
- * one more item now - the last one, because administration is not where the day's work is.
+ * It is not a module. Every module in the list above owns something - locations, vehicles, orders,
+ * shipments - and this owns nothing: it is one way of looking at the day those modules produced,
+ * which is exactly what the dashboard is, and the two belong together at the top rather than
+ * filed under whichever module happens to supply most of the rows.
+ *
+ * Its own capability, not the trips one: `monitoring.transport:read` has meant "see where the
+ * transport is" since migration V3, and a role can hold it - customer service, a duty manager -
+ * without being entitled to open a shipment for editing. Hiding is UX only; the endpoint behind
+ * it checks the same permission server-side.
  */
-export const ADMIN_NAV: NavLeaf = {
-  to: '/admin/security',
-  labelKey: 'items.security',
-  icon: 'bi-shield-lock',
-  capability: 'IAM_VIEW',
+export const CONTROL_TOWER_NAV: NavLeaf = {
+  to: '/control-tower',
+  labelKey: 'items.controlTower',
+  icon: 'bi-broadcast-pin',
+  capability: 'TRANSPORT_MONITOR_VIEW',
 }
+
+/**
+ * Reports & KPIs, beside the control tower and for the same reason.
+ *
+ * The two are one pair: the tower is today and the report is the quarter, both describe days the
+ * modules produced rather than owning anything themselves, and filing either under whichever module
+ * supplies most of its rows would put it where nobody would look for it.
+ *
+ * The same capability, too. `monitoring.transport:read` is what the report's endpoints check, so
+ * anything else here would hide a screen from somebody entitled to it or offer one they cannot open
+ * - the finer questions (may this account see cost, tariffs, the order backlog) are decided per
+ * card, inside the response.
+ */
+export const REPORTS_NAV: NavLeaf = {
+  to: '/reporting',
+  labelKey: 'items.reports',
+  icon: 'bi-bar-chart-line',
+  capability: 'TRANSPORT_MONITOR_VIEW',
+}
+
+/**
+ * The leaves that sit above the module groups, in order.
+ *
+ * Iterated by the sidebar, the search and the breadcrumb rather than each of them repeating a
+ * capability check per leaf: three copies of that condition is how the third one ends up offering a
+ * screen the menu is hiding.
+ */
+export const OVERVIEW_NAV: NavLeaf[] = [CONTROL_TOWER_NAV, REPORTS_NAV]
+
+/**
+ * Configuration, last and outside the module groups.
+ *
+ * It was a single "Seguridad" link pointing at a placeholder until job 12; it is a group again now
+ * that there are two screens behind it and both are administration rather than operation - what
+ * this company *is* (its name, its zone, its document prefixes) and who may act in it. Keeping it
+ * apart from Maestros is the point: a master is data the operation uses every day, and these are
+ * decisions taken once and then left alone.
+ *
+ * Its accent is shared with Tarifas rather than unique, because the palette has six categorical
+ * accents and this is the seventh entry - and because this is not a module. The trailing slot and
+ * the rule above it are what separate it, not a colour.
+ *
+ * Gated by {@code IAM_VIEW}, which is any of the four {@code iam.*:read} permissions. That is
+ * deliberately loose: a PLANNER holds {@code iam.company:read} and will see the section with the
+ * company screen read-only, while the people screen behind {@code iam.user:read} answers 403 to
+ * them. Hiding is UX; each endpoint decides for itself.
+ */
+export const SETTINGS_NAV: NavGroup = {
+  labelKey: 'groups.settings',
+  accent: 4,
+  capability: 'IAM_VIEW',
+  items: [
+    { to: '/settings/company', labelKey: 'items.companySettings', icon: 'bi-building-gear' },
+    { to: '/settings/users', labelKey: 'items.usersAccess', icon: 'bi-people' },
+    // Carries its own capability, unlike its two neighbours: the group is gated by IAM_VIEW, and
+    // issuing a machine credential is deliberately not the same decision as inviting a person
+    // (see Capability.INTEGRATION_VIEW in tms-api). A company administrator holds both and sees
+    // all three; an installation that splits them gets a menu that matches.
+    {
+      to: '/settings/integrations',
+      capability: 'INTEGRATION_VIEW',
+      labelKey: 'items.integrations',
+      icon: 'bi-plug',
+    },
+    // Also its own capability, and for a sharper reason than the integration hub's: the audit
+    // trail names colleagues. A PLANNER holds `iam.company:read` and so passes the group's
+    // IAM_VIEW gate, but `audit.log:read` is granted to the two administrator roles only
+    // (migration V3), and the endpoint answers 403 to everyone else whatever the menu shows.
+    {
+      to: '/security/audit',
+      capability: 'AUDIT_VIEW',
+      labelKey: 'items.audit',
+      icon: 'bi-clock-history',
+    },
+  ],
+}
+
+/**
+ * Every group, module and configuration alike.
+ *
+ * The sidebar draws the two apart - modules in the column, configuration in the trailing slot -
+ * but the breadcrumb and the menu search want one list: a screen that is reachable must be
+ * searchable and must have a breadcrumb, and the previous single "Seguridad" leaf had neither
+ * precisely because it lived outside the only list those two iterated.
+ */
+export const ALL_NAV_GROUPS: NavGroup[] = [...NAV_GROUPS, SETTINGS_NAV]

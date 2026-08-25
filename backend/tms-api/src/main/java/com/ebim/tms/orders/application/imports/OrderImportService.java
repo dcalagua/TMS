@@ -15,6 +15,7 @@ import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
+import com.ebim.tms.shared.settings.CompanySettingsPort;
 import java.math.BigDecimal;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -64,18 +65,20 @@ public class OrderImportService {
     private final OrderImportBatchRepository orderImportBatchRepository;
     private final OriginLookupPort originLookupPort;
     private final DestinationLookupPort destinationLookupPort;
+    private final CompanySettingsPort companySettingsPort;
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
 
     public OrderImportService(OrderImportParser parser, TransportOrderRepository transportOrderRepository,
             OrderImportBatchRepository orderImportBatchRepository, OriginLookupPort originLookupPort,
-            DestinationLookupPort destinationLookupPort, AuditActorProvider auditActorProvider,
-            AuditRecorder auditRecorder) {
+            DestinationLookupPort destinationLookupPort, CompanySettingsPort companySettingsPort,
+            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder) {
         this.parser = parser;
         this.transportOrderRepository = transportOrderRepository;
         this.orderImportBatchRepository = orderImportBatchRepository;
         this.originLookupPort = originLookupPort;
         this.destinationLookupPort = destinationLookupPort;
+        this.companySettingsPort = companySettingsPort;
         this.auditActorProvider = auditActorProvider;
         this.auditRecorder = auditRecorder;
     }
@@ -182,12 +185,15 @@ public class OrderImportService {
             return Map.of();
         }
         List<Long> sequenceValues = transportOrderRepository.nextOrderNumberValues(candidates.size());
+        // Resolved once for the whole file, not once per row: the prefix is a property of the
+        // company, and a file cannot straddle two of them.
+        String prefix = companySettingsPort.settingsOf(scope.companyId()).orderNumberPrefix();
         List<TransportOrder> orders = new ArrayList<>(candidates.size());
         Map<String, String> numbersByReference = new LinkedHashMap<>();
 
         for (int index = 0; index < candidates.size(); index++) {
             OrderImportCandidate candidate = candidates.get(index);
-            String orderNumber = OrderNumbers.format(sequenceValues.get(index));
+            String orderNumber = OrderNumbers.format(prefix, sequenceValues.get(index));
             TransportOrder order = new TransportOrder(scope.companyId(), orderNumber, externalSource,
                     candidate.externalReference(), candidate.origin().id(), candidate.destination().id(),
                     candidate.customerName(), candidate.customerReference(), candidate.serviceDate(),

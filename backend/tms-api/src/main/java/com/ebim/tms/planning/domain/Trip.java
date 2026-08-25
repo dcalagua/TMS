@@ -97,6 +97,13 @@ public class Trip {
     @Column(name = "carrier_id")
     private UUID carrierId;
 
+    /**
+     * The driver planned to run this shipment, or null when none has been named yet (migration
+     * V26). Not required by any state - see {@link #assignDriver}.
+     */
+    @Column(name = "driver_id")
+    private UUID driverId;
+
     @Column(name = "planned_departure_at")
     private OffsetDateTime plannedDepartureAt;
 
@@ -130,6 +137,30 @@ public class Trip {
 
     @Column(name = "cancel_reason")
     private String cancelReason;
+
+    /**
+     * The three execution facts (migration V25), each written once by its own transition and never
+     * afterwards. All are <em>operator-supplied</em> business times, not the instant the request
+     * arrived: a dispatcher recording an 08:40 departure at 09:05 must be able to say 08:40. When
+     * the button was pressed, and by whom, is {@code tms.audit_event}'s job.
+     */
+    @Column(name = "ready_at")
+    private OffsetDateTime readyAt;
+
+    @Column(name = "ready_by")
+    private UUID readyBy;
+
+    @Column(name = "actual_departure_at")
+    private OffsetDateTime actualDepartureAt;
+
+    @Column(name = "dispatched_by")
+    private UUID dispatchedBy;
+
+    @Column(name = "actual_completion_at")
+    private OffsetDateTime actualCompletionAt;
+
+    @Column(name = "completed_by")
+    private UUID completedBy;
 
     @Version
     @Column(name = "version", nullable = false)
@@ -207,6 +238,10 @@ public class Trip {
         return carrierId;
     }
 
+    public UUID driverId() {
+        return driverId;
+    }
+
     public OffsetDateTime plannedDepartureAt() {
         return plannedDepartureAt;
     }
@@ -217,6 +252,17 @@ public class Trip {
 
     public boolean isDraft() {
         return status == TripStatus.DRAFT;
+    }
+
+    /**
+     * Whether this trip reads frozen capacity rather than its vehicle's live capacity - true from
+     * confirmation onwards, and still true for a trip cancelled after it was confirmed. Asked
+     * instead of {@code status() == CONFIRMED} everywhere the question is really "was this plan
+     * ever made binding?", which is what migration V25's {@code ck_trip_draft_has_no_snapshot}
+     * enforces.
+     */
+    public boolean hasCapacitySnapshot() {
+        return capacitySnapshotAt != null;
     }
 
     public BigDecimal snapshotMaxWeightKg() {
@@ -249,6 +295,30 @@ public class Trip {
 
     public String cancelReason() {
         return cancelReason;
+    }
+
+    public OffsetDateTime readyAt() {
+        return readyAt;
+    }
+
+    public UUID readyBy() {
+        return readyBy;
+    }
+
+    public OffsetDateTime actualDepartureAt() {
+        return actualDepartureAt;
+    }
+
+    public UUID dispatchedBy() {
+        return dispatchedBy;
+    }
+
+    public OffsetDateTime actualCompletionAt() {
+        return actualCompletionAt;
+    }
+
+    public UUID completedBy() {
+        return completedBy;
     }
 
     public long version() {
@@ -290,11 +360,36 @@ public class Trip {
     }
 
     /**
+     * Names the driver who will run this shipment, or clears the name when {@code driverId} is
+     * null.
+     *
+     * <p>Whether that driver may be assigned - same company, active, licence still valid on the
+     * planning date, carrier compatible with the vehicle's - is {@code TripService.updateDriver}'s
+     * check, made before this is called. The entity does not know those things: two of them live
+     * in the fleet master, which {@code planning} reaches only through
+     * {@code DriverLookupPort}.
+     *
+     * <p>Unlike {@link #assignVehicle} this is permitted after confirmation, and that asymmetry is
+     * the point. Swapping a vehicle changes what the plan was validated against - the capacity a
+     * confirmed trip is frozen at ({@code docs/domain/CAPACITY_MODEL.md}) - while swapping a
+     * driver changes nothing a shipment was proved against. A driver calling in sick at 05:00 on
+     * a trip confirmed last night is the ordinary case, and forcing a dispatcher to cancel and
+     * rebuild the shipment to answer it would make the lifecycle the enemy of the day.
+     * {@code TripService} still refuses it once the vehicle has left: at that point who is driving
+     * is a fact, not a plan.
+     */
+    public void assignDriver(UUID driverId, UUID actorId) {
+        this.driverId = driverId;
+        this.updatedBy = actorId;
+    }
+
+    /**
      * Freezes the capacity this trip was validated against and locks it. Legality (draft run,
      * vehicle present, load within capacity, stops complete) is
      * {@code PlanningRunService.confirm}'s concern.
      */
     public void confirm(BigDecimal maxWeightKg, BigDecimal maxVolumeM3, Integer maxPallets, UUID actorId) {
+        requireTransitionTo(TripStatus.CONFIRMED);
         this.status = TripStatus.CONFIRMED;
         this.snapshotMaxWeightKg = maxWeightKg;
         this.snapshotMaxVolumeM3 = maxVolumeM3;
@@ -305,13 +400,138 @@ public class Trip {
         this.updatedBy = actorId;
     }
 
-    /** Legality is {@code TripService.cancel}'s concern; releasing the orders is its job too. */
+    /**
+     * Declares the shipment loaded, documented and waiting for its driver.
+     *
+     * <p>{@code readyAt} is the operator's own time, which is why it is a parameter and not
+     * {@code now()}: the same reason {@link #dispatch} and {@link #complete} take theirs. Whether
+     * it is a sane time (not in the future, not before confirmation) is
+     * {@code TripExecutionService}'s check, made with a message a dispatcher can read; migration
+     * V25's {@code ck_trip_execution_times_ordered} is the backstop.
+     */
+    public void markReadyForDispatch(OffsetDateTime readyAt, UUID actorId) {
+        requireTransitionTo(TripStatus.READY_FOR_DISPATCH);
+        this.status = TripStatus.READY_FOR_DISPATCH;
+        this.readyAt = readyAt;
+        this.readyBy = actorId;
+        this.updatedBy = actorId;
+    }
+
+    /**
+     * Sends the vehicle out. {@code actualDepartureAt} is recorded <em>beside</em>
+     * {@link #plannedDepartureAt} and never over it: the gap between the two is the delay, and a
+     * dispatch that overwrote the plan would erase the only evidence there was one.
+     */
+    public void dispatch(OffsetDateTime actualDepartureAt, UUID actorId) {
+        requireTransitionTo(TripStatus.IN_TRANSIT);
+        this.status = TripStatus.IN_TRANSIT;
+        this.actualDepartureAt = actualDepartureAt;
+        this.dispatchedBy = actorId;
+        this.updatedBy = actorId;
+    }
+
+    /**
+     * Closes the trip out. Terminal: nothing follows {@link TripStatus#COMPLETED}.
+     *
+     * <p>Every stop must have been resolved first - completed, skipped or failed (migration V27).
+     * A trip closed over three stops nobody ever touched is a day that looks finished and is not,
+     * and the whole reason per-stop execution exists is to stop that being recordable.
+     * {@code TripExecutionService} refuses first, naming the stops; this is the last line of
+     * defense, in the transaction that broke it.
+     */
+    public void complete(OffsetDateTime actualCompletionAt, UUID actorId) {
+        requireTransitionTo(TripStatus.COMPLETED);
+        if (hasUnresolvedStops()) {
+            throw new IllegalStateException(
+                    "trip " + shipmentNumber + " still has stops that have not been resolved");
+        }
+        this.status = TripStatus.COMPLETED;
+        this.actualCompletionAt = actualCompletionAt;
+        this.completedBy = actorId;
+        this.updatedBy = actorId;
+    }
+
+    /**
+     * Legality beyond the transition table is {@code TripService.cancel}'s concern; releasing the
+     * orders is its job too.
+     *
+     * <p>Reachable from {@link TripStatus#DRAFT}, {@link TripStatus#CONFIRMED} and
+     * {@link TripStatus#READY_FOR_DISPATCH} - never from {@link TripStatus#IN_TRANSIT}, where
+     * "this trip did not happen" has stopped being true. Everything already recorded is kept:
+     * a trip cancelled after being made ready keeps its {@code confirmedAt} and {@code readyAt},
+     * because those things did happen.
+     */
     public void cancel(String reason, UUID actorId) {
+        requireTransitionTo(TripStatus.CANCELLED);
         this.status = TripStatus.CANCELLED;
         this.cancelledAt = OffsetDateTime.now();
         this.cancelledBy = actorId;
         this.cancelReason = reason;
         this.updatedBy = actorId;
+    }
+
+    /**
+     * Records what happened at one of this trip's stops (migration V27).
+     *
+     * <p>Goes through the aggregate root rather than letting a service reach into
+     * {@link TripStop} directly, which is why {@code TripStop.recordOutcome} is package-private:
+     * the two rules that make a stop transition legal are <em>the trip's</em>, not the stop's -
+     * the stop must belong to this trip, and the trip must be on the road. A service holding a
+     * {@code TripStop} it loaded by id could satisfy neither.
+     *
+     * @param stopId the stop to record against; must belong to this trip
+     * @return the stop that was updated, so a caller can build its view without re-finding it
+     * @throws IllegalArgumentException if the stop is not one of this trip's
+     * @throws IllegalStateException if the trip is not {@link TripStatus#IN_TRANSIT}, or if the
+     *     outcome does not follow the stop's current one
+     */
+    public TripStop recordStopOutcome(UUID stopId, StopExecutionStatus outcome, OffsetDateTime occurredAt,
+            String notes, UUID actorId) {
+        if (status != TripStatus.IN_TRANSIT) {
+            throw new IllegalStateException(
+                    "trip " + shipmentNumber + " is " + status + " and its stops cannot be worked");
+        }
+        // stopId.equals(candidate.id()) and not the other way round: a stop that has not been
+        // flushed yet has a null id, and the natural phrasing would answer that with a
+        // NullPointerException instead of "not one of this trip's".
+        TripStop stop = stops.stream()
+                .filter(candidate -> stopId.equals(candidate.id()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "stop " + stopId + " does not belong to trip " + shipmentNumber));
+        stop.recordOutcome(outcome, occurredAt, notes, actorId);
+        this.updatedBy = actorId;
+        return stop;
+    }
+
+    /**
+     * Whether any stop still needs somebody to do something about it - the question
+     * {@link #complete} asks, and the one the workspace turns into "3 of 7 stops done".
+     */
+    public boolean hasUnresolvedStops() {
+        return stops.stream().anyMatch(stop -> stop.executionStatus().isOutstanding());
+    }
+
+    /** The outstanding stops in visiting order, for a refusal that can name them. */
+    public List<TripStop> unresolvedStops() {
+        return stops().stream().filter(stop -> stop.executionStatus().isOutstanding()).toList();
+    }
+
+    /**
+     * The transition table's last line of defense, in the transaction that broke it.
+     *
+     * <p>An {@link IllegalStateException} and not a caller-facing 4xx on purpose: every service
+     * path consults {@link TripStatus#canTransitionTo} first and refuses with a message naming the
+     * two states, so reaching this is a defect in a caller that skipped that check - and the
+     * honest answer to a defect is a rolled-back transaction, not a shipment recorded as departed
+     * from a state it could not have departed from. Same reasoning as
+     * {@link #assertStopSequenceIntegrity}.
+     */
+    private void requireTransitionTo(TripStatus target) {
+        if (!status.canTransitionTo(target)) {
+            throw new IllegalStateException(
+                    "trip " + shipmentNumber + " cannot move from " + status + " to " + target);
+        }
     }
 
     /**

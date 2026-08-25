@@ -12,7 +12,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 
 /**
- * Company-scoped persistence for {@link PlanningRun}. See {@code OriginRepository} for the
+ * Company-scoped persistence for {@link PlanningRun}. See {@code LocationRepository} for the
  * isolation rule every finder here follows: no method returns a row without a {@code companyId}
  * in its own predicate.
  */

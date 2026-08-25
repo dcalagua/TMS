@@ -49,6 +49,13 @@ public enum Permission {
     FLEET_VEHICLE_TYPE_MANAGE("fleet.vehicle_type:manage"),
     FLEET_VEHICLE_READ("fleet.vehicle:read"),
     FLEET_VEHICLE_MANAGE("fleet.vehicle:manage"),
+    /**
+     * The driver master (migration V26). A resource of its own and not part of
+     * {@link #FLEET_VEHICLE_MANAGE}: a driver record holds personal data - name, identity
+     * document, phone - that a vehicle record does not.
+     */
+    FLEET_DRIVER_READ("fleet.driver:read"),
+    FLEET_DRIVER_MANAGE("fleet.driver:manage"),
 
     ORDERS_ORDER_READ("orders.order:read"),
     ORDERS_ORDER_MANAGE("orders.order:manage"),
@@ -57,9 +64,44 @@ public enum Permission {
     PLANNING_PLAN_MANAGE("planning.plan:manage"),
     PLANNING_TRIP_READ("planning.trip:read"),
     PLANNING_TRIP_MANAGE("planning.trip:manage"),
+    /**
+     * Operating a trip through its day - ready, dispatch, complete (migration V25). Deliberately
+     * not implied by {@link #PLANNING_TRIP_MANAGE}: building a plan and running it are different
+     * jobs, and a role may hold either without the other.
+     */
+    PLANNING_TRIP_EXECUTE("planning.trip:execute"),
+    /**
+     * Placing a shipment with its carrier (migration V31). A resource of its own for the reason
+     * {@link #PLANNING_TRIP_EXECUTE} is one: offering a load at a price is a commercial act,
+     * building the plan is not, and an installation may well want the two in different hands.
+     */
+    PLANNING_TENDER_READ("planning.tender:read"),
+    PLANNING_TENDER_MANAGE("planning.tender:manage"),
+
+    /**
+     * The commercial agreement a carrier is paid under (migration V30). Separate from
+     * {@link #RATES_TRIP_COST_READ} because they are different disclosures: a dispatcher may
+     * legitimately need to see what one shipment cost without being shown the tariff behind it.
+     */
+    RATES_RATE_CARD_READ("rates.rate_card:read"),
+    RATES_RATE_CARD_MANAGE("rates.rate_card:manage"),
+    RATES_TRIP_COST_READ("rates.trip_cost:read"),
+    RATES_TRIP_COST_MANAGE("rates.trip_cost:manage"),
 
     INTEGRATION_CLIENT_READ("integration.client:read"),
     INTEGRATION_CLIENT_MANAGE("integration.client:manage"),
+
+    /**
+     * Where this company's published events are pushed (migration V35). Its own resource rather
+     * than part of {@link #INTEGRATION_CLIENT_MANAGE} because the two fail in opposite directions:
+     * a credential is a way <em>in</em> - mismanaging one lets somebody write orders into this
+     * company - and a subscription is a way <em>out</em> - mismanaging one sends this company's
+     * shipment numbers to an address of the administrator's choosing. Both go to the same two
+     * roles today; a deployment that later wants an integrations operator who may configure
+     * endpoints and may not mint credentials can say so without a migration.
+     */
+    INTEGRATION_WEBHOOK_READ("integration.webhook:read"),
+    INTEGRATION_WEBHOOK_MANAGE("integration.webhook:manage"),
 
     MONITORING_TRANSPORT_READ("monitoring.transport:read"),
 

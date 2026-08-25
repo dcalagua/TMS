@@ -8,8 +8,10 @@ import java.util.UUID;
 
 /**
  * The destination counterpart of {@link OriginLookupPort} - see that interface's class comment
- * for the module-boundary reasoning. {@code masterdata.infrastructure.DestinationLookupAdapter}
- * is the only implementation.
+ * for the module-boundary reasoning. Since V23 a destination is a canonical {@code Location}
+ * holding the {@code DESTINATION} role, so "active in company" here means company, active state
+ * and role. {@code masterdata.infrastructure.DestinationLookupAdapter} is the only
+ * implementation.
  */
 public interface DestinationLookupPort {
 

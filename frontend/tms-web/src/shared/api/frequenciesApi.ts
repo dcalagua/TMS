@@ -74,21 +74,24 @@ export function deactivateFrequency(companyId: string, id: string): Promise<Freq
   return apiRequest<FrequencyView>(`/masterdata/frequencies/${id}/deactivate`, { method: 'POST', companyId })
 }
 
-/** Mirrors the backend's `FrequencyExceptionView` record. */
+/** Mirrors the backend's `FrequencyExceptionView` record. `cutoffTimeOverride` is `null` when the
+ * date does not replace the weekly rule's cutoff, which is the ordinary case. */
 export interface FrequencyExceptionView {
   id: string
   exceptionDate: string
   serviceOverride: boolean
+  cutoffTimeOverride: string | null
   note: string | null
   createdAt: string
 }
 
-/** Mirrors the backend's `FrequencyExceptionRequest` record. Not wired into any V1 screen yet
- * (see FrequencyFormDrawer's exceptions placeholder); exposed here because the backend already
- * supports it correctly and a later step should not have to re-derive this shape. */
+/** Mirrors the backend's `FrequencyExceptionRequest` record. `cutoffTimeOverride` is only valid
+ * together with `serviceOverride: true` - a closed date has no cutoff - and the backend answers
+ * 400 if it is sent anyway. */
 export interface FrequencyExceptionRequest {
   exceptionDate: string
   serviceOverride: boolean
+  cutoffTimeOverride?: string | null
   note?: string | null
 }
 

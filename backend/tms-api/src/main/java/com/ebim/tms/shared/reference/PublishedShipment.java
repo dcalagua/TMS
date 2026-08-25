@@ -19,9 +19,13 @@ import java.util.UUID;
  * <p>Never carries stops or orders - see {@link PublishedShipmentDetail} for those, and
  * {@link ShipmentPublicationPort#search}'s class comment for why the split exists.
  *
- * @param status               {@code "CONFIRMED"} or {@code "CANCELLED"} - the only two states a
- *                              publishable shipment can be in ({@link ShipmentPublicationPort}'s
- *                              class comment)
+ * @param status               any {@code planning.domain.TripStatus} except {@code "DRAFT"} - see
+ *                              {@link ShipmentPublicationPort}'s class comment for why a draft is
+ *                              not a shipment
+ * @param actualDepartureAt    when the vehicle really left, or null while it has not. Reported
+ *                              beside {@code plannedDepartureAt}, never instead of it, so a
+ *                              partner can compute the delay rather than being told a departure
+ *                              time that quietly changed meaning (migration V25)
  * @param capacitySource       {@code "SNAPSHOT"} for a confirmed shipment's frozen capacity, or
  *                              {@code "NONE"} - a cancelled shipment that was never confirmed has
  *                              no snapshot to report
@@ -42,6 +46,9 @@ public record PublishedShipment(
         BigDecimal originLatitude,
         BigDecimal originLongitude,
         OffsetDateTime plannedDepartureAt,
+        OffsetDateTime readyAt,
+        OffsetDateTime actualDepartureAt,
+        OffsetDateTime actualCompletionAt,
         String carrierCode,
         String carrierName,
         String vehicleCode,

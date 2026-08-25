@@ -12,6 +12,7 @@ import {
 import type { CommonKey } from '../../shared/i18n/keys'
 import { FormField } from '../../shared/ui/components/FormField'
 import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
+import { FrequencyExceptionsPanel } from './FrequencyExceptionsPanel'
 
 const FORM_ID = 'frequency-form'
 
@@ -241,7 +242,17 @@ export function FrequencyFormDrawer({ companyId, frequency, onClose, onSaved }: 
             </table>
           </div>
 
-          <p className="alert alert-secondary small mb-0">{t('frequencies.form.exceptionsNote')}</p>
+        </fieldset>
+
+        <fieldset className="tms-fieldset">
+          <legend className="tms-fieldset-legend">{t('frequencies.form.exceptions')}</legend>
+          {frequency ? (
+            <FrequencyExceptionsPanel companyId={companyId} frequencyId={frequency.id} canManage />
+          ) : (
+            // A sub-resource needs something to hang from. Saying so beats a panel that looks
+            // broken because every call it makes would 404.
+            <p className="text-body-secondary small mb-0">{t('frequencies.form.saveFirstForExceptions')}</p>
+          )}
         </fieldset>
       </form>
     </TmsDrawer>

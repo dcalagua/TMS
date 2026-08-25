@@ -1,6 +1,5 @@
 package com.ebim.tms.masterdata.application.imports;
 
-import com.ebim.tms.masterdata.application.LocationCompatibilityProjector;
 import com.ebim.tms.masterdata.domain.Location;
 import com.ebim.tms.masterdata.domain.Zone;
 import com.ebim.tms.masterdata.infrastructure.LocationRepository;
@@ -20,6 +19,7 @@ import com.ebim.tms.shared.imports.ImportRow;
 import com.ebim.tms.shared.imports.ImportSupport;
 import com.ebim.tms.shared.imports.infrastructure.ImportBatchRepository;
 import com.ebim.tms.shared.security.CompanyScope;
+import com.ebim.tms.shared.settings.CompanySettingsPort;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -44,10 +44,9 @@ import org.springframework.transaction.annotation.Transactional;
  * </ol>
  *
  * <p>{@link #dryRun} and {@link #apply} share {@link #evaluate}, so a preview cannot describe an
- * outcome different from the one applying produces. Every created location is run through
- * {@link LocationCompatibilityProjector#synchronize} in the same transaction, exactly as
- * {@code LocationService.create} does - a location created by import must be usable as a route
- * origin or an order destination immediately, not only after its next manual edit.
+ * outcome different from the one applying produces. A location created here is immediately
+ * usable as a route origin or an order destination, because since V23 saving the location is
+ * the whole write - there is no projection to keep in step.
  */
 @Service
 public class LocationImportService {
@@ -55,20 +54,20 @@ public class LocationImportService {
     private final LocationImportParser parser;
     private final LocationRepository locationRepository;
     private final ZoneRepository zoneRepository;
-    private final LocationCompatibilityProjector projector;
     private final ImportBatchRepository importBatchRepository;
+    private final CompanySettingsPort companySettingsPort;
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
 
     public LocationImportService(LocationImportParser parser, LocationRepository locationRepository,
-            ZoneRepository zoneRepository, LocationCompatibilityProjector projector,
-            ImportBatchRepository importBatchRepository, AuditActorProvider auditActorProvider,
+            ZoneRepository zoneRepository, ImportBatchRepository importBatchRepository,
+            CompanySettingsPort companySettingsPort, AuditActorProvider auditActorProvider,
             AuditRecorder auditRecorder) {
         this.parser = parser;
         this.locationRepository = locationRepository;
         this.zoneRepository = zoneRepository;
-        this.projector = projector;
         this.importBatchRepository = importBatchRepository;
+        this.companySettingsPort = companySettingsPort;
         this.auditActorProvider = auditActorProvider;
         this.auditRecorder = auditRecorder;
     }
@@ -116,8 +115,12 @@ public class LocationImportService {
                 resolveZoneCodes(scope, LocationImportValidator.referencedZoneCodes(rows)),
                 existingCodes(scope, rows));
 
-        LocationImportValidator.Result result =
-                LocationImportValidator.validate(rows, snapshot, scope.timeZone());
+        // The two blank-cell defaults come from the tenant, not from the launch market: the zone
+        // from tms.company.time_zone and the country from tms.company_settings (migration V34).
+        // Both are resolved once for the file, and both are applied only to a cell the operator
+        // left empty - an import never overwrites a country somebody typed.
+        LocationImportValidator.Result result = LocationImportValidator.validate(rows, snapshot,
+                scope.timeZone(), companySettingsPort.settingsOf(scope.companyId()).defaultCountry());
         int issueCount = result.issues().size();
         List<ImportIssue> reported = ImportSupport.truncate(result.issues(), limits.maxReportedIssues());
 
@@ -163,15 +166,12 @@ public class LocationImportService {
         if (saved.isEmpty()) {
             return;
         }
-        // saveAll, then one flush, then project: a uniqueness violation here - two imports racing
-        // on the same code - surfaces as a DataIntegrityViolationException, which
-        // ApiExceptionHandler turns into a 409, and the whole transaction rolls back
-        // (all-or-nothing) - the same idiom TransportOrderRepository.saveAll/flush uses.
-        List<Location> persisted = locationRepository.saveAll(saved);
+        // saveAll, then one flush: a uniqueness violation here - two imports racing on the same
+        // code - surfaces as a DataIntegrityViolationException, which ApiExceptionHandler turns
+        // into a 409, and the whole transaction rolls back (all-or-nothing) - the same idiom
+        // TransportOrderRepository.saveAll/flush uses.
+        locationRepository.saveAll(saved);
         locationRepository.flush();
-        for (Location location : persisted) {
-            projector.synchronize(location, actorId);
-        }
     }
 
     private ImportReport<LocationImportPreview> report(

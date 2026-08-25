@@ -1,36 +1,34 @@
 package com.ebim.tms.masterdata.domain;
 
 /**
- * What a {@link Location} may <em>do</em>, mirroring {@code ck_location_role} in migration V14.
- * A location holds several of these; {@link LocationType} answers the different question of
- * what the place is.
+ * How a {@link Location} may be <em>used</em> in a movement, mirroring {@code ck_location_role}
+ * as migration V23 leaves it. A location may hold both; {@link LocationType} answers the
+ * different question of what the place <em>is</em>.
  *
- * <p>Only two of the seven carry behaviour today, and saying so explicitly is the point of this
- * comment - a "role" that sometimes means capability and sometimes means category is how a
- * master-data model rots:
+ * <p>V14 shipped seven values - the two below plus {@code STORE}, {@code DC}, {@code PLANT},
+ * {@code HUB} and {@code OTHER} - and its own ADR recorded that the last five carried no
+ * behaviour. They were classification, which is precisely what {@link LocationType} already
+ * expresses, with one value per place instead of a set. V23 removed them, because a screen that
+ * shows "Type: Store" next to "Roles: Store" is teaching an operator that the master
+ * contradicts itself.
  *
  * <ul>
- *   <li>{@link #ORIGIN} - the location has a {@code tms.origin} projection, so it can be a route
- *       origin, an order origin and a planning-run origin.</li>
- *   <li>{@link #SHIP_TO} - the location has a {@code tms.destination} projection, so it can be a
- *       route stop, an order destination and a trip stop.</li>
- *   <li>the rest - classification only. They project nothing and gate nothing.</li>
+ *   <li>{@link #ORIGIN} - the location may ship: a route origin, an order origin, a planning-run
+ *       origin.</li>
+ *   <li>{@link #DESTINATION} - the location may receive: a route stop, an order destination, a
+ *       trip stop.</li>
  * </ul>
  *
- * <p>See {@code docs/architecture/ADR_LOCATION_MODEL.md} section 2.
+ * <p>One store holds both, and that is the point of the model: it is the destination of the
+ * delivery and the origin of the return, as one row, with one address and one pair of
+ * coordinates.
+ *
+ * <p>Widening this vocabulary later ({@code PICKUP}, {@code CROSS_DOCK}, {@code RETURN_POINT})
+ * means one migration relaxing {@code ck_location_role_role} and one value here. It is deferred
+ * until a functional requirement asks for it - see {@code docs/domain/LOCATIONS.md}.
  */
 public enum LocationRole {
 
     ORIGIN,
-    SHIP_TO,
-    STORE,
-    DC,
-    PLANT,
-    HUB,
-    OTHER;
-
-    /** True for the roles that decide whether a compatibility projection exists. */
-    public boolean isProjecting() {
-        return this == ORIGIN || this == SHIP_TO;
-    }
+    DESTINATION
 }

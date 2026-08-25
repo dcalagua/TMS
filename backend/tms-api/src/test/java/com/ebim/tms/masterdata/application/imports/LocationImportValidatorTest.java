@@ -54,10 +54,11 @@ class LocationImportValidatorTest {
     @DisplayName("roles accepts more than one value separated by commas")
     void multipleRoles() {
         Map<String, String> values = baseValues();
-        values.put(LocationImportColumn.ROLES.header(), "ORIGIN, SHIP_TO");
+        values.put(LocationImportColumn.ROLES.header(), "ORIGIN, DESTINATION");
         var result = LocationImportValidator.validate(List.of(row(2, values)), EMPTY_COMPANY, "America/Lima");
 
-        assertThat(result.candidates().get(0).roles()).containsExactlyInAnyOrder(LocationRole.ORIGIN, LocationRole.SHIP_TO);
+        assertThat(result.candidates().get(0).roles())
+                .containsExactlyInAnyOrder(LocationRole.ORIGIN, LocationRole.DESTINATION);
     }
 
     @Test

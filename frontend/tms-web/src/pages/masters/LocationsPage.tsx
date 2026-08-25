@@ -49,18 +49,33 @@ interface AppliedFilters {
   active: ActiveFilter
 }
 
-const DEFAULT_FILTERS: AppliedFilters = { search: '', type: '', role: '', zoneId: '', active: 'active' }
-
 type ModalState = { mode: 'create' } | { mode: 'edit'; location: LocationView } | null
 
+interface LocationsPageProps {
+  /**
+   * Which screen this is. Absent, it is Ubicaciones: the full master. Set, it is Orígenes or
+   * Destinos - the same master with the operational-use filter pinned, the filter control
+   * hidden because it is the identity of the screen rather than a choice, and the drawer
+   * opening with that use already ticked.
+   */
+  view?: LocationRole
+}
+
 /**
- * The canonical master-data screen for physical places (migration V14).
+ * The master-data screen for physical places, and - with `view` set - the Origins and
+ * Destinations screens too.
+ *
+ * Those three menu entries are one component on purpose. A store that receives deliveries and
+ * ships its own returns is one place, one address, one pair of coordinates; "origins" and
+ * "destinations" are two questions asked of that master, not two masters. Building them as
+ * separate screens is what produced the duplicate records this domain change removed, and a
+ * second copy of this file would grow the two apart again within a release.
  *
  * One search box rather than separate code and name filters: this is the master an operator
  * looks something up in, and they look it up by whichever of code, name or external reference
  * they happen to remember - which is exactly what the backend's `search` parameter spans.
  */
-export function LocationsPage() {
+export function LocationsPage({ view }: LocationsPageProps = {}) {
   const { t } = useTranslation('masters')
   const { t: tc } = useTranslation('common')
   const { t: td } = useTranslation('dialogs')
@@ -70,15 +85,27 @@ export function LocationsPage() {
   const canManage = hasPermission('masterdata.location:manage')
   const queryClient = useQueryClient()
 
+  // The view's role is part of the resting state, not something the operator applied, so it is
+  // never offered as a clearable chip and reset() puts it back rather than clearing it.
+  const defaultFilters: AppliedFilters = {
+    search: '', type: '', role: view ?? '', zoneId: '', active: 'active',
+  }
+
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
-  const [draftFilters, setDraftFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
-  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
+  const [draftFilters, setDraftFilters] = useState<AppliedFilters>(defaultFilters)
+  const [filters, setFilters] = useState<AppliedFilters>(defaultFilters)
   const [modal, setModal] = useState<ModalState>(null)
   const [showImport, setShowImport] = useState(false)
 
+  /** `masters` keys for this screen: `locations`, `origins` or `destinations`. */
+  const scope = view === 'ORIGIN' ? 'origins' : view === 'DESTINATION' ? 'destinations' : 'locations'
+
   const locationsQuery = useQuery({
-    queryKey: ['locations', companyId, page, pageSize, filters],
+    // companyId stays second: refresh() invalidates the ['locations', companyId] prefix, and a
+    // key that put the view before it would no longer match that prefix - the list would keep
+    // showing what it showed before the save.
+    queryKey: ['locations', companyId, view ?? 'all', page, pageSize, filters],
     queryFn: ({ signal }) =>
       fetchLocations({
         companyId,
@@ -108,8 +135,8 @@ export function LocationsPage() {
   }
 
   function resetFilters() {
-    setDraftFilters(DEFAULT_FILTERS)
-    setFilters(DEFAULT_FILTERS)
+    setDraftFilters(defaultFilters)
+    setFilters(defaultFilters)
     setPage(0)
   }
 
@@ -153,15 +180,6 @@ export function LocationsPage() {
     }
   }
 
-  /** What the location can actually be used for, which is not the same as the roles it lists. */
-  function usableAs(location: LocationView): string {
-    const uses = [
-      location.originId ? t('locations.usableAs.origin') : null,
-      location.destinationId ? t('locations.usableAs.shipTo') : null,
-    ].filter(Boolean)
-    return uses.length > 0 ? uses.join(' / ') : t('locations.usableAs.none')
-  }
-
   const columns: DataTableColumn<LocationView>[] = [
     { key: 'code', header: tc('columns.code'), render: (location) => <span className="tms-code">{location.code}</span> },
     {
@@ -178,22 +196,22 @@ export function LocationsPage() {
     },
     { key: 'type', header: tc('columns.type'), render: (location) => enumLabels.locationType(location.type) },
     {
-      key: 'roles',
-      header: t('locations.columns.roles'),
-      render: (location) => (
-        <span className="d-inline-flex flex-wrap gap-1">
-          {location.roles.map((role) => (
-            <span key={role} className="badge text-bg-light border">
-              {enumLabels.locationRole(role)}
-            </span>
-          ))}
-        </span>
-      ),
-    },
-    {
-      key: 'usableAs',
-      header: t('locations.columns.usableAs'),
-      render: (location) => <span className="tms-cell-sub">{usableAs(location)}</span>,
+      // One column, not two. The old screen showed "Roles" next to "Utilizable como", which were
+      // the same fact told twice because five of the seven roles described the type instead.
+      key: 'use',
+      header: t('locations.columns.use'),
+      render: (location) =>
+        location.roles.length === 0 ? (
+          <span className="tms-cell-sub">{t('locations.use.none')}</span>
+        ) : (
+          <span className="d-inline-flex flex-wrap gap-1">
+            {location.roles.map((role) => (
+              <span key={role} className="badge text-bg-light border fw-normal">
+                {enumLabels.locationRole(role)}
+              </span>
+            ))}
+          </span>
+        ),
     },
     { key: 'zone', header: tc('columns.zone'), render: (location) => location.zoneName ?? '—' },
     { key: 'active', header: tc('columns.status'), render: (location) => <ActiveBadge active={location.active} /> },
@@ -239,8 +257,8 @@ export function LocationsPage() {
       key: 'type', label: tc('columns.type'), value: enumLabels.locationType(filters.type),
       onClear: () => clearOne({ type: '' }),
     },
-    filters.role && {
-      key: 'role', label: t('locations.columns.roles'), value: enumLabels.locationRole(filters.role),
+    !view && filters.role && {
+      key: 'role', label: t('locations.columns.use'), value: enumLabels.locationRole(filters.role),
       onClear: () => clearOne({ role: '' }),
     },
     filters.zoneId && {
@@ -248,10 +266,10 @@ export function LocationsPage() {
       value: zones.find((zone) => zone.id === filters.zoneId)?.name ?? filters.zoneId,
       onClear: () => clearOne({ zoneId: '' }),
     },
-    filters.active !== DEFAULT_FILTERS.active && {
+    filters.active !== defaultFilters.active && {
       key: 'active', label: tc('columns.status'),
       value: filters.active === 'all' ? tc('filters.statusAll') : tc('filters.statusInactive'),
-      onClear: () => clearOne({ active: DEFAULT_FILTERS.active }),
+      onClear: () => clearOne({ active: defaultFilters.active }),
     },
   ].filter(Boolean) as FilterChip[]
 
@@ -260,9 +278,9 @@ export function LocationsPage() {
   return (
     <div>
       <PageHeader
-        icon="geo-alt-fill"
-        title={t('locations.title')}
-        description={t('locations.description')}
+        icon={view === 'ORIGIN' ? 'box-arrow-up-right' : view === 'DESTINATION' ? 'geo-fill' : 'geo-alt-fill'}
+        title={t(`${scope}.title`)}
+        description={t(`${scope}.description`)}
         actions={
           canManage && (
             <>
@@ -280,7 +298,7 @@ export function LocationsPage() {
                 onClick={() => setModal({ mode: 'create' })}
               >
                 <i className="bi bi-plus-lg" aria-hidden="true" />
-                {t('locations.new')}
+                {t(`${scope}.new`)}
               </button>
             </>
           )
@@ -314,20 +332,22 @@ export function LocationsPage() {
             />
           )}
         </FilterField>
-        <FilterField label={t('locations.columns.roles')}>
-          {(id) => (
-            <Select
-              id={id}
-              size="sm"
-              value={draftFilters.role}
-              onChange={(next) => setDraftFilters({ ...draftFilters, role: next as LocationRole | '' })}
-              options={[
-                { value: '', label: t('locations.filters.allRoles') },
-                ...LOCATION_ROLES.map((role) => ({ value: role, label: enumLabels.locationRole(role) })),
-              ]}
-            />
-          )}
-        </FilterField>
+        {!view && (
+          <FilterField label={t('locations.columns.use')}>
+            {(id) => (
+              <Select
+                id={id}
+                size="sm"
+                value={draftFilters.role}
+                onChange={(next) => setDraftFilters({ ...draftFilters, role: next as LocationRole | '' })}
+                options={[
+                  { value: '', label: t('locations.filters.anyUse') },
+                  ...LOCATION_ROLES.map((role) => ({ value: role, label: enumLabels.locationRole(role) })),
+                ]}
+              />
+            )}
+          </FilterField>
+        )}
         <FilterField label={tc('columns.zone')}>
           {(id) => (
             <Select
@@ -371,8 +391,8 @@ export function LocationsPage() {
         onRetry={() => void locationsQuery.refetch()}
         /* Two different situations, two different exits: nothing has ever been created here, or
            the filters have narrowed everything away. */
-        emptyTitle={isFiltered ? tc('filters.noResultsTitle') : t('locations.empty.title')}
-        emptyMessage={isFiltered ? tc('filters.noResultsMessage') : t('locations.empty.message')}
+        emptyTitle={isFiltered ? tc('filters.noResultsTitle') : t(`${scope}.empty.title`)}
+        emptyMessage={isFiltered ? tc('filters.noResultsMessage') : t(`${scope}.empty.message`)}
         emptyAction={
           isFiltered ? (
             <button type="button" className="btn btn-sm btn-outline-secondary" onClick={resetFilters}>
@@ -385,7 +405,7 @@ export function LocationsPage() {
               onClick={() => setModal({ mode: 'create' })}
             >
               <i className="bi bi-plus-lg" aria-hidden="true" />
-              {t('locations.new')}
+              {t(`${scope}.new`)}
             </button>
           ) : undefined
         }
@@ -408,6 +428,7 @@ export function LocationsPage() {
         <LocationFormDrawer
           companyId={companyId}
           location={modal.mode === 'edit' ? modal.location : null}
+          presetRole={view}
           onClose={() => setModal(null)}
           onSaved={() => {
             setModal(null)

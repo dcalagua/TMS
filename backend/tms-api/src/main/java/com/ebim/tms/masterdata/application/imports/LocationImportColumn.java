@@ -24,9 +24,12 @@ public enum LocationImportColumn {
     TYPE("type", true,
             "Required. One of WAREHOUSE, DISTRIBUTION_CENTER, PLANT, HUB, OTHER, CUSTOMER, STORE, BRANCH, DELIVERY_POINT."),
 
-    /** One or more of {@code LocationRole}, separated by commas or semicolons. */
+    /**
+     * How the place may be used, one or more of {@code LocationRole}, separated by commas or
+     * semicolons. Not what the place is - that is {@link #TYPE}.
+     */
     ROLES("roles", true,
-            "Required. One or more of ORIGIN, SHIP_TO, STORE, DC, PLANT, HUB, OTHER, separated by commas."),
+            "Required. ORIGIN, DESTINATION, or both separated by a comma."),
 
     ADDRESS("address", false, "Optional."),
     ADDRESS_REFERENCE("addressReference", false, "Optional. A landmark or access note."),
@@ -34,8 +37,12 @@ public enum LocationImportColumn {
     PROVINCE("province", false, "Optional."),
     DEPARTMENT("department", false, "Optional."),
 
-    /** Blank defaults to {@code PE}, the same default {@code tms.location.country} has in the database. */
-    COUNTRY("country", false, "Optional. Defaults to PE if left blank."),
+    /**
+     * Blank defaults to the company's {@code defaultCountry} (migration V34), which is itself
+     * {@code PE} until a tenant changes it - the same default {@code tms.location.country} has in
+     * the database.
+     */
+    COUNTRY("country", false, "Optional. Defaults to the company's default country if left blank."),
 
     /** Blank defaults to the caller's company time zone. */
     TIME_ZONE("timeZone", false, "Optional IANA time zone, e.g. America/Lima. Defaults to the company's time zone."),

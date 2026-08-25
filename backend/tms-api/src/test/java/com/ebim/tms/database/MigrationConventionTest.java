@@ -122,10 +122,15 @@ class MigrationConventionTest {
         for (Path script : SCRIPTS) {
             String sql = MigrationScripts.withoutComments(MigrationScripts.read(script)).toLowerCase(Locale.ROOT);
             for (String table : TENANT_DATA_TABLES) {
-                assertThat(sql)
+                // Matched as a whole identifier, not as a substring: `tms.company_settings` is a
+                // different table from `tms.company`, and a plain contains() check reads the
+                // first as a violation of a rule about the second. The rule is about seeding
+                // tenants and users, so it has to end where the table name ends.
+                Pattern insert = Pattern.compile("insert\\s+into\\s+" + Pattern.quote(table) + "\\b(?!_)");
+                assertThat(insert.matcher(sql).find())
                         .as("%s must not insert into %s - demo and local fixtures belong to "
                                 + "supabase/seeds or to test code", script.getFileName(), table)
-                        .doesNotContain("insert into " + table);
+                        .isFalse();
             }
             assertThat(sql)
                     .as("%s must not contain a credential", script.getFileName())
@@ -148,6 +153,42 @@ class MigrationConventionTest {
                     .doesNotContain("to anon,")
                     .doesNotContain("to authenticated,");
         }
+    }
+
+    /**
+     * Every application table has row-level security switched on.
+     *
+     * <p>Checked here, against the SQL text, because every other RLS assertion in this repository
+     * needs a container - and on a machine with no Docker those are all skipped, which is exactly
+     * the machine where a table gets added without its {@code ENABLE ROW LEVEL SECURITY} and
+     * nothing says so. RLS is defence in depth behind the service-layer company predicate
+     * (ADR-005); a table that quietly lacks it has one line of defence where the design says two,
+     * and nobody finds out until an application query forgets its predicate.
+     *
+     * <p>This proves the statement is present, not that the policy behind it is right. What the
+     * policy actually admits is {@code TenantRlsIsolationIntegrationTest}'s job, and that one does
+     * need a database.
+     */
+    @Test
+    @DisplayName("every table created by a migration has row-level security enabled")
+    void everyTableEnablesRowLevelSecurity() {
+        Pattern created = Pattern.compile("create\\s+table\\s+(?:if\\s+not\\s+exists\\s+)?tms\\.([a-z_]+)");
+        Pattern secured = Pattern.compile("alter\\s+table\\s+tms\\.([a-z_]+)\\s+enable\\s+row\\s+level\\s+security");
+
+        List<String> tables = new java.util.ArrayList<>();
+        java.util.Set<String> withRls = new java.util.LinkedHashSet<>();
+        for (Path script : SCRIPTS) {
+            String sql = MigrationScripts.withoutComments(MigrationScripts.read(script)).toLowerCase(Locale.ROOT);
+            created.matcher(sql).results().map(match -> match.group(1)).forEach(tables::add);
+            secured.matcher(sql).results().map(match -> match.group(1)).forEach(withRls::add);
+        }
+
+        assertThat(tables).as("the migration history is expected to create tables").isNotEmpty();
+        assertThat(tables)
+                .as("every tms table must ENABLE ROW LEVEL SECURITY somewhere in the migration history "
+                        + "(ADR-005). A table missing it is a tenant boundary with one line of defence "
+                        + "instead of two, and the tests that would catch it need Docker.")
+                .allSatisfy(table -> assertThat(withRls).contains(table));
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.ebim.tms.planning.application;
 
 import com.ebim.tms.planning.domain.PlanningRun;
+import com.ebim.tms.shared.reference.DriverReference;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.RouteTemplate;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
@@ -13,7 +14,7 @@ import java.util.UUID;
  *
  * <p>Exists to make the batching rule impossible to forget rather than merely documented: the
  * assembler builds one of these per call and then formats rows out of maps, so there is no code
- * path on which rendering row N+1 can issue a query. A 300-trip board costs a fixed five lookups
+ * path on which rendering row N+1 can issue a query. A 300-trip board costs a fixed six lookups
  * regardless of its size ({@code docs/domain/PLANNING_MANUAL_V1.md} section 10).
  *
  * <p>A missing entry is normal, never an error: a trip may have no vehicle, no carrier and no
@@ -25,8 +26,9 @@ record ShipmentReferences(
         Map<UUID, MasterReference> origins,
         Map<UUID, VehicleCapacityReference> vehicles,
         Map<UUID, MasterReference> carriers,
+        Map<UUID, DriverReference> drivers,
         Map<UUID, RouteTemplate> routes) {
 
     static final ShipmentReferences EMPTY =
-            new ShipmentReferences(Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+            new ShipmentReferences(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
 }

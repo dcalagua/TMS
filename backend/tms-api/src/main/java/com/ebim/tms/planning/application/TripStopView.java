@@ -1,13 +1,16 @@
 package com.ebim.tms.planning.application;
 
+import com.ebim.tms.planning.domain.StopExecutionStatus;
 import java.math.BigDecimal;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.util.Set;
 import java.util.UUID;
 
 /**
  * One stop of a trip as the API reports it: its position, the destination resolved for display
  * and for a map, the service window envelope of the orders delivered there and how many of them
- * there are.
+ * there are - plus, since migration V27, what actually happened there.
  *
  * <p>{@code sequence} is always part of a contiguous 1..N series over the trip's stops -
  * {@code Trip.assertStopSequenceIntegrity} refuses to persist anything else - so a client may
@@ -21,6 +24,16 @@ import java.util.UUID;
  * @param longitude see {@code latitude}; the two are always both present or both null
  * @param address   the destination's current address line, or null when it has none. Also read
  *                  live from the master, for the same reason as the coordinates.
+ * @param allowedExecutionTransitions the outcomes this stop may still move to, decided
+ *                  server-side from {@link StopExecutionStatus}'s transition table. A client
+ *                  renders the buttons in this set and derives nothing from
+ *                  {@code executionStatus} itself - the same contract {@code TripView} states for
+ *                  the trip's own lifecycle, and for the same reason: the rule has one home.
+ *                  Empty for a stop whose trip is not on the road, because a stop cannot be
+ *                  worked before its vehicle leaves.
+ * @param dwellMinutes how long the vehicle was at the stop, in whole minutes, or null until both
+ *                  ends of it are known. Derived rather than stored - the two instants are the
+ *                  facts, and this is one reading of them.
  */
 public record TripStopView(
         UUID id,
@@ -33,5 +46,13 @@ public record TripStopView(
         String address,
         LocalTime serviceWindowStart,
         LocalTime serviceWindowEnd,
-        long orderCount) {
+        long orderCount,
+        StopExecutionStatus executionStatus,
+        Set<StopExecutionStatus> allowedExecutionTransitions,
+        OffsetDateTime actualArrivalAt,
+        OffsetDateTime serviceStartedAt,
+        OffsetDateTime actualDepartureAt,
+        String executionNotes,
+        Long dwellMinutes,
+        int openExceptionCount) {
 }

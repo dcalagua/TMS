@@ -19,40 +19,233 @@ LOCALES_DIR = os.path.join(
 )
 
 # Brand-new namespace files, written from scratch. Keyed by namespace name -> language -> tree.
+#
+# Job 07, V30: rates and costing. One namespace covering both halves of the module - the tariff
+# master and the per-shipment cost card that reads it - because they are one product idea and a
+# translator needs to see "Estimado"/"Real" next to the components that produce them.
+#
+# Wording notes that are product decisions, not translation choices:
+#   * "No calculable" is never softened to "-" or "0,00". A component the tariff charges for and
+#     the shipment cannot supply has to read as missing, or an estimate that is short by the whole
+#     line haul gets read as a price.
+#   * "Diferencia" and not "Ahorro"/"Sobrecosto": the sign is shown, and naming it either way
+#     would editorialise a number an operations manager reads in both directions.
+#   * scopeHint says what each scope covers in one sentence, in the form the commercial team
+#     states it ("todo lo que salga de este origen"), because the choice between the three is the
+#     only part of this form somebody can get wrong without noticing.
 NEW_NAMESPACES = {
-    "maps": {
+    "rates": {
         "es": {
-            "advancedCoordinates": "Coordenadas exactas",
-            "helpText": "Haz clic en el mapa o arrastra el marcador para ajustar la ubicación.",
-            "loading": "Cargando el mapa...",
-            "mapAriaLabel": "Mapa para seleccionar la ubicación",
-            "search": "Buscar",
-            "searchFailed": "No se pudo buscar la dirección. Inténtalo de nuevo.",
-            "searchNoResults": "No se encontraron resultados para esa dirección.",
-            "searchPlaceholder": "Buscar una dirección",
-            "someStopsNotMapped_one": "{{count}} destino no tiene coordenadas y no aparece en "
-                                      "el mapa.",
-            "someStopsNotMapped_other": "{{count}} destinos no tienen coordenadas y no "
-                                        "aparecen en el mapa.",
-            "stopsAriaLabel": "Mapa de paradas",
-            "unavailable": "El mapa no está disponible. Puedes ingresar la latitud y la "
-                            "longitud manualmente.",
+            "activateText": "La tarifa volverá a aplicarse a los envíos que cubra.",
+            "anyVehicleType": "Cualquier tipo",
+            "columns": {
+                "components": "Componentes",
+                "scope": "Alcance",
+                "validity": "Vigencia",
+            },
+            "componentShort": {
+                "base": "Base",
+                "minimum": "Mínimo",
+                "perKg": "/kg",
+                "perKm": "/km",
+                "perM3": "/m³",
+                "perPallet": "/pallet",
+            },
+            "deactivateText": "La tarifa dejará de aplicarse. Los costos ya calculados con ella no cambian.",
+            "description": "Lo que cobra cada transportista, por qué concepto y entre qué fechas.",
+            "empty": {
+                "message": "Crea una tarifa para que TMS pueda estimar el costo de cada envío.",
+                "title": "Sin tarifas",
+            },
+            "filters": {
+                "allScopes": "Todos los alcances",
+                "onDate": "Vigentes el día",
+            },
+            "form": {
+                "amountPerKg": "Importe por kg",
+                "amountPerKm": "Importe por km",
+                "amountPerM3": "Importe por m³",
+                "amountPerPallet": "Importe por pallet",
+                "baseAmount": "Importe base",
+                "carrierLocked": "El transportista no se puede cambiar: sería otro acuerdo. Crea una tarifa nueva.",
+                "componentsHelp": "Se cobra la suma de los componentes definidos. Deja en blanco los que no apliquen.",
+                "create": "Nueva tarifa",
+                "currency": "Moneda",
+                "currencyHelp": "Código ISO de 3 letras, por ejemplo PEN o USD. No hay conversión entre monedas.",
+                "edit": "Editar tarifa",
+                "minimumAmount": "Importe mínimo",
+                "minimumHelp": "Piso que se cobra aunque los componentes sumen menos.",
+                "needsAComponent": "La tarifa debe definir al menos un componente además del mínimo.",
+                "route": "Ruta",
+                "sections": {
+                    "components": "Componentes",
+                    "scope": "Alcance",
+                    "validity": "Vigencia y moneda",
+                },
+                "selectCarrier": "Selecciona un transportista",
+                "selectOrigin": "Selecciona un origen",
+                "selectRoute": "Selecciona una ruta",
+                "subtitle": "Un acuerdo comercial con un transportista, vigente entre dos fechas.",
+                "validToHelp": "En blanco es una vigencia sin fecha de fin.",
+                "vehicleTypeHelp": "En blanco aplica a cualquier tipo de vehículo.",
+            },
+            "new": "Nueva tarifa",
+            "noEndDate": "sin fin",
+            "scopeHint": {
+                "CARRIER": "Aplica a todo lo que mueva este transportista.",
+                "ORIGIN": "Aplica a todo lo que salga de este origen.",
+                "ROUTE": "Aplica solo a los envíos armados desde esta ruta maestra.",
+            },
+            "title": "Tarifas",
+            "tripCost": {
+                "actions": {
+                    "close": "Cerrar costo",
+                    "estimate": "Estimar",
+                    "reEstimate": "Volver a estimar",
+                    "recordActual": "Registrar real",
+                    "reopen": "Reabrir",
+                },
+                "actual": "Real",
+                "breakdown": {
+                    "amount": "Importe",
+                    "component": "Concepto",
+                    "detail": "Cálculo",
+                    "notCalculable": "No calculable",
+                    "title": "Detalle de la estimación",
+                },
+                "closedOn": "Costo cerrado el {{date}}",
+                "confirm": {
+                    "closeText": "Después de cerrarlo no se podrá modificar hasta reabrirlo.",
+                    "closeTitle": "¿Cerrar el costo?",
+                    "reopenText": "El costo volverá a ser editable. La reapertura queda registrada en la auditoría.",
+                    "reopenTitle": "¿Reabrir el costo?",
+                },
+                "estimated": "Estimado",
+                "form": {
+                    "amount": "Importe real",
+                    "currencyHelp": "Este envío no tiene estimación, así que hay que indicar la moneda.",
+                    "reference": "Documento del transportista",
+                    "referenceHelp": "Número de factura o liquidación, tal como lo emitió el transportista.",
+                    "subtitle": "Lo que el transportista cobró realmente por este envío.",
+                    "title": "Costo real",
+                },
+                "incomplete": "La estimación está incompleta: hay conceptos que no se pudieron calcular y no suman nada.",
+                "notPriced": "Este envío todavía no tiene costo estimado.",
+                "notify": {
+                    "closed": "Costo cerrado",
+                    "estimated": "Costo estimado",
+                    "reopened": "Costo reabierto",
+                },
+                "rateCard": "Tarifa {{code}} — {{name}}",
+                "title": "Costo",
+                "variance": "Diferencia",
+            },
         },
         "en": {
-            "advancedCoordinates": "Exact coordinates",
-            "helpText": "Click the map or drag the marker to adjust the location.",
-            "loading": "Loading the map...",
-            "mapAriaLabel": "Map to pick the location",
-            "search": "Search",
-            "searchFailed": "Could not search the address. Try again.",
-            "searchNoResults": "No results found for that address.",
-            "searchPlaceholder": "Search an address",
-            "someStopsNotMapped_one": "{{count}} destination has no coordinates and does not "
-                                      "appear on the map.",
-            "someStopsNotMapped_other": "{{count}} destinations have no coordinates and do "
-                                        "not appear on the map.",
-            "stopsAriaLabel": "Stops map",
-            "unavailable": "The map is unavailable. You can enter latitude and longitude manually.",
+            "activateText": "The rate card will apply again to the shipments it covers.",
+            "anyVehicleType": "Any type",
+            "columns": {
+                "components": "Components",
+                "scope": "Scope",
+                "validity": "Validity",
+            },
+            "componentShort": {
+                "base": "Base",
+                "minimum": "Minimum",
+                "perKg": "/kg",
+                "perKm": "/km",
+                "perM3": "/m³",
+                "perPallet": "/pallet",
+            },
+            "deactivateText": "The rate card will stop applying. Costs already calculated from it do not change.",
+            "description": "What each carrier charges, for what, and between which dates.",
+            "empty": {
+                "message": "Create a rate card so TMS can estimate what each shipment costs.",
+                "title": "No rate cards",
+            },
+            "filters": {
+                "allScopes": "All scopes",
+                "onDate": "In force on",
+            },
+            "form": {
+                "amountPerKg": "Amount per kg",
+                "amountPerKm": "Amount per km",
+                "amountPerM3": "Amount per m³",
+                "amountPerPallet": "Amount per pallet",
+                "baseAmount": "Base amount",
+                "carrierLocked": "The carrier cannot be changed: that would be a different agreement. Create a new card.",
+                "componentsHelp": "The shipment is charged the sum of the components defined here. Leave the rest blank.",
+                "create": "New rate card",
+                "currency": "Currency",
+                "currencyHelp": "Three-letter ISO code, for example PEN or USD. There is no conversion between currencies.",
+                "edit": "Edit rate card",
+                "minimumAmount": "Minimum amount",
+                "minimumHelp": "The floor charged even when the components add up to less.",
+                "needsAComponent": "A rate card must define at least one component besides the minimum.",
+                "route": "Route",
+                "sections": {
+                    "components": "Components",
+                    "scope": "Scope",
+                    "validity": "Validity and currency",
+                },
+                "selectCarrier": "Select a carrier",
+                "selectOrigin": "Select an origin",
+                "selectRoute": "Select a route",
+                "subtitle": "A commercial agreement with one carrier, in force between two dates.",
+                "validToHelp": "Blank means an open-ended agreement.",
+                "vehicleTypeHelp": "Blank applies to any vehicle type.",
+            },
+            "new": "New rate card",
+            "noEndDate": "open-ended",
+            "scopeHint": {
+                "CARRIER": "Applies to anything this carrier runs.",
+                "ORIGIN": "Applies to anything leaving this origin.",
+                "ROUTE": "Applies only to shipments built from this master route.",
+            },
+            "title": "Rate cards",
+            "tripCost": {
+                "actions": {
+                    "close": "Close cost",
+                    "estimate": "Estimate",
+                    "reEstimate": "Re-estimate",
+                    "recordActual": "Record actual",
+                    "reopen": "Reopen",
+                },
+                "actual": "Actual",
+                "breakdown": {
+                    "amount": "Amount",
+                    "component": "Component",
+                    "detail": "Calculation",
+                    "notCalculable": "Not calculable",
+                    "title": "Estimate breakdown",
+                },
+                "closedOn": "Cost closed on {{date}}",
+                "confirm": {
+                    "closeText": "Once closed it cannot be changed until it is reopened.",
+                    "closeTitle": "Close this cost?",
+                    "reopenText": "The cost becomes editable again. Reopening is recorded in the audit trail.",
+                    "reopenTitle": "Reopen this cost?",
+                },
+                "estimated": "Estimated",
+                "form": {
+                    "amount": "Actual amount",
+                    "currencyHelp": "This shipment has no estimate, so the currency has to be stated.",
+                    "reference": "Carrier document",
+                    "referenceHelp": "Invoice or settlement number, exactly as the carrier issued it.",
+                    "subtitle": "What the carrier actually charged for this shipment.",
+                    "title": "Actual cost",
+                },
+                "incomplete": "The estimate is incomplete: some components could not be calculated and add nothing.",
+                "notPriced": "This shipment has not been priced yet.",
+                "notify": {
+                    "closed": "Cost closed",
+                    "estimated": "Cost estimated",
+                    "reopened": "Cost reopened",
+                },
+                "rateCard": "Rate card {{code}} — {{name}}",
+                "title": "Cost",
+                "variance": "Variance",
+            },
         },
     },
 }
@@ -62,199 +255,73 @@ NEW_NAMESPACES = {
 # shape as NEW_NAMESPACES: namespace -> language -> partial tree. Only the branches named here
 # are touched; everything else in the file survives.
 EXISTING_NAMESPACE_UPDATES = {
-    "common": {
+    # The four V30 enums. They live in `statuses` with every other value the API transports,
+    # because `enums.test.ts` walks that bundle and fails if any value the client can receive has
+    # no label - which is what stops NOT_CALCULABLE reaching an operator.
+    "statuses": {
         "es": {
-            "empty": {
-                "noMatches": "Sin coincidencias",
+            "costComponentReason": {
+                "DISTANCE_UNKNOWN": "Sin distancia conocida",
+                "PALLETS_UNKNOWN": "Sin pallets declarados",
+                "VOLUME_UNKNOWN": "Sin volumen declarado",
+                "WEIGHT_UNKNOWN": "Sin peso declarado",
             },
-            "loading": {
-                "generic": "Cargando...",
+            "costQuantitySource": {
+                "ORDER_DECLARED_TOTALS": "Totales declarados de los pedidos",
+                "ROUTE_REFERENCE": "Distancia de referencia de la ruta",
+            },
+            "rateCardScope": {
+                "CARRIER": "Transportista",
+                "ORIGIN": "Origen",
+                "ROUTE": "Ruta",
+            },
+            "rateComponent": {
+                "BASE": "Base",
+                "DISTANCE": "Distancia",
+                "MINIMUM_ADJUSTMENT": "Ajuste al mínimo",
+                "PALLETS": "Pallets",
+                "VOLUME": "Volumen",
+                "WEIGHT": "Peso",
             },
         },
         "en": {
-            "empty": {
-                "noMatches": "No matches",
+            "costComponentReason": {
+                "DISTANCE_UNKNOWN": "No known distance",
+                "PALLETS_UNKNOWN": "No pallets declared",
+                "VOLUME_UNKNOWN": "No volume declared",
+                "WEIGHT_UNKNOWN": "No weight declared",
             },
-            "loading": {
-                "generic": "Loading...",
+            "costQuantitySource": {
+                "ORDER_DECLARED_TOTALS": "Declared order totals",
+                "ROUTE_REFERENCE": "Route reference distance",
+            },
+            "rateCardScope": {
+                "CARRIER": "Carrier",
+                "ORIGIN": "Origin",
+                "ROUTE": "Route",
+            },
+            "rateComponent": {
+                "BASE": "Base",
+                "DISTANCE": "Distance",
+                "MINIMUM_ADJUSTMENT": "Minimum adjustment",
+                "PALLETS": "Pallets",
+                "VOLUME": "Volume",
+                "WEIGHT": "Weight",
             },
         },
     },
-    "fleet": {
+    # The Rates group and its single screen. `items.drivers` is here too and does not belong to
+    # this job: navConfig has referenced it since job 03 with no key behind it, which makes
+    # `ParseKeys<'navigation'>` reject the whole file. Adding the two words it needs is cheaper
+    # than leaving the navigation bundle uncompilable for every job after it.
+    "navigation": {
         "es": {
-            "vehicles": {
-                "columns": {
-                    "effectiveCapacity": "Capacidad efectiva",
-                },
-                "ownedFleet": "Flota propia",
-                "palletsUnit": "pallets",
-            },
+            "groups": {"rates": "Tarifas"},
+            "items": {"drivers": "Conductores", "rateCards": "Tarifas"},
         },
         "en": {
-            "vehicles": {
-                "columns": {
-                    "effectiveCapacity": "Effective capacity",
-                },
-                "ownedFleet": "Owned fleet",
-                "palletsUnit": "pallets",
-            },
-        },
-    },
-    "orders": {
-        "es": {
-            "actions": {
-                "import": "Importar",
-            },
-            "form": {
-                "declaredHelp": "Lo que el remitente afirma que pesa u ocupa el pedido, al margen "
-                                "de las líneas. Déjalo vacío si las líneas ya lo describen.",
-                "declaredPallets": "Pallets declarados",
-                "declaredTotals": "Totales declarados",
-                "declaredVolume": "Volumen declarado (m³)",
-                "declaredWeight": "Peso declarado (kg)",
-                "declaredWithoutLines": "Sin líneas, estos son los totales con los que se "
-                                        "planificará el pedido.",
-                "declaredWithLines": "Las líneas mandan: si además declaras una cifra, ambas "
-                                     "deben coincidir con un margen del 1 % o el pedido se rechaza.",
-                "searchDestination": "Escribe un código o un nombre de destino",
-                "searchOrigin": "Escribe un código o un nombre de origen",
-                "storedTotals": "Totales guardados",
-                "totalsSourceCalculated": "Calculados desde las líneas",
-                "totalsSourceDeclared": "Declarados",
-            },
-            "import": {
-                "apply": "Importar los pedidos",
-                "applied": "Importación completada",
-                "appliedText": "{{created}} pedidos creados y {{skipped}} omitidos por duplicado.",
-                "applying": "Importando...",
-                "blocked": "El archivo tiene errores y no se importó nada. Corrige las filas "
-                           "indicadas y vuelve a validarlo.",
-                "columnColumn": "Columna",
-                "columnMessage": "Problema",
-                "columnOutcome": "Resultado",
-                "columnReference": "Referencia externa",
-                "columnRow": "Fila",
-                "confirmText": "Se crearán {{count}} pedidos en una sola operación. Si algo "
-                               "falla no se guardará nada.",
-                "confirmTitle": "¿Importar los pedidos?",
-                "counts": {
-                    "create": "Se crearán",
-                    "duplicates": "Ya existen",
-                    "issues": "Errores",
-                    "orders": "Pedidos",
-                    "rejected": "Rechazados",
-                    "rows": "Filas leídas",
-                },
-                "downloadCsv": "Plantilla CSV",
-                "downloadError": "No se pudo descargar la plantilla",
-                "downloadXlsx": "Plantilla XLSX",
-                "error": "No se pudo procesar el archivo",
-                "externalSource": "Sistema de origen",
-                "externalSourceHelp": "Identifica el sistema del que viene el archivo. Junto con "
-                                      "la referencia externa de cada fila es lo que hace que "
-                                      "reimportar el mismo archivo sea inofensivo.",
-                "file": "Archivo",
-                "fileHelp": "Formatos .xlsx o .csv, hasta {{mb}} MB y {{rows}} filas.",
-                "fileSection": "2. Archivo",
-                "issuesTitle": "Filas con problemas",
-                "issuesTruncated": "Se muestran los primeros {{shown}} de {{total}} problemas.",
-                "nothingToCreate": "No hay pedidos nuevos: todas las referencias del archivo ya "
-                                   "existen en esta compañía.",
-                "ordersTitle": "Pedidos del archivo",
-                "outcomeCreate": "Se creará",
-                "outcomeRejected": "Rechazado",
-                "outcomeSkipped": "Ya existe",
-                "previewSection": "3. Validación",
-                "previewing": "Validando...",
-                "readyToApply": "El archivo es válido. Todavía no se ha guardado nada.",
-                "reset": "Empezar de nuevo",
-                "selectFile": "Selecciona un archivo.",
-                "subtitle": "Carga masiva de pedidos desde XLSX o CSV, validada antes de guardar.",
-                "templateHelp": "Descarga la plantilla, complétala y súbela. Un pedido con varias "
-                                "líneas se escribe en varias filas que comparten la misma "
-                                "referencia externa.",
-                "templateSection": "1. Plantilla",
-                "title": "Importar pedidos",
-                "validate": "Validar el archivo",
-            },
-        },
-        "en": {
-            "actions": {
-                "import": "Import",
-            },
-            "form": {
-                "declaredHelp": "What the sender asserts the order weighs or occupies, "
-                                "independently of the lines. Leave empty when the lines already "
-                                "describe it.",
-                "declaredPallets": "Declared pallets",
-                "declaredTotals": "Declared totals",
-                "declaredVolume": "Declared volume (m³)",
-                "declaredWeight": "Declared weight (kg)",
-                "declaredWithoutLines": "With no lines, these are the totals the order will be "
-                                        "planned with.",
-                "declaredWithLines": "The lines win: if you also declare a figure the two must "
-                                     "agree within 1% or the order is rejected.",
-                "searchDestination": "Type a destination code or name",
-                "searchOrigin": "Type an origin code or name",
-                "storedTotals": "Stored totals",
-                "totalsSourceCalculated": "Calculated from the lines",
-                "totalsSourceDeclared": "Declared",
-            },
-            "import": {
-                "apply": "Import the orders",
-                "applied": "Import complete",
-                "appliedText": "{{created}} orders created and {{skipped}} skipped as duplicates.",
-                "applying": "Importing...",
-                "blocked": "The file has errors and nothing was imported. Fix the rows listed "
-                           "below and validate it again.",
-                "columnColumn": "Column",
-                "columnMessage": "Problem",
-                "columnOutcome": "Outcome",
-                "columnReference": "External reference",
-                "columnRow": "Row",
-                "confirmText": "{{count}} orders will be created in a single operation. If "
-                               "anything fails, nothing is saved.",
-                "confirmTitle": "Import the orders?",
-                "counts": {
-                    "create": "Will be created",
-                    "duplicates": "Already exist",
-                    "issues": "Problems",
-                    "orders": "Orders",
-                    "rejected": "Rejected",
-                    "rows": "Rows read",
-                },
-                "downloadCsv": "CSV template",
-                "downloadError": "Could not download the template",
-                "downloadXlsx": "XLSX template",
-                "error": "Could not process the file",
-                "externalSource": "Source system",
-                "externalSourceHelp": "Identifies the system the file came from. Together with "
-                                      "each row's external reference it is what makes "
-                                      "re-importing the same file harmless.",
-                "file": "File",
-                "fileHelp": ".xlsx or .csv, up to {{mb}} MB and {{rows}} rows.",
-                "fileSection": "2. File",
-                "issuesTitle": "Rows with problems",
-                "issuesTruncated": "Showing the first {{shown}} of {{total}} problems.",
-                "nothingToCreate": "No new orders: every reference in the file already exists in "
-                                   "this company.",
-                "ordersTitle": "Orders in the file",
-                "outcomeCreate": "Will be created",
-                "outcomeRejected": "Rejected",
-                "outcomeSkipped": "Already exists",
-                "previewSection": "3. Validation",
-                "previewing": "Validating...",
-                "readyToApply": "The file is valid. Nothing has been saved yet.",
-                "reset": "Start over",
-                "selectFile": "Select a file.",
-                "subtitle": "Bulk order upload from XLSX or CSV, validated before anything is saved.",
-                "templateHelp": "Download the template, fill it in and upload it. An order with "
-                                "several lines is written as several rows sharing one external "
-                                "reference.",
-                "templateSection": "1. Template",
-                "title": "Import orders",
-                "validate": "Validate the file",
-            },
+            "groups": {"rates": "Rates"},
+            "items": {"drivers": "Drivers", "rateCards": "Rate cards"},
         },
     },
 }
@@ -264,11 +331,7 @@ EXISTING_NAMESPACE_UPDATES = {
 # namespace. A key whose last caller is gone has to go too, or the bundles slowly fill with
 # strings nobody can trace to a screen - and both languages must lose it together, which is why
 # this is one list rather than a per-language one.
-REMOVED_KEYS = {
-    # Replaced by form.searchOrigin / form.searchDestination when the Orders drawer's selects
-    # became async lookups: a combobox has a "type to search" placeholder, not a "pick one".
-    "orders": ["form.selectOrigin", "form.selectDestination"],
-}
+REMOVED_KEYS = {}
 
 
 def remove_key(tree, dotted):

@@ -36,7 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Vehicle use cases. Takes a {@link CompanyScope}, never a company id - see
- * {@code com.ebim.tms.masterdata.application.OriginService} for the contract this follows.
+ * {@code com.ebim.tms.masterdata.application.LocationService} for the contract this follows.
  *
  * <p>Every view is built with the vehicle's carrier/type resolved and its effective capacity
  * computed via {@link EffectiveCapacityResolver}; list resolves both relations for the whole
@@ -221,7 +221,7 @@ public class VehicleService {
 
     /**
      * Two unique constraints can raise a race here (code, license plate) - unlike the
-     * single-unique-column pattern {@code ZoneService}/{@code DestinationService} follow, so the
+     * single-unique-column pattern {@code ZoneService}/{@code FrequencyService} follow, so the
      * conflict is disambiguated by re-checking which value is now actually duplicated, rather
      * than assuming it was the code.
      */

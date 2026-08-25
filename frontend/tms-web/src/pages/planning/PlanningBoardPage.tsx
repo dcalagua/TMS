@@ -11,6 +11,7 @@ import { useFormat } from '../../shared/i18n/format'
 import { confirmDialog, EmptyState, ErrorState, PageHeader, StatusBadge, type StatusTone } from '../../shared/ui/components'
 import { LoadingState } from '../../shared/ui/components/LoadingState'
 import { notifyError, notifySuccess } from '../../shared/ui/alerts'
+import { AutoPlanDrawer } from './AutoPlanDrawer'
 import { CreateTripDrawer } from './CreateTripDrawer'
 import { EligibleOrdersPanel } from './EligibleOrdersPanel'
 import { TripCard } from './TripCard'
@@ -53,6 +54,7 @@ export function PlanningBoardPage() {
 
   const [openTripId, setOpenTripId] = useState<string | null>(null)
   const [showCreateTrip, setShowCreateTrip] = useState(false)
+  const [showAutoPlan, setShowAutoPlan] = useState(false)
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>('orders')
 
   /**
@@ -167,14 +169,26 @@ export function PlanningBoardPage() {
         actions={
           <div className="d-flex flex-wrap align-items-center gap-2">
             {isDraft && canManageTrips && (
-              <button
-                type="button"
-                className="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-2"
-                onClick={() => setShowCreateTrip(true)}
-              >
-                <i className="bi bi-plus-lg" aria-hidden="true" />
-                {t('boardScreen.newTrip')}
-              </button>
+              <>
+                {/* Secondary, not primary: the plan a person builds is still the normal path, and
+                    this one opens a review step rather than doing anything. */}
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-2"
+                  onClick={() => setShowAutoPlan(true)}
+                >
+                  <i className="bi bi-magic" aria-hidden="true" />
+                  {t('boardScreen.autoPlan')}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-2"
+                  onClick={() => setShowCreateTrip(true)}
+                >
+                  <i className="bi bi-plus-lg" aria-hidden="true" />
+                  {t('boardScreen.newTrip')}
+                </button>
+              </>
             )}
             {isDraft && canManageRun && (
               <>
@@ -224,6 +238,17 @@ export function PlanningBoardPage() {
           canManage={canManageTrips}
           onClose={() => setOpenTripId(null)}
           onChanged={refreshBoard}
+        />
+      )}
+
+      {showAutoPlan && (
+        <AutoPlanDrawer
+          companyId={companyId}
+          runId={run.id}
+          runVersion={run.version}
+          canApply={canManageRun && canManageTrips}
+          onClose={() => setShowAutoPlan(false)}
+          onApplied={refreshBoard}
         />
       )}
 

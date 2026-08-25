@@ -61,6 +61,31 @@ public enum ProblemType {
      */
     IDEMPOTENCY_KEY_REUSED("idempotency-key-reused", "Idempotency key reused", HttpStatus.CONFLICT),
 
+    /**
+     * A capability this deployment has not been configured for was asked of it - today, only
+     * proof-of-delivery evidence storage ({@code tms.storage.evidence.mode}).
+     *
+     * <p>Distinct from {@link #INTERNAL_ERROR} because nothing is broken, and from
+     * {@link #CONFLICT} because no request the caller could make would succeed: a client's correct
+     * reaction is to stop offering the feature, not to retry or to change its payload. Distinct
+     * from a 404 too - the endpoint exists, and pretending otherwise would send an integrator
+     * looking for a typo in their URL.
+     */
+    STORAGE_UNAVAILABLE("storage-unavailable", "Storage is not configured", HttpStatus.SERVICE_UNAVAILABLE),
+
+    /**
+     * The generalisation of {@link #STORAGE_UNAVAILABLE}, for the second capability that a
+     * deployment must switch on before it can be used: outbound webhooks, which need a key to
+     * encrypt subscription secrets with ({@code tms.integration.webhooks.secret-key}).
+     *
+     * <p>Kept as a distinct code rather than folded into {@link #STORAGE_UNAVAILABLE} - which
+     * names storage in its own slug and would now be lying - and separate from
+     * {@link #INTERNAL_ERROR} for the same reason that one is: nothing is broken, and no request
+     * the caller could make would succeed. The correct client reaction is to stop offering the
+     * feature until an administrator configures it.
+     */
+    FEATURE_NOT_CONFIGURED("feature-not-configured", "Feature is not configured", HttpStatus.SERVICE_UNAVAILABLE),
+
     /** Anything unexpected. The detail is deliberately generic; the cause is only in the server log. */
     INTERNAL_ERROR("internal-error", "Internal server error", HttpStatus.INTERNAL_SERVER_ERROR);
 

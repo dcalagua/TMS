@@ -44,12 +44,19 @@ fleet edit made a week later would silently rewrite what the plan was validated 
 an audit of it irreproducible. Confirmation therefore copies the three numbers onto the trip, and
 the database enforces the coherence of that in both directions:
 
-- `ck_trip_confirmed_is_complete` - a `CONFIRMED` trip has a vehicle, a departure and all three
-  snapshot values;
-- `ck_trip_snapshot_requires_confirmed` - a non-confirmed trip has none of them.
+- `ck_trip_confirmed_is_complete` - a *committed* trip (`CONFIRMED`, `READY_FOR_DISPATCH`,
+  `IN_TRANSIT` or `COMPLETED`) has a vehicle, a departure and all three snapshot values;
+- `ck_trip_draft_has_no_snapshot` - a `DRAFT` trip has none of them.
 
 So "is this trip reading live or frozen capacity?" is answerable from the row alone, and the API
 says which one it used in every capacity response (`source`).
+
+Migration V25 restated both. V11's pair said "`CONFIRMED`" where it meant "the plan is binding",
+because `CONFIRMED` was the only such state; the execution states
+([`TRIP_EXECUTION_V1.md`](TRIP_EXECUTION_V1.md)) carry the same frozen snapshot, and so does a
+trip cancelled *after* it was confirmed. `TripViewAssembler.summarize` therefore asks
+`Trip.hasCapacitySnapshot()` - "was this plan ever made binding?" - rather than comparing the
+status against a list it would have to keep extending.
 
 `PlanningApiIntegrationTest.confirmationFreezesCapacityAndLocks` shrinks the vehicle type after
 confirmation and asserts the confirmed trip still reports what it was validated against.

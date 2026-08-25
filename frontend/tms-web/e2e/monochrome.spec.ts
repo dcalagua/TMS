@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { signIn, stubServices } from './support/app'
-import { stubOrigins } from './support/masters'
+import { stubLocations } from './support/masters'
 
 /**
  * The monochrome rule, measured rather than asserted.
@@ -78,7 +78,7 @@ async function findBlues(page: Page): Promise<Offender[]> {
 test('no framework blue survives on the list screens, their menus or their drawers', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await stubServices(page)
-  await stubOrigins(page)
+  await stubLocations(page)
   await signIn(page)
 
   await page.goto('/masters/origins')
@@ -86,8 +86,8 @@ test('no framework blue survives on the list screens, their menus or their drawe
   expect(await findBlues(page), 'list screen').toEqual([])
 
   // A focused field is the state an operator sees most often, and it is where the accent used
-  // to be blue.
-  await page.getByLabel(/^Código/).first().focus()
+  // to be blue. The Locations filter bar leads with one search box, not a code field.
+  await page.getByLabel('Buscar').first().focus()
   expect(await findBlues(page), 'focused filter field').toEqual([])
 
   await page.getByRole('button', { name: 'Abrir menú de acciones' }).first().click()

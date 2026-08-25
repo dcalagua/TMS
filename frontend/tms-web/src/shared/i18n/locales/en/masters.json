@@ -1,15 +1,9 @@
 {
   "destinations": {
-    "description": "Delivery and service points used to plan and build trips.",
+    "description": "Locations enabled to receive deliveries. The same Locations record, filtered by operational use.",
     "empty": {
-      "message": "Create a destination or adjust your filters.",
-      "title": "No destinations found"
-    },
-    "form": {
-      "create": "New destination",
-      "edit": "Edit destination",
-      "noZone": "No zone",
-      "subtitle": "A delivery point that orders are dispatched to."
+      "message": "Tick “Can be used as destination” on a location, or create a new one.",
+      "title": "No destinations"
     },
     "new": "New destination",
     "title": "Destinations"
@@ -21,14 +15,26 @@
       "title": "No frequencies found"
     },
     "form": {
+      "addException": "Add exception",
       "create": "New frequency",
       "cutoffAria": "{{day}} cutoff time",
       "cutoffTime": "Cutoff time",
       "day": "Day",
       "edit": "Edit frequency",
-      "exceptionsNote": "Date exceptions (extra pickups, blackouts) are supported by the backend but do not yet have an editor in this release. They are managed one date at a time through the frequency API and will get a dedicated screen in a later step.",
+      "exceptionClosed": "Closed",
+      "exceptionCutoff": "Cutoff",
+      "exceptionCutoffHint": "Empty: the weekly rule's cutoff applies.",
+      "exceptionDate": "Date",
+      "exceptionKind": "Kind",
+      "exceptionNote": "Note",
+      "exceptionOpen": "Open",
+      "exceptions": "Date exceptions",
+      "exceptionsHelp": "Dates that depart from the weekly cadence: holidays with no service, extra days with service, or an open day that closes at a different time.",
       "leadTimeAria": "{{day}} lead time in days",
       "leadTimeDays": "Lead time (days)",
+      "noExceptions": "No exceptions recorded.",
+      "removeException": "Remove the exception for {{date}}",
+      "saveFirstForExceptions": "Save the frequency first to record date exceptions.",
       "serviceDay": "Service day",
       "subtitle": "A service calendar: weekly cadence, cutoff and lead time.",
       "weeklyCadence": "Weekly cadence"
@@ -38,21 +44,22 @@
   },
   "locations": {
     "columns": {
-      "roles": "Roles",
-      "usableAs": "Usable as"
+      "use": "Operational use"
     },
-    "description": "The physical places of the operation: stores, warehouses, plants, hubs and delivery points.",
+    "description": "Physical places the operation uses: stores, warehouses, plants, hubs and delivery points.",
     "empty": {
       "message": "Create a location or adjust the filters.",
       "title": "No locations"
     },
     "filters": {
-      "allRoles": "All roles",
+      "anyUse": "Any use",
       "searchLabel": "Search",
       "searchPlaceholder": "Code, name or external reference"
     },
     "form": {
       "addAssociation": "Associate frequency",
+      "canBeDestination": "Can be used as destination",
+      "canBeOrigin": "Can be used as origin",
       "create": "New location",
       "edit": "Edit location",
       "eligibilityCheck": "Check",
@@ -63,14 +70,14 @@
       "identityHelp": "The external system and reference identify this location to an integration. Provide both or neither.",
       "noAssociations": "No frequencies are associated with this location yet.",
       "noZone": "No zone",
-      "rolesHelp": "ORIGIN and SHIP TO make the location usable in orders, routes and planning. The other roles only classify it.",
       "saveFirstForServiceCalendar": "Save the location first to associate frequencies with it.",
       "sectionEligibility": "Check eligibility",
-      "sectionRoles": "Roles",
       "sectionServiceCalendar": "Service calendar",
+      "sectionUse": "Operational use",
       "selectFrequency": "Select a frequency",
       "serviceCalendarHelp": "Associate one or more frequencies to define which dates this location can be dispatched to or serviced.",
-      "subtitle": "A physical place and the roles it plays in the operation."
+      "subtitle": "A physical place and the roles it plays in the operation.",
+      "useHelp": "How this place may be used in transport. One site can be both: the store receives the delivery and ships the return."
     },
     "import": {
       "applied": "Import complete",
@@ -86,7 +93,7 @@
       "columnRow": "Row",
       "columns": {
         "coordinates": "Coordinates",
-        "roles": "Roles",
+        "roles": "Operational use",
         "type": "Type",
         "zone": "Zone"
       },
@@ -124,22 +131,15 @@
     },
     "new": "New location",
     "title": "Locations",
-    "usableAs": {
-      "none": "Classification only",
-      "origin": "Origin",
-      "shipTo": "Destination"
+    "use": {
+      "none": "No use set"
     }
   },
   "origins": {
-    "description": "Loading and dispatch points used to plan and build trips.",
+    "description": "Locations enabled to ship. The same Locations record, filtered by operational use.",
     "empty": {
-      "message": "Create an origin or adjust your filters.",
-      "title": "No origins found"
-    },
-    "form": {
-      "create": "New origin",
-      "edit": "Edit origin",
-      "subtitle": "A loading and dispatch point used to plan trips."
+      "message": "Tick “Can be used as origin” on a location, or create a new one.",
+      "title": "No origins"
     },
     "new": "New origin",
     "title": "Origins"
@@ -165,6 +165,8 @@
       "removeStop": "Remove stop {{position}}",
       "selectDestination": "Select a destination to add",
       "selectOrigin": "Select an origin",
+      "serviceTimeHelp": "Each stop's service time comes from the location. Enter a value only where this route differs; empty keeps the location's.",
+      "serviceTimeOverride": "Service time for stop {{position}}, in minutes",
       "stopsLabel": "Destination stops, in order",
       "subtitle": "A reusable planned corridor between an origin and its stops."
     },

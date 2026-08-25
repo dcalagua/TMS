@@ -2,7 +2,7 @@ package com.ebim.tms.shared.audit;
 
 /**
  * What happened to the aggregate an {@link AuditRecorder#record} call names. Mirrors
- * {@code ck_audit_event_action} (migration V22).
+ * {@code ck_audit_event_action} (migrations V22, V25 and V26).
  */
 public enum AuditAction {
     CREATE,
@@ -13,11 +13,83 @@ public enum AuditAction {
     REMOVE_ORDER,
     MOVE_ORDER,
     VEHICLE_CHANGE,
+    /**
+     * A trip's driver was set, swapped or cleared (migration V26) - the driver sibling of
+     * {@link #VEHICLE_CHANGE}, distinct from a plain {@link #UPDATE} because "who was driving
+     * this shipment, and when did that change" is a question asked on its own.
+     */
+    DRIVER_CHANGE,
     CONFIRM,
     CANCEL,
     CREDENTIAL_CREATE,
     CREDENTIAL_ROTATE,
     CREDENTIAL_REVOKE,
+    /** An automatic planning proposal was written onto a run as draft trips. */
+    AUTO_PLAN,
     IMPORT_EXECUTED,
-    SHIPMENT_CONFIRMED
+    SHIPMENT_CONFIRMED,
+    /** The four execution transitions of a trip (migration V25) - see {@code TripStatus}. */
+    SHIPMENT_READY,
+    SHIPMENT_DISPATCHED,
+    SHIPMENT_COMPLETED,
+    SHIPMENT_CANCELLED,
+    /**
+     * What was handed over at a stop was recorded, or corrected (migration V28). Audited, unlike
+     * the stop transitions of V27, because it is the record a dispute, an insurance claim or a
+     * credit note is argued from: "somebody recorded that the customer refused these goods" is a
+     * compliance fact as well as an operational one, exactly as {@link #SHIPMENT_CONFIRMED} is.
+     */
+    DELIVERY_RESULT_RECORDED,
+    /**
+     * A trip was priced against a rate card (migration V30). Its own action rather than an
+     * {@link #UPDATE}, because "when was this priced, and against which agreement" is a question
+     * asked on its own - and the answer has to survive the card being edited afterwards.
+     */
+    COST_ESTIMATED,
+    /** What the carrier actually invoiced was recorded, or corrected. */
+    COST_ACTUAL_RECORDED,
+    /**
+     * A cost was settled and frozen. Audited separately because it is the moment a figure stops
+     * being editable, which is exactly what somebody disputing it later needs pinned to a person.
+     */
+    COST_CLOSED,
+    /**
+     * A settled cost was made writable again. Its own action rather than the absence of a
+     * {@link #COST_CLOSED} one, because "who un-froze this figure, and when" is the first question
+     * asked about a cost that changed after it was signed off.
+     */
+    COST_REOPENED,
+
+    /**
+     * A shipment was offered to its carrier (migration V31). Five actions rather than one
+     * {@code TENDER_UPDATED}, because each is a question somebody asks by itself - and creating the
+     * draft is deliberately none of them: it publishes nothing and tells nobody, so
+     * {@code TENDER_SENT} is the first moment anything left this company.
+     *
+     * <p>All five are recorded against {@link AuditAggregateType#SHIPMENT}, exactly as
+     * {@link #DELIVERY_RESULT_RECORDED} is: the thing that changed commercially is the shipment, and
+     * the tender is how it changed. Its id and attempt number travel in the metadata.
+     */
+    TENDER_SENT,
+    /** The carrier agreed to run the shipment - the fact this whole feature exists to record. */
+    TENDER_ACCEPTED,
+    /** The carrier declined, and the metadata carries the reason they gave. */
+    TENDER_REJECTED,
+    /** The offer's deadline passed with no answer. Nobody did this; a deadline did. */
+    TENDER_EXPIRED,
+    /** The offer was withdrawn, by the shipper or because the shipment stopped being offerable. */
+    TENDER_CANCELLED,
+
+    /**
+     * The roles held by one membership were replaced (migration V34). Its own action rather than a
+     * plain {@link #UPDATE}, for the reason {@link #DRIVER_CHANGE} is: "who gave this account
+     * permission to confirm shipments, and when" is a question asked on its own - usually after
+     * something has already gone wrong - and a generic update row would bury it among corrections to
+     * somebody's name.
+     *
+     * <p>The metadata carries the codes before <em>and</em> after. Granting and revoking access
+     * themselves stay {@link #CREATE}, {@link #ACTIVATE} and {@link #DEACTIVATE} on
+     * {@link AuditAggregateType#MEMBERSHIP}, which already say exactly what happened.
+     */
+    ROLES_CHANGED
 }

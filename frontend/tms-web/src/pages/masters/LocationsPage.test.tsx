@@ -39,7 +39,7 @@ const LOCATION: LocationView = {
   code: 'LIM-DC',
   name: 'Lima Distribution Centre',
   type: 'DISTRIBUTION_CENTER',
-  roles: ['ORIGIN', 'SHIP_TO'],
+  roles: ['ORIGIN', 'DESTINATION'],
   address: 'Av. Argentina 1234',
   addressReference: 'Puerta azul',
   district: 'Callao',
@@ -55,8 +55,6 @@ const LOCATION: LocationView = {
   serviceTimeMinutes: 25,
   externalSystem: null,
   externalReference: null,
-  originId: 'origin-1',
-  destinationId: 'destination-1',
   active: true,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
@@ -138,12 +136,12 @@ describe('LocationsPage', () => {
     expect(screen.getByText('Zone A')).toBeInTheDocument()
   })
 
-  it('reports what a location can be used for from its projections, not from its role list', async () => {
+  it('shows the operational use as badges, and says so when a place has none', async () => {
     mockCompany(true)
     locationsApiMocks.fetchLocations.mockResolvedValue(
       page([
         { ...LOCATION, id: 'l-both' },
-        { ...LOCATION, id: 'l-store', code: 'STORE-ONLY', roles: ['STORE'], originId: null, destinationId: null },
+        { ...LOCATION, id: 'l-none', code: 'UNUSED', roles: [] },
       ]),
     )
     zonesApiMocks.fetchZones.mockResolvedValue(page([]))
@@ -151,8 +149,11 @@ describe('LocationsPage', () => {
     renderPage()
 
     await screen.findByText('LIM-DC')
-    expect(screen.getByText('Origen / Destino')).toBeInTheDocument()
-    expect(screen.getByText('Solo clasificación')).toBeInTheDocument()
+    // The type column already says "Centro de distribución"; the use column must say how the
+    // place may be used and nothing else, or it is the Type/Roles duplication all over again.
+    expect(screen.getByText('Origen')).toBeInTheDocument()
+    expect(screen.getByText('Destino')).toBeInTheDocument()
+    expect(screen.getByText('Sin uso definido')).toBeInTheDocument()
   })
 
   it('hides create and manage actions for a caller without masterdata.location:manage', async () => {
@@ -186,7 +187,7 @@ describe('LocationsPage', () => {
     await waitFor(() =>
       expect(locationsApiMocks.createLocation).toHaveBeenCalledWith(
         'company-1',
-        expect.objectContaining({ code: 'NEW-LOC', roles: ['SHIP_TO'], timeZone: 'America/Lima' }),
+        expect.objectContaining({ code: 'NEW-LOC', roles: ['DESTINATION'], timeZone: 'America/Lima' }),
       ),
     )
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())

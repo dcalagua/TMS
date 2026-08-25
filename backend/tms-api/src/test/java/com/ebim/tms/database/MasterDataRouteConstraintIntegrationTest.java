@@ -185,6 +185,24 @@ class MasterDataRouteConstraintIntegrationTest {
     }
 
     @Test
+    @DisplayName("a stop's service time override may be zero or absent, but never negative (V24)")
+    void stopServiceTimeOverrideMustBeNonnegative() throws SQLException {
+        UUID organization = insertOrganization("MDR-ORG");
+        UUID company = insertCompany(organization, "MDR-A");
+        UUID origin = insertOrigin(company, "ORIGIN-A");
+        UUID route = insertRoute(company, "ROUTE-A", origin);
+        UUID zeroStop = insertDestination(company, "DEST-ZERO");
+        UUID inheritStop = insertDestination(company, "DEST-INHERIT");
+        UUID negativeStop = insertDestination(company, "DEST-NEGATIVE");
+
+        // Zero is a drop-and-go stop, and NULL is "use the location's" - both legitimate.
+        insertRouteStop(route, company, zeroStop, 1, 0);
+        insertRouteStop(route, company, inheritStop, 2, null);
+
+        assertViolates(CHECK_VIOLATION, () -> insertRouteStop(route, company, negativeStop, 3, -1));
+    }
+
+    @Test
     @DisplayName("a destination cannot appear twice on the same route")
     void destinationCannotAppearTwiceOnTheSameRoute() throws SQLException {
         UUID organization = insertOrganization("MDR-ORG");
@@ -299,8 +317,14 @@ class MasterDataRouteConstraintIntegrationTest {
                 "INSERT INTO tms.app_user (email, full_name) VALUES ('" + email + "', 'Test person') RETURNING id");
     }
 
+    /**
+     * A canonical location to be used as an origin. No {@code tms.location_role} row: this suite
+     * proves database constraints, and which roles a location holds is an application rule the
+     * services enforce - {@code RouteApiIntegrationTest} and {@code OrderApiIntegrationTest} are
+     * where that is asserted.
+     */
     private UUID insertOrigin(UUID companyId, String code) throws SQLException {
-        return insertReturningId("INSERT INTO tms.origin (company_id, code, name) VALUES ('" + companyId + "', '"
+        return insertReturningId("INSERT INTO tms.location (company_id, code, name) VALUES ('" + companyId + "', '"
                 + code + "', '" + code + " name') RETURNING id");
     }
 
@@ -309,8 +333,9 @@ class MasterDataRouteConstraintIntegrationTest {
                 + code + "', '" + code + " name') RETURNING id");
     }
 
+    /** A canonical location to be used as a destination; see {@link #insertOrigin}. */
     private UUID insertDestination(UUID companyId, String code) throws SQLException {
-        return insertReturningId("INSERT INTO tms.destination (company_id, code, name, country) VALUES ('"
+        return insertReturningId("INSERT INTO tms.location (company_id, code, name, country) VALUES ('"
                 + companyId + "', '" + code + "', '" + code + " name', 'PE') RETURNING id");
     }
 
@@ -325,9 +350,16 @@ class MasterDataRouteConstraintIntegrationTest {
     }
 
     private UUID insertRouteStop(UUID routeId, UUID companyId, UUID destinationId, int sequence) throws SQLException {
-        return insertReturningId("INSERT INTO tms.route_stop (route_id, company_id, destination_id, sequence)"
-                + " VALUES ('" + routeId + "', '" + companyId + "', '" + destinationId + "', " + sequence
-                + ") RETURNING id");
+        return insertRouteStop(routeId, companyId, destinationId, sequence, null);
+    }
+
+    /** {@code serviceTimeOverrideMinutes} null means the stop inherits its location's service time. */
+    private UUID insertRouteStop(UUID routeId, UUID companyId, UUID destinationId, int sequence,
+            Integer serviceTimeOverrideMinutes) throws SQLException {
+        return insertReturningId("INSERT INTO tms.route_stop"
+                + " (route_id, company_id, destination_id, sequence, service_time_override_minutes)"
+                + " VALUES ('" + routeId + "', '" + companyId + "', '" + destinationId + "', " + sequence + ", "
+                + (serviceTimeOverrideMinutes == null ? "NULL" : serviceTimeOverrideMinutes) + ") RETURNING id");
     }
 
     private UUID insertReturningId(String sql) throws SQLException {

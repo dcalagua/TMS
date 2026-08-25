@@ -1,6 +1,8 @@
 package com.ebim.tms.orders.infrastructure;
 
+import com.ebim.tms.orders.domain.OrderStatus;
 import com.ebim.tms.orders.domain.TransportOrder;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -10,7 +12,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 
 /**
- * Company-scoped persistence for {@link TransportOrder}. See {@code OriginRepository} for the
+ * Company-scoped persistence for {@link TransportOrder}. See {@code LocationRepository} for the
  * isolation rule every finder here follows.
  */
 public interface TransportOrderRepository extends JpaRepository<TransportOrder, UUID>, JpaSpecificationExecutor<TransportOrder> {
@@ -76,4 +78,32 @@ public interface TransportOrderRepository extends JpaRepository<TransportOrder, 
     @Query(value = "SELECT nextval('tms.transport_order_number_seq') FROM generate_series(1, :count)",
             nativeQuery = true)
     List<Long> nextOrderNumberValues(int count);
+
+    /**
+     * How many orders this company owes each service day in a range, grouped by lifecycle state -
+     * the whole of {@code OrderPlanningPort.backlogTotals} in one statement.
+     *
+     * <p>Counted rather than fetched, for the reason every other aggregate in this codebase is: the
+     * KPI report is about a quarter of a company that plans 10,000 orders a day, and a screen that
+     * downloaded them to count them would move a million rows to render one card.
+     *
+     * <p>States with no order are simply absent from the result, so the caller defaults them to
+     * zero rather than the query padding four rows it did not find - the same contract
+     * {@code TripRepository.countByStatusForDay} documents.
+     */
+    @Query("""
+            SELECT o.status AS status, COUNT(o) AS orderCount
+              FROM TransportOrder o
+             WHERE o.companyId = :companyId
+               AND o.serviceDate BETWEEN :from AND :to
+             GROUP BY o.status
+            """)
+    List<OrderStatusCount> countByStatusForServiceDates(
+            UUID companyId, LocalDate from, LocalDate to);
+
+    interface OrderStatusCount {
+        OrderStatus getStatus();
+
+        long getOrderCount();
+    }
 }

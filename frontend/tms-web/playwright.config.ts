@@ -27,10 +27,23 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  /**
+   * A built bundle served by `vite preview`, not the dev server.
+   *
+   * The dev server serves unbundled ESM and transforms each module on first request. That was
+   * merely slow while every screen arrived in one graph at startup; once the routes were
+   * code-split, a suite that visits nine screens at six breakpoints made the server transform a
+   * fresh route graph over and over, and tests began timing out on `page.goto` - a different two
+   * of them on every run, which is the signature of contention rather than of a defect.
+   *
+   * Preview serves the same files a deployment does, from disk, already bundled. It costs one
+   * build up front and removes the whole class of flake, and it means the suite exercises what
+   * actually ships rather than a development-only module graph.
+   */
   webServer: {
-    command: 'npm run dev',
+    command: 'npm run build && npm run preview -- --port 5173 --strictPort',
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 180_000,
   },
 })

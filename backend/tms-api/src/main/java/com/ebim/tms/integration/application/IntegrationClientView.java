@@ -17,6 +17,10 @@ import java.util.UUID;
  *
  * @param rotationGraceEndsAt non-null while a superseded secret is still accepted, so the screen
  *     can say "the old key stops working on ..." instead of leaving an operator guessing
+ * @param carrierId the carrier this credential answers for, or null (migration V31). The id and not
+ *     the name: this view is assembled from the entity alone, and making it resolve the fleet
+ *     master would put a lookup port on a screen that lists credentials. The screen already has the
+ *     carrier list it offered in the form
  */
 public record IntegrationClientView(
         UUID id,
@@ -24,6 +28,7 @@ public record IntegrationClientView(
         String name,
         String description,
         List<String> scopes,
+        UUID carrierId,
         boolean active,
         OffsetDateTime lastUsedAt,
         OffsetDateTime secretRotatedAt,
@@ -39,6 +44,7 @@ public record IntegrationClientView(
                 client.name(),
                 client.description(),
                 client.scopeValues().stream().map(IntegrationScope::code).toList(),
+                client.carrierId(),
                 client.active(),
                 client.lastUsedAt(),
                 client.secretRotatedAt(),

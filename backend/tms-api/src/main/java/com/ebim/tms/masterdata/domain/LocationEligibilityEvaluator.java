@@ -53,8 +53,12 @@ public final class LocationEligibilityEvaluator {
             Frequency frequency = candidate.frequency();
             if (FrequencyCalendar.runsOn(frequency, date, candidate.exceptionOnDate())) {
                 FrequencyWeeklyRule matchedRule = FrequencyCalendar.weeklyRuleFor(frequency, date);
+                // Cutoff comes from FrequencyCalendar, not straight off the weekly rule: a date
+                // exception may replace it for this date alone (V24). Lead time has no such
+                // override - it is a property of the cadence a customer plans against, and one
+                // date moving its closing time does not change how far ahead orders are taken.
                 return EligibilityDecision.eligible(frequency.id(),
-                        matchedRule == null ? null : matchedRule.cutoffTime(),
+                        FrequencyCalendar.effectiveCutoff(frequency, date, candidate.exceptionOnDate()),
                         matchedRule == null ? null : matchedRule.leadTimeDays());
             }
         }

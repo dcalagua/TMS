@@ -1,8 +1,7 @@
 package com.ebim.tms.masterdata.application;
 
-import com.ebim.tms.masterdata.domain.Destination;
 import com.ebim.tms.masterdata.domain.Frequency;
-import com.ebim.tms.masterdata.domain.Origin;
+import com.ebim.tms.masterdata.domain.Location;
 import com.ebim.tms.masterdata.domain.Route;
 import com.ebim.tms.masterdata.domain.RouteStop;
 import com.ebim.tms.masterdata.domain.Zone;
@@ -17,9 +16,12 @@ import java.util.UUID;
  * each one resolves to. Returned by get/create/update/activate/deactivate - never by list, which
  * uses {@link RouteView} instead (see that record's class comment for why).
  *
- * @param stops already sorted by sequence by {@link Route#stops()}; every destination on the
- *     page was resolved by the caller in one batched lookup, the same discipline
- *     {@code DestinationService.loadZones} uses for zones.
+ * <p>The JSON field names still say {@code originId} / {@code destinationId}. They name the two
+ * ends of a movement, which is what a route has; since V23 both resolve to a canonical
+ * {@code tms.location}, and renaming the fields would break every client for a synonym.
+ *
+ * @param stops already sorted by sequence by {@link Route#stops()}; every stop's location was
+ *     resolved by the caller in one batched lookup, never one query per stop.
  */
 public record RouteDetailView(
         UUID id,
@@ -42,7 +44,7 @@ public record RouteDetailView(
         OffsetDateTime updatedAt) {
 
     public static RouteDetailView from(
-            Route route, Origin origin, Zone zone, Frequency frequency, Map<UUID, Destination> destinationsById) {
+            Route route, Location origin, Zone zone, Frequency frequency, Map<UUID, Location> destinationsById) {
         List<RouteStopView> stops = route.stops().stream()
                 .map(stop -> RouteStopView.from(stop, destinationsById.get(stop.destinationId())))
                 .toList();
@@ -54,10 +56,27 @@ public record RouteDetailView(
                 route.createdAt(), route.updatedAt());
     }
 
-    public record RouteStopView(UUID destinationId, String destinationCode, String destinationName, int sequence) {
-        static RouteStopView from(RouteStop stop, Destination destination) {
+    /**
+     * Service time is returned three ways on purpose, because an editor has to show all three:
+     * what this stop overrides ({@code serviceTimeOverrideMinutes}, null when it overrides
+     * nothing), what it would inherit ({@code destinationServiceTimeMinutes}, so the field can
+     * show the location's value as its placeholder rather than an empty box), and what actually
+     * applies ({@code effectiveServiceTimeMinutes}). The client never recomputes the third from
+     * the first two - {@code RouteStop.effectiveServiceTimeMinutes} owns that rule.
+     *
+     * @param destinationServiceTimeMinutes {@code null} only when the destination could not be
+     *     resolved at all; the column itself is NOT NULL on {@code tms.location}.
+     */
+    public record RouteStopView(UUID destinationId, String destinationCode, String destinationName, int sequence,
+            Integer serviceTimeOverrideMinutes, Integer destinationServiceTimeMinutes,
+            Integer effectiveServiceTimeMinutes) {
+
+        static RouteStopView from(RouteStop stop, Location destination) {
             return new RouteStopView(stop.destinationId(), destination == null ? null : destination.code(),
-                    destination == null ? null : destination.name(), stop.sequence());
+                    destination == null ? null : destination.name(), stop.sequence(),
+                    stop.serviceTimeOverrideMinutes(),
+                    destination == null ? null : destination.serviceTimeMinutes(),
+                    stop.effectiveServiceTimeMinutes(destination));
         }
     }
 }

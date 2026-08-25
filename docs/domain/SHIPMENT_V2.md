@@ -54,7 +54,7 @@ else.**
 - **Used weight/volume/pallets** are one grouped `SUM` over active `trip_order_assignment` rows,
   never a stored counter. A stored copy is a second source of truth that a concurrent assignment
   can leave stale - see `CAPACITY_MODEL.md`, "Where each number comes from".
-- **Stop coordinates** are read live from `tms.destination`. A corrected store coordinate must
+- **Stop coordinates** are read live from `tms.location` (from `tms.destination` before V23). A corrected store coordinate must
   reach an open plan immediately, and a frozen wrong one would be undetectable.
 
 ### The one snapshot, and why

@@ -9,7 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 /**
- * Company-scoped persistence for {@link Zone}. See {@link OriginRepository} for the isolation
+ * Company-scoped persistence for {@link Zone}. See {@code LocationRepository} for the isolation
  * rule every finder here follows.
  */
 public interface ZoneRepository extends JpaRepository<Zone, UUID>, JpaSpecificationExecutor<Zone> {
