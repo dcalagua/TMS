@@ -1,127 +1,141 @@
-import { useQuery } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
-import type { ApiError } from '../../shared/api/httpClient'
-import { fetchWebhookDelivery } from '../../shared/api/integrationsApi'
-import { describeApiError } from '../../shared/api/problemMessages'
-import { useFormat } from '../../shared/i18n/format'
-import { ErrorState, StatusBadge, type StatusTone } from '../../shared/ui/components'
-import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
+import { useQuery } from "@tanstack/react-query";
+import {
+  Alert, Box, Chip, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography,
+} from "@mui/material";
+import { SendRounded } from "@mui/icons-material";
+import type { ApiError } from "../../shared/api/httpClient";
+import { fetchWebhookDelivery } from "../../shared/api/integrationsApi";
+import { describeApiError } from "../../shared/api/problemMessages";
+import {
+  DetailGrid, DetailItem, FormDrawer, SectionHeader, StatusChip, dataTableSx,
+} from "../../shared/ui/components";
+import type { StatusTone } from "../../theme";
+import { t } from "../../lib/i18n";
+import { fmtDateTime, fmtQuantity } from "../../lib/locale";
 
-const OUTCOME_TONE: Record<string, StatusTone> = {
-  DELIVERED: 'success',
-  RETRYABLE_FAILURE: 'warning',
-  PERMANENT_FAILURE: 'danger',
+interface WebhookDeliveryDrawerProps {
+  companyId: string;
+  deliveryId: string;
+  onClose: () => void;
 }
 
+const OUTCOME_TONE: Record<string, StatusTone> = {
+  DELIVERED: "done",
+  RETRYABLE_FAILURE: "inProgress",
+  PERMANENT_FAILURE: "overdue",
+};
+
 /**
- * One delivery, in full: every attempt that was made and the exact bytes that were sent.
+ * Una entrega, intento por intento, con el cuerpo exacto que se mandó.
  *
- * This is the screen a "you never sent us that shipment" conversation is settled from, so it shows
- * the things that settle it - when each call went out, how long it took, what came back, and the
- * payload itself, which is stored precisely so that a retry three hours later is byte-identical to
- * the first try.
+ * Es la pantalla desde la que se zanja una discusión con un socio: "no nos llegó" contra "sí os
+ * lo mandamos". Por eso el payload se enseña byte a byte, tal y como lo envió cada intento, y no
+ * reformateado — un JSON embellecido ya no es lo que viajó.
  *
- * An attempt with no status code is not a zero: it is a call that never reached a server at all - a
- * timeout, a refused connection, a name that would not resolve - and that difference is the first
- * thing an integrator needs.
+ * Un intento sin código de estado no es un cero: es una llamada que nunca produjo respuesta —un
+ * timeout, una conexión rechazada, un DNS malo— y se dice así.
  */
-export function WebhookDeliveryDrawer({
-  companyId,
-  deliveryId,
-  onClose,
-}: {
-  companyId: string
-  deliveryId: string
-  onClose: () => void
-}) {
-  const { t } = useTranslation('settings')
-  const { t: tc } = useTranslation('common')
-  const format = useFormat()
-
-  const query = useQuery({
-    queryKey: ['webhook-delivery', companyId, deliveryId],
+export function WebhookDeliveryDrawer({ companyId, deliveryId, onClose }: WebhookDeliveryDrawerProps) {
+  const detailQuery = useQuery({
+    queryKey: ["webhook-delivery", companyId, deliveryId],
     queryFn: ({ signal }) => fetchWebhookDelivery(companyId, deliveryId, signal),
-    enabled: companyId !== '',
-  })
+  });
 
-  const detail = query.data
+  const detail = detailQuery.data;
 
   return (
-    <TmsDrawer
+    <FormDrawer
       open
-      title={t('integrations.deliveries.detail.title')}
-      subtitle={detail ? `${detail.delivery.eventType} → ${detail.delivery.subscriptionName}` : undefined}
+      loading={detailQuery.isPending}
+      icon={<SendRounded />}
+      title={t("Entrega")}
+      subtitle={detail?.delivery.eventType}
       size="lg"
       onClose={onClose}
-      loading={query.isPending}
-      footer={
-        <button type="button" className="btn btn-outline-secondary" onClick={onClose}>
-          {tc('actions.close')}
-        </button>
-      }
     >
-      {query.isError && (
-        <ErrorState message={describeApiError(query.error as ApiError)} onRetry={() => void query.refetch()} />
+      {detailQuery.isError && (
+        <Alert severity="error">{describeApiError(detailQuery.error as ApiError)}</Alert>
       )}
 
       {detail && (
         <>
-          <dl className="row small mb-3">
-            <dt className="col-4">{t('integrations.deliveries.detail.eventId')}</dt>
-            <dd className="col-8">
-              <code>{detail.delivery.eventId}</code>
-              <span className="d-block text-body-secondary">{t('integrations.deliveries.detail.eventIdHelp')}</span>
-            </dd>
-            <dt className="col-4">{t('integrations.deliveries.detail.occurredAt')}</dt>
-            <dd className="col-8">{format.dateTime(detail.delivery.occurredAt)}</dd>
-            <dt className="col-4">{tc('columns.status')}</dt>
-            <dd className="col-8">{t(`integrations.deliveries.statuses.${detail.delivery.status}`)}</dd>
-            {detail.delivery.completedAt && (
-              <>
-                <dt className="col-4">{t('integrations.deliveries.detail.completedAt')}</dt>
-                <dd className="col-8">{format.dateTime(detail.delivery.completedAt)}</dd>
-              </>
-            )}
-          </dl>
+          <SectionHeader title={t("Resumen")} />
+          <DetailGrid columns={2}>
+            <DetailItem label={t("Suscripción")} value={detail.delivery.subscriptionName} />
+            <DetailItem label={t("Estado")} value={detail.delivery.status} />
+            {/* El id de evento es el valor con el que el receptor deduplica: es estable entre
+                intentos y reenvíos, y es lo primero que se le pide en una discusión. */}
+            <DetailItem label={t("ID de evento")} value={
+              <Typography component="code" variant="body2" sx={{ fontFamily: "monospace", wordBreak: "break-all" }}>
+                {detail.delivery.eventId}
+              </Typography>
+            } />
+            <DetailItem label={t("Ocurrió")} value={fmtDateTime(detail.delivery.occurredAt)} />
+            <DetailItem label={t("Intentos")} value={fmtQuantity(detail.delivery.attemptCount)} />
+            <DetailItem
+              label={t("Cerrada")}
+              value={detail.delivery.completedAt ? fmtDateTime(detail.delivery.completedAt) : null}
+            />
+          </DetailGrid>
 
-          <h3 className="tms-section-title">{t('integrations.deliveries.detail.attempts')}</h3>
-          {detail.attempts.length === 0 ? (
-            <p className="text-body-secondary small">{t('integrations.deliveries.detail.noAttempts')}</p>
-          ) : (
-            <ul className="list-unstyled d-flex flex-column gap-2 mb-3">
-              {detail.attempts.map((attempt) => (
-                <li key={attempt.id} className="border rounded p-2">
-                  <div className="d-flex flex-wrap align-items-center gap-2">
-                    <span className="fw-semibold">#{attempt.attemptNumber}</span>
-                    <StatusBadge
-                      label={t(`integrations.deliveries.outcomes.${attempt.outcome}`)}
-                      tone={OUTCOME_TONE[attempt.outcome] ?? 'neutral'}
-                    />
-                    <span className="small text-body-secondary">{format.dateTime(attempt.attemptedAt)}</span>
-                    <span className="small text-body-secondary">
-                      {t('integrations.deliveries.detail.duration', { ms: attempt.durationMs })}
-                    </span>
-                  </div>
-                  <div className="small">
-                    {attempt.statusCode !== null ? (
-                      <span>HTTP {attempt.statusCode}</span>
-                    ) : (
-                      <span className="text-body-secondary">{t('integrations.deliveries.detail.noResponse')}</span>
-                    )}
-                    {attempt.error && <span className="d-block text-danger text-break">{attempt.error}</span>}
-                  </div>
-                </li>
-              ))}
-            </ul>
+          {detail.delivery.lastError && (
+            <Alert severity="error" sx={{ mt: 2 }}>{detail.delivery.lastError}</Alert>
           )}
 
-          <h3 className="tms-section-title">{t('integrations.deliveries.detail.payload')}</h3>
-          <p className="text-body-secondary small">{t('integrations.deliveries.detail.payloadHelp')}</p>
-          <pre className="border rounded p-2 small mb-0 text-break" style={{ whiteSpace: 'pre-wrap' }}>
-            {detail.payload}
-          </pre>
+          <Box sx={{ mt: 3 }}>
+            <SectionHeader title={t("Intentos")} />
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small" sx={dataTableSx}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell className="numeric-col">{t("Nº")}</TableCell>
+                    <TableCell>{t("Cuándo")}</TableCell>
+                    <TableCell className="numeric-col">{t("Duración")}</TableCell>
+                    <TableCell className="numeric-col">{t("Código")}</TableCell>
+                    <TableCell>{t("Resultado")}</TableCell>
+                    <TableCell>{t("Error")}</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {detail.attempts.map((attempt) => (
+                    <TableRow key={attempt.id}>
+                      <TableCell className="numeric-col">{attempt.attemptNumber}</TableCell>
+                      <TableCell>{fmtDateTime(attempt.attemptedAt)}</TableCell>
+                      <TableCell className="numeric-col">{fmtQuantity(attempt.durationMs)} ms</TableCell>
+                      <TableCell className="numeric-col">
+                        {/* Sin código: la llamada nunca produjo respuesta. No es un cero. */}
+                        {attempt.statusCode ?? <Chip size="small" variant="outlined" label={t("Sin respuesta")} />}
+                      </TableCell>
+                      <TableCell>
+                        <StatusChip label={attempt.outcome} tone={OUTCOME_TONE[attempt.outcome] ?? "neutral"} />
+                      </TableCell>
+                      <TableCell>{attempt.error ?? "-"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+
+          <Box sx={{ mt: 3 }}>
+            <SectionHeader title={t("Cuerpo enviado")} />
+            <Paper
+              variant="outlined"
+              sx={{ p: 1.5, maxHeight: 320, overflow: "auto", bgcolor: "action.hover" }}
+            >
+              <Typography
+                component="pre"
+                sx={{ m: 0, fontFamily: "monospace", fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+              >
+                {detail.payload}
+              </Typography>
+            </Paper>
+            <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 0.75 }}>
+              {t("Exactamente como lo mandó cada intento, sin reformatear.")}
+            </Typography>
+          </Box>
         </>
       )}
-    </TmsDrawer>
-  )
+    </FormDrawer>
+  );
 }

@@ -1,157 +1,140 @@
-import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
-import { Controller, useForm } from 'react-hook-form'
-import { useTranslation } from 'react-i18next'
-import type { ApiError } from '../../shared/api/httpClient'
-import { fetchVehicles } from '../../shared/api/vehiclesApi'
-import { updateTripVehicle, type TripDetailView, type TripVehicleRequest, type TripView } from '../../shared/api/planningApi'
-import { describePlanningError } from '../../shared/api/problemMessages'
-import { FormField } from '../../shared/ui/components/FormField'
-import { Select } from '../../shared/ui/components/Select'
-import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { Alert, Box, Button, MenuItem, TextField, Typography } from "@mui/material";
+import { LocalShippingRounded } from "@mui/icons-material";
+import type { ApiError } from "../../shared/api/httpClient";
+import { fetchVehicles } from "../../shared/api/vehiclesApi";
+import { updateTripVehicle, type TripDetailView, type TripView } from "../../shared/api/planningApi";
+import { describePlanningError } from "../../shared/api/problemMessages";
+import { FormDrawer } from "../../shared/ui/components";
+import { notifySuccess } from "../../lib/ui";
+import { t } from "../../lib/i18n";
+import { fmtDecimal } from "../../lib/locale";
 
-const FORM_ID = 'trip-vehicle-form'
+const FORM_ID = "trip-vehicle-form";
 
 interface TripVehicleDrawerProps {
-  companyId: string
-  trip: TripView
-  onClose: () => void
-  onUpdated: (detail: TripDetailView) => void
+  companyId: string;
+  trip: TripView;
+  onClose: () => void;
+  onSaved: (detail: TripDetailView) => void;
 }
 
 interface TripVehicleFormValues {
-  vehicleId: string
-  plannedDepartureAt: string
+  vehicleId: string;
+  plannedDepartureAt: string;
 }
 
-function toLocalInputValue(isoValue: string | null): string {
-  if (!isoValue) return ''
-  const date = new Date(isoValue)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+/** Convierte un instante ISO al valor que espera un `<input type="datetime-local">`, que quiere
+ * hora local sin zona. */
+function toLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-interface VehicleOption {
-  id: string
-  code: string
-  licensePlate: string
-}
-
-/** Prepends the trip's currently assigned vehicle if it fell out of the active-only list fetched
- * for the dropdown - the same pattern `OrderFormDrawer`/`RouteFormDrawer` use, and load-bearing
- * here too: without it, react-hook-form's uncontrolled `defaultValue` is applied before the async
- * vehicle list resolves, so the select would silently reset to "Select a vehicle". */
-function withCurrentVehicle(options: VehicleOption[], trip: TripView): VehicleOption[] {
-  if (!trip.vehicleId || options.some((option) => option.id === trip.vehicleId)) {
-    return options
-  }
-  return [{ id: trip.vehicleId, code: trip.vehicleCode ?? trip.vehicleId, licensePlate: trip.vehicleLicensePlate ?? '' }, ...options]
-}
-
-/** Sets or swaps a draft trip's vehicle. The backend revalidates everything already assigned to
- * the trip against the new vehicle's capacity and refuses a downgrade that no longer fits -
- * `docs/domain/CAPACITY_MODEL.md`, "Where the checks fire". Sends the trip's `version` so a
- * vehicle change made from a board that has since been filled by someone else is refused rather
- * than silently applied. */
-export function TripVehicleDrawer({ companyId, trip, onClose, onUpdated }: TripVehicleDrawerProps) {
-  const { t } = useTranslation('planning')
-  const { t: tc } = useTranslation('common')
-  const { t: tv } = useTranslation('validations')
-  const [formError, setFormError] = useState<string | null>(null)
+/**
+ * Asignar o cambiar el vehículo de un viaje.
+ *
+ * El transportista nunca se manda: lo resuelve el servidor a partir del vehículo. Si se mandara
+ * desde aquí serían dos fuentes para el mismo hecho, y la segunda acabaría discrepando en cuanto
+ * alguien cambiase el vehículo de flota.
+ *
+ * Cambiar el vehículo cambia la capacidad del viaje, así que el backend revalida lo que ya lleva
+ * cargado: si la carga actual no cabe en la unidad nueva, el rechazo nombra la dimensión que no
+ * entra y eso es lo que se muestra tal cual.
+ */
+export function TripVehicleDrawer({ companyId, trip, onClose, onSaved }: TripVehicleDrawerProps) {
+  const [formError, setFormError] = useState<string | null>(null);
 
   const vehiclesQuery = useQuery({
-    queryKey: ['vehicles-for-trip-vehicle-form', companyId],
-    queryFn: ({ signal }) => fetchVehicles({ companyId, size: 200, active: true, sort: 'code,asc', signal }),
-  })
-  const vehicles = withCurrentVehicle(vehiclesQuery.data?.content ?? [], trip)
+    queryKey: ["vehicles-for-trip-vehicle", companyId],
+    queryFn: ({ signal }) => fetchVehicles({ companyId, size: 200, active: true, sort: "code,asc", signal }),
+  });
 
   const {
-    register,
-    control,
-    handleSubmit,
-    formState: { errors, isDirty, isSubmitting },
+    register, control, handleSubmit,
+    formState: { isDirty, isSubmitting },
   } = useForm<TripVehicleFormValues>({
     defaultValues: {
-      vehicleId: trip.vehicleId ?? '',
-      plannedDepartureAt: toLocalInputValue(trip.plannedDepartureAt),
+      vehicleId: trip.vehicleId ?? "",
+      plannedDepartureAt: toLocalInput(trip.plannedDepartureAt),
     },
-  })
+  });
 
   async function onSubmit(values: TripVehicleFormValues) {
-    setFormError(null)
-    const request: TripVehicleRequest = {
-      vehicleId: values.vehicleId,
-      plannedDepartureAt: values.plannedDepartureAt ? new Date(values.plannedDepartureAt).toISOString() : null,
-      version: trip.version,
+    setFormError(null);
+    if (values.vehicleId === "") {
+      setFormError(t("Elige un vehículo."));
+      return;
     }
-
     try {
-      const detail = await updateTripVehicle(companyId, trip.id, request)
-      onUpdated(detail)
+      const next = await updateTripVehicle(companyId, trip.id, {
+        vehicleId: values.vehicleId,
+        plannedDepartureAt: values.plannedDepartureAt ? new Date(values.plannedDepartureAt).toISOString() : null,
+        version: trip.version,
+      });
+      notifySuccess(t("Vehículo asignado"));
+      onSaved(next);
     } catch (error) {
-      setFormError(describePlanningError(error as ApiError))
+      setFormError(describePlanningError(error as ApiError));
     }
   }
 
   return (
-    <TmsDrawer
+    <FormDrawer
       open
-      title={t('trip.form.vehicleTitle', { number: trip.tripNumber })}
-      subtitle={t('trip.form.vehicleSubtitle')}
+      icon={<LocalShippingRounded />}
+      title={t("Vehículo del viaje")}
+      subtitle={t("Viaje {{number}}", { number: trip.tripNumber })}
       size="md"
       onClose={onClose}
       dirty={isDirty}
-      closeOnEscape={!isSubmitting}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
-            {tc('actions.cancel')}
-          </button>
-          <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={isSubmitting}>
-            {isSubmitting ? tc('actions.saving') : t('trip.form.submitVehicle')}
-          </button>
+          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : t("Guardar")}
+          </Button>
         </>
       }
     >
-      <form id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && (
-          <div className="alert alert-danger py-2 small" role="alert">
-            {formError}
-          </div>
-        )}
+      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
+        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
 
-        <FormField label={t('trip.form.vehicle')} htmlFor="trip-vehicle-select" error={errors.vehicleId?.message} required>
-          {/* Controller rather than `register`: the control is a button plus a listbox, so
-              there is no native change event for react-hook-form to hook into. */}
+        <Box sx={{ display: "grid", gap: 2, mb: 2 }}>
           <Controller
             control={control}
             name="vehicleId"
-            rules={{ required: tv('required') }}
             render={({ field }) => (
-              <Select
-                id="trip-vehicle-select"
-                value={field.value}
-                onChange={(next) => field.onChange(next)}
-                invalid={Boolean(errors.vehicleId)}
-                options={[
-                  { value: '', label: t('trip.form.selectVehicle') },
-                  ...vehicles.map((vehicle) => ({ value: vehicle.id, label: `${vehicle.code} — ${vehicle.licensePlate}` })),
-                ]}
-              />
+              <TextField
+                select label={t("Vehículo")} required size="small" fullWidth
+                value={field.value} onChange={(e) => field.onChange(e.target.value)}
+              >
+                <MenuItem value="">{t("Selecciona un vehículo")}</MenuItem>
+                {(vehiclesQuery.data?.content ?? []).map((vehicle) => (
+                  <MenuItem key={vehicle.id} value={vehicle.id}>
+                    {vehicle.code} · {vehicle.licensePlate} · {fmtDecimal(vehicle.effectiveMaxWeightKg)} kg
+                  </MenuItem>
+                ))}
+              </TextField>
             )}
           />
-        </FormField>
-
-        <FormField label={t('trip.form.departure')} htmlFor="trip-vehicle-departure">
-          <input
-            id="trip-vehicle-departure"
-            type="datetime-local"
-            className="form-control"
-            {...register('plannedDepartureAt')}
+          <TextField
+            label={t("Salida planificada")} size="small" fullWidth type="datetime-local"
+            slotProps={{ inputLabel: { shrink: true } }}
+            {...register("plannedDepartureAt")}
           />
-        </FormField>
-      </form>
-    </TmsDrawer>
-  )
+        </Box>
+
+        <Typography variant="caption" color="text.secondary">
+          {t("Si la carga actual no cabe en la unidad elegida, el backend rechaza el cambio y dice qué dimensión se excede.")}
+        </Typography>
+      </Box>
+    </FormDrawer>
+  );
 }

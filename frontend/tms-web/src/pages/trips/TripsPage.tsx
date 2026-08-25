@@ -1,67 +1,61 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
-import { fetchCarriers } from '../../shared/api/carriersApi'
-import { fetchDrivers } from '../../shared/api/driversApi'
-import type { ApiError } from '../../shared/api/httpClient'
-import { fetchOrigins } from '../../shared/api/originsApi'
-import { fetchTrips, TRIP_STATUSES, type TripStatus, type TripView } from '../../shared/api/planningApi'
-import { describeApiError } from '../../shared/api/problemMessages'
-import { useCompany } from '../../shared/company/CompanyContext'
-import { useEnumLabels } from '../../shared/i18n/enums'
-import { useFormat } from '../../shared/i18n/format'
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Box, Chip, MenuItem, TextField, Typography } from "@mui/material";
+import { MapRounded } from "@mui/icons-material";
+import { fetchCarriers } from "../../shared/api/carriersApi";
+import { fetchDrivers } from "../../shared/api/driversApi";
+import type { ApiError } from "../../shared/api/httpClient";
+import { fetchOrigins } from "../../shared/api/originsApi";
+import { fetchTrips, TRIP_STATUSES, type TripStatus, type TripView } from "../../shared/api/planningApi";
+import { describeApiError } from "../../shared/api/problemMessages";
+import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  DataTable,
-  FilterBar,
-  PageHeader,
-  Pagination,
-  Select,
-  StatusBadge,
-  type DataTableColumn,
-} from '../../shared/ui/components'
-import { TRIP_STATUS_TONE } from '../../shared/ui/statusTones'
+  DataTable, PageHeader, Pagination, StatusChip, Toolbar, type DataTableColumn,
+} from "../../shared/ui/components";
+import { TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
+import { ICON_TINTS } from "../../shared/ui/navConfig";
+import { enumLabel } from "../../lib/enums";
+import { t } from "../../lib/i18n";
+import { fmtDate, fmtQuantity, fmtTime } from "../../lib/locale";
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 20;
 
 interface AppliedFilters {
-  shipmentNumber: string
-  status: TripStatus | ''
-  originId: string
-  carrierId: string
-  driverId: string
-  planningDateFrom: string
-  planningDateTo: string
+  shipmentNumber: string;
+  status: TripStatus | "";
+  originId: string;
+  carrierId: string;
+  driverId: string;
+  planningDateFrom: string;
+  planningDateTo: string;
 }
 
 const DEFAULT_FILTERS: AppliedFilters = {
-  shipmentNumber: '', status: '', originId: '', carrierId: '', driverId: '',
-  planningDateFrom: '', planningDateTo: '',
-}
+  shipmentNumber: "", status: "", originId: "", carrierId: "", driverId: "",
+  planningDateFrom: "", planningDateTo: "",
+};
 
 /**
- * The execution board (`docs/domain/TRIP_EXECUTION_V1.md`): every trip of the company, indexed by
- * day rather than by planning run.
+ * El tablero de ejecución: todos los viajes de la empresa, indexados por día en lugar de por
+ * plan.
  *
- * A dispatcher's question is "what is leaving today", which spans every run that produced a trip
- * for that date - and `PlanningBoardPage` can only ever show one run. That is why this screen
- * exists next to it instead of inside it, and why the row is the shipment number rather than
- * "trip 2 of PL-17", which means nothing outside its own board.
+ * La pregunta de un despachador es "qué sale hoy", y eso cruza todos los planes que produjeron un
+ * viaje para esa fecha — mientras que el tablero de planificación solo puede enseñar uno. Por eso
+ * esta pantalla existe al lado de aquella y no dentro, y por eso la fila es el número de envío y
+ * no "viaje 2 del PL-17", que no significa nada fuera de su propio tablero.
  */
 export function TripsPage() {
-  const { t } = useTranslation('trips')
-  const enumLabels = useEnumLabels()
-  const format = useFormat()
-  const { selected } = useCompany()
-  const companyId = selected?.id ?? ''
-  const navigate = useNavigate()
+  const { selected } = useCompany();
+  const companyId = selected?.id ?? "";
+  const navigate = useNavigate();
 
-  const [page, setPage] = useState(0)
-  const [draftFilters, setDraftFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
-  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
+  const [page, setPage] = useState(0);
+  const [draft, setDraft] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS);
 
   const tripsQuery = useQuery({
-    queryKey: ['trips', companyId, page, filters],
+    queryKey: ["trips", companyId, page, filters],
     queryFn: ({ signal }) =>
       fetchTrips({
         companyId,
@@ -76,213 +70,173 @@ export function TripsPage() {
         planningDateTo: filters.planningDateTo || undefined,
         signal,
       }),
-    enabled: companyId !== '',
+    enabled: companyId !== "",
     placeholderData: keepPreviousData,
-  })
+  });
 
   const originsQuery = useQuery({
-    queryKey: ['origins-for-trip-filter', companyId],
-    queryFn: ({ signal }) => fetchOrigins({ companyId, size: 200, active: true, sort: 'code,asc', signal }),
-    enabled: companyId !== '',
-  })
+    queryKey: ["origins-for-trip-filter", companyId],
+    queryFn: ({ signal }) => fetchOrigins({ companyId, size: 200, active: true, sort: "code,asc", signal }),
+    enabled: companyId !== "",
+  });
   const carriersQuery = useQuery({
-    queryKey: ['carriers-for-trip-filter', companyId],
-    queryFn: ({ signal }) => fetchCarriers({ companyId, size: 200, active: true, sort: 'code,asc', signal }),
-    enabled: companyId !== '',
-  })
-  // Active drivers only: this is the "where is Ana today" filter, and a retired driver's past
-  // trips are reached from the driver master or from the shipment number, not from a picker whose
-  // list would grow forever.
+    queryKey: ["carriers-for-trip-filter", companyId],
+    queryFn: ({ signal }) => fetchCarriers({ companyId, size: 200, active: true, sort: "code,asc", signal }),
+    enabled: companyId !== "",
+  });
+  // Solo conductores activos: este es el filtro de "dónde está Ana hoy", y los viajes pasados de
+  // un conductor retirado se alcanzan desde el maestro o desde el número de envío, no desde un
+  // desplegable cuya lista crecería para siempre.
   const driversQuery = useQuery({
-    queryKey: ['drivers-for-trip-filter', companyId],
+    queryKey: ["drivers-for-trip-filter", companyId],
     queryFn: ({ signal }) => fetchDrivers({ companyId, size: 200, active: true, signal }),
-    enabled: companyId !== '',
-  })
+    enabled: companyId !== "",
+  });
 
-  function applyFilters() {
-    setFilters(draftFilters)
-    setPage(0)
-  }
-
-  function resetFilters() {
-    setDraftFilters(DEFAULT_FILTERS)
-    setFilters(DEFAULT_FILTERS)
-    setPage(0)
-  }
+  function applyFilters() { setFilters(draft); setPage(0); }
+  function resetFilters() { setDraft(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); setPage(0); }
 
   const columns: DataTableColumn<TripView>[] = [
     {
-      key: 'shipment',
-      header: t('columns.shipment'),
-      render: (trip) => <span className="fw-semibold">{trip.shipmentNumber}</span>,
-    },
-    { key: 'date', header: t('columns.date'), render: (trip) => format.date(trip.planningDate) },
-    { key: 'origin', header: t('columns.origin'), render: (trip) => trip.originName ?? trip.originCode ?? '—' },
-    { key: 'carrier', header: t('columns.carrier'), render: (trip) => trip.carrierName ?? '—' },
-    { key: 'plate', header: t('columns.plate'), render: (trip) => trip.vehicleLicensePlate ?? '—' },
-    {
-      key: 'driver',
-      header: t('columns.driver'),
-      render: (trip) =>
-        trip.driverName === null ? (
-          '—'
-        ) : (
-          <div>
-            <div>{trip.driverName}</div>
-            {/* Only the two statuses that mean something on a board are shown: a valid licence is
-                the normal case and a badge for it would be noise on every row. */}
-            {(trip.driverLicenseStatus === 'EXPIRED' || trip.driverLicenseStatus === 'EXPIRING_SOON') && (
-              <StatusBadge
-                label={enumLabels.driverLicenseStatus(trip.driverLicenseStatus)}
-                tone={trip.driverLicenseStatus === 'EXPIRED' ? 'danger' : 'warning'}
-              />
-            )}
-          </div>
-        ),
-    },
-    { key: 'orders', header: t('columns.orders'), className: 'text-end', render: (trip) => trip.orderCount },
-    { key: 'stops', header: t('columns.stops'), className: 'text-end', render: (trip) => trip.stopCount },
-    {
-      key: 'capacity',
-      header: t('columns.capacity'),
-      className: 'text-end',
-      // The heaviest of the three dimensions, which is the one that decides whether the truck is
-      // full. Never recomputed here - the backend already said which numbers are trustworthy
-      // (`docs/domain/CAPACITY_MODEL.md`), and a null percentage means "unknown", not zero.
-      render: (trip) => {
-        const worst = [trip.capacity.weight, trip.capacity.volume, trip.capacity.pallets]
-          .map((dimension) => dimension.percentUsed)
-          .filter((value): value is number => value !== null)
-          .reduce<number | null>((highest, value) => (highest === null || value > highest ? value : highest), null)
-        return worst === null ? '—' : format.percent(worst, 0)
-      },
-    },
-    {
-      key: 'status',
-      header: t('columns.status'),
+      key: "shipment",
+      header: t("Envío"),
       render: (trip) => (
-        <StatusBadge label={enumLabels.tripStatus(trip.status)} tone={TRIP_STATUS_TONE[trip.status]} />
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 800 }}>{trip.shipmentNumber}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {trip.planNumber} · {t("Viaje {{number}}", { number: trip.tripNumber })}
+          </Typography>
+        </Box>
+      ),
+    },
+    { key: "date", header: t("Fecha"), render: (trip) => fmtDate(trip.planningDate) },
+    { key: "origin", header: t("Origen"), render: (trip) => trip.originName ?? trip.originCode ?? "-" },
+    { key: "carrier", header: t("Transportista"), render: (trip) => trip.carrierName ?? t("Flota propia") },
+    { key: "plate", header: t("Placa"), render: (trip) => trip.vehicleLicensePlate ?? "-" },
+    {
+      key: "driver",
+      header: t("Conductor"),
+      render: (trip) => trip.driverName === null ? "-" : (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+          <Typography variant="body2">{trip.driverName}</Typography>
+          {/* El estado de la licencia lo juzga el servidor contra la fecha del viaje; aquí solo
+              se avisa cuando no es "vigente". */}
+          {trip.driverLicenseStatus && trip.driverLicenseStatus !== "VALID" && (
+            <Chip
+              size="small"
+              color={trip.driverLicenseStatus === "EXPIRED" ? "error" : "warning"}
+              label={enumLabel("driverLicenseStatus", trip.driverLicenseStatus)}
+              sx={{ height: 20, fontSize: 10.5 }}
+            />
+          )}
+        </Box>
       ),
     },
     {
-      key: 'actions',
-      header: '',
-      className: 'text-end',
+      key: "departure",
+      header: t("Salida"),
+      // Planificada y real una encima de otra: la diferencia entre las dos ES el retraso de
+      // salida, y ponerlas en columnas separadas obliga a restarlas de cabeza.
       render: (trip) => (
-        <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => navigate(`/trips/${trip.id}`)}>
-          {t('open')}
-        </button>
+        <Box>
+          <Typography variant="body2">
+            {trip.plannedDepartureAt ? fmtTime(trip.plannedDepartureAt) : "-"}
+          </Typography>
+          {trip.actualDepartureAt && (
+            <Typography variant="caption" color="text.secondary">
+              {t("Real")}: {fmtTime(trip.actualDepartureAt)}
+            </Typography>
+          )}
+        </Box>
       ),
     },
-  ]
+    { key: "stops", header: t("Paradas"), numeric: true, render: (trip) => fmtQuantity(trip.stopCount) },
+    { key: "orders", header: t("Pedidos"), numeric: true, render: (trip) => fmtQuantity(trip.orderCount) },
+    {
+      key: "status",
+      header: t("Estado"),
+      render: (trip) => <StatusChip label={enumLabel("tripStatus", trip.status)} tone={TRIP_STATUS_TONE[trip.status]} />,
+    },
+  ];
 
-  const pageData = tripsQuery.data
+  const pageData = tripsQuery.data;
 
   return (
-    <div>
-      <PageHeader icon="truck" title={t('title')} description={t('description')} />
+    <>
+      <PageHeader
+        icon={<MapRounded />}
+        tint={ICON_TINTS["/trips"]}
+        title={t("Viajes")}
+        subtitle={t("Todos los envíos de la empresa por día, con el estado en que está cada uno.")}
+        onRefresh={() => void tripsQuery.refetch()}
+        refreshing={tripsQuery.isFetching}
+      />
 
-      <FilterBar onSubmit={applyFilters} onReset={resetFilters}>
-        <div>
-          <label htmlFor="filter-shipment-number" className="form-label small mb-1">
-            {t('filters.shipmentNumber')}
-          </label>
-          <input
-            id="filter-shipment-number"
-            className="form-control form-control-sm"
-            value={draftFilters.shipmentNumber}
-            onChange={(event) => setDraftFilters({ ...draftFilters, shipmentNumber: event.target.value })}
-          />
-        </div>
-        <div>
-          <label htmlFor="filter-trip-status" className="form-label small mb-1">
-            {t('filters.status')}
-          </label>
-          <Select
-            id="filter-trip-status"
-            size="sm"
-            value={draftFilters.status}
-            onChange={(next) => setDraftFilters({ ...draftFilters, status: next as TripStatus | '' })}
-            options={[
-              { value: '', label: t('filters.allStatuses') },
-              ...TRIP_STATUSES.map((status) => ({ value: status, label: enumLabels.tripStatus(status) })),
-            ]}
-          />
-        </div>
-        <div>
-          <label htmlFor="filter-trip-origin" className="form-label small mb-1">
-            {t('filters.origin')}
-          </label>
-          <Select
-            id="filter-trip-origin"
-            size="sm"
-            value={draftFilters.originId}
-            onChange={(next) => setDraftFilters({ ...draftFilters, originId: next })}
-            options={[
-              { value: '', label: t('filters.allOrigins') },
-              ...(originsQuery.data?.content ?? []).map((origin) => ({ value: origin.id, label: origin.name })),
-            ]}
-          />
-        </div>
-        <div>
-          <label htmlFor="filter-trip-carrier" className="form-label small mb-1">
-            {t('filters.carrier')}
-          </label>
-          <Select
-            id="filter-trip-carrier"
-            size="sm"
-            value={draftFilters.carrierId}
-            onChange={(next) => setDraftFilters({ ...draftFilters, carrierId: next })}
-            options={[
-              { value: '', label: t('filters.allCarriers') },
-              ...(carriersQuery.data?.content ?? []).map((carrier) => ({
-                value: carrier.id, label: carrier.businessName,
-              })),
-            ]}
-          />
-        </div>
-        <div>
-          <label htmlFor="filter-trip-driver" className="form-label small mb-1">
-            {t('filters.driver')}
-          </label>
-          <Select
-            id="filter-trip-driver"
-            size="sm"
-            value={draftFilters.driverId}
-            onChange={(next) => setDraftFilters({ ...draftFilters, driverId: next })}
-            options={[
-              { value: '', label: t('filters.allDrivers') },
-              ...(driversQuery.data?.content ?? []).map((driver) => ({
-                value: driver.id, label: driver.fullName,
-              })),
-            ]}
-          />
-        </div>
-        <div>
-          <label htmlFor="filter-trip-date-from" className="form-label small mb-1">
-            {t('filters.dateFrom')}
-          </label>
-          <input
-            id="filter-trip-date-from"
-            type="date"
-            className="form-control form-control-sm"
-            value={draftFilters.planningDateFrom}
-            onChange={(event) => setDraftFilters({ ...draftFilters, planningDateFrom: event.target.value })}
-          />
-        </div>
-        <div>
-          <label htmlFor="filter-trip-date-to" className="form-label small mb-1">
-            {t('filters.dateTo')}
-          </label>
-          <input
-            id="filter-trip-date-to"
-            type="date"
-            className="form-control form-control-sm"
-            value={draftFilters.planningDateTo}
-            onChange={(event) => setDraftFilters({ ...draftFilters, planningDateTo: event.target.value })}
-          />
-        </div>
-      </FilterBar>
+      <Toolbar
+        onApply={applyFilters}
+        onReset={resetFilters}
+        filters={
+          <>
+            <TextField
+              size="small" label={t("Envío")} value={draft.shipmentNumber}
+              onChange={(e) => setDraft({ ...draft, shipmentNumber: e.target.value })}
+              sx={{ minWidth: 160 }}
+            />
+            <TextField
+              select size="small" label={t("Estado")} value={draft.status}
+              onChange={(e) => setDraft({ ...draft, status: e.target.value as TripStatus | "" })}
+              sx={{ minWidth: 180 }}
+            >
+              <MenuItem value="">{t("Todos los estados")}</MenuItem>
+              {TRIP_STATUSES.map((status) => (
+                <MenuItem key={status} value={status}>{enumLabel("tripStatus", status)}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select size="small" label={t("Origen")} value={draft.originId}
+              onChange={(e) => setDraft({ ...draft, originId: e.target.value })}
+              sx={{ minWidth: 180 }}
+            >
+              <MenuItem value="">{t("Todos los orígenes")}</MenuItem>
+              {(originsQuery.data?.content ?? []).map((origin) => (
+                <MenuItem key={origin.id} value={origin.id}>{origin.name}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select size="small" label={t("Transportista")} value={draft.carrierId}
+              onChange={(e) => setDraft({ ...draft, carrierId: e.target.value })}
+              sx={{ minWidth: 190 }}
+            >
+              <MenuItem value="">{t("Todos los transportistas")}</MenuItem>
+              {(carriersQuery.data?.content ?? []).map((carrier) => (
+                <MenuItem key={carrier.id} value={carrier.id}>{carrier.businessName}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select size="small" label={t("Conductor")} value={draft.driverId}
+              onChange={(e) => setDraft({ ...draft, driverId: e.target.value })}
+              sx={{ minWidth: 180 }}
+            >
+              <MenuItem value="">{t("Todos")}</MenuItem>
+              {(driversQuery.data?.content ?? []).map((driver) => (
+                <MenuItem key={driver.id} value={driver.id}>{driver.fullName}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              size="small" type="date" label={t("Desde")} value={draft.planningDateFrom}
+              onChange={(e) => setDraft({ ...draft, planningDateFrom: e.target.value })}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ minWidth: 160 }}
+            />
+            <TextField
+              size="small" type="date" label={t("Hasta")} value={draft.planningDateTo}
+              onChange={(e) => setDraft({ ...draft, planningDateTo: e.target.value })}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ minWidth: 160 }}
+            />
+          </>
+        }
+      />
 
       <DataTable
         columns={columns}
@@ -292,10 +246,11 @@ export function TripsPage() {
         isLoading={tripsQuery.isPending}
         error={tripsQuery.isError ? describeApiError(tripsQuery.error as ApiError) : null}
         onRetry={() => void tripsQuery.refetch()}
-        emptyTitle={t('empty.title')}
-        emptyMessage={t('empty.message')}
+        emptyTitle={t("Sin viajes")}
+        emptyMessage={t("Ningún envío coincide con los filtros seleccionados.")}
+        onRowClick={(trip) => navigate(`/trips/${trip.id}`)}
         footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
       />
-    </div>
-  )
+    </>
+  );
 }

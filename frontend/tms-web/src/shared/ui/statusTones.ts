@@ -1,81 +1,79 @@
 import type {
-  DeliveryResult,
-  StopExecutionStatus,
-  TripExceptionStatus,
-  TripStatus,
-} from '../api/planningApi'
-import type { TenderStatus } from '../api/tendersApi'
-import type { StatusTone } from './components'
+  DeliveryResult, StopExecutionStatus, TripExceptionStatus, TripStatus,
+} from "../api/planningApi";
+import type { TenderStatus } from "../api/tendersApi";
+import type { StatusTone } from "../../theme";
 
 /**
- * How each lifecycle state is coloured, in one place so the list and the workspace never disagree
- * about what "in transit" looks like.
+ * Cómo se colorea cada estado del ciclo de vida, en un solo sitio para que la lista y el espacio
+ * de trabajo nunca discrepen sobre qué aspecto tiene "en tránsito".
  *
- * `IN_TRANSIT` is `warning` rather than `success`: a trip on the road is not a finished trip, and
- * the amber is what makes the day's outstanding work visible at a glance on a board of 300 rows.
- * Colour is never the only signal - `StatusBadge` always carries the translated label too.
+ * `IN_TRANSIT` es ámbar y no verde: un viaje en la carretera no es un viaje terminado, y ese
+ * ámbar es lo que hace visible de un vistazo el trabajo pendiente del día en un tablero de 300
+ * filas. El color nunca es la única señal: `StatusChip` lleva siempre también la etiqueta.
  */
 export const TRIP_STATUS_TONE: Record<TripStatus, StatusTone> = {
-  DRAFT: 'neutral',
-  CONFIRMED: 'info',
-  READY_FOR_DISPATCH: 'info',
-  IN_TRANSIT: 'warning',
-  COMPLETED: 'success',
-  CANCELLED: 'danger',
-}
+  DRAFT: "neutral",
+  CONFIRMED: "open",
+  READY_FOR_DISPATCH: "open",
+  IN_TRANSIT: "inProgress",
+  COMPLETED: "done",
+  CANCELLED: "cancelled",
+};
 
 /**
- * How each stop outcome is coloured.
+ * Cómo se colorea cada desenlace de parada.
  *
- * `SKIPPED` is amber and `FAILED` is red, deliberately not the same: a stop dropped by decision is
- * a planned outcome, while one that was attempted and refused is the thing somebody has to call
- * the customer about. Merging the two into one colour would be merging the two facts.
+ * `SKIPPED` es ámbar y `FAILED` rojo, deliberadamente distintos: una parada saltada por decisión
+ * es un desenlace planificado, mientras que una que se intentó y se rechazó es aquello por lo que
+ * alguien tiene que llamar al cliente. Fundir las dos en un color sería fundir los dos hechos.
  */
 export const STOP_EXECUTION_TONE: Record<StopExecutionStatus, StatusTone> = {
-  PENDING: 'neutral',
-  ARRIVED: 'info',
-  IN_SERVICE: 'info',
-  COMPLETED: 'success',
-  SKIPPED: 'warning',
-  FAILED: 'danger',
-}
+  PENDING: "neutral",
+  ARRIVED: "open",
+  IN_SERVICE: "open",
+  COMPLETED: "done",
+  SKIPPED: "inProgress",
+  FAILED: "overdue",
+};
 
-/** Open problems are the ones that still need somebody; resolved ones are history. */
+/** Los problemas abiertos son los que todavía necesitan a alguien; los resueltos son historia. */
 export const TRIP_EXCEPTION_TONE: Record<TripExceptionStatus, StatusTone> = {
-  OPEN: 'danger',
-  RESOLVED: 'success',
-}
+  OPEN: "overdue",
+  RESOLVED: "done",
+};
 
 /**
- * How each delivery outcome is coloured (migration V28).
+ * Cómo se colorea cada desenlace de entrega.
  *
- * `NOT_ATTEMPTED` is neutral rather than red: nothing went wrong with *the goods*, the stop simply
- * was not served - and the stop's own badge is already carrying that news. `PARTIAL` is amber
- * because somebody has to chase the rest, and `REJECTED`/`FAILED` are red because somebody has to
- * ring the customer. Colour is never the only signal; `StatusBadge` carries the translated label.
+ * `NOT_ATTEMPTED` es neutro y no rojo: no le pasó nada a *la mercancía*, simplemente la parada no
+ * se sirvió, y de eso ya está informando el chip de la propia parada. `PARTIAL` es ámbar porque
+ * alguien tiene que perseguir el resto, y `REJECTED`/`FAILED` son rojos porque alguien tiene que
+ * llamar al cliente.
  */
 export const DELIVERY_RESULT_TONE: Record<DeliveryResult, StatusTone> = {
-  DELIVERED: 'success',
-  PARTIAL: 'warning',
-  REJECTED: 'danger',
-  FAILED: 'danger',
-  NOT_ATTEMPTED: 'neutral',
-}
+  DELIVERED: "done",
+  PARTIAL: "inProgress",
+  REJECTED: "overdue",
+  FAILED: "overdue",
+  NOT_ATTEMPTED: "neutral",
+};
 
 /**
- * How each tender attempt is coloured (migration V31).
+ * Cómo se colorea cada intento de oferta a transportista.
  *
- * `SENT` is amber and not blue, unlike `CONFIRMED` above: an offer waiting for an answer is the
- * dispatcher's outstanding work, and it is the state that quietly turns into a problem if the truck
- * has to leave before anybody replies. `EXPIRED` is amber for the same reason and not red - nobody
- * did anything wrong, a clock ran out - while `REJECTED` is red, because a carrier saying no is the
- * thing somebody has to act on today. `CANCELLED` is neutral: we withdrew it on purpose.
+ * `SENT` es ámbar y no azul, a diferencia de `CONFIRMED`: una oferta esperando respuesta es el
+ * trabajo pendiente del despachador, y es el estado que se convierte calladamente en un problema
+ * si el camión tiene que salir antes de que alguien conteste. `EXPIRED` es ámbar por lo mismo y
+ * no rojo —nadie hizo nada mal, se acabó un reloj— mientras que `REJECTED` es rojo, porque un
+ * transportista diciendo que no es aquello sobre lo que hay que actuar hoy. `CANCELLED` es
+ * neutro: la retiramos a propósito.
  */
 export const TENDER_STATUS_TONE: Record<TenderStatus, StatusTone> = {
-  DRAFT: 'neutral',
-  SENT: 'warning',
-  ACCEPTED: 'success',
-  REJECTED: 'danger',
-  EXPIRED: 'warning',
-  CANCELLED: 'neutral',
-}
+  DRAFT: "neutral",
+  SENT: "inProgress",
+  ACCEPTED: "done",
+  REJECTED: "overdue",
+  EXPIRED: "inProgress",
+  CANCELLED: "neutral",
+};

@@ -1,67 +1,69 @@
-import { useState } from 'react'
-import { useForm } from 'react-hook-form'
-import { useTranslation } from 'react-i18next'
-import { applyApiFieldErrors } from '../../shared/api/formErrors'
-import type { ApiError } from '../../shared/api/httpClient'
-import { createCarrier, updateCarrier, type CarrierRequest, type CarrierView } from '../../shared/api/carriersApi'
-import { FormField } from '../../shared/ui/components/FormField'
-import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { Alert, Box, Button, TextField } from "@mui/material";
+import { BusinessRounded } from "@mui/icons-material";
+import { applyApiFieldErrors } from "../../shared/api/formErrors";
+import type { ApiError } from "../../shared/api/httpClient";
+import { createCarrier, updateCarrier, type CarrierRequest, type CarrierView } from "../../shared/api/carriersApi";
+import { FormDrawer, SectionHeader } from "../../shared/ui/components";
+import { t } from "../../lib/i18n";
 
-const FORM_ID = 'carrier-form'
+const FORM_ID = "carrier-form";
 
-/** Matches the backend's `code` constraint; kept next to the field it validates. */
-const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/
+/** Casa con la restricción de `code` del backend; vive junto al campo que valida. */
+const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface CarrierFormValues {
-  code: string
-  businessName: string
-  taxIdType: string
-  taxIdValue: string
-  contactName: string
-  phone: string
-  email: string
-  externalReference: string
+  code: string;
+  businessName: string;
+  taxIdType: string;
+  taxIdValue: string;
+  contactName: string;
+  phone: string;
+  email: string;
+  externalReference: string;
 }
 
 interface CarrierFormDrawerProps {
-  companyId: string
-  /** `null` creates a new carrier; otherwise the form edits this one. */
-  carrier: CarrierView | null
-  onClose: () => void
-  onSaved: () => void
+  companyId: string;
+  /** `null` crea un transportista nuevo; si no, el formulario edita este. */
+  carrier: CarrierView | null;
+  onClose: () => void;
+  onSaved: () => void;
 }
 
 const KNOWN_FIELDS = new Set<keyof CarrierFormValues>([
-  'code', 'businessName', 'taxIdType', 'taxIdValue', 'contactName', 'phone', 'email', 'externalReference',
-])
+  "code", "businessName", "taxIdType", "taxIdValue", "contactName", "phone", "email", "externalReference",
+]);
 
-/** Create and edit share one form; see `ZoneFormDrawer` (masters) for the same pattern. */
+/**
+ * Alta y edición de un transportista.
+ *
+ * No hay campo `active`: activar es su propio endpoint, de modo que retirar a un transportista
+ * de la operación nunca sea un efecto colateral de corregirle el teléfono.
+ */
 export function CarrierFormDrawer({ companyId, carrier, onClose, onSaved }: CarrierFormDrawerProps) {
-  const { t } = useTranslation('fleet')
-  const { t: tc } = useTranslation('common')
-  const { t: tv } = useTranslation('validations')
-  const isEdit = carrier !== null
-  const [formError, setFormError] = useState<string | null>(null)
+  const isEdit = carrier !== null;
+  const [formError, setFormError] = useState<string | null>(null);
   const {
-    register,
-    handleSubmit,
-    setError,
+    register, handleSubmit, setError,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<CarrierFormValues>({
     defaultValues: {
-      code: carrier?.code ?? '',
-      businessName: carrier?.businessName ?? '',
-      taxIdType: carrier?.taxIdType ?? 'RUC',
-      taxIdValue: carrier?.taxIdValue ?? '',
-      contactName: carrier?.contactName ?? '',
-      phone: carrier?.phone ?? '',
-      email: carrier?.email ?? '',
-      externalReference: carrier?.externalReference ?? '',
+      code: carrier?.code ?? "",
+      businessName: carrier?.businessName ?? "",
+      taxIdType: carrier?.taxIdType ?? "RUC",
+      taxIdValue: carrier?.taxIdValue ?? "",
+      contactName: carrier?.contactName ?? "",
+      phone: carrier?.phone ?? "",
+      email: carrier?.email ?? "",
+      externalReference: carrier?.externalReference ?? "",
     },
-  })
+  });
 
   async function onSubmit(values: CarrierFormValues) {
-    setFormError(null)
+    setFormError(null);
     const request: CarrierRequest = {
       code: values.code.trim(),
       businessName: values.businessName.trim(),
@@ -71,186 +73,116 @@ export function CarrierFormDrawer({ companyId, carrier, onClose, onSaved }: Carr
       phone: values.phone.trim() || null,
       email: values.email.trim() || null,
       externalReference: values.externalReference.trim() || null,
-    }
+    };
 
     try {
-      if (isEdit) {
-        await updateCarrier(companyId, carrier.id, request)
-      } else {
-        await createCarrier(companyId, request)
-      }
-      onSaved()
+      if (isEdit) await updateCarrier(companyId, carrier.id, request);
+      else await createCarrier(companyId, request);
+      onSaved();
     } catch (error) {
-      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, tv('highlightedFields')))
+      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, t("Corrige los campos marcados.")));
     }
   }
 
+  const grid = { display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, mb: 3 } as const;
+
   return (
-    <TmsDrawer
+    <FormDrawer
       open
-      title={isEdit ? t('carriers.form.edit') : t('carriers.form.create')}
-      subtitle={t('carriers.form.subtitle')}
+      icon={<BusinessRounded />}
+      title={isEdit ? t("Editar transportista") : t("Nuevo transportista")}
+      subtitle={t("La empresa que pone los vehículos y los conductores.")}
       size="md"
       onClose={onClose}
       dirty={isDirty}
-      closeOnEscape={!isSubmitting}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
-            {tc('actions.cancel')}
-          </button>
-          <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={isSubmitting}>
-            {isSubmitting ? tc('actions.saving') : tc('actions.save')}
-          </button>
+          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : t("Guardar")}
+          </Button>
         </>
       }
     >
-      <form id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && (
-          <div className="alert alert-danger py-2 small" role="alert">
-            {formError}
-          </div>
-        )}
+      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
+        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
 
-        <fieldset className="tms-fieldset">
-          <legend className="tms-fieldset-legend">{tc('sections.identification')}</legend>
-          <div className="row">
-            <div className="col-12 col-sm-4">
-              <FormField label={tc('columns.code')} htmlFor="carrier-code" error={errors.code?.message} required>
-                <input
-                  id="carrier-code"
-                  className={`form-control${errors.code ? ' is-invalid' : ''}`}
-                  {...register('code', {
-                    required: tv('required'),
-                    maxLength: { value: 32, message: tv('maxLength', { count: 32 }) },
-                    pattern: { value: CODE_PATTERN, message: tv('codePattern') },
-                  })}
-                />
-              </FormField>
-            </div>
-            <div className="col-12 col-sm-8">
-              <FormField
-                label={tc('columns.businessName')}
-                htmlFor="carrier-business-name"
-                error={errors.businessName?.message}
-                required
-              >
-                <input
-                  id="carrier-business-name"
-                  className={`form-control${errors.businessName ? ' is-invalid' : ''}`}
-                  {...register('businessName', {
-                    required: tv('required'),
-                    maxLength: { value: 200, message: tv('maxLength', { count: 200 }) },
-                  })}
-                />
-              </FormField>
-            </div>
-          </div>
-        </fieldset>
+        <SectionHeader title={t("Identificación")} />
+        <Box sx={grid}>
+          <TextField
+            label={t("Código")} required size="small" fullWidth
+            error={Boolean(errors.code)} helperText={errors.code?.message}
+            {...register("code", {
+              required: t("Este campo es obligatorio"),
+              maxLength: { value: 32, message: t("No puede superar los {{count}} caracteres", { count: 32 }) },
+              pattern: { value: CODE_PATTERN, message: t("Solo letras, dígitos, guion bajo o guion") },
+            })}
+          />
+          <TextField
+            label={t("Razón social")} required size="small" fullWidth
+            error={Boolean(errors.businessName)} helperText={errors.businessName?.message}
+            {...register("businessName", {
+              required: t("Este campo es obligatorio"),
+              maxLength: { value: 200, message: t("No puede superar los {{count}} caracteres", { count: 200 }) },
+            })}
+          />
+        </Box>
 
-        <fieldset className="tms-fieldset">
-          <legend className="tms-fieldset-legend">{tc('sections.document')}</legend>
-          <div className="row">
-            <div className="col-12 col-sm-5">
-              <FormField
-                label={tc('fields.taxIdType')}
-                htmlFor="carrier-tax-id-type"
-                error={errors.taxIdType?.message}
-                required
-              >
-                <input
-                  id="carrier-tax-id-type"
-                  placeholder={tc('placeholders.taxIdType')}
-                  className={`form-control${errors.taxIdType ? ' is-invalid' : ''}`}
-                  {...register('taxIdType', {
-                    required: tv('required'),
-                    maxLength: { value: 32, message: tv('maxLength', { count: 32 }) },
-                  })}
-                />
-              </FormField>
-            </div>
-            <div className="col-12 col-sm-7">
-              <FormField
-                label={tc('fields.taxIdValue')}
-                htmlFor="carrier-tax-id-value"
-                error={errors.taxIdValue?.message}
-                required
-              >
-                <input
-                  id="carrier-tax-id-value"
-                  className={`form-control${errors.taxIdValue ? ' is-invalid' : ''}`}
-                  {...register('taxIdValue', {
-                    required: tv('required'),
-                    maxLength: { value: 64, message: tv('maxLength', { count: 64 }) },
-                  })}
-                />
-              </FormField>
-            </div>
-          </div>
-        </fieldset>
+        <SectionHeader title={t("Documento")} />
+        <Box sx={grid}>
+          <TextField
+            label={t("Tipo de documento")} required size="small" fullWidth placeholder={t("RUC, DNI, ...")}
+            error={Boolean(errors.taxIdType)} helperText={errors.taxIdType?.message}
+            {...register("taxIdType", {
+              required: t("Este campo es obligatorio"),
+              maxLength: { value: 20, message: t("No puede superar los {{count}} caracteres", { count: 20 }) },
+            })}
+          />
+          <TextField
+            label={t("Número de documento")} required size="small" fullWidth
+            error={Boolean(errors.taxIdValue)} helperText={errors.taxIdValue?.message}
+            {...register("taxIdValue", {
+              required: t("Este campo es obligatorio"),
+              maxLength: { value: 32, message: t("No puede superar los {{count}} caracteres", { count: 32 }) },
+            })}
+          />
+        </Box>
 
-        <fieldset className="tms-fieldset">
-          <legend className="tms-fieldset-legend">{tc('sections.contact')}</legend>
-          <div className="row">
-            <div className="col-12 col-sm-12">
-              <FormField
-                label={tc('fields.contactName')}
-                htmlFor="carrier-contact-name"
-                error={errors.contactName?.message}
-              >
-                <input
-                  id="carrier-contact-name"
-                  className={`form-control${errors.contactName ? ' is-invalid' : ''}`}
-                  {...register('contactName', { maxLength: { value: 200, message: tv('maxLength', { count: 200 }) } })}
-                />
-              </FormField>
-            </div>
-            <div className="col-12 col-sm-5">
-              <FormField label={tc('columns.phone')} htmlFor="carrier-phone" error={errors.phone?.message}>
-                <input
-                  id="carrier-phone"
-                  type="tel"
-                  className={`form-control${errors.phone ? ' is-invalid' : ''}`}
-                  {...register('phone', { maxLength: { value: 32, message: tv('maxLength', { count: 32 }) } })}
-                />
-              </FormField>
-            </div>
-            <div className="col-12 col-sm-7">
-              <FormField label={tc('fields.email')} htmlFor="carrier-email" error={errors.email?.message}>
-                <input
-                  id="carrier-email"
-                  type="email"
-                  className={`form-control${errors.email ? ' is-invalid' : ''}`}
-                  {...register('email', { maxLength: { value: 200, message: tv('maxLength', { count: 200 }) } })}
-                />
-              </FormField>
-            </div>
-          </div>
-        </fieldset>
-
-        <fieldset className="tms-fieldset mb-0">
-          <legend className="tms-fieldset-legend">{tc('sections.operation')}</legend>
-          <div className="row">
-            <div className="col-12">
-              <FormField
-                label={tc('fields.externalReference')}
-                htmlFor="carrier-external-reference"
-                error={errors.externalReference?.message}
-              >
-                <input
-                  id="carrier-external-reference"
-                  placeholder={tc('placeholders.externalReference')}
-                  className={`form-control${errors.externalReference ? ' is-invalid' : ''}`}
-                  {...register('externalReference', {
-                    maxLength: { value: 200, message: tv('maxLength', { count: 200 }) },
-                  })}
-                />
-              </FormField>
-            </div>
-          </div>
-        </fieldset>
-      </form>
-    </TmsDrawer>
-  )
+        <SectionHeader title={t("Contacto")} />
+        <Box sx={grid}>
+          <TextField
+            label={t("Nombre de contacto")} size="small" fullWidth
+            error={Boolean(errors.contactName)} helperText={errors.contactName?.message}
+            {...register("contactName", {
+              maxLength: { value: 200, message: t("No puede superar los {{count}} caracteres", { count: 200 }) },
+            })}
+          />
+          <TextField
+            label={t("Teléfono")} size="small" fullWidth
+            error={Boolean(errors.phone)} helperText={errors.phone?.message}
+            {...register("phone", {
+              maxLength: { value: 40, message: t("No puede superar los {{count}} caracteres", { count: 40 }) },
+            })}
+          />
+          <TextField
+            label={t("Correo electrónico")} size="small" fullWidth type="email"
+            error={Boolean(errors.email)} helperText={errors.email?.message}
+            {...register("email", {
+              pattern: { value: EMAIL_PATTERN, message: t("Ingresa un correo electrónico válido") },
+              maxLength: { value: 200, message: t("No puede superar los {{count}} caracteres", { count: 200 }) },
+            })}
+          />
+          <TextField
+            label={t("Referencia externa")} size="small" fullWidth
+            placeholder={t("Código opcional de EWM u otro sistema")}
+            error={Boolean(errors.externalReference)} helperText={errors.externalReference?.message}
+            {...register("externalReference", {
+              maxLength: { value: 100, message: t("No puede superar los {{count}} caracteres", { count: 100 }) },
+            })}
+          />
+        </Box>
+      </Box>
+    </FormDrawer>
+  );
 }

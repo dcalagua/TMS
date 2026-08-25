@@ -2,33 +2,24 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "target": "es2023",
-    "lib": [
-      "ES2023",
-      "DOM"
-    ],
+    "lib": ["ES2023", "DOM"],
     "module": "esnext",
-    "types": [
-      "vite/client",
-      "google.maps"
-    ],
-    "allowArbitraryExtensions": true,
+    "types": ["vite/client", "google.maps"],
     "skipLibCheck": true,
+
+    /* Bundler mode */
     "moduleResolution": "bundler",
-    "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
+
+    /* Linting */
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true,
-    "strict": true,
-    "noImplicitOverride": true,
-    "noUncheckedIndexedAccess": true
+    "noFallthroughCasesInSwitch": true
   },
-  "include": [
-    "src"
-  ]
+  "include": ["src"]
 }

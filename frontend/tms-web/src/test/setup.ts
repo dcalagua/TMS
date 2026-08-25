@@ -1,9 +1,3 @@
-import '@testing-library/jest-dom/vitest'
-import '../shared/i18n'
-import { cleanup } from '@testing-library/react'
-import { afterEach } from 'vitest'
-
-// `globals: false` means Testing Library cannot auto-register its cleanup hook.
-afterEach(() => {
-  cleanup()
-})
+// Setup de Vitest. La capa de tests queda configurada aunque el port de los tests
+// de TMS quede fuera del alcance de esta reconstruccion.
+export {}

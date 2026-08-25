@@ -1,309 +1,246 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import type { ApiError } from '../../shared/api/httpClient'
-import { describeApiError } from '../../shared/api/problemMessages'
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { Box, Button, Divider, Paper, Typography } from "@mui/material";
 import {
-  acceptTender,
-  createTender,
-  fetchTripTenders,
-  rejectTender,
-  sendTender,
-  updateTenderTerms,
-  withdrawTender,
-  type TenderRequest,
-  type TripTenderView,
-} from '../../shared/api/tendersApi'
-import { useEnumLabels } from '../../shared/i18n/enums'
-import { useFormat } from '../../shared/i18n/format'
-import { notifyError, notifySuccess } from '../../shared/ui/alerts'
-import { confirmDialog, ErrorState, promptDialog, StatusBadge } from '../../shared/ui/components'
-import { TenderDrawer } from './TenderDrawer'
-import { TENDER_STATUS_TONE } from '../../shared/ui/statusTones'
+  LocalOfferRounded, SendRounded, CheckCircleRounded, CancelRounded, EditRounded, UndoRounded,
+} from "@mui/icons-material";
+import type { ApiError } from "../../shared/api/httpClient";
+import {
+  acceptTender, createTender, fetchTripTenders, rejectTender, sendTender, updateTenderTerms,
+  withdrawTender, type TenderRequest, type TripTenderView,
+} from "../../shared/api/tendersApi";
+import { describeApiError } from "../../shared/api/problemMessages";
+import { AppCard, ErrorState, LoadingState, StatusChip } from "../../shared/ui/components";
+import { TENDER_STATUS_TONE } from "../../shared/ui/statusTones";
+import { confirmDialog, notifyError, notifySuccess, promptDialog } from "../../lib/ui";
+import { enumLabel } from "../../lib/enums";
+import { t } from "../../lib/i18n";
+import { fmtDateTime, fmtMoney } from "../../lib/locale";
+import { TenderDrawer } from "./TenderDrawer";
 
-export interface TripTenderCardProps {
-  companyId: string
-  tripId: string
-  /** The shipment's carrier, resolved by the trip - the only party an offer can go to. */
-  carrierName: string | null
-  /** True while the shipment is CONFIRMED or READY_FOR_DISPATCH; the server refuses anything else. */
-  offerable: boolean
-  /** `planning.tender:manage` - hiding is UX only; the backend re-checks every call. */
-  canManage: boolean
+interface TripTenderCardProps {
+  companyId: string;
+  tripId: string;
+  carrierName: string | null;
+  /** `false` cuando el envío no puede ofertarse — sin transportista, o ya fuera de ruta. */
+  offerable: boolean;
+  canManage: boolean;
 }
 
 /**
- * Whether this shipment has been offered to its carrier, what they said, and every attempt before
- * this one (`docs/domain/CARRIER_TENDERING_V1.md`).
+ * A quién se le ofreció este envío y qué contestó.
  *
- * **The whole history, newest first, not just the live attempt.** "We offered this to ACME twice and
- * they said no twice" is what somebody opening this card is looking for, and showing only the
- * current attempt would hide exactly the thing that explains why the shipment is still unplaced.
+ * Cada mutación responde con el historial *entero* del envío, el intento más nuevo primero, y no
+ * con el intento que tocó. Un viaje de ida y vuelta, y quien retira el intento 2 ve al momento el
+ * rechazo del intento 1 encima, que suele ser justo por lo que está mirando.
  *
- * **The buttons come from the server.** Each attempt carries `allowedTransitions`, already resolved
- * against its deadline, so the card never re-derives the lifecycle and never offers an action on an
- * offer that has quietly lapsed. That is the same contract `TripView.allowedTransitions` has with
- * the workspace's own buttons.
- *
- * Its own query, like the cost and tracking cards: a tendering failure costs this card and leaves
- * the rest of the workspace working.
+ * Los botones se pintan desde `allowedTransitions`, que es la respuesta del servidor a "qué
+ * funciona" ya con el plazo aplicado. Derivarlos de `status` sería una segunda copia del ciclo de
+ * vida en TypeScript, y la copia se equivoca en cuanto vence una oferta.
  */
 export function TripTenderCard({ companyId, tripId, carrierName, offerable, canManage }: TripTenderCardProps) {
-  const { t } = useTranslation('trips')
-  const { t: tc } = useTranslation('common')
-  const { t: td } = useTranslation('dialogs')
-  const enumLabels = useEnumLabels()
-  const format = useFormat()
-  const queryClient = useQueryClient()
-  const [busy, setBusy] = useState(false)
-  const [editing, setEditing] = useState<TripTenderView | null>(null)
-  const [creating, setCreating] = useState(false)
+  const queryClient = useQueryClient();
+  const queryKey = ["trip-tenders", companyId, tripId];
+  const [editing, setEditing] = useState<TripTenderView | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const tendersQuery = useQuery({
-    queryKey: ['trip-tenders', companyId, tripId],
+    queryKey,
     queryFn: ({ signal }) => fetchTripTenders(companyId, tripId, signal),
-  })
+  });
 
-  function refresh() {
-    void queryClient.invalidateQueries({ queryKey: ['trip-tenders', companyId, tripId] })
-    // The trip's own timeline gains an entry for every tender transition, so it has to be reloaded
-    // beside this card or the two would disagree until the next navigation.
-    void queryClient.invalidateQueries({ queryKey: ['trip-events', companyId, tripId] })
-  }
+  const refresh = () => void queryClient.invalidateQueries({ queryKey });
 
-  async function run(action: () => Promise<unknown>, successTitle: string) {
-    setBusy(true)
+  async function run(action: () => Promise<TripTenderView[]>, message: string) {
+    if (busy) return;
+    setBusy(true);
     try {
-      await action()
-      notifySuccess(successTitle)
-      refresh()
+      queryClient.setQueryData(queryKey, await action());
+      notifySuccess(message);
     } catch (error) {
-      notifyError(td('errorTitle'), describeApiError(error as ApiError))
+      notifyError(t("No se pudo completar la acción"), describeApiError(error as ApiError));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function send(tender: TripTenderView) {
     const confirmed = await confirmDialog({
-      title: t('tender.confirm.sendTitle'),
-      text: t('tender.confirm.sendText', { carrier: tender.carrierName ?? '' }),
-      confirmLabel: t('tender.actions.send'),
-    })
-    if (!confirmed) return
-    await run(() => sendTender(companyId, tripId, tender.id), t('tender.notify.sent'))
+      title: t("¿Enviar la oferta?"),
+      text: t("Se le ofrece este envío a {{carrier}}.", { carrier: tender.carrierName ?? "" }),
+      confirmLabel: t("Enviar"),
+    });
+    if (confirmed) await run(() => sendTender(companyId, tripId, tender.id), t("Oferta enviada"));
   }
 
   async function accept(tender: TripTenderView) {
     const confirmed = await confirmDialog({
-      title: t('tender.confirm.acceptTitle'),
-      text: t('tender.confirm.acceptText', { carrier: tender.carrierName ?? '' }),
-      confirmLabel: t('tender.actions.accept'),
-    })
-    if (!confirmed) return
-    await run(() => acceptTender(companyId, tripId, tender.id, { notes: null }), t('tender.notify.accepted'))
+      title: t("¿Aceptar la oferta?"),
+      text: t("El envío queda colocado con {{carrier}}.", { carrier: tender.carrierName ?? "" }),
+      confirmLabel: t("Aceptar"),
+    });
+    if (confirmed) await run(() => acceptTender(companyId, tripId, tender.id, {}), t("Oferta aceptada"));
   }
 
-  /** The reason is mandatory server-side, so the dialog refuses an empty one before the round trip. */
+  /** El rechazo pide el motivo *dentro* de la confirmación: el backend lo exige, así que confirmar
+   * primero y preguntar después sería un viaje de ida y vuelta a un 400. */
   async function reject(tender: TripTenderView) {
     const reason = await promptDialog({
-      title: t('tender.confirm.rejectTitle'),
-      text: t('tender.confirm.rejectText'),
-      inputLabel: t('tender.fields.reason'),
+      title: t("¿Registrar un rechazo?"),
+      text: t("Anota lo que contestó el transportista."),
+      inputLabel: t("Motivo"),
       required: true,
-      requiredMessage: t('tender.confirm.reasonRequired'),
-      maxLength: 1000,
-      confirmLabel: t('tender.actions.reject'),
+      maxLength: 500,
+      confirmLabel: t("Registrar rechazo"),
       dangerous: true,
-    })
-    if (reason === null) return
-    await run(() => rejectTender(companyId, tripId, tender.id, { notes: reason }), t('tender.notify.rejected'))
+    });
+    if (reason === null) return;
+    await run(() => rejectTender(companyId, tripId, tender.id, { notes: reason }), t("Rechazo registrado"));
   }
 
   async function withdraw(tender: TripTenderView) {
     const reason = await promptDialog({
-      title: t('tender.confirm.withdrawTitle'),
-      text: t('tender.confirm.withdrawText'),
-      inputLabel: t('tender.fields.reason'),
+      title: t("¿Retirar la oferta?"),
+      text: t("La oferta deja de estar en pie. Di por qué."),
+      inputLabel: t("Motivo"),
       required: true,
-      requiredMessage: t('tender.confirm.reasonRequired'),
       maxLength: 500,
-      confirmLabel: t('tender.actions.withdraw'),
+      confirmLabel: t("Retirar"),
       dangerous: true,
-    })
-    if (reason === null) return
-    await run(() => withdrawTender(companyId, tripId, tender.id, { reason }), t('tender.notify.withdrawn'))
+    });
+    if (reason === null) return;
+    await run(() => withdrawTender(companyId, tripId, tender.id, { reason }), t("Oferta retirada"));
   }
 
   async function saveTerms(request: TenderRequest) {
-    if (editing) {
-      await updateTenderTerms(companyId, tripId, editing.id, request)
-    } else {
-      await createTender(companyId, tripId, request)
-    }
-    setEditing(null)
-    setCreating(false)
-    notifySuccess(td('saved'))
-    refresh()
+    if (editing) await updateTenderTerms(companyId, tripId, editing.id, request);
+    else await createTender(companyId, tripId, request);
+    setEditing(null);
+    setCreating(false);
+    notifySuccess(t("Cambios guardados"));
+    refresh();
   }
 
-  if (tendersQuery.isPending) {
-    return (
-      <p className="text-secondary small mb-0" role="status">
-        {tc('states.loading')}
-      </p>
-    )
-  }
-  /* Reported as a failure rather than as a grey line, for the reason the cost card gives: this
-     card's other short sentences ("Sin ofertas", "No ofertable") are facts about the shipment, and
-     a broken read must not join them. Offering a tender is a commercial act, so "no offers" and
-     "we could not tell you" are especially not interchangeable here. */
+  if (tendersQuery.isPending) return <LoadingState minHeight={120} />;
+
+  /* Se reporta como fallo y no como una línea gris: las otras frases cortas de esta tarjeta
+     ("Sin ofertas", "No ofertable") son hechos sobre el envío, y una lectura rota no puede
+     juntarse con ellas. Ofertar es un acto comercial, así que "no hay ofertas" y "no te lo
+     pudimos decir" son especialmente distintas aquí. */
   if (tendersQuery.isError) {
     return (
       <ErrorState
         message={describeApiError(tendersQuery.error as ApiError)}
         onRetry={() => void tendersQuery.refetch()}
       />
-    )
+    );
   }
 
-  const tenders = tendersQuery.data
-  const live = tenders.find((tender) => tender.status === 'DRAFT' || tender.status === 'SENT') ?? null
-  const accepted = tenders.find((tender) => tender.status === 'ACCEPTED') ?? null
-  // A new attempt is possible only when nothing is live and nothing has been accepted - the two
-  // rules the server enforces, mirrored here so the button is absent rather than a guaranteed 409.
-  const canOffer = canManage && offerable && live === null && accepted === null
-
-  const money = (value: number) =>
-    format.number(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-  function amountOf(tender: TripTenderView): string | null {
-    return tender.offeredAmount === null ? null : `${tender.currency ?? ''} ${money(tender.offeredAmount)}`
-  }
+  const tenders = tendersQuery.data;
+  const live = tenders.find((tender) => tender.status === "DRAFT" || tender.status === "SENT") ?? null;
+  const accepted = tenders.find((tender) => tender.status === "ACCEPTED") ?? null;
+  // Un intento nuevo solo cabe cuando no hay nada vivo ni nada aceptado: las dos reglas que
+  // aplica el servidor, replicadas aquí para que el botón esté ausente en vez de ser un 409 seguro.
+  const canOffer = canManage && offerable && live === null && accepted === null;
 
   return (
-    <div>
-      {tenders.length === 0 ? (
-        <p className="text-secondary small mb-2">
-          {offerable ? t('tender.none') : t('tender.notOfferable')}
-        </p>
-      ) : (
-        <ul className="list-unstyled mb-2">
-          {tenders.map((tender) => (
-            <li key={tender.id} className="border-bottom pb-2 mb-2">
-              <div className="d-flex flex-wrap align-items-center gap-2">
-                <StatusBadge tone={TENDER_STATUS_TONE[tender.status]} label={enumLabels.tenderStatus(tender.status)} />
-                <span className="fw-semibold">{tender.carrierName ?? '—'}</span>
-                <span className="text-secondary small">{t('tender.attempt', { number: tender.attempt })}</span>
-                {amountOf(tender) && <span className="ms-auto fw-semibold">{amountOf(tender)}</span>}
-              </div>
-
-              <div className="text-secondary small mt-1">
-                {tender.sentAt && <div>{t('tender.sentAt', { at: format.dateTime(tender.sentAt) })}</div>}
-                {/* Shown while the offer is live, because the countdown is the actionable part; and
-                    after it lapsed, because "it expired at 12:00" is the explanation. */}
-                {tender.expiresAt && (tender.status === 'SENT' || tender.status === 'EXPIRED') && (
-                  <div>{t('tender.expiresAt', { at: format.dateTime(tender.expiresAt) })}</div>
-                )}
-                {tender.respondedAt && (
-                  <div>
-                    {/* Two calls rather than one with a computed key: `t` is key-checked against
-                        the Spanish bundle (`i18next.d.ts`), and a literal on each branch is what
-                        keeps that check meaningful. */}
-                    {tender.status === 'ACCEPTED'
-                      ? t('tender.acceptedAt', { at: format.dateTime(tender.respondedAt) })
-                      : t('tender.rejectedAt', { at: format.dateTime(tender.respondedAt) })}
-                    {tender.responseSource && (
-                      <span> · {enumLabels.tenderResponseSource(tender.responseSource)}</span>
-                    )}
-                  </div>
-                )}
-                {tender.responseNotes && <div className="fst-italic">{tender.responseNotes}</div>}
-                {tender.cancelReason && <div className="fst-italic">{tender.cancelReason}</div>}
-                {tender.notes && tender.status !== 'CANCELLED' && <div>{tender.notes}</div>}
-              </div>
-
-              {canManage && tender.allowedTransitions.length > 0 && (
-                <div className="d-flex flex-wrap gap-2 mt-2">
-                  {tender.status === 'DRAFT' && (
-                    <>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-secondary"
-                        disabled={busy}
-                        onClick={() => setEditing(tender)}
-                      >
-                        {tc('actions.edit')}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-primary"
-                        disabled={busy}
-                        onClick={() => void send(tender)}
-                      >
-                        {t('tender.actions.send')}
-                      </button>
-                    </>
-                  )}
-                  {tender.allowedTransitions.includes('ACCEPTED') && (
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-secondary"
-                      disabled={busy}
-                      onClick={() => void accept(tender)}
-                    >
-                      {t('tender.actions.accept')}
-                    </button>
-                  )}
-                  {tender.allowedTransitions.includes('REJECTED') && (
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-secondary"
-                      disabled={busy}
-                      onClick={() => void reject(tender)}
-                    >
-                      {t('tender.actions.reject')}
-                    </button>
-                  )}
-                  {tender.allowedTransitions.includes('CANCELLED') && (
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-secondary"
-                      disabled={busy}
-                      onClick={() => void withdraw(tender)}
-                    >
-                      {t('tender.actions.withdraw')}
-                    </button>
-                  )}
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+    <AppCard
+      title={
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <LocalOfferRounded sx={{ fontSize: 19, color: "text.disabled" }} />
+          {t("Ofertas a transportista")}
+        </Box>
+      }
+      actions={canOffer && (
+        <Button size="small" startIcon={<LocalOfferRounded />} onClick={() => setCreating(true)}>
+          {t("Nueva oferta")}
+        </Button>
       )}
+    >
+      {!offerable && tenders.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">
+          {t("Este envío todavía no se puede ofertar: necesita un transportista.")}
+        </Typography>
+      ) : tenders.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">{t("Sin ofertas.")}</Typography>
+      ) : (
+        <Box sx={{ display: "grid", gap: 1 }}>
+          {tenders.map((tender) => {
+            const can = (status: string) => tender.allowedTransitions.includes(status as never);
+            return (
+              <Paper key={tender.id} variant="outlined" sx={{ p: 1.5 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                    {t("Intento {{n}}", { n: tender.attempt })}
+                  </Typography>
+                  <StatusChip label={enumLabel("tenderStatus", tender.status)} tone={TENDER_STATUS_TONE[tender.status]} />
+                  <Box sx={{ flex: 1 }} />
+                  {tender.offeredAmount !== null && (
+                    <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>
+                      {fmtMoney(tender.offeredAmount, tender.currency ?? "PEN")}
+                    </Typography>
+                  )}
+                </Box>
 
-      {canOffer && (
-        <button
-          type="button"
-          className="btn btn-sm btn-outline-secondary"
-          disabled={busy}
-          onClick={() => setCreating(true)}
-        >
-          {tenders.length === 0 ? t('tender.actions.offer') : t('tender.actions.offerAgain')}
-        </button>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                  {tender.carrierName ?? ""}
+                  {tender.expiresAt && ` · ${t("Vence")} ${fmtDateTime(tender.expiresAt)}`}
+                  {tender.sentAt && ` · ${t("Enviada")} ${fmtDateTime(tender.sentAt)}`}
+                </Typography>
+
+                {(tender.notes || tender.responseNotes || tender.cancelReason) && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    {[tender.notes, tender.responseNotes, tender.cancelReason].filter(Boolean).join(" · ")}
+                  </Typography>
+                )}
+
+                {canManage && tender.allowedTransitions.length > 0 && (
+                  <>
+                    <Divider sx={{ my: 1 }} />
+                    <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
+                      {tender.status === "DRAFT" && (
+                        <Button size="small" startIcon={<EditRounded />} onClick={() => setEditing(tender)}>
+                          {t("Editar")}
+                        </Button>
+                      )}
+                      {can("SENT") && (
+                        <Button size="small" variant="contained" startIcon={<SendRounded />} disabled={busy} onClick={() => void send(tender)}>
+                          {t("Enviar")}
+                        </Button>
+                      )}
+                      {can("ACCEPTED") && (
+                        <Button size="small" color="success" startIcon={<CheckCircleRounded />} disabled={busy} onClick={() => void accept(tender)}>
+                          {t("Aceptar")}
+                        </Button>
+                      )}
+                      {can("REJECTED") && (
+                        <Button size="small" color="error" startIcon={<CancelRounded />} disabled={busy} onClick={() => void reject(tender)}>
+                          {t("Rechazar")}
+                        </Button>
+                      )}
+                      {can("CANCELLED") && (
+                        <Button size="small" startIcon={<UndoRounded />} disabled={busy} onClick={() => void withdraw(tender)}>
+                          {t("Retirar")}
+                        </Button>
+                      )}
+                    </Box>
+                  </>
+                )}
+              </Paper>
+            );
+          })}
+        </Box>
       )}
 
       {(creating || editing) && (
         <TenderDrawer
-          carrierName={editing?.carrierName ?? carrierName}
+          carrierName={carrierName}
           tender={editing}
-          onClose={() => {
-            setEditing(null)
-            setCreating(false)
-          }}
+          onClose={() => { setCreating(false); setEditing(null); }}
           onSubmit={saveTerms}
         />
       )}
-    </div>
-  )
+    </AppCard>
+  );
 }

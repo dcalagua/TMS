@@ -1,200 +1,172 @@
-import { useState } from 'react'
-import { Controller, useForm } from 'react-hook-form'
-import { useTranslation } from 'react-i18next'
+import { useState } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { Alert, Box, Button, MenuItem, TextField, Typography } from "@mui/material";
+import { ReportProblemRounded } from "@mui/icons-material";
 import {
-  STOP_SCOPED_EXCEPTION_TYPES,
-  TRIP_EXCEPTION_TYPES,
-  type TripExceptionType,
-} from '../../shared/api/planningApi'
-import { useEnumLabels } from '../../shared/i18n/enums'
-import { FormField } from '../../shared/ui/components/FormField'
-import { Select } from '../../shared/ui/components/Select'
-import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
+  STOP_SCOPED_EXCEPTION_TYPES, TRIP_EXCEPTION_TYPES,
+  type TripExceptionType, type TripStopView,
+} from "../../shared/api/planningApi";
+import { FormDrawer } from "../../shared/ui/components";
+import { enumLabel } from "../../lib/enums";
+import { t } from "../../lib/i18n";
 
-const FORM_ID = 'trip-problem-form'
-
-export interface TripProblemStopOption {
-  id: string
-  label: string
-}
+const FORM_ID = "trip-problem-form";
 
 export interface TripProblemValues {
-  exceptionType: TripExceptionType
-  tripStopId: string | null
-  notes: string | null
+  exceptionType: TripExceptionType;
+  notes: string | null;
+  /** Solo en modo `report`: a qué parada se ata la incidencia, o null para el viaje entero. */
+  tripStopId: string | null;
 }
+
+export type TripProblemMode = "skip" | "fail" | "report";
 
 interface TripProblemDrawerProps {
-  title: string
-  subtitle: string
-  submitLabel: string
-  /**
-   * The stops a trip-level report may be attributed to. Omitted when the problem already belongs
-   * to a known stop - skipping or failing one - in which case no picker is shown at all.
-   */
-  stops?: TripProblemStopOption[]
-  /** Pre-set and not offered for change: the stop the caller is already acting on. */
-  lockedStopId?: string
-  onClose: () => void
-  onSubmit: (values: TripProblemValues) => Promise<void>
+  mode: TripProblemMode;
+  /** Las paradas del viaje, para el selector del modo `report`. */
+  stops: TripStopView[];
+  /** La parada afectada en los modos `skip` y `fail`. */
+  stopLabel?: string;
+  onClose: () => void;
+  /** Lanza un `Error` con la frase del servidor si el backend rechaza: el drawer se queda
+   * abierto con el mensaje dentro, en vez de cerrarse y dejar un toast detrás de nada. */
+  onSubmit: (values: TripProblemValues) => Promise<void>;
 }
 
+const COPY: Record<TripProblemMode, { title: string; subtitle: string; confirm: string }> = {
+  skip: {
+    title: "Saltar la parada",
+    subtitle: "La parada no se va a servir. Di por qué: eso abre una incidencia del viaje.",
+    confirm: "Saltar parada",
+  },
+  fail: {
+    title: "Marcar la parada como fallida",
+    subtitle: "Se intentó y no se pudo servir. El motivo abre una incidencia del viaje.",
+    confirm: "Marcar fallida",
+  },
+  report: {
+    title: "Reportar una incidencia",
+    subtitle: "Algo que pasó en el viaje y hay que dejar registrado.",
+    confirm: "Reportar",
+  },
+};
+
 /**
- * The one form behind every way of saying "something went wrong": skipping a stop, failing one,
- * and reporting a problem against the trip itself.
+ * Saltar una parada, marcarla fallida y reportar una incidencia del viaje comparten formulario.
  *
- * <p>One component rather than three, because the three differ only in which stop the problem is
- * attached to and in what the button says. The fields - a typed reason and a sentence - are the
- * same, and so is the rule that makes them worth collecting: an untyped reason cannot be counted,
- * and `OTHER` without a sentence says nothing at all.
+ * Los tres necesitan lo mismo —un tipo de motivo y una frase— y a qué endpoint van lo decide el
+ * modo. Tenerlos en tres drawers casi idénticos es como el tercero acaba pidiendo un motivo que
+ * los otros dos no ofrecen.
  *
- * <p>Client-side validation here is a courtesy, never the decision. The server re-checks that a
- * delivery-shaped reason names a stop and that `OTHER` carries notes, and it is the server's
- * refusal that is authoritative - see `TripStopExecutionService`.
+ * En los modos de parada la lista de tipos se acota a los que tienen sentido en una parada: el
+ * backend rechaza los demás, y ofrecer un motivo que va a fallar es ofrecer un error.
  */
-export function TripProblemDrawer({
-  title,
-  subtitle,
-  submitLabel,
-  stops,
-  lockedStopId,
-  onClose,
-  onSubmit,
-}: TripProblemDrawerProps) {
-  const { t } = useTranslation('trips')
-  const { t: tc } = useTranslation('common')
-  const enumLabels = useEnumLabels()
-  const [formError, setFormError] = useState<string | null>(null)
+export function TripProblemDrawer({ mode, stops, stopLabel, onClose, onSubmit }: TripProblemDrawerProps) {
+  const [formError, setFormError] = useState<string | null>(null);
+  const copy = COPY[mode];
+  const types = mode === "report" ? TRIP_EXCEPTION_TYPES : STOP_SCOPED_EXCEPTION_TYPES;
 
   const {
-    control,
-    register,
-    handleSubmit,
-    watch,
+    register, control, handleSubmit,
     formState: { errors, isDirty, isSubmitting },
-  } = useForm<{ exceptionType: TripExceptionType; tripStopId: string; notes: string }>({
-    defaultValues: {
-      exceptionType: 'TRAFFIC_DELAY',
-      tripStopId: lockedStopId ?? '',
-      notes: '',
-    },
-  })
+  } = useForm<{ exceptionType: TripExceptionType | ""; notes: string; tripStopId: string }>({
+    defaultValues: { exceptionType: "", notes: "", tripStopId: "" },
+  });
 
-  const selectedType = watch('exceptionType')
-  const notesRequired = selectedType === 'OTHER'
-  // Only meaningful when a picker is on screen: a locked stop always satisfies the rule.
-  const stopRequired = stops !== undefined && STOP_SCOPED_EXCEPTION_TYPES.includes(selectedType)
-
-  async function submit(values: { exceptionType: TripExceptionType; tripStopId: string; notes: string }) {
-    setFormError(null)
+  async function submit(values: { exceptionType: TripExceptionType | ""; notes: string; tripStopId: string }) {
+    setFormError(null);
+    if (values.exceptionType === "") {
+      setFormError(t("Elige un motivo."));
+      return;
+    }
     try {
       await onSubmit({
         exceptionType: values.exceptionType,
-        tripStopId: values.tripStopId === '' ? null : values.tripStopId,
-        notes: values.notes.trim() === '' ? null : values.notes.trim(),
-      })
+        notes: values.notes.trim() || null,
+        tripStopId: values.tripStopId || null,
+      });
     } catch (error) {
-      setFormError((error as Error).message)
+      setFormError((error as Error).message);
     }
   }
 
   return (
-    <TmsDrawer
+    <FormDrawer
       open
-      title={title}
-      subtitle={subtitle}
+      icon={<ReportProblemRounded />}
+      title={t(copy.title)}
+      subtitle={stopLabel ?? t(copy.subtitle)}
       size="md"
       onClose={onClose}
       dirty={isDirty}
-      closeOnEscape={!isSubmitting}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
-            {tc('actions.cancel')}
-          </button>
-          <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={isSubmitting}>
-            {isSubmitting ? tc('actions.saving') : submitLabel}
-          </button>
+          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" color="error" disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : t(copy.confirm)}
+          </Button>
         </>
       }
     >
-      <form id={FORM_ID} onSubmit={(event) => void handleSubmit(submit)(event)} noValidate>
-        {formError && (
-          <div className="alert alert-danger py-2 small" role="alert">
-            {formError}
-          </div>
+      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(submit)(event)} noValidate>
+        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+
+        {stopLabel && (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {t(copy.subtitle)}
+          </Typography>
         )}
 
-        <FormField label={t('workspace.problems.type')} htmlFor="trip-problem-type" required>
-          <Controller
-            control={control}
-            name="exceptionType"
-            render={({ field }) => (
-              <Select
-                id="trip-problem-type"
-                value={field.value}
-                onChange={(next) => field.onChange(next as TripExceptionType)}
-                options={TRIP_EXCEPTION_TYPES.map((type) => ({
-                  value: type,
-                  label: enumLabels.tripExceptionType(type),
-                }))}
-              />
-            )}
-          />
-        </FormField>
-
-        {stops !== undefined && (
-          <FormField
-            label={t('workspace.problems.stop')}
-            htmlFor="trip-problem-stop"
-            required={stopRequired}
-            help={t('workspace.problems.stopHelp')}
-            error={errors.tripStopId?.message}
-          >
+        <Box sx={{ display: "grid", gap: 2 }}>
+          {mode === "report" && (
             <Controller
               control={control}
               name="tripStopId"
-              rules={{
-                validate: (value) =>
-                  !stopRequired || value !== '' || t('workspace.problems.stopRequired'),
-              }}
               render={({ field }) => (
-                <Select
-                  id="trip-problem-stop"
-                  value={field.value}
-                  onChange={(next) => field.onChange(next)}
-                  options={[
-                    { value: '', label: t('workspace.problems.wholeTrip') },
-                    ...stops.map((stop) => ({ value: stop.id, label: stop.label })),
-                  ]}
-                />
+                <TextField
+                  select label={t("Parada")} size="small" fullWidth
+                  value={field.value} onChange={(e) => field.onChange(e.target.value)}
+                  helperText={t("Déjalo vacío si la incidencia es del viaje entero.")}
+                >
+                  <MenuItem value="">{t("Todo el viaje")}</MenuItem>
+                  {stops.map((stop) => (
+                    <MenuItem key={stop.id} value={stop.id}>
+                      {stop.sequence}. {stop.destinationName ?? stop.destinationCode ?? stop.destinationId}
+                    </MenuItem>
+                  ))}
+                </TextField>
               )}
             />
-          </FormField>
-        )}
+          )}
 
-        <FormField
-          label={t('workspace.problems.notes')}
-          htmlFor="trip-problem-notes"
-          required={notesRequired}
-          help={t('workspace.problems.notesHelp')}
-          error={errors.notes?.message}
-        >
-          <textarea
-            id="trip-problem-notes"
-            className="form-control"
-            rows={3}
-            // The tighter of the two server limits (500 on a stop's notes, 1000 on a trip-level
-            // report), because one shared form must not offer a length one of its uses refuses.
-            maxLength={500}
-            {...register('notes', {
-              validate: (value) =>
-                !notesRequired || value.trim() !== '' || t('workspace.problems.notesRequired'),
-            })}
+          <Controller
+            control={control}
+            name="exceptionType"
+            rules={{ required: t("Este campo es obligatorio") }}
+            render={({ field }) => (
+              <TextField
+                select label={t("Motivo")} required size="small" fullWidth
+                value={field.value} onChange={(e) => field.onChange(e.target.value as TripExceptionType)}
+                error={Boolean(errors.exceptionType)} helperText={errors.exceptionType?.message}
+              >
+                <MenuItem value="">{t("Selecciona un motivo")}</MenuItem>
+                {types.map((type) => (
+                  <MenuItem key={type} value={type}>{enumLabel("tripExceptionType", type)}</MenuItem>
+                ))}
+              </TextField>
+            )}
           />
-        </FormField>
-      </form>
-    </TmsDrawer>
-  )
+
+          <TextField
+            label={t("Notas")} size="small" fullWidth multiline rows={3}
+            {...register("notes", {
+              maxLength: { value: 1000, message: t("No puede superar los {{count}} caracteres", { count: 1000 }) },
+            })}
+            error={Boolean(errors.notes)} helperText={errors.notes?.message}
+          />
+        </Box>
+      </Box>
+    </FormDrawer>
+  );
 }

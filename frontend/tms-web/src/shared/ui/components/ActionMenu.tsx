@@ -1,99 +1,89 @@
-import { useId } from 'react'
-import { createPortal } from 'react-dom'
-import { useTranslation } from 'react-i18next'
-import { useMenu } from './useMenu'
+import { useState, type MouseEvent, type ReactNode } from "react";
+import { IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Tooltip, Divider } from "@mui/material";
+import { MoreVertRounded } from "@mui/icons-material";
+import { t } from "../../../lib/i18n";
 
 export interface ActionMenuItem {
-  key: string
-  label: string
-  /** Bootstrap Icons class, for example `bi-pencil`. */
-  icon?: string
-  onSelect: () => void
-  dangerous?: boolean
-  disabled?: boolean
+  key: string;
+  label: string;
+  icon?: ReactNode;
+  onSelect: () => void;
+  dangerous?: boolean;
+  disabled?: boolean;
+  /** Traza una separación por encima de este ítem: agrupa lo destructivo aparte de lo normal. */
+  divider?: boolean;
 }
 
 export interface ActionMenuProps {
-  items: ActionMenuItem[]
-  /** Overrides the trigger's accessible name; defaults to a generic "open actions menu". */
-  label?: string
+  items: ActionMenuItem[];
+  /** Sustituye el nombre accesible del disparador. */
+  label?: string;
 }
 
 /**
- * The `...` menu a table row uses for its secondary actions, so a list of twenty rows is not a
- * wall of forty buttons. Keyboard behaviour and placement come from {@link useMenu}.
+ * El menú `⋮` que usa una fila de tabla para sus acciones secundarias, para que una lista de
+ * veinte filas no sea un muro de cuarenta botones.
  *
- * The panel is portalled to the body rather than nested in the cell. A table row lives inside
- * `.tms-table-wrap` (`overflow: hidden`) and `.tms-table-scroll` (`overflow-x: auto`), so an
- * absolutely positioned child is clipped by the first and inflates the scrollable area of the
- * second - the last row's menu would open behind the panel edge and add a scrollbar. Raising
- * z-index cannot fix that; an overflow container clips whatever the stacking order says. The
- * only structural answer is to leave the table's flow, which is what this does.
- *
- * The panel is styled by the design system rather than by `.dropdown-menu`, which carries
- * Bootstrap's blue active state and a set of paddings that do not match the rest of the app.
+ * El panel lo monta MUI en un portal fuera del flujo de la tabla: una fila vive dentro de un
+ * contenedor con `overflow`, y un hijo posicionado en absoluto quedaría recortado por él — el
+ * menú de la última fila se abriría por detrás del borde del panel. Subir el z-index no arregla
+ * eso; un contenedor con overflow recorta lo que sea que diga el orden de apilado.
  */
 export function ActionMenu({ items, label }: ActionMenuProps) {
-  const { t } = useTranslation('common')
-  const menuId = useId()
-  const { open, toggle, close, containerRef, triggerRef, menuRef, menuStyle, registerItem, onKeyDown } = useMenu(
-    items.length,
-    { align: 'end', isEnabled: (index) => items[index]?.disabled !== true },
-  )
+  const [anchor, setAnchor] = useState<null | HTMLElement>(null);
 
-  if (items.length === 0) {
-    return null
-  }
+  if (items.length === 0) return null;
 
-  const triggerLabel = label ?? t('actions.openMenu')
+  const triggerLabel = label ?? t("Abrir menú de acciones");
+
+  const open = (event: MouseEvent<HTMLElement>) => {
+    event.stopPropagation();
+    setAnchor(event.currentTarget);
+  };
+
+  const choose = (item: ActionMenuItem) => {
+    setAnchor(null);
+    item.onSelect();
+  };
 
   return (
-    <div className="d-inline-block" ref={containerRef}>
-      <button
-        ref={triggerRef}
-        type="button"
-        className={`tms-icon-btn${open ? ' is-active' : ''}`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        aria-label={triggerLabel}
-        title={triggerLabel}
-        onClick={toggle}
+    <>
+      <Tooltip title={triggerLabel}>
+        <IconButton size="small" onClick={open} aria-label={triggerLabel} aria-haspopup="menu">
+          <MoreVertRounded fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Menu
+        anchorEl={anchor}
+        open={anchor !== null}
+        onClose={() => setAnchor(null)}
+        onClick={(e) => e.stopPropagation()}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        slotProps={{
+          paper: {
+            sx: {
+              mt: 0.5, borderRadius: 2.5, minWidth: 208, overflow: "hidden",
+              boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
+              "& .MuiList-root": { py: 0.75 },
+              "& .MuiMenuItem-root": { mx: 0.75, px: 1.25, py: 0.85, borderRadius: 1.5, fontSize: 13.5, fontWeight: 600 },
+            },
+          },
+        }}
       >
-        <i className="bi bi-three-dots-vertical" aria-hidden="true" />
-      </button>
-
-      {open &&
-        createPortal(
-          <div
-            id={menuId}
-            ref={menuRef}
-            role="menu"
-            tabIndex={-1}
-            className="tms-menu"
-            style={menuStyle}
-            onKeyDown={onKeyDown}
+        {items.map((item) => [
+          item.divider ? <Divider key={`${item.key}-div`} sx={{ my: 0.75 }} /> : null,
+          <MenuItem
+            key={item.key}
+            disabled={item.disabled}
+            onClick={() => choose(item)}
+            sx={item.dangerous ? { color: "error.main", "& .MuiListItemIcon-root": { color: "error.main" } } : undefined}
           >
-            {items.map((item, index) => (
-              <button
-                key={item.key}
-                ref={registerItem(index)}
-                type="button"
-                role="menuitem"
-                disabled={item.disabled}
-                className={`tms-menu-item${item.dangerous ? ' is-dangerous' : ''}`}
-                onClick={() => {
-                  close(false)
-                  item.onSelect()
-                }}
-              >
-                {item.icon && <i className={`bi ${item.icon}`} aria-hidden="true" />}
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </div>,
-          document.body,
-        )}
-    </div>
-  )
+            {item.icon && <ListItemIcon sx={{ minWidth: 32, "& svg": { fontSize: 19 } }}>{item.icon}</ListItemIcon>}
+            <ListItemText slotProps={{ primary: { sx: { fontSize: 13.5, fontWeight: 600 } } }}>{item.label}</ListItemText>
+          </MenuItem>,
+        ])}
+      </Menu>
+    </>
+  );
 }

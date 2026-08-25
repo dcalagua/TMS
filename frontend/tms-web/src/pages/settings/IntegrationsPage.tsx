@@ -1,85 +1,64 @@
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { useCompany } from '../../shared/company/CompanyContext'
-import { EmptyState, PageHeader } from '../../shared/ui/components'
-import { InboundPanel } from './InboundPanel'
-import { OutboundPanel } from './OutboundPanel'
+import { useState } from "react";
+import { Alert, Tab, Tabs } from "@mui/material";
+import { PowerRounded, LoginRounded, SendRounded } from "@mui/icons-material";
+import { useCompany } from "../../shared/company/CompanyContext";
+import { PageHeader } from "../../shared/ui/components";
+import { ICON_TINTS } from "../../shared/ui/navConfig";
+import { t } from "../../lib/i18n";
+import { InboundPanel } from "./InboundPanel";
+import { OutboundPanel } from "./OutboundPanel";
 
-type HubTab = 'inbound' | 'outbound'
+type Half = "inbound" | "outbound";
 
 /**
- * The Integration Hub: everything connected to this company, in one screen.
+ * El hub de integraciones, en dos mitades.
  *
- * Two tabs, and the split is by direction rather than by object, because that is how the question
- * is actually asked. **Inbound** is who may write into us and what they sent; **outbound** is where
- * our events go and whether they arrived. The two are separate permissions server-side for the same
- * reason - a credential is a way in and a subscription is a way out, and mismanaging them fails in
- * opposite directions.
+ * **Entrada**: las credenciales de máquina con las que se autentican los socios, y la bandeja de
+ * lo que mandaron. **Salida**: los destinos a los que se empujan los eventos de esta empresa, y
+ * el registro de lo que se entregó.
  *
- * A caller holding neither permission sees an empty state rather than a broken screen: the route is
- * reachable from the menu only with one of them, but a direct URL must not answer with a wall of
- * 403s.
+ * Son una sola pantalla porque son una sola pregunta —"¿qué hay conectado a nosotros y está
+ * funcionando?"— y dos recursos del backend, con dos permisos, porque fallan en direcciones
+ * opuestas: una credencial es una forma de entrar, una suscripción es una forma de salir.
  */
 export function IntegrationsPage() {
-  const { t } = useTranslation('settings')
-  const { selected, hasPermission } = useCompany()
-  const companyId = selected?.id ?? ''
+  const { selected, hasPermission } = useCompany();
+  const companyId = selected?.id ?? "";
+  const canManageInbound = hasPermission("integration.client:manage");
+  const canManageOutbound = hasPermission("integration.webhook:manage");
+  const canReadOutbound = canManageOutbound || hasPermission("integration.webhook:read");
 
-  const canReadClients = hasPermission('integration.client:read')
-  const canReadWebhooks = hasPermission('integration.webhook:read')
-  const [tab, setTab] = useState<HubTab>(canReadClients ? 'inbound' : 'outbound')
+  const [half, setHalf] = useState<Half>("inbound");
 
   return (
-    <div>
+    <>
       <PageHeader
-        icon="plug"
-        title={t('integrations.title')}
-        description={t('integrations.description')}
+        icon={<PowerRounded />}
+        tint={ICON_TINTS["/settings/integrations"]}
+        title={t("Integraciones")}
+        subtitle={t("Qué hay conectado a esta empresa, en las dos direcciones.")}
       />
 
-      {!canReadClients && !canReadWebhooks ? (
-        <EmptyState
-          icon="bi-shield-lock"
-          title={t('integrations.noAccess.title')}
-          message={t('integrations.noAccess.message')}
-        />
-      ) : (
-        <>
-          <ul className="nav nav-tabs mb-3" role="tablist">
-            {canReadClients && (
-              <li className="nav-item" role="presentation">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === 'inbound'}
-                  className={`nav-link${tab === 'inbound' ? ' active' : ''}`}
-                  onClick={() => setTab('inbound')}
-                >
-                  <i className="bi bi-box-arrow-in-down me-2" aria-hidden="true" />
-                  {t('integrations.tabs.inbound')}
-                </button>
-              </li>
-            )}
-            {canReadWebhooks && (
-              <li className="nav-item" role="presentation">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === 'outbound'}
-                  className={`nav-link${tab === 'outbound' ? ' active' : ''}`}
-                  onClick={() => setTab('outbound')}
-                >
-                  <i className="bi bi-box-arrow-up-right me-2" aria-hidden="true" />
-                  {t('integrations.tabs.outbound')}
-                </button>
-              </li>
-            )}
-          </ul>
+      <Tabs
+        value={half}
+        onChange={(_e, value: Half) => setHalf(value)}
+        sx={{ mb: 3, borderBottom: "1px solid", borderColor: "divider" }}
+      >
+        <Tab value="inbound" label={t("Entrada")} icon={<LoginRounded />} iconPosition="start" sx={{ minHeight: 48 }} />
+        <Tab value="outbound" label={t("Salida")} icon={<SendRounded />} iconPosition="start" sx={{ minHeight: 48 }} />
+      </Tabs>
 
-          {tab === 'inbound' && canReadClients && <InboundPanel companyId={companyId} />}
-          {tab === 'outbound' && canReadWebhooks && <OutboundPanel companyId={companyId} />}
-        </>
+      {half === "inbound" && <InboundPanel companyId={companyId} canManage={canManageInbound} />}
+
+      {half === "outbound" && (
+        canReadOutbound
+          ? <OutboundPanel companyId={companyId} canManage={canManageOutbound} />
+          : (
+            // Las dos mitades tienen permisos distintos a propósito: quien puede emitir una
+            // credencial no necesariamente puede configurar a dónde salen los eventos.
+            <Alert severity="info">{t("No disponible para tu cuenta.")}</Alert>
+          )
       )}
-    </div>
-  )
+    </>
+  );
 }

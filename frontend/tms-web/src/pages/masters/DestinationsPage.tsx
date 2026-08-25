@@ -1,12 +1,11 @@
-import { LocationsPage } from './LocationsPage'
+import { LocationsPage } from "./LocationsPage";
 
 /**
- * Destinos: the Locations master, filtered to the places this company may deliver to. The
- * counterpart of `OriginsPage` - see that file for why both are one component.
+ * Destinos: el reverso de Orígenes, con el uso operacional clavado en DESTINATION.
  *
- * A store appears here and in Orígenes when it both receives deliveries and ships its returns.
- * That is one row shown by two questions, not two records.
+ * La misma tienda aparece aquí y en Orígenes cuando recibe entregas y despacha sus propias
+ * devoluciones: una fila, dos lentes, que es justo el punto del modelo de ubicación.
  */
 export function DestinationsPage() {
-  return <LocationsPage view="DESTINATION" />
+  return <LocationsPage view="DESTINATION" />;
 }

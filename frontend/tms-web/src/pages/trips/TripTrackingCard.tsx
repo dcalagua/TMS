@@ -1,125 +1,99 @@
-import { useTranslation } from 'react-i18next'
-import type { TripTrackingView } from '../../shared/api/trackingApi'
-import { useFormat } from '../../shared/i18n/format'
+import { Alert, Box, Typography } from "@mui/material";
+import { MyLocationRounded, SpeedRounded } from "@mui/icons-material";
+import type { TripTrackingView } from "../../shared/api/trackingApi";
+import { AppCard, DetailGrid, DetailItem, LoadingState } from "../../shared/ui/components";
+import { t } from "../../lib/i18n";
+import { fmtDateTime, fmtDecimal, fmtMinutes } from "../../lib/locale";
 
-/**
- * How old a position may be before it is shown as a warning rather than as a fact.
- *
- * Fifteen minutes, which is deliberately far above the 60-second default sampling interval: a feed
- * skipping one or two points is normal (a tunnel, a dead spot, a device rebooting), and a card that
- * turned orange every time would be a card people stop reading. Fifteen minutes of silence from a
- * vehicle that is supposed to be moving is a real signal.
- */
-const STALE_AFTER_MINUTES = 15
-
-export interface TripTrackingCardProps {
-  tracking: TripTrackingView | undefined
-  loading: boolean
-  /** True when the tracking request itself failed - see the component comment. */
-  failed: boolean
+interface TripTrackingCardProps {
+  tracking: TripTrackingView | undefined;
+  loading: boolean;
+  /** La lectura de tracking es la única de esta pantalla que puede fallar legítimamente mientras
+   * todo lo demás funciona: un despliegue sin feed no es un error del operador. */
+  failed: boolean;
 }
 
-/** Minutes between a reported position and now, rounded to the nearest minute. */
-function minutesSince(instant: string): number {
-  return Math.round((Date.now() - new Date(instant).getTime()) / 60000)
+/** Cuánto hace de la última posición, en minutos. La antigüedad es la mitad del dato: una
+ * posición de hace tres horas y una de hace tres minutos dicen cosas muy distintas. */
+function ageMinutes(occurredAt: string): number | null {
+  const then = new Date(occurredAt).getTime();
+  if (Number.isNaN(then)) return null;
+  return Math.max(0, Math.round((Date.now() - then) / 60000));
 }
 
 /**
- * A link that opens the point in Google Maps, which needs no API key and no billing account.
+ * Dónde está el vehículo.
  *
- * The embedded map (`TripStopMap`) draws the same position when Maps is configured; this works
- * regardless, and is also what a dispatcher pastes into a chat when somebody asks where the truck
- * is. `toFixed` and not the locale formatter, deliberately: Google's `q` parameter wants a decimal
- * point, and a Spanish locale writing "-12,046374" would send a dispatcher somewhere else.
- */
-function mapsHref(latitude: number, longitude: number): string {
-  return `https://www.google.com/maps?q=${latitude.toFixed(6)},${longitude.toFixed(6)}`
-}
-
-/**
- * Where the vehicle is (`docs/domain/TRACKING_V1.md`).
+ * Los tres casos de "no hay posición" se distinguen a propósito, porque solo uno merece una
+ * llamada de teléfono:
  *
- * <p>The card renders one of five states and each of them says something different, because
- * "no position" has several causes and a dispatcher does something different about each:
+ *  - `trackable` falso: el envío no ha salido, o se canceló;
+ *  - `providerConfigured` falso: este despliegue no tiene feed en absoluto;
+ *  - los dos ciertos y `lastPosition` nulo: hay feed y no ha dicho nada de este envío.
  *
- *   * the request failed        - TMS's problem, and explicitly not the trip's;
- *   * the trip is not on the road - the status already explains it, nothing to do;
- *   * no feed in this deployment - somebody's job, but not today's dispatcher's;
- *   * a feed that has said nothing about this shipment - the one worth a phone call;
- *   * a position, with how old it is.
- *
- * <p>A failed tracking request never takes the page down with it: the workspace's own query is
- * separate, so a provider outage costs the tracking card and nothing else. That is the same
- * reasoning the timeline's separate query follows, applied to a harder failure.
+ * Un único campo vacío le diría al despachador cuál de los tres es: nada.
  */
 export function TripTrackingCard({ tracking, loading, failed }: TripTrackingCardProps) {
-  const { t } = useTranslation('trips')
-  const format = useFormat()
-
-  if (loading) {
-    return <p className="text-secondary small mb-0">{t('workspace.tracking.loading')}</p>
-  }
-  if (failed || !tracking) {
-    return <p className="text-secondary small mb-0">{t('workspace.tracking.failed')}</p>
-  }
-  if (!tracking.trackable) {
-    return <p className="text-secondary small mb-0">{t('workspace.tracking.notOnTheRoad')}</p>
-  }
-
-  const position = tracking.lastPosition
-  if (position === null) {
-    return (
-      <p className="text-secondary small mb-0">
-        {tracking.providerConfigured
-          ? t('workspace.tracking.noneReported')
-          : t('workspace.tracking.noProvider')}
-      </p>
-    )
-  }
-
-  const age = minutesSince(position.occurredAt)
-  const stale = age >= STALE_AFTER_MINUTES
-
   return (
-    <div className="small">
-      <div className="d-flex justify-content-between align-items-start gap-2">
-        <span className="fw-semibold">
-          {position.latitude.toFixed(5)}, {position.longitude.toFixed(5)}
-        </span>
-        <a
-          className="text-nowrap"
-          href={mapsHref(position.latitude, position.longitude)}
-          target="_blank"
-          rel="noreferrer noopener"
-        >
-          {t('workspace.tracking.openInMaps')}
-        </a>
-      </div>
+    <AppCard
+      title={
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <MyLocationRounded sx={{ fontSize: 19, color: "text.disabled" }} />
+          {t("Ubicación del vehículo")}
+        </Box>
+      }
+    >
+      {loading ? (
+        <LoadingState minHeight={100} />
+      ) : failed || !tracking ? (
+        <Typography variant="body2" color="text.secondary">
+          {t("No se pudo consultar la ubicación en este momento.")}
+        </Typography>
+      ) : !tracking.providerConfigured ? (
+        <Alert severity="info">
+          {t("Esta instalación no tiene un proveedor de rastreo configurado.")}
+        </Alert>
+      ) : !tracking.trackable ? (
+        <Typography variant="body2" color="text.secondary">
+          {t("El envío todavía no está en ruta.")}
+        </Typography>
+      ) : tracking.lastPosition === null ? (
+        // El único de los tres que merece una llamada: hay feed, y no dice nada de este camión.
+        <Alert severity="warning">
+          {t("Hay rastreo configurado, pero no ha reportado ninguna posición de este envío.")}
+        </Alert>
+      ) : (
+        <>
+          <DetailGrid columns={2}>
+            <DetailItem
+              label={t("Última posición")}
+              value={`${fmtDecimal(tracking.lastPosition.latitude, 5)}, ${fmtDecimal(tracking.lastPosition.longitude, 5)}`}
+            />
+            <DetailItem label={t("Reportada")} value={fmtDateTime(tracking.lastPosition.occurredAt)} />
+            <DetailItem
+              label={t("Antigüedad")}
+              value={(() => {
+                const age = ageMinutes(tracking.lastPosition.occurredAt);
+                return age === null ? "-" : fmtMinutes(age);
+              })()}
+            />
+            <DetailItem
+              label={t("Velocidad")}
+              value={tracking.lastPosition.speedKph === null ? null : (
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                  <SpeedRounded sx={{ fontSize: 16, color: "text.disabled" }} />
+                  {fmtDecimal(tracking.lastPosition.speedKph, 0)} km/h
+                </Box>
+              )}
+            />
+          </DetailGrid>
 
-      <span className={`d-block ${stale ? 'text-warning-emphasis fw-semibold' : 'text-secondary'}`}>
-        {t('workspace.tracking.reportedAt', { at: format.dateTime(position.occurredAt) })}
-        {' · '}
-        {age <= 1
-          ? t('workspace.tracking.ageJustNow')
-          : t('workspace.tracking.age', { minutes: age })}
-      </span>
-
-      {position.speedKph !== null && (
-        <span className="d-block text-secondary">
-          {t('workspace.tracking.speed', { speed: position.speedKph })}
-        </span>
+          <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 1.5 }}>
+            {t("Proveedor")}: {tracking.lastPosition.provider}
+            {tracking.vehicleLicensePlate && ` · ${tracking.vehicleLicensePlate}`}
+          </Typography>
+        </>
       )}
-
-      <span className="d-block text-secondary">
-        {t('workspace.tracking.source', { provider: position.provider })}
-        {tracking.vehicleLicensePlate !== null && <> · {tracking.vehicleLicensePlate}</>}
-      </span>
-
-      {tracking.track.length > 1 && (
-        <span className="d-block text-secondary">
-          {t('workspace.tracking.trackPoints', { count: tracking.track.length })}
-        </span>
-      )}
-    </div>
-  )
+    </AppCard>
+  );
 }

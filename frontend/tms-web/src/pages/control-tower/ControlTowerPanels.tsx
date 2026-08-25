@@ -1,197 +1,179 @@
-import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
+import { Box, Chip, Paper, Typography } from "@mui/material";
+import { Link } from "react-router-dom";
+import { ReportProblemRounded, ScheduleRounded, LocalShippingRounded } from "@mui/icons-material";
 import type {
-  ControlTowerExceptionView,
-  ControlTowerStopView,
-  ControlTowerWorkloadView,
-} from '../../shared/api/controlTowerApi'
-import { useEnumLabels } from '../../shared/i18n/enums'
-import { useFormat } from '../../shared/i18n/format'
-import { AppCard, EmptyState, StatusBadge } from '../../shared/ui/components'
-import { TRIP_STATUS_TONE } from '../../shared/ui/statusTones'
+  ControlTowerExceptionView, ControlTowerStopView, ControlTowerWorkloadView,
+} from "../../shared/api/controlTowerApi";
+import { AppCard, StatusChip } from "../../shared/ui/components";
+import { STOP_EXECUTION_TONE, TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
+import { enumLabel } from "../../lib/enums";
+import { t } from "../../lib/i18n";
+import { fmtDateTime, fmtMinutes, fmtPercent, fmtTime } from "../../lib/locale";
 
-/**
- * The control tower's three side panels.
- *
- * They share a shape on purpose: a heading, the worst few rows, and - when the server capped the
- * list - one line saying how many there are in total. A panel that showed twenty rows and stopped
- * would read as "there are twenty", which on the one screen built to surface problems is the worst
- * thing it could say.
- *
- * Every row is a link into the trip workspace. A panel entry the operator cannot act on is a
- * poster, and the action for all three of these is the same: open the shipment.
- */
-
-/** The line under a capped list. Rendered only when something did not fit. */
-function PanelFooter({ shown, total, label }: { shown: number; total: number; label: string }) {
-  if (total <= shown) {
-    return null
-  }
-  return <p className="text-body-secondary small mb-0 pt-2">{label}</p>
+/** Un panel de la torre siempre dice de cuántos son los que enseña: "los peores veinte de
+ * cuarenta y siete" es una frase distinta de "hay veinte". */
+function PanelTitle({ icon, label, shown, total }: { icon: React.ReactNode; label: string; shown: number; total: number }) {
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+      {icon}
+      {label}
+      {total > shown && (
+        <Chip size="small" variant="outlined" label={t("{{shown}} de {{total}}", { shown, total })} sx={{ height: 20, fontSize: 10.5 }} />
+      )}
+    </Box>
+  );
 }
 
 /**
- * The fill for one workload row.
+ * Los envíos más cargados del día, con el peor de sus tres ejes de capacidad.
  *
- * Not `CapacityBar`, which renders one named dimension with its units and its own labels: this is
- * the *worst* of the three, chosen by the backend, and three bars per row would make a five-row
- * panel taller than the table it sits beside. It borrows that component's CSS and, more
- * importantly, its rule - the width is the server's percentage and the colour is the server's
- * `withinCapacity` verdict. Nothing here decides what "full" means.
+ * El porcentaje lo decide el servidor y es *el peor* de los tres, no un promedio: lo que dice si
+ * un camión está lleno es la dimensión que primero se acaba. Un `null` es "no sabemos cuánto va
+ * lleno" y se dice así — pintarlo como 0% se leería como un camión vacío.
  */
-function WorkloadBar({ percentUsed, withinCapacity, label }: {
-  percentUsed: number | null
-  withinCapacity: boolean
-  label: string
-}) {
-  if (percentUsed === null) {
-    return null
-  }
-  const width = Math.min(100, Math.max(0, percentUsed))
+export function WorkloadPanel({ items, total }: { items: ControlTowerWorkloadView[]; total: number }) {
   return (
-    <div
-      className="tms-capacity"
-      role="progressbar"
-      aria-label={label}
-      aria-valuenow={Math.round(percentUsed)}
-      aria-valuemin={0}
-      aria-valuemax={100}
-    >
-      <div
-        className={`tms-capacity-fill ${withinCapacity ? 'tms-capacity-fill-success' : 'tms-capacity-fill-danger'}`}
-        style={{ width: `${width}%` }}
-      />
-    </div>
-  )
-}
-
-export function WorkloadPanel({ rows }: { rows: ControlTowerWorkloadView[] }) {
-  const { t } = useTranslation('controlTower')
-  const format = useFormat()
-
-  return (
-    <AppCard title={t('panels.workload.title')}>
-      <p className="text-body-secondary small mb-2">{t('panels.workload.hint')}</p>
-      {rows.length === 0 ? (
-        <EmptyState title={t('panels.workload.empty')} />
+    <AppCard title={<PanelTitle icon={<LocalShippingRounded sx={{ fontSize: 19, color: "text.disabled" }} />} label={t("Carga de los envíos")} shown={items.length} total={total} />}>
+      {items.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">{t("No hay envíos en curso.")}</Typography>
       ) : (
-        <ul className="list-unstyled mb-0 d-flex flex-column gap-3">
-          {rows.map((row) => (
-            <li key={row.trip.id}>
-              <div className="d-flex align-items-center justify-content-between gap-2">
-                <Link to={`/trips/${row.trip.id}`} className="fw-semibold text-decoration-none tms-truncate">
-                  {row.trip.shipmentNumber}
-                </Link>
-                <span className="small text-body-secondary flex-shrink-0 tms-code">
-                  {format.percent(row.percentUsed, 0)}
-                </span>
-              </div>
-              <WorkloadBar
-                percentUsed={row.percentUsed}
-                withinCapacity={row.trip.capacity.withinCapacity}
-                label={format.percent(row.percentUsed, 0)}
-              />
-              <div className="small text-body-secondary tms-truncate">
-                {row.trip.vehicleLicensePlate ?? row.trip.vehicleCode ?? '—'}
-                {row.trip.carrierName ? ` · ${row.trip.carrierName}` : ''}
-              </div>
-            </li>
+        <Box sx={{ display: "grid", gap: 1 }}>
+          {items.map(({ trip, percentUsed }) => (
+            <Paper
+              key={trip.id}
+              component={Link}
+              to={`/trips/${trip.id}`}
+              variant="outlined"
+              sx={{
+                p: 1.25, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap",
+                textDecoration: "none", color: "text.primary",
+                "&:hover": { borderColor: "primary.main" },
+              }}
+            >
+              <Box sx={{ flex: 1, minWidth: 140 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>{trip.shipmentNumber}</Typography>
+                <Typography variant="caption" color="text.secondary" noWrap>
+                  {trip.vehicleLicensePlate ?? t("Sin vehículo asignado")}
+                  {trip.carrierName && ` · ${trip.carrierName}`}
+                </Typography>
+              </Box>
+              <StatusChip label={enumLabel("tripStatus", trip.status)} tone={TRIP_STATUS_TONE[trip.status]} />
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 800, fontVariantNumeric: "tabular-nums", minWidth: 52, textAlign: "right",
+                  color: percentUsed === null ? "text.disabled"
+                    : percentUsed > 100 ? "error.main"
+                    : percentUsed >= 85 ? "warning.main" : "text.primary",
+                }}
+              >
+                {percentUsed === null ? t("n/d") : fmtPercent(percentUsed)}
+              </Typography>
+            </Paper>
           ))}
-        </ul>
+        </Box>
       )}
     </AppCard>
-  )
+  );
 }
 
-export function ExceptionsPanel({ rows, total }: { rows: ControlTowerExceptionView[]; total: number }) {
-  const { t } = useTranslation('controlTower')
-  const enumLabels = useEnumLabels()
-  const format = useFormat()
-
+/**
+ * Las incidencias abiertas del día, a nivel de envío a propósito: el panel dice qué envío abrir,
+ * y es el espacio de trabajo el que resuelve la parada.
+ */
+export function ExceptionsPanel({ items, total }: { items: ControlTowerExceptionView[]; total: number }) {
   return (
-    <AppCard title={t('panels.exceptions.title')}>
-      {rows.length === 0 ? (
-        <EmptyState title={t('panels.exceptions.empty')} />
+    <AppCard title={<PanelTitle icon={<ReportProblemRounded sx={{ fontSize: 19, color: "error.main" }} />} label={t("Incidencias abiertas")} shown={items.length} total={total} />}>
+      {items.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">{t("Ninguna incidencia abierta hoy.")}</Typography>
       ) : (
-        <>
-          <ul className="list-unstyled mb-0 d-flex flex-column gap-3">
-            {rows.map((row) => (
-              <li key={row.id}>
-                <div className="d-flex align-items-center justify-content-between gap-2">
-                  <Link to={`/trips/${row.tripId}`} className="fw-semibold text-decoration-none tms-truncate">
-                    {row.shipmentNumber ?? '—'}
-                  </Link>
-                  {row.tripStatus && (
-                    <StatusBadge
-                      label={enumLabels.tripStatus(row.tripStatus)}
-                      tone={TRIP_STATUS_TONE[row.tripStatus]}
-                    />
-                  )}
-                </div>
-                <div className="small">{enumLabels.tripExceptionType(row.exceptionType)}</div>
-                <div className="small text-body-secondary">
-                  {format.time(row.reportedAt)}
-                  {row.notes ? ` · ${row.notes}` : ''}
-                </div>
-              </li>
-            ))}
-          </ul>
-          <PanelFooter
-            shown={rows.length}
-            total={total}
-            label={t('panels.exceptions.more', { shown: rows.length, total })}
-          />
-        </>
+        <Box sx={{ display: "grid", gap: 1 }}>
+          {items.map((exception) => (
+            <Paper
+              key={exception.id}
+              component={Link}
+              to={`/trips/${exception.tripId}`}
+              variant="outlined"
+              sx={{
+                p: 1.25, textDecoration: "none", color: "text.primary", display: "block",
+                borderLeft: "3px solid", borderLeftColor: "error.main",
+                "&:hover": { borderColor: "error.main" },
+              }}
+            >
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  {enumLabel("tripExceptionType", exception.exceptionType)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">{exception.shipmentNumber ?? ""}</Typography>
+                <Box sx={{ flex: 1 }} />
+                <Typography variant="caption" color="text.secondary">{fmtDateTime(exception.reportedAt)}</Typography>
+              </Box>
+              {exception.notes && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
+                  {exception.notes}
+                </Typography>
+              )}
+            </Paper>
+          ))}
+        </Box>
       )}
     </AppCard>
-  )
+  );
 }
 
-export function OutstandingStopsPanel({ rows, total }: { rows: ControlTowerStopView[]; total: number }) {
-  const { t } = useTranslation('controlTower')
-  const enumLabels = useEnumLabels()
-  const format = useFormat()
-
+/**
+ * Las paradas que siguen sin resolverse en envíos que ya están fuera: el trabajo que queda en la
+ * calle.
+ *
+ * `minutesPastWindow` viene del servidor, que es quien sabe a qué día y a qué zona horaria
+ * pertenece una ventana guardada como hora local sin fecha. Calcularlo aquí sería adivinarlo.
+ */
+export function OutstandingStopsPanel({ items, total }: { items: ControlTowerStopView[]; total: number }) {
   return (
-    <AppCard title={t('panels.stops.title')}>
-      {rows.length === 0 ? (
-        <EmptyState title={t('panels.stops.empty')} />
+    <AppCard title={<PanelTitle icon={<ScheduleRounded sx={{ fontSize: 19, color: "text.disabled" }} />} label={t("Paradas pendientes")} shown={items.length} total={total} />}>
+      {items.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">{t("No queda ninguna parada pendiente.")}</Typography>
       ) : (
-        <>
-          <ul className="list-unstyled mb-0 d-flex flex-column gap-3">
-            {rows.map((row) => (
-              <li key={row.stopId}>
-                <div className="d-flex align-items-center justify-content-between gap-2">
-                  <Link to={`/trips/${row.tripId}`} className="fw-semibold text-decoration-none tms-truncate">
-                    {row.shipmentNumber ?? '—'}
-                  </Link>
-                  {/* Only the late ones take a badge. Badging every outstanding stop would make
-                      the panel one colour and tell the eye nothing. */}
-                  {row.minutesPastWindow !== null && (
-                    <StatusBadge
-                      label={t('pastWindowMinutes', { minutes: format.quantity(row.minutesPastWindow) })}
-                      tone="danger"
-                    />
+        <Box sx={{ display: "grid", gap: 1 }}>
+          {items.map((stop) => {
+            const late = stop.minutesPastWindow !== null && stop.minutesPastWindow > 0;
+            return (
+              <Paper
+                key={stop.stopId}
+                component={Link}
+                to={`/trips/${stop.tripId}`}
+                variant="outlined"
+                sx={{
+                  p: 1.25, textDecoration: "none", color: "text.primary", display: "block",
+                  ...(late ? { borderLeft: "3px solid", borderLeftColor: "warning.main" } : {}),
+                  "&:hover": { borderColor: "primary.main" },
+                }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                    {stop.sequence}. {stop.destinationName ?? stop.destinationCode ?? ""}
+                  </Typography>
+                  <StatusChip
+                    label={enumLabel("stopExecutionStatus", stop.executionStatus)}
+                    tone={STOP_EXECUTION_TONE[stop.executionStatus]}
+                  />
+                  <Box sx={{ flex: 1 }} />
+                  {late && (
+                    <Typography variant="caption" sx={{ fontWeight: 800, color: "warning.main" }}>
+                      +{fmtMinutes(stop.minutesPastWindow)}
+                    </Typography>
                   )}
-                </div>
-                <div className="small tms-truncate">
-                  {row.sequence}. {row.destinationName ?? row.destinationCode ?? '—'}
-                </div>
-                <div className="small text-body-secondary">
-                  {row.windowEndsAt ? t('dueBy', { time: format.time(row.windowEndsAt) }) : t('noWindow')}
-                  {' · '}
-                  {enumLabels.stopExecutionStatus(row.executionStatus)}
-                </div>
-              </li>
-            ))}
-          </ul>
-          <PanelFooter
-            shown={rows.length}
-            total={total}
-            label={t('panels.stops.more', { shown: rows.length, total })}
-          />
-        </>
+                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
+                  {stop.shipmentNumber}
+                  {stop.vehicleLicensePlate && ` · ${stop.vehicleLicensePlate}`}
+                  {stop.windowEndsAt && ` · ${t("Ventana hasta")} ${fmtTime(stop.windowEndsAt)}`}
+                </Typography>
+              </Paper>
+            );
+          })}
+        </Box>
       )}
     </AppCard>
-  )
+  );
 }

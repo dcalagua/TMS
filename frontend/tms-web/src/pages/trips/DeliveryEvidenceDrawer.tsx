@@ -1,128 +1,125 @@
-import { useState, type FormEvent } from 'react'
-import { useTranslation } from 'react-i18next'
-import { EVIDENCE_TYPES, type EvidenceType } from '../../shared/api/planningApi'
-import { useEnumLabels } from '../../shared/i18n/enums'
-import { FormField } from '../../shared/ui/components/FormField'
-import { Select } from '../../shared/ui/components/Select'
-import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
+import { useState, type ChangeEvent } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { Alert, Box, Button, MenuItem, TextField, Typography } from "@mui/material";
+import { AttachFileRounded, UploadFileRounded } from "@mui/icons-material";
+import { EVIDENCE_TYPES, type EvidenceType } from "../../shared/api/planningApi";
+import { FormDrawer } from "../../shared/ui/components";
+import { enumLabel } from "../../lib/enums";
+import { t } from "../../lib/i18n";
 
-const FORM_ID = 'delivery-evidence-form'
+const FORM_ID = "delivery-evidence-form";
 
 export interface DeliveryEvidenceValues {
-  evidenceType: EvidenceType
-  /** A `datetime-local` value, or null. The caller converts it to the ISO instant the API takes. */
-  capturedAt: string | null
-  file: File
+  evidenceType: EvidenceType;
+  capturedAt: string | null;
+  file: File;
 }
 
 interface DeliveryEvidenceDrawerProps {
-  orderNumber: string
-  onClose: () => void
-  onSubmit: (values: DeliveryEvidenceValues) => Promise<void>
+  orderNumber: string;
+  onClose: () => void;
+  /** Lanza un `Error` con la frase del servidor si el backend rechaza. */
+  onSubmit: (values: DeliveryEvidenceValues) => Promise<void>;
 }
 
 /**
- * Attaching a signature, a photo or a signed note to a delivery that has already been recorded.
+ * Adjuntar una prueba de entrega —una firma, una foto, un documento— a una entrega ya registrada.
  *
- * <p>Plain state rather than `react-hook-form`, unlike its siblings: the form is one file and two
- * fields, and a file input is the one control whose value a form library cannot own anyway.
- *
- * <p>The accepted types are the server's ({@code tms.storage.evidence.allowed-content-types}) and
- * the `accept` attribute below is only a hint to the file picker - a deployment that narrows the
- * list is enforced server-side, and a refusal comes back as a message in this drawer rather than as
- * a toast behind it. The same is true of a deployment with no store configured at all: the upload
- * answers 503 and the sentence explains that delivery results are still recorded without it.
+ * Un despliegue sin almacén de evidencias responde 503 y aquí se enseña la frase del propio
+ * servidor, que dice que los resultados de entrega se registran igualmente. Eso es un hecho de
+ * configuración, no un error que haya cometido el operador, y presentarlo como un fallo rojo
+ * genérico haría que alguien fuera a buscar el problema donde no está.
  */
 export function DeliveryEvidenceDrawer({ orderNumber, onClose, onSubmit }: DeliveryEvidenceDrawerProps) {
-  const { t } = useTranslation('trips')
-  const { t: tc } = useTranslation('common')
-  const enumLabels = useEnumLabels()
+  const [formError, setFormError] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
 
-  const [evidenceType, setEvidenceType] = useState<EvidenceType>('SIGNATURE')
-  const [capturedAt, setCapturedAt] = useState('')
-  const [file, setFile] = useState<File | null>(null)
-  const [formError, setFormError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const {
+    register, control, handleSubmit,
+    formState: { isDirty, isSubmitting },
+  } = useForm<{ evidenceType: EvidenceType; capturedAt: string }>({
+    defaultValues: { evidenceType: "SIGNATURE", capturedAt: "" },
+  });
 
-  async function submit(event: FormEvent) {
-    event.preventDefault()
-    setFormError(null)
-    if (file === null) {
-      setFormError(t('workspace.evidence.fileRequired'))
-      return
+  function pickFile(event: ChangeEvent<HTMLInputElement>) {
+    setFile(event.target.files?.[0] ?? null);
+    setFormError(null);
+  }
+
+  async function submit(values: { evidenceType: EvidenceType; capturedAt: string }) {
+    setFormError(null);
+    if (!file) {
+      setFormError(t("Elige un fichero."));
+      return;
     }
-    setBusy(true)
     try {
-      await onSubmit({ evidenceType, capturedAt: capturedAt.trim() === '' ? null : capturedAt, file })
+      await onSubmit({
+        evidenceType: values.evidenceType,
+        capturedAt: values.capturedAt || null,
+        file,
+      });
     } catch (error) {
-      setFormError((error as Error).message)
-    } finally {
-      setBusy(false)
+      setFormError((error as Error).message);
     }
   }
 
   return (
-    <TmsDrawer
+    <FormDrawer
       open
-      title={t('workspace.evidence.title')}
-      subtitle={t('workspace.evidence.subtitle', { order: orderNumber })}
+      icon={<AttachFileRounded />}
+      title={t("Adjuntar prueba de entrega")}
+      subtitle={orderNumber}
       size="md"
       onClose={onClose}
-      dirty={file !== null}
-      closeOnEscape={!busy}
-      closeOnBackdrop={!busy}
+      dirty={isDirty || file !== null}
+      closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={busy}>
-            {tc('actions.cancel')}
-          </button>
-          <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={busy}>
-            {busy ? tc('actions.saving') : t('workspace.evidence.submit')}
-          </button>
+          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting || file === null}>
+            {isSubmitting ? t("Subiendo...") : t("Adjuntar")}
+          </Button>
         </>
       }
     >
-      <form id={FORM_ID} onSubmit={(event) => void submit(event)} noValidate>
-        {formError && (
-          <div className="alert alert-danger py-2 small" role="alert">
-            {formError}
-          </div>
-        )}
+      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(submit)(event)} noValidate>
+        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
 
-        <FormField label={t('workspace.evidence.type')} htmlFor="evidence-type" required>
-          <Select
-            id="evidence-type"
-            value={evidenceType}
-            onChange={(next) => setEvidenceType(next as EvidenceType)}
-            options={EVIDENCE_TYPES.map((value) => ({ value, label: enumLabels.evidenceType(value) }))}
+        <Box sx={{ display: "grid", gap: 2 }}>
+          <Controller
+            control={control}
+            name="evidenceType"
+            render={({ field }) => (
+              <TextField
+                select label={t("Tipo")} required size="small" fullWidth
+                value={field.value} onChange={(e) => field.onChange(e.target.value as EvidenceType)}
+              >
+                {EVIDENCE_TYPES.map((type) => (
+                  <MenuItem key={type} value={type}>{enumLabel("evidenceType", type)}</MenuItem>
+                ))}
+              </TextField>
+            )}
           />
-        </FormField>
 
-        <FormField label={t('workspace.evidence.file')} htmlFor="evidence-file" required
-          help={t('workspace.evidence.fileHelp')}>
-          <input
-            id="evidence-file"
-            type="file"
-            className="form-control"
-            accept="image/jpeg,image/png,image/webp,application/pdf"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          <TextField
+            label={t("Capturado el")} size="small" fullWidth type="datetime-local"
+            slotProps={{ inputLabel: { shrink: true } }}
+            helperText={t("Cuándo se tomó la firma o la foto. Opcional.")}
+            {...register("capturedAt")}
           />
-        </FormField>
 
-        <FormField
-          label={t('workspace.evidence.capturedAt')}
-          htmlFor="evidence-captured-at"
-          help={t('workspace.evidence.capturedAtHelp')}
-        >
-          <input
-            id="evidence-captured-at"
-            type="datetime-local"
-            className="form-control"
-            value={capturedAt}
-            onChange={(event) => setCapturedAt(event.target.value)}
-          />
-        </FormField>
-      </form>
-    </TmsDrawer>
-  )
+          <Box>
+            <Button component="label" variant="outlined" startIcon={<UploadFileRounded />}>
+              {file ? file.name : t("Elegir fichero")}
+              <input type="file" hidden accept="image/*,application/pdf" onChange={pickFile} />
+            </Button>
+          </Box>
+
+          <Typography variant="caption" color="text.secondary">
+            {t("La prueba se guarda en un almacén privado: nunca queda accesible por una URL pública.")}
+          </Typography>
+        </Box>
+      </Box>
+    </FormDrawer>
+  );
 }

@@ -1,209 +1,189 @@
-import { useState } from 'react'
-import { useForm } from 'react-hook-form'
-import { useTranslation } from 'react-i18next'
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import {
-  inviteUser,
-  updateUserProfile,
-  updateUserRoles,
+  Alert, Box, Button, Checkbox, FormControlLabel, Paper, TextField, Typography,
+} from "@mui/material";
+import { PersonAddRounded, PersonRounded } from "@mui/icons-material";
+import { applyApiFieldErrors } from "../../shared/api/formErrors";
+import type { ApiError } from "../../shared/api/httpClient";
+import {
+  fetchAssignableRoles, inviteUser, updateUserProfile, updateUserRoles,
   type AdministeredUserView,
-  type RoleView,
-} from '../../shared/api/administrationApi'
-import { applyApiFieldErrors } from '../../shared/api/formErrors'
-import type { ApiError } from '../../shared/api/httpClient'
-import { FormField } from '../../shared/ui/components/FormField'
-import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
+} from "../../shared/api/administrationApi";
+import { FormDrawer, SectionHeader } from "../../shared/ui/components";
+import { t } from "../../lib/i18n";
 
-const FORM_ID = 'user-access-form'
+const FORM_ID = "user-form";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface UserFormValues {
-  email: string
-  fullName: string
+  email: string;
+  fullName: string;
+  roleCodes: string[];
 }
-
-const KNOWN_FIELDS = new Set<keyof UserFormValues>(['email', 'fullName'])
 
 interface UserFormDrawerProps {
-  companyId: string
-  /** `null` invites somebody new; otherwise the drawer edits this membership. */
-  user: AdministeredUserView | null
-  roles: RoleView[]
-  /** The signed-in administrator's own `appUserId`, so the form can refuse to edit its own roles. */
-  currentAppUserId: string | null
-  onClose: () => void
-  onSaved: () => void
+  companyId: string;
+  /** `null` invita a alguien nuevo; si no, edita esta membresía. */
+  user: AdministeredUserView | null;
+  onClose: () => void;
+  onSaved: () => void;
 }
 
+const KNOWN_FIELDS = new Set<keyof UserFormValues>(["email", "fullName", "roleCodes"]);
+
 /**
- * Invite somebody, or change what they may do here.
+ * Invitar a alguien a esta empresa, o cambiarle el nombre y los roles.
  *
- * Roles are checkboxes and not a dropdown because a membership holds several: a planner who is
- * also the person who maintains the fleet is one membership with two roles, and forcing that into
- * one choice is what makes people create a second account.
+ * Lo que se concede y se revoca es una *membresía*, no una cuenta: la misma persona puede tener
+ * varias, y el identificador sobre el que se actúa es `membershipId` y no `appUserId`.
  *
- * A role the backend marks `assignable: false` is shown disabled with the reason rather than
- * hidden. An ORGANIZATION-scoped role on a company membership grants nothing at all, and an
- * administrator who cannot find ORGANIZATION_ADMIN in the list would reasonably conclude the
- * screen is broken; seeing it greyed out with "organization-wide" beside it answers the question.
+ * El correo solo se pide al invitar. Cambiarlo después sería invitar a otra persona, y el modelo
+ * lo trata así.
+ *
+ * Los roles de ámbito ORGANIZACIÓN no se ofrecen: sobre una membresía de empresa no conceden
+ * nada, y el backend los rechaza. Se enseña por qué en vez de esconderlos sin más.
  */
-export function UserFormDrawer({
-  companyId,
-  user,
-  roles,
-  currentAppUserId,
-  onClose,
-  onSaved,
-}: UserFormDrawerProps) {
-  const { t } = useTranslation('settings')
-  const { t: tc } = useTranslation('common')
-  const { t: tv } = useTranslation('validations')
-  const isEdit = user !== null
-  const isSelf = isEdit && user.appUserId === currentAppUserId
-  const [formError, setFormError] = useState<string | null>(null)
-  const [selectedRoles, setSelectedRoles] = useState<string[]>(user?.roleCodes ?? [])
-  const [rolesTouched, setRolesTouched] = useState(false)
+export function UserFormDrawer({ companyId, user, onClose, onSaved }: UserFormDrawerProps) {
+  const isEdit = user !== null;
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const rolesQuery = useQuery({
+    queryKey: ["assignable-roles", companyId],
+    queryFn: ({ signal }) => fetchAssignableRoles(companyId, signal),
+  });
+  const roles = rolesQuery.data ?? [];
 
   const {
-    register,
-    handleSubmit,
-    setError,
+    register, control, handleSubmit, setError,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<UserFormValues>({
-    defaultValues: { email: user?.email ?? '', fullName: user?.fullName ?? '' },
-  })
-
-  function toggleRole(code: string) {
-    setRolesTouched(true)
-    setSelectedRoles((current) =>
-      current.includes(code) ? current.filter((held) => held !== code) : [...current, code],
-    )
-  }
+    defaultValues: {
+      email: user?.email ?? "",
+      fullName: user?.fullName ?? "",
+      roleCodes: user?.roleCodes ?? [],
+    },
+  });
 
   async function onSubmit(values: UserFormValues) {
-    setFormError(null)
-    if (selectedRoles.length === 0) {
-      setFormError(t('users.roleRequired'))
-      return
+    setFormError(null);
+    if (values.roleCodes.length === 0) {
+      setFormError(t("Selecciona al menos un rol"));
+      return;
     }
 
     try {
-      if (!isEdit) {
-        await inviteUser(companyId, {
-          email: values.email.trim().toLowerCase(),
-          fullName: values.fullName.trim(),
-          roleCodes: selectedRoles,
-        })
+      if (isEdit) {
+        // Dos llamadas y no una: el nombre y los roles son endpoints distintos porque son
+        // decisiones distintas — corregir cómo se llama alguien no es cambiar lo que puede hacer.
+        await updateUserProfile(companyId, user.membershipId, values.fullName.trim());
+        await updateUserRoles(companyId, user.membershipId, values.roleCodes);
       } else {
-        // Two calls because they are two permissions server-side: correcting a name is
-        // `iam.user:manage` and changing what somebody may do is `iam.membership:manage`. Each is
-        // sent only when it actually changed, so an administrator who holds one of the two is not
-        // refused for the half they did not touch.
-        if (values.fullName.trim() !== user.fullName) {
-          await updateUserProfile(companyId, user.membershipId, values.fullName.trim())
-        }
-        if (rolesTouched && !isSelf) {
-          await updateUserRoles(companyId, user.membershipId, selectedRoles)
-        }
+        await inviteUser(companyId, {
+          email: values.email.trim(),
+          fullName: values.fullName.trim(),
+          roleCodes: values.roleCodes,
+        });
       }
-      onSaved()
+      onSaved();
     } catch (error) {
-      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, tv('highlightedFields')))
+      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, t("Corrige los campos marcados.")));
     }
   }
 
   return (
-    <TmsDrawer
+    <FormDrawer
       open
-      title={isEdit ? t('users.form.edit') : t('users.form.invite')}
-      subtitle={isEdit ? t('users.form.editSubtitle') : t('users.form.inviteSubtitle')}
+      icon={isEdit ? <PersonRounded /> : <PersonAddRounded />}
+      title={isEdit ? t("Editar acceso") : t("Invitar a alguien")}
+      subtitle={isEdit ? user.email : t("Se le da acceso a esta empresa con los roles que elijas.")}
       size="md"
       onClose={onClose}
-      dirty={isDirty || rolesTouched}
-      closeOnEscape={!isSubmitting}
+      dirty={isDirty}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
-            {tc('actions.cancel')}
-          </button>
-          <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={isSubmitting}>
-            {isSubmitting ? tc('actions.saving') : isEdit ? tc('actions.save') : t('users.form.sendInvite')}
-          </button>
+          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : isEdit ? t("Guardar") : t("Invitar")}
+          </Button>
         </>
       }
     >
-      <form id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && (
-          <div className="alert alert-danger py-2 small" role="alert">
-            {formError}
-          </div>
-        )}
+      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
+        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
 
-        <FormField
-          label={tc('fields.email')}
-          htmlFor="user-email"
-          error={errors.email?.message}
-          help={isEdit ? t('users.emailImmutable') : t('users.emailHelp')}
-          required
-        >
-          <input
-            id="user-email"
-            type="email"
-            className={`form-control${errors.email ? ' is-invalid' : ''}`}
-            readOnly={isEdit}
-            disabled={isEdit}
-            {...register('email', {
-              required: tv('required'),
-              maxLength: { value: 254, message: tv('maxLength', { count: 254 }) },
-            })}
-          />
-        </FormField>
-
-        <FormField label={t('users.fullName')} htmlFor="user-full-name" error={errors.fullName?.message} required>
-          <input
-            id="user-full-name"
-            className={`form-control${errors.fullName ? ' is-invalid' : ''}`}
-            {...register('fullName', {
-              required: tv('required'),
-              maxLength: { value: 200, message: tv('maxLength', { count: 200 }) },
-            })}
-          />
-        </FormField>
-
-        <fieldset className="tms-fieldset mb-0">
-          <legend className="tms-fieldset-legend">{t('users.roles')}</legend>
-          {isSelf && (
-            <div className="alert alert-warning py-2 small" role="alert">
-              {t('users.selfRolesLocked')}
-            </div>
+        <SectionHeader title={t("Identidad")} />
+        <Box sx={{ display: "grid", gap: 2, mb: 3 }}>
+          {!isEdit && (
+            <TextField
+              label={t("Correo electrónico")} required size="small" fullWidth type="email"
+              error={Boolean(errors.email)} helperText={errors.email?.message}
+              {...register("email", {
+                required: t("Este campo es obligatorio"),
+                pattern: { value: EMAIL_PATTERN, message: t("Ingresa un correo electrónico válido") },
+              })}
+            />
           )}
-          {roles.map((role) => {
-            const checked = selectedRoles.includes(role.code)
-            const locked = !role.assignable || isSelf
-            return (
-              <div className="form-check" key={role.code}>
-                <input
-                  className="form-check-input"
-                  type="checkbox"
-                  id={`user-role-${role.code}`}
-                  checked={checked}
-                  disabled={locked}
-                  onChange={() => toggleRole(role.code)}
-                />
-                <label className="form-check-label" htmlFor={`user-role-${role.code}`}>
-                  <span className="fw-semibold">{role.name}</span>
-                  {!role.assignable && (
-                    <span className="text-body-secondary"> — {t('users.organizationScoped')}</span>
-                  )}
-                  {role.description && <span className="d-block small text-body-secondary">{role.description}</span>}
-                  <span className="d-block small text-body-secondary">
-                    {t('users.permissionCount', { count: role.permissionCodes.length })}
-                  </span>
-                </label>
-              </div>
-            )
-          })}
-        </fieldset>
-      </form>
-    </TmsDrawer>
-  )
+          <TextField
+            label={t("Nombre")} required size="small" fullWidth
+            error={Boolean(errors.fullName)} helperText={errors.fullName?.message}
+            {...register("fullName", { required: t("Este campo es obligatorio") })}
+          />
+        </Box>
+
+        <SectionHeader title={t("Roles")} />
+        {user?.organizationWide && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {t("Esta persona tiene un rol de organización: alcanza a todas las empresas y no se cambia desde aquí.")}
+          </Alert>
+        )}
+        <Controller
+          control={control}
+          name="roleCodes"
+          render={({ field }) => (
+            <Box sx={{ display: "grid", gap: 1 }}>
+              {roles.map((role) => (
+                <Paper key={role.code} variant="outlined" sx={{ p: 1.25, opacity: role.assignable ? 1 : 0.6 }}>
+                  <FormControlLabel
+                    sx={{ alignItems: "flex-start", m: 0 }}
+                    control={
+                      <Checkbox
+                        sx={{ mt: -0.5 }}
+                        disabled={!role.assignable || user?.organizationWide}
+                        checked={field.value.includes(role.code)}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...field.value, role.code]
+                            : field.value.filter((code) => code !== role.code);
+                          field.onChange(next);
+                        }}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{role.name}</Typography>
+                        {role.description && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                            {role.description}
+                          </Typography>
+                        )}
+                        {!role.assignable && (
+                          <Typography variant="caption" color="warning.main" sx={{ display: "block", fontWeight: 700 }}>
+                            {t("Es un rol de organización: sobre una membresía de empresa no concede nada.")}
+                          </Typography>
+                        )}
+                      </Box>
+                    }
+                  />
+                </Paper>
+              ))}
+            </Box>
+          )}
+        />
+      </Box>
+    </FormDrawer>
+  );
 }

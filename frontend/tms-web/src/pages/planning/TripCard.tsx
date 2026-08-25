@@ -1,110 +1,116 @@
-import { useTranslation } from 'react-i18next'
-import { type TripView } from '../../shared/api/planningApi'
-import { useEnumLabels } from '../../shared/i18n/enums'
-import { useFormat } from '../../shared/i18n/format'
-import { CapacityBar } from '../../shared/ui/components/CapacityBar'
-import { StatusBadge } from '../../shared/ui/components/StatusBadge'
-import { TRIP_STATUS_TONE } from '../../shared/ui/statusTones'
+import { Box, Button, Card, CardContent, Divider, Typography } from "@mui/material";
+import { LocalShippingRounded } from "@mui/icons-material";
+import type { TripView } from "../../shared/api/planningApi";
+import { CapacityBar, StatusChip } from "../../shared/ui/components";
+import { TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
+import { enumLabel } from "../../lib/enums";
+import { t } from "../../lib/i18n";
+import { fmtDateTime, fmtQuantity } from "../../lib/locale";
 
 interface TripCardProps {
-  trip: TripView
-  onOpen: () => void
+  trip: TripView;
+  onOpen: () => void;
 }
 
 /**
- * One shipment on the board: both identities (the run-local trip number a planner reads and the
- * `shipmentNumber` everything outside the board uses), status, the vehicle with its type and the
- * carrier the shipment was *planned* with, the departure, how much is on it, the suggested route
- * if a planner picked one, and the three capacity dimensions rendered exactly as the backend
- * computed them (`TripCapacityView` - see `CapacityBar`).
+ * Un envío en el tablero: las dos identidades (el número de viaje dentro del plan, que es lo que
+ * lee un planificador, y el `shipmentNumber` que usa todo lo de fuera del tablero), el estado, el
+ * vehículo con su tipo y el transportista con el que se *planificó* el envío, la salida, cuánto
+ * lleva encima, la ruta sugerida si alguien eligió una, y las tres dimensiones de capacidad
+ * pintadas exactamente como las calculó el backend.
  *
- * The whole card is the control that opens `TripDetailDrawer`: on a board of a dozen trips,
- * hunting for a small "Open" button in each footer is slower than clicking the card a planner
- * is already reading. The heading carries the accessible name.
+ * La tarjeta entera es el control que abre el detalle: en un tablero de una docena de viajes,
+ * cazar un botoncito "Abrir" en cada pie es más lento que pulsar la tarjeta que el planificador
+ * ya está leyendo. El botón se queda igualmente, con nombre accesible propio, para quien navega
+ * con teclado.
  */
 export function TripCard({ trip, onOpen }: TripCardProps) {
-  const { t } = useTranslation('planning')
-  const enumLabels = useEnumLabels()
-  const format = useFormat()
-
-  const title = t('card.title', { number: trip.tripNumber })
-  const overCapacity = !trip.capacity.withinCapacity
+  const overCapacity = !trip.capacity.withinCapacity;
 
   return (
-    <article className={`tms-card h-100 d-flex flex-column${overCapacity ? ' border-danger' : ''}`}>
-      <div className="tms-card-header">
-        <span className="tms-min-w-0 d-flex flex-column">
-          <span className="tms-code tms-cell-strong">{title}</span>
-          {/* The shipment number, not the trip number, is what an external system, a manifest or
-              a phone call refers to: trip 3 means nothing without naming its planning run. */}
-          <span className="small text-body-secondary tms-truncate">
-            {t('card.shipment')} <span className="tms-code">{trip.shipmentNumber}</span>
-          </span>
-        </span>
-        <StatusBadge label={enumLabels.tripStatus(trip.status)} tone={TRIP_STATUS_TONE[trip.status]} />
-      </div>
+    <Card
+      component="article"
+      variant="outlined"
+      onClick={onOpen}
+      sx={{
+        height: "100%", display: "flex", flexDirection: "column", cursor: "pointer",
+        // El borde rojo es un aviso, no el veredicto: quien decide si cabe es el backend, y esto
+        // solo repite lo que ya dijo en `withinCapacity`.
+        ...(overCapacity ? { borderColor: "error.main" } : {}),
+        transition: "transform .15s, box-shadow .15s",
+        "&:hover": { transform: "translateY(-2px)", boxShadow: 3 },
+      }}
+    >
+      <Box sx={{
+        display: "flex", alignItems: "flex-start", justifyContent: "space-between",
+        gap: 1.5, px: 2, py: 1.35,
+      }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="subtitle1" sx={{ lineHeight: 1.25 }}>
+            {t("Viaje {{number}}", { number: trip.tripNumber })}
+          </Typography>
+          {/* El número de envío, no el de viaje, es lo que referencia un sistema externo, un
+              manifiesto o una llamada: "viaje 3" no significa nada sin nombrar su plan. */}
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {t("Envío")} {trip.shipmentNumber}
+          </Typography>
+        </Box>
+        <StatusChip label={enumLabel("tripStatus", trip.status)} tone={TRIP_STATUS_TONE[trip.status]} />
+      </Box>
+      <Divider />
 
-      <div className="tms-card-body flex-grow-1">
-        <p className="mb-1">
+      <CardContent sx={{ flexGrow: 1, p: 2, "&:last-child": { pb: 2 } }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+          <LocalShippingRounded sx={{ fontSize: 18, color: "text.disabled" }} />
           {trip.vehicleCode ? (
-            <>
-              <span className="fw-semibold">{trip.vehicleCode}</span>
-              <span className="text-body-secondary"> · {trip.vehicleLicensePlate}</span>
-            </>
+            <Typography variant="body2">
+              <Box component="span" sx={{ fontWeight: 700 }}>{trip.vehicleCode}</Box>
+              <Box component="span" sx={{ color: "text.secondary" }}> · {trip.vehicleLicensePlate}</Box>
+            </Typography>
           ) : (
-            <span className="text-body-secondary fst-italic">{t('card.noVehicle')}</span>
+            <Typography variant="body2" color="text.disabled" sx={{ fontStyle: "italic" }}>
+              {t("Sin vehículo asignado")}
+            </Typography>
           )}
-        </p>
-        <p className="small text-body-secondary mb-2 tms-truncate">
-          {trip.carrierName ?? t('card.noCarrier')}
-          {trip.vehicleTypeCode && (
-            <>
-              {' · '}
-              {t('card.vehicleType')} {trip.vehicleTypeCode}
-            </>
-          )}
-        </p>
+        </Box>
+        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block", mb: 2 }}>
+          {trip.carrierName ?? t("Flota propia")}
+          {trip.vehicleTypeCode && ` · ${trip.vehicleTypeCode}`}
+        </Typography>
 
-        <dl className="row row-cols-1 small mb-3 g-0">
-          <div className="d-flex justify-content-between gap-2">
-            <dt className="fw-normal text-body-secondary">{t('card.departure')}</dt>
-            <dd className="mb-0 text-end">
-              {trip.plannedDepartureAt ? format.dateTime(trip.plannedDepartureAt) : t('card.noDeparture')}
-            </dd>
-          </div>
-          <div className="d-flex justify-content-between gap-2">
-            <dt className="fw-normal text-body-secondary">{t('card.ordersLabel')}</dt>
-            <dd className="mb-0 text-end">{format.quantity(trip.orderCount)}</dd>
-          </div>
-          <div className="d-flex justify-content-between gap-2">
-            <dt className="fw-normal text-body-secondary">{t('card.stopsLabel')}</dt>
-            <dd className="mb-0 text-end">{format.quantity(trip.stopCount)}</dd>
-          </div>
-          {trip.routeCode && (
-            <div className="d-flex justify-content-between gap-2">
-              <dt className="fw-normal text-body-secondary">{t('card.route')}</dt>
-              <dd className="mb-0 text-end tms-truncate">{trip.routeCode}</dd>
-            </div>
-          )}
-        </dl>
+        <Box component="dl" sx={{ m: 0, mb: 2, display: "grid", gap: 0.4 }}>
+          {[
+            { label: t("Salida"), value: trip.plannedDepartureAt ? fmtDateTime(trip.plannedDepartureAt) : t("Sin definir") },
+            { label: t("Pedidos"), value: fmtQuantity(trip.orderCount) },
+            { label: t("Paradas"), value: fmtQuantity(trip.stopCount) },
+            ...(trip.routeCode ? [{ label: t("Ruta"), value: trip.routeCode }] : []),
+          ].map((row) => (
+            <Box key={row.label} sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
+              <Typography component="dt" variant="caption" color="text.secondary">{row.label}</Typography>
+              <Typography component="dd" variant="caption" sx={{ m: 0, textAlign: "right", fontWeight: 600 }}>
+                {row.value}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
 
         <CapacityBar kind="weight" dimension={trip.capacity.weight} />
         <CapacityBar kind="volume" dimension={trip.capacity.volume} />
         <CapacityBar kind="pallets" dimension={trip.capacity.pallets} />
-      </div>
+      </CardContent>
 
-      <div className="tms-card-header border-top border-bottom-0 justify-content-end">
-        {/* The visible label stays short; the accessible name says which trip it opens, so a
-            board of a dozen cards does not present a dozen buttons all called "Abrir". */}
-        <button
-          type="button"
-          className="btn btn-sm btn-outline-primary"
-          aria-label={t('card.openNamed', { number: trip.tripNumber })}
-          onClick={onOpen}
+      <Divider />
+      <Box sx={{ display: "flex", justifyContent: "flex-end", px: 2, py: 1 }}>
+        {/* La etiqueta visible se queda corta; el nombre accesible dice qué viaje abre, para que
+            un tablero de doce tarjetas no presente doce botones llamados todos "Abrir". */}
+        <Button
+          size="small" variant="outlined"
+          aria-label={t("Abrir el viaje {{number}}", { number: trip.tripNumber })}
+          onClick={(e) => { e.stopPropagation(); onOpen(); }}
         >
-          {t('card.open')}
-        </button>
-      </div>
-    </article>
-  )
+          {t("Abrir")}
+        </Button>
+      </Box>
+    </Card>
+  );
 }

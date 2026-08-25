@@ -1,536 +1,339 @@
-import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
-import { Controller, useForm, type Validate } from 'react-hook-form'
-import { useTranslation } from 'react-i18next'
-import { fetchCarriers } from '../../shared/api/carriersApi'
-import { applyApiFieldErrors } from '../../shared/api/formErrors'
-import type { ApiError } from '../../shared/api/httpClient'
-import { fetchOrigins } from '../../shared/api/originsApi'
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { Controller, useForm, useWatch } from "react-hook-form";
+import { Alert, Box, Button, MenuItem, TextField, Typography } from "@mui/material";
+import { PaidRounded } from "@mui/icons-material";
+import { applyApiFieldErrors } from "../../shared/api/formErrors";
+import type { ApiError } from "../../shared/api/httpClient";
+import { fetchCarriers } from "../../shared/api/carriersApi";
+import { fetchOrigins } from "../../shared/api/originsApi";
+import { fetchRoutes } from "../../shared/api/routesApi";
+import { fetchVehicleTypes } from "../../shared/api/vehicleTypesApi";
 import {
-  createRateCard,
-  RATE_CARD_SCOPES,
-  updateRateCard,
-  type RateCardRequest,
-  type RateCardScope,
-  type RateCardView,
-} from '../../shared/api/ratesApi'
-import { fetchRoutes } from '../../shared/api/routesApi'
-import { fetchVehicleTypes } from '../../shared/api/vehicleTypesApi'
-import { useEnumLabels } from '../../shared/i18n/enums'
-import { FormField } from '../../shared/ui/components/FormField'
-import { Select } from '../../shared/ui/components/Select'
-import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
+  createRateCard, RATE_CARD_SCOPES, updateRateCard,
+  type RateCardRequest, type RateCardScope, type RateCardView,
+} from "../../shared/api/ratesApi";
+import { FormDrawer, SectionHeader } from "../../shared/ui/components";
+import { enumLabel } from "../../lib/enums";
+import { t } from "../../lib/i18n";
+import { today } from "../../lib/locale";
 
-const FORM_ID = 'rate-card-form'
+const FORM_ID = "rate-card-form";
 
-/** Matches the backend's constraints; kept next to the fields they validate. */
-const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/
-const CURRENCY_PATTERN = /^[A-Za-z]{3}$/
+const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
+const CURRENCY_PATTERN = /^[A-Za-z]{3}$/;
 
 interface RateCardFormValues {
-  code: string
-  name: string
-  carrierId: string
-  scope: RateCardScope
-  originId: string
-  routeId: string
-  vehicleTypeId: string
-  currency: string
-  validFrom: string
-  validTo: string
-  baseAmount: string
-  amountPerKm: string
-  amountPerKg: string
-  amountPerM3: string
-  amountPerPallet: string
-  minimumAmount: string
+  code: string;
+  name: string;
+  carrierId: string;
+  scope: RateCardScope;
+  originId: string;
+  routeId: string;
+  vehicleTypeId: string;
+  currency: string;
+  validFrom: string;
+  validTo: string;
+  baseAmount: string;
+  amountPerKm: string;
+  amountPerKg: string;
+  amountPerM3: string;
+  amountPerPallet: string;
+  minimumAmount: string;
 }
 
 interface RateCardFormDrawerProps {
-  companyId: string
-  /** `null` creates a new card; otherwise the form edits this one. */
-  card: RateCardView | null
-  onClose: () => void
-  onSaved: () => void
+  companyId: string;
+  rateCard: RateCardView | null;
+  onClose: () => void;
+  onSaved: () => void;
 }
 
 const KNOWN_FIELDS = new Set<keyof RateCardFormValues>([
-  'code', 'name', 'carrierId', 'scope', 'originId', 'routeId', 'vehicleTypeId', 'currency', 'validFrom', 'validTo',
-  'baseAmount', 'amountPerKm', 'amountPerKg', 'amountPerM3', 'amountPerPallet', 'minimumAmount',
-])
+  "code", "name", "carrierId", "scope", "originId", "routeId", "vehicleTypeId", "currency",
+  "validFrom", "validTo", "baseAmount", "amountPerKm", "amountPerKg", "amountPerM3",
+  "amountPerPallet", "minimumAmount",
+]);
+
+const toAmount = (value: string): number | null => (value.trim() === "" ? null : Number(value));
 
 /**
- * Create and edit share one form.
+ * Un tarifario: a qué transportista aplica, sobre qué alcance y con qué componentes se calcula.
  *
- * Two things it enforces before the request is sent, both of which the backend refuses anyway -
- * they are here so the refusal arrives while the operator is still looking at the field:
- * the scope's target (an origin, a route, or neither), and that the card charges for something.
+ * El alcance decide qué segundo campo hace falta. `CARRIER` no pide ninguno —vale para todo lo
+ * que haga ese transportista—, `ORIGIN` pide un origen y `ROUTE` una ruta. Se enseña solo el que
+ * corresponde en lugar de los tres en gris: los tres a la vez invitan a rellenar dos, y el
+ * backend rechaza esa combinación.
  *
- * The carrier is locked once a card exists. That is not a UI convenience: re-pointing an
- * agreement at another carrier would restate every estimate that has already cited it, so the
- * backend refuses it too and the answer is a new card.
+ * Los componentes son todos opcionales porque un tarifario real rara vez los usa todos: uno de
+ * distancia pura deja peso y volumen vacíos, y un mínimo sin nada más es un precio plano.
  */
-export function RateCardFormDrawer({ companyId, card, onClose, onSaved }: RateCardFormDrawerProps) {
-  const { t } = useTranslation('rates')
-  const { t: tc } = useTranslation('common')
-  const { t: tv } = useTranslation('validations')
-  const enumLabels = useEnumLabels()
-  const isEdit = card !== null
-  const [formError, setFormError] = useState<string | null>(null)
+export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: RateCardFormDrawerProps) {
+  const isEdit = rateCard !== null;
+  const [formError, setFormError] = useState<string | null>(null);
 
   const carriersQuery = useQuery({
-    queryKey: ['carriers-for-rate-form', companyId],
-    queryFn: ({ signal }) => fetchCarriers({ companyId, size: 200, active: true, sort: 'code,asc', signal }),
-  })
-  const carriers = carriersQuery.data?.content ?? []
-
+    queryKey: ["carriers-for-rate-form", companyId],
+    queryFn: ({ signal }) => fetchCarriers({ companyId, size: 200, active: true, sort: "code,asc", signal }),
+  });
   const originsQuery = useQuery({
-    queryKey: ['origins-for-rate-form', companyId],
-    queryFn: ({ signal }) => fetchOrigins({ companyId, size: 200, active: true, sort: 'code,asc', signal }),
-  })
-  const origins = originsQuery.data?.content ?? []
-
+    queryKey: ["origins-for-rate-form", companyId],
+    queryFn: ({ signal }) => fetchOrigins({ companyId, size: 200, active: true, sort: "code,asc", signal }),
+  });
   const routesQuery = useQuery({
-    queryKey: ['routes-for-rate-form', companyId],
-    queryFn: ({ signal }) => fetchRoutes({ companyId, size: 200, active: true, sort: 'code,asc', signal }),
-  })
-  const routes = routesQuery.data?.content ?? []
-
-  const vehicleTypesQuery = useQuery({
-    queryKey: ['vehicle-types-for-rate-form', companyId],
-    queryFn: ({ signal }) => fetchVehicleTypes({ companyId, size: 200, active: true, sort: 'code,asc', signal }),
-  })
-  const vehicleTypes = vehicleTypesQuery.data?.content ?? []
+    queryKey: ["routes-for-rate-form", companyId],
+    queryFn: ({ signal }) => fetchRoutes({ companyId, size: 200, active: true, sort: "code,asc", signal }),
+  });
+  const typesQuery = useQuery({
+    queryKey: ["vehicle-types-for-rate-form", companyId],
+    queryFn: ({ signal }) => fetchVehicleTypes({ companyId, size: 200, active: true, sort: "code,asc", signal }),
+  });
 
   const {
-    register,
-    control,
-    watch,
-    handleSubmit,
-    setError,
+    register, control, handleSubmit, setError,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<RateCardFormValues>({
     defaultValues: {
-      code: card?.code ?? '',
-      name: card?.name ?? '',
-      carrierId: card?.carrierId ?? '',
-      scope: card?.scope ?? 'CARRIER',
-      originId: (card?.scope === 'ORIGIN' ? card.scopeTargetId : '') ?? '',
-      routeId: (card?.scope === 'ROUTE' ? card.scopeTargetId : '') ?? '',
-      vehicleTypeId: card?.vehicleTypeId ?? '',
-      currency: card?.currency ?? '',
-      validFrom: card?.validFrom ?? '',
-      validTo: card?.validTo ?? '',
-      baseAmount: card?.baseAmount?.toString() ?? '',
-      amountPerKm: card?.amountPerKm?.toString() ?? '',
-      amountPerKg: card?.amountPerKg?.toString() ?? '',
-      amountPerM3: card?.amountPerM3?.toString() ?? '',
-      amountPerPallet: card?.amountPerPallet?.toString() ?? '',
-      minimumAmount: card?.minimumAmount?.toString() ?? '',
+      code: rateCard?.code ?? "",
+      name: rateCard?.name ?? "",
+      carrierId: rateCard?.carrierId ?? "",
+      scope: rateCard?.scope ?? "CARRIER",
+      originId: rateCard?.scope === "ORIGIN" ? (rateCard.scopeTargetId ?? "") : "",
+      routeId: rateCard?.scope === "ROUTE" ? (rateCard.scopeTargetId ?? "") : "",
+      vehicleTypeId: rateCard?.vehicleTypeId ?? "",
+      currency: rateCard?.currency ?? "PEN",
+      validFrom: rateCard?.validFrom ?? today(),
+      validTo: rateCard?.validTo ?? "",
+      baseAmount: rateCard?.baseAmount?.toString() ?? "",
+      amountPerKm: rateCard?.amountPerKm?.toString() ?? "",
+      amountPerKg: rateCard?.amountPerKg?.toString() ?? "",
+      amountPerM3: rateCard?.amountPerM3?.toString() ?? "",
+      amountPerPallet: rateCard?.amountPerPallet?.toString() ?? "",
+      minimumAmount: rateCard?.minimumAmount?.toString() ?? "",
     },
-  })
+  });
 
-  const scope = watch('scope')
-
-  const validateAmount: Validate<string, RateCardFormValues> = (value) => {
-    if (value.trim() === '') return true
-    const parsed = Number(value)
-    if (Number.isNaN(parsed)) return tv('number')
-    return parsed >= 0 || tv('nonNegative')
-  }
-
-  function toNumberOrNull(value: string): number | null {
-    return value.trim() === '' ? null : Number(value)
-  }
+  const scope = useWatch({ control, name: "scope" });
 
   async function onSubmit(values: RateCardFormValues) {
-    setFormError(null)
-    if (values.scope === 'ORIGIN' && !values.originId) {
-      setError('originId', { message: tv('required') })
-      return
-    }
-    if (values.scope === 'ROUTE' && !values.routeId) {
-      setError('routeId', { message: tv('required') })
-      return
-    }
-
+    setFormError(null);
     const request: RateCardRequest = {
       code: values.code.trim(),
       name: values.name.trim(),
       carrierId: values.carrierId,
       scope: values.scope,
-      originId: values.scope === 'ORIGIN' ? values.originId : null,
-      routeId: values.scope === 'ROUTE' ? values.routeId : null,
+      // Solo el objetivo del alcance elegido viaja: mandar los dos sería contradecirse.
+      originId: values.scope === "ORIGIN" ? (values.originId || null) : null,
+      routeId: values.scope === "ROUTE" ? (values.routeId || null) : null,
       vehicleTypeId: values.vehicleTypeId || null,
       currency: values.currency.trim().toUpperCase(),
       validFrom: values.validFrom,
       validTo: values.validTo || null,
-      baseAmount: toNumberOrNull(values.baseAmount),
-      amountPerKm: toNumberOrNull(values.amountPerKm),
-      amountPerKg: toNumberOrNull(values.amountPerKg),
-      amountPerM3: toNumberOrNull(values.amountPerM3),
-      amountPerPallet: toNumberOrNull(values.amountPerPallet),
-      minimumAmount: toNumberOrNull(values.minimumAmount),
-    }
-
-    const charges = [
-      request.baseAmount,
-      request.amountPerKm,
-      request.amountPerKg,
-      request.amountPerM3,
-      request.amountPerPallet,
-    ]
-    if (charges.every((amount) => amount === null)) {
-      setFormError(t('form.needsAComponent'))
-      return
-    }
+      baseAmount: toAmount(values.baseAmount),
+      amountPerKm: toAmount(values.amountPerKm),
+      amountPerKg: toAmount(values.amountPerKg),
+      amountPerM3: toAmount(values.amountPerM3),
+      amountPerPallet: toAmount(values.amountPerPallet),
+      minimumAmount: toAmount(values.minimumAmount),
+    };
 
     try {
-      if (isEdit) {
-        await updateRateCard(companyId, card.id, request)
-      } else {
-        await createRateCard(companyId, request)
-      }
-      onSaved()
+      if (isEdit) await updateRateCard(companyId, rateCard.id, request);
+      else await createRateCard(companyId, request);
+      onSaved();
     } catch (error) {
-      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, tv('highlightedFields')))
+      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, t("Corrige los campos marcados.")));
     }
   }
 
+  const grid2 = { display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, mb: 3 } as const;
+
   return (
-    <TmsDrawer
+    <FormDrawer
       open
-      title={isEdit ? t('form.edit') : t('form.create')}
-      subtitle={t('form.subtitle')}
+      icon={<PaidRounded />}
+      title={isEdit ? t("Editar tarifario") : t("Nuevo tarifario")}
+      subtitle={t("Cómo se calcula lo que cuesta un envío con este transportista.")}
       size="lg"
       onClose={onClose}
       dirty={isDirty}
-      closeOnEscape={!isSubmitting}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
-            {tc('actions.cancel')}
-          </button>
-          <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={isSubmitting}>
-            {isSubmitting ? tc('actions.saving') : tc('actions.save')}
-          </button>
+          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : t("Guardar")}
+          </Button>
         </>
       }
     >
-      <form id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && (
-          <div className="alert alert-danger py-2 small" role="alert">
-            {formError}
-          </div>
-        )}
+      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
+        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
 
-        <fieldset className="tms-fieldset">
-          <legend className="tms-fieldset-legend">{tc('sections.identification')}</legend>
-          <div className="row">
-            <div className="col-12 col-sm-4">
-              <FormField label={tc('columns.code')} htmlFor="rate-code" error={errors.code?.message} required>
-                <input
-                  id="rate-code"
-                  className={`form-control${errors.code ? ' is-invalid' : ''}`}
-                  {...register('code', {
-                    required: tv('required'),
-                    maxLength: { value: 32, message: tv('maxLength', { count: 32 }) },
-                    pattern: { value: CODE_PATTERN, message: tv('codePattern') },
-                  })}
-                />
-              </FormField>
-            </div>
-            <div className="col-12 col-sm-8">
-              <FormField label={tc('columns.name')} htmlFor="rate-name" error={errors.name?.message} required>
-                <input
-                  id="rate-name"
-                  className={`form-control${errors.name ? ' is-invalid' : ''}`}
-                  {...register('name', {
-                    required: tv('required'),
-                    maxLength: { value: 200, message: tv('maxLength', { count: 200 }) },
-                  })}
-                />
-              </FormField>
-            </div>
-          </div>
-        </fieldset>
+        <SectionHeader title={t("Identificación")} />
+        <Box sx={grid2}>
+          <TextField
+            label={t("Código")} required size="small" fullWidth
+            error={Boolean(errors.code)} helperText={errors.code?.message}
+            {...register("code", {
+              required: t("Este campo es obligatorio"),
+              maxLength: { value: 32, message: t("No puede superar los {{count}} caracteres", { count: 32 }) },
+              pattern: { value: CODE_PATTERN, message: t("Solo letras, dígitos, guion bajo o guion") },
+            })}
+          />
+          <TextField
+            label={t("Nombre")} required size="small" fullWidth
+            error={Boolean(errors.name)} helperText={errors.name?.message}
+            {...register("name", { required: t("Este campo es obligatorio") })}
+          />
+        </Box>
 
-        <fieldset className="tms-fieldset">
-          <legend className="tms-fieldset-legend">{t('form.sections.scope')}</legend>
-          <div className="row">
-            <div className="col-12 col-sm-6">
-              <FormField
-                label={tc('columns.carrier')}
-                htmlFor="rate-carrier"
-                error={errors.carrierId?.message}
-                required
-                help={isEdit ? t('form.carrierLocked') : undefined}
+        <SectionHeader title={t("Alcance")} />
+        <Box sx={grid2}>
+          <Controller
+            control={control}
+            name="carrierId"
+            rules={{ required: t("Este campo es obligatorio") }}
+            render={({ field }) => (
+              <TextField
+                select label={t("Transportista")} required size="small" fullWidth
+                value={field.value} onChange={(e) => field.onChange(e.target.value)}
+                error={Boolean(errors.carrierId)} helperText={errors.carrierId?.message}
               >
-                <Controller
-                  control={control}
-                  name="carrierId"
-                  rules={{ required: tv('required') }}
-                  render={({ field }) => (
-                    <Select
-                      id="rate-carrier"
-                      value={field.value}
-                      onChange={field.onChange}
-                      disabled={isEdit}
-                      invalid={Boolean(errors.carrierId)}
-                      options={[
-                        { value: '', label: t('form.selectCarrier') },
-                        ...(card?.carrierId && !carriers.some((carrier) => carrier.id === card.carrierId)
-                          ? [{ value: card.carrierId, label: card.carrierCode ?? card.carrierId }]
-                          : []),
-                        ...carriers.map((carrier) => ({
-                          value: carrier.id,
-                          label: `${carrier.code} — ${carrier.businessName}`,
-                        })),
-                      ]}
-                    />
-                  )}
-                />
-              </FormField>
-            </div>
-            <div className="col-12 col-sm-6">
-              <FormField label={t('columns.scope')} htmlFor="rate-scope" error={errors.scope?.message} required>
-                <Controller
-                  control={control}
-                  name="scope"
-                  rules={{ required: true }}
-                  render={({ field }) => (
-                    <Select
-                      id="rate-scope"
-                      value={field.value}
-                      onChange={(value) => field.onChange(value as RateCardScope)}
-                      options={RATE_CARD_SCOPES.map((value) => ({
-                        value,
-                        label: enumLabels.rateCardScope(value),
-                      }))}
-                    />
-                  )}
-                />
-              </FormField>
-            </div>
-            {scope === 'ORIGIN' && (
-              <div className="col-12 col-sm-6">
-                <FormField
-                  label={tc('columns.origin')}
-                  htmlFor="rate-origin"
-                  error={errors.originId?.message}
-                  required
+                <MenuItem value="">{t("Selecciona un transportista")}</MenuItem>
+                {(carriersQuery.data?.content ?? []).map((carrier) => (
+                  <MenuItem key={carrier.id} value={carrier.id}>{carrier.businessName}</MenuItem>
+                ))}
+              </TextField>
+            )}
+          />
+          <Controller
+            control={control}
+            name="scope"
+            render={({ field }) => (
+              <TextField
+                select label={t("Ámbito")} required size="small" fullWidth
+                value={field.value} onChange={(e) => field.onChange(e.target.value as RateCardScope)}
+              >
+                {RATE_CARD_SCOPES.map((option) => (
+                  <MenuItem key={option} value={option}>{enumLabel("rateCardScope", option)}</MenuItem>
+                ))}
+              </TextField>
+            )}
+          />
+
+          {/* Solo el objetivo que el ámbito elegido necesita. Los tres a la vez invitan a
+              rellenar dos, y el backend rechaza esa combinación. */}
+          {scope === "ORIGIN" && (
+            <Controller
+              control={control}
+              name="originId"
+              rules={{ required: t("Este campo es obligatorio") }}
+              render={({ field }) => (
+                <TextField
+                  select label={t("Origen")} required size="small" fullWidth
+                  value={field.value} onChange={(e) => field.onChange(e.target.value)}
+                  error={Boolean(errors.originId)} helperText={errors.originId?.message}
                 >
-                  <Controller
-                    control={control}
-                    name="originId"
-                    render={({ field }) => (
-                      <Select
-                        id="rate-origin"
-                        value={field.value}
-                        onChange={field.onChange}
-                        invalid={Boolean(errors.originId)}
-                        options={[
-                          { value: '', label: t('form.selectOrigin') },
-                          ...origins.map((origin) => ({
-                            value: origin.id,
-                            label: `${origin.code} — ${origin.name}`,
-                          })),
-                        ]}
-                      />
-                    )}
-                  />
-                </FormField>
-              </div>
-            )}
-            {scope === 'ROUTE' && (
-              <div className="col-12 col-sm-6">
-                <FormField label={t('form.route')} htmlFor="rate-route" error={errors.routeId?.message} required>
-                  <Controller
-                    control={control}
-                    name="routeId"
-                    render={({ field }) => (
-                      <Select
-                        id="rate-route"
-                        value={field.value}
-                        onChange={field.onChange}
-                        invalid={Boolean(errors.routeId)}
-                        options={[
-                          { value: '', label: t('form.selectRoute') },
-                          ...routes.map((route) => ({ value: route.id, label: `${route.code} — ${route.name}` })),
-                        ]}
-                      />
-                    )}
-                  />
-                </FormField>
-              </div>
-            )}
-            <div className="col-12 col-sm-6">
-              <FormField
-                label={tc('fields.vehicleType')}
-                htmlFor="rate-vehicle-type"
-                error={errors.vehicleTypeId?.message}
-                help={t('form.vehicleTypeHelp')}
-              >
-                <Controller
-                  control={control}
-                  name="vehicleTypeId"
-                  render={({ field }) => (
-                    <Select
-                      id="rate-vehicle-type"
-                      value={field.value}
-                      onChange={field.onChange}
-                      options={[
-                        { value: '', label: t('anyVehicleType') },
-                        ...vehicleTypes.map((type) => ({ value: type.id, label: `${type.code} — ${type.name}` })),
-                      ]}
-                    />
-                  )}
-                />
-              </FormField>
-            </div>
-          </div>
-          <p className="text-body-secondary small mb-0">{t(`scopeHint.${scope}`)}</p>
-        </fieldset>
+                  <MenuItem value="">{t("Selecciona un origen")}</MenuItem>
+                  {(originsQuery.data?.content ?? []).map((origin) => (
+                    <MenuItem key={origin.id} value={origin.id}>{origin.code} · {origin.name}</MenuItem>
+                  ))}
+                </TextField>
+              )}
+            />
+          )}
+          {scope === "ROUTE" && (
+            <Controller
+              control={control}
+              name="routeId"
+              rules={{ required: t("Este campo es obligatorio") }}
+              render={({ field }) => (
+                <TextField
+                  select label={t("Ruta")} required size="small" fullWidth
+                  value={field.value} onChange={(e) => field.onChange(e.target.value)}
+                  error={Boolean(errors.routeId)} helperText={errors.routeId?.message}
+                >
+                  <MenuItem value="">{t("Selecciona una ruta")}</MenuItem>
+                  {(routesQuery.data?.content ?? []).map((route) => (
+                    <MenuItem key={route.id} value={route.id}>{route.code} · {route.name}</MenuItem>
+                  ))}
+                </TextField>
+              )}
+            />
+          )}
 
-        <fieldset className="tms-fieldset">
-          <legend className="tms-fieldset-legend">{t('form.sections.validity')}</legend>
-          <div className="row">
-            <div className="col-12 col-sm-4">
-              <FormField
-                label={t('form.currency')}
-                htmlFor="rate-currency"
-                error={errors.currency?.message}
-                required
-                help={t('form.currencyHelp')}
+          <Controller
+            control={control}
+            name="vehicleTypeId"
+            render={({ field }) => (
+              <TextField
+                select label={t("Tipo de vehículo")} size="small" fullWidth
+                value={field.value} onChange={(e) => field.onChange(e.target.value)}
+                helperText={t("Opcional: acota el tarifario a un tipo de unidad.")}
               >
-                <input
-                  id="rate-currency"
-                  maxLength={3}
-                  placeholder="PEN"
-                  className={`form-control text-uppercase${errors.currency ? ' is-invalid' : ''}`}
-                  {...register('currency', {
-                    required: tv('required'),
-                    pattern: { value: CURRENCY_PATTERN, message: t('form.currencyHelp') },
-                  })}
-                />
-              </FormField>
-            </div>
-            <div className="col-12 col-sm-4">
-              <FormField
-                label={tc('fields.effectiveFrom')}
-                htmlFor="rate-valid-from"
-                error={errors.validFrom?.message}
-                required
-              >
-                <input
-                  id="rate-valid-from"
-                  type="date"
-                  className={`form-control${errors.validFrom ? ' is-invalid' : ''}`}
-                  {...register('validFrom', { required: tv('required') })}
-                />
-              </FormField>
-            </div>
-            <div className="col-12 col-sm-4">
-              <FormField
-                label={tc('fields.effectiveTo')}
-                htmlFor="rate-valid-to"
-                error={errors.validTo?.message}
-                help={t('form.validToHelp')}
-              >
-                <input
-                  id="rate-valid-to"
-                  type="date"
-                  className={`form-control${errors.validTo ? ' is-invalid' : ''}`}
-                  {...register('validTo')}
-                />
-              </FormField>
-            </div>
-          </div>
-        </fieldset>
+                <MenuItem value="">{t("Cualquier tipo")}</MenuItem>
+                {(typesQuery.data?.content ?? []).map((type) => (
+                  <MenuItem key={type.id} value={type.id}>{type.code} · {type.name}</MenuItem>
+                ))}
+              </TextField>
+            )}
+          />
+        </Box>
 
-        <fieldset className="tms-fieldset mb-0">
-          <legend className="tms-fieldset-legend">{t('form.sections.components')}</legend>
-          <div className="row">
-            <div className="col-12 col-sm-4">
-              <FormField label={t('form.baseAmount')} htmlFor="rate-base" error={errors.baseAmount?.message}>
-                <input
-                  id="rate-base"
-                  type="text"
-                  inputMode="decimal"
-                  className={`form-control${errors.baseAmount ? ' is-invalid' : ''}`}
-                  {...register('baseAmount', { validate: validateAmount })}
-                />
-              </FormField>
-            </div>
-            <div className="col-12 col-sm-4">
-              <FormField label={t('form.amountPerKm')} htmlFor="rate-per-km" error={errors.amountPerKm?.message}>
-                <input
-                  id="rate-per-km"
-                  type="text"
-                  inputMode="decimal"
-                  className={`form-control${errors.amountPerKm ? ' is-invalid' : ''}`}
-                  {...register('amountPerKm', { validate: validateAmount })}
-                />
-              </FormField>
-            </div>
-            <div className="col-12 col-sm-4">
-              <FormField label={t('form.amountPerKg')} htmlFor="rate-per-kg" error={errors.amountPerKg?.message}>
-                <input
-                  id="rate-per-kg"
-                  type="text"
-                  inputMode="decimal"
-                  className={`form-control${errors.amountPerKg ? ' is-invalid' : ''}`}
-                  {...register('amountPerKg', { validate: validateAmount })}
-                />
-              </FormField>
-            </div>
-            <div className="col-12 col-sm-4">
-              <FormField label={t('form.amountPerM3')} htmlFor="rate-per-m3" error={errors.amountPerM3?.message}>
-                <input
-                  id="rate-per-m3"
-                  type="text"
-                  inputMode="decimal"
-                  className={`form-control${errors.amountPerM3 ? ' is-invalid' : ''}`}
-                  {...register('amountPerM3', { validate: validateAmount })}
-                />
-              </FormField>
-            </div>
-            <div className="col-12 col-sm-4">
-              <FormField
-                label={t('form.amountPerPallet')}
-                htmlFor="rate-per-pallet"
-                error={errors.amountPerPallet?.message}
-              >
-                <input
-                  id="rate-per-pallet"
-                  type="text"
-                  inputMode="decimal"
-                  className={`form-control${errors.amountPerPallet ? ' is-invalid' : ''}`}
-                  {...register('amountPerPallet', { validate: validateAmount })}
-                />
-              </FormField>
-            </div>
-            <div className="col-12 col-sm-4">
-              <FormField
-                label={t('form.minimumAmount')}
-                htmlFor="rate-minimum"
-                error={errors.minimumAmount?.message}
-                help={t('form.minimumHelp')}
-              >
-                <input
-                  id="rate-minimum"
-                  type="text"
-                  inputMode="decimal"
-                  className={`form-control${errors.minimumAmount ? ' is-invalid' : ''}`}
-                  {...register('minimumAmount', { validate: validateAmount })}
-                />
-              </FormField>
-            </div>
-          </div>
-          <p className="text-body-secondary small mb-0">{t('form.componentsHelp')}</p>
-        </fieldset>
-      </form>
-    </TmsDrawer>
-  )
+        <SectionHeader title={t("Vigencia")} />
+        <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, mb: 3 }}>
+          <TextField
+            label={t("Moneda")} required size="small" fullWidth placeholder="PEN"
+            error={Boolean(errors.currency)} helperText={errors.currency?.message}
+            {...register("currency", {
+              required: t("Este campo es obligatorio"),
+              pattern: { value: CURRENCY_PATTERN, message: t("Tres letras, p. ej. PEN") },
+            })}
+          />
+          <TextField
+            label={t("Vigente desde")} required size="small" fullWidth type="date"
+            slotProps={{ inputLabel: { shrink: true } }}
+            error={Boolean(errors.validFrom)} helperText={errors.validFrom?.message}
+            {...register("validFrom", { required: t("Este campo es obligatorio") })}
+          />
+          <TextField
+            label={t("Vigente hasta")} size="small" fullWidth type="date"
+            slotProps={{ inputLabel: { shrink: true } }}
+            helperText={t("Vacío = sin fecha de fin.")}
+            {...register("validTo")}
+          />
+        </Box>
+
+        <SectionHeader title={t("Componentes")} />
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          {t("Todos son opcionales. Un tarifario de distancia pura deja peso y volumen vacíos; un mínimo solo es un precio plano.")}
+        </Typography>
+        <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" } }}>
+          {([
+            ["baseAmount", "Importe base"],
+            ["amountPerKm", "Por kilómetro"],
+            ["amountPerKg", "Por kilogramo"],
+            ["amountPerM3", "Por m³"],
+            ["amountPerPallet", "Por pallet"],
+            ["minimumAmount", "Mínimo"],
+          ] as const).map(([name, label]) => (
+            <TextField
+              key={name}
+              label={t(label)} size="small" fullWidth type="number"
+              error={Boolean(errors[name])} helperText={errors[name]?.message}
+              {...register(name, {
+                validate: (value) => {
+                  if (value.trim() === "") return true;
+                  const parsed = Number(value);
+                  if (Number.isNaN(parsed)) return t("Debe ser un número");
+                  return parsed >= 0 || t("Debe ser cero o mayor");
+                },
+              })}
+            />
+          ))}
+        </Box>
+      </Box>
+    </FormDrawer>
+  );
 }

@@ -1,281 +1,226 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import type { ApiError } from '../../shared/api/httpClient'
-import { describeApiError } from '../../shared/api/problemMessages'
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import {
-  closeTripCost,
-  estimateTripCost,
-  fetchTripCost,
-  recordActualTripCost,
-  reopenTripCost,
-  type TripCostComponentView,
-  type TripCostView,
-} from '../../shared/api/ratesApi'
-import { useEnumLabels } from '../../shared/i18n/enums'
-import { useFormat } from '../../shared/i18n/format'
-import { notifyError, notifySuccess } from '../../shared/ui/alerts'
-import { confirmDialog, ErrorState } from '../../shared/ui/components'
-import { ActualCostDrawer } from './ActualCostDrawer'
+  Alert, Box, Button, Divider, Paper, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Typography,
+} from "@mui/material";
+import {
+  PaidRounded, CalculateRounded, LockRounded, LockOpenRounded, EditNoteRounded,
+} from "@mui/icons-material";
+import type { ApiError } from "../../shared/api/httpClient";
+import {
+  closeTripCost, estimateTripCost, fetchTripCost, reopenTripCost, type TripCostView,
+} from "../../shared/api/ratesApi";
+import { describeApiError } from "../../shared/api/problemMessages";
+import { AppCard, LoadingState, StatusChip, dataTableSx } from "../../shared/ui/components";
+import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
+import { enumLabel } from "../../lib/enums";
+import { t } from "../../lib/i18n";
+import { fmtDateTime, fmtDecimal, fmtMoney } from "../../lib/locale";
+import { ActualCostDrawer } from "./ActualCostDrawer";
 
-export interface TripCostCardProps {
-  companyId: string
-  tripId: string
-  /** `rates.trip_cost:manage` - hiding is UX only; the backend re-checks every call. */
-  canManage: boolean
+interface TripCostCardProps {
+  companyId: string;
+  tripId: string;
+  canManage: boolean;
 }
 
 /**
- * What this shipment was estimated at, what it actually cost, and the gap between them
- * (`docs/domain/RATES_COSTING_V1.md`).
+ * Lo que cuesta el envío: el estimado que salió del tarifario, el real que alguien registró y la
+ * diferencia entre los dos.
  *
- * The two figures are always shown side by side and neither is ever presented as the other. An
- * estimate that could not be calculated in full says so above the total rather than below it: a
- * number that is short by the entire line haul must not be read as a price and then explained
- * afterwards.
+ * El estimado nunca se calcula aquí. Se pide al backend, que aplica el tarifario vigente y
+ * devuelve el desglose por componente con el motivo de cada uno; recalcularlo en el navegador
+ * sería una segunda tarifa que acabaría discrepando de la que se factura.
  *
- * Its own query, like the tracking card's: a costing failure costs this card and leaves the rest
- * of the workspace working.
+ * Cerrar el costo es explícito y reversible por su propio endpoint. Es la frontera entre "esto
+ * todavía se está cocinando" y "esto es lo que vale ese viaje", y esa frontera merece una acción
+ * deliberada en lugar de deducirse de que el viaje terminó.
  */
 export function TripCostCard({ companyId, tripId, canManage }: TripCostCardProps) {
-  const { t } = useTranslation('rates')
-  const { t: tc } = useTranslation('common')
-  const { t: td } = useTranslation('dialogs')
-  const enumLabels = useEnumLabels()
-  const format = useFormat()
-  const queryClient = useQueryClient()
-  const [busy, setBusy] = useState(false)
-  const [showActualForm, setShowActualForm] = useState(false)
+  const queryClient = useQueryClient();
+  const queryKey = ["trip-cost", companyId, tripId];
+  const [showActual, setShowActual] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const costQuery = useQuery({
-    queryKey: ['trip-cost', companyId, tripId],
+    queryKey,
     queryFn: ({ signal }) => fetchTripCost(companyId, tripId, signal),
-  })
+    retry: false,
+  });
 
-  function refresh() {
-    void queryClient.invalidateQueries({ queryKey: ['trip-cost', companyId, tripId] })
-  }
+  const applyCost = (next: TripCostView) => queryClient.setQueryData(queryKey, next);
 
-  async function run(action: () => Promise<TripCostView>, successTitle: string) {
-    setBusy(true)
+  async function run(action: () => Promise<TripCostView>, message: string) {
+    setBusy(true);
     try {
-      await action()
-      notifySuccess(successTitle)
-      refresh()
+      applyCost(await action());
+      notifySuccess(message);
     } catch (error) {
-      notifyError(td('errorTitle'), describeApiError(error as ApiError))
+      notifyError(t("No se pudo completar la acción"), describeApiError(error as ApiError));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function close() {
     const confirmed = await confirmDialog({
-      title: t('tripCost.confirm.closeTitle'),
-      text: t('tripCost.confirm.closeText'),
-      confirmLabel: t('tripCost.actions.close'),
-    })
-    if (!confirmed) return
-    await run(() => closeTripCost(companyId, tripId), t('tripCost.notify.closed'))
+      title: t("¿Cerrar el costo?"),
+      text: t("El costo queda fijado. Se puede reabrir, pero deja de cambiar solo."),
+      confirmLabel: t("Cerrar costo"),
+    });
+    if (confirmed) await run(() => closeTripCost(companyId, tripId), t("Costo cerrado"));
   }
 
-  async function reopen() {
-    const confirmed = await confirmDialog({
-      title: t('tripCost.confirm.reopenTitle'),
-      text: t('tripCost.confirm.reopenText'),
-      confirmLabel: t('tripCost.actions.reopen'),
-      dangerous: true,
-    })
-    if (!confirmed) return
-    await run(() => reopenTripCost(companyId, tripId), t('tripCost.notify.reopened'))
-  }
-
-  if (costQuery.isPending) {
-    return (
-      <p className="text-secondary small mb-0" role="status">
-        {tc('states.loading')}
-      </p>
-    )
-  }
-  /* A failure is reported as one, not as another grey caption. Every other line this card can
-     render - "todavía no tiene costo estimado", a closed date - is a fact about the shipment, and
-     styling a broken read the same way invites it to be read as one more of them. The retry is
-     here because the alternative is reloading the whole workspace to re-run one query. */
-  if (costQuery.isError) {
-    return (
-      <ErrorState
-        message={describeApiError(costQuery.error as ApiError)}
-        onRetry={() => void costQuery.refetch()}
-      />
-    )
-  }
-
-  const cost = costQuery.data
-  const currency = cost.currency ?? ''
-
-  /**
-   * Money is always shown with both decimals, which `format.decimal` deliberately does not do -
-   * it drops trailing zeros, and "PEN 180" beside "PEN 154,43" reads as a rounder number than it
-   * is. Rates keep up to four, because that is what a tariff is agreed in.
-   */
-  const money = (value: number) =>
-    format.number(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-  /** "40,5 KM × 0,85 · Distancia de referencia de la ruta" - or the reason the line has no figure. */
-  function describeLine(line: TripCostComponentView): string {
-    if (line.status === 'NOT_CALCULABLE') {
-      return line.reason ? enumLabels.costComponentReason(line.reason) : ''
-    }
-    if (line.quantity === null || line.rate === null) {
-      return ''
-    }
-    const rate = format.number(line.rate, { minimumFractionDigits: 2, maximumFractionDigits: 4 })
-    const product = `${format.decimal(line.quantity, 2)} ${line.unit ?? ''} × ${rate}`
-    // The provenance is part of the line, not a footnote: the first thing anyone disputing an
-    // estimate asks is where the 40,5 km came from.
-    return line.quantitySource ? `${product} · ${enumLabels.costQuantitySource(line.quantitySource)}` : product
-  }
+  const cost = costQuery.data;
 
   return (
-    <div>
-      {!cost.priced ? (
-        <p className="text-secondary small mb-2">{t('tripCost.notPriced')}</p>
+    <AppCard
+      title={
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <PaidRounded sx={{ fontSize: 19, color: "text.disabled" }} />
+          {t("Costo del viaje")}
+          {cost?.closed && <StatusChip label={t("Cerrado")} tone="done" />}
+        </Box>
+      }
+      actions={canManage && cost && (
+        <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
+          {!cost.closed && (
+            <>
+              <Button
+                size="small" startIcon={<CalculateRounded />} disabled={busy}
+                onClick={() => void run(() => estimateTripCost(companyId, tripId), t("Costo estimado"))}
+              >
+                {t("Estimar")}
+              </Button>
+              <Button size="small" startIcon={<EditNoteRounded />} onClick={() => setShowActual(true)}>
+                {t("Costo real")}
+              </Button>
+              <Button size="small" startIcon={<LockRounded />} disabled={busy} onClick={() => void close()}>
+                {t("Cerrar")}
+              </Button>
+            </>
+          )}
+          {cost.closed && (
+            <Button
+              size="small" startIcon={<LockOpenRounded />} disabled={busy}
+              onClick={() => void run(() => reopenTripCost(companyId, tripId), t("Costo reabierto"))}
+            >
+              {t("Reabrir")}
+            </Button>
+          )}
+        </Box>
+      )}
+    >
+      {costQuery.isPending ? (
+        <LoadingState minHeight={120} />
+      ) : costQuery.isError ? (
+        <Alert severity="error">{describeApiError(costQuery.error as ApiError)}</Alert>
+      ) : !cost?.priced ? (
+        // 200 y no 404: un viaje que nadie ha costeado no es un error, es un viaje sin costear.
+        <Alert severity="info">
+          {t("Este viaje todavía no está costeado. Pulsa «Estimar» para aplicarle el tarifario vigente.")}
+        </Alert>
       ) : (
         <>
-          {!cost.estimateComplete && (
-            <div className="alert alert-warning py-2 small" role="status">
-              {t('tripCost.incomplete')}
-            </div>
-          )}
-
-          <div className="row g-2 small mb-2">
-            <div className="col-4">
-              <span className="d-block text-secondary">{t('tripCost.estimated')}</span>
-              <span className="fw-semibold">
-                {cost.estimatedAmount === null ? '—' : `${currency} ${money(cost.estimatedAmount)}`}
-              </span>
-            </div>
-            <div className="col-4">
-              <span className="d-block text-secondary">{t('tripCost.actual')}</span>
-              <span className="fw-semibold">
-                {cost.actualAmount === null ? '—' : `${currency} ${money(cost.actualAmount)}`}
-              </span>
-            </div>
-            <div className="col-4">
-              <span className="d-block text-secondary">{t('tripCost.variance')}</span>
-              <span className={`fw-semibold${cost.variance !== null && cost.variance > 0 ? ' text-danger' : ''}`}>
-                {cost.variance === null ? '—' : `${currency} ${money(cost.variance)}`}
-              </span>
-            </div>
-          </div>
+          <Box sx={{
+            display: "grid", gap: 2, mb: 2,
+            gridTemplateColumns: { xs: "1fr", sm: "repeat(3, minmax(0, 1fr))" },
+          }}>
+            {[
+              { label: t("Estimado"), value: fmtMoney(cost.estimatedAmount, cost.currency ?? "PEN"), color: "text.primary" },
+              { label: t("Real"), value: cost.actualAmount === null ? "-" : fmtMoney(cost.actualAmount, cost.currency ?? "PEN"), color: "text.primary" },
+              {
+                label: t("Diferencia"),
+                value: cost.variance === null ? "-" : fmtMoney(cost.variance, cost.currency ?? "PEN"),
+                // El signo importa más que el número: por encima del estimado es rojo.
+                color: cost.variance === null ? "text.primary" : cost.variance > 0 ? "error.main" : "success.main",
+              },
+            ].map((item) => (
+              <Box key={item.label}>
+                <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", fontWeight: 700, letterSpacing: ".06em" }}>
+                  {item.label}
+                </Typography>
+                <Typography sx={{ fontWeight: 800, fontSize: "1.25rem", fontVariantNumeric: "tabular-nums", color: item.color }}>
+                  {item.value}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
 
           {cost.rateCardCode && (
-            <p className="text-secondary small mb-2">
-              {t('tripCost.rateCard', { code: cost.rateCardCode, name: cost.rateCardName ?? '' })}
-              {cost.estimatedAt && <span className="d-block">{format.dateTime(cost.estimatedAt)}</span>}
-            </p>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+              {t("Tarifario")}: {cost.rateCardCode} · {cost.rateCardName}
+              {cost.estimatedAt && ` · ${fmtDateTime(cost.estimatedAt)}`}
+            </Typography>
+          )}
+
+          {!cost.estimateComplete && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              {t("El estimado está incompleto: algún componente del tarifario no se pudo calcular.")}
+            </Alert>
           )}
 
           {cost.components.length > 0 && (
-            <table className="table table-sm small mb-2">
-              <caption className="visually-hidden">{t('tripCost.breakdown.title')}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t('tripCost.breakdown.component')}</th>
-                  <th scope="col">{t('tripCost.breakdown.detail')}</th>
-                  <th scope="col" className="text-end">
-                    {t('tripCost.breakdown.amount')}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {cost.components.map((line) => (
-                  <tr key={line.component} className={line.status === 'NOT_CALCULABLE' ? 'text-secondary' : undefined}>
-                    <td>{enumLabels.rateComponent(line.component)}</td>
-                    <td>{describeLine(line)}</td>
-                    <td className="text-end">
-                      {line.status === 'NOT_CALCULABLE' ? t('tripCost.breakdown.notCalculable') : money(line.amount)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small" sx={dataTableSx}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>{t("Componente")}</TableCell>
+                    <TableCell className="numeric-col">{t("Tarifa")}</TableCell>
+                    <TableCell className="numeric-col">{t("Cantidad")}</TableCell>
+                    <TableCell>{t("Origen")}</TableCell>
+                    <TableCell className="numeric-col">{t("Importe")}</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {cost.components.map((component, index) => (
+                    <TableRow key={`${component.component}-${index}`}>
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {enumLabel("rateComponent", component.component)}
+                        </Typography>
+                        {/* El motivo explica por qué un componente vale cero o no se calculó: sin
+                            él, una fila en blanco parece un fallo del tarifario. */}
+                        {component.reason && (
+                          <Typography variant="caption" color="text.secondary">
+                            {enumLabel("costComponentReason", component.reason)}
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell className="numeric-col">{component.rate === null ? "-" : fmtDecimal(component.rate)}</TableCell>
+                      <TableCell className="numeric-col">{component.quantity === null ? "-" : fmtDecimal(component.quantity)}</TableCell>
+                      <TableCell>
+                        {component.quantitySource ? enumLabel("costQuantitySource", component.quantitySource) : "-"}
+                      </TableCell>
+                      <TableCell className="numeric-col">{fmtMoney(component.amount, cost.currency ?? "PEN")}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
 
-          {cost.actualReference && (
-            <p className="text-secondary small mb-2">
-              {tc('fields.reference')}: <span className="tms-code">{cost.actualReference}</span>
-            </p>
-          )}
-
-          {cost.closed && (
-            <p className="text-secondary small mb-2">
-              {t('tripCost.closedOn', { date: cost.closedAt ? format.dateTime(cost.closedAt) : '' })}
-            </p>
+          {(cost.actualReference || cost.actualNotes) && (
+            <>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                {[cost.actualReference, cost.actualNotes].filter(Boolean).join(" · ")}
+              </Typography>
+            </>
           )}
         </>
       )}
 
-      {canManage && (
-        <div className="d-flex flex-wrap gap-2">
-          {!cost.closed && (
-            <button
-              type="button"
-              className="btn btn-sm btn-outline-secondary"
-              disabled={busy}
-              onClick={() => void run(() => estimateTripCost(companyId, tripId), t('tripCost.notify.estimated'))}
-            >
-              {cost.priced ? t('tripCost.actions.reEstimate') : t('tripCost.actions.estimate')}
-            </button>
-          )}
-          {!cost.closed && (
-            <button
-              type="button"
-              className="btn btn-sm btn-outline-secondary"
-              disabled={busy}
-              onClick={() => setShowActualForm(true)}
-            >
-              {t('tripCost.actions.recordActual')}
-            </button>
-          )}
-          {!cost.closed && cost.actualAmount !== null && (
-            <button
-              type="button"
-              className="btn btn-sm btn-outline-secondary"
-              disabled={busy}
-              onClick={() => void close()}
-            >
-              {t('tripCost.actions.close')}
-            </button>
-          )}
-          {cost.closed && (
-            <button
-              type="button"
-              className="btn btn-sm btn-outline-secondary"
-              disabled={busy}
-              onClick={() => void reopen()}
-            >
-              {t('tripCost.actions.reopen')}
-            </button>
-          )}
-        </div>
-      )}
-
-      {showActualForm && (
+      {showActual && cost && (
         <ActualCostDrawer
-          currency={cost.currency}
-          amount={cost.actualAmount}
-          reference={cost.actualReference}
-          notes={cost.actualNotes}
-          onClose={() => setShowActualForm(false)}
-          onSubmit={async (request) => {
-            await recordActualTripCost(companyId, tripId, request)
-            setShowActualForm(false)
-            notifySuccess(td('updated'))
-            refresh()
-          }}
+          companyId={companyId}
+          tripId={tripId}
+          cost={cost}
+          onClose={() => setShowActual(false)}
+          onSaved={(next) => { applyCost(next); setShowActual(false); }}
         />
       )}
-    </div>
-  )
+    </AppCard>
+  );
 }

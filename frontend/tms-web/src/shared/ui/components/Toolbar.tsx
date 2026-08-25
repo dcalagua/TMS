@@ -1,74 +1,129 @@
-import { useId, useState, type ReactNode } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useState, type ReactNode } from "react";
+import { Badge, Box, Button, Chip, Collapse, Paper, Typography, useMediaQuery, useTheme } from "@mui/material";
+import { FilterAltRounded, SearchRounded, CloseRounded } from "@mui/icons-material";
+import { t } from "../../../lib/i18n";
 
 export interface ToolbarProps {
-  /** Always visible: the search field and the primary action. */
-  primary?: ReactNode
-  /** The secondary filter controls, collapsible below `md`. */
-  filters?: ReactNode
-  onApply?: () => void
-  onReset?: () => void
-  /** Shown next to the filter toggle, e.g. "3 filters applied". */
-  activeFilterCount?: number
+  /** Siempre visible: el buscador y la acción principal. */
+  primary?: ReactNode;
+  /** Los controles de filtro secundarios, plegables por debajo de `md`. */
+  filters?: ReactNode;
+  onApply?: () => void;
+  onReset?: () => void;
+  /** Se muestra junto al desplegador de filtros, p. ej. "3". */
+  activeFilterCount?: number;
 }
 
 /**
- * The control strip above a list. On a wide screen the filters sit on one line next to the
- * search field; below `md` they collapse behind a toggle, because five stacked inputs between
- * an operator and their results is not a filter bar, it is a wall.
+ * La franja de controles encima de una lista. En pantalla ancha los filtros van en una línea
+ * junto al buscador; por debajo de `md` se pliegan tras un botón, porque cinco inputs apilados
+ * entre un operador y sus resultados no son una barra de filtros, son un muro.
  */
 export function Toolbar({ primary, filters, onApply, onReset, activeFilterCount = 0 }: ToolbarProps) {
-  const { t } = useTranslation('common')
-  const [expanded, setExpanded] = useState(false)
-  const panelId = useId()
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const [expanded, setExpanded] = useState(false);
+  const showFilters = !isMobile || expanded;
 
   return (
-    <div className="tms-toolbar mb-3">
-      <div className="d-flex flex-wrap align-items-center gap-2 w-100">
+    <Box sx={{ mb: 2 }}>
+      <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1, mb: filters ? 1.5 : 0 }}>
         {primary}
-
-        {filters && (
-          <button
-            type="button"
-            className="btn btn-sm btn-outline-secondary d-md-none ms-auto d-inline-flex align-items-center gap-1"
-            onClick={() => setExpanded((open) => !open)}
+        {filters && isMobile && (
+          <Button
+            size="small" variant="outlined" sx={{ ml: "auto" }}
+            onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
-            aria-controls={panelId}
+            startIcon={
+              <Badge badgeContent={activeFilterCount || undefined} color="primary">
+                <FilterAltRounded />
+              </Badge>
+            }
           >
-            <i className="bi bi-funnel" aria-hidden="true" />
-            {/* Not "apply filters": that is the submit button inside the panel, and two
-                controls with the same accessible name doing different things is a defect. */}
-            <span>{t('actions.filters')}</span>
-            {activeFilterCount > 0 && <span className="badge text-bg-primary">{activeFilterCount}</span>}
-          </button>
+            {t("Filtros")}
+          </Button>
         )}
-      </div>
+      </Box>
 
       {filters && (
-        <form
-          id={panelId}
-          className={`w-100 ${expanded ? 'd-flex' : 'd-none'} d-md-flex flex-wrap align-items-end gap-2`}
-          onSubmit={(event) => {
-            event.preventDefault()
-            onApply?.()
-          }}
-        >
-          {filters}
-
-          <div className="d-flex gap-2 ms-md-auto">
-            {onReset && (
-              <button type="button" className="btn btn-sm btn-outline-secondary" onClick={onReset}>
-                {t('actions.clear')}
-              </button>
+        <Collapse in={showFilters} unmountOnExit={false}>
+          <Paper
+            component="form"
+            variant="outlined"
+            onSubmit={(e) => { e.preventDefault(); onApply?.(); }}
+            sx={{
+              borderRadius: "10px", p: 1.5,
+              display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 1.5,
+            }}
+          >
+            {filters}
+            {(onApply || onReset) && (
+              <Box sx={{ display: "flex", gap: 1, ml: { md: "auto" } }}>
+                {onReset && (
+                  <Button size="small" variant="outlined" onClick={onReset} startIcon={<CloseRounded />}>
+                    {t("Limpiar")}
+                  </Button>
+                )}
+                {onApply && (
+                  <Button size="small" type="submit" variant="contained" startIcon={<SearchRounded />}>
+                    {t("Aplicar filtros")}
+                  </Button>
+                )}
+              </Box>
             )}
-            {onApply && (
-              <button type="submit" className="btn btn-sm btn-primary">
-                {t('actions.applyFilters')}
-              </button>
-            )}
-          </div>
-        </form>
+          </Paper>
+        </Collapse>
       )}
-    </div>
-  )
+    </Box>
+  );
+}
+
+export interface FilterChip {
+  key: string;
+  /** Qué es el filtro, p. ej. "Tipo". */
+  label: string;
+  /** A qué está puesto, ya traducido — nunca un enum crudo ni un código. */
+  value: string;
+  /** Limpia este filtro. Se omite para uno que no se pueda quitar por separado. */
+  onClear?: () => void;
+}
+
+/**
+ * Los filtros que están estrechando la lista, como chips que se pueden quitar.
+ *
+ * Una barra de filtros guarda sus valores en sus propios inputs, que están tres líneas más
+ * arriba del conteo de resultados y son fáciles de pasar por alto. Cuando una lista se ve
+ * vacía o corta, "¿por qué estoy filtrando?" es la primera pregunta, y esto la contesta sin que
+ * el usuario relea cuatro controles — y le deja soltar uno sin buscar cuál lo tenía.
+ */
+export function FilterChips({ chips, onClearAll }: { chips: FilterChip[]; onClearAll?: () => void }) {
+  if (chips.length === 0) return null;
+
+  return (
+    <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.75, mb: 2 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+        {t("Filtros:")}
+      </Typography>
+      {chips.map((chip) => (
+        <Chip
+          key={chip.key}
+          size="small"
+          variant="outlined"
+          onDelete={chip.onClear}
+          label={
+            <>
+              <Box component="span" sx={{ color: "text.secondary", fontWeight: 600 }}>{chip.label}: </Box>
+              {chip.value}
+            </>
+          }
+          sx={{ maxWidth: 280 }}
+        />
+      ))}
+      {onClearAll && chips.length > 1 && (
+        <Button size="small" onClick={onClearAll} sx={{ minHeight: 0, py: 0.25 }}>
+          {t("Quitar todos")}
+        </Button>
+      )}
+    </Box>
+  );
 }

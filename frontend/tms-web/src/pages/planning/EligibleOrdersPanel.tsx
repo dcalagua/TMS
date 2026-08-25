@@ -1,77 +1,67 @@
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import type { ApiError } from '../../shared/api/httpClient'
-import type { OrderPriority } from '../../shared/api/ordersApi'
-import { fetchDestinations } from '../../shared/api/destinationsApi'
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import {
-  assignOrderToTrip,
-  fetchEligibleOrders,
-  type EligibleOrderView,
-  type PlanningRunView,
-  type TripDetailView,
-  type TripView,
-} from '../../shared/api/planningApi'
-import { describePlanningError } from '../../shared/api/problemMessages'
-import { useEnumLabels } from '../../shared/i18n/enums'
-import { useFormat } from '../../shared/i18n/format'
+  Box, Button, Divider, IconButton, MenuItem, Paper, TextField, Tooltip, Typography,
+} from "@mui/material";
+import { SearchRounded, CloseRounded, AddTaskRounded } from "@mui/icons-material";
+import type { ApiError } from "../../shared/api/httpClient";
+import type { OrderPriority } from "../../shared/api/ordersApi";
+import { fetchDestinations } from "../../shared/api/destinationsApi";
 import {
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  Pagination,
-  Select,
-  StatusBadge,
-  type StatusTone,
-} from '../../shared/ui/components'
-import { notifyError, notifySuccess } from '../../shared/ui/alerts'
+  assignOrderToTrip, fetchEligibleOrders,
+  type EligibleOrderView, type PlanningRunView, type TripDetailView, type TripView,
+} from "../../shared/api/planningApi";
+import { describePlanningError } from "../../shared/api/problemMessages";
+import { EmptyState, ErrorState, LoadingState, Pagination, StatusChip } from "../../shared/ui/components";
+import { notifyError, notifySuccess } from "../../lib/ui";
+import { enumLabel } from "../../lib/enums";
+import type { StatusTone } from "../../theme";
+import { t } from "../../lib/i18n";
+import { fmtDecimal, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
 
-const PAGE_SIZE = 10
+const PAGE_SIZE = 10;
 
 const PRIORITY_TONE: Record<OrderPriority, StatusTone> = {
-  LOW: 'neutral',
-  NORMAL: 'neutral',
-  HIGH: 'warning',
-  URGENT: 'danger',
-}
+  LOW: "neutral",
+  NORMAL: "neutral",
+  HIGH: "inProgress",
+  URGENT: "overdue",
+};
 
 interface EligibleOrdersPanelProps {
-  companyId: string
-  run: PlanningRunView
-  trips: TripView[]
-  canManage: boolean
-  onAssigned: (detail: TripDetailView) => void
+  companyId: string;
+  run: PlanningRunView;
+  trips: TripView[];
+  canManage: boolean;
+  onAssigned: (detail: TripDetailView) => void;
 }
 
 /**
- * The left pane of the planning board: orders in `READY_FOR_PLANNING` for this run's origin and
- * date, paginated - never loaded all at once (the step brief's explicit rule). Origin and service
- * date are not editable filters here: eligibility requires an exact match on both
- * (`docs/domain/PLANNING_MANUAL_V1.md` section 5), so widening them would only list orders an
- * assign call would then refuse.
+ * El panel izquierdo del tablero: los pedidos en `READY_FOR_PLANNING` para el origen y la fecha
+ * de este plan, paginados — nunca cargados de golpe.
  *
- * Rendered as a compact list rather than a table. This panel is a third of the board on desktop
- * and a full-width tab on a phone; a seven-column table in that width scrolls sideways and hides
- * exactly the two things a planner scans for - the order number and its destination. Each row
- * still carries everything the brief asks for: number, destination, priority, weight, volume and
- * pallets, on two dense lines rather than in a card the size of a trip.
+ * El origen y la fecha de servicio no son filtros editables aquí: la elegibilidad exige que
+ * coincidan exactamente los dos, así que ensancharlos solo listaría pedidos que la llamada de
+ * asignación rechazaría después.
+ *
+ * Se pinta como una lista compacta y no como una tabla. Este panel es un tercio del tablero en
+ * escritorio y una pestaña a ancho completo en un teléfono; una tabla de siete columnas en ese
+ * ancho se va de lado y esconde justo las dos cosas que un planificador busca —el número de
+ * pedido y su destino—. Cada fila sigue llevando todo: número, destino, prioridad, peso, volumen
+ * y pallets, en dos líneas densas.
  */
 export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssigned }: EligibleOrdersPanelProps) {
-  const { t } = useTranslation('planning')
-  const { t: tc } = useTranslation('common')
-  const enumLabels = useEnumLabels()
-  const format = useFormat()
-  const queryClient = useQueryClient()
-  const [page, setPage] = useState(0)
-  const [draftFilters, setDraftFilters] = useState({ destinationId: '', orderNumber: '' })
-  const [filters, setFilters] = useState({ destinationId: '', orderNumber: '' })
-  const [assignTargets, setAssignTargets] = useState<Record<string, string>>({})
-  const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null)
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(0);
+  const [draft, setDraft] = useState({ destinationId: "", orderNumber: "" });
+  const [filters, setFilters] = useState({ destinationId: "", orderNumber: "" });
+  const [assignTargets, setAssignTargets] = useState<Record<string, string>>({});
+  const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
 
-  const draftTrips = trips.filter((trip) => trip.status === 'DRAFT')
+  const draftTrips = trips.filter((trip) => trip.status === "DRAFT");
 
   const eligibleQuery = useQuery({
-    queryKey: ['eligible-orders', companyId, run.id, page, filters],
+    queryKey: ["eligible-orders", companyId, run.id, page, filters],
     queryFn: ({ signal }) =>
       fetchEligibleOrders({
         companyId,
@@ -81,203 +71,161 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
         orderNumber: filters.orderNumber || undefined,
         page,
         size: PAGE_SIZE,
-        sort: 'orderNumber,asc',
+        sort: "orderNumber,asc",
         signal,
       }),
     placeholderData: keepPreviousData,
-  })
+  });
 
   const destinationsQuery = useQuery({
-    queryKey: ['destinations-for-eligible-orders', companyId],
-    queryFn: ({ signal }) => fetchDestinations({ companyId, size: 200, active: true, sort: 'code,asc', signal }),
-  })
-  const destinations = destinationsQuery.data?.content ?? []
+    queryKey: ["destinations-for-eligible-orders", companyId],
+    queryFn: ({ signal }) => fetchDestinations({ companyId, size: 200, active: true, sort: "code,asc", signal }),
+  });
 
-  function applyFilters() {
-    setFilters(draftFilters)
-    setPage(0)
-  }
-
+  function applyFilters() { setFilters(draft); setPage(0); }
   function resetFilters() {
-    setDraftFilters({ destinationId: '', orderNumber: '' })
-    setFilters({ destinationId: '', orderNumber: '' })
-    setPage(0)
+    setDraft({ destinationId: "", orderNumber: "" });
+    setFilters({ destinationId: "", orderNumber: "" });
+    setPage(0);
   }
 
-  function refreshEligible() {
-    void queryClient.invalidateQueries({ queryKey: ['eligible-orders', companyId, run.id] })
-  }
+  const refreshEligible = () =>
+    void queryClient.invalidateQueries({ queryKey: ["eligible-orders", companyId, run.id] });
 
   async function assign(order: EligibleOrderView) {
-    const targetTripId = assignTargets[order.id] ?? draftTrips[0]?.id
-    if (!targetTripId) return
+    const targetTripId = assignTargets[order.id] ?? draftTrips[0]?.id;
+    if (!targetTripId) return;
 
-    setAssigningOrderId(order.id)
+    setAssigningOrderId(order.id);
     try {
-      const detail = await assignOrderToTrip(companyId, targetTripId, { orderId: order.id })
+      const detail = await assignOrderToTrip(companyId, targetTripId, { orderId: order.id });
       notifySuccess(
-        t('eligible.assigned'),
-        t('eligible.assignedDetail', { number: order.orderNumber, trip: detail.trip.tripNumber }),
-      )
-      refreshEligible()
-      onAssigned(detail)
+        t("Pedido asignado"),
+        t("{{number}} se asignó al viaje {{trip}}.", { number: order.orderNumber, trip: detail.trip.tripNumber }),
+      );
+      refreshEligible();
+      onAssigned(detail);
     } catch (error) {
-      notifyError(t('eligible.assignError'), describePlanningError(error as ApiError))
+      // El rechazo de capacidad lo escribe el backend nombrando cada dimensión que no cupo, así
+      // que aquí se muestra literal: `describePlanningError` es exactamente para esto.
+      notifyError(t("No se pudo asignar el pedido"), describePlanningError(error as ApiError));
     } finally {
-      setAssigningOrderId(null)
+      setAssigningOrderId(null);
     }
   }
 
-  const pageData = eligibleQuery.data
-  const rows = pageData?.content ?? []
+  const pageData = eligibleQuery.data;
+  const rows = pageData?.content ?? [];
 
   return (
-    <div className="tms-card h-100 d-flex flex-column">
-      {/* No heading here: the board already labels this column, and repeating it would put the
-          same words on screen twice. The subtitle is the part that adds information. */}
-      <div className="p-3 border-bottom">
-        <p className="small text-body-secondary mb-0">
-          {t('eligible.subtitle', {
-            origin: run.originName ?? run.originCode,
-            date: format.date(run.planningDate),
-          })}
-        </p>
-      </div>
-
-      <form
-        className="p-3 border-bottom d-flex flex-wrap align-items-end gap-2"
-        onSubmit={(event) => {
-          event.preventDefault()
-          applyFilters()
-        }}
+    <Paper variant="outlined" sx={{ borderRadius: "10px", overflow: "hidden" }}>
+      <Box
+        component="form"
+        onSubmit={(e) => { e.preventDefault(); applyFilters(); }}
+        sx={{ p: 1.5, display: "grid", gap: 1.25 }}
       >
-        <div className="tms-filter-field flex-grow-1">
-          <label htmlFor="eligible-order-number" className="tms-filter-label">
-            {tc('columns.orderNumber')}
-          </label>
-          <input
-            id="eligible-order-number"
-            className="form-control form-control-sm"
-            value={draftFilters.orderNumber}
-            onChange={(event) => setDraftFilters({ ...draftFilters, orderNumber: event.target.value })}
-          />
-        </div>
-        <div className="tms-filter-field flex-grow-1">
-          <label htmlFor="eligible-destination" className="tms-filter-label">
-            {tc('columns.destination')}
-          </label>
-          <Select
-            id="eligible-destination"
-            size="sm"
-            value={draftFilters.destinationId}
-            onChange={(next) => setDraftFilters({ ...draftFilters, destinationId: next })}
-            options={[
-              { value: '', label: t('eligible.allDestinations') },
-              ...destinations.map((destination) => ({ value: destination.id, label: destination.name })),
-            ]}
-          />
-        </div>
-        <div className="d-flex gap-2 ms-auto">
-          <button type="button" className="btn btn-sm btn-outline-secondary" onClick={resetFilters}>
-            {tc('actions.clear')}
-          </button>
-          <button type="submit" className="btn btn-sm btn-primary">
-            {tc('actions.applyFilters')}
-          </button>
-        </div>
-      </form>
+        <TextField
+          size="small" label={t("Pedido")} value={draft.orderNumber}
+          onChange={(e) => setDraft({ ...draft, orderNumber: e.target.value })}
+        />
+        <TextField
+          select size="small" label={t("Destino")} value={draft.destinationId}
+          onChange={(e) => setDraft({ ...draft, destinationId: e.target.value })}
+        >
+          <MenuItem value="">{t("Todos los destinos")}</MenuItem>
+          {(destinationsQuery.data?.content ?? []).map((destination) => (
+            <MenuItem key={destination.id} value={destination.id}>{destination.name}</MenuItem>
+          ))}
+        </TextField>
+        <Box sx={{ display: "flex", gap: 1 }}>
+          <Button size="small" type="submit" variant="contained" startIcon={<SearchRounded />} sx={{ flex: 1 }}>
+            {t("Aplicar filtros")}
+          </Button>
+          <Tooltip title={t("Limpiar")}>
+            <IconButton size="small" onClick={resetFilters}><CloseRounded fontSize="small" /></IconButton>
+          </Tooltip>
+        </Box>
+      </Box>
+      <Divider />
 
-      <div className="flex-grow-1">
-        {canManage && draftTrips.length === 0 && (
-          <p className="alert alert-secondary small py-2 m-3 mb-0">{t('eligible.createTripFirst')}</p>
-        )}
-
-        {eligibleQuery.isPending && <LoadingState label={tc('states.loadingRecords')} />}
-
-        {eligibleQuery.isError && (
-          <div className="p-3">
-            <ErrorState
-              message={describePlanningError(eligibleQuery.error as ApiError)}
-              onRetry={() => void eligibleQuery.refetch()}
-            />
-          </div>
-        )}
-
-        {!eligibleQuery.isPending && !eligibleQuery.isError && rows.length === 0 && (
-          <EmptyState icon="bi-inbox" title={t('eligible.emptyTitle')} message={t('eligible.emptyMessage')} />
-        )}
-
-        {rows.length > 0 && (
-          <ul className="list-unstyled mb-0">
-            {rows.map((order) => (
-              <li key={order.id} className="border-bottom px-3 py-2">
-                <div className="d-flex align-items-baseline justify-content-between gap-2">
-                  <span className="tms-code tms-cell-strong">{order.orderNumber}</span>
-                  <StatusBadge
-                    label={enumLabels.orderPriority(order.priority as OrderPriority)}
-                    tone={PRIORITY_TONE[order.priority as OrderPriority] ?? 'neutral'}
+      {eligibleQuery.isPending ? (
+        <LoadingState minHeight={200} />
+      ) : eligibleQuery.isError ? (
+        <ErrorState
+          message={describePlanningError(eligibleQuery.error as ApiError)}
+          onRetry={() => void eligibleQuery.refetch()}
+        />
+      ) : rows.length === 0 ? (
+        <EmptyState
+          title={t("Sin pedidos elegibles")}
+          message={t("No hay pedidos liberados para este origen y esta fecha.")}
+        />
+      ) : (
+        <Box>
+          {rows.map((order) => {
+            const target = assignTargets[order.id] ?? draftTrips[0]?.id ?? "";
+            return (
+              <Box
+                key={order.id}
+                sx={{
+                  px: 1.5, py: 1.25, borderBottom: "1px solid", borderColor: "divider",
+                  "&:last-of-type": { borderBottom: 0 },
+                }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 800 }}>{order.orderNumber}</Typography>
+                  <StatusChip
+                    label={enumLabel("orderPriority", order.priority)}
+                    tone={PRIORITY_TONE[order.priority as OrderPriority] ?? "neutral"}
                   />
-                </div>
+                </Box>
+                <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
+                  {order.destinationName ?? order.destinationCode ?? "-"}
+                  {order.customerName && ` · ${order.customerName}`}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontVariantNumeric: "tabular-nums" }}>
+                  {fmtWeightKg(order.totalWeightKg)} · {fmtVolumeM3(order.totalVolumeM3)} · {fmtDecimal(order.totalPallets)} {t("pallets")}
+                </Typography>
 
-                <p className="mb-1 small tms-truncate" title={order.destinationName ?? undefined}>
-                  {order.destinationName ?? order.destinationCode ?? '—'}
-                  {order.customerName && <span className="text-body-secondary"> · {order.customerName}</span>}
-                </p>
-
-                <p className="mb-2 small text-body-secondary tms-code">
-                  {format.weight(order.totalWeightKg)} · {format.volume(order.totalVolumeM3)} ·{' '}
-                  {format.decimal(order.totalPallets)} {t('capacity.palletsUnit')}
-                </p>
-
-                {canManage && (
-                  // Not an `input-group`: `.tms-select` draws its own border and radius, unlike
-                  // `.form-select`, so it does not need (or want) Bootstrap's input-group merging.
-                  <div className="d-flex gap-2 align-items-start">
-                    <div className="flex-grow-1">
-                      {/* `aria-label`, not a visible `<label>`: this text repeats the order
-                          number already on screen in the row, and a real DOM label (even
-                          visually hidden) would make it match twice wherever a test looks that
-                          text up. */}
-                      <Select
-                        aria-label={t('eligible.assignAria', { number: order.orderNumber })}
-                        size="sm"
-                        value={assignTargets[order.id] ?? draftTrips[0]?.id ?? ''}
-                        onChange={(next) => setAssignTargets({ ...assignTargets, [order.id]: next })}
-                        disabled={draftTrips.length === 0}
-                        options={
-                          draftTrips.length === 0
-                            ? [{ value: '', label: t('eligible.noOpenTrips') }]
-                            : draftTrips.map((trip) => ({
-                                value: trip.id,
-                                label: t('eligible.tripOption', {
-                                  number: trip.tripNumber,
-                                  vehicle: trip.vehicleCode ?? t('eligible.noVehicle'),
-                                }),
-                              }))
-                        }
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-outline-primary btn-sm"
-                      disabled={draftTrips.length === 0 || assigningOrderId === order.id}
-                      onClick={() => void assign(order)}
+                {canManage && draftTrips.length > 0 && (
+                  <Box sx={{ display: "flex", gap: 0.75, mt: 1 }}>
+                    <TextField
+                      select size="small" value={target}
+                      onChange={(e) => setAssignTargets({ ...assignTargets, [order.id]: e.target.value })}
+                      aria-label={t("Viaje de destino de {{number}}", { number: order.orderNumber })}
+                      sx={{ flex: 1 }}
                     >
-                      {assigningOrderId === order.id ? t('eligible.assigning') : t('eligible.assign')}
-                    </button>
-                  </div>
+                      {draftTrips.map((trip) => (
+                        <MenuItem key={trip.id} value={trip.id}>
+                          {t("Viaje {{number}}", { number: trip.tripNumber })}
+                          {trip.vehicleCode ? ` · ${trip.vehicleCode}` : ""}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <Button
+                      size="small" variant="outlined" startIcon={<AddTaskRounded />}
+                      disabled={assigningOrderId === order.id || target === ""}
+                      onClick={() => void assign(order)}
+                      aria-label={t("Asignar {{number}}", { number: order.orderNumber })}
+                    >
+                      {t("Asignar")}
+                    </Button>
+                  </Box>
                 )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {pageData && rows.length > 0 && (
-        <div className="p-3 border-top">
-          <Pagination page={pageData} onPageChange={setPage} />
-        </div>
+              </Box>
+            );
+          })}
+        </Box>
       )}
-    </div>
-  )
+
+      {pageData && pageData.totalElements > 0 && (
+        <>
+          <Divider />
+          <Box sx={{ px: 1.5, py: 1 }}>
+            <Pagination page={pageData} onPageChange={setPage} />
+          </Box>
+        </>
+      )}
+    </Paper>
+  );
 }

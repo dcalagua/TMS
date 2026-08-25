@@ -1,114 +1,123 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { Link, useParams } from 'react-router-dom'
-import type { ApiError } from '../../shared/api/httpClient'
-import { cancelPlanningRun, confirmPlanningRun, fetchPlanningRun } from '../../shared/api/planningApi'
-import { describeApiError, describePlanningError } from '../../shared/api/problemMessages'
-import { useCompany } from '../../shared/company/CompanyContext'
-import { useEnumLabels } from '../../shared/i18n/enums'
-import { useFormat } from '../../shared/i18n/format'
-import { confirmDialog, EmptyState, ErrorState, PageHeader, StatusBadge, type StatusTone } from '../../shared/ui/components'
-import { LoadingState } from '../../shared/ui/components/LoadingState'
-import { notifyError, notifySuccess } from '../../shared/ui/alerts'
-import { AutoPlanDrawer } from './AutoPlanDrawer'
-import { CreateTripDrawer } from './CreateTripDrawer'
-import { EligibleOrdersPanel } from './EligibleOrdersPanel'
-import { TripCard } from './TripCard'
-import { TripDetailDrawer } from './TripDetailDrawer'
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import {
+  Box, Button, Chip, Paper, Tab, Tabs, Typography, useMediaQuery, useTheme,
+} from "@mui/material";
+import {
+  ArrowBackRounded, AutoFixHighRounded, AddRounded, ViewKanbanRounded, LocalShippingRounded,
+} from "@mui/icons-material";
+import type { ApiError } from "../../shared/api/httpClient";
+import { cancelPlanningRun, confirmPlanningRun, fetchPlanningRun } from "../../shared/api/planningApi";
+import { describeApiError, describePlanningError } from "../../shared/api/problemMessages";
+import { useCompany } from "../../shared/company/CompanyContext";
+import {
+  EmptyState, ErrorState, LoadingState, PageHeader, StatusChip,
+} from "../../shared/ui/components";
+import { ICON_TINTS } from "../../shared/ui/navConfig";
+import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
+import { enumLabel } from "../../lib/enums";
+import type { StatusTone } from "../../theme";
+import { t } from "../../lib/i18n";
+import { fmtDate } from "../../lib/locale";
+import { AutoPlanDrawer } from "./AutoPlanDrawer";
+import { CreateTripDrawer } from "./CreateTripDrawer";
+import { EligibleOrdersPanel } from "./EligibleOrdersPanel";
+import { TripCard } from "./TripCard";
+import { TripDetailDrawer } from "./TripDetailDrawer";
 
-const STATUS_TONE: Record<'DRAFT' | 'CONFIRMED' | 'CANCELLED', StatusTone> = {
-  DRAFT: 'info',
-  CONFIRMED: 'success',
-  CANCELLED: 'danger',
-}
+const STATUS_TONE: Record<"DRAFT" | "CONFIRMED" | "CANCELLED", StatusTone> = {
+  DRAFT: "open",
+  CONFIRMED: "done",
+  CANCELLED: "cancelled",
+};
 
-/** Which half of the board a phone is showing. Two narrow columns side by side is unusable at
- * 360px, so below `lg` the panels become tabs instead of shrinking. */
-type MobilePanel = 'orders' | 'trips'
+/** Qué mitad del tablero enseña un teléfono. Dos columnas estrechas una al lado de la otra son
+ * inservibles a 360px, así que por debajo de `lg` los paneles se vuelven pestañas en lugar de
+ * encogerse. */
+type MobilePanel = "orders" | "trips";
 
 /**
- * The planning board (`docs/domain/PLANNING_MANUAL_V1.md`, "The flow" steps 3-8): one call opens
- * the run with every trip's capacity summary already attached
- * (`docs/overnight/10_MANUAL_PLANNING_BACKEND.md` section 8 point 1), so this page never loops
- * over trips to build itself. Every mutation below re-syncs the board by invalidating this one
- * query rather than hand-merging partial responses into local state.
+ * El tablero de planificación: una sola llamada abre el plan con el resumen de capacidad de cada
+ * viaje ya adjunto, así que esta pantalla nunca itera los viajes para construirse.
+ *
+ * Cada mutación de abajo vuelve a sincronizar el tablero invalidando esa única query, en lugar
+ * de fusionar a mano respuestas parciales en estado local: el veredicto de capacidad es del
+ * backend, y un merge en cliente es exactamente la forma de acabar enseñando uno que ya no es
+ * verdad.
  */
 export function PlanningBoardPage() {
-  const { t } = useTranslation('planning')
-  const enumLabels = useEnumLabels()
-  const format = useFormat()
-  const { runId } = useParams<{ runId: string }>()
-  const { selected, hasPermission } = useCompany()
-  const companyId = selected?.id ?? ''
-  const canManageRun = hasPermission('planning.plan:manage') && hasPermission('planning.trip:manage')
-  const canManageTrips = hasPermission('planning.trip:manage')
-  const queryClient = useQueryClient()
+  const theme = useTheme();
+  const isNarrow = useMediaQuery(theme.breakpoints.down("lg"));
+  const { runId } = useParams<{ runId: string }>();
+  const { selected, hasPermission } = useCompany();
+  const companyId = selected?.id ?? "";
+  const canManageRun = hasPermission("planning.plan:manage") && hasPermission("planning.trip:manage");
+  const canManageTrips = hasPermission("planning.trip:manage");
+  const queryClient = useQueryClient();
 
-  const queryKey = ['planning-run', companyId, runId]
+  const queryKey = ["planning-run", companyId, runId];
   const runQuery = useQuery({
     queryKey,
     queryFn: ({ signal }) => fetchPlanningRun(companyId, runId as string, signal),
     enabled: runId !== undefined,
-  })
+  });
 
-  const [openTripId, setOpenTripId] = useState<string | null>(null)
-  const [showCreateTrip, setShowCreateTrip] = useState(false)
-  const [showAutoPlan, setShowAutoPlan] = useState(false)
-  const [mobilePanel, setMobilePanel] = useState<MobilePanel>('orders')
+  const [openTripId, setOpenTripId] = useState<string | null>(null);
+  const [showCreateTrip, setShowCreateTrip] = useState(false);
+  const [showAutoPlan, setShowAutoPlan] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState<MobilePanel>("orders");
 
   /**
-   * Re-syncs both halves of the board. The eligible pool has to be invalidated too: taking an
-   * order off a trip - or moving it - returns it to that pool, and without this the left panel
-   * kept showing a stale list until the page was reloaded.
+   * Vuelve a sincronizar las dos mitades del tablero. La bolsa de elegibles también hay que
+   * invalidarla: quitar un pedido de un viaje —o moverlo— lo devuelve a esa bolsa, y sin esto el
+   * panel de la izquierda seguía enseñando una lista vieja hasta recargar la página.
    */
   function refreshBoard() {
-    void queryClient.invalidateQueries({ queryKey })
-    void queryClient.invalidateQueries({ queryKey: ['eligible-orders', companyId, runId] })
+    void queryClient.invalidateQueries({ queryKey });
+    void queryClient.invalidateQueries({ queryKey: ["eligible-orders", companyId, runId] });
   }
 
   async function confirmPlan() {
-    if (!runQuery.data) return
-    const { run } = runQuery.data
+    if (!runQuery.data) return;
+    const { run } = runQuery.data;
     const confirmed = await confirmDialog({
-      title: t('boardScreen.confirmTitle'),
-      text: t('boardScreen.confirmText', { number: run.planNumber }),
-      confirmLabel: t('boardScreen.confirmPlan'),
-    })
-    if (!confirmed) return
+      title: t("¿Confirmar el plan?"),
+      text: t("{{number}} quedará confirmado y sus viajes pasarán a ejecución.", { number: run.planNumber }),
+      confirmLabel: t("Confirmar plan"),
+    });
+    if (!confirmed) return;
 
     try {
-      await confirmPlanningRun(companyId, run.id, { version: run.version })
-      notifySuccess(t('boardScreen.confirmed'), run.planNumber)
-      refreshBoard()
+      await confirmPlanningRun(companyId, run.id, { version: run.version });
+      notifySuccess(t("Plan confirmado"), run.planNumber);
+      refreshBoard();
     } catch (error) {
-      notifyError(t('boardScreen.confirmError'), describePlanningError(error as ApiError))
+      notifyError(t("No se pudo confirmar el plan"), describePlanningError(error as ApiError));
     }
   }
 
   async function cancelPlan() {
-    if (!runQuery.data) return
-    const { run } = runQuery.data
+    if (!runQuery.data) return;
+    const { run } = runQuery.data;
     const confirmed = await confirmDialog({
-      title: t('boardScreen.cancelTitle'),
-      text: t('boardScreen.cancelText', { number: run.planNumber }),
-      confirmLabel: t('boardScreen.cancelPlan'),
+      title: t("¿Cancelar este plan?"),
+      text: t("{{number}} quedará cancelado y sus pedidos volverán a estar disponibles.", { number: run.planNumber }),
+      confirmLabel: t("Cancelar plan"),
       dangerous: true,
-    })
-    if (!confirmed) return
+    });
+    if (!confirmed) return;
 
     try {
-      await cancelPlanningRun(companyId, run.id, { version: run.version })
-      notifySuccess(t('boardScreen.cancelled'), run.planNumber)
-      refreshBoard()
+      await cancelPlanningRun(companyId, run.id, { version: run.version });
+      notifySuccess(t("Plan cancelado"), run.planNumber);
+      refreshBoard();
     } catch (error) {
-      notifyError(t('boardScreen.cancelError'), describePlanningError(error as ApiError))
+      notifyError(t("No se pudo cancelar el plan"), describePlanningError(error as ApiError));
     }
   }
 
-  if (runQuery.isPending) {
-    return <LoadingState label={t('boardScreen.loading')} />
-  }
+  if (runQuery.isPending) return <LoadingState label={t("Cargando el plan...")} />;
 
   if (runQuery.isError) {
     return (
@@ -116,11 +125,11 @@ export function PlanningBoardPage() {
         message={describeApiError(runQuery.error as ApiError)}
         onRetry={() => void runQuery.refetch()}
       />
-    )
+    );
   }
 
-  const { run, trips } = runQuery.data
-  const isDraft = run.status === 'DRAFT'
+  const { run, trips } = runQuery.data;
+  const isDraft = run.status === "DRAFT";
 
   const ordersPanel = (
     <EligibleOrdersPanel
@@ -130,105 +139,115 @@ export function PlanningBoardPage() {
       canManage={isDraft && canManageTrips}
       onAssigned={refreshBoard}
     />
-  )
+  );
 
-  const tripsPanel =
-    trips.length === 0 ? (
-      <div className="tms-card">
-        <EmptyState icon="bi-truck" title={t('boardScreen.noTrips')} message={t('boardScreen.noTripsHint')} />
-      </div>
-    ) : (
-      <div className="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-3">
-        {trips.map((trip) => (
-          <div key={trip.id} className="col">
-            <TripCard trip={trip} onOpen={() => setOpenTripId(trip.id)} />
-          </div>
-        ))}
-      </div>
-    )
+  const tripsPanel = trips.length === 0 ? (
+    <Paper variant="outlined" sx={{ borderRadius: "10px" }}>
+      <EmptyState
+        icon={<LocalShippingRounded />}
+        title={t("Este plan todavía no tiene viajes")}
+        message={t("Crea un viaje o usa la planificación automática para proponerlos.")}
+      />
+    </Paper>
+  ) : (
+    <Box sx={{
+      display: "grid", gap: 2,
+      gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" },
+    }}>
+      {trips.map((trip) => (
+        <TripCard key={trip.id} trip={trip} onOpen={() => setOpenTripId(trip.id)} />
+      ))}
+    </Box>
+  );
 
   return (
-    <div>
-      <Link to="/planning" className="text-decoration-none small d-inline-flex align-items-center gap-1 mb-2">
-        <i className="bi bi-arrow-left" aria-hidden="true" />
-        {t('boardScreen.backToRuns')}
-      </Link>
+    <>
+      <Button
+        component={Link} to="/planning" size="small" startIcon={<ArrowBackRounded />}
+        sx={{ mb: 1, ml: -1 }}
+      >
+        {t("Volver a planes")}
+      </Button>
 
       <PageHeader
-        icon="columns-gap"
+        icon={<ViewKanbanRounded />}
+        tint={ICON_TINTS["/planning"]}
         title={run.planNumber}
+        subtitle={`${run.originName ?? run.originCode ?? ""} · ${fmtDate(run.planningDate)}`}
         meta={
           <>
-            <StatusBadge label={enumLabels.planningRunStatus(run.status)} tone={STATUS_TONE[run.status]} />
-            <span className="tms-badge tms-badge-neutral">
-              {t('boardScreen.tripsCount', { count: trips.length })}
-            </span>
+            <StatusChip label={enumLabel("planningRunStatus", run.status)} tone={STATUS_TONE[run.status]} />
+            <Chip size="small" variant="outlined" label={t("{{count}} viajes", { count: trips.length })} />
           </>
         }
-        description={`${run.originName ?? run.originCode} · ${format.date(run.planningDate)}`}
+        onRefresh={refreshBoard}
+        refreshing={runQuery.isFetching}
         actions={
-          <div className="d-flex flex-wrap align-items-center gap-2">
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
             {isDraft && canManageTrips && (
               <>
-                {/* Secondary, not primary: the plan a person builds is still the normal path, and
-                    this one opens a review step rather than doing anything. */}
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-2"
-                  onClick={() => setShowAutoPlan(true)}
-                >
-                  <i className="bi bi-magic" aria-hidden="true" />
-                  {t('boardScreen.autoPlan')}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-2"
-                  onClick={() => setShowCreateTrip(true)}
-                >
-                  <i className="bi bi-plus-lg" aria-hidden="true" />
-                  {t('boardScreen.newTrip')}
-                </button>
+                {/* Secundario y no principal: el plan que arma una persona sigue siendo el camino
+                    normal, y este abre un paso de revisión en vez de hacer algo. */}
+                <Button variant="outlined" color="secondary" startIcon={<AutoFixHighRounded />} onClick={() => setShowAutoPlan(true)}>
+                  {t("Planificar automáticamente")}
+                </Button>
+                <Button variant="outlined" startIcon={<AddRounded />} onClick={() => setShowCreateTrip(true)}>
+                  {t("Nuevo viaje")}
+                </Button>
               </>
             )}
             {isDraft && canManageRun && (
               <>
-                <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => void cancelPlan()}>
-                  {t('boardScreen.cancelPlan')}
-                </button>
-                <button type="button" className="btn btn-sm btn-primary" onClick={() => void confirmPlan()}>
-                  {t('boardScreen.confirmPlan')}
-                </button>
+                <Button variant="outlined" color="error" onClick={() => void cancelPlan()}>
+                  {t("Cancelar plan")}
+                </Button>
+                <Button variant="contained" onClick={() => void confirmPlan()}>
+                  {t("Confirmar plan")}
+                </Button>
               </>
             )}
-          </div>
+          </Box>
         }
       />
 
-      {/* Below `lg` the two panels become tabs; above it they are a split view. */}
-      <div className="btn-group w-100 mb-3 d-lg-none" role="group" aria-label={t('boardScreen.panels')}>
-        {(['orders', 'trips'] as const).map((panel) => (
-          <button
-            key={panel}
-            type="button"
-            className={`btn btn-sm ${mobilePanel === panel ? 'btn-secondary' : 'btn-outline-secondary'}`}
-            aria-pressed={mobilePanel === panel}
-            onClick={() => setMobilePanel(panel)}
-          >
-            {panel === 'orders' ? t('boardScreen.tabOrders') : t('boardScreen.tabTrips')}
-          </button>
-        ))}
-      </div>
+      {/* Por debajo de `lg` los dos paneles se vuelven pestañas; por encima, una vista partida. */}
+      {isNarrow && (
+        <Tabs
+          value={mobilePanel}
+          onChange={(_e, value: MobilePanel) => setMobilePanel(value)}
+          variant="fullWidth"
+          sx={{ mb: 2, borderBottom: "1px solid", borderColor: "divider" }}
+        >
+          <Tab value="orders" label={t("Pedidos")} />
+          <Tab value="trips" label={t("Viajes")} />
+        </Tabs>
+      )}
 
-      <div className="row g-3">
-        <div className={`col-12 col-lg-4 ${mobilePanel === 'orders' ? '' : 'd-none d-lg-block'}`}>
-          <h2 className="tms-section-title mb-2 d-none d-lg-block">{t('board.orders')}</h2>
-          {ordersPanel}
-        </div>
-        <div className={`col-12 col-lg-8 tms-min-w-0 ${mobilePanel === 'trips' ? '' : 'd-none d-lg-block'}`}>
-          <h2 className="tms-section-title mb-2 d-none d-lg-block">{t('board.trips')}</h2>
-          {tripsPanel}
-        </div>
-      </div>
+      <Box sx={{
+        display: "grid", gap: 3,
+        gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 4fr) minmax(0, 8fr)" },
+      }}>
+        {(!isNarrow || mobilePanel === "orders") && (
+          <Box sx={{ minWidth: 0 }}>
+            {!isNarrow && (
+              <Typography variant="overline" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                {t("Pedidos elegibles")}
+              </Typography>
+            )}
+            {ordersPanel}
+          </Box>
+        )}
+        {(!isNarrow || mobilePanel === "trips") && (
+          <Box sx={{ minWidth: 0 }}>
+            {!isNarrow && (
+              <Typography variant="overline" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                {t("Viajes")}
+              </Typography>
+            )}
+            {tripsPanel}
+          </Box>
+        )}
+      </Box>
 
       {openTripId && (
         <TripDetailDrawer
@@ -259,13 +278,12 @@ export function PlanningBoardPage() {
           runVersion={run.version}
           onClose={() => setShowCreateTrip(false)}
           onCreated={() => {
-            setShowCreateTrip(false)
-            notifySuccess(t('boardScreen.tripCreated'))
-            refreshBoard()
+            setShowCreateTrip(false);
+            notifySuccess(t("Viaje creado"));
+            refreshBoard();
           }}
         />
       )}
-
-    </div>
-  )
+    </>
+  );
 }

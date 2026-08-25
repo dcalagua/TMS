@@ -1,12 +1,12 @@
-import { createClient } from '@supabase/supabase-js'
-import { appEnv } from '../config/env'
+import { createClient } from "@supabase/supabase-js";
+import { appEnv } from "../config/env";
 
 /**
- * The only direct Supabase usage in the app (V1 rule): authentication.
+ * El único uso directo de Supabase en la app (regla V1): la autenticación.
  *
- * `persistSession`/`autoRefreshToken` let supabase-js keep the session valid in the
- * background; `AuthContext` reads whatever session this client currently holds rather than
- * managing tokens itself. No business table is ever queried through this client.
+ * `persistSession`/`autoRefreshToken` dejan que supabase-js mantenga la sesión válida en
+ * segundo plano; `AuthContext` lee la sesión que este cliente tenga en cada momento en lugar
+ * de gestionar tokens por su cuenta. Ninguna tabla de negocio se consulta nunca por aquí.
  */
 export const supabase = createClient(appEnv.supabaseUrl, appEnv.supabaseAnonKey, {
   auth: {
@@ -14,4 +14,4 @@ export const supabase = createClient(appEnv.supabaseUrl, appEnv.supabaseAnonKey,
     autoRefreshToken: true,
     detectSessionInUrl: false,
   },
-})
+});

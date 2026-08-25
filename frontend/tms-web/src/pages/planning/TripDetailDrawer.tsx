@@ -1,660 +1,604 @@
-import { useEnumLabels } from '../../shared/i18n/enums'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import type { ApiError } from '../../shared/api/httpClient'
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import {
-  cancelTrip,
-  fetchTrip,
-  moveOrderToTrip,
-  removeOrderFromTrip,
-  reorderTripStops,
-  updateTripRoute,
-  type TripDetailView,
-  type TripView,
-} from '../../shared/api/planningApi'
-import { describePlanningError } from '../../shared/api/problemMessages'
-import { fetchRoutes } from '../../shared/api/routesApi'
-import { useFormat } from '../../shared/i18n/format'
-import { TripStopMap, type TripStopMapOrigin, type TripStopMapStop } from '../../shared/maps/TripStopMap'
-import { CapacityBar, confirmDialog, Select, StatusBadge, TmsDrawer } from '../../shared/ui/components'
-import { LoadingState } from '../../shared/ui/components/LoadingState'
-import { notifyError, notifySuccess } from '../../shared/ui/alerts'
-import { TRIP_STATUS_TONE } from '../../shared/ui/statusTones'
-import { TripDriverDrawer } from './TripDriverDrawer'
-import { TripVehicleDrawer } from './TripVehicleDrawer'
-
-/** `LocalTime` strings from the backend ("HH:mm" or "HH:mm:ss") trimmed to "HH:mm" for display. */
-function formatServiceWindow(start: string | null, end: string | null): string | null {
-  if (!start && !end) return null
-  const short = (value: string) => value.slice(0, 5)
-  if (start && end) return `${short(start)}–${short(end)}`
-  return short(start ?? end ?? '')
-}
+  Alert, Box, Button, Checkbox, Chip, FormControlLabel, IconButton, MenuItem,
+  Paper, Tab, Tabs, TextField, Tooltip, Typography, useMediaQuery, useTheme,
+} from "@mui/material";
+import {
+  LocalShippingRounded, ArrowUpwardRounded, ArrowDownwardRounded, DeleteRounded,
+  SwapHorizRounded, SaveRounded, BadgeRounded, AltRouteRounded, CancelRounded,
+} from "@mui/icons-material";
+import type { ApiError } from "../../shared/api/httpClient";
+import { fetchRoutes } from "../../shared/api/routesApi";
+import {
+  cancelTrip, fetchTrip, moveOrderToTrip, removeOrderFromTrip, reorderTripStops, updateTripRoute,
+  type TripDetailView, type TripView,
+} from "../../shared/api/planningApi";
+import { describePlanningError } from "../../shared/api/problemMessages";
+import { TripStopMap, type TripStopMapOrigin, type TripStopMapStop } from "../../shared/maps/TripStopMap";
+import {
+  CapacityBar, DetailGrid, DetailItem, FormDrawer, SectionHeader, StatusChip,
+} from "../../shared/ui/components";
+import { STOP_EXECUTION_TONE, TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
+import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
+import { enumLabel } from "../../lib/enums";
+import { t } from "../../lib/i18n";
+import { fmtDate, fmtDateTime, fmtDecimal, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
+import { TripDriverDrawer } from "./TripDriverDrawer";
+import { TripVehicleDrawer } from "./TripVehicleDrawer";
 
 interface TripDetailDrawerProps {
-  companyId: string
-  tripId: string
-  /** The board's other trips, for the "move to" target list and their display labels only - the
-   * move itself is re-validated server-side against the target's real, current load. */
-  siblingTrips: TripView[]
-  canManage: boolean
-  onClose: () => void
-  /** Fired after any mutation that changes this trip or a sibling (move), so the board behind the
-   * drawer can refresh its cards instead of showing a load that no longer matches the database. */
-  onChanged: () => void
+  companyId: string;
+  tripId: string;
+  /** Los demás viajes del plan, para poder mover un pedido de uno a otro sin salir de aquí. */
+  siblingTrips: TripView[];
+  canManage: boolean;
+  onClose: () => void;
+  onChanged: () => void;
+}
+
+function formatServiceWindow(start: string | null, end: string | null): string | null {
+  if (!start && !end) return null;
+  const from = start?.slice(0, 5) ?? "--:--";
+  const to = end?.slice(0, 5) ?? "--:--";
+  return `${from} - ${to}`;
 }
 
 function moveItem<T>(items: T[], from: number, to: number): T[] {
-  const next = items.slice()
-  const [moved] = next.splice(from, 1) as [T]
-  next.splice(to, 0, moved)
-  return next
+  if (to < 0 || to >= items.length) return items;
+  const next = items.slice();
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
 }
 
 /**
- * The board's detail drawer: the shipment header, one trip's assignments (remove, move to another
- * trip), its suggested route and its stop sequence, plus vehicle assignment and trip cancellation.
- * Everything here mutates through the trip endpoints and repaints from their response -
- * `docs/overnight/10_MANUAL_PLANNING_BACKEND.md` section 8 point 4: every mutation returns the
- * updated `TripDetailView`.
+ * El envío por dentro: cabecera, capacidad, los pedidos que lleva, la secuencia de paradas y la
+ * ruta sugerida.
  *
- * The header is read-only and resolved entirely server-side (`docs/domain/SHIPMENT_V2.md`): the
- * browser never joins an origin, a carrier or a route to a trip itself, so what a planner reads
- * here is what an outbound integration would publish.
+ * Cada mutación devuelve el `TripDetailView` actualizado y ese es el que se escribe en la caché:
+ * el veredicto de capacidad, la secuencia y las transiciones permitidas son del backend, y
+ * fusionar a mano una respuesta parcial es la forma de acabar enseñando una capacidad que ya no
+ * es cierta.
+ *
+ * La cabecera es de solo lectura y la resuelve entera el servidor: el navegador nunca une un
+ * origen, un transportista o una ruta a un viaje por su cuenta, así que lo que lee aquí un
+ * planificador es lo mismo que publicaría una integración saliente.
  */
-export function TripDetailDrawer({ companyId, tripId, siblingTrips, canManage, onClose, onChanged }: TripDetailDrawerProps) {
-  const { t } = useTranslation('planning')
-  const { t: tc } = useTranslation('common')
-  const format = useFormat()
-  const enumLabels = useEnumLabels()
-  const queryClient = useQueryClient()
-  const queryKey = ['trip', companyId, tripId]
+export function TripDetailDrawer({
+  companyId, tripId, siblingTrips, canManage, onClose, onChanged,
+}: TripDetailDrawerProps) {
+  const theme = useTheme();
+  const isNarrow = useMediaQuery(theme.breakpoints.down("md"));
+  const queryClient = useQueryClient();
+  const queryKey = ["trip", companyId, tripId];
 
   const tripQuery = useQuery({
     queryKey,
     queryFn: ({ signal }) => fetchTrip(companyId, tripId, signal),
-  })
-  const detail = tripQuery.data ?? null
-  const editable = detail !== null && canManage && detail.trip.status === 'DRAFT'
+  });
+  const detail = tripQuery.data ?? null;
+  const editable = detail !== null && canManage && detail.trip.status === "DRAFT";
 
-  const [moveTargets, setMoveTargets] = useState<Record<string, string>>({})
-  const [busyOrderId, setBusyOrderId] = useState<string | null>(null)
-  const [showVehicleModal, setShowVehicleModal] = useState(false)
-  const [showDriverModal, setShowDriverModal] = useState(false)
-  const [stopOrder, setStopOrder] = useState<string[]>([])
-  const [savingStops, setSavingStops] = useState(false)
-  const [routeId, setRouteId] = useState<string>('')
-  const [applyRouteSequence, setApplyRouteSequence] = useState(true)
-  const [savingRoute, setSavingRoute] = useState(false)
-  const [selectedStopId, setSelectedStopId] = useState<string | null>(null)
-  const [mobileStopTab, setMobileStopTab] = useState<'map' | 'list'>('list')
+  const [moveTargets, setMoveTargets] = useState<Record<string, string>>({});
+  const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
+  const [showVehicleDrawer, setShowVehicleDrawer] = useState(false);
+  const [showDriverDrawer, setShowDriverDrawer] = useState(false);
+  const [stopOrder, setStopOrder] = useState<string[]>([]);
+  const [savingStops, setSavingStops] = useState(false);
+  const [routeId, setRouteId] = useState<string>("");
+  const [applyRouteSequence, setApplyRouteSequence] = useState(true);
+  const [savingRoute, setSavingRoute] = useState(false);
+  const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
+  const [mobileStopTab, setMobileStopTab] = useState<"map" | "list">("list");
 
-  const serverStopIds = detail ? detail.stops.slice().sort((a, b) => a.sequence - b.sequence).map((s) => s.destinationId) : []
-  const serverStopsKey = serverStopIds.join('|')
+  const serverStopIds = detail
+    ? detail.stops.slice().sort((a, b) => a.sequence - b.sequence).map((s) => s.destinationId)
+    : [];
+  const serverStopsKey = serverStopIds.join("|");
 
-  // Re-seeds the local ordering only when the *set* of stops changes (an assignment/move added or
-  // removed a destination) - not on every refetch, so an in-progress manual reorder is not
-  // clobbered by an unrelated capacity refresh. Deliberately keyed on `serverStopsKey`, not
-  // `detail`/`serverStopIds`, which change reference on every refetch even when the set does not.
+  // Vuelve a sembrar el orden local solo cuando cambia el *conjunto* de paradas (una asignación o
+  // un movimiento añadió o quitó un destino), no en cada refetch: así un reordenamiento manual en
+  // curso no lo pisa un refresco de capacidad que no tiene nada que ver. Deliberadamente clavado
+  // en `serverStopsKey` y no en `detail`, que cambia de referencia en cada refetch.
   useEffect(() => {
-    setStopOrder(serverStopIds)
+    setStopOrder(serverStopIds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverStopsKey])
+  }, [serverStopsKey]);
 
-  // A selection that fell off the set (the destination was removed/moved elsewhere) would
-  // otherwise keep highlighting a marker/list row that no longer exists.
+  // Una selección que se cayó del conjunto (el destino se quitó o se movió a otro viaje) seguiría
+  // resaltando un marcador y una fila que ya no existen.
   useEffect(() => {
-    if (selectedStopId && !stopOrder.includes(selectedStopId)) {
-      setSelectedStopId(null)
-    }
-  }, [stopOrder, selectedStopId])
+    if (selectedStopId && !stopOrder.includes(selectedStopId)) setSelectedStopId(null);
+  }, [stopOrder, selectedStopId]);
 
   const mapOrigin = useMemo<TripStopMapOrigin | null>(() => {
-    if (!detail || !detail.trip.originId) return null
+    if (!detail || !detail.trip.originId) return null;
     return {
       latitude: detail.trip.originLatitude,
       longitude: detail.trip.originLongitude,
-      label: detail.trip.originName ?? detail.trip.originCode ?? t('drawer.header.origin'),
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detail?.trip.originId, detail?.trip.originLatitude, detail?.trip.originLongitude, detail?.trip.originName, detail?.trip.originCode])
+      label: detail.trip.originName ?? detail.trip.originCode ?? t("Origen"),
+    };
+  }, [detail]);
 
-  // Numbered from the planner's current (possibly unsaved) order, not the last-saved sequence, so
-  // the map reflects an up/down move immediately instead of only after "Guardar el orden".
+  // Numeradas desde el orden actual del planificador (posiblemente sin guardar) y no desde la
+  // última secuencia guardada, para que el mapa refleje un movimiento arriba/abajo al momento en
+  // lugar de solo después de "Guardar el orden".
   const mapStops = useMemo<TripStopMapStop[]>(() => {
-    const stops = detail?.stops
-    if (!stops) return []
+    const stops = detail?.stops;
+    if (!stops) return [];
     return stopOrder.map((destinationId, index) => {
-      const stop = stops.find((s) => s.destinationId === destinationId)
+      const stop = stops.find((s) => s.destinationId === destinationId);
       return {
         id: destinationId,
         sequence: index + 1,
         latitude: stop?.latitude ?? null,
         longitude: stop?.longitude ?? null,
         label: stop?.destinationName ?? stop?.destinationCode ?? destinationId,
-      }
-    })
-  }, [stopOrder, detail?.stops])
+      };
+    });
+  }, [stopOrder, detail]);
 
-  const selectedStop = detail?.stops.find((s) => s.destinationId === selectedStopId) ?? null
-  const selectedStopPosition = selectedStopId ? stopOrder.indexOf(selectedStopId) + 1 : 0
+  const serverRouteId = detail?.trip.routeId ?? "";
+  useEffect(() => { setRouteId(serverRouteId); }, [serverRouteId]);
 
-  const serverRouteId = detail?.trip.routeId ?? ''
-  useEffect(() => {
-    setRouteId(serverRouteId)
-  }, [serverRouteId])
-
-  // Only the corridors that actually depart from this shipment's origin: the backend refuses any
-  // other with a 400, so offering them would be offering a guaranteed error. Skipped entirely
-  // while the trip cannot be edited - a confirmed shipment's route is a fact, not a choice.
-  const originId = detail?.trip.originId ?? null
+  // Solo los corredores que de verdad salen del origen de este envío: el backend rechaza
+  // cualquier otro con un 400, así que ofrecerlos sería ofrecer un error garantizado. Ni se piden
+  // cuando el viaje no se puede editar: la ruta de un envío confirmado es un hecho, no una opción.
+  const originId = detail?.trip.originId ?? null;
   const routesQuery = useQuery({
-    queryKey: ['routes', companyId, 'for-origin', originId],
+    queryKey: ["routes", companyId, "for-origin", originId],
     enabled: editable && originId !== null,
     queryFn: ({ signal }) =>
-      fetchRoutes({ companyId, originId: originId ?? undefined, active: true, size: 200, sort: 'code,asc', signal }),
-  })
-  const routes = routesQuery.data?.content ?? []
+      fetchRoutes({ companyId, originId: originId ?? undefined, active: true, size: 200, sort: "code,asc", signal }),
+  });
 
   function applyDetail(next: TripDetailView) {
-    queryClient.setQueryData(queryKey, next)
-    onChanged()
+    queryClient.setQueryData(queryKey, next);
+    onChanged();
   }
 
-  const targetTrips = siblingTrips.filter((trip) => trip.id !== tripId && trip.status === 'DRAFT')
+  const targetTrips = siblingTrips.filter((trip) => trip.id !== tripId && trip.status === "DRAFT");
 
   async function removeOrder(orderId: string, orderNumber: string) {
-    setBusyOrderId(orderId)
+    setBusyOrderId(orderId);
     try {
-      const next = await removeOrderFromTrip(companyId, tripId, orderId)
-      applyDetail(next)
-      notifySuccess(t('drawer.orderRemoved'), t('drawer.orderRemovedDetail', { number: orderNumber }))
+      applyDetail(await removeOrderFromTrip(companyId, tripId, orderId));
+      notifySuccess(t("Pedido quitado del viaje"), orderNumber);
     } catch (error) {
-      notifyError(t('drawer.removeError'), describePlanningError(error as ApiError))
+      notifyError(t("No se pudo quitar el pedido"), describePlanningError(error as ApiError));
     } finally {
-      setBusyOrderId(null)
+      setBusyOrderId(null);
     }
   }
 
   async function moveOrder(orderId: string, orderNumber: string) {
-    const targetTripId = moveTargets[orderId] ?? targetTrips[0]?.id
-    if (!targetTripId) return
+    const targetTripId = moveTargets[orderId] ?? targetTrips[0]?.id;
+    if (!targetTripId) return;
 
-    setBusyOrderId(orderId)
+    setBusyOrderId(orderId);
     try {
-      const next = await moveOrderToTrip(companyId, tripId, orderId, { targetTripId })
-      applyDetail(next)
-      notifySuccess(t('drawer.orderMoved'), t('drawer.orderMovedDetail', { number: orderNumber }))
+      applyDetail(await moveOrderToTrip(companyId, tripId, orderId, { targetTripId }));
+      notifySuccess(t("Pedido movido"), orderNumber);
     } catch (error) {
-      notifyError(t('drawer.moveError'), describePlanningError(error as ApiError))
+      notifyError(t("No se pudo mover el pedido"), describePlanningError(error as ApiError));
     } finally {
-      setBusyOrderId(null)
+      setBusyOrderId(null);
     }
   }
 
   async function saveStopOrder() {
-    setSavingStops(true)
+    setSavingStops(true);
     try {
-      const next = await reorderTripStops(companyId, tripId, { destinationIds: stopOrder })
-      applyDetail(next)
-      notifySuccess(t('drawer.stopOrderSaved'))
+      applyDetail(await reorderTripStops(companyId, tripId, { destinationIds: stopOrder }));
+      notifySuccess(t("Orden de paradas guardado"));
     } catch (error) {
-      notifyError(t('drawer.stopOrderError'), describePlanningError(error as ApiError))
+      notifyError(t("No se pudo guardar el orden de paradas"), describePlanningError(error as ApiError));
     } finally {
-      setSavingStops(false)
+      setSavingStops(false);
     }
   }
 
   /**
-   * Saves the route reference. `applySequence` is what turns a suggestion into a one-time
-   * reordering; without it the corridor is only recorded. Either way the set of stops is the
-   * backend's to decide and does not change here.
+   * Guarda la referencia de ruta. `applySequence` es lo que convierte una sugerencia en una
+   * reordenación puntual; sin él, el corredor solo queda registrado. En cualquier caso, qué
+   * destinos sirve el envío lo decide el backend y no cambia aquí.
    */
   async function saveRoute(nextRouteId: string | null) {
-    if (!detail) return
-    setSavingRoute(true)
+    if (!detail) return;
+    setSavingRoute(true);
     try {
-      const next = await updateTripRoute(companyId, tripId, {
+      applyDetail(await updateTripRoute(companyId, tripId, {
         routeId: nextRouteId,
         applySequence: nextRouteId !== null && applyRouteSequence,
         version: detail.trip.version,
-      })
-      applyDetail(next)
-      notifySuccess(nextRouteId === null ? t('drawer.route.cleared') : t('drawer.route.saved'))
+      }));
+      notifySuccess(nextRouteId === null ? t("Ruta quitada") : t("Ruta guardada"));
     } catch (error) {
-      notifyError(t('drawer.route.error'), describePlanningError(error as ApiError))
+      notifyError(t("No se pudo guardar la ruta"), describePlanningError(error as ApiError));
     } finally {
-      setSavingRoute(false)
+      setSavingRoute(false);
     }
   }
 
   async function cancelThisTrip() {
-    if (!detail) return
+    if (!detail) return;
     const confirmed = await confirmDialog({
-      title: t('drawer.cancelTripTitle'),
-      text: t('drawer.cancelTripText', { number: detail.trip.tripNumber }),
-      confirmLabel: t('drawer.cancelTrip'),
+      title: t("¿Cancelar el viaje?"),
+      text: t("El viaje {{number}} quedará cancelado y sus pedidos volverán al pool.", { number: detail.trip.tripNumber }),
+      confirmLabel: t("Cancelar viaje"),
       dangerous: true,
-    })
-    if (!confirmed) return
+    });
+    if (!confirmed) return;
 
     try {
-      const next = await cancelTrip(companyId, tripId, { version: detail.trip.version })
-      applyDetail(next)
-      notifySuccess(t('drawer.tripCancelled'))
+      applyDetail(await cancelTrip(companyId, tripId, { version: detail.trip.version }));
+      notifySuccess(t("Viaje cancelado"));
     } catch (error) {
-      notifyError(t('drawer.cancelTripError'), describePlanningError(error as ApiError))
+      notifyError(t("No se pudo cancelar el viaje"), describePlanningError(error as ApiError));
     }
   }
 
-  const stopsDirty = stopOrder.join('|') !== serverStopsKey
-  const routeDirty = routeId !== serverRouteId
+  const trip = detail?.trip;
+  const stopsSorted = detail ? stopOrder.map((id) => detail.stops.find((s) => s.destinationId === id)) : [];
+  const stopOrderDirty = stopOrder.join("|") !== serverStopsKey;
 
   return (
-    <TmsDrawer
-      open
-      title={detail ? t('card.title', { number: detail.trip.tripNumber }) : t('drawer.titleFallback')}
-      subtitle={t('drawer.subtitle')}
-      size="xl"
-      onClose={onClose}
-      // Stops reordered or a route picked but not yet saved are unsaved work like any edited field.
-      dirty={stopsDirty || routeDirty}
-    >
-      <div>
-        {detail && (
-          <p className="mb-3">
-            <StatusBadge label={enumLabels.tripStatus(detail.trip.status)} tone={TRIP_STATUS_TONE[detail.trip.status]} />
-          </p>
-        )}
-        {tripQuery.isError && (
-          <div className="alert alert-danger py-2 small" role="alert">
-            {describePlanningError(tripQuery.error as ApiError)}
-          </div>
-        )}
-        {!detail && !tripQuery.isError && <LoadingState label={t('drawer.loading')} />}
-
-        {detail && (
+    <>
+      <FormDrawer
+        open
+        loading={tripQuery.isPending}
+        icon={<LocalShippingRounded />}
+        title={trip ? t("Viaje {{number}}", { number: trip.tripNumber }) : t("Viaje")}
+        subtitle={trip ? `${t("Envío")} ${trip.shipmentNumber}` : undefined}
+        size="xl"
+        onClose={onClose}
+        footer={
           <>
-            <div className="d-flex justify-content-between align-items-start mb-3 gap-2">
-              <div className="tms-min-w-0">
-                <p className="mb-1">
-                  {detail.trip.vehicleCode ? (
-                    <>
-                      <span className="fw-semibold">{detail.trip.vehicleCode}</span> · {detail.trip.vehicleLicensePlate}
-                    </>
-                  ) : (
-                    <span className="text-body-secondary fst-italic">{t('card.noVehicle')}</span>
-                  )}
-                </p>
-                <p className="small text-body-secondary mb-0">{detail.trip.carrierName ?? t('card.noCarrier')}</p>
-                <p className="small text-body-secondary mb-0">{detail.trip.driverName ?? t('card.noDriver')}</p>
-              </div>
-              {editable && (
-                <div className="btn-group btn-group-sm flex-shrink-0">
-                  <button type="button" className="btn btn-outline-secondary" onClick={() => setShowVehicleModal(true)}>
-                    {detail.trip.vehicleId ? t('drawer.changeVehicle') : t('drawer.assignVehicle')}
-                  </button>
-                  <button type="button" className="btn btn-outline-secondary" onClick={() => setShowDriverModal(true)}>
-                    {detail.trip.driverId ? t('drawer.changeDriver') : t('drawer.assignDriver')}
-                  </button>
-                  <button type="button" className="btn btn-outline-danger" onClick={() => void cancelThisTrip()}>
-                    {t('drawer.cancelTrip')}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <h3 className="tms-section-title mb-2">{t('drawer.header.title')}</h3>
-            {/* One definition list rather than a table: this is a set of labelled facts about one
-                shipment, and on a phone it has to wrap into a single readable column. */}
-            <dl className="row g-2 small mb-4">
-              <ShipmentFact label={t('drawer.header.shipment')} value={detail.trip.shipmentNumber} code />
-              <ShipmentFact label={t('drawer.header.plan')} value={detail.trip.planNumber} code />
-              <ShipmentFact label={t('drawer.header.planningDate')} value={format.date(detail.trip.planningDate)} />
-              <ShipmentFact
-                label={t('drawer.header.origin')}
-                value={detail.trip.originName ?? detail.trip.originCode}
-              />
-              <ShipmentFact label={t('drawer.header.carrier')} value={detail.trip.carrierName} />
-              <ShipmentFact
-                label={t('drawer.header.vehicle')}
-                value={
-                  detail.trip.vehicleCode
-                    ? `${detail.trip.vehicleCode} · ${detail.trip.vehicleLicensePlate ?? ''}`.trim()
-                    : null
-                }
-              />
-              <ShipmentFact label={t('drawer.header.vehicleType')} value={detail.trip.vehicleTypeCode} />
-              <ShipmentFact label={t('drawer.header.driver')} value={detail.trip.driverName} />
-              <ShipmentFact
-                label={t('drawer.header.driverLicense')}
-                value={
-                  detail.trip.driverLicenseNumber === null
-                    ? null
-                    : `${detail.trip.driverLicenseNumber} · ${enumLabels.driverLicenseStatus(
-                        detail.trip.driverLicenseStatus ?? 'UNRECORDED',
-                      )}`
-                }
-              />
-              <ShipmentFact
-                label={t('drawer.header.departure')}
-                value={detail.trip.plannedDepartureAt ? format.dateTime(detail.trip.plannedDepartureAt) : null}
-              />
-              <ShipmentFact
-                label={t('drawer.header.route')}
-                value={detail.trip.routeCode ? `${detail.trip.routeCode} — ${detail.trip.routeName ?? ''}`.trim() : null}
-              />
-            </dl>
-
-            <CapacityBar kind="weight" dimension={detail.trip.capacity.weight} />
-            <CapacityBar kind="volume" dimension={detail.trip.capacity.volume} />
-            <CapacityBar kind="pallets" dimension={detail.trip.capacity.pallets} />
-
-            <h3 className="tms-section-title mt-4 mb-2">{t('drawer.assignedOrders')}</h3>
-            {detail.assignments.length === 0 && <p className="small text-body-secondary">{t('drawer.noAssignedOrders')}</p>}
-            {detail.assignments.length > 0 && (
-              <div className="table-responsive mb-3">
-                <table className="table table-sm align-middle">
-                  <thead>
-                    <tr>
-                      <th scope="col">{tc('columns.orderNumber')}</th>
-                      <th scope="col">{tc('columns.destination')}</th>
-                      <th scope="col">{t('drawer.amounts')}</th>
-                      {editable && <th scope="col" />}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detail.assignments.map((assignment) => (
-                      <tr key={assignment.assignmentId}>
-                        <td>{assignment.orderNumber}</td>
-                        <td>{assignment.destinationName ?? assignment.destinationCode ?? '—'}</td>
-                        <td className="small text-body-secondary">
-                          {format.weight(assignment.assignedWeightKg)} · {format.volume(assignment.assignedVolumeM3)} ·{' '}
-                          {format.decimal(assignment.assignedPallets)} {t('capacity.palletsUnit')}
-                        </td>
-                        {editable && (
-                          <td>
-                            <div className="d-flex gap-1 justify-content-end align-items-start">
-                              <div style={{ width: '10rem' }}>
-                                {/* `aria-label`, not a visible `<label>`: this text repeats the
-                                    order number already on screen in the row, and a real DOM
-                                    label (even visually hidden) would make it match twice
-                                    wherever a test looks that text up. */}
-                                <Select
-                                  aria-label={t('drawer.moveAria', { number: assignment.orderNumber })}
-                                  size="sm"
-                                  value={moveTargets[assignment.orderId] ?? targetTrips[0]?.id ?? ''}
-                                  onChange={(next) => setMoveTargets({ ...moveTargets, [assignment.orderId]: next })}
-                                  disabled={targetTrips.length === 0}
-                                  options={
-                                    targetTrips.length === 0
-                                      ? [{ value: '', label: t('drawer.noOtherTrips') }]
-                                      : targetTrips.map((trip) => ({
-                                          value: trip.id,
-                                          label: t('drawer.tripOption', { number: trip.tripNumber }),
-                                        }))
-                                  }
-                                />
-                              </div>
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline-secondary"
-                                disabled={targetTrips.length === 0 || busyOrderId === assignment.orderId}
-                                onClick={() => void moveOrder(assignment.orderId, assignment.orderNumber)}
-                              >
-                                {t('drawer.move')}
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline-danger"
-                                disabled={busyOrderId === assignment.orderId}
-                                onClick={() => void removeOrder(assignment.orderId, assignment.orderNumber)}
-                              >
-                                {t('drawer.remove')}
-                              </button>
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <Button onClick={onClose}>{t("Cerrar")}</Button>
+            {editable && (
+              <Button color="error" startIcon={<CancelRounded />} onClick={() => void cancelThisTrip()}>
+                {t("Cancelar viaje")}
+              </Button>
             )}
+          </>
+        }
+      >
+        {tripQuery.isError && (
+          <Alert severity="error">{describePlanningError(tripQuery.error as ApiError)}</Alert>
+        )}
+
+        {detail && trip && (
+          <>
+            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 2 }}>
+              <StatusChip label={enumLabel("tripStatus", trip.status)} tone={TRIP_STATUS_TONE[trip.status]} variant="solid" />
+              {!trip.capacity.withinCapacity && (
+                <StatusChip label={t("Capacidad excedida")} tone="overdue" />
+              )}
+            </Box>
+
+            <SectionHeader
+              title={t("Envío")}
+              actions={editable && (
+                <Box sx={{ display: "flex", gap: 1 }}>
+                  <Button size="small" startIcon={<LocalShippingRounded />} onClick={() => setShowVehicleDrawer(true)}>
+                    {t("Vehículo")}
+                  </Button>
+                  <Button size="small" startIcon={<BadgeRounded />} onClick={() => setShowDriverDrawer(true)}>
+                    {t("Conductor")}
+                  </Button>
+                </Box>
+              )}
+            />
+            <DetailGrid columns={3}>
+              <DetailItem label={t("Plan")} value={trip.planNumber} />
+              <DetailItem label={t("Fecha de planificación")} value={fmtDate(trip.planningDate)} />
+              <DetailItem label={t("Origen")} value={trip.originName ?? trip.originCode} />
+              <DetailItem label={t("Vehículo")} value={trip.vehicleCode ? `${trip.vehicleCode} · ${trip.vehicleLicensePlate}` : null} />
+              <DetailItem label={t("Transportista")} value={trip.carrierName} />
+              <DetailItem
+                label={t("Conductor")}
+                value={trip.driverName ? (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+                    {trip.driverName}
+                    {/* El estado de la licencia lo juzga el servidor contra la fecha del *viaje*,
+                        no contra hoy: el tablero está indexado por el día en que el viaje sale. */}
+                    {trip.driverLicenseStatus && trip.driverLicenseStatus !== "VALID" && (
+                      <Chip
+                        size="small"
+                        color={trip.driverLicenseStatus === "EXPIRED" ? "error" : "warning"}
+                        label={enumLabel("driverLicenseStatus", trip.driverLicenseStatus)}
+                        sx={{ height: 20, fontSize: 10.5 }}
+                      />
+                    )}
+                  </Box>
+                ) : null}
+              />
+              <DetailItem label={t("Salida planificada")} value={trip.plannedDepartureAt ? fmtDateTime(trip.plannedDepartureAt) : null} />
+              <DetailItem label={t("Salida real")} value={trip.actualDepartureAt ? fmtDateTime(trip.actualDepartureAt) : null} />
+              <DetailItem label={t("Ruta")} value={trip.routeName ?? trip.routeCode} />
+            </DetailGrid>
+
+            <Box sx={{ mt: 3 }}>
+              <SectionHeader title={t("Capacidad")} />
+              <CapacityBar kind="weight" dimension={trip.capacity.weight} />
+              <CapacityBar kind="volume" dimension={trip.capacity.volume} />
+              <CapacityBar kind="pallets" dimension={trip.capacity.pallets} />
+            </Box>
+
+            <Box sx={{ mt: 3 }}>
+              <SectionHeader title={t("Pedidos asignados")} />
+              {detail.assignments.length === 0 ? (
+                <Alert severity="info">{t("Este viaje todavía no lleva pedidos.")}</Alert>
+              ) : (
+                <Box sx={{ display: "grid", gap: 1 }}>
+                  {detail.assignments.map((assignment) => (
+                    <Paper key={assignment.assignmentId} variant="outlined" sx={{ p: 1.5 }}>
+                      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, flexWrap: "wrap" }}>
+                        <Box sx={{ flex: 1, minWidth: 180 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 800 }}>{assignment.orderNumber}</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                            {assignment.destinationName ?? assignment.destinationCode ?? "-"}
+                            {assignment.customerName && ` · ${assignment.customerName}`}
+                          </Typography>
+                          {/* Las cantidades vienen de la fila de asignación, no de la cabecera del
+                              pedido: es lo que se comprometió en este viaje. */}
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontVariantNumeric: "tabular-nums" }}>
+                            {fmtWeightKg(assignment.assignedWeightKg)} · {fmtVolumeM3(assignment.assignedVolumeM3)} · {fmtDecimal(assignment.assignedPallets)} {t("pallets")}
+                          </Typography>
+                        </Box>
+                        {editable && (
+                          <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexWrap: "wrap" }}>
+                            {targetTrips.length > 0 && (
+                              <>
+                                <TextField
+                                  select size="small" sx={{ minWidth: 150 }}
+                                  value={moveTargets[assignment.orderId] ?? targetTrips[0].id}
+                                  onChange={(e) => setMoveTargets({ ...moveTargets, [assignment.orderId]: e.target.value })}
+                                  aria-label={t("Viaje de destino de {{number}}", { number: assignment.orderNumber })}
+                                >
+                                  {targetTrips.map((target) => (
+                                    <MenuItem key={target.id} value={target.id}>
+                                      {t("Viaje {{number}}", { number: target.tripNumber })}
+                                    </MenuItem>
+                                  ))}
+                                </TextField>
+                                <Tooltip title={t("Mover")}>
+                                  <span>
+                                    <IconButton
+                                      size="small"
+                                      disabled={busyOrderId === assignment.orderId}
+                                      onClick={() => void moveOrder(assignment.orderId, assignment.orderNumber)}
+                                      aria-label={t("Mover {{number}}", { number: assignment.orderNumber })}
+                                    >
+                                      <SwapHorizRounded fontSize="small" />
+                                    </IconButton>
+                                  </span>
+                                </Tooltip>
+                              </>
+                            )}
+                            <Tooltip title={t("Quitar")}>
+                              <span>
+                                <IconButton
+                                  size="small" sx={{ color: "error.main" }}
+                                  disabled={busyOrderId === assignment.orderId}
+                                  onClick={() => void removeOrder(assignment.orderId, assignment.orderNumber)}
+                                  aria-label={t("Quitar {{number}}", { number: assignment.orderNumber })}
+                                >
+                                  <DeleteRounded fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          </Box>
+                        )}
+                      </Box>
+                    </Paper>
+                  ))}
+                </Box>
+              )}
+            </Box>
 
             {editable && (
-              <>
-                <h3 className="tms-section-title mt-4 mb-1">{t('drawer.route.title')}</h3>
-                <p className="small text-body-secondary mb-2">{t('drawer.route.subtitle')}</p>
-                <div className="d-flex flex-column flex-sm-row gap-2 align-items-sm-end mb-2">
-                  <div className="flex-grow-1">
-                    <label className="form-label small mb-1" htmlFor="trip-route">
-                      {t('drawer.header.route')}
-                    </label>
-                    <Select
-                      id="trip-route"
-                      size="sm"
-                      value={routeId}
-                      disabled={savingRoute || routesQuery.isPending}
-                      onChange={(next) => setRouteId(next)}
-                      options={[
-                        { value: '', label: t('drawer.route.none') },
-                        ...routes.map((route) => ({ value: route.id, label: `${route.code} — ${route.name}` })),
-                      ]}
-                    />
-                  </div>
-                  <div className="d-flex gap-2">
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-primary"
-                      disabled={savingRoute || routeId === '' || !routeDirty}
-                      onClick={() => void saveRoute(routeId)}
-                    >
-                      {savingRoute ? t('drawer.saving') : t('drawer.route.apply')}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-secondary"
-                      disabled={savingRoute || serverRouteId === ''}
-                      onClick={() => void saveRoute(null)}
-                    >
-                      {t('drawer.route.clear')}
-                    </button>
-                  </div>
-                </div>
-                <div className="form-check small mb-3">
-                  <input
-                    className="form-check-input"
-                    type="checkbox"
-                    id="trip-route-sequence"
-                    checked={applyRouteSequence}
-                    onChange={(event) => setApplyRouteSequence(event.target.checked)}
+              <Box sx={{ mt: 3 }}>
+                <SectionHeader title={t("Ruta sugerida")} />
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  {t("La ruta es una sugerencia: no cambia qué destinos sirve el envío, solo puede reordenar los que ya tiene.")}
+                </Typography>
+                <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <TextField
+                    select size="small" label={t("Ruta")} value={routeId}
+                    onChange={(e) => setRouteId(e.target.value)}
+                    sx={{ minWidth: 230, flex: 1 }}
+                  >
+                    <MenuItem value="">{t("Sin ruta")}</MenuItem>
+                    {(routesQuery.data?.content ?? []).map((route) => (
+                      <MenuItem key={route.id} value={route.id}>{route.code} · {route.name}</MenuItem>
+                    ))}
+                  </TextField>
+                  <FormControlLabel
+                    sx={{ mt: 0.5 }}
+                    control={
+                      <Checkbox
+                        size="small" checked={applyRouteSequence}
+                        onChange={(e) => setApplyRouteSequence(e.target.checked)}
+                        disabled={routeId === ""}
+                      />
+                    }
+                    label={<Typography variant="body2">{t("Aplicar su secuencia")}</Typography>}
                   />
-                  <label className="form-check-label" htmlFor="trip-route-sequence">
-                    {t('drawer.route.applySequence')}
-                  </label>
-                  <p className="text-body-secondary mb-0">{t('drawer.route.applySequenceHelp')}</p>
-                </div>
-              </>
+                  <Button
+                    size="small" variant="outlined" startIcon={<AltRouteRounded />}
+                    disabled={savingRoute}
+                    onClick={() => void saveRoute(routeId === "" ? null : routeId)}
+                  >
+                    {t("Guardar ruta")}
+                  </Button>
+                </Box>
+              </Box>
             )}
 
-            <h3 className="tms-section-title mt-4 mb-2">{t('drawer.stopSequence')}</h3>
-            {stopOrder.length === 0 && <p className="small text-body-secondary">{t('drawer.noStops')}</p>}
-            {stopOrder.length > 0 && (
-              <>
-                {/* Below md a map and a full stop list cannot both fit usefully, so a phone gets
-                    tabs instead of one or the other being squeezed unreadably small. */}
-                <ul className="nav nav-pills nav-fill mb-2 d-md-none" role="tablist">
-                  <li className="nav-item" role="presentation">
-                    <button
-                      type="button"
-                      className={`nav-link ${mobileStopTab === 'map' ? 'active' : ''}`}
-                      onClick={() => setMobileStopTab('map')}
-                    >
-                      {t('drawer.map.tabMap')}
-                    </button>
-                  </li>
-                  <li className="nav-item" role="presentation">
-                    <button
-                      type="button"
-                      className={`nav-link ${mobileStopTab === 'list' ? 'active' : ''}`}
-                      onClick={() => setMobileStopTab('list')}
-                    >
-                      {t('drawer.map.tabList')}
-                    </button>
-                  </li>
-                </ul>
+            <Box sx={{ mt: 3 }}>
+              <SectionHeader
+                title={t("Paradas")}
+                actions={editable && stopOrderDirty && (
+                  <Button
+                    size="small" variant="contained" startIcon={<SaveRounded />}
+                    disabled={savingStops}
+                    onClick={() => void saveStopOrder()}
+                  >
+                    {t("Guardar el orden")}
+                  </Button>
+                )}
+              />
 
-                <div className="tms-trip-stop-layout mb-2">
-                  <div className={`${mobileStopTab === 'map' ? 'd-block' : 'd-none'} d-md-block`}>
-                    <TripStopMap
-                      origin={mapOrigin}
-                      stops={mapStops}
-                      selectedStopId={selectedStopId}
-                      onSelectStop={setSelectedStopId}
-                    />
-                    {selectedStop ? (
-                      <div className="border rounded p-2 small">
-                        <p className="fw-semibold mb-1 tms-truncate">
-                          {selectedStop.destinationName ?? selectedStop.destinationCode ?? selectedStop.destinationId}
-                        </p>
-                        <p className="text-body-secondary mb-2">
-                          {t('drawer.map.sequenceLabel', { position: selectedStopPosition, total: stopOrder.length })}
-                        </p>
-                        <dl className="row g-1 mb-0">
-                          <dt className="col-4 fw-normal text-body-secondary">{t('drawer.map.address')}</dt>
-                          <dd className="col-8 mb-0">{selectedStop.address ?? t('drawer.map.noAddress')}</dd>
-                          <dt className="col-4 fw-normal text-body-secondary">{t('drawer.map.serviceWindow')}</dt>
-                          <dd className="col-8 mb-0">
-                            {formatServiceWindow(selectedStop.serviceWindowStart, selectedStop.serviceWindowEnd) ??
-                              t('drawer.map.noServiceWindow')}
-                          </dd>
-                          <dt className="col-4 fw-normal text-body-secondary">{t('drawer.map.orders')}</dt>
-                          <dd className="col-8 mb-0">{t('drawer.stopOrders', { count: selectedStop.orderCount })}</dd>
-                        </dl>
-                      </div>
-                    ) : (
-                      <p className="small text-body-secondary mb-0">{t('drawer.map.selectHint')}</p>
-                    )}
-                  </div>
+              {isNarrow && (
+                <Tabs
+                  value={mobileStopTab}
+                  onChange={(_e, value: "map" | "list") => setMobileStopTab(value)}
+                  variant="fullWidth"
+                  sx={{ mb: 2, borderBottom: "1px solid", borderColor: "divider" }}
+                >
+                  <Tab value="list" label={t("Lista")} />
+                  <Tab value="map" label={t("Mapa")} />
+                </Tabs>
+              )}
 
-                  <div className={`${mobileStopTab === 'list' ? 'd-block' : 'd-none'} d-md-block`}>
-                    <ol className="list-group list-group-numbered mb-2">
-                      {stopOrder.map((destinationId, index) => {
-                        const stop = detail.stops.find((s) => s.destinationId === destinationId)
-                        const mappable = stop?.latitude !== null && stop?.longitude !== null
-                        return (
-                          <li
-                            key={destinationId}
-                            className={`list-group-item d-flex justify-content-between align-items-center gap-2 ${
-                              destinationId === selectedStopId ? 'active' : ''
-                            }`}
-                          >
-                            <button
-                              type="button"
-                              className="btn btn-link p-0 text-start text-decoration-none text-reset tms-min-w-0 flex-grow-1"
-                              aria-pressed={destinationId === selectedStopId}
-                              onClick={() => setSelectedStopId(destinationId)}
-                            >
-                              <span className="tms-truncate d-block">
-                                {stop?.destinationName ?? stop?.destinationCode ?? destinationId}
-                              </span>
-                              <span className="small">
-                                {t('drawer.stopOrders', { count: stop?.orderCount ?? 0 })}
-                                {/* A stop with no coordinate is not an error - it simply cannot be put on
-                                    a map, and saying so beats a marker at (0, 0) in the Atlantic. */}
-                                {!mappable && (
-                                  <>
-                                    {' · '}
-                                    <span title={t('drawer.coordinatesMissingHint')}>{t('drawer.coordinatesMissing')}</span>
-                                  </>
-                                )}
-                              </span>
-                            </button>
-                            {editable && (
-                              <div className="btn-group btn-group-sm flex-shrink-0">
-                                <button
-                                  type="button"
-                                  className="btn btn-outline-secondary"
-                                  aria-label={t('drawer.moveStopUp', { position: index + 1 })}
-                                  disabled={index === 0}
-                                  onClick={() => setStopOrder(moveItem(stopOrder, index, index - 1))}
-                                >
-                                  ↑
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-outline-secondary"
-                                  aria-label={t('drawer.moveStopDown', { position: index + 1 })}
-                                  disabled={index === stopOrder.length - 1}
-                                  onClick={() => setStopOrder(moveItem(stopOrder, index, index + 1))}
-                                >
-                                  ↓
-                                </button>
-                              </div>
-                            )}
-                          </li>
-                        )
-                      })}
-                    </ol>
-                  </div>
-                </div>
-              </>
-            )}
-            {editable && stopOrder.length > 0 && (
-              <button
-                type="button"
-                className="btn btn-sm btn-primary"
-                disabled={!stopsDirty || savingStops}
-                onClick={() => void saveStopOrder()}
-              >
-                {savingStops ? t('drawer.saving') : t('drawer.saveStopOrder')}
-              </button>
+              {(!isNarrow || mobileStopTab === "map") && (
+                <TripStopMap
+                  origin={mapOrigin}
+                  stops={mapStops}
+                  selectedStopId={selectedStopId}
+                  onSelectStop={setSelectedStopId}
+                  height={260}
+                />
+              )}
+
+              {(!isNarrow || mobileStopTab === "list") && (
+                stopsSorted.length === 0 ? (
+                  <Alert severity="info">{t("Este viaje todavía no tiene paradas.")}</Alert>
+                ) : (
+                  <Box sx={{ display: "grid", gap: 1 }}>
+                    {stopsSorted.map((stop, index) => {
+                      if (!stop) return null;
+                      const window = formatServiceWindow(stop.serviceWindowStart, stop.serviceWindowEnd);
+                      const selected = stop.destinationId === selectedStopId;
+                      return (
+                        <Paper
+                          key={stop.id}
+                          variant="outlined"
+                          onClick={() => setSelectedStopId(stop.destinationId)}
+                          sx={{
+                            p: 1.5, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap",
+                            cursor: "pointer",
+                            borderColor: selected ? "primary.main" : "divider",
+                            bgcolor: selected ? "action.hover" : "transparent",
+                          }}
+                        >
+                          <Box sx={{
+                            width: 28, height: 28, borderRadius: "50%", flexShrink: 0, display: "grid", placeItems: "center",
+                            bgcolor: "primary.main", color: "primary.contrastText", fontWeight: 800, fontSize: 13,
+                          }}>
+                            {index + 1}
+                          </Box>
+                          <Box sx={{ flex: 1, minWidth: 160 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+                              {stop.destinationName ?? stop.destinationCode ?? stop.destinationId}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {[stop.address, window].filter(Boolean).join(" · ") || stop.destinationCode}
+                            </Typography>
+                          </Box>
+                          <StatusChip
+                            label={enumLabel("stopExecutionStatus", stop.executionStatus)}
+                            tone={STOP_EXECUTION_TONE[stop.executionStatus]}
+                          />
+                          {stop.openExceptionCount > 0 && (
+                            <Chip size="small" color="error" label={t("{{count}} incidencias", { count: stop.openExceptionCount })} />
+                          )}
+                          {editable && (
+                            <Box sx={{ display: "flex", gap: 0.25 }}>
+                              <Tooltip title={t("Subir")}>
+                                <span>
+                                  <IconButton
+                                    size="small" disabled={index === 0}
+                                    onClick={(e) => { e.stopPropagation(); setStopOrder(moveItem(stopOrder, index, index - 1)); }}
+                                    aria-label={t("Subir la parada {{position}}", { position: index + 1 })}
+                                  >
+                                    <ArrowUpwardRounded fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                              <Tooltip title={t("Bajar")}>
+                                <span>
+                                  <IconButton
+                                    size="small" disabled={index === stopsSorted.length - 1}
+                                    onClick={(e) => { e.stopPropagation(); setStopOrder(moveItem(stopOrder, index, index + 1)); }}
+                                    aria-label={t("Bajar la parada {{position}}", { position: index + 1 })}
+                                  >
+                                    <ArrowDownwardRounded fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            </Box>
+                          )}
+                        </Paper>
+                      );
+                    })}
+                  </Box>
+                )
+              )}
+
+              {stopOrderDirty && (
+                <Alert severity="warning" sx={{ mt: 1.5 }}>
+                  {t("El orden de paradas tiene cambios sin guardar.")}
+                </Alert>
+              )}
+            </Box>
+
+            {detail.exceptions.length > 0 && (
+              <Box sx={{ mt: 3 }}>
+                <SectionHeader title={t("Incidencias")} />
+                <Box sx={{ display: "grid", gap: 1 }}>
+                  {detail.exceptions.map((exception) => (
+                    <Paper key={exception.id} variant="outlined" sx={{ p: 1.5 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {enumLabel("tripExceptionType", exception.exceptionType)}
+                        </Typography>
+                        <StatusChip
+                          label={enumLabel("tripExceptionStatus", exception.status)}
+                          tone={exception.status === "OPEN" ? "overdue" : "done"}
+                        />
+                      </Box>
+                      <Typography variant="caption" color="text.secondary">
+                        {[exception.stopDestinationName, exception.notes].filter(Boolean).join(" · ")}
+                      </Typography>
+                    </Paper>
+                  ))}
+                </Box>
+              </Box>
             )}
           </>
         )}
-      </div>
+      </FormDrawer>
 
-      {showVehicleModal && detail && (
+      {showVehicleDrawer && detail && (
         <TripVehicleDrawer
           companyId={companyId}
           trip={detail.trip}
-          onClose={() => setShowVehicleModal(false)}
-          onUpdated={(next) => {
-            setShowVehicleModal(false)
-            applyDetail(next)
-            notifySuccess(t('drawer.vehicleSaved'))
-          }}
+          onClose={() => setShowVehicleDrawer(false)}
+          onSaved={(next) => { applyDetail(next); setShowVehicleDrawer(false); }}
         />
       )}
 
-      {showDriverModal && detail && (
+      {showDriverDrawer && detail && (
         <TripDriverDrawer
           companyId={companyId}
           trip={detail.trip}
-          onClose={() => setShowDriverModal(false)}
-          onUpdated={(next) => {
-            setShowDriverModal(false)
-            applyDetail(next)
-            notifySuccess(t('drawer.driverSaved'))
-          }}
+          onClose={() => setShowDriverDrawer(false)}
+          onSaved={(next) => { applyDetail(next); setShowDriverDrawer(false); }}
         />
       )}
-    </TmsDrawer>
-  )
-}
-
-/**
- * One labelled fact of the shipment header. A value the backend could not resolve renders as an
- * em dash rather than being hidden: "this shipment has no carrier yet" is information a planner
- * needs, and a row that silently disappears makes the header a different shape every time.
- */
-function ShipmentFact({ label, value, code = false }: { label: string; value: string | null; code?: boolean }) {
-  return (
-    <>
-      <dt className="col-5 col-sm-4 fw-normal text-body-secondary">{label}</dt>
-      <dd className={`col-7 col-sm-8 mb-0 tms-truncate${code ? ' tms-code' : ''}`}>{value ?? '—'}</dd>
     </>
-  )
+  );
 }

@@ -1,228 +1,194 @@
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import type { ApiError } from '../../shared/api/httpClient'
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import {
-  activateCarrier,
-  CARRIER_IMPORT_BASE_PATH,
-  deactivateCarrier,
-  fetchCarriers,
-  type CarrierImportPreview,
-  type CarrierView,
-} from '../../shared/api/carriersApi'
-import { describeApiError } from '../../shared/api/problemMessages'
-import { useCompany } from '../../shared/company/CompanyContext'
+  Box, Button, MenuItem, Paper, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, TextField, Typography,
+} from "@mui/material";
 import {
-  confirmDialog,
-  DataTable,
-  FilterBar,
-  ImportDrawer,
-  PageHeader,
-  Pagination,
-  ActionMenu,
-  ActiveBadge,
-  StatusBadge,
-  Select,
-  type DataTableColumn,
-} from '../../shared/ui/components'
-import { notifyError, notifySuccess } from '../../shared/ui/alerts'
-import { CarrierFormDrawer } from './CarrierFormDrawer'
+  AddRounded, UploadRounded, BusinessRounded, EditRounded, BlockRounded, CheckCircleRounded,
+} from "@mui/icons-material";
+import type { ApiError } from "../../shared/api/httpClient";
+import {
+  activateCarrier, CARRIER_IMPORT_BASE_PATH, deactivateCarrier, fetchCarriers,
+  type CarrierImportPreview, type CarrierView,
+} from "../../shared/api/carriersApi";
+import { describeApiError } from "../../shared/api/problemMessages";
+import { useCompany } from "../../shared/company/CompanyContext";
+import {
+  ActionMenu, ActiveBadge, DataTable, ImportDrawer, ImportOutcomeChip, PageHeader,
+  Pagination, Toolbar, dataTableSx, type DataTableColumn,
+} from "../../shared/ui/components";
+import {
+  ACTIVE_FILTER_OPTIONS, activeParam, notifySaved, toggleActiveRecord, type ActiveFilter,
+} from "../../shared/ui/masterActions";
+import { ICON_TINTS } from "../../shared/ui/navConfig";
+import { t } from "../../lib/i18n";
+import { CarrierFormDrawer } from "./CarrierFormDrawer";
 
-const PAGE_SIZE = 25
-
-type ActiveFilter = 'active' | 'inactive' | 'all'
+const PAGE_SIZE = 25;
 
 interface AppliedFilters {
-  code: string
-  businessName: string
-  active: ActiveFilter
+  code: string;
+  businessName: string;
+  taxIdValue: string;
+  active: ActiveFilter;
 }
 
-const DEFAULT_FILTERS: AppliedFilters = { code: '', businessName: '', active: 'active' }
+const DEFAULT_FILTERS: AppliedFilters = { code: "", businessName: "", taxIdValue: "", active: "active" };
 
-type ModalState = { mode: 'create' } | { mode: 'edit'; carrier: CarrierView } | null
+type ModalState = { mode: "create" } | { mode: "edit"; carrier: CarrierView } | null;
 
 export function CarriersPage() {
-  const { t } = useTranslation('fleet')
-  const { t: tc } = useTranslation('common')
-  const { t: td } = useTranslation('dialogs')
-  const { selected, hasPermission } = useCompany()
-  const companyId = selected?.id ?? ''
-  const canManage = hasPermission('fleet.carrier:manage')
-  const queryClient = useQueryClient()
+  const { selected, hasPermission } = useCompany();
+  const companyId = selected?.id ?? "";
+  const canManage = hasPermission("fleet.carrier:manage");
+  const queryClient = useQueryClient();
 
-  const [page, setPage] = useState(0)
-  const [draftFilters, setDraftFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
-  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
-  const [modal, setModal] = useState<ModalState>(null)
-  const [showImport, setShowImport] = useState(false)
+  const [page, setPage] = useState(0);
+  const [draft, setDraft] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const [modal, setModal] = useState<ModalState>(null);
+  const [showImport, setShowImport] = useState(false);
 
   const carriersQuery = useQuery({
-    queryKey: ['carriers', companyId, page, filters],
+    queryKey: ["carriers", companyId, page, filters],
     queryFn: ({ signal }) =>
       fetchCarriers({
         companyId,
         page,
         size: PAGE_SIZE,
-        sort: 'code,asc',
+        sort: "code,asc",
         code: filters.code || undefined,
         businessName: filters.businessName || undefined,
-        active: filters.active === 'all' ? undefined : filters.active === 'active',
+        taxIdValue: filters.taxIdValue || undefined,
+        active: activeParam(filters.active),
         signal,
       }),
     placeholderData: keepPreviousData,
-  })
+  });
 
-  function applyFilters() {
-    setFilters(draftFilters)
-    setPage(0)
-  }
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: ["carriers", companyId] });
 
-  function resetFilters() {
-    setDraftFilters(DEFAULT_FILTERS)
-    setFilters(DEFAULT_FILTERS)
-    setPage(0)
-  }
-
-  function refresh() {
-    void queryClient.invalidateQueries({ queryKey: ['carriers', companyId] })
-  }
+  function applyFilters() { setFilters(draft); setPage(0); }
+  function resetFilters() { setDraft(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); setPage(0); }
 
   async function toggleActive(carrier: CarrierView) {
-    const confirmed = await confirmDialog({
-      title: carrier.active
-        ? td('deactivate.title', { name: carrier.businessName })
-        : td('activate.title', { name: carrier.businessName }),
-      text: carrier.active ? td('deactivate.text') : td('activate.text'),
-      confirmLabel: carrier.active ? tc('actions.deactivate') : tc('actions.activate'),
-      dangerous: carrier.active,
-    })
-    if (!confirmed) return
-
-    try {
-      if (carrier.active) {
-        await deactivateCarrier(companyId, carrier.id)
-        notifySuccess(td('deactivated'), carrier.businessName)
-      } else {
-        await activateCarrier(companyId, carrier.id)
-        notifySuccess(td('activated'), carrier.businessName)
-      }
-      refresh()
-    } catch (error) {
-      notifyError(td('errorTitle'), describeApiError(error as ApiError))
-    }
+    const changed = await toggleActiveRecord({
+      name: carrier.businessName,
+      active: carrier.active,
+      activate: () => activateCarrier(companyId, carrier.id),
+      deactivate: () => deactivateCarrier(companyId, carrier.id),
+    });
+    if (changed) refresh();
   }
 
   const columns: DataTableColumn<CarrierView>[] = [
-    { key: 'code', header: tc('columns.code'), render: (carrier) => <span className="fw-semibold">{carrier.code}</span> },
-    { key: 'businessName', header: tc('columns.businessName'), render: (carrier) => carrier.businessName },
-    { key: 'taxId', header: tc('columns.taxId'), render: (carrier) => `${carrier.taxIdType} ${carrier.taxIdValue}` },
-    { key: 'contactName', header: tc('columns.contact'), render: (carrier) => carrier.contactName ?? '—' },
-    { key: 'phone', header: tc('columns.phone'), render: (carrier) => carrier.phone ?? '—' },
+    { key: "code", header: t("Código"), render: (c) => <Typography variant="body2" sx={{ fontWeight: 700 }}>{c.code}</Typography> },
+    { key: "businessName", header: t("Razón social"), render: (c) => c.businessName },
     {
-      key: 'active',
-      header: tc('columns.status'),
-      render: (carrier) => (
-        <ActiveBadge active={carrier.active} />
+      key: "taxId",
+      header: t("RUC"),
+      render: (c) => (
+        <Box>
+          <Typography variant="body2" sx={{ fontVariantNumeric: "tabular-nums" }}>{c.taxIdValue}</Typography>
+          <Typography variant="caption" color="text.secondary">{c.taxIdType}</Typography>
+        </Box>
       ),
     },
-  ]
+    {
+      key: "contact",
+      header: t("Contacto"),
+      // Nombre, teléfono y correo en una celda: son un solo hecho —a quién se llama— y tres
+      // columnas medio vacías por él ensancharían la tabla sin decir más.
+      render: (c) => (
+        <Box sx={{ minWidth: 0 }}>
+          {c.contactName && <Typography variant="body2" sx={{ lineHeight: 1.3 }}>{c.contactName}</Typography>}
+          <Typography variant="caption" color="text.secondary">
+            {[c.phone, c.email].filter(Boolean).join(" · ") || "-"}
+          </Typography>
+        </Box>
+      ),
+    },
+    { key: "active", header: t("Estado"), render: (c) => <ActiveBadge active={c.active} /> },
+  ];
 
   if (canManage) {
     columns.push({
-      key: 'actions',
-      header: tc('columns.actions'),
+      key: "actions",
+      header: t("Acciones"),
       actions: true,
       render: (carrier) => (
         <ActionMenu
           items={[
+            { key: "edit", label: t("Editar"), icon: <EditRounded />, onSelect: () => setModal({ mode: "edit", carrier }) },
             {
-              key: 'edit',
-              label: tc('actions.edit'),
-              icon: 'bi-pencil',
-              onSelect: () => setModal({ mode: 'edit', carrier }),
-            },
-            {
-              key: 'active',
-              label: carrier.active ? tc('actions.deactivate') : tc('actions.activate'),
-              icon: carrier.active ? 'bi-slash-circle' : 'bi-check-circle',
+              key: "active",
+              label: carrier.active ? t("Desactivar") : t("Activar"),
+              icon: carrier.active ? <BlockRounded /> : <CheckCircleRounded />,
               dangerous: carrier.active,
               onSelect: () => void toggleActive(carrier),
             },
           ]}
         />
       ),
-    })
+    });
   }
 
-  const pageData = carriersQuery.data
+  const pageData = carriersQuery.data;
 
   return (
-    <div>
+    <>
       <PageHeader
-        icon="building"
-        title={t('carriers.title')}
-        description={t('carriers.description')}
-        actions={
-          canManage && (
-            <>
-              <button
-                type="button"
-                className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
-                onClick={() => setShowImport(true)}
-              >
-                <i className="bi bi-upload" aria-hidden="true" />
-                {tc('actions.import')}
-              </button>
-              <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setModal({ mode: 'create' })}>
-                <i className="bi bi-plus-lg" aria-hidden="true" />
-                {t('carriers.new')}
-              </button>
-            </>
-          )
-        }
+        icon={<BusinessRounded />}
+        tint={ICON_TINTS["/fleet/carriers"]}
+        title={t("Transportistas")}
+        subtitle={t("Las empresas que ponen los vehículos y los conductores de la operación.")}
+        onRefresh={refresh}
+        refreshing={carriersQuery.isFetching}
+        actions={canManage && (
+          <>
+            <Button variant="outlined" startIcon={<UploadRounded />} onClick={() => setShowImport(true)}>
+              {t("Importar")}
+            </Button>
+            <Button variant="contained" startIcon={<AddRounded />} onClick={() => setModal({ mode: "create" })}>
+              {t("Nuevo transportista")}
+            </Button>
+          </>
+        )}
       />
 
-      <FilterBar onSubmit={applyFilters} onReset={resetFilters}>
-        <div>
-          <label htmlFor="carrier-filter-code" className="form-label small mb-1">
-            {tc('columns.code')}
-          </label>
-          <input
-            id="carrier-filter-code"
-            className="form-control form-control-sm"
-            value={draftFilters.code}
-            onChange={(event) => setDraftFilters({ ...draftFilters, code: event.target.value })}
-          />
-        </div>
-        <div>
-          <label htmlFor="carrier-filter-business-name" className="form-label small mb-1">
-            {tc('columns.businessName')}
-          </label>
-          <input
-            id="carrier-filter-business-name"
-            className="form-control form-control-sm"
-            value={draftFilters.businessName}
-            onChange={(event) => setDraftFilters({ ...draftFilters, businessName: event.target.value })}
-          />
-        </div>
-        <div>
-          <label htmlFor="carrier-filter-active" className="form-label small mb-1">
-            {tc('columns.status')}
-          </label>
-          <Select
-            id="carrier-filter-active"
-            size="sm"
-            value={draftFilters.active}
-            onChange={(next) => setDraftFilters({ ...draftFilters, active: next as ActiveFilter })}
-            options={[
-              { value: 'active', label: tc('filters.statusActive') },
-              { value: 'inactive', label: tc('filters.statusInactive') },
-              { value: 'all', label: tc('filters.statusAll') },
-            ]}
-          />
-        </div>
-      </FilterBar>
+      <Toolbar
+        onApply={applyFilters}
+        onReset={resetFilters}
+        filters={
+          <>
+            <TextField
+              size="small" label={t("Código")} value={draft.code}
+              onChange={(e) => setDraft({ ...draft, code: e.target.value })}
+              sx={{ minWidth: 150 }}
+            />
+            <TextField
+              size="small" label={t("Razón social")} value={draft.businessName}
+              onChange={(e) => setDraft({ ...draft, businessName: e.target.value })}
+              sx={{ minWidth: 220 }}
+            />
+            <TextField
+              size="small" label={t("RUC")} value={draft.taxIdValue}
+              onChange={(e) => setDraft({ ...draft, taxIdValue: e.target.value })}
+              sx={{ minWidth: 160 }}
+            />
+            <TextField
+              select size="small" label={t("Estado")} value={draft.active}
+              onChange={(e) => setDraft({ ...draft, active: e.target.value as ActiveFilter })}
+              sx={{ minWidth: 150 }}
+            >
+              {ACTIVE_FILTER_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>{t(option.label)}</MenuItem>
+              ))}
+            </TextField>
+          </>
+        }
+      />
 
       <DataTable
         columns={columns}
@@ -232,107 +198,62 @@ export function CarriersPage() {
         isLoading={carriersQuery.isPending}
         error={carriersQuery.isError ? describeApiError(carriersQuery.error as ApiError) : null}
         onRetry={() => void carriersQuery.refetch()}
-        emptyTitle={t('carriers.empty.title')}
-        emptyMessage={t('carriers.empty.message')}
+        emptyTitle={t("Sin transportistas")}
+        emptyMessage={t("Crea un transportista o ajusta los filtros.")}
         footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
       />
 
       {modal && (
         <CarrierFormDrawer
           companyId={companyId}
-          carrier={modal.mode === 'edit' ? modal.carrier : null}
+          carrier={modal.mode === "edit" ? modal.carrier : null}
           onClose={() => setModal(null)}
           onSaved={() => {
-            setModal(null)
-            notifySuccess(modal.mode === 'edit' ? td('updated') : td('created'))
-            refresh()
+            const wasEdit = modal.mode === "edit";
+            setModal(null);
+            notifySaved(wasEdit);
+            refresh();
           }}
         />
       )}
 
       {showImport && (
         <ImportDrawer<CarrierImportPreview>
+          open
           apiBasePath={CARRIER_IMPORT_BASE_PATH}
           companyId={companyId}
+          title={t("Importar transportistas")}
+          subtitle={t("Alta masiva desde una plantilla .xlsx o .csv.")}
           onClose={() => setShowImport(false)}
           onImported={refresh}
-          strings={{
-            title: t('carriers.import.title'),
-            subtitle: t('carriers.import.subtitle'),
-            templateSection: t('carriers.import.templateSection'),
-            templateHelp: t('carriers.import.templateHelp'),
-            downloadXlsx: t('carriers.import.downloadXlsx'),
-            downloadCsv: t('carriers.import.downloadCsv'),
-            downloadError: t('carriers.import.downloadError'),
-            fileSection: t('carriers.import.fileSection'),
-            file: t('carriers.import.file'),
-            fileHelp: (mb, rows) => t('carriers.import.fileHelp', { mb, rows }),
-            previewSection: t('carriers.import.previewSection'),
-            validate: t('carriers.import.validate'),
-            previewing: t('carriers.import.previewing'),
-            apply: t('carriers.import.apply'),
-            applying: t('carriers.import.applying'),
-            applied: (created, skipped) => `${t('carriers.import.applied')}: ${t('carriers.import.appliedText', { created, skipped })}`,
-            confirmTitle: t('carriers.import.confirmTitle'),
-            confirmText: (count) => t('carriers.import.confirmText', { count }),
-            blocked: t('carriers.import.blocked'),
-            readyToApply: t('carriers.import.readyToApply'),
-            nothingToCreate: t('carriers.import.nothingToCreate'),
-            reset: t('carriers.import.reset'),
-            issuesTitle: t('carriers.import.issuesTitle'),
-            issuesTruncated: (shown, total) => t('carriers.import.issuesTruncated', { shown, total }),
-            downloadIssuesReport: t('carriers.import.downloadIssuesReport'),
-            itemsTitle: t('carriers.import.itemsTitle'),
-            columnRow: t('carriers.import.columnRow'),
-            columnColumn: t('carriers.import.columnColumn'),
-            columnIdentifier: t('carriers.import.columnIdentifier'),
-            columnMessage: t('carriers.import.columnMessage'),
-            countRows: t('carriers.import.countRows'),
-            countItems: t('carriers.import.countItems'),
-            countCreate: t('carriers.import.countCreate'),
-            countDuplicates: t('carriers.import.countDuplicates'),
-            countRejected: t('carriers.import.countRejected'),
-            countIssues: t('carriers.import.countIssues'),
-            outcomeCreate: t('carriers.import.outcomeCreate'),
-            outcomeSkipped: t('carriers.import.outcomeSkipped'),
-            outcomeRejected: t('carriers.import.outcomeRejected'),
-            cancel: t('carriers.import.cancel'),
-            close: t('carriers.import.close'),
-          }}
           renderItems={(items, outcomeLabel) => (
-            <div className="tms-table-scroll">
-              <table className="table table-sm align-middle">
-                <caption className="visually-hidden">{t('carriers.import.itemsTitle')}</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">{tc('columns.status')}</th>
-                    <th scope="col">{tc('columns.code')}</th>
-                    <th scope="col">{t('carriers.import.columns.businessName')}</th>
-                    <th scope="col">{t('carriers.import.columns.taxId')}</th>
-                    <th scope="col">{t('carriers.import.columns.contact')}</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 340 }}>
+              <Table size="small" stickyHeader sx={dataTableSx}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>{t("Estado")}</TableCell>
+                    <TableCell>{t("Código")}</TableCell>
+                    <TableCell>{t("Razón social")}</TableCell>
+                    <TableCell>{t("Documento")}</TableCell>
+                    <TableCell>{t("Contacto")}</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {items.map((item, index) => (
-                    <tr key={`${item.code}-${index}`}>
-                      <td>
-                        <StatusBadge
-                          label={outcomeLabel(item.outcome)}
-                          tone={item.outcome === 'CREATE' ? 'success' : item.outcome === 'REJECTED' ? 'danger' : 'neutral'}
-                        />
-                      </td>
-                      <td className="tms-code">{item.code}</td>
-                      <td>{item.businessName}</td>
-                      <td>{item.taxIdType ? `${item.taxIdType} ${item.taxIdValue}` : '—'}</td>
-                      <td>{item.contactName ?? '—'}</td>
-                    </tr>
+                    <TableRow key={`${item.code}-${index}`}>
+                      <TableCell><ImportOutcomeChip outcome={item.outcome} label={outcomeLabel(item.outcome)} /></TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>{item.code}</TableCell>
+                      <TableCell>{item.businessName}</TableCell>
+                      <TableCell>{[item.taxIdType, item.taxIdValue].filter(Boolean).join(" ") || "-"}</TableCell>
+                      <TableCell>{[item.contactName, item.phone, item.email].filter(Boolean).join(" · ") || "-"}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
         />
       )}
-    </div>
-  )
+    </>
+  );
 }

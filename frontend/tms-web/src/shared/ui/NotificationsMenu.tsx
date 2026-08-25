@@ -1,302 +1,169 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useId } from 'react'
-import { createPortal } from 'react-dom'
-import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-  fetchNotifications,
-  markAllNotificationsRead,
-  markNotificationRead,
-  type NotificationFeedView,
-  type NotificationType,
-  type NotificationView,
-} from '../api/notificationsApi'
-import type { DeliveryResult, TripExceptionType } from '../api/planningApi'
-import { useCompany } from '../company/CompanyContext'
-import { useEnumLabels } from '../i18n/enums'
-import { useFormat } from '../i18n/format'
-import { useMenu } from './components/useMenu'
+  Badge, Box, Button, CircularProgress, Divider, IconButton, List, ListItemButton,
+  Menu, Tooltip, Typography,
+} from "@mui/material";
+import {
+  NotificationsRounded, ErrorOutlineRounded, WarningAmberRounded, InfoOutlined, DoneAllRounded,
+} from "@mui/icons-material";
+import {
+  fetchNotifications, markAllNotificationsRead, markNotificationRead,
+  type NotificationSeverity, type NotificationType, type NotificationView,
+} from "../api/notificationsApi";
+import { useCompany } from "../company/CompanyContext";
+import { t } from "../../lib/i18n";
+import { fmtDateTime } from "../../lib/locale";
 
-/** How often the badge re-reads itself. See the component comment. */
-const POLL_INTERVAL_MS = 60_000
+/** Una frase por tipo, con los marcadores que manda el backend en `messageArgs`. Es texto de
+ * presentación: el tipo y sus argumentos son el contrato, la frase es nuestra. */
+const MESSAGE: Record<NotificationType, { title: string; text: string }> = {
+  TRIP_DELAYED: { title: "Viaje retrasado", text: "El viaje {{trip}} salió con retraso." },
+  EXCEPTION_OPENED: { title: "Incidencia abierta", text: "Se abrió una incidencia en el viaje {{trip}}." },
+  TENDER_REJECTED: { title: "Oferta rechazada", text: "{{carrier}} rechazó el viaje {{trip}}." },
+  TENDER_EXPIRED: { title: "Oferta vencida", text: "La oferta del viaje {{trip}} venció sin respuesta." },
+  DRIVER_LICENSE_EXPIRING: { title: "Licencia por vencer", text: "La licencia de {{driver}} vence pronto." },
+  TRIP_COMPLETED: { title: "Viaje completado", text: "El viaje {{trip}} se cerró." },
+  DELIVERY_FAILED: { title: "Entrega fallida", text: "Una entrega del viaje {{trip}} no se pudo completar." },
+};
 
-/**
- * The icon per alert type.
- *
- * Per type rather than per severity: three shapes for seven facts would make the panel a wall of
- * identical triangles, and the icon is the fastest thing to scan. The colour still comes from the
- * severity, so "how bad" and "what happened" are read from two different channels.
- */
-const TYPE_ICONS: Record<NotificationType, string> = {
-  TRIP_DELAYED: 'bi-clock-history',
-  EXCEPTION_OPENED: 'bi-exclamation-triangle',
-  TENDER_REJECTED: 'bi-hand-thumbs-down',
-  TENDER_EXPIRED: 'bi-hourglass-bottom',
-  DRIVER_LICENSE_EXPIRING: 'bi-person-badge',
-  TRIP_COMPLETED: 'bi-check2-circle',
-  DELIVERY_FAILED: 'bi-box-seam',
-}
+const SEVERITY_ICON: Record<NotificationSeverity, typeof InfoOutlined> = {
+  INFO: InfoOutlined,
+  WARNING: WarningAmberRounded,
+  CRITICAL: ErrorOutlineRounded,
+};
 
-/**
- * Where an alert leads. The backend constrains `entityType` to the two kinds it can navigate to
- * (`NotificationEntityType`), which is what keeps this exhaustive rather than defensive.
- */
-function targetOf(notification: NotificationView): string {
-  return notification.entityType === 'TRIP'
-    ? `/trips/${notification.entityId}`
-    : '/fleet/drivers'
-}
+const SEVERITY_COLOR: Record<NotificationSeverity, string> = {
+  INFO: "info.main",
+  WARNING: "warning.main",
+  CRITICAL: "error.main",
+};
 
-/**
- * One placeholder out of the alert's argument bag.
- *
- * The bag is loose by design - its shape differs per alert type and the backend stores it as
- * JSON - so this is the seam where it becomes a value a sentence can carry. A missing placeholder
- * renders as nothing rather than as `undefined`: an alert from an older build whose arguments were
- * shaped differently should read short, not broken.
- */
-function arg(notification: NotificationView, key: string): string | number {
-  const value = notification.messageArgs[key]
-  return value === null || value === undefined ? '' : value
-}
+/** Cuánto espera la campana antes de volver a preguntar. Un minuto: una alerta que llega un
+ * minuto tarde sigue siendo útil, y sesenta peticiones por hora y pestaña no lo serían. */
+const POLL_MS = 60_000;
 
 /**
- * Alerts bell: the unread count, the last things that happened, and a way into each of them.
+ * La campana de la barra superior: la insignia y el panel, alimentados por una sola petición.
  *
- * **It renders for everybody and gates nothing.** `GET /notifications` needs no permission and
- * answers with the alert types this account is entitled to be told about, so an account with none
- * of them sees the same empty panel it saw before this module existed - never a 403 on a control
- * that is on screen at all times. The disclosure decision is the backend's, per alert type
- * (`docs/domain/ALERTS_NOTIFICATIONS_V1.md` section 6).
- *
- * **No text arrives from the server.** Each row is rendered from its `type` - which selects a
- * sentence in the `notifications` bundle - and its `messageArgs`. That is why switching language
- * re-reads the whole history correctly instead of leaving yesterday's alerts in yesterday's
- * language.
- *
- * **Polled, not pushed.** Once a minute, and only while the tab is in front. TMS has no realtime
- * channel and adding one for a bell would be a platform decision made by a top-bar control; a
- * minute is well inside the time it takes to act on any of these alerts, and the panel refetches
- * on open regardless.
+ * La lectura marca en nombre de la *empresa*, no del usuario: dos despachadores comparten una
+ * insignia a propósito, porque una alerta que ya atendió uno no debería seguir persiguiendo al
+ * otro. El backend responde con el feed refrescado, así que el conteo nunca queda obsoleto.
  */
-export function NotificationsMenu() {
-  // Two bindings rather than one over both namespaces: `navigation` owns the control (its label,
-  // its empty state), `notifications` owns the alert sentences, and keeping them apart is what
-  // lets the second one be read as a list of seven messages by whoever translates it.
-  const { t } = useTranslation('navigation')
-  const { t: tAlert } = useTranslation('notifications')
-  const labels = useEnumLabels()
-  const format = useFormat()
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const { selected } = useCompany()
-  const companyId = selected?.id ?? null
-  const menuId = useId()
+export function NotificationsMenu({ iconSx }: { iconSx?: object }) {
+  const { selected } = useCompany();
+  const companyId = selected?.id ?? "";
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [anchor, setAnchor] = useState<null | HTMLElement>(null);
+  const [busy, setBusy] = useState(false);
 
-  const queryKey = ['notifications', companyId]
+  const feed = useQuery({
+    queryKey: ["notifications", companyId],
+    queryFn: ({ signal }) => fetchNotifications(companyId, signal),
+    enabled: companyId !== "",
+    refetchInterval: POLL_MS,
+    staleTime: POLL_MS / 2,
+  });
 
-  const feedQuery = useQuery<NotificationFeedView>({
-    queryKey,
-    queryFn: ({ signal }) => fetchNotifications(companyId as string, signal),
-    enabled: companyId !== null,
-    staleTime: 30_000,
-    refetchInterval: POLL_INTERVAL_MS,
-  })
+  const unread = feed.data?.unreadCount ?? 0;
+  const items = feed.data?.notifications ?? [];
 
-  const notifications = feedQuery.data?.notifications ?? []
-  const unreadCount = feedQuery.data?.unreadCount ?? 0
-
-  const { open, toggle, close, containerRef, triggerRef, menuRef, menuStyle, registerItem, onKeyDown } =
-    useMenu(notifications.length + 1, {
-      // The last entry is "mark all read", which is disabled once there is nothing left to clear.
-      // Without this, arrowing down the panel would park focus on a dead control.
-      isEnabled: (index) => index < notifications.length || unreadCount > 0,
-    })
-
-  // Both mutations answer with the whole feed, so the badge and the list are replaced together
-  // rather than invalidated and refetched - one round trip, and no frame where the count and the
-  // rows disagree.
-  const applyFeed = (feed: NotificationFeedView) => queryClient.setQueryData(queryKey, feed)
-
-  const readOne = useMutation({
-    mutationFn: (notificationId: string) => markNotificationRead(companyId as string, notificationId),
-    onSuccess: applyFeed,
-  })
-
-  const readAll = useMutation({
-    mutationFn: () => markAllNotificationsRead(companyId as string),
-    onSuccess: applyFeed,
-  })
-
-  /**
-   * The sentence for one alert.
-   *
-   * A switch over the seven types rather than one interpolated key, and not by preference:
-   * i18next types `t()`'s options against the placeholders it parses out of the translation, so a
-   * computed key resolves to all seven messages at once and would demand the union of their
-   * placeholders on every call. Narrowing per type is what lets each call carry exactly the
-   * arguments its own sentence uses.
-   *
-   * It is also where the two enum-shaped placeholders are labelled. The backend stores contract
-   * values (`VEHICLE_BREAKDOWN`, `REJECTED`) because that is what they are; interpolating one
-   * straight into a sentence would put a screaming constant in front of an operator, which is the
-   * whole reason `useEnumLabels` exists.
-   */
-  function messageOf(notification: NotificationView): string {
-    switch (notification.type) {
-      case 'TRIP_DELAYED':
-        return tAlert('types.TRIP_DELAYED.message', {
-          shipmentNumber: arg(notification, 'shipmentNumber'),
-          minutes: arg(notification, 'minutes'),
-        })
-      case 'EXCEPTION_OPENED':
-        return tAlert('types.EXCEPTION_OPENED.message', {
-          shipmentNumber: arg(notification, 'shipmentNumber'),
-          exceptionType: labels.tripExceptionType(
-            String(arg(notification, 'exceptionType')) as TripExceptionType,
-          ),
-        })
-      case 'TENDER_REJECTED':
-        return tAlert('types.TENDER_REJECTED.message', {
-          shipmentNumber: arg(notification, 'shipmentNumber'),
-          attempt: arg(notification, 'attempt'),
-        })
-      case 'TENDER_EXPIRED':
-        return tAlert('types.TENDER_EXPIRED.message', {
-          shipmentNumber: arg(notification, 'shipmentNumber'),
-          attempt: arg(notification, 'attempt'),
-        })
-      case 'DRIVER_LICENSE_EXPIRING':
-        return tAlert('types.DRIVER_LICENSE_EXPIRING.message', {
-          driverName: arg(notification, 'driverName'),
-          expiresOn: format.date(String(arg(notification, 'expiresOn'))),
-          shipmentNumber: arg(notification, 'shipmentNumber'),
-        })
-      case 'TRIP_COMPLETED':
-        return tAlert('types.TRIP_COMPLETED.message', {
-          shipmentNumber: arg(notification, 'shipmentNumber'),
-        })
-      case 'DELIVERY_FAILED':
-        return tAlert('types.DELIVERY_FAILED.message', {
-          shipmentNumber: arg(notification, 'shipmentNumber'),
-          orderNumber: arg(notification, 'orderNumber'),
-          stopSequence: arg(notification, 'stopSequence'),
-          result: labels.deliveryResult(String(arg(notification, 'result')) as DeliveryResult),
-        })
+  async function open(notification: NotificationView) {
+    setAnchor(null);
+    if (notification.readAt === null) {
+      try {
+        const refreshed = await markNotificationRead(companyId, notification.id);
+        queryClient.setQueryData(["notifications", companyId], refreshed);
+      } catch {
+        // Marcar como leída es una comodidad: si falla, la alerta se queda sin leer y el
+        // usuario ya está mirando lo que le importaba, que es el viaje.
+      }
     }
+    if (notification.entityType === "TRIP") navigate(`/trips/${notification.entityId}`);
+    else if (notification.entityType === "DRIVER") navigate("/fleet/drivers");
   }
 
-  function handleOpen(notification: NotificationView) {
-    close(false)
-    if (notification.readAt === null) {
-      // Fire and forget: the operator is already on their way to the shipment, and making them
-      // wait for an acknowledgement they did not ask for would be the tail wagging the dog. A
-      // failure leaves the alert unread, which is the safe direction to fail in.
-      readOne.mutate(notification.id)
+  async function readAll() {
+    setBusy(true);
+    try {
+      const refreshed = await markAllNotificationsRead(companyId);
+      queryClient.setQueryData(["notifications", companyId], refreshed);
+    } catch {
+      /* la insignia se recalcula sola en el siguiente sondeo */
+    } finally {
+      setBusy(false);
     }
-    void navigate(targetOf(notification))
   }
 
   return (
-    <div ref={containerRef}>
-      <button
-        ref={triggerRef}
-        type="button"
-        className={`tms-icon-btn tms-bell${open ? ' is-open' : ''}`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        aria-label={
-          unreadCount > 0 ? t('notificationsUnread', { unread: unreadCount }) : t('notifications')
-        }
-        title={t('notifications')}
-        onClick={toggle}
+    <>
+      <Tooltip title={t("Notificaciones")}>
+        <IconButton onClick={(e) => setAnchor(e.currentTarget)} sx={iconSx} aria-label={t("Notificaciones")}>
+          <Badge badgeContent={unread} color="error" max={99}>
+            <NotificationsRounded />
+          </Badge>
+        </IconButton>
+      </Tooltip>
+
+      <Menu
+        anchorEl={anchor}
+        open={anchor !== null}
+        onClose={() => setAnchor(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        slotProps={{ paper: { sx: { mt: 1, width: 380, maxWidth: "100vw", borderRadius: 2.5, overflow: "hidden" } } }}
       >
-        <i className="bi bi-bell" aria-hidden="true" />
-        {unreadCount > 0 && (
-          // aria-hidden: the same number is already in the button's accessible name, and a
-          // screen reader announcing "12, Alerts, 12 unread" is the badge read twice.
-          <span className="tms-bell-badge" aria-hidden="true">
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </span>
-        )}
-      </button>
+        <Box sx={{ px: 2, py: 1.25, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+          <Typography variant="subtitle1">{t("Notificaciones")}</Typography>
+          {unread > 0 && (
+            <Button size="small" onClick={readAll} disabled={busy} startIcon={<DoneAllRounded />} sx={{ minHeight: 0 }}>
+              {t("Marcar todo como leído")}
+            </Button>
+          )}
+        </Box>
+        <Divider />
 
-      {open &&
-        createPortal(
-          <div
-            id={menuId}
-            ref={menuRef}
-            role="menu"
-            tabIndex={-1}
-            className="tms-menu tms-menu-wide"
-            style={menuStyle}
-            onKeyDown={onKeyDown}
-          >
-            <p className="tms-menu-header">{t('notifications')}</p>
-            <hr className="tms-menu-divider" />
-
-            {notifications.length === 0 ? (
-              <div className="tms-menu-empty">
-                <i className="bi bi-bell-slash tms-menu-empty-icon" aria-hidden="true" />
-                <p className="tms-menu-empty-title">{t('notificationsEmpty')}</p>
-                <p className="tms-menu-empty-hint">{t('notificationsEmptyHint')}</p>
-              </div>
-            ) : (
-              <div className="tms-menu-body">
-                {notifications.map((notification, index) => (
-                  <button
-                    key={notification.id}
-                    ref={registerItem(index)}
-                    type="button"
-                    role="menuitem"
-                    className={`tms-menu-action tms-alert-row${notification.readAt === null ? ' is-unread' : ''}${
-                      notification.resolvedAt !== null ? ' is-resolved' : ''
-                    }`}
-                    onClick={() => handleOpen(notification)}
-                  >
-                    <span
-                      className={`tms-menu-tile tms-alert-tile is-${notification.severity.toLowerCase()}`}
-                      aria-hidden="true"
-                    >
-                      <i className={`bi ${TYPE_ICONS[notification.type]}`} />
-                    </span>
-                    <span className="tms-menu-action-text">
-                      <span className="tms-menu-action-title">
-                        {tAlert(`types.${notification.type}.title`)}
-                      </span>
-                      <span className="tms-menu-action-meta">{messageOf(notification)}</span>
-                      <span className="tms-alert-time">
-                        {format.dateTime(notification.occurredAt)}
-                        {notification.resolvedAt !== null && <> · {tAlert('resolved')}</>}
-                      </span>
-                    </span>
-                    <i className="bi bi-chevron-right tms-menu-action-caret" aria-hidden="true" />
-                  </button>
-                ))}
-
-                <hr className="tms-menu-divider" />
-
-                <button
-                  ref={registerItem(notifications.length)}
-                  type="button"
-                  role="menuitem"
-                  className="tms-menu-action tms-alert-readall"
-                  disabled={unreadCount === 0 || readAll.isPending}
-                  onClick={() => readAll.mutate()}
+        {feed.isPending ? (
+          <Box sx={{ display: "grid", placeItems: "center", py: 4 }}><CircularProgress size={22} /></Box>
+        ) : items.length === 0 ? (
+          <Box sx={{ py: 4, textAlign: "center" }}>
+            <Typography variant="body2" color="text.secondary">{t("Sin notificaciones")}</Typography>
+          </Box>
+        ) : (
+          <List sx={{ py: 0, maxHeight: 420, overflowY: "auto" }}>
+            {items.map((n) => {
+              const Icon = SEVERITY_ICON[n.severity];
+              const copy = MESSAGE[n.type];
+              const args = { ...n.messageArgs, trip: n.entityLabel ?? n.entityId } as Record<string, string | number>;
+              return (
+                <ListItemButton
+                  key={n.id}
+                  onClick={() => open(n)}
+                  sx={{
+                    alignItems: "flex-start", gap: 1.25, py: 1.25,
+                    borderLeft: "3px solid",
+                    borderLeftColor: n.readAt === null ? SEVERITY_COLOR[n.severity] : "transparent",
+                    bgcolor: n.readAt === null ? "action.hover" : "transparent",
+                  }}
                 >
-                  <span className="tms-menu-tile" aria-hidden="true">
-                    <i className="bi bi-check2-all" />
-                  </span>
-                  <span className="tms-menu-action-text">
-                    <span className="tms-menu-action-title">{tAlert('markAllRead')}</span>
-                  </span>
-                </button>
-              </div>
-            )}
-          </div>,
-          document.body,
+                  <Icon sx={{ fontSize: 19, mt: 0.25, color: SEVERITY_COLOR[n.severity], flexShrink: 0 }} />
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ fontWeight: n.readAt === null ? 800 : 600, lineHeight: 1.3 }}>
+                      {t(copy.title)}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.35 }}>
+                      {t(copy.text, args)}
+                    </Typography>
+                    <Typography variant="caption" color="text.disabled">{fmtDateTime(n.occurredAt)}</Typography>
+                  </Box>
+                </ListItemButton>
+              );
+            })}
+          </List>
         )}
-    </div>
-  )
+      </Menu>
+    </>
+  );
 }

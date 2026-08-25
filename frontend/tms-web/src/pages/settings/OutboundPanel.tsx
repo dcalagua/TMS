@@ -1,460 +1,376 @@
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import type { ApiError } from '../../shared/api/httpClient'
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { Box, Button, Chip, MenuItem, TextField, Typography } from "@mui/material";
 import {
-  fetchWebhookDeliveries,
-  fetchWebhookEventTypes,
-  fetchWebhookSubscriptions,
-  retryWebhookDelivery,
-  rotateWebhookSecret,
+  AddRounded, EditRounded, AutorenewRounded, BlockRounded, CheckCircleRounded, ReplayRounded,
+} from "@mui/icons-material";
+import type { ApiError } from "../../shared/api/httpClient";
+import {
+  fetchWebhookDeliveries, fetchWebhookSubscriptions, retryWebhookDelivery, rotateWebhookSecret,
   setWebhookSubscriptionActive,
-  type WebhookDeliveryStatus,
-  type WebhookDeliveryView,
-  type WebhookSubscriptionSecretView,
-  type WebhookSubscriptionView,
-} from '../../shared/api/integrationsApi'
-import { describeApiError } from '../../shared/api/problemMessages'
-import { useCompany } from '../../shared/company/CompanyContext'
-import { useFormat } from '../../shared/i18n/format'
-import { notifyError, notifySuccess } from '../../shared/ui/alerts'
+  type WebhookDeliveryStatus, type WebhookDeliveryView,
+  type WebhookSubscriptionSecretView, type WebhookSubscriptionView,
+} from "../../shared/api/integrationsApi";
+import { describeApiError } from "../../shared/api/problemMessages";
 import {
-  ActionMenu,
-  DataTable,
-  Pagination,
-  SectionHeader,
-  Select,
-  StatusBadge,
-  confirmDialog,
-  type ActionMenuItem,
-  type DataTableColumn,
-  type StatusTone,
-} from '../../shared/ui/components'
-import { SecretRevealDrawer } from './SecretRevealDrawer'
-import { WebhookDeliveryDrawer } from './WebhookDeliveryDrawer'
-import { WebhookSubscriptionDrawer } from './WebhookSubscriptionDrawer'
+  ActionMenu, DataTable, Pagination, SectionHeader, StatusChip, type DataTableColumn,
+} from "../../shared/ui/components";
+import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
+import type { StatusTone } from "../../theme";
+import { t } from "../../lib/i18n";
+import { fmtDateTime, fmtQuantity } from "../../lib/locale";
+import { SecretRevealDrawer } from "./SecretRevealDrawer";
+import { WebhookDeliveryDrawer } from "./WebhookDeliveryDrawer";
+import { WebhookSubscriptionDrawer } from "./WebhookSubscriptionDrawer";
 
-const PAGE_SIZE = 10
-
-type SubscriptionModal =
-  | { mode: 'create' }
-  | { mode: 'edit'; subscription: WebhookSubscriptionView }
-  | null
+const PAGE_SIZE = 20;
 
 const DELIVERY_TONE: Record<WebhookDeliveryStatus, StatusTone> = {
-  PENDING: 'warning',
-  PROCESSED: 'success',
-  FAILED: 'danger',
+  PENDING: "inProgress",
+  PROCESSED: "done",
+  FAILED: "overdue",
+};
+
+interface OutboundPanelProps {
+  companyId: string;
+  canManage: boolean;
 }
 
 /**
- * Outbound: where this company's events are pushed, and whether they arrived.
+ * La mitad de salida del hub: a dónde se empujan los eventos de esta empresa, y el registro de
+ * lo que se entregó.
  *
- * The delivery log sits under the endpoint list for the same reason the inbound inbox sits under the
- * credential list - it is how the thing above it is debugged. "You never told us that shipment was
- * confirmed" is answered from the delivery, and specifically from its attempts, which is why a row
- * opens a drawer showing every call that was made and the exact bytes that were sent.
- *
- * A signing secret is never shown here. Only its last four characters, which is enough for "the one
- * ending 7fQ2" and not enough to sign anything.
+ * La racha de fallos consecutivos es lo primero que se mira: no es un contador de por vida, se
+ * pone a cero en cuanto algo se entrega, así que un número alto significa "esto está roto ahora",
+ * no "esto falló alguna vez".
  */
-export function OutboundPanel({ companyId }: { companyId: string }) {
-  const { t } = useTranslation('settings')
-  const { t: tc } = useTranslation('common')
-  const { t: td } = useTranslation('dialogs')
-  const { t: ts } = useTranslation('statuses')
-  const format = useFormat()
-  const { hasPermission } = useCompany()
-  const canManage = hasPermission('integration.webhook:manage')
-  const queryClient = useQueryClient()
+export function OutboundPanel({ companyId, canManage }: OutboundPanelProps) {
+  const queryClient = useQueryClient();
+  const [subsPage, setSubsPage] = useState(0);
+  const [deliveriesPage, setDeliveriesPage] = useState(0);
+  const [subFilter, setSubFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<WebhookDeliveryStatus | "">("");
+  const [editing, setEditing] = useState<WebhookSubscriptionView | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [secret, setSecret] = useState<WebhookSubscriptionSecretView | null>(null);
+  const [openDeliveryId, setOpenDeliveryId] = useState<string | null>(null);
 
-  const [subscriptionPage, setSubscriptionPage] = useState(0)
-  const [deliveryPage, setDeliveryPage] = useState(0)
-  const [subscriptionFilter, setSubscriptionFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'' | WebhookDeliveryStatus>('')
-  const [modal, setModal] = useState<SubscriptionModal>(null)
-  const [issued, setIssued] = useState<WebhookSubscriptionSecretView | null>(null)
-  const [openDelivery, setOpenDelivery] = useState<string | null>(null)
-
-  const subscriptionsQuery = useQuery({
-    queryKey: ['webhook-subscriptions', companyId, subscriptionPage],
-    queryFn: ({ signal }) =>
-      fetchWebhookSubscriptions(companyId, { page: subscriptionPage, size: PAGE_SIZE, sort: 'name,asc' }, signal),
+  const subsQuery = useQuery({
+    queryKey: ["webhook-subscriptions", companyId, subsPage],
+    queryFn: ({ signal }) => fetchWebhookSubscriptions(companyId, { page: subsPage, size: PAGE_SIZE }, signal),
     placeholderData: keepPreviousData,
-    enabled: companyId !== '',
-  })
-
-  // The vocabulary changes only with a migration, so it is fetched once and kept - re-reading it
-  // per drawer open would be a round trip for a constant.
-  const eventTypesQuery = useQuery({
-    queryKey: ['webhook-event-types', companyId],
-    queryFn: ({ signal }) => fetchWebhookEventTypes(companyId, signal),
-    enabled: companyId !== '',
-    staleTime: Infinity,
-  })
+  });
 
   const deliveriesQuery = useQuery({
-    queryKey: ['webhook-deliveries', companyId, deliveryPage, subscriptionFilter, statusFilter],
+    queryKey: ["webhook-deliveries", companyId, deliveriesPage, subFilter, statusFilter],
     queryFn: ({ signal }) =>
       fetchWebhookDeliveries(
         companyId,
         {
-          page: deliveryPage,
+          page: deliveriesPage,
           size: PAGE_SIZE,
-          sort: 'createdAt,desc',
-          subscriptionId: subscriptionFilter || undefined,
+          subscriptionId: subFilter || undefined,
           status: statusFilter || undefined,
         },
         signal,
       ),
     placeholderData: keepPreviousData,
-    enabled: companyId !== '',
-  })
+  });
 
-  function refreshSubscriptions() {
-    void queryClient.invalidateQueries({ queryKey: ['webhook-subscriptions', companyId] })
+  function refresh() {
+    void queryClient.invalidateQueries({ queryKey: ["webhook-subscriptions", companyId] });
+    void queryClient.invalidateQueries({ queryKey: ["webhook-deliveries", companyId] });
   }
 
-  function refreshDeliveries() {
-    void queryClient.invalidateQueries({ queryKey: ['webhook-deliveries', companyId] })
+  async function toggleActive(subscription: WebhookSubscriptionView) {
+    const confirmed = await confirmDialog({
+      title: subscription.active
+        ? t("¿Desactivar {{name}}?", { name: subscription.name })
+        : t("¿Activar {{name}}?", { name: subscription.name }),
+      text: subscription.active
+        ? t("Se dejan de empujar eventos a este destino. Los pendientes no se reintentan.")
+        : t("Vuelve a recibir eventos desde ahora. No se reenvían los de mientras estuvo apagada."),
+      confirmLabel: subscription.active ? t("Desactivar") : t("Activar"),
+      dangerous: subscription.active,
+    });
+    if (!confirmed) return;
+
+    try {
+      await setWebhookSubscriptionActive(companyId, subscription.id, !subscription.active);
+      notifySuccess(subscription.active ? t("Suscripción desactivada") : t("Suscripción activada"), subscription.name);
+      refresh();
+    } catch (error) {
+      notifyError(t("No se pudo completar la acción"), describeApiError(error as ApiError));
+    }
   }
 
   async function rotate(subscription: WebhookSubscriptionView) {
     const confirmed = await confirmDialog({
-      title: t('integrations.webhooks.rotateTitle', { name: subscription.name }),
-      text: t('integrations.webhooks.rotateText'),
-      confirmLabel: t('integrations.webhooks.rotate'),
+      title: t("¿Rotar el secreto de firma?"),
+      text: t("Las entregas se firmarán con el nuevo desde ya. El receptor deja de validar hasta que lo cambie."),
+      confirmLabel: t("Rotar"),
       dangerous: true,
-    })
-    if (!confirmed) return
-    try {
-      setIssued(await rotateWebhookSecret(companyId, subscription.id))
-      refreshSubscriptions()
-    } catch (error) {
-      notifyError(td('errorTitle'), describeApiError(error as ApiError))
-    }
-  }
+    });
+    if (!confirmed) return;
 
-  async function toggleActive(subscription: WebhookSubscriptionView) {
-    const activating = !subscription.active
-    const confirmed = await confirmDialog({
-      title: activating
-        ? t('integrations.webhooks.resumeTitle', { name: subscription.name })
-        : t('integrations.webhooks.pauseTitle', { name: subscription.name }),
-      text: activating ? t('integrations.webhooks.resumeText') : t('integrations.webhooks.pauseText'),
-      confirmLabel: activating ? t('integrations.webhooks.resume') : t('integrations.webhooks.pause'),
-      dangerous: !activating,
-    })
-    if (!confirmed) return
     try {
-      await setWebhookSubscriptionActive(companyId, subscription.id, activating)
-      notifySuccess(activating ? t('integrations.webhooks.resumed') : t('integrations.webhooks.paused'))
-      refreshSubscriptions()
+      setSecret(await rotateWebhookSecret(companyId, subscription.id));
+      refresh();
     } catch (error) {
-      notifyError(td('errorTitle'), describeApiError(error as ApiError))
+      notifyError(t("No se pudo completar la acción"), describeApiError(error as ApiError));
     }
   }
 
   async function retry(delivery: WebhookDeliveryView) {
     try {
-      await retryWebhookDelivery(companyId, delivery.id)
-      notifySuccess(t('integrations.deliveries.requeued'))
-      refreshDeliveries()
+      await retryWebhookDelivery(companyId, delivery.id);
+      notifySuccess(t("Reintento encolado"));
+      refresh();
     } catch (error) {
-      notifyError(td('errorTitle'), describeApiError(error as ApiError))
+      notifyError(t("No se pudo completar la acción"), describeApiError(error as ApiError));
     }
   }
 
-  const subscriptionColumns: DataTableColumn<WebhookSubscriptionView>[] = [
+  const subColumns: DataTableColumn<WebhookSubscriptionView>[] = [
     {
-      key: 'name',
-      header: tc('columns.name'),
-      render: (subscription) => (
-        <span>
-          <span className="fw-semibold d-block">{subscription.name}</span>
-          <span className="small text-body-secondary text-break">{subscription.targetUrl}</span>
-        </span>
+      key: "name",
+      header: t("Suscripción"),
+      render: (sub) => (
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.3 }}>{sub.name}</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ wordBreak: "break-all" }}>
+            {sub.targetUrl}
+          </Typography>
+        </Box>
       ),
     },
     {
-      key: 'eventTypes',
-      header: t('integrations.webhooks.events'),
-      render: (subscription) => (
-        <span className="d-flex flex-wrap gap-1">
-          {subscription.eventTypes.map((eventType) => (
-            <StatusBadge key={eventType} label={eventType} tone="info" />
+      key: "events",
+      header: t("Eventos"),
+      render: (sub) => (
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, maxWidth: 320 }}>
+          {sub.eventTypes.map((eventType) => (
+            <Chip key={eventType} size="small" variant="outlined" label={eventType} sx={{ fontSize: 10.5, height: 20 }} />
           ))}
-        </span>
+        </Box>
       ),
     },
     {
-      key: 'status',
-      header: tc('columns.status'),
-      render: (subscription) => {
-        if (subscription.active) {
-          return <StatusBadge label={ts('active')} tone="success" />
-        }
-        // A suspension is TMS switching the endpoint off, and it must not look like somebody
-        // pausing it: the operator has to fix their side before reactivating.
-        return subscription.suspendedReason ? (
-          <StatusBadge label={t('integrations.webhooks.suspended')} tone="danger" />
-        ) : (
-          <StatusBadge label={t('integrations.webhooks.paused')} tone="neutral" />
-        )
-      },
-    },
-    {
-      key: 'health',
-      header: t('integrations.webhooks.health'),
-      render: (subscription) => (
-        <span className="small">
-          {subscription.lastSuccessAt ? (
-            <span className="d-block">
-              {t('integrations.webhooks.lastSuccess', { when: format.dateTime(subscription.lastSuccessAt) })}
-            </span>
+      key: "health",
+      header: t("Salud"),
+      // La racha, no el histórico: se pone a cero en cuanto algo se entrega.
+      render: (sub) => (
+        <Box>
+          {sub.consecutiveFailures > 0 ? (
+            <Typography variant="body2" sx={{ fontWeight: 800, color: "error.main" }}>
+              {t("{{count}} fallos seguidos", { count: sub.consecutiveFailures })}
+            </Typography>
           ) : (
-            <span className="d-block text-body-secondary">{t('integrations.webhooks.neverDelivered')}</span>
+            <Typography variant="body2" color="success.main" sx={{ fontWeight: 700 }}>{t("Sana")}</Typography>
           )}
-          {subscription.consecutiveFailures > 0 && (
-            <span className="d-block text-danger">
-              {t('integrations.webhooks.failureStreak', { count: subscription.consecutiveFailures })}
-            </span>
-          )}
-          <span className="d-block text-body-secondary">
-            {t('integrations.webhooks.secretHint', { hint: subscription.secretHint })}
-          </span>
-        </span>
+          <Typography variant="caption" color="text.secondary">
+            {sub.lastSuccessAt ? `${t("Último éxito")}: ${fmtDateTime(sub.lastSuccessAt)}` : t("Nunca entregó")}
+          </Typography>
+        </Box>
       ),
     },
-  ]
+    {
+      key: "secret",
+      header: t("Secreto"),
+      // Los últimos cuatro caracteres: bastante para reconocerlo, no para firmar con él.
+      render: (sub) => (
+        <Typography variant="body2" sx={{ fontFamily: "monospace" }}>···{sub.secretHint}</Typography>
+      ),
+    },
+    {
+      key: "status",
+      header: t("Estado"),
+      render: (sub) => (
+        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+          <StatusChip label={sub.active ? t("Activa") : t("Inactiva")} tone={sub.active ? "done" : "cancelled"} />
+          {/* Solo cuando fue eTMS quien la apagó tras fallar repetidamente. */}
+          {sub.suspendedReason && <StatusChip label={t("Suspendida")} tone="overdue" />}
+        </Box>
+      ),
+    },
+  ];
 
   if (canManage) {
-    subscriptionColumns.push({
-      key: 'actions',
-      header: tc('columns.actions'),
+    subColumns.push({
+      key: "actions",
+      header: t("Acciones"),
       actions: true,
-      render: (subscription) => {
-        const items: ActionMenuItem[] = [
-          {
-            key: 'edit',
-            label: tc('actions.edit'),
-            icon: 'bi-pencil',
-            onSelect: () => setModal({ mode: 'edit', subscription }),
-          },
-          {
-            key: 'rotate',
-            label: t('integrations.webhooks.rotate'),
-            icon: 'bi-arrow-repeat',
-            onSelect: () => void rotate(subscription),
-          },
-          {
-            key: 'active',
-            label: subscription.active ? t('integrations.webhooks.pause') : t('integrations.webhooks.resume'),
-            icon: subscription.active ? 'bi-pause-circle' : 'bi-play-circle',
-            dangerous: subscription.active,
-            onSelect: () => void toggleActive(subscription),
-          },
-        ]
-        return <ActionMenu items={items} />
-      },
-    })
+      render: (sub) => (
+        <ActionMenu
+          items={[
+            { key: "edit", label: t("Editar"), icon: <EditRounded />, onSelect: () => setEditing(sub) },
+            { key: "rotate", label: t("Rotar secreto"), icon: <AutorenewRounded />, onSelect: () => void rotate(sub) },
+            {
+              key: "active",
+              label: sub.active ? t("Desactivar") : t("Activar"),
+              icon: sub.active ? <BlockRounded /> : <CheckCircleRounded />,
+              dangerous: sub.active,
+              divider: true,
+              onSelect: () => void toggleActive(sub),
+            },
+          ]}
+        />
+      ),
+    });
   }
 
   const deliveryColumns: DataTableColumn<WebhookDeliveryView>[] = [
-    { key: 'createdAt', header: t('integrations.deliveries.queuedAt'), render: (row) => format.dateTime(row.createdAt) },
+    { key: "event", header: t("Evento"), render: (row) => <Typography variant="body2" sx={{ fontWeight: 600 }}>{row.eventType}</Typography> },
+    { key: "subscription", header: t("Suscripción"), render: (row) => row.subscriptionName },
     {
-      key: 'event',
-      header: t('integrations.deliveries.event'),
+      key: "status",
+      header: t("Estado"),
       render: (row) => (
-        <span>
-          <span className="d-block">{row.eventType}</span>
-          <span className="small text-body-secondary">{row.subscriptionName}</span>
-        </span>
-      ),
-    },
-    {
-      key: 'status',
-      header: tc('columns.status'),
-      render: (row) => (
-        <span className="d-flex flex-column gap-1">
-          <StatusBadge label={t(`integrations.deliveries.statuses.${row.status}`)} tone={DELIVERY_TONE[row.status]} />
-          <span className="small text-body-secondary">
-            {t('integrations.deliveries.attempts', { count: row.attemptCount })}
-          </span>
-        </span>
-      ),
-    },
-    {
-      key: 'outcome',
-      header: t('integrations.deliveries.outcome'),
-      render: (row) => (
-        <span className="small">
-          {row.lastStatusCode !== null && <span className="d-block">HTTP {row.lastStatusCode}</span>}
-          {row.lastError && <span className="d-block text-danger text-break">{row.lastError}</span>}
-          {row.status === 'PENDING' && (
-            <span className="d-block text-body-secondary">
-              {t('integrations.deliveries.nextAttempt', { when: format.dateTime(row.nextAttemptAt) })}
-            </span>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+          <StatusChip label={row.status} tone={DELIVERY_TONE[row.status]} />
+          {row.lastStatusCode !== null && (
+            <Typography variant="caption" color="text.secondary">{row.lastStatusCode}</Typography>
           )}
-        </span>
+        </Box>
       ),
     },
+    { key: "attempts", header: t("Intentos"), numeric: true, render: (row) => fmtQuantity(row.attemptCount) },
+    { key: "occurred", header: t("Ocurrió"), render: (row) => fmtDateTime(row.occurredAt) },
     {
-      key: 'actions',
-      header: tc('columns.actions'),
-      actions: true,
-      render: (row) => {
-        const items: ActionMenuItem[] = [
-          {
-            key: 'inspect',
-            label: t('integrations.deliveries.inspect'),
-            icon: 'bi-search',
-            onSelect: () => setOpenDelivery(row.id),
-          },
-        ]
-        // Only a finished delivery can be re-queued; a pending one is already going to be retried
-        // on a schedule designed not to hammer the receiver.
-        if (canManage && row.status !== 'PENDING') {
-          items.push({
-            key: 'retry',
-            label: t('integrations.deliveries.retry'),
-            icon: 'bi-arrow-clockwise',
-            onSelect: () => void retry(row),
-          })
-        }
-        return <ActionMenu items={items} />
-      },
+      key: "next",
+      header: t("Próximo intento"),
+      // Solo significa algo mientras está pendiente: en las demás es ruido.
+      render: (row) => row.status === "PENDING" ? fmtDateTime(row.nextAttemptAt) : "-",
     },
-  ]
+    { key: "error", header: t("Error"), render: (row) => row.lastError ?? "-" },
+  ];
 
-  const subscriptions = subscriptionsQuery.data
-  const deliveries = deliveriesQuery.data
+  if (canManage) {
+    deliveryColumns.push({
+      key: "actions",
+      header: t("Acciones"),
+      actions: true,
+      render: (row) => (
+        <ActionMenu
+          items={[
+            { key: "open", label: t("Ver detalle"), icon: <EditRounded />, onSelect: () => setOpenDeliveryId(row.id) },
+            {
+              key: "retry", label: t("Reintentar"), icon: <ReplayRounded />,
+              disabled: row.status === "PROCESSED",
+              onSelect: () => void retry(row),
+            },
+          ]}
+        />
+      ),
+    });
+  }
 
   return (
-    <div className="d-flex flex-column gap-4">
-      <section>
-        <SectionHeader
-          title={t('integrations.webhooks.title')}
-          actions={
-            canManage && (
-              <button
-                type="button"
-                className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2"
-                onClick={() => setModal({ mode: 'create' })}
-              >
-                <i className="bi bi-broadcast" aria-hidden="true" />
-                {t('integrations.webhooks.add')}
-              </button>
-            )
-          }
-        />
-        <p className="text-body-secondary small">{t('integrations.webhooks.description')}</p>
+    <>
+      <SectionHeader
+        title={t("Suscripciones")}
+        level={2}
+        actions={canManage && (
+          <Button size="small" variant="contained" startIcon={<AddRounded />} onClick={() => setCreating(true)}>
+            {t("Nueva suscripción")}
+          </Button>
+        )}
+      />
+      <Box sx={{ mb: 4 }}>
         <DataTable
-          columns={subscriptionColumns}
-          rows={subscriptions?.content ?? []}
-          total={subscriptions?.totalElements}
-          rowKey={(subscription) => subscription.id}
-          isLoading={subscriptionsQuery.isPending}
-          error={subscriptionsQuery.isError ? describeApiError(subscriptionsQuery.error as ApiError) : null}
-          onRetry={() => void subscriptionsQuery.refetch()}
-          emptyTitle={t('integrations.webhooks.empty.title')}
-          emptyMessage={t('integrations.webhooks.empty.message')}
-          footer={subscriptions ? <Pagination page={subscriptions} onPageChange={setSubscriptionPage} /> : undefined}
+          columns={subColumns}
+          rows={subsQuery.data?.content ?? []}
+          total={subsQuery.data?.totalElements}
+          rowKey={(sub) => sub.id}
+          isLoading={subsQuery.isPending}
+          error={subsQuery.isError ? describeApiError(subsQuery.error as ApiError) : null}
+          onRetry={() => void subsQuery.refetch()}
+          emptyTitle={t("Sin suscripciones")}
+          emptyMessage={t("Crea una suscripción para que un sistema reciba los eventos de esta empresa.")}
+          footer={subsQuery.data ? <Pagination page={subsQuery.data} onPageChange={setSubsPage} /> : undefined}
         />
-      </section>
+      </Box>
 
-      <section>
-        <SectionHeader
-          title={t('integrations.deliveries.title')}
-          actions={
-            <div className="d-flex gap-2">
-              <Select
-                id="webhook-delivery-subscription"
-                size="sm"
-                value={subscriptionFilter}
-                onChange={(next) => {
-                  setSubscriptionFilter(next)
-                  setDeliveryPage(0)
-                }}
-                options={[
-                  { value: '', label: t('integrations.deliveries.allEndpoints') },
-                  ...(subscriptions?.content ?? []).map((subscription) => ({
-                    value: subscription.id,
-                    label: subscription.name,
-                  })),
-                ]}
-              />
-              <Select
-                id="webhook-delivery-status"
-                size="sm"
-                value={statusFilter}
-                onChange={(next) => {
-                  setStatusFilter(next as '' | WebhookDeliveryStatus)
-                  setDeliveryPage(0)
-                }}
-                options={[
-                  { value: '', label: tc('filters.statusAll') },
-                  { value: 'PENDING', label: t('integrations.deliveries.statuses.PENDING') },
-                  { value: 'PROCESSED', label: t('integrations.deliveries.statuses.PROCESSED') },
-                  { value: 'FAILED', label: t('integrations.deliveries.statuses.FAILED') },
-                ]}
-              />
-            </div>
-          }
-        />
-        <p className="text-body-secondary small">{t('integrations.deliveries.description')}</p>
-        <DataTable
-          columns={deliveryColumns}
-          rows={deliveries?.content ?? []}
-          total={deliveries?.totalElements}
-          rowKey={(row) => row.id}
-          isLoading={deliveriesQuery.isPending}
-          error={deliveriesQuery.isError ? describeApiError(deliveriesQuery.error as ApiError) : null}
-          onRetry={() => void deliveriesQuery.refetch()}
-          emptyTitle={t('integrations.deliveries.empty.title')}
-          emptyMessage={t('integrations.deliveries.empty.message')}
-          footer={deliveries ? <Pagination page={deliveries} onPageChange={setDeliveryPage} /> : undefined}
-        />
-      </section>
+      <SectionHeader
+        title={t("Entregas")}
+        level={2}
+        actions={
+          <Box sx={{ display: "flex", gap: 1 }}>
+            <TextField
+              select size="small" label={t("Suscripción")} value={subFilter}
+              onChange={(e) => { setSubFilter(e.target.value); setDeliveriesPage(0); }}
+              sx={{ minWidth: 200 }}
+            >
+              <MenuItem value="">{t("Todas")}</MenuItem>
+              {(subsQuery.data?.content ?? []).map((sub) => (
+                <MenuItem key={sub.id} value={sub.id}>{sub.name}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select size="small" label={t("Estado")} value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value as WebhookDeliveryStatus | ""); setDeliveriesPage(0); }}
+              sx={{ minWidth: 160 }}
+            >
+              <MenuItem value="">{t("Todos")}</MenuItem>
+              <MenuItem value="PENDING">PENDING</MenuItem>
+              <MenuItem value="PROCESSED">PROCESSED</MenuItem>
+              <MenuItem value="FAILED">FAILED</MenuItem>
+            </TextField>
+          </Box>
+        }
+      />
+      <DataTable
+        columns={deliveryColumns}
+        rows={deliveriesQuery.data?.content ?? []}
+        total={deliveriesQuery.data?.totalElements}
+        rowKey={(row) => row.id}
+        isLoading={deliveriesQuery.isPending}
+        error={deliveriesQuery.isError ? describeApiError(deliveriesQuery.error as ApiError) : null}
+        onRetry={() => void deliveriesQuery.refetch()}
+        emptyTitle={t("Sin entregas")}
+        emptyMessage={t("Todavía no se ha empujado ningún evento.")}
+        onRowClick={(row) => setOpenDeliveryId(row.id)}
+        footer={deliveriesQuery.data ? <Pagination page={deliveriesQuery.data} onPageChange={setDeliveriesPage} /> : undefined}
+      />
 
-      {modal && (
+      {(creating || editing) && (
         <WebhookSubscriptionDrawer
           companyId={companyId}
-          subscription={modal.mode === 'edit' ? modal.subscription : null}
-          eventTypes={eventTypesQuery.data ?? []}
-          onClose={() => setModal(null)}
-          onSaved={(secret) => {
-            setModal(null)
-            if (secret) {
-              setIssued(secret)
-            } else {
-              notifySuccess(td('updated'))
-            }
-            refreshSubscriptions()
+          subscription={editing}
+          onClose={() => { setCreating(false); setEditing(null); }}
+          onCreated={(created) => {
+            setCreating(false);
+            setSecret(created);
+            refresh();
+          }}
+          onUpdated={() => {
+            setEditing(null);
+            notifySuccess(t("Cambios guardados"));
+            refresh();
           }}
         />
       )}
 
-      {issued && (
+      {secret && (
         <SecretRevealDrawer
-          title={t('integrations.webhooks.secretTitle')}
-          notice={issued.notice}
+          title={t("Secreto de {{name}}", { name: secret.subscription.name })}
+          notice={secret.notice}
           fields={[
-            { label: t('integrations.webhooks.signingSecret'), value: issued.secret, secret: true },
-            { label: t('integrations.webhooks.signatureHeader'), value: issued.signatureHeader, secret: false },
-            { label: t('integrations.webhooks.signatureFormat'), value: issued.signedPayloadFormat, secret: false },
+            { label: t("Secreto de firma"), value: secret.secret, primary: true },
+            { label: t("Cabecera de firma"), value: secret.signatureHeader },
+            { label: t("Formato firmado"), value: secret.signedPayloadFormat },
           ]}
-          onClose={() => setIssued(null)}
+          onClose={() => setSecret(null)}
         />
       )}
 
-      {openDelivery && (
+      {openDeliveryId && (
         <WebhookDeliveryDrawer
           companyId={companyId}
-          deliveryId={openDelivery}
-          onClose={() => setOpenDelivery(null)}
+          deliveryId={openDeliveryId}
+          onClose={() => setOpenDeliveryId(null)}
         />
       )}
-    </div>
-  )
+    </>
+  );
 }

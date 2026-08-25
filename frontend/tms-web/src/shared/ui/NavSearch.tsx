@@ -1,166 +1,109 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
-import { useCompany } from '../company/CompanyContext'
-import type { NavigationKey } from '../i18n/keys'
-import { ALL_NAV_GROUPS, HOME_NAV, OVERVIEW_NAV, type NavLeaf } from './navConfig'
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Autocomplete, Box, InputAdornment, TextField, Typography,
+} from "@mui/material";
+import { SearchRounded } from "@mui/icons-material";
+import { ALL_NAV_LEAVES, ICON_TINTS, DEFAULT_TINT, NAV_SECTIONS, type NavLeaf } from "./navConfig";
+import { useCompany } from "../company/CompanyContext";
+import { t } from "../../lib/i18n";
+import { R } from "../../theme";
+import { alpha } from "@mui/material/styles";
 
-interface Entry {
-  item: NavLeaf
-  /** The group the entry belongs to, so two similarly named screens stay distinguishable. */
-  groupKey?: NavigationKey
-}
+/** La sección a la que pertenece cada hoja, para agrupar los resultados igual que el menú. */
+const SECTION_OF: Record<string, string> = Object.fromEntries(
+  NAV_SECTIONS.flatMap((s) => s.items.map((i) => [i.to, s.title])),
+);
 
 /**
- * Jump straight to a screen by typing its name.
+ * El buscador central de la barra superior: encuentra una pantalla por su nombre en vez de
+ * obligar a recorrer el menú.
  *
- * This is navigation, not search over data: with twenty-odd screens behind six groups, a
- * planner who knows they want Frecuencias should not have to remember it lives under Maestros.
- * It searches the same `navConfig` the sidebar renders and respects the same capability gating,
- * so it can never offer a screen the menu is hiding.
- *
- * Deliberately not a global data search. Promising one in the chrome and then only matching
- * screen names would be worse than not offering it.
+ * Solo ofrece lo que la cuenta puede abrir. Tres consumidores del menú —la barra lateral, este
+ * buscador y las migas— comparten la misma lista y el mismo filtro de capabilities: tres copias
+ * de esa condición es como la tercera acaba ofreciendo una pantalla que el menú está
+ * escondiendo.
  */
 export function NavSearch() {
-  const { t } = useTranslation('navigation')
-  const navigate = useNavigate()
-  const { hasCapability, status } = useCompany()
-  const [query, setQuery] = useState('')
-  const [open, setOpen] = useState(false)
-  const [activeIndex, setActiveIndex] = useState(0)
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const listId = useId()
+  const navigate = useNavigate();
+  const { hasCapability, status } = useCompany();
+  const [value, setValue] = useState("");
 
-  const entries = useMemo<Entry[]>(() => {
-    const all: Entry[] = [{ item: HOME_NAV }]
-    // Gated exactly like a group is, and for the same reason: the search must never offer a
-    // screen the menu is hiding.
-    for (const item of OVERVIEW_NAV) {
-      if (!item.capability || status !== 'ready' || hasCapability(item.capability)) {
-        all.push({ item })
-      }
-    }
-    for (const group of ALL_NAV_GROUPS) {
-      if (group.capability && status === 'ready' && !hasCapability(group.capability)) {
-        continue
-      }
-      for (const item of group.items) {
-        all.push({ item, groupKey: group.labelKey })
-      }
-    }
-    return all
-  }, [hasCapability, status])
-
-  const matches = useMemo(() => {
-    const needle = normalise(query)
-    if (needle === '') {
-      return []
-    }
-    return entries.filter((entry) => normalise(t(entry.item.labelKey)).includes(needle)).slice(0, 6)
-  }, [entries, query, t])
-
-  // Clicking anywhere else dismisses the list; the input keeps whatever was typed so a
-  // mis-click does not throw the query away.
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-    function onPointerDown(event: PointerEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    return () => document.removeEventListener('pointerdown', onPointerDown)
-  }, [open])
-
-  function go(entry: Entry) {
-    setOpen(false)
-    setQuery('')
-    navigate(entry.item.to)
-  }
-
-  function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'Escape') {
-      setOpen(false)
-      return
-    }
-    if (matches.length === 0) {
-      return
-    }
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      setOpen(true)
-      setActiveIndex((current) => (current + 1) % matches.length)
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      setOpen(true)
-      setActiveIndex((current) => (current - 1 + matches.length) % matches.length)
-    } else if (event.key === 'Enter') {
-      event.preventDefault()
-      const entry = matches[Math.min(activeIndex, matches.length - 1)]
-      if (entry) {
-        go(entry)
-      }
-    }
-  }
-
-  const expanded = open && query.trim() !== ''
+  const options = useMemo(() => {
+    const visible = (leaf: NavLeaf) => {
+      // Antes de que `/me` responda no se sabe nada: mejor no ofrecer nada que ofrecer de más.
+      if (leaf.capability === undefined) return true;
+      return status === "ready" && hasCapability(leaf.capability);
+    };
+    return ALL_NAV_LEAVES.filter((leaf) => {
+      const section = NAV_SECTIONS.find((s) => s.items.includes(leaf));
+      if (section?.capability && !(status === "ready" && hasCapability(section.capability))) return false;
+      return visible(leaf);
+    });
+  }, [hasCapability, status]);
 
   return (
-    <div className="tms-navsearch" ref={containerRef}>
-      <i className="bi bi-search tms-navsearch-icon" aria-hidden="true" />
-      <input
-        type="text"
-        role="combobox"
-        className="tms-navsearch-input"
-        placeholder={t('search.placeholder')}
-        aria-label={t('search.label')}
-        aria-expanded={expanded}
-        aria-controls={listId}
-        aria-autocomplete="list"
-        autoComplete="off"
-        value={query}
-        onChange={(event) => {
-          setQuery(event.target.value)
-          setActiveIndex(0)
-          setOpen(true)
-        }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
-      />
-
-      {expanded && (
-        <ul className="tms-navsearch-list" id={listId} role="listbox" aria-label={t('search.results')}>
-          {matches.length === 0 && <li className="tms-navsearch-empty">{t('search.empty')}</li>}
-          {matches.map((entry, index) => (
-            <li key={entry.item.to}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={index === activeIndex}
-                className={`tms-navsearch-option${index === activeIndex ? ' active' : ''}`}
-                onMouseEnter={() => setActiveIndex(index)}
-                onClick={() => go(entry)}
-              >
-                <i className={`bi ${entry.item.icon}`} aria-hidden="true" />
-                <span className="tms-truncate">{t(entry.item.labelKey)}</span>
-                {entry.groupKey && <span className="tms-navsearch-group">{t(entry.groupKey)}</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
+    <Autocomplete<NavLeaf, false, false, false>
+      size="small"
+      options={options}
+      value={null}
+      inputValue={value}
+      onInputChange={(_e, next) => setValue(next)}
+      onChange={(_e, leaf) => {
+        if (leaf) { navigate(leaf.to); setValue(""); }
+      }}
+      getOptionLabel={(option) => t(option.label)}
+      groupBy={(option) => t(SECTION_OF[option.to] ?? "Inicio")}
+      noOptionsText={t("Sin resultados")}
+      blurOnSelect
+      clearOnBlur
+      sx={{ width: { xs: 180, sm: 280, md: 380 }, maxWidth: "100%" }}
+      renderOption={(props, option) => {
+        const { key, ...rest } = props as { key: string } & Record<string, unknown>;
+        const tint = ICON_TINTS[option.to] ?? DEFAULT_TINT;
+        return (
+          <Box component="li" key={key} {...rest} sx={{ gap: 1.25 }}>
+            <Box sx={{
+              width: 26, height: 26, borderRadius: 1.75, flexShrink: 0, display: "grid", placeItems: "center",
+              bgcolor: alpha(tint, 0.18), color: tint, "& svg": { fontSize: 16 },
+            }}>
+              {option.icon}
+            </Box>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>{t(option.label)}</Typography>
+          </Box>
+        );
+      }}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          placeholder={t("Buscar")}
+          aria-label={t("Buscar")}
+          slotProps={{
+            ...params.slotProps,
+            input: {
+              ...params.slotProps.input,
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchRounded fontSize="small" sx={{ color: "text.secondary" }} />
+                </InputAdornment>
+              ),
+            },
+          }}
+          sx={{
+            // El buscador vive ahora sobre el papel de la barra, así que se pinta con el
+            // lienzo por fondo: sobre blanco, un campo blanco no se distingue de la barra.
+            "& .MuiOutlinedInput-root": {
+              bgcolor: "background.default",
+              borderRadius: `${R.md}px`,
+              transition: "background-color .15s, border-color .15s",
+              "& fieldset": { borderColor: "divider" },
+              "&:hover fieldset": { borderColor: "text.disabled" },
+            },
+            "& .MuiOutlinedInput-input::placeholder": { color: "text.secondary", opacity: 1 },
+            "& .MuiAutocomplete-clearIndicator, & .MuiAutocomplete-popupIndicator": { color: "text.secondary" },
+          }}
+        />
       )}
-    </div>
-  )
-}
-
-/** Case- and accent-insensitive, so "frecuencias" matches when the user types "frec". */
-function normalise(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .trim()
+    />
+  );
 }
