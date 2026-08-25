@@ -1,149 +1,220 @@
-import type { ReactNode } from 'react'
-import { useTranslation } from 'react-i18next'
-import { useFormat } from '../../i18n/format'
-import { EmptyState } from './EmptyState'
-import { ErrorState } from './ErrorState'
-import { SkeletonTable } from './Skeleton'
+import type { MouseEvent, ReactNode } from "react";
+import {
+  Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography,
+} from "@mui/material";
+import { ChevronRightRounded } from "@mui/icons-material";
+import { dataTableSx, TABLE_MAX_H } from "./tableStyles";
+import { EmptyState, ErrorState, SkeletonTable } from "./states";
+import { t } from "../../../lib/i18n";
+import { fmtQuantity } from "../../../lib/locale";
+import { R, T } from "../../../theme";
+
+/**
+ * ¿El gesto nació en un control de la fila, y no en la fila?
+ *
+ * Una fila que abre el detalle lleva su `onClick` en el `<tr>`, y las columnas de acciones
+ * viven dentro de ese `<tr>`. Sin este guardia, pulsar «Editar» hacía las dos cosas: abría el
+ * formulario y, por debajo, navegaba al detalle.
+ */
+function fromRowControl(event: MouseEvent<HTMLElement>): boolean {
+  const control = (event.target as HTMLElement | null)
+    ?.closest("button, a, input, select, textarea, [role='button'], [role='menuitem']");
+  return control !== null && control !== event.currentTarget;
+}
 
 export interface DataTableColumn<T> {
-  key: string
-  header: string
-  render: (row: T) => ReactNode
-  className?: string
-  /** Right-aligns and tabular-aligns the column: weights, volumes, counts. */
-  numeric?: boolean
-  /** Pins the column to the right and shrinks it: the row's action controls. */
-  actions?: boolean
+  key: string;
+  header: string;
+  render: (row: T) => ReactNode;
+  /** Alinea a la derecha con cifras tabulares: pesos, volúmenes, conteos. */
+  numeric?: boolean;
+  /** Ancla la columna a la derecha y la encoge: los controles de acción de la fila. */
+  actions?: boolean;
+  /** Ancho fijo, cuando la columna tiene que dejar de pelearse por el espacio. */
+  width?: number | string;
 }
 
 interface DataTableProps<T> {
-  columns: DataTableColumn<T>[]
-  rows: T[]
-  rowKey: (row: T) => string
-  isLoading?: boolean
-  error?: string | null
-  onRetry?: () => void
-  emptyTitle?: string
-  emptyMessage?: string
-  emptyAction?: ReactNode
-  /** Caption for assistive technology; the table is otherwise unnamed. */
-  caption?: string
+  columns: DataTableColumn<T>[];
+  rows: T[];
+  rowKey: (row: T) => string;
+  isLoading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
+  emptyTitle?: string;
+  emptyMessage?: string;
+  emptyAction?: ReactNode;
+  /** Nombre accesible de la tabla; sin esto queda sin nombrar. */
+  caption?: string;
   /**
-   * Server-side total for the current filters. Shown as a persistent count above the table -
-   * unlike the pager, which hides itself when everything fits on one page.
+   * Total de servidor para los filtros actuales. Se muestra como conteo permanente encima de
+   * la tabla — a diferencia del paginador, que se esconde cuando todo cabe en una página.
    */
-  total?: number
+  total?: number;
   /**
-   * Rendered on the panel's own footer strip, below the last row. The pager belongs here rather
-   * than in a card wrapped around this one: a panel inside a panel doubles the border and the
-   * radius, which is what made the old list screens read as boxes stacked on a grey field.
+   * Se pinta en la franja de pie del propio panel, bajo la última fila. El paginador va aquí
+   * y no en una tarjeta envolviendo a esta: un panel dentro de un panel duplica el borde y el
+   * radio, que es lo que hacía que las listas se leyeran como cajas apiladas sobre un campo gris.
    */
-  footer?: ReactNode
+  footer?: ReactNode;
+  /** Se llama al pulsar una fila. Con esto, la fila entera se vuelve el enlace al detalle. */
+  onRowClick?: (row: T) => void;
+  /** Franja de color a la izquierda de la fila — severidad, prioridad, alerta. */
+  rowAccent?: (row: T) => string | null;
+  maxHeight?: number | string;
 }
 
-function columnClass<T>(column: DataTableColumn<T>): string | undefined {
-  const classes = [column.className, column.numeric ? 'tms-cell-numeric' : null, column.actions ? 'tms-cell-actions' : null]
-    .filter(Boolean)
-    .join(' ')
-  return classes || undefined
+function cellClass<T>(column: DataTableColumn<T>): string | undefined {
+  const classes = [column.numeric ? "numeric-col" : null, column.actions ? "actions-col" : null]
+    .filter(Boolean).join(" ");
+  return classes || undefined;
 }
 
 /**
- * Table wrapper every master/list screen builds on: one place that owns loading, error and
- * empty presentation, operational row density, the horizontal scroll container and column
- * definitions as data rather than JSX repeated per screen.
+ * El envoltorio de tabla sobre el que se construye toda pantalla de lista: un solo sitio que
+ * es dueño de la presentación de cargando/error/vacío, de la densidad operativa, del contenedor
+ * de scroll horizontal y de las columnas como datos en lugar de JSX repetido por pantalla.
  *
- * The scroll lives on the table's own wrapper. A wide table must never widen the page - that
- * is what puts a horizontal scrollbar on the whole application at tablet widths.
+ * El scroll vive en el envoltorio de la tabla. Una tabla ancha nunca debe ensanchar la página:
+ * eso es lo que pone una barra horizontal en toda la aplicación a anchos de tablet.
  */
 export function DataTable<T>({
-  columns,
-  rows,
-  rowKey,
-  isLoading = false,
-  error = null,
-  onRetry,
-  emptyTitle,
-  emptyMessage,
-  emptyAction,
-  caption,
-  total,
-  footer,
+  columns, rows, rowKey, isLoading = false, error = null, onRetry,
+  emptyTitle, emptyMessage, emptyAction, caption, total, footer, onRowClick, rowAccent,
+  maxHeight = TABLE_MAX_H,
 }: DataTableProps<T>) {
-  const { t } = useTranslation('common')
-  const format = useFormat()
-
   if (error) {
     return (
-      <div className="tms-table-wrap p-3">
+      <Paper variant="outlined" sx={{ borderRadius: `${R.lg}px` }}>
         <ErrorState message={error} onRetry={onRetry} />
-      </div>
-    )
+      </Paper>
+    );
   }
 
   if (isLoading) {
     return (
-      <div className="tms-table-wrap">
-        <p className="visually-hidden" role="status">
-          {t('states.loadingRecords')}
-        </p>
+      <Paper variant="outlined" sx={{ borderRadius: `${R.lg}px` }}>
+        <Box role="status" sx={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
+          {t("Cargando registros...")}
+        </Box>
         <SkeletonTable columns={Math.min(columns.length, 6)} />
-      </div>
-    )
+      </Paper>
+    );
   }
 
-  const isEmpty = rows.length === 0
+  const isEmpty = rows.length === 0;
 
   return (
-    <div className="tms-table-wrap">
+    <Paper variant="outlined" sx={{ borderRadius: `${R.lg}px`, overflow: "hidden" }}>
       {total !== undefined && (
-        <p className="tms-result-bar mb-0">
-          <span className="tms-result-count">{format.quantity(total)}</span>
-          <span>{t('table.results', { count: total })}</span>
-        </p>
+        /* `role="status"`: al cambiar un filtro, el conteo nuevo se anuncia sin que haya que ir
+           a buscarlo. Es la única forma de que quien no ve la tabla se entere de que el filtro
+           hizo algo. Va sobre el papel y no sobre una franja gris: la única superficie tintada
+           del panel es la cabecera, y con dos la tabla parece tener tres fondos. */
+        <Box role="status" sx={{
+          px: 2, py: "10px", display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap",
+          borderBottom: "1px solid", borderColor: "divider",
+        }}>
+          <Typography component="span" sx={{
+            fontSize: T.body, fontWeight: 700, fontVariantNumeric: "tabular-nums",
+          }}>
+            {fmtQuantity(total)} {total === 1 ? t("resultado") : t("resultados")}
+          </Typography>
+          {/* «18 resultados» no se lee como «hay 18» cuando en pantalla hay 20 de 340. Se dice
+              al lado del número y no en la barra de filtros, porque es el número el que se cree. */}
+          {rows.length > 0 && rows.length < total && (
+            <Typography component="span" sx={{ fontSize: T.micro, color: "text.secondary" }}>
+              {t("Mostrando {{count}} en esta página", { count: fmtQuantity(rows.length) })}
+            </Typography>
+          )}
+        </Box>
       )}
-      <div className="tms-table-scroll">
-        <table className="table table-hover tms-table align-middle">
-          {caption && <caption className="visually-hidden">{caption}</caption>}
-          <thead>
-            <tr>
+
+      {/* `tabIndex` porque un contenedor con scroll que solo se mueve con el dedo deja fuera a
+          quien navegue con teclado. */}
+      <TableContainer tabIndex={0} sx={{ maxHeight }}>
+        <Table size="small" stickyHeader aria-label={caption} sx={dataTableSx}>
+          <TableHead>
+            <TableRow>
               {columns.map((column) => (
-                <th key={column.key} scope="col" className={columnClass(column)}>
+                <TableCell key={column.key} className={cellClass(column)} sx={{ width: column.width }}>
                   {column.header}
-                </th>
+                </TableCell>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+              {/* La columna del chevron. Sin título y angosta: es una señal, no un dato. Va solo
+                  cuando la fila abre algo — una tabla que no navega no puede insinuar que sí. */}
+              {onRowClick && <TableCell aria-hidden className="open-col" />}
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {isEmpty ? (
-              /* The empty message goes inside the table rather than replacing it. Swapping the
-                 whole panel for a message removes the column headers - the thing that tells the
-                 user what this list is - and makes the screen appear to change identity between
-                 one search and the next. */
-              <tr className="tms-table-empty-row">
-                <td colSpan={columns.length}>
-                  <EmptyState
-                    title={emptyTitle ?? t('states.noRecords')}
-                    message={emptyMessage}
-                    action={emptyAction}
-                  />
-                </td>
-              </tr>
+              /* El mensaje de vacío va dentro de la tabla en vez de reemplazarla. Cambiar el
+                 panel entero por un mensaje quita las cabeceras de columna — lo que le dice al
+                 usuario qué es esta lista — y hace que la pantalla parezca cambiar de identidad
+                 entre una búsqueda y la siguiente. */
+              <TableRow>
+                <TableCell colSpan={columns.length + (onRowClick ? 1 : 0)} sx={{ borderBottom: 0 }}>
+                  <EmptyState title={emptyTitle} message={emptyMessage} action={emptyAction} />
+                </TableCell>
+              </TableRow>
             ) : (
-              rows.map((row) => (
-                <tr key={rowKey(row)}>
-                  {columns.map((column) => (
-                    <td key={column.key} className={columnClass(column)}>
-                      {column.render(row)}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              rows.map((row) => {
+                const accent = rowAccent?.(row) ?? null;
+                return (
+                  /* Una fila que abre el detalle tiene que abrirlo también con el teclado. Con
+                     `onClick` a secas, las pantallas cuyo único camino al detalle es pulsar la
+                     fila quedaban inalcanzables sin ratón: no es que costara más, es que no
+                     había forma. */
+                  <TableRow
+                    key={rowKey(row)}
+                    hover
+                    onClick={onRowClick
+                      ? (event) => { if (!fromRowControl(event)) onRowClick(row); }
+                      : undefined}
+                    tabIndex={onRowClick ? 0 : undefined}
+                    role={onRowClick ? "button" : undefined}
+                    onKeyDown={onRowClick
+                      ? (event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        // Con el foco en el botón «Editar» de la fila, Enter lo activa y además
+                        // burbujea hasta aquí. Se atiende solo lo que pasó sobre la fila misma.
+                        if (event.target !== event.currentTarget) return;
+                        // Espacio desplaza la página por defecto: sin esto, abrir una fila con
+                        // la barra espaciadora además salta al pie.
+                        event.preventDefault();
+                        onRowClick(row);
+                      }
+                      : undefined}
+                    sx={{
+                      cursor: onRowClick ? "pointer" : "default",
+                      ...(onRowClick ? { "&:focus-visible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: "-2px" } } : {}),
+                      ...(accent ? { "& td:first-of-type": { boxShadow: `inset 3px 0 0 ${accent}` } } : {}),
+                    }}
+                  >
+                    {columns.map((column) => (
+                      <TableCell key={column.key} className={cellClass(column)}>
+                        {column.render(row)}
+                      </TableCell>
+                    ))}
+                    {/* `aria-hidden` porque la fila YA se anuncia como botón: nombrarlo otra vez
+                        le haría leer al lector de pantalla un control que no existe. Es una
+                        pista para el ojo; el teclado ya tiene la suya en `focus-visible`. */}
+                    {onRowClick && (
+                      <TableCell aria-hidden className="open-col">
+                        <ChevronRightRounded sx={{ fontSize: 16, verticalAlign: "middle" }} />
+                      </TableCell>
+                    )}
+                  </TableRow>
+                );
+              })
             )}
-          </tbody>
-        </table>
-      </div>
-      {footer && <div className="tms-table-foot">{footer}</div>}
-    </div>
-  )
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {footer && (
+        <Box sx={{ borderTop: "1px solid", borderColor: "divider", px: 1.5, py: 1 }}>{footer}</Box>
+      )}
+    </Paper>
+  );
 }

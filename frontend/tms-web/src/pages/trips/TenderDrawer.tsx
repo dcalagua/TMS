@@ -1,210 +1,154 @@
-import { useState } from 'react'
-import { useForm, type Validate } from 'react-hook-form'
-import { useTranslation } from 'react-i18next'
-import { applyApiFieldErrors } from '../../shared/api/formErrors'
-import type { ApiError } from '../../shared/api/httpClient'
-import type { TenderRequest, TripTenderView } from '../../shared/api/tendersApi'
-import { FormField } from '../../shared/ui/components/FormField'
-import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
+import { useState } from "react";
+import { useForm, type Validate } from "react-hook-form";
+import { Alert, Box, Button, TextField, Typography } from "@mui/material";
+import { LocalOfferRounded } from "@mui/icons-material";
+import { applyApiFieldErrors } from "../../shared/api/formErrors";
+import type { ApiError } from "../../shared/api/httpClient";
+import type { TenderRequest, TripTenderView } from "../../shared/api/tendersApi";
+import { FormDrawer } from "../../shared/ui/components";
+import { t } from "../../lib/i18n";
 
-const FORM_ID = 'tender-form'
+const FORM_ID = "tender-form";
 
-const CURRENCY_PATTERN = /^[A-Za-z]{3}$/
+const CURRENCY_PATTERN = /^[A-Za-z]{3}$/;
 
 interface TenderFormValues {
-  offeredAmount: string
-  currency: string
-  notes: string
-  expiresAt: string
+  offeredAmount: string;
+  currency: string;
+  notes: string;
+  expiresAt: string;
 }
 
 export interface TenderDrawerProps {
-  /** The carrier the shipment will be offered to - the trip's own, and never a choice here. */
-  carrierName: string | null
-  /** The draft being edited, or null when a new offer is being prepared. */
-  tender: TripTenderView | null
-  onClose: () => void
-  onSubmit: (request: TenderRequest) => Promise<void>
+  /** El transportista al que se va a ofrecer el envío — el suyo, y nunca una elección de aquí. */
+  carrierName: string | null;
+  /** El borrador que se está editando, o null cuando se prepara una oferta nueva. */
+  tender: TripTenderView | null;
+  onClose: () => void;
+  onSubmit: (request: TenderRequest) => Promise<void>;
 }
 
-const KNOWN_FIELDS = new Set<keyof TenderFormValues>(['offeredAmount', 'currency', 'notes', 'expiresAt'])
+const KNOWN_FIELDS = new Set<keyof TenderFormValues>(["offeredAmount", "currency", "notes", "expiresAt"]);
+
+/** Convierte un instante ISO al valor de un `<input type="datetime-local">`. */
+function toLocalInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 /**
- * The terms of an offer: what we will pay, by when they must answer, and anything the carrier needs
- * to know.
+ * Los términos de una oferta: qué se paga, hasta cuándo tienen para contestar y lo que el
+ * transportista necesite saber.
  *
- * **No carrier picker,** and its absence is the design rather than an omission. A shipment's carrier
- * comes from the vehicle planned on it, and by the time a shipment can be offered that vehicle is
- * fixed - so there is exactly one carrier the offer could go to, and a dropdown with one entry would
- * suggest a choice the product does not have. `docs/domain/CARRIER_TENDERING_V1.md` §3 explains what
- * that costs.
+ * **Sin selector de transportista**, y su ausencia es el diseño, no un olvido. El transportista de
+ * un envío sale del vehículo que se le planificó, y para cuando un envío se puede ofertar ese
+ * vehículo ya está fijado: hay exactamente un transportista al que puede ir la oferta, y un
+ * desplegable de una sola entrada sugeriría una elección que el producto no tiene.
  *
- * The amount and the currency travel together or not at all: the backend refuses one without the
- * other, and a company tendering under a standing rate card has no per-shipment price to state.
+ * El importe y la moneda viajan juntos o no viajan: el backend rechaza uno sin el otro, y una
+ * empresa que oferta bajo un tarifario permanente no tiene precio que declarar por envío.
  */
 export function TenderDrawer({ carrierName, tender, onClose, onSubmit }: TenderDrawerProps) {
-  const { t } = useTranslation('trips')
-  const { t: tc } = useTranslation('common')
-  const { t: tv } = useTranslation('validations')
-  const [formError, setFormError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null);
 
   const {
-    register,
-    handleSubmit,
-    setError,
-    watch,
+    register, handleSubmit, setError, watch,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<TenderFormValues>({
     defaultValues: {
-      offeredAmount: tender?.offeredAmount?.toString() ?? '',
-      currency: tender?.currency ?? '',
-      notes: tender?.notes ?? '',
-      // <input type="datetime-local"> wants a local wall-clock string with no zone, so the stored
-      // instant is trimmed to minutes here and read back through the browser's own zone below.
-      expiresAt: toLocalInput(tender?.expiresAt ?? null),
+      offeredAmount: tender?.offeredAmount?.toString() ?? "",
+      currency: tender?.currency ?? "",
+      notes: tender?.notes ?? "",
+      expiresAt: toLocalInput(tender?.expiresAt),
     },
-  })
+  });
 
-  const amount = watch('offeredAmount')
-  const currency = watch('currency')
-  const pricing = amount.trim() !== '' || currency.trim() !== ''
+  const amount = watch("offeredAmount");
+  const currency = watch("currency");
 
-  /** Optional as a pair: state both or neither, which is what the backend enforces. */
-  const validateAmount: Validate<string, TenderFormValues> = (value) => {
-    if (value.trim() === '') {
-      return currency.trim() === '' || tv('required')
-    }
-    const parsed = Number(value)
-    if (Number.isNaN(parsed)) return tv('number')
-    return parsed >= 0 || tv('nonNegative')
-  }
+  /** Importe y moneda: los dos o ninguno. Es la regla del backend, dicha antes de enviar. */
+  const validatePair: Validate<string, TenderFormValues> = () =>
+    (amount.trim() === "") === (currency.trim() === "")
+    || t("Indica el importe y la moneda, o deja ambos en blanco");
 
   async function submit(values: TenderFormValues) {
-    setFormError(null)
+    setFormError(null);
+    const request: TenderRequest = {
+      offeredAmount: values.offeredAmount.trim() === "" ? null : Number(values.offeredAmount),
+      currency: values.currency.trim() === "" ? null : values.currency.trim().toUpperCase(),
+      notes: values.notes.trim() || null,
+      expiresAt: values.expiresAt ? new Date(values.expiresAt).toISOString() : null,
+    };
+
     try {
-      await onSubmit({
-        offeredAmount: values.offeredAmount.trim() === '' ? null : Number(values.offeredAmount),
-        currency: values.currency.trim() === '' ? null : values.currency.trim().toUpperCase(),
-        notes: values.notes.trim() || null,
-        expiresAt: values.expiresAt === '' ? null : new Date(values.expiresAt).toISOString(),
-      })
+      await onSubmit(request);
     } catch (error) {
-      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, tv('highlightedFields')))
+      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, t("Corrige los campos marcados.")));
     }
   }
 
   return (
-    <TmsDrawer
+    <FormDrawer
       open
-      title={tender ? t('tender.form.editTitle') : t('tender.form.title')}
-      subtitle={carrierName ?? undefined}
+      icon={<LocalOfferRounded />}
+      title={tender ? t("Editar la oferta") : t("Nueva oferta")}
+      subtitle={carrierName ?? t("Se crea como borrador: enviarla es una acción aparte.")}
+      size="md"
       onClose={onClose}
       dirty={isDirty}
-      closeOnEscape={!isSubmitting}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
-            {tc('actions.cancel')}
-          </button>
-          <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={isSubmitting}>
-            {isSubmitting ? tc('actions.saving') : tc('actions.save')}
-          </button>
+          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : t("Guardar")}
+          </Button>
         </>
       }
     >
-      <form id={FORM_ID} onSubmit={(event) => void handleSubmit(submit)(event)} noValidate>
-        {formError && (
-          <div className="alert alert-danger py-2 small" role="alert">
-            {formError}
-          </div>
-        )}
+      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(submit)(event)} noValidate>
+        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
 
-        <p className="text-secondary small">{t('tender.form.intro')}</p>
+        <Box sx={{ display: "grid", gap: 2 }}>
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "2fr 1fr" }}>
+            <TextField
+              label={t("Importe ofrecido")} size="small" fullWidth type="number"
+              error={Boolean(errors.offeredAmount)} helperText={errors.offeredAmount?.message}
+              {...register("offeredAmount", { validate: validatePair })}
+            />
+            <TextField
+              label={t("Moneda")} size="small" fullWidth placeholder="PEN"
+              error={Boolean(errors.currency)} helperText={errors.currency?.message}
+              {...register("currency", {
+                validate: validatePair,
+                pattern: { value: CURRENCY_PATTERN, message: t("Tres letras, p. ej. PEN") },
+              })}
+            />
+          </Box>
 
-        <div className="row">
-          <div className="col-12 col-sm-8">
-            <FormField
-              label={t('tender.form.offeredAmount')}
-              htmlFor="tender-amount"
-              error={errors.offeredAmount?.message}
-              help={t('tender.form.offeredAmountHelp')}
-            >
-              <input
-                id="tender-amount"
-                type="text"
-                inputMode="decimal"
-                className={`form-control${errors.offeredAmount ? ' is-invalid' : ''}`}
-                {...register('offeredAmount', { validate: validateAmount })}
-              />
-            </FormField>
-          </div>
-          <div className="col-12 col-sm-4">
-            <FormField
-              label={t('tender.form.currency')}
-              htmlFor="tender-currency"
-              error={errors.currency?.message}
-              required={pricing}
-            >
-              <input
-                id="tender-currency"
-                maxLength={3}
-                placeholder="PEN"
-                className={`form-control text-uppercase${errors.currency ? ' is-invalid' : ''}`}
-                {...register('currency', {
-                  validate: (value) =>
-                    value.trim() === ''
-                      ? amount.trim() === '' || tv('required')
-                      : CURRENCY_PATTERN.test(value) || t('tender.form.currencyHelp'),
-                })}
-              />
-            </FormField>
-          </div>
-        </div>
-
-        <FormField
-          label={t('tender.form.expiresAt')}
-          htmlFor="tender-expires-at"
-          error={errors.expiresAt?.message}
-          help={t('tender.form.expiresAtHelp')}
-        >
-          <input
-            id="tender-expires-at"
-            type="datetime-local"
-            className={`form-control${errors.expiresAt ? ' is-invalid' : ''}`}
-            {...register('expiresAt')}
+          <TextField
+            label={t("Vence el")} size="small" fullWidth type="datetime-local"
+            slotProps={{ inputLabel: { shrink: true } }}
+            helperText={t("Tiene que seguir en el futuro cuando se envíe la oferta, no cuando se redacta.")}
+            {...register("expiresAt")}
           />
-        </FormField>
 
-        <FormField
-          label={t('tender.form.notes')}
-          htmlFor="tender-notes"
-          error={errors.notes?.message}
-          help={t('tender.form.notesHelp')}
-        >
-          <textarea
-            id="tender-notes"
-            rows={3}
-            className={`form-control${errors.notes ? ' is-invalid' : ''}`}
-            {...register('notes', { maxLength: { value: 1000, message: tv('maxLength', { count: 1000 }) } })}
+          <TextField
+            label={t("Notas")} size="small" fullWidth multiline rows={3}
+            {...register("notes", {
+              maxLength: { value: 1000, message: t("No puede superar los {{count}} caracteres", { count: 1000 }) },
+            })}
+            error={Boolean(errors.notes)} helperText={errors.notes?.message}
           />
-        </FormField>
-      </form>
-    </TmsDrawer>
-  )
-}
+        </Box>
 
-/**
- * An ISO instant as the local `YYYY-MM-DDTHH:mm` a `datetime-local` input expects.
- *
- * Local and not UTC on purpose: a planner setting "answer by 12:00" means noon where they are, and
- * a field that showed them 17:00 because the instant is stored in UTC would be the kind of detail
- * that produces a deadline nobody meant.
- */
-function toLocalInput(iso: string | null): string {
-  if (!iso) return ''
-  const at = new Date(iso)
-  if (Number.isNaN(at.getTime())) return ''
-  const offsetMs = at.getTimezoneOffset() * 60_000
-  return new Date(at.getTime() - offsetMs).toISOString().slice(0, 16)
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 2 }}>
+          {t("Todos los términos son opcionales: una oferta puede ser solo una pregunta.")}
+        </Typography>
+      </Box>
+    </FormDrawer>
+  );
 }

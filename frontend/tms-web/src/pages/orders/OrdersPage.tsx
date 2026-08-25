@@ -1,89 +1,82 @@
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { fetchDestinations } from '../../shared/api/destinationsApi'
-import type { ApiError } from '../../shared/api/httpClient'
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { Box, Button, MenuItem, TextField, Tooltip, Typography } from "@mui/material";
 import {
-  ORDER_PRIORITIES,
-  ORDER_STATUSES,
-  cancelOrder,
-  fetchOrders,
-  markOrderReadyForPlanning,
-  type OrderFulfillmentStatus,
-  type OrderPriority,
-  type OrderStatus,
-  type OrderView,
-} from '../../shared/api/ordersApi'
-import { fetchOrigins } from '../../shared/api/originsApi'
-import { describeApiError } from '../../shared/api/problemMessages'
-import { useEnumLabels } from '../../shared/i18n/enums'
-import { useFormat } from '../../shared/i18n/format'
-import { useCompany } from '../../shared/company/CompanyContext'
-import { notifyError, notifySuccess } from '../../shared/ui/alerts'
+  AddRounded, UploadRounded, AssignmentTurnedInRounded, EditRounded, VisibilityRounded,
+  CheckCircleRounded, CancelRounded, ScaleRounded, ViewInArRounded, LayersRounded,
+} from "@mui/icons-material";
+import { fetchDestinations } from "../../shared/api/destinationsApi";
+import type { ApiError } from "../../shared/api/httpClient";
 import {
-  ActionMenu,
-  DataTable,
-  PageHeader,
-  Pagination,
-  Select,
-  StatusBadge,
-  Toolbar,
-  confirmDialog,
+  ORDER_PRIORITIES, ORDER_STATUSES, cancelOrder, fetchOrders, markOrderReadyForPlanning,
+  type OrderFulfillmentStatus, type OrderPriority, type OrderStatus, type OrderView,
+} from "../../shared/api/ordersApi";
+import { fetchOrigins } from "../../shared/api/originsApi";
+import { describeApiError } from "../../shared/api/problemMessages";
+import { useCompany } from "../../shared/company/CompanyContext";
+import {
+  ActionMenu, DataTable, KpiCard, PageHeader, Pagination, StatusChip, Toolbar,
   type DataTableColumn,
-  type StatusTone,
-} from '../../shared/ui/components'
-import { OrderFormDrawer } from './OrderFormDrawer'
-import { OrderImportDrawer } from './OrderImportDrawer'
+} from "../../shared/ui/components";
+import { ICON_TINTS } from "../../shared/ui/navConfig";
+import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
+import { enumLabel } from "../../lib/enums";
+import type { StatusTone } from "../../theme";
+import { t } from "../../lib/i18n";
+import { fmtDate, fmtDecimal, fmtQuantity, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
+import { OrderFormDrawer } from "./OrderFormDrawer";
+import { OrderImportDrawer } from "./OrderImportDrawer";
 
-const PAGE_SIZE = 25
+const PAGE_SIZE = 25;
 
 const STATUS_TONE: Record<OrderStatus, StatusTone> = {
-  NOT_READY: 'neutral',
-  READY_FOR_PLANNING: 'info',
-  PLANNED: 'success',
-  CANCELLED: 'danger',
-}
+  NOT_READY: "neutral",
+  READY_FOR_PLANNING: "open",
+  PLANNED: "done",
+  CANCELLED: "cancelled",
+};
 
 /**
- * The delivery outcome's colours, kept apart from `STATUS_TONE` above because the two columns
- * answer different questions: one says whether the order may go on a truck, the other says what
- * happened when it did. `PENDING` is neutral rather than amber - an order nobody has delivered
- * yet is the normal state of most of the list, not a problem.
+ * Los colores del resultado de entrega, aparte de `STATUS_TONE` porque las dos columnas
+ * responden preguntas distintas: una dice si el pedido puede subir a un camión, la otra dice qué
+ * pasó cuando subió. `PENDING` es neutro y no ámbar — un pedido que nadie ha entregado todavía
+ * es el estado normal de casi toda la lista, no un problema.
  */
 const FULFILLMENT_TONE: Record<OrderFulfillmentStatus, StatusTone> = {
-  PENDING: 'neutral',
-  DELIVERED: 'success',
-  PARTIALLY_DELIVERED: 'warning',
-  REJECTED: 'danger',
-  FAILED: 'danger',
-  NOT_ATTEMPTED: 'neutral',
-}
+  PENDING: "neutral",
+  DELIVERED: "done",
+  PARTIALLY_DELIVERED: "inProgress",
+  REJECTED: "overdue",
+  FAILED: "overdue",
+  NOT_ATTEMPTED: "neutral",
+};
 
 const PRIORITY_TONE: Record<OrderPriority, StatusTone> = {
-  LOW: 'neutral',
-  NORMAL: 'neutral',
-  HIGH: 'warning',
-  URGENT: 'danger',
-}
+  LOW: "neutral",
+  NORMAL: "neutral",
+  HIGH: "inProgress",
+  URGENT: "overdue",
+};
 
 interface AppliedFilters {
-  orderNumber: string
-  originId: string
-  destinationId: string
-  serviceDateFrom: string
-  serviceDateTo: string
-  status: OrderStatus | ''
-  priority: OrderPriority | ''
+  orderNumber: string;
+  originId: string;
+  destinationId: string;
+  serviceDateFrom: string;
+  serviceDateTo: string;
+  status: OrderStatus | "";
+  priority: OrderPriority | "";
 }
 
 const DEFAULT_FILTERS: AppliedFilters = {
-  orderNumber: '', originId: '', destinationId: '', serviceDateFrom: '', serviceDateTo: '', status: '', priority: '',
-}
+  orderNumber: "", originId: "", destinationId: "", serviceDateFrom: "", serviceDateTo: "", status: "", priority: "",
+};
 
-type ModalState = { mode: 'create' } | { mode: 'edit'; orderId: string } | { mode: 'import' } | null
+type ModalState = { mode: "create" } | { mode: "edit"; orderId: string } | { mode: "import" } | null;
 
-/** Totals for the rows currently on screen. Deliberately not presented as a company-wide
- * figure: the backend paginates, so anything beyond this page is simply not known here. */
+/** Totales de las filas que están en pantalla. Deliberadamente no se presentan como una cifra de
+ * toda la empresa: el backend pagina, así que lo que hay más allá de esta página simplemente no
+ * se conoce aquí. */
 function pageTotals(rows: OrderView[]) {
   return rows.reduce(
     (running, order) => ({
@@ -92,32 +85,28 @@ function pageTotals(rows: OrderView[]) {
       pallets: running.pallets + order.totalPallets,
     }),
     { weight: 0, volume: 0, pallets: 0 },
-  )
+  );
 }
 
 export function OrdersPage() {
-  const { t } = useTranslation('orders')
-  const { t: tc } = useTranslation('common')
-  const enumLabels = useEnumLabels()
-  const format = useFormat()
-  const { selected, hasPermission } = useCompany()
-  const companyId = selected?.id ?? ''
-  const canManage = hasPermission('orders.order:manage')
-  const queryClient = useQueryClient()
+  const { selected, hasPermission } = useCompany();
+  const companyId = selected?.id ?? "";
+  const canManage = hasPermission("orders.order:manage");
+  const queryClient = useQueryClient();
 
-  const [page, setPage] = useState(0)
-  const [draftFilters, setDraftFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
-  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
-  const [modal, setModal] = useState<ModalState>(null)
+  const [page, setPage] = useState(0);
+  const [draft, setDraft] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const [modal, setModal] = useState<ModalState>(null);
 
   const ordersQuery = useQuery({
-    queryKey: ['orders', companyId, page, filters],
+    queryKey: ["orders", companyId, page, filters],
     queryFn: ({ signal }) =>
       fetchOrders({
         companyId,
         page,
         size: PAGE_SIZE,
-        sort: 'serviceDate,desc',
+        sort: "serviceDate,desc",
         orderNumber: filters.orderNumber || undefined,
         originId: filters.originId || undefined,
         destinationId: filters.destinationId || undefined,
@@ -128,355 +117,266 @@ export function OrdersPage() {
         signal,
       }),
     placeholderData: keepPreviousData,
-  })
+  });
 
   const originsQuery = useQuery({
-    queryKey: ['origins-for-order-filter', companyId],
-    queryFn: ({ signal }) => fetchOrigins({ companyId, size: 200, active: true, sort: 'code,asc', signal }),
-    enabled: companyId !== '',
-  })
-  const origins = originsQuery.data?.content ?? []
-
+    queryKey: ["origins-for-order-filter", companyId],
+    queryFn: ({ signal }) => fetchOrigins({ companyId, size: 200, active: true, sort: "code,asc", signal }),
+    enabled: companyId !== "",
+  });
   const destinationsQuery = useQuery({
-    queryKey: ['destinations-for-order-filter', companyId],
-    queryFn: ({ signal }) => fetchDestinations({ companyId, size: 200, active: true, sort: 'code,asc', signal }),
-    enabled: companyId !== '',
-  })
-  const destinations = destinationsQuery.data?.content ?? []
-
-  function applyFilters() {
-    setFilters(draftFilters)
-    setPage(0)
-  }
-
-  function resetFilters() {
-    setDraftFilters(DEFAULT_FILTERS)
-    setFilters(DEFAULT_FILTERS)
-    setPage(0)
-  }
+    queryKey: ["destinations-for-order-filter", companyId],
+    queryFn: ({ signal }) => fetchDestinations({ companyId, size: 200, active: true, sort: "code,asc", signal }),
+    enabled: companyId !== "",
+  });
 
   function refresh() {
-    void queryClient.invalidateQueries({ queryKey: ['orders', companyId] })
+    void queryClient.invalidateQueries({ queryKey: ["orders", companyId] });
+    // Un pedido liberado cambia lo que la planificación puede recoger.
+    void queryClient.invalidateQueries({ queryKey: ["eligible-orders", companyId] });
   }
+
+  function applyFilters() { setFilters(draft); setPage(0); }
+  function resetFilters() { setDraft(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); setPage(0); }
 
   async function markReady(order: OrderView) {
     const confirmed = await confirmDialog({
-      title: t('dialogs.markReadyTitle'),
-      text: t('dialogs.markReadyText', { number: order.orderNumber }),
-      confirmLabel: t('actions.markReady'),
-    })
-    if (!confirmed) return
+      title: t("¿Marcar el pedido como listo para planificar?"),
+      text: t("{{number}} será visible para planificación cuando tenga al menos una línea y un peso, volumen o cantidad de pallets conocidos.", { number: order.orderNumber }),
+      confirmLabel: t("Marcar listo"),
+    });
+    if (!confirmed) return;
 
     try {
-      await markOrderReadyForPlanning(companyId, order.id)
-      notifySuccess(t('dialogs.markedReady'), order.orderNumber)
-      refresh()
+      await markOrderReadyForPlanning(companyId, order.id);
+      notifySuccess(t("Pedido marcado como listo"), order.orderNumber);
+      refresh();
     } catch (error) {
-      notifyError(t('dialogs.markReadyError'), describeApiError(error as ApiError))
+      notifyError(t("No se pudo marcar el pedido como listo"), describeApiError(error as ApiError));
     }
   }
 
   async function cancel(order: OrderView) {
     const confirmed = await confirmDialog({
-      title: t('dialogs.cancelTitle'),
-      text: t('dialogs.cancelText', { number: order.orderNumber }),
-      confirmLabel: t('actions.cancelOrder'),
+      title: t("¿Cancelar el pedido?"),
+      text: t("{{number}} quedará cancelado y ya no podrá editarse ni planificarse.", { number: order.orderNumber }),
+      confirmLabel: t("Cancelar pedido"),
       dangerous: true,
-    })
-    if (!confirmed) return
+    });
+    if (!confirmed) return;
 
     try {
-      await cancelOrder(companyId, order.id)
-      notifySuccess(t('dialogs.cancelled'), order.orderNumber)
-      refresh()
+      await cancelOrder(companyId, order.id);
+      notifySuccess(t("Pedido cancelado"), order.orderNumber);
+      refresh();
     } catch (error) {
-      notifyError(t('dialogs.cancelError'), describeApiError(error as ApiError))
+      notifyError(t("No se pudo cancelar el pedido"), describeApiError(error as ApiError));
     }
   }
 
   const columns: DataTableColumn<OrderView>[] = [
     {
-      key: 'orderNumber',
-      header: tc('columns.orderNumber'),
-      render: (order) => <span className="tms-code tms-cell-strong">{order.orderNumber}</span>,
+      key: "orderNumber",
+      header: t("Pedido"),
+      render: (order) => <Typography variant="body2" sx={{ fontWeight: 800 }}>{order.orderNumber}</Typography>,
     },
     {
-      key: 'origin',
-      header: tc('columns.origin'),
+      key: "origin",
+      header: t("Origen"),
       render: (order) => (
-        <span className="tms-truncate d-block" style={{ maxWidth: '14rem' }} title={order.originName ?? undefined}>
-          {order.originName ?? order.originCode ?? '—'}
-        </span>
+        <Tooltip title={order.originName ?? ""}>
+          <Typography variant="body2" noWrap sx={{ maxWidth: "14rem" }}>
+            {order.originName ?? order.originCode ?? "-"}
+          </Typography>
+        </Tooltip>
       ),
     },
     {
-      key: 'destination',
-      header: tc('columns.destination'),
+      key: "destination",
+      header: t("Destino"),
       render: (order) => (
-        <span
-          className="tms-truncate d-block"
-          style={{ maxWidth: '14rem' }}
-          title={order.destinationName ?? undefined}
-        >
-          {order.destinationName ?? order.destinationCode ?? '—'}
-        </span>
+        <Tooltip title={order.destinationName ?? ""}>
+          <Typography variant="body2" noWrap sx={{ maxWidth: "14rem" }}>
+            {order.destinationName ?? order.destinationCode ?? "-"}
+          </Typography>
+        </Tooltip>
       ),
     },
-    { key: 'serviceDate', header: tc('columns.requiredDate'), render: (order) => format.date(order.serviceDate) },
+    { key: "serviceDate", header: t("Fecha requerida"), render: (order) => fmtDate(order.serviceDate) },
     {
-      key: 'priority',
-      header: tc('columns.priority'),
+      key: "priority",
+      header: t("Prioridad"),
       render: (order) => (
-        <StatusBadge label={enumLabels.orderPriority(order.priority)} tone={PRIORITY_TONE[order.priority]} />
+        <StatusChip label={enumLabel("orderPriority", order.priority)} tone={PRIORITY_TONE[order.priority]} />
       ),
     },
-    { key: 'weight', header: tc('columns.weight'), numeric: true, render: (order) => format.weight(order.totalWeightKg) },
-    { key: 'volume', header: tc('columns.volume'), numeric: true, render: (order) => format.volume(order.totalVolumeM3) },
+    { key: "weight", header: t("Peso"), numeric: true, render: (order) => fmtWeightKg(order.totalWeightKg) },
+    { key: "volume", header: t("Volumen"), numeric: true, render: (order) => fmtVolumeM3(order.totalVolumeM3) },
+    { key: "pallets", header: t("Pallets"), numeric: true, render: (order) => fmtDecimal(order.totalPallets) },
+    { key: "lines", header: t("Líneas"), numeric: true, render: (order) => fmtQuantity(order.lineCount) },
     {
-      key: 'pallets',
-      header: tc('columns.pallets'),
-      numeric: true,
-      render: (order) => format.decimal(order.totalPallets),
+      key: "status",
+      header: t("Estado"),
+      render: (order) => <StatusChip label={enumLabel("orderStatus", order.status)} tone={STATUS_TONE[order.status]} />,
     },
     {
-      key: 'lines',
-      header: tc('columns.lines'),
-      numeric: true,
-      render: (order) => format.quantity(order.lineCount),
-    },
-    {
-      key: 'status',
-      header: tc('columns.status'),
-      render: (order) => <StatusBadge label={enumLabels.orderStatus(order.status)} tone={STATUS_TONE[order.status]} />,
-    },
-    {
-      // Its own column, beside the planning status rather than replacing it. An order that was
-      // refused at the dock is still a planned order, and a list that showed only "Planificado"
-      // was telling a dispatcher the job was done.
-      key: 'fulfillment',
-      header: t('columns.fulfillment'),
+      // Columna propia, al lado del estado de planificación y no en su lugar. Un pedido que
+      // rechazaron en el muelle sigue siendo un pedido planificado, y una lista que solo
+      // enseñara "Planificado" le estaría diciendo al despachador que el trabajo está hecho.
+      key: "fulfillment",
+      header: t("Entrega"),
       render: (order) => (
-        <StatusBadge
-          label={enumLabels.orderFulfillmentStatus(order.fulfillmentStatus)}
+        <StatusChip
+          label={enumLabel("orderFulfillmentStatus", order.fulfillmentStatus)}
           tone={FULFILLMENT_TONE[order.fulfillmentStatus]}
         />
       ),
     },
-  ]
+  ];
 
   if (canManage) {
     columns.push({
-      key: 'actions',
-      header: tc('columns.actions'),
+      key: "actions",
+      header: t("Acciones"),
       actions: true,
       render: (order) => {
-        const editable = order.status === 'NOT_READY' || order.status === 'READY_FOR_PLANNING'
-        const cancellable = order.status !== 'CANCELLED' && order.status !== 'PLANNED'
+        const editable = order.status === "NOT_READY" || order.status === "READY_FOR_PLANNING";
+        const cancellable = order.status !== "CANCELLED" && order.status !== "PLANNED";
         return (
           <ActionMenu
             items={[
               {
-                key: 'open',
-                label: editable ? tc('actions.edit') : t('actions.view'),
-                icon: editable ? 'bi-pencil' : 'bi-eye',
-                onSelect: () => setModal({ mode: 'edit', orderId: order.id }),
+                key: "open",
+                label: editable ? t("Editar") : t("Ver"),
+                icon: editable ? <EditRounded /> : <VisibilityRounded />,
+                onSelect: () => setModal({ mode: "edit", orderId: order.id }),
               },
-              ...(order.status === 'NOT_READY'
-                ? [
-                    {
-                      key: 'ready',
-                      label: t('actions.markReady'),
-                      icon: 'bi-check2-circle',
-                      onSelect: () => void markReady(order),
-                    },
-                  ]
+              ...(order.status === "NOT_READY"
+                ? [{
+                    key: "ready",
+                    label: t("Marcar listo"),
+                    icon: <CheckCircleRounded />,
+                    onSelect: () => void markReady(order),
+                  }]
                 : []),
               ...(cancellable
-                ? [
-                    {
-                      key: 'cancel',
-                      label: t('actions.cancelOrder'),
-                      icon: 'bi-x-circle',
-                      dangerous: true,
-                      onSelect: () => void cancel(order),
-                    },
-                  ]
+                ? [{
+                    key: "cancel",
+                    label: t("Cancelar pedido"),
+                    icon: <CancelRounded />,
+                    dangerous: true,
+                    divider: true,
+                    onSelect: () => void cancel(order),
+                  }]
                 : []),
             ]}
           />
-        )
+        );
       },
-    })
+    });
   }
 
-  const pageData = ordersQuery.data
-  const rows = pageData?.content ?? []
-  const totals = pageTotals(rows)
-  const activeFilterCount = Object.values(filters).filter((value) => value !== '').length
+  const pageData = ordersQuery.data;
+  const rows = pageData?.content ?? [];
+  const totals = pageTotals(rows);
 
   return (
-    <div>
+    <>
       <PageHeader
-        icon="card-checklist"
-        title={t('title')}
-        description={t('description')}
-        meta={
-          pageData && (
-            <span className="tms-badge tms-badge-neutral">
-              {t('summary.found', { count: pageData.totalElements })}
-            </span>
-          )
-        }
-        actions={
-          canManage && (
-            <>
-              <button
-                type="button"
-                className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
-                onClick={() => setModal({ mode: 'import' })}
-              >
-                <i className="bi bi-upload" aria-hidden="true" />
-                {t('actions.import')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2"
-                onClick={() => setModal({ mode: 'create' })}
-              >
-                <i className="bi bi-plus-lg" aria-hidden="true" />
-                {t('new')}
-              </button>
-            </>
-          )
-        }
+        icon={<AssignmentTurnedInRounded />}
+        tint={ICON_TINTS["/orders"]}
+        title={t("Pedidos")}
+        subtitle={t("Pedidos de transporte: cabecera más líneas. Los totales siempre los calcula y controla el backend.")}
+        onRefresh={refresh}
+        refreshing={ordersQuery.isFetching}
+        actions={canManage && (
+          <>
+            <Button variant="outlined" startIcon={<UploadRounded />} onClick={() => setModal({ mode: "import" })}>
+              {t("Importar")}
+            </Button>
+            <Button variant="contained" startIcon={<AddRounded />} onClick={() => setModal({ mode: "create" })}>
+              {t("Nuevo pedido")}
+            </Button>
+          </>
+        )}
       />
 
-      {rows.length > 0 && (
-        <div className="row g-2 mb-3">
-          {[
-            { key: 'weight', label: t('summary.pageWeight'), value: format.weight(totals.weight), icon: 'bi-box-seam' },
-            { key: 'volume', label: t('summary.pageVolume'), value: format.volume(totals.volume), icon: 'bi-bounding-box' },
-            { key: 'pallets', label: t('summary.pagePallets'), value: format.decimal(totals.pallets), icon: 'bi-stack' },
-          ].map((tile) => (
-            <div className="col-12 col-sm-4" key={tile.key}>
-              <div className="tms-card h-100 px-3 py-2 d-flex align-items-center gap-3">
-                <i className={`bi ${tile.icon} fs-5 text-body-secondary`} aria-hidden="true" />
-                <div className="tms-min-w-0">
-                  <p className="tms-section-title mb-0">{tile.label}</p>
-                  <p className="mb-0 fw-semibold">{tile.value}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-          <div className="col-12">
-            <p className="text-body-secondary small mb-0">{t('summary.pageNote')}</p>
-          </div>
-        </div>
-      )}
+      {/* Los totales de la página, no de la empresa: el backend pagina y esta suma solo puede
+          hablar de lo que hay en pantalla. Se dice literalmente, debajo. */}
+      <Box sx={{
+        display: "grid", gap: 2, mb: 2,
+        gridTemplateColumns: { xs: "1fr", sm: "repeat(3, minmax(0, 1fr))" },
+      }}>
+        <KpiCard icon={<ScaleRounded />} color="info.main" title={t("Peso en esta página")} value={fmtWeightKg(totals.weight)} loading={ordersQuery.isPending} />
+        <KpiCard icon={<ViewInArRounded />} color="secondary.main" title={t("Volumen en esta página")} value={fmtVolumeM3(totals.volume)} loading={ordersQuery.isPending} />
+        <KpiCard icon={<LayersRounded />} color="warning.main" title={t("Pallets en esta página")} value={fmtDecimal(totals.pallets)} loading={ordersQuery.isPending} />
+      </Box>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+        {t("Los totales corresponden solo a los pedidos de esta página.")}
+      </Typography>
 
       <Toolbar
         onApply={applyFilters}
         onReset={resetFilters}
-        activeFilterCount={activeFilterCount}
-        primary={
-          <div className="tms-filter-field flex-grow-1" style={{ maxWidth: '18rem' }}>
-            <label htmlFor="filter-order-number" className="tms-filter-label">
-              {tc('columns.orderNumber')}
-            </label>
-            <input
-              id="filter-order-number"
-              className="form-control form-control-sm"
-              value={draftFilters.orderNumber}
-              onChange={(event) => setDraftFilters({ ...draftFilters, orderNumber: event.target.value })}
-            />
-          </div>
-        }
         filters={
           <>
-            <div className="tms-filter-field">
-              <label htmlFor="filter-origin" className="tms-filter-label">
-                {tc('columns.origin')}
-              </label>
-              <Select
-                id="filter-origin"
-                size="sm"
-                value={draftFilters.originId}
-                onChange={(next) => setDraftFilters({ ...draftFilters, originId: next })}
-                options={[
-                  { value: '', label: tc('filters.allOrigins') },
-                  ...origins.map((origin) => ({ value: origin.id, label: origin.name })),
-                ]}
-              />
-            </div>
-            <div className="tms-filter-field">
-              <label htmlFor="filter-destination" className="tms-filter-label">
-                {tc('columns.destination')}
-              </label>
-              <Select
-                id="filter-destination"
-                size="sm"
-                value={draftFilters.destinationId}
-                onChange={(next) => setDraftFilters({ ...draftFilters, destinationId: next })}
-                options={[
-                  { value: '', label: t('filters.allDestinations') },
-                  ...destinations.map((destination) => ({ value: destination.id, label: destination.name })),
-                ]}
-              />
-            </div>
-            <div className="tms-filter-field">
-              <label htmlFor="filter-date-from" className="tms-filter-label">
-                {t('filters.dateFrom')}
-              </label>
-              <input
-                id="filter-date-from"
-                type="date"
-                className="form-control form-control-sm"
-                value={draftFilters.serviceDateFrom}
-                onChange={(event) => setDraftFilters({ ...draftFilters, serviceDateFrom: event.target.value })}
-              />
-            </div>
-            <div className="tms-filter-field">
-              <label htmlFor="filter-date-to" className="tms-filter-label">
-                {t('filters.dateTo')}
-              </label>
-              <input
-                id="filter-date-to"
-                type="date"
-                className="form-control form-control-sm"
-                value={draftFilters.serviceDateTo}
-                onChange={(event) => setDraftFilters({ ...draftFilters, serviceDateTo: event.target.value })}
-              />
-            </div>
-            <div className="tms-filter-field">
-              <label htmlFor="filter-status" className="tms-filter-label">
-                {tc('columns.status')}
-              </label>
-              <Select
-                id="filter-status"
-                size="sm"
-                value={draftFilters.status}
-                onChange={(next) => setDraftFilters({ ...draftFilters, status: next as OrderStatus | '' })}
-                options={[
-                  { value: '', label: t('filters.allStatuses') },
-                  ...ORDER_STATUSES.map((status) => ({ value: status, label: enumLabels.orderStatus(status) })),
-                ]}
-              />
-            </div>
-            <div className="tms-filter-field">
-              <label htmlFor="filter-priority" className="tms-filter-label">
-                {tc('columns.priority')}
-              </label>
-              <Select
-                id="filter-priority"
-                size="sm"
-                value={draftFilters.priority}
-                onChange={(next) => setDraftFilters({ ...draftFilters, priority: next as OrderPriority | '' })}
-                options={[
-                  { value: '', label: t('filters.allPriorities') },
-                  ...ORDER_PRIORITIES.map((priority) => ({ value: priority, label: enumLabels.orderPriority(priority) })),
-                ]}
-              />
-            </div>
+            <TextField
+              size="small" label={t("Pedido")} value={draft.orderNumber}
+              onChange={(e) => setDraft({ ...draft, orderNumber: e.target.value })}
+              sx={{ minWidth: 150 }}
+            />
+            <TextField
+              select size="small" label={t("Origen")} value={draft.originId}
+              onChange={(e) => setDraft({ ...draft, originId: e.target.value })}
+              sx={{ minWidth: 190 }}
+            >
+              <MenuItem value="">{t("Todos los orígenes")}</MenuItem>
+              {(originsQuery.data?.content ?? []).map((origin) => (
+                <MenuItem key={origin.id} value={origin.id}>{origin.name}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select size="small" label={t("Destino")} value={draft.destinationId}
+              onChange={(e) => setDraft({ ...draft, destinationId: e.target.value })}
+              sx={{ minWidth: 190 }}
+            >
+              <MenuItem value="">{t("Todos los destinos")}</MenuItem>
+              {(destinationsQuery.data?.content ?? []).map((destination) => (
+                <MenuItem key={destination.id} value={destination.id}>{destination.name}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              size="small" type="date" label={t("Desde")} value={draft.serviceDateFrom}
+              onChange={(e) => setDraft({ ...draft, serviceDateFrom: e.target.value })}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ minWidth: 160 }}
+            />
+            <TextField
+              size="small" type="date" label={t("Hasta")} value={draft.serviceDateTo}
+              onChange={(e) => setDraft({ ...draft, serviceDateTo: e.target.value })}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ minWidth: 160 }}
+            />
+            <TextField
+              select size="small" label={t("Estado")} value={draft.status}
+              onChange={(e) => setDraft({ ...draft, status: e.target.value as OrderStatus | "" })}
+              sx={{ minWidth: 180 }}
+            >
+              <MenuItem value="">{t("Todos los estados")}</MenuItem>
+              {ORDER_STATUSES.map((status) => (
+                <MenuItem key={status} value={status}>{enumLabel("orderStatus", status)}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select size="small" label={t("Prioridad")} value={draft.priority}
+              onChange={(e) => setDraft({ ...draft, priority: e.target.value as OrderPriority | "" })}
+              sx={{ minWidth: 180 }}
+            >
+              <MenuItem value="">{t("Todas las prioridades")}</MenuItem>
+              {ORDER_PRIORITIES.map((priority) => (
+                <MenuItem key={priority} value={priority}>{enumLabel("orderPriority", priority)}</MenuItem>
+              ))}
+            </TextField>
           </>
         }
       />
@@ -489,27 +389,34 @@ export function OrdersPage() {
         isLoading={ordersQuery.isPending}
         error={ordersQuery.isError ? describeApiError(ordersQuery.error as ApiError) : null}
         onRetry={() => void ordersQuery.refetch()}
-        emptyTitle={t('empty.title')}
-        emptyMessage={t('empty.message')}
-        caption={t('title')}
+        emptyTitle={t("Sin pedidos")}
+        emptyMessage={t("Crea un pedido o ajusta los filtros.")}
+        onRowClick={(order) => setModal({ mode: "edit", orderId: order.id })}
         footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
       />
 
-      {modal?.mode === 'import' && (
-        <OrderImportDrawer companyId={companyId} onClose={() => setModal(null)} onImported={refresh} />
-      )}
-
-      {(modal?.mode === 'create' || modal?.mode === 'edit') && (
+      {(modal?.mode === "create" || modal?.mode === "edit") && (
         <OrderFormDrawer
           companyId={companyId}
-          orderId={modal.mode === 'edit' ? modal.orderId : null}
+          orderId={modal.mode === "edit" ? modal.orderId : null}
+          canManage={canManage}
           onClose={() => setModal(null)}
           onSaved={() => {
-            setModal(null)
-            refresh()
+            const wasEdit = modal.mode === "edit";
+            setModal(null);
+            notifySuccess(wasEdit ? t("Registro actualizado") : t("Registro creado"));
+            refresh();
           }}
         />
       )}
-    </div>
-  )
+
+      {modal?.mode === "import" && (
+        <OrderImportDrawer
+          companyId={companyId}
+          onClose={() => setModal(null)}
+          onImported={refresh}
+        />
+      )}
+    </>
+  );
 }

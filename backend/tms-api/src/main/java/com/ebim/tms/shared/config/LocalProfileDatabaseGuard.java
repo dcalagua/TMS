@@ -1,7 +1,11 @@
 package com.ebim.tms.shared.config;
 
+import com.zaxxer.hikari.HikariDataSource;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.Locale;
 import java.util.Set;
+import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,10 +86,57 @@ public class LocalProfileDatabaseGuard {
      * The URL Flyway will actually use, taken from Flyway's own configuration rather than from the
      * environment. The two can differ - a property is one thing, the datasource that got built is
      * another - and the one that matters is the connection about to be opened.
+     *
+     * <p>Two sources, in order, because Flyway is configured two different ways. When
+     * {@code spring.flyway.url} is set, Spring Boot builds Flyway its own datasource and the URL
+     * is right there. When it is not set - every profile in this repository - Flyway is handed the
+     * application's datasource instead, and {@code getUrl()} is null: the URL was never a Flyway
+     * property, it belongs to the pool. Reading only the first source made this guard blind on the
+     * path it actually runs on, so it refused every start and named no host while doing it.
      */
     private static String urlOf(Flyway flyway) {
-        String url = flyway.getConfiguration().getUrl();
-        return url == null ? "" : url;
+        String configured = flyway.getConfiguration().getUrl();
+        if (configured != null && !configured.isBlank()) {
+            return configured;
+        }
+        return urlOf(flyway.getConfiguration().getDataSource());
+    }
+
+    /**
+     * The URL a pool is configured with, read without opening a connection wherever possible.
+     *
+     * <p><b>Why the pool is asked before the driver.</b> This guard exists to refuse a database
+     * before anything touches it, so it must not connect to the very host it is about to reject -
+     * on a hosted project that would be an unwanted login attempt against somebody's production
+     * pooler, from a laptop, before a single check has run. Hikari is the pool Spring Boot
+     * configures here, and it knows its own URL as configuration, so the common path costs no
+     * connection at all.
+     *
+     * <p>The metadata probe stays as a fallback for a pool that is not Hikari. It is the lesser
+     * evil rather than a good one: opening one connection is still better than being unable to
+     * read the host and refusing every start, which is the failure this method was written to end.
+     *
+     * <p>Fail-closed throughout: anything that cannot be read returns empty, empty is not a local
+     * host, and the start is refused. "I could not tell" and "it is safe" remain different answers.
+     */
+    static String urlOf(DataSource dataSource) {
+        if (dataSource == null) {
+            return "";
+        }
+        if (dataSource instanceof HikariDataSource hikari) {
+            String configured = hikari.getJdbcUrl();
+            if (configured != null && !configured.isBlank()) {
+                return configured;
+            }
+        }
+        try (Connection connection = dataSource.getConnection()) {
+            String url = connection.getMetaData().getURL();
+            return url == null ? "" : url;
+        } catch (SQLException | RuntimeException probeFailed) {
+            log.warn("Could not read the JDBC URL from the datasource, so it cannot be shown to be "
+                    + "local; refusing. Cause: {}", probeFailed.toString());
+            return "";
+        }
     }
 
     /**

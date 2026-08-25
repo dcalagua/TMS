@@ -1,240 +1,185 @@
-import { useState } from 'react'
-import { Controller, useForm } from 'react-hook-form'
-import { useTranslation } from 'react-i18next'
+import { useState } from "react";
+import { Controller, useForm, useWatch } from "react-hook-form";
+import { Alert, Box, Button, MenuItem, TextField, Typography } from "@mui/material";
+import { InventoryRounded } from "@mui/icons-material";
 import {
-  DELIVERY_RESULTS,
-  DELIVERY_RESULTS_NEEDING_NOTES,
-  DELIVERY_RESULTS_NEEDING_TIME,
+  DELIVERY_RESULTS, DELIVERY_RESULTS_NEEDING_NOTES, DELIVERY_RESULTS_NEEDING_TIME,
   DELIVERY_RESULTS_WITH_RECEIVER,
-  type DeliveryResult,
-  type OrderDeliveryView,
-} from '../../shared/api/planningApi'
-import { useEnumLabels } from '../../shared/i18n/enums'
-import { FormField } from '../../shared/ui/components/FormField'
-import { Select } from '../../shared/ui/components/Select'
-import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
+  type DeliveryResult, type OrderDeliveryView,
+} from "../../shared/api/planningApi";
+import { FormDrawer } from "../../shared/ui/components";
+import { enumLabel } from "../../lib/enums";
+import { t } from "../../lib/i18n";
 
-const FORM_ID = 'delivery-result-form'
+const FORM_ID = "delivery-form";
 
 export interface DeliveryValues {
-  result: DeliveryResult
-  /** A `datetime-local` value, or null. The caller converts it to the ISO instant the API takes. */
-  deliveredAt: string | null
-  receiverName: string | null
-  receiverDocument: string | null
-  notes: string | null
+  result: DeliveryResult;
+  deliveredAt: string | null;
+  receiverName: string | null;
+  receiverDocument: string | null;
+  notes: string | null;
 }
 
 interface DeliveryDrawerProps {
-  /** "3. Supermercado Centro" - which stop this delivery happened at. */
-  stopLabel: string
-  orderNumber: string
-  /** The delivery being corrected, or undefined when recording one for the first time. */
-  existing?: OrderDeliveryView
-  onClose: () => void
-  onSubmit: (values: DeliveryValues) => Promise<void>
+  stopLabel: string;
+  orderNumber: string;
+  /** El registro existente cuando esto es una corrección; `undefined` cuando es un alta. */
+  existing?: OrderDeliveryView;
+  onClose: () => void;
+  /** Lanza un `Error` con la frase del servidor si el backend rechaza. */
+  onSubmit: (values: DeliveryValues) => Promise<void>;
+}
+
+/** Convierte un instante ISO al valor de un `<input type="datetime-local">`. */
+function toLocalInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 /**
- * An ISO instant turned back into the `datetime-local` value an input can show, in the operator's
- * own time zone - the inverse of the workspace's `toInstant`. Returns an empty string for null,
- * which is what an untouched input holds.
- */
-function toLocalInput(iso: string | null): string {
-  if (iso === null) return ''
-  const parsed = new Date(iso)
-  if (Number.isNaN(parsed.getTime())) return ''
-  const pad = (value: number) => String(value).padStart(2, '0')
-  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`
-    + `T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`
-}
-
-/**
- * Recording what was handed over to one customer, for one order, at one stop
- * (`docs/domain/PROOF_OF_DELIVERY_V1.md`).
+ * Qué se entregó de un pedido en una parada, y en qué condiciones.
  *
- * <p>The form changes shape with the result, because the fields are only meaningful for some of
- * them: nothing was attempted, so there is no time and nobody to name; a failed attempt has no
- * receiver either; and anything short of a clean delivery has to say why. Hiding a field is not the
- * enforcement - the server refuses the same combinations with a message of its own, and it is that
- * refusal which is authoritative - it is what keeps a dispatcher from filling in three boxes that
- * would then be rejected.
+ * El mismo drawer sirve para registrar y para corregir: es un `PUT` con el estado *completo* de
+ * una entrega, no un parche, así que un nombre de receptor borrado del formulario es un nombre
+ * que se quita — que es la única forma de deshacer uno tecleado por error.
  *
- * <p>Correcting an existing delivery uses the same form, pre-filled: a correction is not a
- * different fact, it is the same fact told properly, and the API takes it as one `PUT`.
+ * Qué combinaciones son legales lo decide el servidor. Las listas de `planningApi` que este
+ * formulario consulta (`DELIVERY_RESULTS_NEEDING_TIME` y hermanas) solo dan forma al formulario:
+ * enseñan el campo que hace falta y esconden el que sobra, pero no sustituyen a la validación.
  */
 export function DeliveryDrawer({ stopLabel, orderNumber, existing, onClose, onSubmit }: DeliveryDrawerProps) {
-  const { t } = useTranslation('trips')
-  const { t: tc } = useTranslation('common')
-  const enumLabels = useEnumLabels()
-  const [formError, setFormError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null);
 
   const {
-    control,
-    register,
-    handleSubmit,
-    watch,
+    register, control, handleSubmit,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<{
-    result: DeliveryResult
-    deliveredAt: string
-    receiverName: string
-    receiverDocument: string
-    notes: string
+    result: DeliveryResult;
+    deliveredAt: string;
+    receiverName: string;
+    receiverDocument: string;
+    notes: string;
   }>({
     defaultValues: {
-      result: existing?.result ?? 'DELIVERED',
-      deliveredAt: toLocalInput(existing?.deliveredAt ?? null),
-      receiverName: existing?.receiverName ?? '',
-      receiverDocument: existing?.receiverDocument ?? '',
-      notes: existing?.notes ?? '',
+      result: existing?.result ?? "DELIVERED",
+      deliveredAt: toLocalInput(existing?.deliveredAt),
+      receiverName: existing?.receiverName ?? "",
+      receiverDocument: existing?.receiverDocument ?? "",
+      notes: existing?.notes ?? "",
     },
-  })
+  });
 
-  const result = watch('result')
-  const showsTime = result !== 'NOT_ATTEMPTED'
-  const timeRequired = DELIVERY_RESULTS_NEEDING_TIME.includes(result)
-  const showsReceiver = DELIVERY_RESULTS_WITH_RECEIVER.includes(result)
-  const notesRequired = DELIVERY_RESULTS_NEEDING_NOTES.includes(result)
+  const result = useWatch({ control, name: "result" });
+  const needsTime = DELIVERY_RESULTS_NEEDING_TIME.includes(result);
+  const hasReceiver = DELIVERY_RESULTS_WITH_RECEIVER.includes(result);
+  const needsNotes = DELIVERY_RESULTS_NEEDING_NOTES.includes(result);
 
   async function submit(values: {
-    result: DeliveryResult
-    deliveredAt: string
-    receiverName: string
-    receiverDocument: string
-    notes: string
+    result: DeliveryResult; deliveredAt: string; receiverName: string; receiverDocument: string; notes: string;
   }) {
-    setFormError(null)
-    const blankToNull = (value: string) => (value.trim() === '' ? null : value.trim())
+    setFormError(null);
     try {
       await onSubmit({
         result: values.result,
-        // Cleared rather than carried over when the chosen result has no room for it: the API takes
-        // the whole state of the delivery, so a leftover value from a previous choice would be sent
-        // as if it had been meant.
-        deliveredAt: showsTime ? blankToNull(values.deliveredAt) : null,
-        receiverName: showsReceiver ? blankToNull(values.receiverName) : null,
-        receiverDocument: showsReceiver ? blankToNull(values.receiverDocument) : null,
-        notes: blankToNull(values.notes),
-      })
+        // Los campos que no aplican al resultado elegido se mandan vacíos y no con lo que quedara
+        // escrito: el backend rechaza un receptor en un intento fallido, y esto evita mandarle uno
+        // que el operador ya no ve.
+        deliveredAt: needsTime && values.deliveredAt ? values.deliveredAt : null,
+        receiverName: hasReceiver ? (values.receiverName.trim() || null) : null,
+        receiverDocument: hasReceiver ? (values.receiverDocument.trim() || null) : null,
+        notes: values.notes.trim() || null,
+      });
     } catch (error) {
-      setFormError((error as Error).message)
+      setFormError((error as Error).message);
     }
   }
 
   return (
-    <TmsDrawer
+    <FormDrawer
       open
-      title={existing === undefined ? t('workspace.deliveries.recordTitle') : t('workspace.deliveries.correctTitle')}
-      subtitle={t('workspace.deliveries.subtitle', { order: orderNumber, stop: stopLabel })}
+      icon={<InventoryRounded />}
+      title={existing ? t("Corregir la entrega") : t("Registrar la entrega")}
+      subtitle={`${orderNumber} · ${stopLabel}`}
       size="md"
       onClose={onClose}
       dirty={isDirty}
-      closeOnEscape={!isSubmitting}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
-            {tc('actions.cancel')}
-          </button>
-          <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={isSubmitting}>
-            {isSubmitting ? tc('actions.saving') : t('workspace.deliveries.submit')}
-          </button>
+          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : t("Guardar")}
+          </Button>
         </>
       }
     >
-      <form id={FORM_ID} onSubmit={(event) => void handleSubmit(submit)(event)} noValidate>
-        {formError && (
-          <div className="alert alert-danger py-2 small" role="alert">
-            {formError}
-          </div>
-        )}
+      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(submit)(event)} noValidate>
+        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
 
-        <FormField label={t('workspace.deliveries.result')} htmlFor="delivery-result" required>
+        <Box sx={{ display: "grid", gap: 2 }}>
           <Controller
             control={control}
             name="result"
             render={({ field }) => (
-              <Select
-                id="delivery-result"
-                value={field.value}
-                onChange={(next) => field.onChange(next as DeliveryResult)}
-                options={DELIVERY_RESULTS.map((value) => ({
-                  value,
-                  label: enumLabels.deliveryResult(value),
-                }))}
-              />
+              <TextField
+                select label={t("Resultado")} required size="small" fullWidth
+                value={field.value} onChange={(e) => field.onChange(e.target.value as DeliveryResult)}
+              >
+                {DELIVERY_RESULTS.map((option) => (
+                  <MenuItem key={option} value={option}>{enumLabel("deliveryResult", option)}</MenuItem>
+                ))}
+              </TextField>
             )}
           />
-        </FormField>
 
-        {showsTime && (
-          <FormField
-            label={t('workspace.deliveries.deliveredAt')}
-            htmlFor="delivery-delivered-at"
-            required={timeRequired}
-            help={t('workspace.deliveries.deliveredAtHelp')}
-            error={errors.deliveredAt?.message}
-          >
-            <input
-              id="delivery-delivered-at"
-              type="datetime-local"
-              className="form-control"
-              {...register('deliveredAt', {
-                validate: (value) =>
-                  !timeRequired || value.trim() !== '' || t('workspace.deliveries.deliveredAtRequired'),
-              })}
+          {needsTime && (
+            <TextField
+              label={t("Entregado el")} size="small" fullWidth type="datetime-local"
+              slotProps={{ inputLabel: { shrink: true } }}
+              helperText={t("Cuándo ocurrió de verdad, no cuándo se está tecleando.")}
+              {...register("deliveredAt")}
             />
-          </FormField>
-        )}
+          )}
 
-        {showsReceiver && (
-          <>
-            <FormField label={t('workspace.deliveries.receiverName')} htmlFor="delivery-receiver-name">
-              <input
-                id="delivery-receiver-name"
-                type="text"
-                className="form-control"
-                maxLength={120}
-                {...register('receiverName')}
+          {hasReceiver && (
+            <>
+              <TextField
+                label={t("Nombre de quien recibe")} size="small" fullWidth
+                {...register("receiverName", {
+                  maxLength: { value: 200, message: t("No puede superar los {{count}} caracteres", { count: 200 }) },
+                })}
+                error={Boolean(errors.receiverName)} helperText={errors.receiverName?.message}
               />
-            </FormField>
-
-            <FormField
-              label={t('workspace.deliveries.receiverDocument')}
-              htmlFor="delivery-receiver-document"
-              help={t('workspace.deliveries.receiverDocumentHelp')}
-            >
-              <input
-                id="delivery-receiver-document"
-                type="text"
-                className="form-control"
-                maxLength={60}
-                {...register('receiverDocument')}
+              <TextField
+                label={t("Documento de quien recibe")} size="small" fullWidth
+                {...register("receiverDocument", {
+                  maxLength: { value: 50, message: t("No puede superar los {{count}} caracteres", { count: 50 }) },
+                })}
+                error={Boolean(errors.receiverDocument)} helperText={errors.receiverDocument?.message}
               />
-            </FormField>
-          </>
-        )}
+            </>
+          )}
 
-        <FormField
-          label={t('workspace.deliveries.notes')}
-          htmlFor="delivery-notes"
-          required={notesRequired}
-          help={t('workspace.deliveries.notesHelp')}
-          error={errors.notes?.message}
-        >
-          <textarea
-            id="delivery-notes"
-            className="form-control"
-            rows={3}
-            maxLength={1000}
-            {...register('notes', {
-              validate: (value) =>
-                !notesRequired || value.trim() !== '' || t('workspace.deliveries.notesRequired'),
+          <TextField
+            label={t("Notas")} size="small" fullWidth multiline rows={3}
+            required={needsNotes}
+            {...register("notes", {
+              maxLength: { value: 1000, message: t("No puede superar los {{count}} caracteres", { count: 1000 }) },
             })}
+            error={Boolean(errors.notes)} helperText={errors.notes?.message}
           />
-        </FormField>
-      </form>
-    </TmsDrawer>
-  )
+
+          {needsNotes && (
+            <Typography variant="caption" color="text.secondary">
+              {t("Una entrega parcial, rechazada o fallida necesita una explicación: es lo que alguien va a leer mañana.")}
+            </Typography>
+          )}
+        </Box>
+      </Box>
+    </FormDrawer>
+  );
 }

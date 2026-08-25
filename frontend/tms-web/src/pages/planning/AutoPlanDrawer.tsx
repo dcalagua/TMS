@@ -1,204 +1,204 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
-  applyAutoPlan,
-  previewAutoPlan,
-  type AutoPlanView,
-  type UnplannedOrderView,
-} from '../../shared/api/planningApi'
-import type { ApiError } from '../../shared/api/httpClient'
-import { describeApiError } from '../../shared/api/problemMessages'
-import { TmsDrawer } from '../../shared/ui/components'
-import { notifyError, notifySuccess } from '../../shared/ui/alerts'
+  Alert, Box, Button, Chip, Paper, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Typography,
+} from "@mui/material";
+import { AutoFixHighRounded } from "@mui/icons-material";
+import {
+  applyAutoPlan, previewAutoPlan, type AutoPlanView, type UnplannedOrderView,
+} from "../../shared/api/planningApi";
+import type { ApiError } from "../../shared/api/httpClient";
+import { describeApiError } from "../../shared/api/problemMessages";
+import { FormDrawer, SectionHeader, dataTableSx } from "../../shared/ui/components";
+import { notifyError, notifySuccess } from "../../lib/ui";
+import { t } from "../../lib/i18n";
+import { fmtQuantity } from "../../lib/locale";
 
 interface AutoPlanDrawerProps {
-  companyId: string
-  runId: string
-  /** The run's version, sent with the write so a stale board cannot plan a confirmed run. */
-  runVersion: number
-  canApply: boolean
-  onClose: () => void
-  onApplied: () => void
+  companyId: string;
+  runId: string;
+  /** La versión del plan, enviada con la escritura para que un tablero viejo no pueda planificar
+   * un plan que ya se confirmó. */
+  runVersion: number;
+  canApply: boolean;
+  onClose: () => void;
+  onApplied: () => void;
 }
 
 /**
- * The automatic planning review step.
+ * El paso de revisión de la planificación automática.
  *
- * Preview first, always. The engine is deterministic and the preview calls the same code the
- * write does, so what this drawer shows is what applying produces - and a planner who is about to
- * have nine trips created for them should see the nine trips first. There is no "just do it"
- * path, and that is the point: automatic planning proposes, a person decides.
+ * Previsualizar siempre, primero. El motor es determinista y la previsualización llama al mismo
+ * código que la escritura, así que lo que enseña este drawer es lo que produce aplicar — y un
+ * planificador al que están a punto de crearle nueve viajes debería ver los nueve antes. No hay
+ * camino de "hazlo y ya", y ese es el punto: la planificación automática propone, decide una
+ * persona.
  *
- * The unplanned list is given the same weight as the proposal. "7 trips created" next to a
- * quietly discarded backlog is how a planner learns at 6pm that forty orders never went out.
+ * La lista de no asignados tiene el mismo peso que la propuesta. "7 viajes creados" al lado de
+ * una cola descartada en silencio es como un planificador se entera a las seis de la tarde de que
+ * cuarenta pedidos no salieron.
  */
 export function AutoPlanDrawer({
   companyId, runId, runVersion, canApply, onClose, onApplied,
 }: AutoPlanDrawerProps) {
-  const { t } = useTranslation('planning')
-  const { t: tc } = useTranslation('common')
-
   const preview = useQuery({
-    queryKey: ['auto-plan-preview', companyId, runId],
+    queryKey: ["auto-plan-preview", companyId, runId],
     queryFn: ({ signal }) => previewAutoPlan(companyId, runId, signal),
-    // A proposal is a photograph of the backlog: refetching it while the planner reads it would
-    // change the thing they are deciding about.
+    // Una propuesta es una foto de la cola: volver a pedirla mientras el planificador la lee
+    // cambiaría justo aquello sobre lo que está decidiendo.
     staleTime: Infinity,
     refetchOnWindowFocus: false,
-  })
+  });
 
   const apply = useMutation({
     mutationFn: () => applyAutoPlan(companyId, runId, { version: runVersion }),
     onSuccess: (result) => {
-      notifySuccess(t('autoPlan.appliedTitle'), t('autoPlan.appliedText', { count: result.created.length }))
-      onApplied()
-      onClose()
+      notifySuccess(
+        t("Propuesta aplicada"),
+        result.created.length === 1
+          ? t("Se creó {{count}} viaje en borrador.", { count: result.created.length })
+          : t("Se crearon {{count}} viajes en borrador.", { count: result.created.length }),
+      );
+      onApplied();
+      onClose();
     },
-    onError: (error) => notifyError(t('autoPlan.failedTitle'), describeApiError(error as ApiError)),
-  })
+    onError: (error) => notifyError(t("No se pudo aplicar la propuesta"), describeApiError(error as ApiError)),
+  });
 
-  const plan = preview.data
+  const plan = preview.data;
 
   return (
-    <TmsDrawer
+    <FormDrawer
       open
       loading={preview.isPending}
-      title={t('autoPlan.title')}
-      subtitle={t('autoPlan.subtitle')}
+      icon={<AutoFixHighRounded />}
+      title={t("Planificación automática")}
+      subtitle={t("Propuesta de viajes en borrador. Revisa antes de aplicar; nada se confirma automáticamente.")}
       size="lg"
       onClose={onClose}
       footer={
-        <div className="d-flex justify-content-end gap-2">
-          <button type="button" className="btn btn-outline-secondary" onClick={onClose}>
-            {tc('actions.cancel')}
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
+        <>
+          <Button onClick={onClose}>{t("Cancelar")}</Button>
+          <Button
+            variant="contained"
             disabled={!canApply || !plan || plan.proposed.length === 0 || apply.isPending}
             onClick={() => apply.mutate()}
           >
-            {apply.isPending ? t('autoPlan.applying') : t('autoPlan.apply')}
-          </button>
-        </div>
+            {apply.isPending ? t("Aplicando...") : t("Aplicar propuesta")}
+          </Button>
+        </>
       }
     >
       {preview.isError && (
-        <div className="alert alert-danger py-2 small" role="alert">
-          {describeApiError(preview.error as ApiError)}
-        </div>
+        <Alert severity="error">{describeApiError(preview.error as ApiError)}</Alert>
       )}
-
       {plan && <AutoPlanBody plan={plan} />}
-    </TmsDrawer>
-  )
+    </FormDrawer>
+  );
 }
 
 /**
- * Each reason phrased as what the planner can do about it, not as what the engine concluded.
- * A literal map rather than a switch: the i18n keys are typed, so a renamed key is a compile
- * error here instead of a raw enum name rendered on the screen.
+ * Cada motivo redactado como lo que el planificador puede hacer al respecto, no como lo que
+ * concluyó el motor. Un mapa literal y no un switch: así, añadir un motivo al backend sin
+ * traducirlo es un error de compilación en lugar de un nombre de enum crudo en la pantalla.
  */
-const REASON_KEY = {
-  EXCEEDS_LARGEST_VEHICLE: 'autoPlan.reasons.exceedsLargestVehicle',
-  NO_VEHICLE_AVAILABLE: 'autoPlan.reasons.noVehicleAvailable',
-  NO_FLEET: 'autoPlan.reasons.noFleet',
-  TAKEN_WHILE_PLANNING: 'autoPlan.reasons.takenWhilePlanning',
-  NOT_SERVICEABLE_ON_DATE: 'autoPlan.reasons.notServiceableOnDate',
-} as const satisfies Record<UnplannedOrderView['reason'], string>
+const REASON_COPY = {
+  EXCEEDS_LARGEST_VEHICLE: "Excede la capacidad de cualquier unidad disponible. Divide el pedido o incorpora una unidad mayor.",
+  NO_VEHICLE_AVAILABLE: "No quedó capacidad disponible en la flota de esta fecha.",
+  NO_FLEET: "No hay unidades disponibles para esta fecha.",
+  TAKEN_WHILE_PLANNING: "Otro planificador asignó este pedido mientras se escribía el plan. Recarga el tablero.",
+  NOT_SERVICEABLE_ON_DATE: "El destino no se atiende en esta fecha según su calendario de servicio.",
+} as const satisfies Record<UnplannedOrderView["reason"], string>;
 
 function AutoPlanBody({ plan }: { plan: AutoPlanView }) {
-  const { t } = useTranslation('planning')
-  const { t: tc } = useTranslation('common')
+  const plannedOrders = plan.proposed.reduce((total, trip) => total + trip.orderNumbers.length, 0);
 
-  const plannedOrders = plan.proposed.reduce((total, trip) => total + trip.orderNumbers.length, 0)
+  const stat = (label: string, value: number) => (
+    <Box sx={{ textAlign: "center", minWidth: 100 }}>
+      <Typography sx={{ fontWeight: 800, fontSize: "1.5rem", lineHeight: 1.1, fontVariantNumeric: "tabular-nums" }}>
+        {fmtQuantity(value)}
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", fontWeight: 700, letterSpacing: ".05em" }}>
+        {label}
+      </Typography>
+    </Box>
+  );
 
   return (
     <>
-      <fieldset className="tms-fieldset">
-        <legend className="tms-fieldset-legend">{t('autoPlan.summary')}</legend>
-        <dl className="row mb-0 small">
-          <dt className="col-7 fw-normal text-body-secondary">{t('autoPlan.ordersConsidered')}</dt>
-          <dd className="col-5 mb-1 text-end">{plan.ordersConsidered}</dd>
-          <dt className="col-7 fw-normal text-body-secondary">{t('autoPlan.vehiclesOffered')}</dt>
-          <dd className="col-5 mb-1 text-end">{plan.vehiclesOffered}</dd>
-          <dt className="col-7 fw-normal text-body-secondary">{t('autoPlan.tripsProposed')}</dt>
-          <dd className="col-5 mb-1 text-end fw-semibold">{plan.proposed.length}</dd>
-          <dt className="col-7 fw-normal text-body-secondary">{t('autoPlan.ordersPlanned')}</dt>
-          <dd className="col-5 mb-0 text-end">{plannedOrders}</dd>
-        </dl>
-        <p className="text-body-secondary small mt-2 mb-0">{t('autoPlan.engineNote', { engine: plan.engine })}</p>
-      </fieldset>
+      <SectionHeader title={t("Resumen")} />
+      <Paper variant="outlined" sx={{ p: 2, mb: 1.5, display: "flex", flexWrap: "wrap", gap: 2, justifyContent: "space-around" }}>
+        {stat(t("Pedidos evaluados"), plan.ordersConsidered)}
+        {stat(t("Unidades disponibles"), plan.vehiclesOffered)}
+        {stat(t("Viajes propuestos"), plan.proposed.length)}
+        {stat(t("Pedidos asignados"), plannedOrders)}
+      </Paper>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 3 }}>
+        {t("Generado por {{engine}}. La misma entrada produce siempre la misma propuesta.", { engine: plan.engine })}
+      </Typography>
 
-      <fieldset className="tms-fieldset">
-        <legend className="tms-fieldset-legend">{t('autoPlan.proposedTrips')}</legend>
-        {plan.proposed.length === 0 ? (
-          <p className="text-body-secondary small mb-0">{t('autoPlan.nothingToPlan')}</p>
-        ) : (
-          <div className="tms-table-scroll">
-            <table className="table table-sm align-middle mb-0">
-              <caption className="visually-hidden">{t('autoPlan.proposedTrips')}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">#</th>
-                  <th scope="col">{t('autoPlan.vehicle')}</th>
-                  <th scope="col">{t('autoPlan.orders')}</th>
-                  <th scope="col" className="text-end">{t('autoPlan.stops')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {plan.proposed.map((trip, index) => (
-                  <tr key={`${trip.vehicleId}-${index}`}>
-                    <td className="text-body-secondary">{index + 1}</td>
-                    <td className="tms-code">{trip.vehicleCode ?? '—'}</td>
-                    <td>
-                      <span className="tms-cell-stack">
-                        <span className="tms-cell-primary">
-                          {t('autoPlan.orderCount', { count: trip.orderNumbers.length })}
-                        </span>
-                        <span className="tms-cell-sub">{trip.orderNumbers.join(', ')}</span>
-                      </span>
-                    </td>
-                    <td className="text-end">{trip.stopCount}</td>
-                  </tr>
+      <SectionHeader title={t("Viajes propuestos")} />
+      {plan.proposed.length === 0 ? (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          {t("No hay nada que planificar con los pedidos y unidades de esta fecha.")}
+        </Alert>
+      ) : (
+        <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
+          <Table size="small" sx={dataTableSx}>
+            <TableHead>
+              <TableRow>
+                <TableCell>{t("Unidad")}</TableCell>
+                <TableCell className="numeric-col">{t("Paradas")}</TableCell>
+                <TableCell>{t("Pedidos")}</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {plan.proposed.map((trip, index) => (
+                <TableRow key={`${trip.vehicleId}-${index}`}>
+                  <TableCell sx={{ fontWeight: 700 }}>{trip.vehicleCode ?? trip.vehicleId}</TableCell>
+                  <TableCell className="numeric-col">{fmtQuantity(trip.stopCount)}</TableCell>
+                  <TableCell>
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                      {trip.orderNumbers.map((number) => (
+                        <Chip key={number} size="small" variant="outlined" label={number} />
+                      ))}
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+
+      <SectionHeader title={t("Pedidos sin asignar")} />
+      {plan.unplanned.length === 0 ? (
+        <Alert severity="success">{t("Todos los pedidos evaluados quedaron asignados.")}</Alert>
+      ) : (
+        <>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            {t("Estos pedidos siguen disponibles en el pool. Decide qué hacer con cada uno.")}
+          </Typography>
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small" sx={dataTableSx}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>{t("Pedido")}</TableCell>
+                  <TableCell>{t("Motivo")}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {plan.unplanned.map((order) => (
+                  <TableRow key={order.orderId}>
+                    <TableCell sx={{ fontWeight: 700 }}>{order.orderNumber ?? order.orderId}</TableCell>
+                    <TableCell>{t(REASON_COPY[order.reason])}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </fieldset>
-
-      <fieldset className="tms-fieldset">
-        <legend className="tms-fieldset-legend">{t('autoPlan.unplanned')}</legend>
-        {plan.unplanned.length === 0 ? (
-          <p className="text-body-secondary small mb-0">{t('autoPlan.everythingPlanned')}</p>
-        ) : (
-          <>
-            {/* Not an error panel. These orders stay in the pool and the planner decides what to
-                do with them - which is only possible if they are told, per order, what happened. */}
-            <p className="text-body-secondary small">{t('autoPlan.unplannedHelp')}</p>
-            <div className="tms-table-scroll">
-              <table className="table table-sm align-middle mb-0">
-                <caption className="visually-hidden">{t('autoPlan.unplanned')}</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">{tc('columns.code')}</th>
-                    <th scope="col">{t('autoPlan.reason')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {plan.unplanned.map((order) => (
-                    <tr key={order.orderId}>
-                      <td className="tms-code">{order.orderNumber ?? '—'}</td>
-                      <td className="small">{t(REASON_KEY[order.reason])}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </fieldset>
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </>
+      )}
     </>
-  )
+  );
 }

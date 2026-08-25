@@ -1,254 +1,201 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import {
-  createFrequencyException,
-  deleteFrequencyException,
-  fetchFrequencyExceptions,
-} from '../../shared/api/frequenciesApi'
-import type { ApiError } from '../../shared/api/httpClient'
-import { describeApiError } from '../../shared/api/problemMessages'
-import { confirmDialog, StatusBadge } from '../../shared/ui/components'
-import { FormField } from '../../shared/ui/components/FormField'
-import { Select } from '../../shared/ui/components/Select'
-import { notifyError, notifySuccess } from '../../shared/ui/alerts'
+  Alert, Box, Button, IconButton, MenuItem, Paper, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
+} from "@mui/material";
+import { AddRounded, DeleteRounded } from "@mui/icons-material";
+import {
+  createFrequencyException, deleteFrequencyException, fetchFrequencyExceptions,
+} from "../../shared/api/frequenciesApi";
+import type { ApiError } from "../../shared/api/httpClient";
+import { describeApiError } from "../../shared/api/problemMessages";
+import { LoadingState, StatusChip, dataTableSx } from "../../shared/ui/components";
+import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
+import { t } from "../../lib/i18n";
+import { fmtDate } from "../../lib/locale";
 
 interface FrequencyExceptionsPanelProps {
-  companyId: string
-  frequencyId: string
-  canManage: boolean
+  companyId: string;
+  frequencyId: string;
+  canManage: boolean;
 }
 
-/** `<input type="time">` gives HH:MM; the API takes a LocalTime, which wants HH:MM:SS. */
+/** `<input type="time">` da HH:MM; la API espera un LocalTime, que quiere HH:MM:SS. */
 function toApiTime(value: string) {
-  return value.length === 5 ? `${value}:00` : value
+  return value.length === 5 ? `${value}:00` : value;
 }
 
 /**
- * Date exceptions on a service calendar: the two answers the weekly cadence cannot give.
+ * Excepciones por fecha sobre un calendario de servicio: las dos respuestas que la cadencia
+ * semanal no puede dar.
  *
- * A weekly rule says "Mondays, Wednesdays and Fridays". Christmas Day is a Wednesday and the
- * depot is shut; the Saturday before it, everyone works. Both are exceptions to the cadence and
- * neither can be expressed by editing it - changing the rule would change every week.
+ * Una regla semanal dice "lunes, miércoles y viernes". Navidad cae en miércoles y el depósito
+ * está cerrado; el sábado anterior, todo el mundo trabaja. Las dos son excepciones a la cadencia
+ * y ninguna se puede expresar editándola: cambiar la regla cambiaría todas las semanas.
  *
- * Two kinds, because the model has exactly two (`frequency_exception.service_override`):
- * **cerrado** removes a date the cadence would have served, **abierto** adds one it would not.
+ * Dos tipos, porque el modelo tiene exactamente dos (`frequency_exception.service_override`):
+ * **cerrado** quita una fecha que la cadencia sí habría servido, **abierto** añade una que no.
  *
- * An open date may also close earlier than usual - 24/12 open until 11:00 rather than the usual
- * 15:00 - which is the third thing the cadence cannot say. The cutoff field appears only for an
- * open date: a closed one dispatches nothing, so there is no last moment to order, and the
- * backend refuses the combination rather than storing a time nobody could act on. Leave it empty
- * and the weekly rule's cutoff still applies.
- *
- * A sub-resource with its own endpoints, so it is its own panel and not fields on the frequency
- * form: each row here is one API call, and it needs a saved frequency to hang from - the same
- * shape `LocationFrequencyPanel` uses.
+ * Una fecha abierta puede además cerrar antes de lo habitual —el 24/12 abierto hasta las 11:00
+ * en lugar de las 15:00 de siempre— que es la tercera cosa que la cadencia no sabe decir. El
+ * campo de corte solo aparece para una fecha abierta: una cerrada no despacha nada, así que no
+ * hay último momento para pedir, y el backend rechaza la combinación en vez de guardar una hora
+ * sobre la que nadie podría actuar. Déjalo vacío y sigue aplicando el corte de la regla semanal.
  */
 export function FrequencyExceptionsPanel({ companyId, frequencyId, canManage }: FrequencyExceptionsPanelProps) {
-  const { t } = useTranslation('masters')
-  const { t: tc } = useTranslation('common')
-  const { t: td } = useTranslation('dialogs')
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
-  const [date, setDate] = useState('')
-  const [kind, setKind] = useState<'closed' | 'open'>('closed')
-  const [cutoff, setCutoff] = useState('')
-  const [note, setNote] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [date, setDate] = useState("");
+  const [kind, setKind] = useState<"closed" | "open">("closed");
+  const [cutoff, setCutoff] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const exceptionsQuery = useQuery({
-    queryKey: ['frequency-exceptions', companyId, frequencyId],
+    queryKey: ["frequency-exceptions", companyId, frequencyId],
     queryFn: ({ signal }) => fetchFrequencyExceptions(companyId, frequencyId, signal),
-  })
-  const exceptions = exceptionsQuery.data ?? []
+  });
+  const exceptions = exceptionsQuery.data ?? [];
 
-  function refresh() {
-    void queryClient.invalidateQueries({ queryKey: ['frequency-exceptions', companyId, frequencyId] })
-  }
+  const refresh = () =>
+    void queryClient.invalidateQueries({ queryKey: ["frequency-exceptions", companyId, frequencyId] });
 
   async function add() {
-    if (date === '') return
-    setSaving(true)
+    if (date === "") return;
+    setSaving(true);
     try {
       await createFrequencyException(companyId, frequencyId, {
         exceptionDate: date,
-        serviceOverride: kind === 'open',
-        // A closed date can never carry one, whatever is left in the field - the input is
-        // hidden for it, but the request is what the backend judges.
-        cutoffTimeOverride: kind === 'open' && cutoff !== '' ? toApiTime(cutoff) : null,
-        note: note.trim() === '' ? null : note.trim(),
-      })
-      setDate('')
-      setCutoff('')
-      setNote('')
-      notifySuccess(td('created'))
-      refresh()
+        serviceOverride: kind === "open",
+        // Una fecha cerrada nunca puede llevarlo, quede lo que quede en el campo: el input se
+        // esconde para ella, pero lo que el backend juzga es la petición.
+        cutoffTimeOverride: kind === "open" && cutoff !== "" ? toApiTime(cutoff) : null,
+        note: note.trim() === "" ? null : note.trim(),
+      });
+      setDate("");
+      setCutoff("");
+      setNote("");
+      notifySuccess(t("Registro creado"));
+      refresh();
     } catch (error) {
-      notifyError(td('errorTitle'), describeApiError(error as ApiError))
+      notifyError(t("No se pudo completar la acción"), describeApiError(error as ApiError));
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function remove(exceptionId: string, exceptionDate: string) {
     const confirmed = await confirmDialog({
-      title: td('delete.title', { name: exceptionDate }),
-      text: td('delete.text'),
-      confirmLabel: tc('actions.delete'),
+      title: t("¿Eliminar {{name}}?", { name: fmtDate(exceptionDate) }),
+      text: t("Esta acción no se puede deshacer."),
+      confirmLabel: t("Eliminar"),
       dangerous: true,
-    })
-    if (!confirmed) return
+    });
+    if (!confirmed) return;
 
     try {
-      await deleteFrequencyException(companyId, frequencyId, exceptionId)
-      notifySuccess(td('deleted'))
-      refresh()
+      await deleteFrequencyException(companyId, frequencyId, exceptionId);
+      notifySuccess(t("Registro eliminado"));
+      refresh();
     } catch (error) {
-      notifyError(td('errorTitle'), describeApiError(error as ApiError))
+      notifyError(t("No se pudo completar la acción"), describeApiError(error as ApiError));
     }
   }
 
   return (
     <>
-      <p className="text-body-secondary small">{t('frequencies.form.exceptionsHelp')}</p>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        {t("Fechas concretas que se apartan de la cadencia: un feriado cerrado, o un día abierto que normalmente no lo estaría.")}
+      </Typography>
 
       {exceptionsQuery.isError && (
-        <div className="alert alert-danger py-2 small" role="alert">
-          {describeApiError(exceptionsQuery.error as ApiError)}
-        </div>
-      )}
-
-      {exceptions.length === 0 ? (
-        <p className="text-body-secondary small">{t('frequencies.form.noExceptions')}</p>
-      ) : (
-        <div className="tms-table-scroll mb-3">
-          <table className="table table-sm align-middle mb-0">
-            <caption className="visually-hidden">{t('frequencies.form.exceptions')}</caption>
-            <thead>
-              <tr>
-                <th scope="col">{t('frequencies.form.exceptionDate')}</th>
-                <th scope="col">{t('frequencies.form.exceptionKind')}</th>
-                <th scope="col">{t('frequencies.form.exceptionCutoff')}</th>
-                <th scope="col">{t('frequencies.form.exceptionNote')}</th>
-                {canManage && <th scope="col" className="text-end">{tc('columns.actions')}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {exceptions.map((exception) => (
-                <tr key={exception.id}>
-                  <td className="tms-code">{exception.exceptionDate}</td>
-                  <td>
-                    <StatusBadge
-                      label={exception.serviceOverride
-                        ? t('frequencies.form.exceptionOpen')
-                        : t('frequencies.form.exceptionClosed')}
-                      tone={exception.serviceOverride ? 'success' : 'danger'}
-                    />
-                  </td>
-                  {/* An em dash means "the weekly rule's cutoff still applies", which is what
-                      an empty override actually means - not "no cutoff". */}
-                  <td className="tms-code">
-                    {exception.cutoffTimeOverride === null
-                      ? '—'
-                      : exception.cutoffTimeOverride.slice(0, 5)}
-                  </td>
-                  <td className="small">{exception.note ?? '—'}</td>
-                  {canManage && (
-                    <td className="text-end">
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-danger"
-                        aria-label={t('frequencies.form.removeException', { date: exception.exceptionDate })}
-                        onClick={() => void remove(exception.id, exception.exceptionDate)}
-                      >
-                        <i className="bi bi-trash" aria-hidden="true" />
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Alert severity="error" sx={{ mb: 2 }}>{describeApiError(exceptionsQuery.error as ApiError)}</Alert>
       )}
 
       {canManage && (
-        <div className="row g-2 align-items-end">
-          <div className="col-12 col-sm-3">
-            <FormField label={t('frequencies.form.exceptionDate')} htmlFor="frequency-exception-date">
-              <input
-                id="frequency-exception-date"
-                type="date"
-                className="form-control form-control-sm"
-                value={date}
-                onChange={(event) => setDate(event.target.value)}
-              />
-            </FormField>
-          </div>
-          <div className="col-12 col-sm-3">
-            <FormField label={t('frequencies.form.exceptionKind')} htmlFor="frequency-exception-kind">
-              <Select
-                id="frequency-exception-kind"
-                size="sm"
-                value={kind}
-                onChange={(next) => {
-                  const nextKind = next as 'closed' | 'open'
-                  setKind(nextKind)
-                  // Switching to closed drops whatever was typed, so a hidden field can never
-                  // be submitted behind the operator's back.
-                  if (nextKind === 'closed') setCutoff('')
-                }}
-                options={[
-                  { value: 'closed', label: t('frequencies.form.exceptionClosed') },
-                  { value: 'open', label: t('frequencies.form.exceptionOpen') },
-                ]}
-              />
-            </FormField>
-          </div>
-          <div className="col-12 col-sm-3">
-            {/* Only for an open date: a closed one has no cutoff. Rendered as nothing rather
-                than as a disabled box, which would suggest a value could be filled in later. */}
-            {kind === 'open' && (
-              <FormField
-                label={t('frequencies.form.exceptionCutoff')}
-                htmlFor="frequency-exception-cutoff"
-                help={t('frequencies.form.exceptionCutoffHint')}
-              >
-                <input
-                  id="frequency-exception-cutoff"
-                  type="time"
-                  className="form-control form-control-sm"
-                  value={cutoff}
-                  onChange={(event) => setCutoff(event.target.value)}
-                />
-              </FormField>
-            )}
-          </div>
-          <div className="col-12 col-sm-3">
-            <FormField label={t('frequencies.form.exceptionNote')} htmlFor="frequency-exception-note">
-              <input
-                id="frequency-exception-note"
-                type="text"
-                className="form-control form-control-sm"
-                maxLength={500}
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-              />
-            </FormField>
-          </div>
-          <div className="col-12">
-            <button
-              type="button"
-              className="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-2"
-              disabled={date === '' || saving}
-              onClick={() => void add()}
-            >
-              <i className="bi bi-plus-lg" aria-hidden="true" />
-              {t('frequencies.form.addException')}
-            </button>
-          </div>
-        </div>
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, alignItems: "flex-start", mb: 2 }}>
+          <TextField
+            size="small" type="date" label={t("Fecha")} value={date}
+            onChange={(e) => setDate(e.target.value)}
+            slotProps={{ inputLabel: { shrink: true } }}
+            sx={{ minWidth: 165 }}
+          />
+          <TextField
+            select size="small" label={t("Tipo")} value={kind}
+            onChange={(e) => setKind(e.target.value as "closed" | "open")}
+            sx={{ minWidth: 150 }}
+          >
+            <MenuItem value="closed">{t("Cerrado")}</MenuItem>
+            <MenuItem value="open">{t("Abierto")}</MenuItem>
+          </TextField>
+          {/* Solo para una fecha abierta: una cerrada no despacha, así que un corte no
+              significaría nada y el backend lo rechazaría. */}
+          {kind === "open" && (
+            <TextField
+              size="small" type="time" label={t("Corte")} value={cutoff}
+              onChange={(e) => setCutoff(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ minWidth: 130 }}
+            />
+          )}
+          <TextField
+            size="small" label={t("Nota")} value={note}
+            onChange={(e) => setNote(e.target.value)}
+            sx={{ minWidth: 200, flex: 1 }}
+          />
+          <Button variant="outlined" startIcon={<AddRounded />} onClick={() => void add()} disabled={date === "" || saving}>
+            {t("Añadir")}
+          </Button>
+        </Box>
+      )}
+
+      {exceptionsQuery.isPending ? (
+        <LoadingState minHeight={120} />
+      ) : exceptions.length === 0 ? (
+        <Alert severity="info">{t("Esta frecuencia no tiene excepciones.")}</Alert>
+      ) : (
+        <TableContainer component={Paper} variant="outlined">
+          <Table size="small" sx={dataTableSx}>
+            <TableHead>
+              <TableRow>
+                <TableCell>{t("Fecha")}</TableCell>
+                <TableCell>{t("Tipo")}</TableCell>
+                <TableCell>{t("Corte")}</TableCell>
+                <TableCell>{t("Nota")}</TableCell>
+                {canManage && <TableCell className="actions-col">{t("Acciones")}</TableCell>}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {exceptions.map((exception) => (
+                <TableRow key={exception.id}>
+                  <TableCell sx={{ fontWeight: 600 }}>{fmtDate(exception.exceptionDate)}</TableCell>
+                  <TableCell>
+                    <StatusChip
+                      tone={exception.serviceOverride ? "done" : "cancelled"}
+                      label={exception.serviceOverride ? t("Abierto") : t("Cerrado")}
+                    />
+                  </TableCell>
+                  <TableCell>{exception.cutoffTimeOverride?.slice(0, 5) ?? "-"}</TableCell>
+                  <TableCell>{exception.note ?? "-"}</TableCell>
+                  {canManage && (
+                    <TableCell className="actions-col">
+                      <Tooltip title={t("Eliminar")}>
+                        <IconButton
+                          size="small" sx={{ color: "error.main" }}
+                          onClick={() => void remove(exception.id, exception.exceptionDate)}
+                        >
+                          <DeleteRounded fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
     </>
-  )
+  );
 }

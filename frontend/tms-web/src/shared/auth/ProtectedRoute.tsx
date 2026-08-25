@@ -1,23 +1,22 @@
-import { useTranslation } from 'react-i18next'
-import { Navigate, Outlet, useLocation } from 'react-router-dom'
-import { LoadingState } from '../ui/components/LoadingState'
-import { useAuth } from './AuthContext'
+import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { LoadingState } from "../ui/components/states";
+import { t } from "../../lib/i18n";
+import { useAuth } from "./AuthContext";
 
-/** Route-level auth guard. Unauthenticated visitors are sent to `/login`; the backend is the
- * real authority on every request regardless - this only avoids flashing screens that will
- * fail with 401. */
+/** Guarda de autenticación a nivel de ruta. A quien no ha entrado se le manda a `/login`; el
+ * backend sigue siendo la autoridad real en cada peticion pase lo que pase — esto solo evita
+ * el parpadeo de pantallas que van a fallar con 401. */
 export function ProtectedRoute() {
-  const { t } = useTranslation('auth')
-  const { status } = useAuth()
-  const location = useLocation()
+  const { status } = useAuth();
+  const location = useLocation();
 
-  if (status === 'loading') {
-    return <LoadingState label={t('session.checking')} />
+  if (status === "loading") {
+    return <LoadingState label={t("Verificando tu sesión...")} minHeight="100vh" />;
   }
 
-  if (status === 'signedOut') {
-    return <Navigate to="/login" replace state={{ from: location }} />
+  if (status === "signedOut") {
+    return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  return <Outlet />
+  return <Outlet />;
 }

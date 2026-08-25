@@ -1,24 +1,25 @@
-import type { FieldValues, Path, UseFormSetError } from 'react-hook-form'
-import type { ApiError } from './httpClient'
-import { describeApiError } from './problemMessages'
+import type { FieldValues, Path, UseFormSetError } from "react-hook-form";
+import type { ApiError } from "./httpClient";
+import { describeApiError } from "./problemMessages";
 
 /**
- * Turns a backend refusal into inline field errors plus, when needed, one form-level message.
+ * Convierte un rechazo del backend en errores de campo en línea más, cuando hace falta, un
+ * mensaje a nivel de formulario.
  *
- * Every form dialog needs the same three-way split, so it lives here rather than being written
- * out per screen:
+ * Todos los diálogos de formulario necesitan el mismo reparto en tres, así que vive aquí en
+ * lugar de escribirse una vez por pantalla:
  *
- * - a `validation-failed` document names the offending fields, and each one that the form
- *   actually renders becomes an inline error under that field, where the user is looking;
- * - a field the form does not render (the backend validates more than any single screen shows)
- *   would otherwise vanish, so its message is surfaced at form level;
- * - anything else - a conflict, a permission refusal, a server error - is described from its
- *   stable `code`, never from `detail`.
+ * - un documento `validation-failed` nombra los campos ofensores, y cada uno que el formulario
+ *   realmente pinta se convierte en un error en línea bajo ese campo, donde el usuario mira;
+ * - un campo que el formulario no pinta (el backend valida más de lo que enseña cualquier
+ *   pantalla) se desvanecería, así que su mensaje se saca a nivel de formulario;
+ * - cualquier otra cosa — un conflicto, un permiso denegado, un error de servidor — se
+ *   describe desde su `code` estable, nunca desde `detail`.
  *
- * @param knownFields the form's own field names; anything outside it cannot be shown inline
- * @param fallback translated copy for "some fields need correcting", used when every field
- *   error was placed inline and there is nothing left to say at form level
- * @returns the form-level message, or `null` when the inline errors say everything
+ * @param knownFields los nombres de campo del propio formulario; lo de fuera no puede pintarse en línea
+ * @param fallback copy para "hay campos que corregir", cuando todos los errores de campo se
+ *   colocaron en línea y no queda nada que decir a nivel de formulario
+ * @returns el mensaje de formulario, o `null` cuando los errores en línea ya lo dicen todo
  */
 export function applyApiFieldErrors<TValues extends FieldValues>(
   error: ApiError,
@@ -27,17 +28,17 @@ export function applyApiFieldErrors<TValues extends FieldValues>(
   fallback: string,
 ): string | null {
   if (error.fieldErrors.length === 0) {
-    return describeApiError(error)
+    return describeApiError(error);
   }
 
-  const unmatched: string[] = []
+  const unmatched: string[] = [];
   for (const fieldError of error.fieldErrors) {
     if (knownFields.has(fieldError.field)) {
-      setError(fieldError.field as Path<TValues>, { message: fieldError.message })
+      setError(fieldError.field as Path<TValues>, { message: fieldError.message });
     } else {
-      unmatched.push(fieldError.message)
+      unmatched.push(fieldError.message);
     }
   }
 
-  return unmatched.length > 0 ? unmatched.join(' ') : fallback
+  return unmatched.length > 0 ? unmatched.join(" ") : fallback;
 }

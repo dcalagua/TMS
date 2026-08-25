@@ -1,329 +1,261 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
-import { useTranslation } from 'react-i18next'
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { Alert, Autocomplete, Box, Button, TextField, Typography } from "@mui/material";
+import { ApartmentRounded, AddBusinessRounded, SaveRounded } from "@mui/icons-material";
+import { applyApiFieldErrors } from "../../shared/api/formErrors";
+import type { ApiError } from "../../shared/api/httpClient";
 import {
-  fetchCompanyProfile,
-  updateCompanyProfile,
-  type CompanyProfileRequest,
-} from '../../shared/api/administrationApi'
-import { applyApiFieldErrors } from '../../shared/api/formErrors'
-import type { ApiError } from '../../shared/api/httpClient'
-import { describeApiError } from '../../shared/api/problemMessages'
-import { useCompany } from '../../shared/company/CompanyContext'
-import { AppCard, ErrorState, FormField, LoadingState, PageHeader, StatusBadge } from '../../shared/ui/components'
-import { notifySuccess } from '../../shared/ui/alerts'
-import { CompanyCreateDrawer } from './CompanyCreateDrawer'
+  fetchCompanyProfile, updateCompanyProfile, type CompanyProfileRequest,
+} from "../../shared/api/administrationApi";
+import { describeApiError } from "../../shared/api/problemMessages";
+import { useCompany } from "../../shared/company/CompanyContext";
+import {
+  AppCard, DetailGrid, DetailItem, ErrorState, LoadingState, PageHeader, SectionHeader, StatusChip,
+} from "../../shared/ui/components";
+import { ICON_TINTS } from "../../shared/ui/navConfig";
+import { notifySuccess } from "../../lib/ui";
+import { t } from "../../lib/i18n";
+import { CompanyCreateDrawer } from "./CompanyCreateDrawer";
 
-const FORM_ID = 'company-settings-form'
+const FORM_ID = "company-profile-form";
 
-/** Both mirror the CHECK constraints of migration V34, so the form refuses what the database would. */
-const COUNTRY_PATTERN = /^[A-Za-z]{2}$/
-const PREFIX_PATTERN = /^[A-Za-z][A-Za-z0-9]{0,5}-$/
+const TIME_ZONES: string[] = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
+
+function isValidTimeZone(value: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 interface CompanyFormValues {
-  name: string
-  taxIdentifier: string
-  timeZone: string
-  defaultCountry: string
-  orderNumberPrefix: string
-  shipmentNumberPrefix: string
+  name: string;
+  taxIdentifier: string;
+  timeZone: string;
+  defaultCountry: string;
+  orderNumberPrefix: string;
+  shipmentNumberPrefix: string;
 }
 
 const KNOWN_FIELDS = new Set<keyof CompanyFormValues>([
-  'name', 'taxIdentifier', 'timeZone', 'defaultCountry', 'orderNumberPrefix', 'shipmentNumberPrefix',
-])
+  "name", "taxIdentifier", "timeZone", "defaultCountry", "orderNumberPrefix", "shipmentNumberPrefix",
+]);
 
 /**
- * The tenant's own screen: what this company is called, which zone its operating day is measured
- * in, and what the documents it produces are named.
+ * Qué *es* esta empresa: su nombre, su documento, su zona horaria y los prefijos con los que
+ * numera pedidos y envíos.
  *
- * The two prefixes get a live sample underneath them rather than an explanation, because "TO-" is
- * abstract and `TO-00000042` is not. The sample is rendered from the field's current value, so it
- * answers the question before the form is saved.
+ * El código no se edita. Es la clave con la que la nombra todo lo demás —integraciones incluidas—
+ * y cambiarlo no sería corregir un dato, sería otra empresa.
+ *
+ * La zona horaria no es cosmética: es contra ella contra la que el backend decide a qué día
+ * operativo pertenece una fecha de servicio. Por eso se valida contra el catálogo IANA del
+ * navegador antes de mandarla.
  */
 export function CompanySettingsPage() {
-  const { t } = useTranslation('settings')
-  const { t: tc } = useTranslation('common')
-  const { t: tv } = useTranslation('validations')
-  const { selected, hasPermission, refetch: refetchCompanies } = useCompany()
-  const companyId = selected?.id ?? ''
-  const canManage = hasPermission('iam.company:manage')
-  const queryClient = useQueryClient()
-  const [formError, setFormError] = useState<string | null>(null)
-  const [showCreate, setShowCreate] = useState(false)
+  const { selected, refetch: refetchCompanies } = useCompany();
+  const companyId = selected?.id ?? "";
+  const queryClient = useQueryClient();
+  const [formError, setFormError] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
 
   const profileQuery = useQuery({
-    queryKey: ['company-profile', companyId],
+    queryKey: ["company-profile", companyId],
     queryFn: ({ signal }) => fetchCompanyProfile(companyId, signal),
-    enabled: companyId !== '',
-  })
+    enabled: companyId !== "",
+  });
 
   const {
-    register,
-    handleSubmit,
-    reset,
-    setError,
-    watch,
+    register, handleSubmit, setError, reset, setValue, watch,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<CompanyFormValues>({
     defaultValues: {
-      name: '', taxIdentifier: '', timeZone: '', defaultCountry: '',
-      orderNumberPrefix: '', shipmentNumberPrefix: '',
+      name: "", taxIdentifier: "", timeZone: "", defaultCountry: "", orderNumberPrefix: "", shipmentNumberPrefix: "",
     },
-  })
+  });
 
-  const profile = profileQuery.data
-
-  // The form is populated from the response rather than initialised with it, because the query is
-  // still pending on first render and `defaultValues` is only read once.
+  // El formulario se siembra cuando llega el perfil, no en el render: `reset` es lo que hace que
+  // `isDirty` signifique "el usuario cambió algo" y no "todavía no habían llegado los datos".
+  const profile = profileQuery.data;
   useEffect(() => {
-    if (!profile) return
+    if (!profile) return;
     reset({
       name: profile.name,
-      taxIdentifier: profile.taxIdentifier ?? '',
+      taxIdentifier: profile.taxIdentifier ?? "",
       timeZone: profile.timeZone,
       defaultCountry: profile.settings.defaultCountry,
       orderNumberPrefix: profile.settings.orderNumberPrefix,
       shipmentNumberPrefix: profile.settings.shipmentNumberPrefix,
-    })
-  }, [profile, reset])
+    });
+  }, [profile, reset]);
 
   async function onSubmit(values: CompanyFormValues) {
-    setFormError(null)
+    setFormError(null);
     const request: CompanyProfileRequest = {
       name: values.name.trim(),
       taxIdentifier: values.taxIdentifier.trim() || null,
       timeZone: values.timeZone.trim(),
       defaultCountry: values.defaultCountry.trim().toUpperCase(),
-      orderNumberPrefix: values.orderNumberPrefix.trim().toUpperCase(),
-      shipmentNumberPrefix: values.shipmentNumberPrefix.trim().toUpperCase(),
-    }
+      orderNumberPrefix: values.orderNumberPrefix.trim(),
+      shipmentNumberPrefix: values.shipmentNumberPrefix.trim(),
+    };
+
     try {
-      await updateCompanyProfile(companyId, request)
-      notifySuccess(t('company.saved'))
-      void queryClient.invalidateQueries({ queryKey: ['company-profile', companyId] })
-      // The company switcher shows the name and the shell measures "today" in the time zone, so a
-      // change to either has to reach `/me` and not only this screen.
-      refetchCompanies()
+      const next = await updateCompanyProfile(companyId, request);
+      queryClient.setQueryData(["company-profile", companyId], next);
+      // El nombre de la empresa sale en el shell: sin esto, la barra superior seguiría diciendo
+      // el anterior hasta la siguiente recarga.
+      refetchCompanies();
+      notifySuccess(t("Cambios guardados"));
     } catch (error) {
-      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, tv('highlightedFields')))
+      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, t("Corrige los campos marcados.")));
     }
   }
 
-  if (profileQuery.isPending) {
-    return <LoadingState />
-  }
+  if (profileQuery.isPending) return <LoadingState label={t("Cargando la empresa...")} />;
   if (profileQuery.isError || !profile) {
     return (
       <ErrorState
         message={describeApiError(profileQuery.error as ApiError)}
         onRetry={() => void profileQuery.refetch()}
       />
-    )
+    );
   }
 
-  const orderSample = `${(watch('orderNumberPrefix') || profile.settings.orderNumberPrefix).toUpperCase()}00000042`
-  const shipmentSample =
-    `${(watch('shipmentNumberPrefix') || profile.settings.shipmentNumberPrefix).toUpperCase()}00000042`
+  const grid2 = { display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } } as const;
 
   return (
-    // The form wraps the page header as well as the cards, so the Save button in the header is a
-    // plain descendant submit rather than one associated by the `form` attribute. It keeps the
-    // `form` attribute too - it is correct either way - but the DOM relationship is what actually
-    // has to hold, and a header that lives outside the element it submits is the kind of thing that
-    // works until a wrapper is introduced between them.
-    <form id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
+    <>
       <PageHeader
-        icon="building-gear"
-        title={t('company.title')}
-        description={t('company.description')}
-        meta={
-          <>
-            <StatusBadge label={profile.code} tone="neutral" />
-            {!profile.organizationActive && (
-              <StatusBadge label={t('company.organizationInactive')} tone="danger" />
-            )}
-          </>
-        }
+        icon={<ApartmentRounded />}
+        tint={ICON_TINTS["/settings/company"]}
+        title={t("Empresa")}
+        subtitle={t("Qué es esta empresa y cómo numera lo que produce.")}
+        meta={!profile.organizationActive && <StatusChip label={t("Organización inactiva")} tone="overdue" />}
         actions={
-          <>
+          <Box sx={{ display: "flex", gap: 1 }}>
+            {/* Solo para quien tiene un rol de organización: crear una empresa alcanza a toda la
+                organización, y `iam.company:manage` lo tiene también un administrador de una sola. */}
             {profile.canCreateCompany && (
-              <button
-                type="button"
-                className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
-                onClick={() => setShowCreate(true)}
-              >
-                <i className="bi bi-plus-square" aria-hidden="true" />
-                {t('company.newCompany')}
-              </button>
+              <Button variant="outlined" startIcon={<AddBusinessRounded />} onClick={() => setShowCreate(true)}>
+                {t("Nueva empresa")}
+              </Button>
             )}
-            {canManage && (
-              <button type="submit" form={FORM_ID} className="btn btn-primary btn-sm" disabled={isSubmitting || !isDirty}>
-                {isSubmitting ? tc('actions.saving') : tc('actions.save')}
-              </button>
-            )}
-          </>
+            <Button
+              type="submit" form={FORM_ID} variant="contained" startIcon={<SaveRounded />}
+              disabled={isSubmitting || !isDirty}
+            >
+              {isSubmitting ? t("Guardando...") : t("Guardar")}
+            </Button>
+          </Box>
         }
       />
 
-      {formError && (
-        <div className="alert alert-danger py-2 small" role="alert">
-          {formError}
-        </div>
+      {!profile.organizationActive && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          {t("La organización está desactivada: eso revoca cada membresía por debajo de ella.")}
+        </Alert>
       )}
 
-      <div className="row g-3">
-          <div className="col-12 col-xl-6">
-            <AppCard title={t('company.identity')}>
-              <FormField label={t('company.code')} htmlFor="company-code" help={t('company.codeHelp')}>
-                <input id="company-code" className="form-control" value={profile.code} readOnly disabled />
-              </FormField>
-              <FormField label={t('company.organization')} htmlFor="company-organization">
-                <input
-                  id="company-organization"
-                  className="form-control"
-                  value={`${profile.organization.code} — ${profile.organization.name}`}
-                  readOnly
-                  disabled
-                />
-              </FormField>
-              <FormField label={tc('columns.name')} htmlFor="company-name" error={errors.name?.message} required>
-                <input
-                  id="company-name"
-                  className={`form-control${errors.name ? ' is-invalid' : ''}`}
-                  disabled={!canManage}
-                  {...register('name', {
-                    required: tv('required'),
-                    maxLength: { value: 200, message: tv('maxLength', { count: 200 }) },
-                  })}
-                />
-              </FormField>
-              <FormField
-                label={t('company.taxIdentifier')}
-                htmlFor="company-tax-identifier"
-                error={errors.taxIdentifier?.message}
-              >
-                <input
-                  id="company-tax-identifier"
-                  className={`form-control${errors.taxIdentifier ? ' is-invalid' : ''}`}
-                  disabled={!canManage}
-                  {...register('taxIdentifier', {
-                    maxLength: { value: 60, message: tv('maxLength', { count: 60 }) },
-                  })}
-                />
-              </FormField>
-            </AppCard>
-          </div>
+      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
+        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
 
-          <div className="col-12 col-xl-6">
-            <AppCard title={t('company.operation')}>
-              <FormField
-                label={t('company.timeZone')}
-                htmlFor="company-time-zone"
-                error={errors.timeZone?.message}
-                help={t('company.timeZoneHelp')}
-                required
-              >
-                <input
-                  id="company-time-zone"
-                  className={`form-control${errors.timeZone ? ' is-invalid' : ''}`}
-                  placeholder="America/Lima"
-                  disabled={!canManage}
-                  {...register('timeZone', {
-                    required: tv('required'),
-                    maxLength: { value: 60, message: tv('maxLength', { count: 60 }) },
-                  })}
-                />
-              </FormField>
-              <FormField
-                label={t('company.defaultCountry')}
-                htmlFor="company-default-country"
-                error={errors.defaultCountry?.message}
-                help={t('company.defaultCountryHelp')}
-                required
-              >
-                <input
-                  id="company-default-country"
-                  className={`form-control${errors.defaultCountry ? ' is-invalid' : ''}`}
-                  placeholder="PE"
-                  maxLength={2}
-                  disabled={!canManage}
-                  {...register('defaultCountry', {
-                    required: tv('required'),
-                    pattern: { value: COUNTRY_PATTERN, message: t('company.countryPattern') },
-                  })}
-                />
-              </FormField>
-            </AppCard>
-          </div>
+        <Box sx={{ display: "grid", gap: 3, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
+          <AppCard title={t("Identidad")}>
+            <SectionHeader title={t("Datos fijos")} />
+            <DetailGrid>
+              {/* El código no se edita: es la clave con la que la nombra todo lo demás. */}
+              <DetailItem label={t("Código")} value={profile.code} />
+              <DetailItem label={t("Organización")} value={profile.organization.name} />
+            </DetailGrid>
 
-          <div className="col-12">
-            <AppCard title={t('company.numbering')}>
-              <p className="text-body-secondary small mb-3">{t('company.numberingHelp')}</p>
-              <div className="row">
-                <div className="col-12 col-sm-6">
-                  <FormField
-                    label={t('company.orderPrefix')}
-                    htmlFor="company-order-prefix"
-                    error={errors.orderNumberPrefix?.message}
-                    help={t('company.sample', { value: orderSample })}
-                    required
-                  >
-                    <input
-                      id="company-order-prefix"
-                      className={`form-control${errors.orderNumberPrefix ? ' is-invalid' : ''}`}
-                      placeholder="TO-"
-                      maxLength={7}
-                      disabled={!canManage}
-                      {...register('orderNumberPrefix', {
-                        required: tv('required'),
-                        pattern: { value: PREFIX_PATTERN, message: t('company.prefixPattern') },
-                      })}
+            <SectionHeader title={t("Datos editables")} />
+            <Box sx={{ display: "grid", gap: 2 }}>
+              <TextField
+                label={t("Nombre")} required size="small" fullWidth
+                error={Boolean(errors.name)} helperText={errors.name?.message}
+                {...register("name", { required: t("Este campo es obligatorio") })}
+              />
+              <Box sx={grid2}>
+                <TextField
+                  label={t("RUC")} size="small" fullWidth
+                  error={Boolean(errors.taxIdentifier)} helperText={errors.taxIdentifier?.message}
+                  {...register("taxIdentifier")}
+                />
+                <Autocomplete
+                  freeSolo
+                  size="small"
+                  options={TIME_ZONES}
+                  value={watch("timeZone")}
+                  onChange={(_e, next) => setValue("timeZone", next ?? "", { shouldDirty: true, shouldValidate: true })}
+                  onInputChange={(_e, next) => setValue("timeZone", next, { shouldDirty: true })}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label={t("Zona horaria")} required placeholder="America/Lima"
+                      error={Boolean(errors.timeZone)} helperText={errors.timeZone?.message}
                     />
-                  </FormField>
-                </div>
-                <div className="col-12 col-sm-6">
-                  <FormField
-                    label={t('company.shipmentPrefix')}
-                    htmlFor="company-shipment-prefix"
-                    error={errors.shipmentNumberPrefix?.message}
-                    help={t('company.sample', { value: shipmentSample })}
-                    required
-                  >
-                    <input
-                      id="company-shipment-prefix"
-                      className={`form-control${errors.shipmentNumberPrefix ? ' is-invalid' : ''}`}
-                      placeholder="SH-"
-                      maxLength={7}
-                      disabled={!canManage}
-                      {...register('shipmentNumberPrefix', {
-                        required: tv('required'),
-                        pattern: { value: PREFIX_PATTERN, message: t('company.prefixPattern') },
-                      })}
-                    />
-                  </FormField>
-                </div>
-              </div>
-            </AppCard>
-          </div>
-      </div>
+                  )}
+                />
+              </Box>
+              {/* Registrado aparte del Autocomplete para que la validación siga viviendo en el
+                  formulario y no en el componente. */}
+              <input
+                type="hidden"
+                {...register("timeZone", {
+                  required: t("Este campo es obligatorio"),
+                  validate: (value) => isValidTimeZone(value) || t("Debe ser una zona horaria IANA válida, por ejemplo America/Lima"),
+                })}
+              />
+            </Box>
+          </AppCard>
 
-      {/* Portalled to the body by TmsDrawer, so its own form is never nested inside this one. */}
+          <AppCard title={t("Numeración y defectos")}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {t("Los prefijos van delante del correlativo: «TO-» produce TO-00000001. El país por defecto se aplica a una fila de importación que deje el país en blanco.")}
+            </Typography>
+            <Box sx={{ display: "grid", gap: 2 }}>
+              <Box sx={grid2}>
+                <TextField
+                  label={t("Prefijo de pedidos")} required size="small" fullWidth
+                  error={Boolean(errors.orderNumberPrefix)} helperText={errors.orderNumberPrefix?.message}
+                  {...register("orderNumberPrefix", { required: t("Este campo es obligatorio") })}
+                />
+                <TextField
+                  label={t("Prefijo de envíos")} required size="small" fullWidth
+                  error={Boolean(errors.shipmentNumberPrefix)} helperText={errors.shipmentNumberPrefix?.message}
+                  {...register("shipmentNumberPrefix", { required: t("Este campo es obligatorio") })}
+                />
+              </Box>
+              <TextField
+                label={t("País por defecto")} required size="small" sx={{ maxWidth: 200 }}
+                placeholder="PE"
+                error={Boolean(errors.defaultCountry)} helperText={errors.defaultCountry?.message}
+                {...register("defaultCountry", {
+                  required: t("Este campo es obligatorio"),
+                  maxLength: { value: 2, message: t("No puede superar los {{count}} caracteres", { count: 2 }) },
+                })}
+              />
+            </Box>
+          </AppCard>
+        </Box>
+      </Box>
+
       {showCreate && (
         <CompanyCreateDrawer
           companyId={companyId}
-          organizationName={profile.organization.name}
           onClose={() => setShowCreate(false)}
-          onCreated={(created) => {
-            setShowCreate(false)
-            notifySuccess(t('company.created'), `${created.code} — ${created.name}`)
-            // The creator holds an organization-wide membership, so the new company is already
-            // selectable - but only after `/me` is read again.
-            refetchCompanies()
+          onCreated={() => {
+            setShowCreate(false);
+            notifySuccess(t("Empresa creada"));
+            // La nueva empresa tiene que aparecer en el selector de la barra superior.
+            refetchCompanies();
           }}
         />
       )}
-    </form>
-  )
+    </>
+  );
 }

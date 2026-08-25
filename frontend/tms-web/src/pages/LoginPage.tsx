@@ -1,184 +1,355 @@
-import { useState } from 'react'
-import { useForm } from 'react-hook-form'
-import { useTranslation } from 'react-i18next'
-import { Navigate, useLocation } from 'react-router-dom'
-import { useAuth } from '../shared/auth/AuthContext'
-import { LanguageSwitcher } from '../shared/ui/LanguageSwitcher'
-import { FormField } from '../shared/ui/components/FormField'
+import { useState, type ReactNode } from "react";
+import { useForm } from "react-hook-form";
+import { Navigate, useLocation } from "react-router-dom";
+import {
+  Alert, Box, Button, IconButton, InputAdornment, Paper, TextField, ToggleButton, ToggleButtonGroup,
+  Typography, useMediaQuery, useTheme,
+} from "@mui/material";
+import { alpha } from "@mui/material/styles";
+import {
+  VisibilityRounded, VisibilityOffRounded, ShieldRounded,
+  Inventory2Rounded, TuneRounded, ApartmentRounded, DarkModeRounded, LightModeRounded,
+} from "@mui/icons-material";
+import { useAuth } from "../shared/auth/AuthContext";
+import { EbimMark } from "../shared/ui/EbimLogo";
+import { useColorMode } from "../lib/colorMode";
+import { R, SIDEBAR, T, brandSidebar, getTheme, type ThemeKey } from "../theme";
+import { getLang, setLang, t } from "../lib/i18n";
+import { ThemeProvider } from "@mui/material/styles";
 
 interface LoginFormValues {
-  email: string
-  password: string
+  email: string;
+  password: string;
 }
 
 interface LocationState {
-  from?: { pathname: string }
+  from?: { pathname: string };
 }
 
-/** What the product does, in the panel's own words. Three is the count that fits without the
- * panel turning into a feature list nobody reads. */
+/** Qué hace el producto, en sus propias palabras. Tres es lo que cabe sin que el panel se
+ * convierta en una lista de características que nadie lee. */
 const FEATURES = [
-  { icon: 'bi-box-seam', titleKey: 'brand.feature1.title', textKey: 'brand.feature1.text' },
-  { icon: 'bi-sliders', titleKey: 'brand.feature2.title', textKey: 'brand.feature2.text' },
-  { icon: 'bi-buildings', titleKey: 'brand.feature3.title', textKey: 'brand.feature3.text' },
-] as const
+  { icon: <Inventory2Rounded />, title: "Pedidos y maestros", text: "Orígenes, destinos, zonas y frecuencias listos para planificar." },
+  { icon: <TuneRounded />, title: "Planificación con control", text: "El sistema no deja cargar un viaje por encima de su capacidad." },
+  { icon: <ApartmentRounded />, title: "Multiempresa", text: "Cada compañía ve lo suyo, con permisos propios." },
+] as const;
 
 /**
- * Sign-in screen. The only place the app talks to Supabase Auth directly, through
- * `useAuth().signIn` - no business call happens here.
+ * Un campo con su etiqueta encima, no dentro del borde.
  *
- * The composition is a single centred card holding two panels, not a full-bleed split. A split
- * that runs edge to edge gives the branding a column it cannot fill and strands the form in the
- * middle of a large empty field; a contained card of a fixed maximum width holds its own
- * proportions on a 1280px laptop and a 2560px monitor alike, and reads as an object placed on
- * the page rather than as two coloured halves of it.
+ * Es lo que hace el resto de la suite en su pantalla de acceso, y aquí gana algo concreto: la
+ * etiqueta se lee antes de tocar el campo y sigue leyéndose mientras se escribe, en vez de
+ * encogerse hasta el tamaño de una nota al pie sobre el propio borde.
+ */
+function LabelledField({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  return (
+    <Box sx={{ mb: 2.25 }}>
+      <Typography
+        component="label"
+        htmlFor={id}
+        sx={{ display: "block", mb: 0.85, fontSize: T.bodyStrong, fontWeight: 700, color: "text.primary" }}
+      >
+        {label}
+      </Typography>
+      {children}
+    </Box>
+  );
+}
+
+/**
+ * Pantalla de acceso. El único sitio donde la app habla directamente con Supabase Auth, a
+ * través de `useAuth().signIn` — aquí no ocurre ninguna llamada de negocio.
  *
- * Below `lg` the brand panel is dropped rather than stacked: on a phone it would only push the
- * fields under the fold. The brand is set in type - there is no EBIM logo asset in the repo,
- * and inventing one would be worse than a wordmark.
+ * La composición es la de la suite: una sola tarjeta ancha partida en dos mitades iguales, la
+ * marca a la izquierda sobre el mismo degradado que la barra lateral y el formulario a la
+ * derecha, centrado en su mitad y estrecho a propósito. Las dos mitades llevan geometría de
+ * fondo muy tenue para que ninguna quede como un rectángulo plano.
+ *
+ * Por debajo de `lg` el panel de marca se quita en vez de apilarse: en un teléfono solo
+ * empujaría los campos por debajo del pliegue.
  */
 export function LoginPage() {
-  const { t } = useTranslation(['auth', 'common'])
-  const { status, signIn } = useAuth()
-  const location = useLocation()
-  const [formError, setFormError] = useState<string | null>(null)
-  const [showPassword, setShowPassword] = useState(false)
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<LoginFormValues>()
+  const theme = useTheme();
+  const isNarrow = useMediaQuery(theme.breakpoints.down("lg"));
+  const { status, signIn } = useAuth();
+  const { mode, toggle: toggleMode, themeKey, brandAccent } = useColorMode();
+  const location = useLocation();
+  const [formError, setFormError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<LoginFormValues>();
+  const lang = getLang();
 
-  if (status === 'signedIn') {
-    const redirectTo = (location.state as LocationState | null)?.from?.pathname ?? '/'
-    return <Navigate to={redirectTo} replace />
+  // El panel de marca lleva el mismo gradiente y el mismo marco oscuro que la barra lateral, de
+  // forma que el login ya es la aplicación antes de entrar en ella.
+  const shellTheme = getTheme("dark", themeKey, brandAccent ?? undefined);
+  const shellBg = themeKey === "brand"
+    ? (brandAccent ? brandSidebar(brandAccent) : SIDEBAR.forest)
+    : SIDEBAR[themeKey as Exclude<ThemeKey, "brand">];
+  const accentSoft = shellTheme.palette.primary.light;
+
+  if (status === "signedIn") {
+    const redirectTo = (location.state as LocationState | null)?.from?.pathname ?? "/";
+    return <Navigate to={redirectTo} replace />;
   }
 
   async function onSubmit(values: LoginFormValues) {
-    setFormError(null)
-    const result = await signIn(values.email, values.password)
+    setFormError(null);
+    const result = await signIn(values.email, values.password);
     if (!result.ok) {
-      setFormError(result.message ?? t('login.failed'))
+      setFormError(result.message ?? t("No se pudo iniciar sesión. Revisa tus credenciales e inténtalo de nuevo."));
     }
   }
 
+  const fieldSx = {
+    "& .MuiOutlinedInput-root": { borderRadius: `${R.md}px`, bgcolor: "background.default" },
+    "& .MuiOutlinedInput-input": { py: 1.45, fontSize: T.bodyStrong },
+  } as const;
+
   return (
-    <div className="tms-login">
-      {/* Page furniture, not card furniture: the language switch belongs to the visit, not to
-          the form, so it sits outside the card the way a browser control would. */}
-      <div className="tms-login-utility">
-        <LanguageSwitcher />
-      </div>
+    <Box sx={{
+      minHeight: "100vh", display: "grid", placeItems: "center", p: { xs: 1.5, sm: 3 },
+      bgcolor: "background.default",
+    }}>
+      <Paper
+        variant="outlined"
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" },
+          width: "100%", maxWidth: 1060, minHeight: { lg: 592 },
+          overflow: "hidden", borderRadius: `${R.xl + 4}px`,
+          boxShadow: (th) => `0 30px 70px ${alpha(th.palette.common.black, th.palette.mode === "dark" ? 0.55 : 0.14)}`,
+        }}
+      >
+        {!isNarrow && (
+          <ThemeProvider theme={shellTheme}>
+            <Box sx={{
+              position: "relative", overflow: "hidden", background: shellBg, color: "#fff",
+              px: 6, py: 5.5, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 4,
+            }}>
+              {/* Geometría de fondo: dos halos muy suaves que rompen el plano sin competir con
+                  el texto. Decoración pura, por eso queda fuera del flujo y sin rol. */}
+              <Box aria-hidden sx={{
+                position: "absolute", top: -110, right: -90, width: 380, height: 380, borderRadius: "50%",
+                background: `radial-gradient(circle, ${alpha("#fff", 0.13)} 0%, ${alpha("#fff", 0)} 68%)`,
+              }} />
+              <Box aria-hidden sx={{
+                position: "absolute", bottom: -140, left: -120, width: 420, height: 420, borderRadius: "50%",
+                background: `radial-gradient(circle, ${alpha("#fff", 0.09)} 0%, ${alpha("#fff", 0)} 70%)`,
+              }} />
 
-      <div className="tms-login-card">
-        <aside className="tms-login-brand d-none d-lg-flex">
-          <div className="tms-login-brand-top">
-            <span className="tms-login-logo" aria-hidden="true">
-              TMS
-            </span>
-            <p className="tms-login-wordmark">
-              TMS <span>by EBIM</span>
-            </p>
-            <p className="tms-login-kicker">{t('brand.kicker')}</p>
-          </div>
+              <Box sx={{ position: "relative" }}>
+                <EbimMark size={34} color="#fff" animated />
+                <Typography sx={{
+                  mt: 4, fontSize: 40, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1, color: "#fff",
+                }}>
+                  <Box component="span" sx={{ color: accentSoft }}>e</Box>TMS
+                </Typography>
+                <Typography sx={{
+                  mt: 1.5, textTransform: "uppercase", letterSpacing: ".16em", fontSize: 10.5,
+                  fontWeight: 800, color: alpha("#fff", 0.6),
+                }}>
+                  {t("Gestión de transporte")}
+                </Typography>
+              </Box>
 
-          <div>
-            <h2 className="tms-login-headline">{t('brand.headline')}</h2>
-            <p className="tms-login-lead">{t('brand.lead')}</p>
+              <Box sx={{ position: "relative" }}>
+                <Typography sx={{ fontSize: 27, fontWeight: 800, lineHeight: 1.22, color: "#fff", mb: 1.75, maxWidth: 350 }}>
+                  {t("Cada viaje sale con la carga que cabe.")}
+                </Typography>
+                <Typography sx={{ fontSize: T.bodyStrong, lineHeight: 1.55, color: alpha("#fff", 0.78), mb: 3.5, maxWidth: 400 }}>
+                  {t("Del pedido al viaje sin planillas intermedias: capacidad, rutas y flota en un solo sistema.")}
+                </Typography>
 
-            <ul className="tms-login-features">
-              {FEATURES.map((feature) => (
-                <li key={feature.icon} className="tms-login-feature">
-                  <span className="tms-login-feature-icon" aria-hidden="true">
-                    <i className={`bi ${feature.icon}`} />
-                  </span>
-                  <span>
-                    <span className="tms-login-feature-title">{t(feature.titleKey)}</span>
-                    <span className="tms-login-feature-text">{t(feature.textKey)}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+                <Box component="ul" sx={{ listStyle: "none", p: 0, m: 0, display: "grid", gap: 2.25 }}>
+                  {FEATURES.map((feature) => (
+                    <Box component="li" key={feature.title} sx={{ display: "flex", gap: 1.75, alignItems: "flex-start" }}>
+                      <Box sx={{
+                        width: 36, height: 36, borderRadius: `${R.md}px`, flexShrink: 0, display: "grid", placeItems: "center",
+                        bgcolor: alpha("#fff", 0.15), color: "#fff", "& svg": { fontSize: 19 },
+                      }}>
+                        {feature.icon}
+                      </Box>
+                      <Box>
+                        <Typography sx={{ fontWeight: 800, fontSize: T.bodyStrong, color: "#fff", lineHeight: 1.35 }}>
+                          {t(feature.title)}
+                        </Typography>
+                        <Typography sx={{ fontSize: T.body, color: alpha("#fff", 0.7), lineHeight: 1.45 }}>
+                          {t(feature.text)}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
 
-          <div className="tms-login-brand-foot">
-            <p className="tms-login-trust">
-              <i className="bi bi-shield-check" aria-hidden="true" />
-              {t('brand.trust')}
-            </p>
-            <p className="tms-login-suite">{t('brand.suite')}</p>
-          </div>
-        </aside>
+              <Box sx={{ position: "relative" }}>
+                <Typography sx={{
+                  display: "flex", alignItems: "center", gap: 0.85,
+                  fontSize: T.label + 0.5, fontWeight: 600, color: alpha("#fff", 0.72),
+                }}>
+                  <ShieldRounded sx={{ fontSize: 15 }} />
+                  {t("Conexión cifrada y datos aislados por compañía.")}
+                </Typography>
+                <Typography sx={{
+                  mt: 0.85, fontSize: T.label, color: alpha("#fff", 0.42), letterSpacing: ".08em",
+                }}>
+                  {t("Suite EBIM · TMS · EWM")}
+                </Typography>
+              </Box>
+            </Box>
+          </ThemeProvider>
+        )}
 
-        <main className="tms-login-panel">
-          {/* The wordmark appears here only where the brand panel is absent, so a phone still
-              knows what it is signing in to. */}
-          <span className="tms-login-panel-brand d-lg-none">
-            <span className="tms-brand-mark" aria-hidden="true">
-              TMS
-            </span>
-            <span className="tms-brand">
-              TMS <span className="tms-brand-accent">by EBIM</span>
-            </span>
-          </span>
+        <Box component="main" sx={{
+          position: "relative", overflow: "hidden", bgcolor: "background.paper",
+          px: { xs: 3, sm: 6 }, py: { xs: 4, sm: 6 },
+          display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center",
+        }}>
+          {/* La misma geometría de la mitad izquierda, aquí en trazo y en el acento del tema.
+              Sin ella el formulario flota sobre un rectángulo blanco vacío. */}
+          <Box aria-hidden sx={{
+            position: "absolute", top: -150, right: -120, width: 300, height: 300, borderRadius: "50%",
+            border: "1.5px solid", borderColor: (th) => alpha(th.palette.primary.main, 0.13),
+          }} />
+          <Box aria-hidden sx={{
+            position: "absolute", top: -60, right: -150, width: 230, height: 230, borderRadius: "50%",
+            bgcolor: (th) => alpha(th.palette.primary.main, 0.05),
+          }} />
+          <Box aria-hidden sx={{
+            position: "absolute", bottom: -95, right: -85, width: 210, height: 210, borderRadius: `${R.xl + 16}px`,
+            transform: "rotate(-14deg)", bgcolor: (th) => alpha(th.palette.primary.main, 0.05),
+          }} />
 
-          <h1 className="tms-login-title">{t('login.welcome')}</h1>
-          <p className="tms-login-subtitle">{t('login.subtitle')}</p>
-
-          {formError && (
-            <div className="alert alert-danger d-flex align-items-start gap-2 py-2 small" role="alert">
-              <i className="bi bi-exclamation-triangle-fill mt-1" aria-hidden="true" />
-              <span>{formError}</span>
-            </div>
-          )}
-
-          <form onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-            <FormField label={t('login.email')} htmlFor="email" error={errors.email?.message} required>
-              <input
-                id="email"
-                type="email"
-                autoComplete="username"
-                autoFocus
-                placeholder={t('login.emailPlaceholder')}
-                className={`form-control form-control-lg${errors.email ? ' is-invalid' : ''}`}
-                {...register('email', { required: t('login.emailRequired') })}
-              />
-            </FormField>
-
-            <FormField label={t('login.password')} htmlFor="password" error={errors.password?.message} required>
-              <div className="input-group">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  className={`form-control form-control-lg${errors.password ? ' is-invalid' : ''}`}
-                  {...register('password', { required: t('login.passwordRequired') })}
-                />
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary"
-                  onClick={() => setShowPassword((visible) => !visible)}
-                  aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
-                  aria-pressed={showPassword}
-                >
-                  <i className={showPassword ? 'bi bi-eye-slash' : 'bi bi-eye'} aria-hidden="true" />
-                </button>
-              </div>
-            </FormField>
-
-            <button
-              type="submit"
-              className="btn btn-primary btn-lg w-100 d-flex align-items-center justify-content-center gap-2 mt-1"
-              disabled={isSubmitting}
+          {/* Mobiliario de la visita, no del formulario: el idioma y la apariencia se quedan en
+              la esquina para no romper el eje central de la composición. */}
+          <Box sx={{ position: "absolute", top: 16, right: 16, display: "flex", alignItems: "center", gap: 1, zIndex: 2 }}>
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={lang}
+              onChange={(_, next: string | null) => next && setLang(next as "es" | "en")}
+              aria-label={t("Idioma")}
+              sx={{
+                bgcolor: "background.default", borderRadius: R.pill, p: 0.375,
+                "& .MuiToggleButton-root": {
+                  border: 0, borderRadius: R.pill, px: 1.35, py: 0.2, minHeight: 0,
+                  fontSize: T.micro, fontWeight: 800, color: "text.secondary",
+                },
+                "& .Mui-selected": { bgcolor: "background.paper", color: "text.primary" },
+              }}
             >
-              {isSubmitting && <span className="spinner-border spinner-border-sm" aria-hidden="true" />}
-              {isSubmitting ? t('login.submitting') : t('login.submit')}
-            </button>
-          </form>
+              <ToggleButton value="es">ES</ToggleButton>
+              <ToggleButton value="en">EN</ToggleButton>
+            </ToggleButtonGroup>
 
-          <p className="tms-login-help">{t('login.help')}</p>
-        </main>
-      </div>
-    </div>
-  )
+            <IconButton
+              size="small"
+              onClick={toggleMode}
+              aria-label={mode === "dark" ? t("Modo claro") : t("Modo oscuro")}
+              title={mode === "dark" ? t("Modo claro") : t("Modo oscuro")}
+              sx={{ bgcolor: "background.default" }}
+            >
+              {mode === "dark" ? <LightModeRounded fontSize="small" /> : <DarkModeRounded fontSize="small" />}
+            </IconButton>
+          </Box>
+
+          <Box sx={{ position: "relative", width: "100%", maxWidth: 372 }}>
+            {isNarrow && (
+              <Box sx={{ display: "flex", justifyContent: "center", mb: 3 }}>
+                <EbimMark size={30} color={theme.palette.primary.main} />
+              </Box>
+            )}
+
+            <Typography sx={{
+              textAlign: "center", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", mb: 1,
+            }}>
+              {t("Bienvenido")}
+            </Typography>
+            <Typography sx={{ textAlign: "center", fontSize: T.body, color: "text.secondary", mb: 4 }}>
+              {t("Ingresa tus credenciales para continuar")}
+            </Typography>
+
+            {formError && <Alert severity="error" sx={{ mb: 2.5, borderRadius: `${R.md}px` }}>{formError}</Alert>}
+
+            <Box component="form" onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
+              <LabelledField id="email" label={t("Correo electrónico")}>
+                <TextField
+                  id="email"
+                  type="email"
+                  placeholder="nombre@empresa.com"
+                  autoComplete="username"
+                  autoFocus
+                  required
+                  fullWidth
+                  error={Boolean(errors.email)}
+                  helperText={errors.email?.message}
+                  sx={fieldSx}
+                  {...register("email", { required: t("El correo electrónico es obligatorio") })}
+                />
+              </LabelledField>
+
+              <LabelledField id="password" label={t("Contraseña")}>
+                <TextField
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  required
+                  fullWidth
+                  error={Boolean(errors.password)}
+                  helperText={errors.password?.message}
+                  sx={fieldSx}
+                  slotProps={{
+                    input: {
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={() => setShowPassword((visible) => !visible)}
+                            aria-label={showPassword ? t("Ocultar contraseña") : t("Mostrar contraseña")}
+                            aria-pressed={showPassword}
+                            edge="end"
+                            size="small"
+                          >
+                            {showPassword ? <VisibilityOffRounded fontSize="small" /> : <VisibilityRounded fontSize="small" />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                  {...register("password", { required: t("La contraseña es obligatoria") })}
+                />
+              </LabelledField>
+
+              <Button
+                type="submit"
+                variant="contained"
+                fullWidth
+                disableElevation
+                disabled={isSubmitting}
+                sx={{ mt: 1.5, py: 1.6, borderRadius: `${R.md}px`, fontSize: T.bodyStrong, fontWeight: 800 }}
+              >
+                {isSubmitting ? t("Ingresando...") : t("Ingresar")}
+              </Button>
+            </Box>
+
+            <Typography sx={{ textAlign: "center", fontSize: T.body, color: "text.secondary", mt: 3 }}>
+              {t("¿Sin acceso? Pídeselo al administrador de tu compañía.")}
+            </Typography>
+
+            {/* El lockup cierra el panel como lo hace el acceso del resto de la suite: después de
+                las acciones, discreto, y solo como firma. */}
+            <Box sx={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 1,
+              mt: 4, pt: 3, borderTop: 1, borderColor: "divider", opacity: 0.6,
+            }}>
+              <EbimMark size={19} color={theme.palette.text.secondary} />
+              <Typography sx={{ fontSize: T.bodyStrong, fontWeight: 800 }}>eTMS</Typography>
+              <Typography sx={{ fontSize: T.micro, letterSpacing: ".14em", fontWeight: 700, color: "text.disabled" }}>
+                BY EBIM
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
+      </Paper>
+    </Box>
+  );
 }

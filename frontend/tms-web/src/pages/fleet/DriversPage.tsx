@@ -1,321 +1,224 @@
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { fetchCarriers } from '../../shared/api/carriersApi'
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { Box, Button, MenuItem, TextField, Typography } from "@mui/material";
+import { AddRounded, BadgeRounded, EditRounded, BlockRounded, CheckCircleRounded } from "@mui/icons-material";
+import type { ApiError } from "../../shared/api/httpClient";
+import { fetchCarriers } from "../../shared/api/carriersApi";
 import {
-  activateDriver,
-  deactivateDriver,
-  DRIVER_LICENSE_STATUSES,
-  fetchDrivers,
-  type DriverLicenseStatus,
-  type DriverView,
-} from '../../shared/api/driversApi'
-import type { ApiError } from '../../shared/api/httpClient'
-import { describeApiError } from '../../shared/api/problemMessages'
-import { useCompany } from '../../shared/company/CompanyContext'
-import { useEnumLabels } from '../../shared/i18n/enums'
-import { useFormat } from '../../shared/i18n/format'
-import { notifyError, notifySuccess } from '../../shared/ui/alerts'
+  activateDriver, deactivateDriver, DRIVER_LICENSE_STATUSES, fetchDrivers,
+  type DriverLicenseStatus, type DriverView,
+} from "../../shared/api/driversApi";
+import { describeApiError } from "../../shared/api/problemMessages";
+import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  ActionMenu,
-  ActiveBadge,
-  confirmDialog,
-  DataTable,
-  FilterBar,
-  PageHeader,
-  Pagination,
-  Select,
-  StatusBadge,
+  ActionMenu, ActiveBadge, DataTable, PageHeader, Pagination, StatusChip, Toolbar,
   type DataTableColumn,
-} from '../../shared/ui/components'
-import { DriverFormDrawer } from './DriverFormDrawer'
+} from "../../shared/ui/components";
+import {
+  ACTIVE_FILTER_OPTIONS, activeParam, notifySaved, toggleActiveRecord, type ActiveFilter,
+} from "../../shared/ui/masterActions";
+import { ICON_TINTS } from "../../shared/ui/navConfig";
+import { enumLabel } from "../../lib/enums";
+import type { StatusTone } from "../../theme";
+import { t } from "../../lib/i18n";
+import { fmtDate } from "../../lib/locale";
+import { DriverFormDrawer } from "./DriverFormDrawer";
 
-const PAGE_SIZE = 25
-
-type ActiveFilter = 'active' | 'inactive' | 'all'
-
-interface AppliedFilters {
-  code: string
-  name: string
-  carrierId: string
-  licenseStatus: DriverLicenseStatus | ''
-  active: ActiveFilter
-}
-
-const DEFAULT_FILTERS: AppliedFilters = {
-  code: '', name: '', carrierId: '', licenseStatus: '', active: 'active',
-}
-
-type ModalState = { mode: 'create' } | { mode: 'edit'; driver: DriverView } | null
+const PAGE_SIZE = 25;
 
 /**
- * The licence badge's colour, and the only place the four statuses turn into a tone.
+ * El estado de la licencia lo deriva el backend, y el color solo lo presenta.
  *
- * `EXPIRED` is danger because it is the one that actually stops a dispatch; `EXPIRING_SOON` is a
- * warning a planner acts on by choice; `UNRECORDED` is neutral rather than a warning, because a
- * missing date blocks nothing and colouring it amber would train people to ignore amber.
+ * "Por vencer" es ámbar y no rojo a propósito: el conductor todavía puede salir, y teñirlo de
+ * rojo junto a los que ya no pueden haría que la lista dejara de distinguir un aviso de un
+ * bloqueo. "Sin registrar" es neutro: hay operaciones que no llevan esa fecha, y eso no es un
+ * problema por sí mismo.
  */
-const LICENSE_TONE: Record<DriverLicenseStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
-  VALID: 'success',
-  EXPIRING_SOON: 'warning',
-  EXPIRED: 'danger',
-  UNRECORDED: 'neutral',
+const LICENSE_TONE: Record<DriverLicenseStatus, StatusTone> = {
+  VALID: "done",
+  EXPIRING_SOON: "inProgress",
+  EXPIRED: "overdue",
+  UNRECORDED: "neutral",
+};
+
+interface AppliedFilters {
+  code: string;
+  name: string;
+  carrierId: string;
+  licenseStatus: DriverLicenseStatus | "";
+  active: ActiveFilter;
 }
 
-export function DriversPage() {
-  const { t } = useTranslation('fleet')
-  const { t: tc } = useTranslation('common')
-  const { t: td } = useTranslation('dialogs')
-  const enumLabels = useEnumLabels()
-  const format = useFormat()
-  const { selected, hasPermission } = useCompany()
-  const companyId = selected?.id ?? ''
-  const canManage = hasPermission('fleet.driver:manage')
-  const queryClient = useQueryClient()
+const DEFAULT_FILTERS: AppliedFilters = { code: "", name: "", carrierId: "", licenseStatus: "", active: "active" };
 
-  const [page, setPage] = useState(0)
-  const [draftFilters, setDraftFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
-  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
-  const [modal, setModal] = useState<ModalState>(null)
+type ModalState = { mode: "create" } | { mode: "edit"; driver: DriverView } | null;
+
+export function DriversPage() {
+  const { selected, hasPermission } = useCompany();
+  const companyId = selected?.id ?? "";
+  const canManage = hasPermission("fleet.driver:manage");
+  const queryClient = useQueryClient();
+
+  const [page, setPage] = useState(0);
+  const [draft, setDraft] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const [modal, setModal] = useState<ModalState>(null);
 
   const driversQuery = useQuery({
-    queryKey: ['drivers', companyId, page, filters],
+    queryKey: ["drivers", companyId, page, filters],
     queryFn: ({ signal }) =>
       fetchDrivers({
         companyId,
         page,
         size: PAGE_SIZE,
+        sort: "code,asc",
         code: filters.code || undefined,
         name: filters.name || undefined,
         carrierId: filters.carrierId || undefined,
         licenseStatus: filters.licenseStatus || undefined,
-        active: filters.active === 'all' ? undefined : filters.active === 'active',
+        active: activeParam(filters.active),
         signal,
       }),
     placeholderData: keepPreviousData,
-  })
+  });
 
   const carriersQuery = useQuery({
-    queryKey: ['carriers-for-driver-filter', companyId],
-    queryFn: ({ signal }) => fetchCarriers({ companyId, size: 200, active: true, sort: 'code,asc', signal }),
-    enabled: companyId !== '',
-  })
-  const carriers = carriersQuery.data?.content ?? []
+    queryKey: ["carriers-for-filter", companyId],
+    queryFn: ({ signal }) => fetchCarriers({ companyId, size: 200, active: true, sort: "code,asc", signal }),
+    enabled: companyId !== "",
+  });
 
-  function applyFilters() {
-    setFilters(draftFilters)
-    setPage(0)
-  }
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: ["drivers", companyId] });
 
-  function resetFilters() {
-    setDraftFilters(DEFAULT_FILTERS)
-    setFilters(DEFAULT_FILTERS)
-    setPage(0)
-  }
-
-  function refresh() {
-    void queryClient.invalidateQueries({ queryKey: ['drivers', companyId] })
-  }
+  function applyFilters() { setFilters(draft); setPage(0); }
+  function resetFilters() { setDraft(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); setPage(0); }
 
   async function toggleActive(driver: DriverView) {
-    const confirmed = await confirmDialog({
-      title: driver.active
-        ? td('deactivate.title', { name: driver.fullName })
-        : td('activate.title', { name: driver.fullName }),
-      text: driver.active ? td('deactivate.text') : td('activate.text'),
-      confirmLabel: driver.active ? tc('actions.deactivate') : tc('actions.activate'),
-      dangerous: driver.active,
-    })
-    if (!confirmed) return
-
-    try {
-      if (driver.active) {
-        await deactivateDriver(companyId, driver.id)
-        notifySuccess(td('deactivated'), driver.fullName)
-      } else {
-        await activateDriver(companyId, driver.id)
-        notifySuccess(td('activated'), driver.fullName)
-      }
-      refresh()
-    } catch (error) {
-      notifyError(td('errorTitle'), describeApiError(error as ApiError))
-    }
+    const changed = await toggleActiveRecord({
+      name: driver.fullName,
+      active: driver.active,
+      activate: () => activateDriver(companyId, driver.id),
+      deactivate: () => deactivateDriver(companyId, driver.id),
+    });
+    if (changed) refresh();
   }
 
   const columns: DataTableColumn<DriverView>[] = [
+    { key: "code", header: t("Código"), render: (d) => <Typography variant="body2" sx={{ fontWeight: 700 }}>{d.code}</Typography> },
+    { key: "name", header: t("Nombre"), render: (d) => d.fullName },
     {
-      key: 'name',
-      header: t('drivers.columns.name'),
-      render: (driver) => (
-        <div>
-          <div className="fw-semibold">{driver.fullName}</div>
-          <div className="text-muted small">{driver.code}</div>
-        </div>
+      key: "document",
+      header: t("Documento"),
+      render: (d) => (
+        <Box>
+          <Typography variant="body2" sx={{ fontVariantNumeric: "tabular-nums" }}>{d.documentNumber}</Typography>
+          <Typography variant="caption" color="text.secondary">{d.documentType}</Typography>
+        </Box>
       ),
     },
+    { key: "carrier", header: t("Transportista"), render: (d) => d.carrierBusinessName ?? t("Flota propia") },
     {
-      key: 'document',
-      header: t('drivers.columns.document'),
-      render: (driver) => `${driver.documentType} ${driver.documentNumber}`,
-    },
-    {
-      key: 'carrier',
-      header: tc('columns.carrier'),
-      render: (driver) => driver.carrierBusinessName ?? t('drivers.ownStaff'),
-    },
-    {
-      key: 'license',
-      header: t('drivers.columns.license'),
-      render: (driver) => (
-        <div>
-          <div className="tms-code">
-            {driver.licenseNumber}
-            {driver.licenseCategory !== null && <span className="text-muted"> · {driver.licenseCategory}</span>}
-          </div>
-          {/* The date sits under the badge rather than in its own column: on its own a date says
-              nothing, and the badge without it cannot be acted on. */}
-          <div className="small">
-            <StatusBadge
-              label={enumLabels.driverLicenseStatus(driver.licenseStatus)}
-              tone={LICENSE_TONE[driver.licenseStatus]}
-            />{' '}
-            <span className="text-muted">
-              {driver.licenseExpiresOn === null
-                ? t('drivers.licenseNoExpiry')
-                : format.date(driver.licenseExpiresOn)}
-            </span>
-          </div>
-        </div>
+      key: "license",
+      header: t("Licencia"),
+      render: (d) => (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.4, alignItems: "flex-start" }}>
+          <StatusChip tone={LICENSE_TONE[d.licenseStatus]} label={enumLabel("driverLicenseStatus", d.licenseStatus)} />
+          {d.licenseExpiresOn && (
+            <Typography variant="caption" color="text.secondary">{fmtDate(d.licenseExpiresOn)}</Typography>
+          )}
+        </Box>
       ),
     },
-    { key: 'phone', header: tc('columns.phone'), render: (driver) => driver.phone ?? '—' },
-    { key: 'active', header: tc('columns.status'), render: (driver) => <ActiveBadge active={driver.active} /> },
-  ]
+    { key: "active", header: t("Estado"), render: (d) => <ActiveBadge active={d.active} /> },
+  ];
 
   if (canManage) {
     columns.push({
-      key: 'actions',
-      header: tc('columns.actions'),
+      key: "actions",
+      header: t("Acciones"),
       actions: true,
       render: (driver) => (
         <ActionMenu
           items={[
+            { key: "edit", label: t("Editar"), icon: <EditRounded />, onSelect: () => setModal({ mode: "edit", driver }) },
             {
-              key: 'edit',
-              label: tc('actions.edit'),
-              icon: 'bi-pencil',
-              onSelect: () => setModal({ mode: 'edit', driver }),
-            },
-            {
-              key: 'active',
-              label: driver.active ? tc('actions.deactivate') : tc('actions.activate'),
-              icon: driver.active ? 'bi-slash-circle' : 'bi-check-circle',
+              key: "active",
+              label: driver.active ? t("Desactivar") : t("Activar"),
+              icon: driver.active ? <BlockRounded /> : <CheckCircleRounded />,
               dangerous: driver.active,
               onSelect: () => void toggleActive(driver),
             },
           ]}
         />
       ),
-    })
+    });
   }
 
-  const pageData = driversQuery.data
+  const pageData = driversQuery.data;
 
   return (
-    <div>
+    <>
       <PageHeader
-        icon="truck"
-        title={t('drivers.title')}
-        description={t('drivers.description')}
-        actions={
-          canManage && (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2"
-              onClick={() => setModal({ mode: 'create' })}
-            >
-              <i className="bi bi-plus-lg" aria-hidden="true" />
-              {t('drivers.new')}
-            </button>
-          )
-        }
+        icon={<BadgeRounded />}
+        tint={ICON_TINTS["/fleet/drivers"]}
+        title={t("Conductores")}
+        subtitle={t("Las personas que conducen, con el estado de su licencia al día.")}
+        onRefresh={refresh}
+        refreshing={driversQuery.isFetching}
+        actions={canManage && (
+          <Button variant="contained" startIcon={<AddRounded />} onClick={() => setModal({ mode: "create" })}>
+            {t("Nuevo conductor")}
+          </Button>
+        )}
       />
 
-      <FilterBar onSubmit={applyFilters} onReset={resetFilters}>
-        <div>
-          <label htmlFor="driver-filter-code" className="form-label small mb-1">
-            {tc('columns.code')}
-          </label>
-          <input
-            id="driver-filter-code"
-            className="form-control form-control-sm"
-            value={draftFilters.code}
-            onChange={(event) => setDraftFilters({ ...draftFilters, code: event.target.value })}
-          />
-        </div>
-        <div>
-          <label htmlFor="driver-filter-name" className="form-label small mb-1">
-            {t('drivers.filters.name')}
-          </label>
-          <input
-            id="driver-filter-name"
-            className="form-control form-control-sm"
-            value={draftFilters.name}
-            onChange={(event) => setDraftFilters({ ...draftFilters, name: event.target.value })}
-          />
-        </div>
-        <div>
-          <label htmlFor="driver-filter-carrier" className="form-label small mb-1">
-            {tc('columns.carrier')}
-          </label>
-          <Select
-            id="driver-filter-carrier"
-            size="sm"
-            value={draftFilters.carrierId}
-            onChange={(next) => setDraftFilters({ ...draftFilters, carrierId: next })}
-            options={[
-              { value: '', label: tc('filters.allCarriers') },
-              ...carriers.map((carrier) => ({ value: carrier.id, label: carrier.businessName })),
-            ]}
-          />
-        </div>
-        <div>
-          <label htmlFor="driver-filter-license" className="form-label small mb-1">
-            {t('drivers.filters.license')}
-          </label>
-          <Select
-            id="driver-filter-license"
-            size="sm"
-            value={draftFilters.licenseStatus}
-            onChange={(next) =>
-              setDraftFilters({ ...draftFilters, licenseStatus: next as DriverLicenseStatus | '' })
-            }
-            options={[
-              { value: '', label: t('drivers.filters.allLicenseStatuses') },
-              ...DRIVER_LICENSE_STATUSES.map((status) => ({
-                value: status,
-                label: enumLabels.driverLicenseStatus(status),
-              })),
-            ]}
-          />
-        </div>
-        <div>
-          <label htmlFor="driver-filter-active" className="form-label small mb-1">
-            {tc('columns.status')}
-          </label>
-          <Select
-            id="driver-filter-active"
-            size="sm"
-            value={draftFilters.active}
-            onChange={(next) => setDraftFilters({ ...draftFilters, active: next as ActiveFilter })}
-            options={[
-              { value: 'active', label: tc('filters.statusActive') },
-              { value: 'inactive', label: tc('filters.statusInactive') },
-              { value: 'all', label: tc('filters.statusAll') },
-            ]}
-          />
-        </div>
-      </FilterBar>
+      <Toolbar
+        onApply={applyFilters}
+        onReset={resetFilters}
+        filters={
+          <>
+            <TextField
+              size="small" label={t("Código")} value={draft.code}
+              onChange={(e) => setDraft({ ...draft, code: e.target.value })}
+              sx={{ minWidth: 140 }}
+            />
+            <TextField
+              size="small" label={t("Nombre")} value={draft.name}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              sx={{ minWidth: 200 }}
+            />
+            <TextField
+              select size="small" label={t("Transportista")} value={draft.carrierId}
+              onChange={(e) => setDraft({ ...draft, carrierId: e.target.value })}
+              sx={{ minWidth: 200 }}
+            >
+              <MenuItem value="">{t("Todos los transportistas")}</MenuItem>
+              {(carriersQuery.data?.content ?? []).map((carrier) => (
+                <MenuItem key={carrier.id} value={carrier.id}>{carrier.businessName}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select size="small" label={t("Licencia")} value={draft.licenseStatus}
+              onChange={(e) => setDraft({ ...draft, licenseStatus: e.target.value as DriverLicenseStatus | "" })}
+              sx={{ minWidth: 180 }}
+            >
+              <MenuItem value="">{t("Todos")}</MenuItem>
+              {DRIVER_LICENSE_STATUSES.map((status) => (
+                <MenuItem key={status} value={status}>{enumLabel("driverLicenseStatus", status)}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select size="small" label={t("Estado")} value={draft.active}
+              onChange={(e) => setDraft({ ...draft, active: e.target.value as ActiveFilter })}
+              sx={{ minWidth: 150 }}
+            >
+              {ACTIVE_FILTER_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>{t(option.label)}</MenuItem>
+              ))}
+            </TextField>
+          </>
+        }
+      />
 
       <DataTable
         columns={columns}
@@ -325,23 +228,24 @@ export function DriversPage() {
         isLoading={driversQuery.isPending}
         error={driversQuery.isError ? describeApiError(driversQuery.error as ApiError) : null}
         onRetry={() => void driversQuery.refetch()}
-        emptyTitle={t('drivers.empty.title')}
-        emptyMessage={t('drivers.empty.message')}
+        emptyTitle={t("Sin conductores")}
+        emptyMessage={t("Crea un conductor o ajusta los filtros.")}
         footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
       />
 
       {modal && (
         <DriverFormDrawer
           companyId={companyId}
-          driver={modal.mode === 'edit' ? modal.driver : null}
+          driver={modal.mode === "edit" ? modal.driver : null}
           onClose={() => setModal(null)}
           onSaved={() => {
-            setModal(null)
-            notifySuccess(modal.mode === 'edit' ? td('updated') : td('created'))
-            refresh()
+            const wasEdit = modal.mode === "edit";
+            setModal(null);
+            notifySaved(wasEdit);
+            refresh();
           }}
         />
       )}
-    </div>
-  )
+    </>
+  );
 }

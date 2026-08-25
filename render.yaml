@@ -50,29 +50,19 @@ services:
         sync: false
 
   # ------------------------------------------------------------------------------------------
-  # Frontend - compiled by Vite, served by nginx. VITE_* values are baked in at build time, so
-  # changing one requires a rebuild, not a restart.
+  # El frontend NO se declara aquí.
+  #
+  # Se publica con AWS Amplify (`amplify.yml`, `appRoot: frontend/tms-web`): `npm ci` y
+  # `npm run build`, y el contenido de `dist` servido como estático. No hay contenedor y no hay
+  # nginx que mantener.
+  #
+  # Este bloque declaraba un servicio `tms-web` que construía desde
+  # `./frontend/tms-web/Dockerfile`. Ese fichero se retiró en 00f9386, cuando la publicación pasó
+  # a Amplify, y el servicio quedó apuntando a una ruta inexistente: un blueprint que no puede
+  # construir, esperando a que alguien lo desplegara para descubrirlo. Se retira aquí en lugar de
+  # devolver el Dockerfile, porque dos canales de publicación para un mismo artefacto es una
+  # invitación a que se desincronicen.
+  #
+  # Si algún día el frontend vuelve a Render, esto necesita un Dockerfile nuevo *y* retirar
+  # Amplify - no las dos cosas a la vez.
   # ------------------------------------------------------------------------------------------
-  - type: web
-    name: tms-web
-    runtime: docker
-    plan: starter
-    region: oregon
-    dockerfilePath: ./frontend/tms-web/Dockerfile
-    dockerContext: ./frontend/tms-web
-    healthCheckPath: /
-    envVars:
-      # Build arguments, not runtime configuration. Render passes matching env vars through to
-      # `docker build` as --build-arg.
-      #
-      # VITE_API_BASE_URL must end in /api/v1 and point at the tms-api service's public URL.
-      # It is deliberately not wired with `fromService`: the value needs a path suffix that a
-      # service reference cannot express, so setting it by hand is the honest option.
-      - key: VITE_API_BASE_URL
-        sync: false
-      - key: VITE_SUPABASE_URL
-        sync: false
-      # The anon/publishable key. Designed to be public and safe in a browser bundle. The
-      # service-role key must never be set on this service.
-      - key: VITE_SUPABASE_ANON_KEY
-        sync: false

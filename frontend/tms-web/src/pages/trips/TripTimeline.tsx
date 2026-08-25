@@ -1,141 +1,133 @@
-import { useTranslation } from 'react-i18next'
-import type { TransportEventType, TransportEventView } from '../../shared/api/planningApi'
-import { useEnumLabels } from '../../shared/i18n/enums'
-import { useFormat } from '../../shared/i18n/format'
-import { ErrorState } from '../../shared/ui/components'
-
-/**
- * The icon each kind of entry carries. Never the only signal - every row shows its translated
- * label too - but it is what lets a dispatcher find the exception in a day of forty entries
- * without reading any of them.
- */
-const EVENT_ICON: Record<TransportEventType, string> = {
-  TRIP_CONFIRMED: 'clipboard-check',
-  TRIP_READY: 'box-seam',
-  TRIP_DISPATCHED: 'truck',
-  TRIP_COMPLETED: 'flag',
-  TRIP_CANCELLED: 'x-circle',
-  ARRIVED_AT_STOP: 'geo-alt',
-  SERVICE_STARTED: 'hourglass-split',
-  STOP_COMPLETED: 'check-circle',
-  STOP_SKIPPED: 'skip-forward',
-  STOP_FAILED: 'exclamation-triangle',
-  DELIVERY_RECORDED: 'clipboard-check',
-  TENDER_SENT: 'send',
-  TENDER_ACCEPTED: 'hand-thumbs-up',
-  TENDER_REJECTED: 'hand-thumbs-down',
-  TENDER_EXPIRED: 'clock-history',
-  TENDER_CANCELLED: 'slash-circle',
-  EXCEPTION_REPORTED: 'exclamation-octagon',
-  EXCEPTION_RESOLVED: 'check2-circle',
-}
-
-const EVENT_TONE: Record<TransportEventType, string> = {
-  TRIP_CONFIRMED: 'text-secondary',
-  TRIP_READY: 'text-secondary',
-  TRIP_DISPATCHED: 'text-primary',
-  TRIP_COMPLETED: 'text-success',
-  TRIP_CANCELLED: 'text-danger',
-  ARRIVED_AT_STOP: 'text-primary',
-  SERVICE_STARTED: 'text-secondary',
-  STOP_COMPLETED: 'text-success',
-  STOP_SKIPPED: 'text-warning',
-  STOP_FAILED: 'text-danger',
-  DELIVERY_RECORDED: 'text-success',
-  // An offer waiting for an answer is outstanding work, so amber; so is one whose clock ran out,
-  // because nobody did anything wrong. A carrier saying no is what somebody has to act on today.
-  TENDER_SENT: 'text-warning',
-  TENDER_ACCEPTED: 'text-success',
-  TENDER_REJECTED: 'text-danger',
-  TENDER_EXPIRED: 'text-warning',
-  TENDER_CANCELLED: 'text-secondary',
-  EXCEPTION_REPORTED: 'text-danger',
-  EXCEPTION_RESOLVED: 'text-success',
-}
+import { Box, Typography } from "@mui/material";
+import { alpha } from "@mui/material/styles";
+import {
+  PlayArrowRounded, FlagRounded, PlaceRounded, BuildRounded, DoneRounded,
+  SkipNextRounded, ErrorOutlineRounded, EditRounded, CircleRounded, LocalOfferRounded,
+} from "@mui/icons-material";
+import type { TransportEventType, TransportEventView } from "../../shared/api/planningApi";
+import { EmptyState, LoadingState } from "../../shared/ui/components";
+import { enumLabel } from "../../lib/enums";
+import { t } from "../../lib/i18n";
+import { fmtDateTime } from "../../lib/locale";
 
 interface TripTimelineProps {
-  events: TransportEventView[]
-  loading: boolean
-  /**
-   * The events request failed. Distinct from an empty `events`, and the distinction is the whole
-   * reason this prop exists: a log that could not be read is not a log with nothing in it.
-   */
-  failed?: boolean
-  onRetry?: () => void
+  events: TransportEventView[];
+  loading?: boolean;
 }
 
 /**
- * The trip's day, oldest first (`docs/domain/TRIP_EXECUTION_V1.md`).
+ * Qué le fue pasando al viaje, en orden.
  *
- * <p>Read-only by construction: the log is append-only on the server, and a screen that offered to
- * edit an entry would be promising something the database refuses. Every action that *adds* to it
- * lives on the thing the entry is about - the trip's buttons, or a stop's.
+ * Se pinta desde su propia consulta y no desde el detalle del viaje: crece durante todo el día,
+ * se lee más de lo que se acciona, y separarla es lo que evita que cada acción sobre una parada
+ * reenvíe cuarenta entradas.
  *
- * <p>`recordedAt` is shown only when it differs from `eventTime` by more than a minute. An arrival
- * typed as it happened has nothing to say about when it was typed; one backdated six hours has,
- * and that is exactly the case a supervisor needs to see rather than to go looking for.
- *
- * <p>A failed request is reported as a failure and never as an empty day. The log is append-only,
- * so "nothing has been recorded" is a claim about the trip - and making it because a fetch failed
- * would tell a dispatcher checking whether their driver reported an arrival that no such report
- * exists. The card offers the read again rather than making the operator reload the workspace.
+ * Cada fila lleva dos tiempos. `eventTime` es cuándo pasó y es el que manda la vertical; el
+ * `recordedAt` solo aparece cuando difiere, porque la diferencia entre los dos es información
+ * real —una llegada de las 11:04 tecleada a las 11:40— y esconderla haría que un rastro
+ * introducido en diferido pareciera un rastro en vivo.
  */
-export function TripTimeline({ events, loading, failed = false, onRetry }: TripTimelineProps) {
-  const { t } = useTranslation('trips')
-  const enumLabels = useEnumLabels()
-  const format = useFormat()
-
-  if (loading) {
-    return (
-      <p className="text-secondary small mb-0" role="status">
-        {t('workspace.timeline.loading')}
-      </p>
-    )
-  }
-  if (failed) {
-    return <ErrorState message={t('workspace.timeline.failed')} onRetry={onRetry} />
-  }
+export function TripTimeline({ events, loading }: TripTimelineProps) {
+  if (loading) return <LoadingState minHeight={160} />;
   if (events.length === 0) {
-    return <p className="text-secondary small mb-0">{t('workspace.timeline.empty')}</p>
-  }
-
-  function backdatedBy(event: TransportEventView): number {
-    return Math.round(
-      (new Date(event.recordedAt).getTime() - new Date(event.eventTime).getTime()) / 60000,
-    )
+    return <EmptyState title={t("Sin eventos")} message={t("Todavía no ha pasado nada en este viaje.")} />;
   }
 
   return (
-    <ul className="list-unstyled mb-0 small">
-      {events.map((event) => (
-        <li key={event.id} className="d-flex gap-2 border-bottom py-2">
-          <i
-            className={`bi bi-${EVENT_ICON[event.eventType]} ${EVENT_TONE[event.eventType]} mt-1`}
-            aria-hidden="true"
-          />
-          <div className="flex-grow-1 tms-min-w-0">
-            <div className="d-flex justify-content-between gap-2">
-              <span className="fw-semibold">{enumLabels.transportEventType(event.eventType)}</span>
-              <span className="text-nowrap text-secondary">{format.dateTime(event.eventTime)}</span>
-            </div>
-            {event.stopSequence !== null && (
-              <span className="d-block text-secondary">
-                {t('workspace.timeline.atStop', {
-                  sequence: event.stopSequence,
-                  name: event.stopDestinationName ?? event.stopDestinationCode ?? '',
-                })}
-              </span>
-            )}
-            {event.notes !== null && <span className="d-block">{event.notes}</span>}
-            <span className="d-block text-secondary">
-              {event.actorName ?? t('workspace.timeline.unknownActor')}
-              {backdatedBy(event) > 1 && (
-                <> · {t('workspace.timeline.recordedLater', { minutes: backdatedBy(event) })}</>
+    <Box sx={{ position: "relative", pl: 3.5 }}>
+      {/* La línea vertical que une los hitos. Decorativa: lo que se lee son las filas. */}
+      <Box aria-hidden sx={{
+        position: "absolute", left: 13, top: 8, bottom: 8, width: "2px",
+        bgcolor: "divider", borderRadius: 1,
+      }} />
+
+      {events.map((event) => {
+        const Icon = EVENT_ICON[event.eventType] ?? CircleRounded;
+        const color = EVENT_COLOR[event.eventType] ?? "text.disabled";
+        const sameTime = fmtDateTime(event.eventTime) === fmtDateTime(event.recordedAt);
+        return (
+          <Box key={event.id} sx={{ position: "relative", pb: 2.5 }}>
+            <Box sx={(th) => {
+              const [k, sub = "main"] = String(color).split(".");
+              const palette = th.palette as unknown as Record<string, Record<string, string>>;
+              const main = palette[k]?.[sub] ?? th.palette.text.disabled;
+              return {
+                position: "absolute", left: -27, top: 1,
+                width: 28, height: 28, borderRadius: "50%", display: "grid", placeItems: "center",
+                bgcolor: alpha(main, 0.16), color: main,
+                border: "2px solid", borderColor: th.palette.background.paper,
+                "& svg": { fontSize: 16 },
+              };
+            }}>
+              <Icon />
+            </Box>
+
+            <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.35 }}>
+              {enumLabel("transportEventType", event.eventType)}
+              {event.stopSequence !== null && (
+                <Box component="span" sx={{ color: "text.secondary", fontWeight: 500 }}>
+                  {" · "}
+                  {event.stopSequence}. {event.stopDestinationName ?? event.stopDestinationCode ?? ""}
+                </Box>
               )}
-            </span>
-          </div>
-        </li>
-      ))}
-    </ul>
-  )
+            </Typography>
+
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+              {fmtDateTime(event.eventTime)}
+              {!sameTime && ` · ${t("registrado")} ${fmtDateTime(event.recordedAt)}`}
+              {event.actorName && ` · ${event.actorName}`}
+            </Typography>
+
+            {event.notes && (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>{event.notes}</Typography>
+            )}
+          </Box>
+        );
+      })}
+    </Box>
+  );
 }
+
+/** Un icono por tipo de evento. Un mapa parcial: un tipo nuevo del backend cae a un punto neutro
+ * en lugar de romper la línea de tiempo. */
+const EVENT_ICON: Partial<Record<TransportEventType, typeof CircleRounded>> = {
+  TRIP_CONFIRMED: FlagRounded,
+  TRIP_READY: FlagRounded,
+  TRIP_DISPATCHED: PlayArrowRounded,
+  TRIP_COMPLETED: DoneRounded,
+  TRIP_CANCELLED: ErrorOutlineRounded,
+  ARRIVED_AT_STOP: PlaceRounded,
+  SERVICE_STARTED: BuildRounded,
+  STOP_COMPLETED: DoneRounded,
+  STOP_SKIPPED: SkipNextRounded,
+  STOP_FAILED: ErrorOutlineRounded,
+  DELIVERY_RECORDED: EditRounded,
+  TENDER_SENT: LocalOfferRounded,
+  TENDER_ACCEPTED: DoneRounded,
+  TENDER_REJECTED: ErrorOutlineRounded,
+  TENDER_EXPIRED: SkipNextRounded,
+  TENDER_CANCELLED: SkipNextRounded,
+  EXCEPTION_REPORTED: ErrorOutlineRounded,
+  EXCEPTION_RESOLVED: DoneRounded,
+};
+
+const EVENT_COLOR: Partial<Record<TransportEventType, string>> = {
+  TRIP_CONFIRMED: "info.main",
+  TRIP_READY: "info.main",
+  TRIP_DISPATCHED: "warning.main",
+  TRIP_COMPLETED: "success.main",
+  TRIP_CANCELLED: "error.main",
+  ARRIVED_AT_STOP: "info.main",
+  SERVICE_STARTED: "info.main",
+  STOP_COMPLETED: "success.main",
+  STOP_SKIPPED: "warning.main",
+  STOP_FAILED: "error.main",
+  DELIVERY_RECORDED: "primary.main",
+  TENDER_SENT: "warning.main",
+  TENDER_ACCEPTED: "success.main",
+  TENDER_REJECTED: "error.main",
+  TENDER_EXPIRED: "warning.main",
+  TENDER_CANCELLED: "text.disabled",
+  EXCEPTION_REPORTED: "error.main",
+  EXCEPTION_RESOLVED: "success.main",
+};

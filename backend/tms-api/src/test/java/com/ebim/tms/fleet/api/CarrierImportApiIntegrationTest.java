@@ -222,6 +222,7 @@ class CarrierImportApiIntegrationTest {
     @DisplayName("a preview reports what would happen and writes nothing at all")
     void previewWritesNothing() throws Exception {
         long before = count("SELECT count(*) FROM tms.carrier WHERE company_id = '" + COMPANY_A + "'");
+        long batchesBefore = count("SELECT count(*) FROM tms.import_batch WHERE entity_type = 'CARRIER'");
 
         mockMvc.perform(preview(csv(carrier("PRV-1")), COMPANY_A, adminToken))
                 .andExpect(status().isOk())
@@ -232,7 +233,8 @@ class CarrierImportApiIntegrationTest {
 
         assertThat(count("SELECT count(*) FROM tms.carrier WHERE company_id = '" + COMPANY_A + "'"))
                 .isEqualTo(before);
-        assertThat(count("SELECT count(*) FROM tms.import_batch WHERE entity_type = 'CARRIER'")).isZero();
+        assertThat(count("SELECT count(*) FROM tms.import_batch WHERE entity_type = 'CARRIER'"))
+                .isEqualTo(batchesBefore);
     }
 
     @Test
@@ -291,6 +293,8 @@ class CarrierImportApiIntegrationTest {
     @DisplayName("a file with one bad row imports none of its good ones either")
     void oneBadRowRejectsTheWholeFile() throws Exception {
         long before = count("SELECT count(*) FROM tms.carrier WHERE company_id = '" + COMPANY_A + "'");
+        long batchesBefore = count("SELECT count(*) FROM tms.import_batch WHERE entity_type = 'CARRIER'"
+                + " AND company_id = '" + COMPANY_A + "'");
         String body = carrier("GOOD-1") + carrierWithoutBusinessName("BAD-1");
 
         mockMvc.perform(apply(csv(body), COMPANY_A, adminToken))
@@ -302,7 +306,8 @@ class CarrierImportApiIntegrationTest {
         assertThat(count("SELECT count(*) FROM tms.carrier WHERE company_id = '" + COMPANY_A + "'"))
                 .isEqualTo(before);
         assertThat(count("SELECT count(*) FROM tms.import_batch WHERE entity_type = 'CARRIER'"
-                + " AND company_id = '" + COMPANY_A + "'")).isZero();
+                + " AND company_id = '" + COMPANY_A + "'"))
+                .isEqualTo(batchesBefore);
     }
 
     // --- tenancy -----------------------------------------------------------------------

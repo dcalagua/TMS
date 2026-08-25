@@ -411,9 +411,12 @@ class LocationApiIntegrationTest {
         @Test
         @DisplayName("a retired V14 role is refused rather than silently dropped")
         void retiredRolesAreRejected() throws Exception {
+            // DC is one of the five V14 role values V23 dropped, and the only one that is not
+            // also a LocationType - so this asserts the retirement itself, and the case below
+            // asserts the separate rule that a type may not be spelled as a role.
             mockMvc.perform(asAdmin(post(BASE), COMPANY_A)
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(locationRequest("OLD-ROLE", "STORE", "[\"DESTINATION\"]", null, null, null)))
+                            .content(locationRequest("OLD-ROLE", "STORE", "[\"DC\"]", null, null, null)))
                     .andExpect(status().isBadRequest());
 
             // A kind of place is what type says. Accepting it as a role too is the Type/Roles

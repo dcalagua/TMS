@@ -45,7 +45,10 @@ class SchemaExposureIntegrationTest {
             // Append-only logs: SELECT and INSERT only, UPDATE/DELETE revoked from tms_app.
             "audit_event", "transport_event", "delivery_evidence",
             "driver", "trip_exception", "order_delivery", "tracking_position",
-            "rate_card", "trip_cost", "trip_cost_component", "trip_tender", "notification");
+            "rate_card", "trip_cost", "trip_cost_component", "trip_tender", "notification",
+            // V34: the one settings row per company. V35: outbound webhooks.
+            "company_settings", "webhook_subscription", "webhook_subscription_event",
+            "webhook_delivery", "webhook_delivery_attempt");
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the
@@ -68,7 +71,9 @@ class SchemaExposureIntegrationTest {
             "planning_run", "trip", "trip_stop", "trip_order_assignment",
             "shipment_outbox_event", "import_batch", "driver", "trip_exception",
             "order_delivery", "tracking_position", "rate_card", "trip_cost", "trip_cost_component",
-            "trip_tender", "notification");
+            "trip_tender", "notification",
+            "company_settings", "webhook_subscription", "webhook_subscription_event",
+            "webhook_delivery", "webhook_delivery_attempt");
 
     /**
      * The only tables allowed to carry a {@code company_id} and <em>not</em> the tenant policy.

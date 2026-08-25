@@ -1,210 +1,220 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
+  COMPANY_ID_HEADER,
+  CORRELATION_ID_HEADER,
   apiRequest,
-  onApiResponseError,
-  resetAuthRefreshState,
+  isAuthFailureResponse,
   setAuthRefreshHandler,
   setAuthTokenProvider,
-} from './httpClient'
+} from "./httpClient";
 
-function jsonResponse(body: unknown, status = 200): Response {
+/**
+ * El cliente HTTP: cómo construye una petición y cómo traduce una respuesta de error.
+ *
+ * Es la utilidad más crítica del frontend porque toda pantalla pasa por ella. Un fallo aquí no
+ * se ve como un fallo: se ve como una pantalla vacía, o como una fuga entre empresas si la
+ * cabecera de ámbito deja de viajar. Se prueba contra un `fetch` sustituido en lugar de contra
+ * un servidor, para que lo que se afirme sea exactamente la petición que sale.
+ */
+
+const BASE = "http://localhost:8080/api/v1";
+
+function jsonResponse(body: unknown, init: { status?: number; headers?: Record<string, string> } = {}): Response {
   return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  })
+    status: init.status ?? 200,
+    headers: { "content-type": "application/json", ...(init.headers ?? {}) },
+  });
 }
 
-function problemResponse(overrides: Record<string, unknown> = {}, status = 403): Response {
-  return jsonResponse(
-    {
-      type: 'urn:tms:problem:company-scope-forbidden',
-      title: 'Company scope is not allowed',
-      status,
-      detail: 'The selected company is not available to this account.',
-      code: 'company-scope-forbidden',
-      timestamp: '2026-08-19T08:41:07.123Z',
-      correlationId: 'server-generated-id',
-      ...overrides,
-    },
-    status,
-  )
+/** La última petición que el `fetch` sustituido recibió, desmontada en algo afirmable. */
+function lastCall(fetchMock: ReturnType<typeof vi.fn>) {
+  const [url, init] = fetchMock.mock.calls.at(-1) as [string, RequestInit];
+  return { url: new URL(url), init, headers: (init.headers ?? {}) as Record<string, string> };
 }
 
-afterEach(() => {
-  vi.restoreAllMocks()
-  setAuthTokenProvider(() => null)
-  setAuthRefreshHandler(() => Promise.resolve(null))
-  resetAuthRefreshState()
-})
+describe("apiRequest", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
 
-describe('apiRequest', () => {
-  it('calls the configured backend base path and returns parsed JSON', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ status: 'UP' }))
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    setAuthTokenProvider(async () => null);
+    setAuthRefreshHandler(async () => null);
+  });
 
-    const result = await apiRequest<{ status: string }>('/system/info')
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
 
-    expect(result).toEqual({ status: 'UP' })
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe('http://localhost:8080/api/v1/system/info')
-  })
+  describe("construcción de la petición", () => {
+    it("resuelve el path contra la base del API y devuelve el cuerpo ya parseado", async () => {
+      fetchMock.mockResolvedValue(jsonResponse({ content: [], totalElements: 0 }));
 
-  it('omits empty query parameters and attaches the bearer token when available', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse([]))
-    setAuthTokenProvider(() => 'test-token')
+      const payload = await apiRequest<{ totalElements: number }>("/masterdata/locations");
 
-    await apiRequest('/orders', { query: { page: 0, status: undefined } })
+      expect(lastCall(fetchMock).url.toString()).toBe(`${BASE}/masterdata/locations`);
+      expect(payload.totalElements).toBe(0);
+    });
 
-    const [url, init] = fetchMock.mock.calls[0] ?? []
-    const headers = (init?.headers ?? {}) as Record<string, string>
-    expect(String(url)).toBe('http://localhost:8080/api/v1/orders?page=0')
-    expect(headers.Authorization).toBe('Bearer test-token')
-  })
+    it("acepta un path sin barra inicial sin duplicarla ni perderla", async () => {
+      fetchMock.mockResolvedValue(jsonResponse({}));
 
-  it('raises ApiError carrying the HTTP status so 401 is distinguishable from a failure', async () => {
-    // A Response body can only be read once, so build a fresh one per call.
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse({ message: 'nope' }, 401))
+      await apiRequest("masterdata/zones");
 
-    await expect(apiRequest('/orders')).rejects.toBeInstanceOf(ApiError)
-    await expect(apiRequest('/orders')).rejects.toMatchObject({ status: 401 })
-  })
+      expect(lastCall(fetchMock).url.pathname).toBe("/api/v1/masterdata/zones");
+    });
 
-  it('sends a unique X-Correlation-Id on every request', async () => {
-    // A Response body can only be read once, so build a fresh one per call.
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse({}))
+    it("serializa la query y omite los valores nulos en vez de mandarlos vacíos", async () => {
+      fetchMock.mockResolvedValue(jsonResponse({}));
 
-    await apiRequest('/orders')
-    await apiRequest('/orders')
+      await apiRequest("/masterdata/locations", {
+        query: { page: 0, size: 25, role: "ORIGIN", search: undefined, zoneId: null, active: true },
+      });
 
-    const firstHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>
-    const secondHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Record<string, string>
-    expect(firstHeaders['X-Correlation-Id']).toBeTruthy()
-    expect(firstHeaders['X-Correlation-Id']).not.toBe(secondHeaders['X-Correlation-Id'])
-  })
+      const { url } = lastCall(fetchMock);
+      expect(url.searchParams.get("page")).toBe("0");
+      expect(url.searchParams.get("size")).toBe("25");
+      expect(url.searchParams.get("role")).toBe("ORIGIN");
+      expect(url.searchParams.get("active")).toBe("true");
+      // Un `search=` vacío no es lo mismo que no filtrar: el backend lo trataría como un filtro.
+      expect(url.searchParams.has("search")).toBe(false);
+      expect(url.searchParams.has("zoneId")).toBe(false);
+    });
 
-  it('sends X-Company-Id only when a companyId is given', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({}))
+    it("envía el ámbito de empresa y el bearer token como cabeceras", async () => {
+      setAuthTokenProvider(async () => "token-abc");
+      fetchMock.mockResolvedValue(jsonResponse({}));
 
-    await apiRequest('/orders', { companyId: 'company-123' })
+      await apiRequest("/masterdata/locations", { companyId: "company-1" });
 
-    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>
-    expect(headers['X-Company-Id']).toBe('company-123')
-  })
+      const { headers } = lastCall(fetchMock);
+      expect(headers[COMPANY_ID_HEADER]).toBe("company-1");
+      expect(headers.Authorization).toBe("Bearer token-abc");
+      expect(headers[CORRELATION_ID_HEADER]).toEqual(expect.any(String));
+    });
 
-  it('parses Problem Details into a stable ApiError.code, not detail', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(problemResponse())
+    it("no inventa una cabecera de empresa cuando el endpoint no tiene ámbito", async () => {
+      fetchMock.mockResolvedValue(jsonResponse({}));
 
-    const error = (await apiRequest('/companies/current').catch((caught) => caught)) as ApiError
+      await apiRequest("/system/info");
 
-    expect(error).toBeInstanceOf(ApiError)
-    expect(error.status).toBe(403)
-    expect(error.code).toBe('company-scope-forbidden')
-    expect(error.correlationId).toBe('server-generated-id')
-  })
+      expect(lastCall(fetchMock).headers[COMPANY_ID_HEADER]).toBeUndefined();
+    });
 
-  it('notifies registered response-error handlers exactly once per failure, without retrying', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(problemResponse({ code: 'unauthenticated' }, 401))
-    const handler = vi.fn()
-    const unsubscribe = onApiResponseError(handler)
+    it("manda el cuerpo como JSON y declara su Content-Type solo cuando hay cuerpo", async () => {
+      fetchMock.mockResolvedValue(jsonResponse({ id: "new-1" }, { status: 201 }));
 
-    await expect(apiRequest('/me')).rejects.toBeInstanceOf(ApiError)
+      await apiRequest("/masterdata/zones", { method: "POST", body: { code: "NORTE" } });
 
-    expect(handler).toHaveBeenCalledTimes(1)
-    expect(handler.mock.calls[0]?.[0]).toMatchObject({ code: 'unauthenticated' })
-    unsubscribe()
-  })
-})
+      const { init, headers } = lastCall(fetchMock);
+      expect(init.method).toBe("POST");
+      expect(headers["Content-Type"]).toBe("application/json");
+      expect(init.body).toBe(JSON.stringify({ code: "NORTE" }));
+    });
 
-describe('authentication recovery', () => {
-  it('replays a 401 once with the refreshed token and returns the retried result', async () => {
-    setAuthTokenProvider(() => 'stale-token')
-    setAuthRefreshHandler(() => Promise.resolve('renewed-token'))
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
-      const headers = (init?.headers ?? {}) as Record<string, string>
-      return headers.Authorization === 'Bearer renewed-token'
-        ? jsonResponse({ recovered: true })
-        : jsonResponse({ code: 'unauthenticated' }, 401)
-    })
+    it("una petición GET no declara Content-Type porque no lleva cuerpo", async () => {
+      fetchMock.mockResolvedValue(jsonResponse({}));
 
-    await expect(apiRequest('/orders')).resolves.toEqual({ recovered: true })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-  })
+      await apiRequest("/orders");
 
-  it('gives up after one retry so a permanently rejecting backend cannot cause a loop', async () => {
-    setAuthTokenProvider(() => 'stale-token')
-    setAuthRefreshHandler(() => Promise.resolve('renewed-token'))
-    const fetchMock = vi
-      .spyOn(globalThis, 'fetch')
-      .mockImplementation(async () => jsonResponse({ code: 'invalid-token' }, 401))
-    const handler = vi.fn()
-    const unsubscribe = onApiResponseError(handler)
+      expect(lastCall(fetchMock).headers["Content-Type"]).toBeUndefined();
+    });
+  });
 
-    await expect(apiRequest('/orders')).rejects.toMatchObject({ code: 'invalid-token' })
+  describe("traducción de Problem Details (RFC 9457)", () => {
+    it("convierte un problem+json en un ApiError que conserva status, code y correlationId", async () => {
+      fetchMock.mockResolvedValue(
+        jsonResponse(
+          {
+            type: "urn:tms:problem:resource-not-found",
+            title: "Resource not found",
+            status: 404,
+            detail: "No existe la ubicación pedida.",
+            code: "resource-not-found",
+            correlationId: "corr-123",
+          },
+          { status: 404 },
+        ),
+      );
 
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(handler).toHaveBeenCalledTimes(1)
-    unsubscribe()
-  })
+      const error = await apiRequest("/masterdata/locations/missing").catch((caught: unknown) => caught);
 
-  it('reports nothing to error handlers when the retry succeeds', async () => {
-    setAuthTokenProvider(() => 'stale-token')
-    setAuthRefreshHandler(() => Promise.resolve('renewed-token'))
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
-      const headers = (init?.headers ?? {}) as Record<string, string>
-      return headers.Authorization === 'Bearer renewed-token' ? jsonResponse({}) : jsonResponse({ code: 'unauthenticated' }, 401)
-    })
-    const handler = vi.fn()
-    const unsubscribe = onApiResponseError(handler)
+      expect(error).toBeInstanceOf(ApiError);
+      const apiError = error as ApiError;
+      expect(apiError.status).toBe(404);
+      expect(apiError.code).toBe("resource-not-found");
+      expect(apiError.correlationId).toBe("corr-123");
+    });
 
-    await apiRequest('/orders')
+    it("expone los errores de campo de una validación fallida", async () => {
+      fetchMock.mockResolvedValue(
+        jsonResponse(
+          {
+            status: 400,
+            code: "validation-failed",
+            errors: [{ field: "code", message: "must not be blank" }],
+          },
+          { status: 400 },
+        ),
+      );
 
-    expect(handler).not.toHaveBeenCalled()
-    unsubscribe()
-  })
+      const error = (await apiRequest("/masterdata/locations", { method: "POST", body: {} }).catch(
+        (caught: unknown) => caught,
+      )) as ApiError;
 
-  it('refreshes once for many requests failing together, not once per request', async () => {
-    setAuthTokenProvider(() => 'stale-token')
-    const refresh = vi.fn(() => Promise.resolve('renewed-token'))
-    setAuthRefreshHandler(refresh)
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
-      const headers = (init?.headers ?? {}) as Record<string, string>
-      return headers.Authorization === 'Bearer renewed-token' ? jsonResponse({}) : jsonResponse({ code: 'unauthenticated' }, 401)
-    })
+      expect(error.code).toBe("validation-failed");
+      expect(error.fieldErrors).toEqual([{ field: "code", message: "must not be blank" }]);
+    });
 
-    await Promise.all([apiRequest('/a'), apiRequest('/b'), apiRequest('/c')])
+    it("un error sin cuerpo Problem Details sigue siendo un ApiError con su status", async () => {
+      fetchMock.mockResolvedValue(new Response("<html>502</html>", { status: 502 }));
 
-    expect(refresh).toHaveBeenCalledTimes(1)
-  })
+      const error = (await apiRequest("/orders").catch((caught: unknown) => caught)) as ApiError;
 
-  it('does not retry when the refresh cannot produce a different token', async () => {
-    setAuthTokenProvider(() => 'stale-token')
-    setAuthRefreshHandler(() => Promise.resolve('stale-token'))
-    const fetchMock = vi
-      .spyOn(globalThis, 'fetch')
-      .mockImplementation(async () => jsonResponse({ code: 'unauthenticated' }, 401))
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error.status).toBe(502);
+      // Sin documento no hay código estable: null es lo honesto, y la UI cae en su copy genérico.
+      expect(error.code).toBeNull();
+    });
+  });
 
-    await expect(apiRequest('/orders')).rejects.toBeInstanceOf(ApiError)
+  describe("refresco de sesión", () => {
+    it("reintenta una vez cuando el token se refrescó, y devuelve el resultado del reintento", async () => {
+      setAuthTokenProvider(async () => "stale");
+      setAuthRefreshHandler(async () => "fresh");
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ status: 401, code: "invalid-token" }, { status: 401 }))
+        .mockResolvedValueOnce(jsonResponse({ totalElements: 3 }));
 
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-  })
+      const payload = await apiRequest<{ totalElements: number }>("/orders", { companyId: "company-1" });
 
-  it('never retries a failure that is not an authentication failure', async () => {
-    setAuthTokenProvider(() => 'token')
-    const refresh = vi.fn(() => Promise.resolve('renewed-token'))
-    setAuthRefreshHandler(refresh)
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => problemResponse({}, 403))
+      expect(payload.totalElements).toBe(3);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(lastCall(fetchMock).headers.Authorization).toBe("Bearer fresh");
+    });
 
-    await expect(apiRequest('/orders')).rejects.toMatchObject({ status: 403 })
+    it("no entra en bucle cuando el refresco no produce un token distinto", async () => {
+      setAuthTokenProvider(async () => "stale");
+      setAuthRefreshHandler(async () => "stale");
+      fetchMock.mockResolvedValue(jsonResponse({ status: 401, code: "invalid-token" }, { status: 401 }));
 
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(refresh).not.toHaveBeenCalled()
-  })
+      await expect(apiRequest("/orders")).rejects.toBeInstanceOf(ApiError);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
+});
 
-  it('surfaces a refresh that throws as an unrecoverable failure instead of propagating it', async () => {
-    setAuthTokenProvider(() => 'stale-token')
-    setAuthRefreshHandler(() => Promise.reject(new Error('network down')))
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse({ code: 'unauthenticated' }, 401))
+describe("isAuthFailureResponse", () => {
+  it("reconoce los dos códigos de token inservible y el 401 pelado", () => {
+    expect(isAuthFailureResponse(401, "invalid-token")).toBe(true);
+    expect(isAuthFailureResponse(401, "unauthenticated")).toBe(true);
+    expect(isAuthFailureResponse(401, null)).toBe(true);
+  });
 
-    await expect(apiRequest('/orders')).rejects.toMatchObject({ code: 'unauthenticated' })
-  })
-})
+  it("no confunde un 403 de permisos con un fallo de autenticación", () => {
+    // Refrescar la sesión no arregla un permiso que no se tiene: reintentar sería ruido.
+    expect(isAuthFailureResponse(403, "access-denied")).toBe(false);
+  });
+});

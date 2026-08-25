@@ -1,18 +1,18 @@
-# Frontend-local ignores. Repository-wide rules live in the root .gitignore.
 node_modules
 dist
 dist-ssr
-coverage
 *.local
-*.tsbuildinfo
-.eslintcache
-
-# Local env files. `.env.example` stays tracked.
 .env
-.env.*
-!.env.example
+.env.local
+.env.*.local
+.vite
+coverage
+*.tsbuildinfo
+.DS_Thumbs
 
-# Playwright output: traces, screenshots and reports are run artefacts, not sources.
-artifacts/
-/test-results/
-/playwright-report/
+# Artefactos de Playwright y de cobertura
+playwright-report/
+test-results/
+blob-report/
+coverage/
+.playwright/

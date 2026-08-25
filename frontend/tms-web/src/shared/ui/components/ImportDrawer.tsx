@@ -1,377 +1,281 @@
-import { useState, type ChangeEvent, type ReactNode } from 'react'
-import type { ApiError } from '../../api/httpClient'
+import { useState, type ChangeEvent, type ReactNode } from "react";
 import {
-  applyImport,
-  downloadImportTemplate,
-  previewImport,
-  type ImportFormat,
-  type ImportOutcome,
-  type ImportReport,
-} from '../../api/importApi'
-import { describeApiError, describeImportError } from '../../api/problemMessages'
-import { notifyError, notifySuccess } from '../alerts'
-import { FormField } from './FormField'
-import { TmsDrawer } from './TmsDrawer'
-import { confirmDialog } from './ConfirmDialog'
+  Alert, Box, Button, Chip, Paper, Stack, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Typography,
+} from "@mui/material";
+import { DownloadRounded, UploadFileRounded, FactCheckRounded, PlaylistAddCheckRounded } from "@mui/icons-material";
+import type { ApiError } from "../../api/httpClient";
+import { saveDownloadedFile } from "../../api/httpClient";
+import {
+  applyImport, downloadImportTemplate, previewImport,
+  type ImportOutcome, type ImportReport,
+} from "../../api/importApi";
+import { describeApiError, describeImportError } from "../../api/problemMessages";
+import { confirmDialog, notifyError, notifySuccess } from "../../../lib/ui";
+import { t } from "../../../lib/i18n";
+import { fmtQuantity } from "../../../lib/locale";
+import { FormDrawer } from "./FormDrawer";
+import { SectionHeader } from "./layout";
+import { dataTableSx } from "./tableStyles";
 
-/** Every string the drawer renders, pre-translated by the caller - keeps this component free of
- * any particular i18n namespace so it stays reusable across Locations, Carriers, Vehicle Types
- * and Vehicles (and any future entity) without those entities sharing one translation namespace. */
-export interface ImportDrawerStrings {
-  title: string
-  subtitle: string
-  templateSection: string
-  templateHelp: string
-  downloadXlsx: string
-  downloadCsv: string
-  downloadError: string
-  fileSection: string
-  file: string
-  fileHelp: (maxFileMb: number, maxRows: number) => string
-  previewSection: string
-  validate: string
-  previewing: string
-  apply: string
-  applying: string
-  applied: (created: number, skipped: number) => string
-  confirmTitle: string
-  confirmText: (createdCount: number) => string
-  blocked: string
-  readyToApply: string
-  nothingToCreate: string
-  reset: string
-  issuesTitle: string
-  issuesTruncated: (shown: number, total: number) => string
-  downloadIssuesReport: string
-  itemsTitle: string
-  columnRow: string
-  columnColumn: string
-  columnIdentifier: string
-  columnMessage: string
-  countRows: string
-  countItems: string
-  countCreate: string
-  countDuplicates: string
-  countRejected: string
-  countIssues: string
-  outcomeCreate: string
-  outcomeSkipped: string
-  outcomeRejected: string
-  cancel: string
-  close: string
-}
+const OUTCOME_LABEL: Record<ImportOutcome, string> = {
+  CREATE: "Se creará",
+  SKIPPED_DUPLICATE: "Ya existe",
+  REJECTED: "Rechazada",
+};
+
+const OUTCOME_COLOR: Record<ImportOutcome, "success" | "default" | "error"> = {
+  CREATE: "success",
+  SKIPPED_DUPLICATE: "default",
+  REJECTED: "error",
+};
 
 interface ImportDrawerProps<T> {
-  /** e.g. `/masterdata/locations/import` - the controller's `@RequestMapping`. */
-  apiBasePath: string
-  companyId: string
-  strings: ImportDrawerStrings
-  onClose: () => void
-  /** Called once after an applied import, so the list behind the drawer reloads. */
-  onImported: () => void
-  /** Renders the entity-specific preview table for one report's items. */
-  renderItems: (items: T[], outcomeLabel: (outcome: ImportOutcome) => string) => ReactNode
-  /** Shown in the file field's help text. Mirrors the backend's `ImportLimits`; not enforced
-   * here - the server rejects an oversized file regardless. */
-  maxFileMb?: number
-  maxRows?: number
+  open: boolean;
+  /** p. ej. `/masterdata/locations/import` — el `@RequestMapping` del controlador. */
+  apiBasePath: string;
+  companyId: string;
+  title: string;
+  subtitle: string;
+  onClose: () => void;
+  /** Se llama una vez tras una importación aplicada, para que la lista de detrás recargue. */
+  onImported: () => void;
+  /** Pinta la tabla de previsualización específica de la entidad. */
+  renderItems: (items: T[], outcomeLabel: (outcome: ImportOutcome) => string) => ReactNode;
+  /** Se muestra en la ayuda del campo de fichero. Refleja el `ImportLimits` del backend; aquí
+   * no se aplica — el servidor rechaza un fichero grande de todos modos. */
+  maxFileMb?: number;
+  maxRows?: number;
 }
 
 /**
- * The bulk master-data import, as three steps in one drawer: download the template, upload a
- * filled copy, read what it would do - and only then apply it. Generalizes
- * `pages/orders/OrderImportDrawer.tsx` so Locations, Carriers, Vehicle Types and Vehicles share
- * one drawer instead of four near-identical copies of it; only the entity-specific preview
- * columns (via {@link ImportDrawerProps.renderItems}) and the API base path differ.
+ * La importación masiva de maestros, como tres pasos en un solo drawer: descarga la plantilla,
+ * sube una copia rellena, lee qué haría — y solo entonces aplícala.
  *
- * The preview is not a convenience: the backend refuses a file with any invalid row outright, so
- * without a dry run an operator's only way to find out what is wrong would be to attempt the
- * import and read the refusal. Applying is gated behind an explicit second action and a
- * confirmation, never fused into the upload: uploading is inspection, importing is a decision.
+ * La previsualización no es una comodidad: el backend rechaza de plano un fichero con cualquier
+ * fila inválida, así que sin una pasada en seco la única forma que tendría un operador de
+ * enterarse de qué está mal sería intentar la importación y leer el rechazo. Aplicar va detrás
+ * de una segunda acción explícita y de una confirmación, nunca fundido con la subida: subir es
+ * inspeccionar, importar es decidir.
  */
 export function ImportDrawer<T>({
-  apiBasePath,
-  companyId,
-  strings: s,
-  onClose,
-  onImported,
-  renderItems,
-  maxFileMb = 2,
-  maxRows = 5000,
+  open, apiBasePath, companyId, title, subtitle, onClose, onImported, renderItems,
+  maxFileMb = 2, maxRows = 5000,
 }: ImportDrawerProps<T>) {
-  const [file, setFile] = useState<File | null>(null)
-  const [report, setReport] = useState<ImportReport<T> | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState<'preview' | 'apply' | null>(null)
+  const [file, setFile] = useState<File | null>(null);
+  const [report, setReport] = useState<ImportReport<T> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"preview" | "apply" | null>(null);
 
-  // An applied report is terminal: the file is in the system and re-applying it would only
-  // produce a report of skipped duplicates. The drawer switches to a result view.
-  const isApplied = report?.applied === true
-  const canValidate = file !== null && busy === null
+  // Un informe aplicado es terminal: el fichero ya está en el sistema y volver a aplicarlo solo
+  // produciría un informe de duplicados omitidos. El drawer pasa a vista de resultado.
+  const isApplied = report?.applied === true;
+  const canValidate = file !== null && busy === null;
   const canApply =
-    report !== null && !report.applied && report.issueCount === 0 && report.createdCount > 0 && busy === null
+    report !== null && !report.applied && report.issueCount === 0 && report.createdCount > 0 && busy === null;
 
-  const outcomeLabel: Record<ImportOutcome, string> = {
-    CREATE: s.outcomeCreate,
-    SKIPPED_DUPLICATE: s.outcomeSkipped,
-    REJECTED: s.outcomeRejected,
+  /** Cualquier edición invalida el informe: describe el fichero anterior, y mostrarlo junto a
+   * otro fichero es la forma de que alguien apruebe una cosa distinta de la que leyó. */
+  function pickFile(event: ChangeEvent<HTMLInputElement>) {
+    setFile(event.target.files?.[0] ?? null);
+    setReport(null);
+    setError(null);
   }
 
-  /** Any edit invalidates the report: it describes the previous file, and showing it next to a
-   * new one is how an operator ends up approving something they did not look at. */
-  function invalidateReport() {
-    setReport(null)
-    setError(null)
+  function reset() {
+    setFile(null);
+    setReport(null);
+    setError(null);
   }
 
-  function onFileChange(event: ChangeEvent<HTMLInputElement>) {
-    setFile(event.target.files?.[0] ?? null)
-    invalidateReport()
-  }
-
-  async function download(fileFormat: ImportFormat) {
+  async function template(format: "XLSX" | "CSV") {
     try {
-      const downloaded = await downloadImportTemplate(apiBasePath, companyId, fileFormat)
-      const url = URL.createObjectURL(downloaded.blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = downloaded.fileName ?? `import-template.${fileFormat.toLowerCase()}`
-      link.click()
-      // Revoking immediately after the synthetic click is safe: the browser has already taken
-      // its own reference to the blob by then, and not revoking leaks it for the tab's lifetime.
-      URL.revokeObjectURL(url)
-    } catch (downloadError) {
-      notifyError(s.downloadError, describeApiError(downloadError as ApiError))
+      const downloaded = await downloadImportTemplate(apiBasePath, companyId, format);
+      saveDownloadedFile(downloaded, `plantilla.${format.toLowerCase()}`);
+    } catch (cause) {
+      notifyError(t("No se pudo descargar la plantilla."), describeApiError(cause as ApiError));
     }
   }
 
-  /** Every row's problem, as a CSV built client-side: the issues already sit in `report`, so
-   * there is nothing to fetch. Lets an operator hand the file to whoever fixes it without
-   * reading the drawer's table row by row. */
-  function downloadIssuesCsv() {
-    if (report === null || report.issues.length === 0) return
-    const header = [s.columnRow, s.columnColumn, s.columnIdentifier, s.columnMessage]
-    const csvEscape = (value: string) => (/[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value)
-    const rows = report.issues.map((issue) =>
-      [String(issue.rowNumber), issue.column ?? '', issue.identifier ?? '', issue.message].map(csvEscape).join(','),
-    )
-    // A UTF-8 BOM so Excel on Windows opens accented text correctly, matching the templates.
-    // Written as a code point rather than the literal character, invisible in a source file.
-    const csv = String.fromCharCode(0xfeff) + [header.map(csvEscape).join(','), ...rows].join('\r\n')
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${(report.fileName ?? 'import').replace(/\.[^.]+$/, '')}-errors.csv`
-    link.click()
-    URL.revokeObjectURL(url)
-  }
-
   async function validate() {
-    if (file === null) return
-    setBusy('preview')
-    setError(null)
+    if (!file) return;
+    setBusy("preview");
+    setError(null);
     try {
-      setReport(await previewImport<T>(apiBasePath, companyId, file))
-    } catch (previewError) {
-      setReport(null)
-      setError(describeImportError(previewError as ApiError))
+      setReport(await previewImport<T>(apiBasePath, companyId, file));
+    } catch (cause) {
+      setReport(null);
+      setError(describeImportError(cause as ApiError));
     } finally {
-      setBusy(null)
+      setBusy(null);
     }
   }
 
   async function apply() {
-    if (file === null || report === null) return
-
+    if (!file || !report) return;
     const confirmed = await confirmDialog({
-      title: s.confirmTitle,
-      text: s.confirmText(report.createdCount),
-      confirmLabel: s.apply,
-    })
-    if (!confirmed) return
+      title: t("¿Aplicar la importación?"),
+      text: t("Se crearán {{count}} registros. Esta acción no se puede deshacer.", { count: report.createdCount }),
+      confirmLabel: t("Importar"),
+    });
+    if (!confirmed) return;
 
-    setBusy('apply')
-    setError(null)
+    setBusy("apply");
+    setError(null);
     try {
-      const applied = await applyImport<T>(apiBasePath, companyId, file)
-      setReport(applied)
-      if (applied.applied) {
-        notifySuccess(s.applied(applied.createdCount, applied.skippedCount))
-        onImported()
-      }
-    } catch (applyError) {
-      setError(describeImportError(applyError as ApiError))
+      const applied = await applyImport<T>(apiBasePath, companyId, file);
+      setReport(applied);
+      notifySuccess(
+        t("Importación aplicada"),
+        t("{{created}} creados, {{skipped}} omitidos.", { created: applied.createdCount, skipped: applied.skippedCount }),
+      );
+      onImported();
+    } catch (cause) {
+      setError(describeImportError(cause as ApiError));
     } finally {
-      setBusy(null)
+      setBusy(null);
     }
   }
 
-  function reset() {
-    setFile(null)
-    setReport(null)
-    setError(null)
-  }
+  const counter = (label: string, value: number, color?: "success" | "warning" | "error") => (
+    <Box sx={{ textAlign: "center", minWidth: 84 }}>
+      <Typography sx={{
+        fontWeight: 800, fontSize: "1.4rem", lineHeight: 1.1, fontVariantNumeric: "tabular-nums",
+        color: color ? `${color}.main` : "text.primary",
+      }}>
+        {fmtQuantity(value)}
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", fontWeight: 700, letterSpacing: ".05em" }}>
+        {label}
+      </Typography>
+    </Box>
+  );
 
   return (
-    <TmsDrawer
-      open
-      title={s.title}
-      subtitle={s.subtitle}
-      size="xl"
+    <FormDrawer
+      open={open}
+      title={title}
+      subtitle={subtitle}
       onClose={onClose}
-      closeOnEscape={busy === null}
-      closeOnBackdrop={busy === null}
+      size="xl"
+      icon={<UploadFileRounded />}
       footer={
         <>
-          <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={busy !== null}>
-            {isApplied ? s.close : s.cancel}
-          </button>
-          {isApplied ? (
-            <button type="button" className="btn btn-outline-primary" onClick={reset}>
-              {s.reset}
-            </button>
-          ) : (
+          <Button onClick={onClose}>{isApplied ? t("Cerrar") : t("Cancelar")}</Button>
+          {!isApplied && (
             <>
-              <button type="button" className="btn btn-outline-primary" onClick={() => void validate()} disabled={!canValidate}>
-                {busy === 'preview' ? s.previewing : s.validate}
-              </button>
-              <button type="button" className="btn btn-primary" onClick={() => void apply()} disabled={!canApply}>
-                {busy === 'apply' ? s.applying : s.apply}
-              </button>
+              <Button onClick={validate} disabled={!canValidate} variant="outlined" startIcon={<FactCheckRounded />}>
+                {busy === "preview" ? t("Validando...") : t("Validar")}
+              </Button>
+              <Button onClick={apply} disabled={!canApply} variant="contained" startIcon={<PlaylistAddCheckRounded />}>
+                {busy === "apply" ? t("Importando...") : t("Importar")}
+              </Button>
             </>
           )}
         </>
       }
     >
-      {error && (
-        <div className="alert alert-danger py-2 small" role="alert">
-          {error}
-        </div>
-      )}
+      <SectionHeader title={t("1. Plantilla")} />
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+        {t("Descarga la plantilla, rellénala y vuelve aquí para subirla.")}
+      </Typography>
+      <Stack direction="row" spacing={1} sx={{ mb: 3 }}>
+        <Button size="small" variant="outlined" startIcon={<DownloadRounded />} onClick={() => template("XLSX")}>
+          {t("Descargar .xlsx")}
+        </Button>
+        <Button size="small" variant="outlined" startIcon={<DownloadRounded />} onClick={() => template("CSV")}>
+          {t("Descargar .csv")}
+        </Button>
+      </Stack>
 
-      <fieldset className="tms-fieldset">
-        <legend className="tms-fieldset-legend">{s.templateSection}</legend>
-        <p className="text-body-secondary small">{s.templateHelp}</p>
-        <div className="d-flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
-            onClick={() => void download('XLSX')}
-          >
-            <i className="bi bi-file-earmark-spreadsheet" aria-hidden="true" />
-            {s.downloadXlsx}
-          </button>
-          <button
-            type="button"
-            className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
-            onClick={() => void download('CSV')}
-          >
-            <i className="bi bi-filetype-csv" aria-hidden="true" />
-            {s.downloadCsv}
-          </button>
-        </div>
-      </fieldset>
+      <SectionHeader title={t("2. Fichero")} />
+      <Button component="label" variant="outlined" startIcon={<UploadFileRounded />} disabled={isApplied} sx={{ mb: 1 }}>
+        {file ? file.name : t("Elegir fichero")}
+        <input type="file" hidden accept=".xlsx,.csv" onChange={pickFile} />
+      </Button>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 3 }}>
+        {t("Formatos .xlsx y .csv, hasta {{mb}} MB y {{rows}} filas.", { mb: maxFileMb, rows: fmtQuantity(maxRows) })}
+      </Typography>
 
-      <fieldset className="tms-fieldset" disabled={busy !== null || isApplied}>
-        <legend className="tms-fieldset-legend">{s.fileSection}</legend>
-        <FormField label={s.file} htmlFor="import-file" help={s.fileHelp(maxFileMb, maxRows)} required>
-          <input
-            id="import-file"
-            type="file"
-            className="form-control"
-            accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
-            onChange={onFileChange}
-          />
-        </FormField>
-      </fieldset>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {report && (
-        <fieldset className="tms-fieldset mb-0">
-          <legend className="tms-fieldset-legend">{s.previewSection}</legend>
+        <>
+          <SectionHeader title={isApplied ? t("Resultado") : t("3. Previsualización")} />
 
-          <div
-            className={`alert py-2 small ${
-              report.applied ? 'alert-success' : report.issueCount > 0 ? 'alert-danger' : 'alert-light border'
-            }`}
-            role="status"
-          >
-            {report.applied
-              ? s.applied(report.createdCount, report.skippedCount)
-              : report.issueCount > 0
-                ? s.blocked
-                : report.createdCount === 0
-                  ? s.nothingToCreate
-                  : s.readyToApply}
-          </div>
+          <Paper variant="outlined" sx={{ p: 2, mb: 2, display: "flex", flexWrap: "wrap", gap: 2, justifyContent: "space-around" }}>
+            {counter(t("Filas"), report.rowCount)}
+            {counter(t("Registros"), report.itemCount)}
+            {counter(t("A crear"), report.createdCount, "success")}
+            {counter(t("Duplicados"), report.skippedCount, "warning")}
+            {counter(t("Rechazados"), report.rejectedCount, "error")}
+            {counter(t("Problemas"), report.issueCount, "error")}
+          </Paper>
 
-          <div className="row g-2 mb-3">
-            {[
-              { key: 'rows', label: s.countRows, value: report.rowCount },
-              { key: 'items', label: s.countItems, value: report.itemCount },
-              { key: 'create', label: s.countCreate, value: report.createdCount },
-              { key: 'duplicates', label: s.countDuplicates, value: report.skippedCount },
-              { key: 'rejected', label: s.countRejected, value: report.rejectedCount },
-              { key: 'issues', label: s.countIssues, value: report.issueCount },
-            ].map((tile) => (
-              <div className="col-6 col-sm-4 col-lg-2" key={tile.key}>
-                <div className="tms-card h-100 px-3 py-2">
-                  <p className="tms-section-title mb-0">{tile.label}</p>
-                  <p className="mb-0 fw-semibold">{tile.value}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          {isApplied ? (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              {t("{{created}} creados, {{skipped}} omitidos.", { created: report.createdCount, skipped: report.skippedCount })}
+            </Alert>
+          ) : report.issueCount > 0 ? (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {t("El fichero tiene problemas. Corrígelos y vuelve a validarlo: no se importará nada mientras quede uno.")}
+            </Alert>
+          ) : report.createdCount === 0 ? (
+            <Alert severity="info" sx={{ mb: 2 }}>{t("No hay nada nuevo que crear en este fichero.")}</Alert>
+          ) : (
+            <Alert severity="success" sx={{ mb: 2 }}>{t("El fichero es válido. Ya puedes importarlo.")}</Alert>
+          )}
 
           {report.issues.length > 0 && (
             <>
-              <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
-                <p className="tms-section-title mb-0">{s.issuesTitle}</p>
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
-                  onClick={downloadIssuesCsv}
-                >
-                  <i className="bi bi-download" aria-hidden="true" />
-                  {s.downloadIssuesReport}
-                </button>
-              </div>
-              <div className="tms-table-scroll mb-3">
-                <table className="table table-sm align-middle">
-                  <caption className="visually-hidden">{s.issuesTitle}</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">{s.columnRow}</th>
-                      <th scope="col">{s.columnColumn}</th>
-                      <th scope="col">{s.columnIdentifier}</th>
-                      <th scope="col">{s.columnMessage}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <SectionHeader title={t("Problemas")} />
+              <TableContainer component={Paper} variant="outlined" sx={{ mb: 2, maxHeight: 300 }}>
+                <Table size="small" stickyHeader sx={dataTableSx}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>{t("Fila")}</TableCell>
+                      <TableCell>{t("Columna")}</TableCell>
+                      <TableCell>{t("Identificador")}</TableCell>
+                      <TableCell>{t("Mensaje")}</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {report.issues.map((issue, index) => (
-                      <tr key={`${issue.rowNumber}-${issue.column ?? ''}-${index}`}>
-                        <td className="tms-cell-strong">{issue.rowNumber}</td>
-                        <td className="tms-code">{issue.column ?? '—'}</td>
-                        <td className="tms-code">{issue.identifier ?? '—'}</td>
-                        <td>{issue.message}</td>
-                      </tr>
+                      <TableRow key={`${issue.rowNumber}-${index}`}>
+                        <TableCell>{issue.rowNumber}</TableCell>
+                        <TableCell>{issue.column ?? "-"}</TableCell>
+                        <TableCell>{issue.identifier ?? "-"}</TableCell>
+                        <TableCell>{issue.message}</TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </TableBody>
+                </Table>
+              </TableContainer>
               {report.issuesTruncated && (
-                <p className="text-body-secondary small">{s.issuesTruncated(report.issues.length, report.issueCount)}</p>
+                <Typography variant="caption" color="text.secondary">
+                  {t("Se muestran {{shown}} de {{total}} problemas.", { shown: report.issues.length, total: report.issueCount })}
+                </Typography>
               )}
             </>
           )}
 
           {report.items.length > 0 && (
             <>
-              <p className="tms-section-title">{s.itemsTitle}</p>
-              {renderItems(report.items, (outcome) => outcomeLabel[outcome])}
+              <SectionHeader title={t("Registros")} />
+              {renderItems(report.items, (outcome) => t(OUTCOME_LABEL[outcome]))}
             </>
           )}
-        </fieldset>
+
+          {!isApplied && (
+            <Button size="small" onClick={reset} sx={{ mt: 2 }}>{t("Empezar de nuevo")}</Button>
+          )}
+        </>
       )}
-    </TmsDrawer>
-  )
+    </FormDrawer>
+  );
+}
+
+/** El chip de resultado por fila que comparten todas las tablas de previsualización. */
+export function ImportOutcomeChip({ outcome, label }: { outcome: ImportOutcome; label: string }) {
+  return <Chip size="small" label={label} color={OUTCOME_COLOR[outcome]} variant={outcome === "CREATE" ? "filled" : "outlined"} />;
 }

@@ -1,360 +1,308 @@
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import type { ApiError } from '../../shared/api/httpClient'
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { Box, Button, Chip, MenuItem, TextField, Typography } from "@mui/material";
 import {
-  fetchIntegrationClients,
-  fetchIntegrationRequests,
-  revokeIntegrationClient,
-  rotateIntegrationClient,
-  type IntegrationClientSecretView,
-  type IntegrationClientView,
-  type IntegrationRequestView,
-} from '../../shared/api/integrationsApi'
-import { describeApiError } from '../../shared/api/problemMessages'
-import { useCompany } from '../../shared/company/CompanyContext'
-import { useFormat } from '../../shared/i18n/format'
-import { notifyError, notifySuccess } from '../../shared/ui/alerts'
+  AddRounded, EditRounded, AutorenewRounded, BlockRounded,
+} from "@mui/icons-material";
+import type { ApiError } from "../../shared/api/httpClient";
 import {
-  ActionMenu,
-  DataTable,
-  Pagination,
-  SectionHeader,
-  Select,
-  StatusBadge,
-  confirmDialog,
-  type ActionMenuItem,
-  type DataTableColumn,
-} from '../../shared/ui/components'
-import { IntegrationClientDrawer } from './IntegrationClientDrawer'
-import { SecretRevealDrawer } from './SecretRevealDrawer'
+  fetchIntegrationClients, fetchIntegrationRequests, revokeIntegrationClient, rotateIntegrationClient,
+  type IntegrationClientSecretView, type IntegrationClientView, type IntegrationRequestView,
+} from "../../shared/api/integrationsApi";
+import { describeApiError } from "../../shared/api/problemMessages";
+import {
+  ActionMenu, DataTable, Pagination, SectionHeader, StatusChip, type DataTableColumn,
+} from "../../shared/ui/components";
+import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
+import type { StatusTone } from "../../theme";
+import { t } from "../../lib/i18n";
+import { fmtDateTime, fmtQuantity } from "../../lib/locale";
+import { IntegrationClientDrawer } from "./IntegrationClientDrawer";
+import { SecretRevealDrawer } from "./SecretRevealDrawer";
 
-const PAGE_SIZE = 10
+const PAGE_SIZE = 20;
 
-type ClientModal = { mode: 'create' } | { mode: 'edit'; client: IntegrationClientView } | null
+const REQUEST_TONE: Record<IntegrationRequestView["status"], StatusTone> = {
+  SUCCEEDED: "done",
+  PARTIAL: "inProgress",
+  REJECTED: "overdue",
+  FAILED: "overdue",
+};
+
+interface InboundPanelProps {
+  companyId: string;
+  canManage: boolean;
+}
 
 /**
- * Inbound: who may write into this company, and what they have sent.
+ * La mitad de entrada del hub: las credenciales con las que se autentican los socios, y la
+ * bandeja de lo que mandaron.
  *
- * The two tables belong together because the second is how the first is debugged. "Our WMS says it
- * posted that order yesterday" is answered by looking at the credential's traffic, not by looking at
- * the credential.
- *
- * Nothing here ever shows a secret except the one response that creates or rotates it - see
- * `SecretRevealDrawer`. The client id is not a secret and is shown in full, because a partner
- * quoting it is how a support conversation starts.
+ * Las dos van juntas porque la pregunta es una: "¿esto está conectado y funciona?". Una lista de
+ * credenciales sin el registro de peticiones dice quién puede entrar, pero no si alguien entró.
  */
-export function InboundPanel({ companyId }: { companyId: string }) {
-  const { t } = useTranslation('settings')
-  const { t: tc } = useTranslation('common')
-  const { t: td } = useTranslation('dialogs')
-  const { t: ts } = useTranslation('statuses')
-  const format = useFormat()
-  const { hasPermission } = useCompany()
-  const canManage = hasPermission('integration.client:manage')
-  const queryClient = useQueryClient()
-
-  const [clientPage, setClientPage] = useState(0)
-  const [requestPage, setRequestPage] = useState(0)
-  const [clientFilter, setClientFilter] = useState('')
-  const [modal, setModal] = useState<ClientModal>(null)
-  const [issued, setIssued] = useState<IntegrationClientSecretView | null>(null)
+export function InboundPanel({ companyId, canManage }: InboundPanelProps) {
+  const queryClient = useQueryClient();
+  const [clientsPage, setClientsPage] = useState(0);
+  const [requestsPage, setRequestsPage] = useState(0);
+  const [clientFilter, setClientFilter] = useState("");
+  const [editing, setEditing] = useState<IntegrationClientView | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [secret, setSecret] = useState<IntegrationClientSecretView | null>(null);
 
   const clientsQuery = useQuery({
-    queryKey: ['integration-clients', companyId, clientPage],
-    queryFn: ({ signal }) =>
-      fetchIntegrationClients(companyId, { page: clientPage, size: PAGE_SIZE, sort: 'name,asc' }, signal),
+    queryKey: ["integration-clients", companyId, clientsPage],
+    queryFn: ({ signal }) => fetchIntegrationClients(companyId, { page: clientsPage, size: PAGE_SIZE }, signal),
     placeholderData: keepPreviousData,
-    enabled: companyId !== '',
-  })
+  });
 
   const requestsQuery = useQuery({
-    queryKey: ['integration-requests', companyId, requestPage, clientFilter],
+    queryKey: ["integration-requests", companyId, requestsPage, clientFilter],
     queryFn: ({ signal }) =>
       fetchIntegrationRequests(
         companyId,
-        {
-          page: requestPage,
-          size: PAGE_SIZE,
-          sort: 'receivedAt,desc',
-          clientId: clientFilter || undefined,
-        },
+        { page: requestsPage, size: PAGE_SIZE, clientId: clientFilter || undefined },
         signal,
       ),
     placeholderData: keepPreviousData,
-    enabled: companyId !== '',
-  })
+  });
 
-  function refreshClients() {
-    void queryClient.invalidateQueries({ queryKey: ['integration-clients', companyId] })
+  function refresh() {
+    void queryClient.invalidateQueries({ queryKey: ["integration-clients", companyId] });
+    void queryClient.invalidateQueries({ queryKey: ["integration-requests", companyId] });
   }
 
+  /**
+   * Rotar pregunta primero si el secreto pudo filtrarse, porque de eso depende si el anterior
+   * sigue valiendo un rato o muere ahora mismo: si se filtró, una ventana de gracia es una puerta
+   * abierta.
+   */
   async function rotate(client: IntegrationClientView) {
-    const confirmed = await confirmDialog({
-      title: t('integrations.clients.rotateTitle', { name: client.name }),
-      text: t('integrations.clients.rotateText'),
-      confirmLabel: t('integrations.clients.rotate'),
-    })
-    if (!confirmed) return
+    const leaked = await confirmDialog({
+      title: t("¿Rotar el secreto de {{name}}?", { name: client.name }),
+      text: t("¿El secreto actual pudo filtrarse? Si es así se revoca al instante y el socio dejará de poder entrar hasta que configure el nuevo."),
+      confirmLabel: t("Sí, revocar el anterior ya"),
+      cancelLabel: t("No, dar margen"),
+      dangerous: true,
+    });
+
     try {
-      // No graceHours: the deployment's configured window applies, which is what a planned
-      // rotation wants. A leaked secret is handled by revoking, which is immediate.
-      setIssued(await rotateIntegrationClient(companyId, client.id))
-      refreshClients()
+      // `graceHours: 0` mata el anterior al momento; omitirlo usa la ventana configurada.
+      setSecret(await rotateIntegrationClient(companyId, client.id, leaked ? 0 : undefined));
+      refresh();
     } catch (error) {
-      notifyError(td('errorTitle'), describeApiError(error as ApiError))
+      notifyError(t("No se pudo completar la acción"), describeApiError(error as ApiError));
     }
   }
 
   async function revoke(client: IntegrationClientView) {
     const confirmed = await confirmDialog({
-      title: t('integrations.clients.revokeTitle', { name: client.name }),
-      text: t('integrations.clients.revokeText'),
-      confirmLabel: t('integrations.clients.revoke'),
+      title: t("¿Revocar {{name}}?", { name: client.name }),
+      text: t("La credencial deja de funcionar al momento y no se puede restaurar."),
+      confirmLabel: t("Revocar"),
       dangerous: true,
-    })
-    if (!confirmed) return
+    });
+    if (!confirmed) return;
+
     try {
-      await revokeIntegrationClient(companyId, client.id)
-      notifySuccess(t('integrations.clients.revoked'), client.name)
-      refreshClients()
+      await revokeIntegrationClient(companyId, client.id);
+      notifySuccess(t("Credencial revocada"), client.name);
+      refresh();
     } catch (error) {
-      notifyError(td('errorTitle'), describeApiError(error as ApiError))
+      notifyError(t("No se pudo completar la acción"), describeApiError(error as ApiError));
     }
   }
 
   const clientColumns: DataTableColumn<IntegrationClientView>[] = [
     {
-      key: 'name',
-      header: tc('columns.name'),
+      key: "name",
+      header: t("Credencial"),
       render: (client) => (
-        <span>
-          <span className="fw-semibold d-block">{client.name}</span>
-          <code className="small text-body-secondary">{client.clientId}</code>
-        </span>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.3 }}>{client.name}</Typography>
+          {/* El clientId es la mitad pública: se puede enseñar y copiar sin riesgo. */}
+          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>
+            {client.clientId}
+          </Typography>
+        </Box>
       ),
     },
     {
-      key: 'scopes',
-      header: t('integrations.clients.scopes'),
+      key: "scopes",
+      header: t("Alcances"),
       render: (client) => (
-        <span className="d-flex flex-wrap gap-1">
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
           {client.scopes.map((scope) => (
-            <StatusBadge key={scope} label={scope} tone="info" />
+            <Chip key={scope} size="small" variant="outlined" label={scope.replace("integration.", "")} />
           ))}
-        </span>
+        </Box>
       ),
     },
     {
-      key: 'status',
-      header: tc('columns.status'),
-      render: (client) => {
-        if (client.revokedAt) return <StatusBadge label={t('integrations.clients.revoked')} tone="danger" />
-        if (!client.active) return <StatusBadge label={ts('inactive')} tone="neutral" />
-        // A rotation in flight is worth surfacing: two secrets are accepted until the window ends,
-        // and somebody has to redeploy before it does.
-        if (client.rotationGraceEndsAt) {
-          return <StatusBadge label={t('integrations.clients.rotating')} tone="warning" />
-        }
-        return <StatusBadge label={ts('active')} tone="success" />
-      },
+      key: "lastUsed",
+      header: t("Último uso"),
+      // La pregunta real de esta columna es "¿esto sigue en uso?": un "nunca" en una credencial
+      // de hace seis meses es una credencial que sobra.
+      render: (client) => client.lastUsedAt ? fmtDateTime(client.lastUsedAt) : t("Nunca"),
     },
     {
-      key: 'lastUsedAt',
-      header: t('integrations.clients.lastUsed'),
-      render: (client) =>
-        client.lastUsedAt ? format.dateTime(client.lastUsedAt) : t('integrations.clients.neverUsed'),
+      key: "status",
+      header: t("Estado"),
+      render: (client) => (
+        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+          <StatusChip
+            label={client.active ? t("Activa") : t("Revocada")}
+            tone={client.active ? "done" : "cancelled"}
+          />
+          {client.rotationGraceEndsAt && (
+            <StatusChip label={t("Rotando")} tone="inProgress" />
+          )}
+        </Box>
+      ),
     },
-  ]
+  ];
 
   if (canManage) {
     clientColumns.push({
-      key: 'actions',
-      header: tc('columns.actions'),
+      key: "actions",
+      header: t("Acciones"),
       actions: true,
-      render: (client) => {
-        if (client.revokedAt) {
-          return <span className="text-body-secondary small">{t('integrations.clients.terminal')}</span>
-        }
-        const items: ActionMenuItem[] = [
-          {
-            key: 'edit',
-            label: tc('actions.edit'),
-            icon: 'bi-pencil',
-            onSelect: () => setModal({ mode: 'edit', client }),
-          },
-          {
-            key: 'rotate',
-            label: t('integrations.clients.rotate'),
-            icon: 'bi-arrow-repeat',
-            onSelect: () => void rotate(client),
-          },
-          {
-            key: 'revoke',
-            label: t('integrations.clients.revoke'),
-            icon: 'bi-slash-circle',
-            dangerous: true,
-            onSelect: () => void revoke(client),
-          },
-        ]
-        return <ActionMenu items={items} />
-      },
-    })
+      render: (client) => (
+        <ActionMenu
+          items={[
+            { key: "edit", label: t("Editar"), icon: <EditRounded />, disabled: !client.active, onSelect: () => setEditing(client) },
+            { key: "rotate", label: t("Rotar secreto"), icon: <AutorenewRounded />, disabled: !client.active, onSelect: () => void rotate(client) },
+            {
+              key: "revoke", label: t("Revocar"), icon: <BlockRounded />,
+              dangerous: true, divider: true, disabled: !client.active,
+              onSelect: () => void revoke(client),
+            },
+          ]}
+        />
+      ),
+    });
   }
 
   const requestColumns: DataTableColumn<IntegrationRequestView>[] = [
-    { key: 'receivedAt', header: t('integrations.inbox.receivedAt'), render: (row) => format.dateTime(row.receivedAt) },
-    { key: 'operation', header: t('integrations.inbox.operation'), render: (row) => <code>{row.operation}</code> },
+    { key: "operation", header: t("Operación"), render: (row) => <Typography variant="body2" sx={{ fontWeight: 600 }}>{row.operation}</Typography> },
     {
-      key: 'reference',
-      header: t('integrations.inbox.reference'),
-      render: (row) =>
-        row.externalReference ? (
-          <span>
-            {row.externalReference}
-            {row.externalSystem && <span className="d-block small text-body-secondary">{row.externalSystem}</span>}
-          </span>
-        ) : (
-          '—'
-        ),
-    },
-    {
-      key: 'status',
-      header: tc('columns.status'),
+      key: "status",
+      header: t("Resultado"),
       render: (row) => (
-        <span className="d-flex flex-column gap-1">
-          <StatusBadge
-            label={t(`integrations.inbox.statuses.${row.status}`)}
-            tone={
-              row.status === 'SUCCEEDED'
-                ? 'success'
-                : row.status === 'PARTIAL'
-                  ? 'warning'
-                  : 'danger'
-            }
-          />
-          {row.itemCount > 1 && (
-            <span className="small text-body-secondary">
-              {t('integrations.inbox.counts', { succeeded: row.succeededCount, total: row.itemCount })}
-            </span>
-          )}
-        </span>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+          <StatusChip label={row.status} tone={REQUEST_TONE[row.status]} />
+          <Typography variant="caption" color="text.secondary">{row.httpStatus}</Typography>
+        </Box>
       ),
     },
     {
-      key: 'outcome',
-      header: t('integrations.inbox.outcome'),
+      key: "items",
+      header: t("Elementos"),
+      numeric: true,
+      // Éxitos y fallos juntos: un 200 con la mitad de las filas rechazadas no es un éxito.
       render: (row) => (
-        <span>
-          <span className="small">HTTP {row.httpStatus}</span>
-          {row.errorSummary && <span className="d-block small text-danger">{row.errorSummary}</span>}
-          {row.correlationId && (
-            <code className="d-block small text-body-secondary">{row.correlationId}</code>
-          )}
-        </span>
+        <Typography variant="body2" sx={{ fontVariantNumeric: "tabular-nums" }}>
+          {fmtQuantity(row.succeededCount)} / {fmtQuantity(row.itemCount)}
+        </Typography>
       ),
     },
-  ]
-
-  const clients = clientsQuery.data
-  const requests = requestsQuery.data
+    { key: "reference", header: t("Referencia externa"), render: (row) => row.externalReference ?? "-" },
+    { key: "received", header: t("Recibida"), render: (row) => fmtDateTime(row.receivedAt) },
+    {
+      key: "duration",
+      header: t("Duración"),
+      numeric: true,
+      render: (row) => `${fmtQuantity(row.durationMs)} ms`,
+    },
+    { key: "error", header: t("Error"), render: (row) => row.errorSummary ?? "-" },
+  ];
 
   return (
-    <div className="d-flex flex-column gap-4">
-      <section>
-        <SectionHeader
-          title={t('integrations.clients.title')}
-          actions={
-            canManage && (
-              <button
-                type="button"
-                className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2"
-                onClick={() => setModal({ mode: 'create' })}
-              >
-                <i className="bi bi-key" aria-hidden="true" />
-                {t('integrations.clients.issue')}
-              </button>
-            )
-          }
-        />
-        <p className="text-body-secondary small">{t('integrations.clients.description')}</p>
+    <>
+      <SectionHeader
+        title={t("Credenciales")}
+        level={2}
+        actions={canManage && (
+          <Button size="small" variant="contained" startIcon={<AddRounded />} onClick={() => setCreating(true)}>
+            {t("Nueva credencial")}
+          </Button>
+        )}
+      />
+      <Box sx={{ mb: 4 }}>
         <DataTable
           columns={clientColumns}
-          rows={clients?.content ?? []}
-          total={clients?.totalElements}
+          rows={clientsQuery.data?.content ?? []}
+          total={clientsQuery.data?.totalElements}
           rowKey={(client) => client.id}
           isLoading={clientsQuery.isPending}
           error={clientsQuery.isError ? describeApiError(clientsQuery.error as ApiError) : null}
           onRetry={() => void clientsQuery.refetch()}
-          emptyTitle={t('integrations.clients.empty.title')}
-          emptyMessage={t('integrations.clients.empty.message')}
-          footer={clients ? <Pagination page={clients} onPageChange={setClientPage} /> : undefined}
+          emptyTitle={t("Sin credenciales")}
+          emptyMessage={t("Emite una credencial para que un socio pueda conectarse.")}
+          footer={clientsQuery.data ? <Pagination page={clientsQuery.data} onPageChange={setClientsPage} /> : undefined}
         />
-      </section>
+      </Box>
 
-      <section>
-        <SectionHeader
-          title={t('integrations.inbox.title')}
-          actions={
-            <Select
-              id="integration-inbox-client"
-              size="sm"
-              value={clientFilter}
-              onChange={(next) => {
-                setClientFilter(next)
-                setRequestPage(0)
-              }}
-              options={[
-                { value: '', label: t('integrations.inbox.allClients') },
-                ...(clients?.content ?? []).map((client) => ({ value: client.id, label: client.name })),
-              ]}
-            />
-          }
-        />
-        <p className="text-body-secondary small">{t('integrations.inbox.description')}</p>
-        <DataTable
-          columns={requestColumns}
-          rows={requests?.content ?? []}
-          total={requests?.totalElements}
-          rowKey={(row) => row.id}
-          isLoading={requestsQuery.isPending}
-          error={requestsQuery.isError ? describeApiError(requestsQuery.error as ApiError) : null}
-          onRetry={() => void requestsQuery.refetch()}
-          emptyTitle={t('integrations.inbox.empty.title')}
-          emptyMessage={t('integrations.inbox.empty.message')}
-          footer={requests ? <Pagination page={requests} onPageChange={setRequestPage} /> : undefined}
-        />
-      </section>
+      <SectionHeader
+        title={t("Bandeja de entrada")}
+        level={2}
+        actions={
+          <TextField
+            select size="small" label={t("Credencial")} value={clientFilter}
+            onChange={(e) => { setClientFilter(e.target.value); setRequestsPage(0); }}
+            sx={{ minWidth: 220 }}
+          >
+            <MenuItem value="">{t("Todas")}</MenuItem>
+            {(clientsQuery.data?.content ?? []).map((client) => (
+              <MenuItem key={client.id} value={client.id}>{client.name}</MenuItem>
+            ))}
+          </TextField>
+        }
+      />
+      <DataTable
+        columns={requestColumns}
+        rows={requestsQuery.data?.content ?? []}
+        total={requestsQuery.data?.totalElements}
+        rowKey={(row) => row.id}
+        isLoading={requestsQuery.isPending}
+        error={requestsQuery.isError ? describeApiError(requestsQuery.error as ApiError) : null}
+        onRetry={() => void requestsQuery.refetch()}
+        emptyTitle={t("Sin peticiones")}
+        emptyMessage={t("Todavía no ha entrado ninguna petición de integración.")}
+        footer={requestsQuery.data ? <Pagination page={requestsQuery.data} onPageChange={setRequestsPage} /> : undefined}
+      />
 
-      {modal && (
+      {(creating || editing) && (
         <IntegrationClientDrawer
           companyId={companyId}
-          client={modal.mode === 'edit' ? modal.client : null}
-          onClose={() => setModal(null)}
-          onSaved={(secret) => {
-            setModal(null)
-            if (secret) {
-              setIssued(secret)
-            } else {
-              notifySuccess(td('updated'))
-            }
-            refreshClients()
+          client={editing}
+          onClose={() => { setCreating(false); setEditing(null); }}
+          onCreated={(created) => {
+            setCreating(false);
+            setSecret(created);
+            refresh();
+          }}
+          onUpdated={() => {
+            setEditing(null);
+            notifySuccess(t("Cambios guardados"));
+            refresh();
           }}
         />
       )}
 
-      {issued && (
+      {secret && (
         <SecretRevealDrawer
-          title={t('integrations.clients.secretTitle')}
-          notice={issued.notice}
+          title={t("Credencial de {{name}}", { name: secret.client.name })}
+          notice={secret.notice}
+          previousValidUntil={secret.previousSecretValidUntil}
           fields={[
-            { label: t('integrations.clients.clientId'), value: issued.clientId, secret: false },
-            { label: t('integrations.clients.secret'), value: issued.secret, secret: true },
-            { label: t('integrations.clients.bearerToken'), value: issued.bearerToken, secret: true },
+            { label: t("Client ID"), value: secret.clientId },
+            { label: t("Secreto"), value: secret.secret },
+            { label: t("Bearer token"), value: secret.bearerToken, primary: true },
           ]}
-          onClose={() => setIssued(null)}
+          onClose={() => setSecret(null)}
         />
       )}
-    </div>
-  )
+    </>
+  );
 }

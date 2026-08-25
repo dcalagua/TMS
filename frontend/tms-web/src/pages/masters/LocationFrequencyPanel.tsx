@@ -1,310 +1,241 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import type { ApiError } from '../../shared/api/httpClient'
-import { fetchFrequencies } from '../../shared/api/frequenciesApi'
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import {
-  activateLocationFrequency,
-  createLocationFrequency,
-  deactivateLocationFrequency,
-  deleteLocationFrequency,
-  fetchLocationEligibility,
-  fetchLocationFrequencies,
-  type EligibilityView,
-} from '../../shared/api/locationFrequenciesApi'
-import { describeApiError } from '../../shared/api/problemMessages'
-import { ActiveBadge, confirmDialog } from '../../shared/ui/components'
-import { FormField } from '../../shared/ui/components/FormField'
-import { Select } from '../../shared/ui/components/Select'
-import { notifyError, notifySuccess } from '../../shared/ui/alerts'
+  Alert, Box, Button, IconButton, MenuItem, Paper, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
+} from "@mui/material";
+import { AddRounded, DeleteRounded, BlockRounded, CheckCircleRounded, FactCheckRounded } from "@mui/icons-material";
+import type { ApiError } from "../../shared/api/httpClient";
+import { describeApiError } from "../../shared/api/problemMessages";
+import { fetchFrequencies } from "../../shared/api/frequenciesApi";
+import {
+  activateLocationFrequency, createLocationFrequency, deactivateLocationFrequency,
+  deleteLocationFrequency, fetchLocationEligibility, fetchLocationFrequencies,
+  type EligibilityView, type LocationFrequencyView,
+} from "../../shared/api/locationFrequenciesApi";
+import { ActiveBadge, LoadingState, dataTableSx } from "../../shared/ui/components";
+import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
+import { t } from "../../lib/i18n";
+import { fmtDate, today } from "../../lib/locale";
 
 interface LocationFrequencyPanelProps {
-  companyId: string
-  locationId: string
-  locationName: string
-}
-
-/** Today, as `YYYY-MM-DD`, for the eligibility date input's default value. */
-function today(): string {
-  return new Date().toISOString().slice(0, 10)
+  companyId: string;
+  locationId: string;
 }
 
 /**
- * A location's service calendar (migration V15/job 03): which frequencies govern whether it can
- * be dispatched to or serviced on a given date, plus a quick eligibility check against that
- * calendar. Only rendered once the location has an id - the associations are a sub-resource of
- * an existing location, the same reason `FrequencyController`'s exceptions sub-resource requires
- * a saved frequency first.
+ * El calendario de servicio de una ubicación: qué frecuencias tiene asociadas, desde y hasta
+ * cuándo, y una comprobación de elegibilidad para una fecha concreta.
  *
- * Kept as its own panel rather than form fields, because every mutation here (add/remove/
- * activate/deactivate an association) is its own API call against its own sub-resource, not part
- * of the location's own create/update payload - the same shape `FrequencyFormDrawer` would use
- * for exceptions if that sub-resource were wired into the UI yet.
+ * Las asociaciones se guardan por su cuenta y no con el formulario que las rodea. Es
+ * deliberado: asociar una frecuencia es una decisión completa en sí misma, y hacerla depender
+ * de que alguien pulse "Guardar" arriba significaría que una ubicación puede quedarse a medio
+ * configurar sin que nada lo diga.
+ *
+ * La elegibilidad la calcula el backend. Aquí no se deriva: la respuesta trae el veredicto, la
+ * frecuencia que lo decidió, la hora de corte y el lead time, y el panel solo los presenta.
  */
-export function LocationFrequencyPanel({ companyId, locationId, locationName }: LocationFrequencyPanelProps) {
-  const { t } = useTranslation('masters')
-  const { t: tc } = useTranslation('common')
-  const { t: td } = useTranslation('dialogs')
-  const queryClient = useQueryClient()
+export function LocationFrequencyPanel({ companyId, locationId }: LocationFrequencyPanelProps) {
+  const queryClient = useQueryClient();
+  const [frequencyId, setFrequencyId] = useState("");
+  const [effectiveFrom, setEffectiveFrom] = useState("");
+  const [effectiveTo, setEffectiveTo] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [checkDate, setCheckDate] = useState(today);
+  const [eligibility, setEligibility] = useState<EligibilityView | null>(null);
+  const [checking, setChecking] = useState(false);
 
-  const [selectedFrequencyId, setSelectedFrequencyId] = useState('')
-  const [effectiveFrom, setEffectiveFrom] = useState('')
-  const [effectiveTo, setEffectiveTo] = useState('')
-  const [adding, setAdding] = useState(false)
+  const associationsKey = ["location-frequencies", companyId, locationId];
 
-  const [eligibilityDate, setEligibilityDate] = useState(today)
-  const [eligibility, setEligibility] = useState<EligibilityView | null>(null)
-  const [checkingEligibility, setCheckingEligibility] = useState(false)
-
-  const associationsQuery = useQuery({
-    queryKey: ['location-frequencies', companyId, locationId],
+  const associations = useQuery({
+    queryKey: associationsKey,
     queryFn: () => fetchLocationFrequencies(companyId, locationId),
-  })
-  const associations = associationsQuery.data ?? []
+  });
 
-  const frequenciesQuery = useQuery({
-    queryKey: ['frequencies-for-location-form', companyId],
-    queryFn: ({ signal }) => fetchFrequencies({ companyId, size: 200, active: true, sort: 'name,asc', signal }),
-  })
-  const frequencyOptions = frequenciesQuery.data?.content ?? []
+  const frequencies = useQuery({
+    queryKey: ["frequencies-for-location", companyId],
+    queryFn: ({ signal }) => fetchFrequencies({ companyId, size: 200, active: true, sort: "code,asc", signal }),
+  });
 
-  function refresh() {
-    void queryClient.invalidateQueries({ queryKey: ['location-frequencies', companyId, locationId] })
-  }
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: associationsKey });
 
-  async function handleAdd() {
-    if (!selectedFrequencyId) return
-    setAdding(true)
+  async function associate() {
+    if (frequencyId === "") return;
+    setBusy(true);
     try {
       await createLocationFrequency(companyId, locationId, {
-        frequencyId: selectedFrequencyId,
+        frequencyId,
         effectiveFrom: effectiveFrom || null,
         effectiveTo: effectiveTo || null,
-      })
-      notifySuccess(td('created'))
-      setSelectedFrequencyId('')
-      setEffectiveFrom('')
-      setEffectiveTo('')
-      refresh()
+      });
+      setFrequencyId("");
+      setEffectiveFrom("");
+      setEffectiveTo("");
+      notifySuccess(t("Registro creado"));
+      refresh();
     } catch (error) {
-      notifyError(td('errorTitle'), describeApiError(error as ApiError))
+      notifyError(t("No se pudo completar la acción"), describeApiError(error as ApiError));
     } finally {
-      setAdding(false)
+      setBusy(false);
     }
   }
 
-  async function handleToggleActive(associationId: string, active: boolean, frequencyName: string | null) {
-    const label = frequencyName ?? locationName
-    const confirmed = await confirmDialog({
-      title: active ? td('deactivate.title', { name: label }) : td('activate.title', { name: label }),
-      text: active ? td('deactivate.text') : td('activate.text'),
-      confirmLabel: active ? tc('actions.deactivate') : tc('actions.activate'),
-      dangerous: active,
-    })
-    if (!confirmed) return
-
+  async function toggle(association: LocationFrequencyView) {
     try {
-      if (active) {
-        await deactivateLocationFrequency(companyId, locationId, associationId)
-        notifySuccess(td('deactivated'))
-      } else {
-        await activateLocationFrequency(companyId, locationId, associationId)
-        notifySuccess(td('activated'))
-      }
-      refresh()
+      if (association.active) await deactivateLocationFrequency(companyId, locationId, association.id);
+      else await activateLocationFrequency(companyId, locationId, association.id);
+      refresh();
     } catch (error) {
-      notifyError(td('errorTitle'), describeApiError(error as ApiError))
+      notifyError(t("No se pudo completar la acción"), describeApiError(error as ApiError));
     }
   }
 
-  async function handleDelete(associationId: string, frequencyName: string | null) {
+  async function remove(association: LocationFrequencyView) {
     const confirmed = await confirmDialog({
-      title: td('delete.title', { name: frequencyName ?? locationName }),
-      text: td('delete.text'),
-      confirmLabel: td('delete.confirm'),
+      title: t("¿Eliminar {{name}}?", { name: association.frequencyName ?? association.frequencyCode ?? "" }),
+      text: t("Esta acción no se puede deshacer."),
+      confirmLabel: t("Eliminar"),
       dangerous: true,
-    })
-    if (!confirmed) return
-
+    });
+    if (!confirmed) return;
     try {
-      await deleteLocationFrequency(companyId, locationId, associationId)
-      notifySuccess(td('deleted'))
-      refresh()
+      await deleteLocationFrequency(companyId, locationId, association.id);
+      notifySuccess(t("Registro eliminado"));
+      refresh();
     } catch (error) {
-      notifyError(td('errorTitle'), describeApiError(error as ApiError))
+      notifyError(t("No se pudo completar la acción"), describeApiError(error as ApiError));
     }
   }
 
-  async function handleCheckEligibility() {
-    if (!eligibilityDate) return
-    setCheckingEligibility(true)
+  async function check() {
+    setChecking(true);
+    setEligibility(null);
     try {
-      setEligibility(await fetchLocationEligibility(companyId, locationId, eligibilityDate))
+      setEligibility(await fetchLocationEligibility(companyId, locationId, checkDate));
     } catch (error) {
-      notifyError(td('errorTitle'), describeApiError(error as ApiError))
+      notifyError(t("No se pudo completar la acción"), describeApiError(error as ApiError));
     } finally {
-      setCheckingEligibility(false)
+      setChecking(false);
     }
   }
 
-  // The evaluator only ever matches one of this location's own associations (see
-  // `LocationEligibilityEvaluator`), so the match is always findable in `associations`.
-  const matchedAssociation = eligibility?.frequencyId
-    ? associations.find((association) => association.frequencyId === eligibility.frequencyId)
-    : null
+  const rows = associations.data ?? [];
 
   return (
-    <>
-      <fieldset className="tms-fieldset">
-        <legend className="tms-fieldset-legend">{t('locations.form.sectionServiceCalendar')}</legend>
-        <p className="text-body-secondary small">{t('locations.form.serviceCalendarHelp')}</p>
+    <Box>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        {t("Asocia una o más frecuencias para definir en qué fechas puede despacharse o recibir servicio esta ubicación.")}
+      </Typography>
 
-        {associations.length === 0 && (
-          <p className="text-body-secondary small">{t('locations.form.noAssociations')}</p>
-        )}
-        {associations.length > 0 && (
-          <ul className="list-group mb-3">
-            {associations.map((association) => (
-              <li
-                key={association.id}
-                className="list-group-item d-flex justify-content-between align-items-center gap-2 flex-wrap"
-              >
-                <div className="tms-min-w-0">
-                  <div className="tms-truncate">
-                    {association.frequencyCode
-                      ? `${association.frequencyCode} — ${association.frequencyName}`
-                      : association.frequencyId}
-                  </div>
-                  <div className="text-body-secondary small">
-                    {tc('fields.effectiveFrom')}: {association.effectiveFrom ?? '—'} · {tc('fields.effectiveTo')}:{' '}
-                    {association.effectiveTo ?? '—'}
-                  </div>
-                </div>
-                <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                  <ActiveBadge active={association.active} />
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-secondary"
-                    onClick={() => void handleToggleActive(association.id, association.active, association.frequencyName)}
-                  >
-                    {association.active ? tc('actions.deactivate') : tc('actions.activate')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-danger"
-                    onClick={() => void handleDelete(association.id, association.frequencyName)}
-                  >
-                    {tc('actions.delete')}
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, alignItems: "flex-start", mb: 2 }}>
+        <TextField
+          select size="small" label={t("Frecuencia")} value={frequencyId}
+          onChange={(e) => setFrequencyId(e.target.value)}
+          sx={{ minWidth: 220, flex: 1 }}
+        >
+          <MenuItem value="">{t("Selecciona una frecuencia")}</MenuItem>
+          {(frequencies.data?.content ?? []).map((frequency) => (
+            <MenuItem key={frequency.id} value={frequency.id}>{frequency.code} · {frequency.name}</MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          size="small" type="date" label={t("Vigente desde")} value={effectiveFrom}
+          onChange={(e) => setEffectiveFrom(e.target.value)}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ minWidth: 165 }}
+        />
+        <TextField
+          size="small" type="date" label={t("Vigente hasta")} value={effectiveTo}
+          onChange={(e) => setEffectiveTo(e.target.value)}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ minWidth: 165 }}
+        />
+        <Button
+          variant="outlined" startIcon={<AddRounded />} onClick={() => void associate()}
+          disabled={frequencyId === "" || busy}
+        >
+          {t("Asociar frecuencia")}
+        </Button>
+      </Box>
 
-        <div className="row g-2 align-items-end">
-          <div className="col-12 col-sm-5">
-            <FormField label={tc('fields.frequency')} htmlFor="location-frequency-to-add">
-              <Select
-                id="location-frequency-to-add"
-                value={selectedFrequencyId}
-                onChange={setSelectedFrequencyId}
-                placeholder={t('locations.form.selectFrequency')}
-                options={frequencyOptions.map((frequency) => ({ value: frequency.id, label: frequency.name }))}
-              />
-            </FormField>
-          </div>
-          <div className="col-6 col-sm-3">
-            <FormField label={tc('fields.effectiveFrom')} htmlFor="location-frequency-from">
-              <input
-                id="location-frequency-from"
-                type="date"
-                className="form-control"
-                value={effectiveFrom}
-                onChange={(event) => setEffectiveFrom(event.target.value)}
-              />
-            </FormField>
-          </div>
-          <div className="col-6 col-sm-3">
-            <FormField label={tc('fields.effectiveTo')} htmlFor="location-frequency-to">
-              <input
-                id="location-frequency-to"
-                type="date"
-                className="form-control"
-                value={effectiveTo}
-                onChange={(event) => setEffectiveTo(event.target.value)}
-              />
-            </FormField>
-          </div>
-          <div className="col-12 col-sm-1">
-            <button
-              type="button"
-              className="btn btn-outline-primary w-100"
-              disabled={!selectedFrequencyId || adding}
-              onClick={() => void handleAdd()}
-              aria-label={t('locations.form.addAssociation')}
-              title={t('locations.form.addAssociation')}
-            >
-              <i className="bi bi-plus-lg" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-      </fieldset>
+      {associations.isPending ? (
+        <LoadingState minHeight={120} />
+      ) : rows.length === 0 ? (
+        <Alert severity="info" sx={{ mb: 3 }}>{t("Aún no hay frecuencias asociadas a esta ubicación.")}</Alert>
+      ) : (
+        <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
+          <Table size="small" sx={dataTableSx}>
+            <TableHead>
+              <TableRow>
+                <TableCell>{t("Frecuencia")}</TableCell>
+                <TableCell>{t("Vigente desde")}</TableCell>
+                <TableCell>{t("Vigente hasta")}</TableCell>
+                <TableCell>{t("Estado")}</TableCell>
+                <TableCell className="actions-col">{t("Acciones")}</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {rows.map((association) => (
+                <TableRow key={association.id}>
+                  <TableCell>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {association.frequencyName ?? "-"}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">{association.frequencyCode ?? ""}</Typography>
+                  </TableCell>
+                  <TableCell>{association.effectiveFrom ? fmtDate(association.effectiveFrom) : "-"}</TableCell>
+                  <TableCell>{association.effectiveTo ? fmtDate(association.effectiveTo) : "-"}</TableCell>
+                  <TableCell><ActiveBadge active={association.active} /></TableCell>
+                  <TableCell className="actions-col">
+                    <Tooltip title={association.active ? t("Desactivar") : t("Activar")}>
+                      <IconButton size="small" onClick={() => void toggle(association)}>
+                        {association.active ? <BlockRounded fontSize="small" /> : <CheckCircleRounded fontSize="small" />}
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("Eliminar")}>
+                      <IconButton size="small" onClick={() => void remove(association)} sx={{ color: "error.main" }}>
+                        <DeleteRounded fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
 
-      <fieldset className="tms-fieldset mb-0">
-        <legend className="tms-fieldset-legend">{t('locations.form.sectionEligibility')}</legend>
-        <p className="text-body-secondary small">{t('locations.form.eligibilityHelp')}</p>
-        <div className="row g-2 align-items-end">
-          <div className="col-6 col-sm-4">
-            <FormField label={t('locations.form.eligibilityDateLabel')} htmlFor="location-eligibility-date">
-              <input
-                id="location-eligibility-date"
-                type="date"
-                className="form-control"
-                value={eligibilityDate}
-                onChange={(event) => setEligibilityDate(event.target.value)}
-              />
-            </FormField>
-          </div>
-          <div className="col-6 col-sm-3">
-            <button
-              type="button"
-              className="btn btn-outline-secondary w-100"
-              disabled={!eligibilityDate || checkingEligibility}
-              onClick={() => void handleCheckEligibility()}
-            >
-              {t('locations.form.eligibilityCheck')}
-            </button>
-          </div>
-        </div>
+      <Typography variant="subtitle2" sx={{ mb: 0.5 }}>{t("Verificar elegibilidad")}</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+        {t("Comprueba si esta ubicación puede despachar o recibir servicio en una fecha concreta, según sus frecuencias asociadas.")}
+      </Typography>
+      <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap", mb: 1.5 }}>
+        <TextField
+          size="small" type="date" label={t("Fecha a verificar")} value={checkDate}
+          onChange={(e) => setCheckDate(e.target.value)}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ minWidth: 175 }}
+        />
+        <Button variant="outlined" startIcon={<FactCheckRounded />} onClick={() => void check()} disabled={checking}>
+          {t("Verificar")}
+        </Button>
+      </Box>
 
-        {eligibility && (
-          <div className={`alert py-2 mt-3 ${eligibility.eligible ? 'alert-success' : 'alert-secondary'}`} role="status">
-            <strong>
-              {eligibility.eligible ? t('locations.form.eligibilityEligible') : t('locations.form.eligibilityNotEligible')}
-            </strong>
-            {eligibility.eligible && matchedAssociation && (
-              <div className="small">
-                {tc('fields.frequency')}: {matchedAssociation.frequencyCode} — {matchedAssociation.frequencyName}
-              </div>
-            )}
-            {eligibility.eligible && (eligibility.cutoffTime || eligibility.leadTimeDays !== null) && (
-              <div className="small">
-                {eligibility.cutoffTime && (
-                  <span className="me-3">
-                    {t('frequencies.form.cutoffTime')}: {eligibility.cutoffTime}
-                  </span>
-                )}
-                {eligibility.leadTimeDays !== null && (
-                  <span>
-                    {t('frequencies.form.leadTimeDays')}: {eligibility.leadTimeDays}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </fieldset>
-    </>
-  )
+      {eligibility && (
+        <Alert severity={eligibility.eligible ? "success" : "warning"}>
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            {eligibility.eligible ? t("Elegible para despacho") : t("No elegible")}
+          </Typography>
+          <Typography variant="body2">{eligibility.reason}</Typography>
+          {(eligibility.cutoffTime || eligibility.leadTimeDays !== null) && (
+            <Typography variant="caption" color="text.secondary">
+              {eligibility.cutoffTime && `${t("Corte")}: ${eligibility.cutoffTime}`}
+              {eligibility.cutoffTime && eligibility.leadTimeDays !== null && " · "}
+              {eligibility.leadTimeDays !== null && `${t("Lead time")}: ${eligibility.leadTimeDays} ${t("días")}`}
+            </Typography>
+          )}
+        </Alert>
+      )}
+    </Box>
+  );
 }

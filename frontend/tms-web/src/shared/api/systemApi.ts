@@ -1,14 +1,14 @@
-import { apiRequest } from './httpClient'
+import { apiRequest } from "./httpClient";
 
 export interface SystemInfo {
-  application: string
-  version: string
-  status: string
-  profiles: string[]
-  timestamp: string
+  application: string;
+  version: string;
+  status: string;
+  profiles: string[];
+  timestamp: string;
 }
 
-/** Public backend identification endpoint - the reachability check for the API. */
+/** Endpoint público de identificación del backend — la comprobación de alcance de la API. */
 export function fetchSystemInfo(signal?: AbortSignal): Promise<SystemInfo> {
-  return apiRequest<SystemInfo>('/system/info', { signal })
+  return apiRequest<SystemInfo>("/system/info", { signal });
 }

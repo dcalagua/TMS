@@ -1,274 +1,216 @@
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { Box, Button, Chip, MenuItem, TextField, Typography } from "@mui/material";
 import {
-  fetchAdministeredUsers,
-  fetchAssignableRoles,
-  restoreUserAccess,
-  revokeUserAccess,
+  PersonAddRounded, GroupsRounded, EditRounded, BlockRounded, CheckCircleRounded,
+} from "@mui/icons-material";
+import type { ApiError } from "../../shared/api/httpClient";
+import {
+  fetchAdministeredUsers, fetchAssignableRoles, restoreUserAccess, revokeUserAccess,
   type AdministeredUserView,
-} from '../../shared/api/administrationApi'
-import { describeApiError } from '../../shared/api/problemMessages'
-import type { ApiError } from '../../shared/api/httpClient'
-import { useCompany } from '../../shared/company/CompanyContext'
+} from "../../shared/api/administrationApi";
+import { describeApiError } from "../../shared/api/problemMessages";
+import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  ActionMenu,
-  DataTable,
-  FilterBar,
-  PageHeader,
-  Pagination,
-  Select,
-  StatusBadge,
-  confirmDialog,
-  type ActionMenuItem,
+  ActionMenu, ActiveBadge, DataTable, PageHeader, Pagination, StatusChip, Toolbar,
   type DataTableColumn,
-} from '../../shared/ui/components'
-import { notifyError, notifySuccess } from '../../shared/ui/alerts'
-import { UserFormDrawer } from './UserFormDrawer'
+} from "../../shared/ui/components";
+import { ACTIVE_FILTER_OPTIONS, activeParam, type ActiveFilter } from "../../shared/ui/masterActions";
+import { ICON_TINTS } from "../../shared/ui/navConfig";
+import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
+import { t } from "../../lib/i18n";
+import { fmtDate } from "../../lib/locale";
+import { UserFormDrawer } from "./UserFormDrawer";
 
-const PAGE_SIZE = 25
+const PAGE_SIZE = 25;
 
-type AccessFilter = 'active' | 'revoked' | 'all'
-
-interface AppliedFilters {
-  search: string
-  access: AccessFilter
-}
-
-const DEFAULT_FILTERS: AppliedFilters = { search: '', access: 'active' }
-
-type ModalState = { mode: 'invite' } | { mode: 'edit'; user: AdministeredUserView } | null
+type ModalState = { mode: "invite" } | { mode: "edit"; user: AdministeredUserView } | null;
 
 /**
- * Who can act in this company.
+ * Quién puede actuar en esta empresa y con qué roles.
  *
- * The row's identity is a membership, so the two states a row can be in are "has access" and
- * "access revoked" - not "user enabled" and "user disabled". That distinction is the whole reason
- * this screen is safe to give a company administrator: revoking here ends access to *this*
- * company and leaves the person's account, and their access to any other organization,
- * untouched.
+ * Lo que se lista son *membresías*, no cuentas: la misma persona puede aparecer en varias
+ * empresas, y lo que se revoca aquí es su acceso a esta.
  *
- * An organization-wide member is listed and cannot be edited. Hiding them would answer "who can
- * act here" with a list that is missing the people with the most authority.
+ * La cuenta desactivada a nivel de instalación se enseña pero no se toca: explica por qué alguien
+ * con membresía activa no puede entrar, y arreglarlo no es asunto de esta pantalla.
  */
 export function UsersPage() {
-  const { t } = useTranslation('settings')
-  const { t: tc } = useTranslation('common')
-  const { t: td } = useTranslation('dialogs')
-  const { selected, profile, hasPermission } = useCompany()
-  const companyId = selected?.id ?? ''
-  const canManageAccess = hasPermission('iam.membership:manage')
-  const canManageProfiles = hasPermission('iam.user:manage')
-  const queryClient = useQueryClient()
+  const { selected, hasPermission } = useCompany();
+  const companyId = selected?.id ?? "";
+  const canManage = hasPermission("iam.user:manage");
+  const queryClient = useQueryClient();
 
-  const [page, setPage] = useState(0)
-  const [draftFilters, setDraftFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
-  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
-  const [modal, setModal] = useState<ModalState>(null)
+  const [page, setPage] = useState(0);
+  const [draft, setDraft] = useState({ search: "", active: "active" as ActiveFilter });
+  const [filters, setFilters] = useState({ search: "", active: "active" as ActiveFilter });
+  const [modal, setModal] = useState<ModalState>(null);
 
   const usersQuery = useQuery({
-    queryKey: ['admin-users', companyId, page, filters],
+    queryKey: ["admin-users", companyId, page, filters],
     queryFn: ({ signal }) =>
       fetchAdministeredUsers({
         companyId,
         page,
         size: PAGE_SIZE,
-        sort: 'fullName,asc',
+        sort: "fullName,asc",
         search: filters.search || undefined,
-        active: filters.access === 'all' ? undefined : filters.access === 'active',
+        active: activeParam(filters.active),
         signal,
       }),
+    enabled: companyId !== "",
     placeholderData: keepPreviousData,
-    enabled: companyId !== '',
-  })
+  });
 
-  // The catalogue is the same for every installation and changes only with a migration, so it is
-  // fetched once and kept: re-reading it per drawer open would be a round trip for a constant.
   const rolesQuery = useQuery({
-    queryKey: ['admin-roles', companyId],
+    queryKey: ["assignable-roles", companyId],
     queryFn: ({ signal }) => fetchAssignableRoles(companyId, signal),
-    enabled: companyId !== '',
-    staleTime: Infinity,
-  })
+    enabled: companyId !== "",
+  });
 
-  function refresh() {
-    void queryClient.invalidateQueries({ queryKey: ['admin-users', companyId] })
+  /** El código de rol traducido a su nombre. Un código crudo en una tabla de personas no le dice
+   * nada a quien administra. */
+  const roleName = (code: string) => rolesQuery.data?.find((role) => role.code === code)?.name ?? code;
+
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: ["admin-users", companyId] });
+
+  function applyFilters() { setFilters(draft); setPage(0); }
+  function resetFilters() {
+    setDraft({ search: "", active: "active" });
+    setFilters({ search: "", active: "active" });
+    setPage(0);
   }
 
   async function toggleAccess(user: AdministeredUserView) {
     const confirmed = await confirmDialog({
       title: user.membershipActive
-        ? t('users.revokeTitle', { name: user.fullName })
-        : t('users.restoreTitle', { name: user.fullName }),
-      text: user.membershipActive ? t('users.revokeText') : t('users.restoreText'),
-      confirmLabel: user.membershipActive ? t('users.revoke') : t('users.restore'),
+        ? t("¿Revocar el acceso de {{name}}?", { name: user.fullName })
+        : t("¿Restaurar el acceso de {{name}}?", { name: user.fullName }),
+      text: user.membershipActive
+        ? t("Dejará de poder entrar a esta empresa. Se puede restaurar después.")
+        : t("Volverá a poder entrar a esta empresa con los roles que tenía."),
+      confirmLabel: user.membershipActive ? t("Revocar") : t("Restaurar"),
       dangerous: user.membershipActive,
-    })
-    if (!confirmed) return
+    });
+    if (!confirmed) return;
 
     try {
-      if (user.membershipActive) {
-        await revokeUserAccess(companyId, user.membershipId)
-        notifySuccess(t('users.revoked'), user.email)
-      } else {
-        await restoreUserAccess(companyId, user.membershipId)
-        notifySuccess(t('users.restored'), user.email)
-      }
-      refresh()
+      if (user.membershipActive) await revokeUserAccess(companyId, user.membershipId);
+      else await restoreUserAccess(companyId, user.membershipId);
+      notifySuccess(user.membershipActive ? t("Acceso revocado") : t("Acceso restaurado"), user.fullName);
+      refresh();
     } catch (error) {
-      notifyError(td('errorTitle'), describeApiError(error as ApiError))
+      notifyError(t("No se pudo completar la acción"), describeApiError(error as ApiError));
     }
   }
 
   const columns: DataTableColumn<AdministeredUserView>[] = [
     {
-      key: 'fullName',
-      header: t('users.fullName'),
+      key: "person",
+      header: t("Nombre"),
       render: (user) => (
-        <span className="fw-semibold">
-          {user.fullName}
-          {user.appUserId === profile?.id && (
-            <span className="text-body-secondary fw-normal"> ({t('users.you')})</span>
-          )}
-        </span>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.3 }}>{user.fullName}</Typography>
+          <Typography variant="caption" color="text.secondary">{user.email}</Typography>
+        </Box>
       ),
     },
-    { key: 'email', header: tc('fields.email'), render: (user) => user.email },
     {
-      key: 'roles',
-      header: t('users.roles'),
-      render: (user) =>
-        user.roleCodes.length === 0 ? '—' : (
-          <span className="d-flex flex-wrap gap-1">
-            {user.roleCodes.map((code) => (
-              <StatusBadge key={code} label={code} tone="info" />
-            ))}
-          </span>
-        ),
+      key: "roles",
+      header: t("Roles"),
+      render: (user) => (
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+          {user.roleCodes.map((code) => (
+            <Chip key={code} size="small" variant="outlined" label={roleName(code)} />
+          ))}
+          {/* Un rol de organización alcanza a todas las empresas: decirlo evita que alguien
+              intente quitarlo desde aquí y no entienda por qué no se puede. */}
+          {user.organizationWide && (
+            <Chip size="small" color="info" label={t("Organización")} />
+          )}
+        </Box>
+      ),
     },
+    { key: "since", header: t("Desde"), render: (user) => fmtDate(user.createdAt) },
     {
-      key: 'scope',
-      header: t('users.scope'),
-      render: (user) =>
-        user.organizationWide ? (
-          <StatusBadge label={t('users.organizationWide')} tone="warning" />
-        ) : (
-          <StatusBadge label={t('users.companyScoped')} tone="neutral" />
-        ),
+      key: "status",
+      header: t("Estado"),
+      render: (user) => (
+        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+          <ActiveBadge active={user.membershipActive} />
+          {/* La cuenta desactivada a nivel de instalación explica por qué alguien con membresía
+              activa no puede entrar. Se enseña; no se toca desde aquí. */}
+          {!user.userActive && <StatusChip label={t("Cuenta deshabilitada")} tone="overdue" />}
+        </Box>
+      ),
     },
-    {
-      key: 'status',
-      header: tc('columns.status'),
-      render: (user) => {
-        if (!user.userActive) {
-          return <StatusBadge label={t('users.accountDisabled')} tone="danger" />
-        }
-        return user.membershipActive ? (
-          <StatusBadge label={t('users.hasAccess')} tone="success" />
-        ) : (
-          <StatusBadge label={t('users.accessRevoked')} tone="neutral" />
-        )
-      },
-    },
-  ]
+  ];
 
-  if (canManageAccess || canManageProfiles) {
+  if (canManage) {
     columns.push({
-      key: 'actions',
-      header: tc('columns.actions'),
+      key: "actions",
+      header: t("Acciones"),
       actions: true,
-      render: (user) => {
-        // An organization-wide membership reaches every company of the organization, so a company
-        // screen offers nothing for it. The endpoints refuse it too; this only avoids offering a
-        // button that would answer 409.
-        if (user.organizationWide) {
-          return <span className="text-body-secondary small">{t('users.notEditableHere')}</span>
-        }
-        const items: ActionMenuItem[] = []
-        if (canManageProfiles || canManageAccess) {
-          items.push({
-            key: 'edit',
-            label: tc('actions.edit'),
-            icon: 'bi-pencil',
-            onSelect: () => setModal({ mode: 'edit', user }),
-          })
-        }
-        if (canManageAccess && user.appUserId !== profile?.id) {
-          items.push({
-            key: 'access',
-            label: user.membershipActive ? t('users.revoke') : t('users.restore'),
-            icon: user.membershipActive ? 'bi-person-dash' : 'bi-person-check',
-            dangerous: user.membershipActive,
-            onSelect: () => void toggleAccess(user),
-          })
-        }
-        return <ActionMenu items={items} />
-      },
-    })
+      render: (user) => (
+        <ActionMenu
+          items={[
+            { key: "edit", label: t("Editar"), icon: <EditRounded />, onSelect: () => setModal({ mode: "edit", user }) },
+            {
+              key: "access",
+              label: user.membershipActive ? t("Revocar acceso") : t("Restaurar acceso"),
+              icon: user.membershipActive ? <BlockRounded /> : <CheckCircleRounded />,
+              dangerous: user.membershipActive,
+              divider: true,
+              onSelect: () => void toggleAccess(user),
+            },
+          ]}
+        />
+      ),
+    });
   }
 
-  const pageData = usersQuery.data
+  const pageData = usersQuery.data;
 
   return (
-    <div>
+    <>
       <PageHeader
-        icon="people"
-        title={t('users.title')}
-        description={t('users.description')}
-        actions={
-          canManageAccess && (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2"
-              onClick={() => setModal({ mode: 'invite' })}
-            >
-              <i className="bi bi-person-plus" aria-hidden="true" />
-              {t('users.invite')}
-            </button>
-          )
-        }
+        icon={<GroupsRounded />}
+        tint={ICON_TINTS["/settings/users"]}
+        title={t("Usuarios y accesos")}
+        subtitle={t("Quién puede actuar en esta empresa y con qué roles.")}
+        onRefresh={refresh}
+        refreshing={usersQuery.isFetching}
+        actions={canManage && (
+          <Button variant="contained" startIcon={<PersonAddRounded />} onClick={() => setModal({ mode: "invite" })}>
+            {t("Invitar")}
+          </Button>
+        )}
       />
 
-      <FilterBar
-        onSubmit={() => {
-          setFilters(draftFilters)
-          setPage(0)
-        }}
-        onReset={() => {
-          setDraftFilters(DEFAULT_FILTERS)
-          setFilters(DEFAULT_FILTERS)
-          setPage(0)
-        }}
-      >
-        <div>
-          <label htmlFor="user-filter-search" className="form-label small mb-1">
-            {t('users.searchLabel')}
-          </label>
-          <input
-            id="user-filter-search"
-            className="form-control form-control-sm"
-            placeholder={t('users.searchPlaceholder')}
-            value={draftFilters.search}
-            onChange={(event) => setDraftFilters({ ...draftFilters, search: event.target.value })}
-          />
-        </div>
-        <div>
-          <label htmlFor="user-filter-access" className="form-label small mb-1">
-            {tc('columns.status')}
-          </label>
-          <Select
-            id="user-filter-access"
-            size="sm"
-            value={draftFilters.access}
-            onChange={(next) => setDraftFilters({ ...draftFilters, access: next as AccessFilter })}
-            options={[
-              { value: 'active', label: t('users.hasAccess') },
-              { value: 'revoked', label: t('users.accessRevoked') },
-              { value: 'all', label: tc('filters.statusAll') },
-            ]}
-          />
-        </div>
-      </FilterBar>
+      <Toolbar
+        onApply={applyFilters}
+        onReset={resetFilters}
+        filters={
+          <>
+            {/* Un solo cuadro sobre nombre y correo: así es como se busca a una persona. */}
+            <TextField
+              size="small" type="search" label={t("Buscar")} value={draft.search}
+              placeholder={t("Nombre o correo")}
+              onChange={(e) => setDraft({ ...draft, search: e.target.value })}
+              sx={{ minWidth: 260, flex: 1 }}
+            />
+            <TextField
+              select size="small" label={t("Estado")} value={draft.active}
+              onChange={(e) => setDraft({ ...draft, active: e.target.value as ActiveFilter })}
+              sx={{ minWidth: 150 }}
+            >
+              {ACTIVE_FILTER_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>{t(option.label)}</MenuItem>
+              ))}
+            </TextField>
+          </>
+        }
+      />
 
       <DataTable
         columns={columns}
@@ -278,25 +220,24 @@ export function UsersPage() {
         isLoading={usersQuery.isPending}
         error={usersQuery.isError ? describeApiError(usersQuery.error as ApiError) : null}
         onRetry={() => void usersQuery.refetch()}
-        emptyTitle={t('users.empty.title')}
-        emptyMessage={t('users.empty.message')}
+        emptyTitle={t("Sin usuarios")}
+        emptyMessage={t("Invita a alguien o ajusta los filtros.")}
         footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
       />
 
       {modal && (
         <UserFormDrawer
           companyId={companyId}
-          user={modal.mode === 'edit' ? modal.user : null}
-          roles={rolesQuery.data ?? []}
-          currentAppUserId={profile?.id ?? null}
+          user={modal.mode === "edit" ? modal.user : null}
           onClose={() => setModal(null)}
           onSaved={() => {
-            setModal(null)
-            notifySuccess(modal.mode === 'edit' ? td('updated') : t('users.invited'))
-            refresh()
+            const wasEdit = modal.mode === "edit";
+            setModal(null);
+            notifySuccess(wasEdit ? t("Registro actualizado") : t("Invitación enviada"));
+            refresh();
           }}
         />
       )}
-    </div>
-  )
+    </>
+  );
 }

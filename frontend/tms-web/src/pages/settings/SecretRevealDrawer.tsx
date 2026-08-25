@@ -1,107 +1,105 @@
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
+import { useState } from "react";
+import { Alert, Box, Button, IconButton, Paper, Tooltip, Typography } from "@mui/material";
+import { ContentCopyRounded, CheckRounded, KeyRounded } from "@mui/icons-material";
+import { FormDrawer } from "../../shared/ui/components";
+import { t } from "../../lib/i18n";
+import { fmtDateTime } from "../../lib/locale";
 
-interface RevealedField {
-  label: string
-  value: string
-  /** A secret is masked until the operator asks to see it; a client id is not. */
-  secret: boolean
+interface SecretField {
+  label: string;
+  value: string;
+  /** El campo que el socio pega tal cual: se marca para que no se copie el equivocado. */
+  primary?: boolean;
 }
 
 interface SecretRevealDrawerProps {
-  title: string
-  /** The backend's own notice, so the warning and the API contract cannot drift apart. */
-  notice: string
-  fields: RevealedField[]
-  onClose: () => void
+  title: string;
+  /** La frase del backend explicando qué es esto y por qué no vuelve a verse. */
+  notice: string;
+  fields: SecretField[];
+  /** Hasta cuándo sigue valiendo el secreto anterior, si esto fue una rotación. */
+  previousValidUntil?: string | null;
+  onClose: () => void;
 }
 
 /**
- * The one screen in the product that displays a secret, once.
+ * La única pantalla del producto que enseña un secreto, y lo enseña una sola vez.
  *
- * Everything about it is shaped by that: the value is masked until asked for, copying is one click
- * because the alternative is somebody transcribing 43 base64 characters by hand, and closing it is
- * deliberate rather than incidental - there is no backdrop dismissal, because losing this by
- * clicking beside it means rotating and reconfiguring the partner's system.
+ * El backend no lo guarda en claro, así que cerrar este drawer sin copiarlo significa rotarlo de
+ * nuevo. Se dice explícitamente en lugar de confiar en que alguien lo intuya, y el botón de
+ * cerrar no se disfraza de "listo": cerrar es la acción irreversible aquí.
  *
- * It is generic over both kinds of secret - an inbound credential and a webhook signing key -
- * because the handling rules are identical and a second copy of this screen would be a second place
- * to get them wrong.
+ * No hay descarga ni "enviar por correo". Un secreto que sale de aquí por un canal que no sea el
+ * portapapeles de quien lo pidió es un secreto en el historial de alguien.
  */
-export function SecretRevealDrawer({ title, notice, fields, onClose }: SecretRevealDrawerProps) {
-  const { t } = useTranslation('settings')
-  const { t: tc } = useTranslation('common')
-  const [revealed, setRevealed] = useState<Record<string, boolean>>({})
-  const [copied, setCopied] = useState<string | null>(null)
+export function SecretRevealDrawer({ title, notice, fields, previousValidUntil, onClose }: SecretRevealDrawerProps) {
+  const [copied, setCopied] = useState<string | null>(null);
 
-  async function copy(field: RevealedField) {
+  async function copy(field: SecretField) {
     try {
-      await navigator.clipboard.writeText(field.value)
-      setCopied(field.label)
+      await navigator.clipboard.writeText(field.value);
+      setCopied(field.label);
+      setTimeout(() => setCopied(null), 2000);
     } catch {
-      // A denied clipboard permission is not an error worth a dialog: the value is on screen and
-      // can be selected. Revealing it is the useful fallback.
-      setRevealed((current) => ({ ...current, [field.label]: true }))
+      // El portapapeles puede estar bloqueado (contexto no seguro, permiso denegado). El valor
+      // sigue visible y seleccionable a mano, que es la razón de enseñarlo en texto.
     }
   }
 
   return (
-    <TmsDrawer
+    <FormDrawer
       open
+      icon={<KeyRounded />}
       title={title}
-      subtitle={t('integrations.secret.subtitle')}
+      subtitle={t("Se muestra una sola vez.")}
       size="md"
       onClose={onClose}
+      // Sin cierre por clic fuera: aquí un clic distraído cuesta una rotación.
       closeOnBackdrop={false}
-      footer={
-        <button type="button" className="btn btn-primary" onClick={onClose}>
-          {t('integrations.secret.done')}
-        </button>
-      }
+      footer={<Button onClick={onClose} variant="contained">{t("Ya lo copié, cerrar")}</Button>}
     >
-      <div className="alert alert-warning" role="alert">
-        <i className="bi bi-exclamation-triangle me-2" aria-hidden="true" />
-        {notice}
-      </div>
+      <Alert severity="warning" sx={{ mb: 3 }}>{notice}</Alert>
 
-      {fields.map((field) => {
-        const isRevealed = !field.secret || revealed[field.label] === true
-        return (
-          <div className="mb-3" key={field.label}>
-            <label className="form-label small fw-semibold mb-1">{field.label}</label>
-            <div className="input-group input-group-sm">
-              <input
-                readOnly
-                className="form-control font-monospace"
-                aria-label={field.label}
-                value={isRevealed ? field.value : '•'.repeat(Math.min(field.value.length, 48))}
-              />
-              {field.secret && (
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary"
-                  aria-label={isRevealed ? t('integrations.secret.hide') : t('integrations.secret.reveal')}
-                  onClick={() => setRevealed((current) => ({ ...current, [field.label]: !isRevealed }))}
-                >
-                  <i className={`bi ${isRevealed ? 'bi-eye-slash' : 'bi-eye'}`} aria-hidden="true" />
-                </button>
-              )}
-              <button
-                type="button"
-                className="btn btn-outline-secondary"
-                aria-label={tc('actions.copy')}
-                onClick={() => void copy(field)}
-              >
-                <i className="bi bi-clipboard" aria-hidden="true" />
-              </button>
-            </div>
-            {copied === field.label && (
-              <span className="form-text text-success">{t('integrations.secret.copied')}</span>
-            )}
-          </div>
-        )
-      })}
-    </TmsDrawer>
-  )
+      <Box sx={{ display: "grid", gap: 2 }}>
+        {fields.map((field) => (
+          <Paper
+            key={field.label}
+            variant="outlined"
+            sx={{ p: 1.5, ...(field.primary ? { borderColor: "primary.main" } : {}) }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+              <Typography variant="caption" sx={{
+                textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 700, color: "text.secondary",
+              }}>
+                {field.label}
+              </Typography>
+              <Box sx={{ flex: 1 }} />
+              <Tooltip title={copied === field.label ? t("Copiado") : t("Copiar")}>
+                <IconButton size="small" onClick={() => void copy(field)}>
+                  {copied === field.label ? <CheckRounded fontSize="small" color="success" /> : <ContentCopyRounded fontSize="small" />}
+                </IconButton>
+              </Tooltip>
+            </Box>
+            <Typography
+              component="code"
+              sx={{
+                display: "block", wordBreak: "break-all", fontFamily: "monospace", fontSize: 13,
+                bgcolor: "action.hover", px: 1, py: 0.75, borderRadius: 1,
+              }}
+            >
+              {field.value}
+            </Typography>
+          </Paper>
+        ))}
+      </Box>
+
+      {previousValidUntil && (
+        <Alert severity="info" sx={{ mt: 3 }}>
+          {t("El secreto anterior sigue valiendo hasta {{until}}, para que el socio tenga tiempo de cambiarlo.", {
+            until: fmtDateTime(previousValidUntil),
+          })}
+        </Alert>
+      )}
+    </FormDrawer>
+  );
 }

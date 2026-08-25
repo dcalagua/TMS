@@ -342,7 +342,7 @@ public interface TripRepository extends JpaRepository<Trip, UUID>, JpaSpecificat
                                      THEN COALESCE(l.volume_m3, 0) ELSE 0 END), 0) AS "volumeUsed",
                    -- Cast, unlike the two above it: snapshot_max_pallets is an integer column and
                    -- summing it yields bigint, while the load it is divided by is numeric. Making
-                   -- both sides numeric here keeps the projection's two getters the same type.
+                   -- both sides numeric here keeps the two projection getters the same type.
                    COALESCE(SUM(CAST(s.snapshot_max_pallets AS numeric)), 0)      AS "palletCapacity",
                    COALESCE(SUM(CASE WHEN s.snapshot_max_pallets IS NOT NULL
                                      THEN COALESCE(l.pallets, 0) ELSE 0 END), 0)  AS "palletsUsed"

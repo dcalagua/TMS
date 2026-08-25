@@ -1,72 +1,72 @@
-import { useEnumLabels } from '../../shared/i18n/enums'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
-import type { ApiError } from '../../shared/api/httpClient'
-import { fetchOrigins } from '../../shared/api/originsApi'
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button, MenuItem, TextField, Typography } from "@mui/material";
+import { AddRounded, ViewKanbanRounded, OpenInNewRounded } from "@mui/icons-material";
+import type { ApiError } from "../../shared/api/httpClient";
+import { fetchOrigins } from "../../shared/api/originsApi";
 import {
-  fetchPlanningRuns,
-  PLANNING_RUN_STATUSES,
-  type PlanningRunStatus,
-  type PlanningRunView,
-} from '../../shared/api/planningApi'
-import { describeApiError } from '../../shared/api/problemMessages'
-import { useCompany } from '../../shared/company/CompanyContext'
+  fetchPlanningRuns, PLANNING_RUN_STATUSES,
+  type PlanningRunStatus, type PlanningRunView,
+} from "../../shared/api/planningApi";
+import { describeApiError } from "../../shared/api/problemMessages";
+import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  DataTable,
-  FilterBar,
-  PageHeader,
-  Pagination,
-  Select,
-  StatusBadge,
-  type DataTableColumn,
-  type StatusTone,
-} from '../../shared/ui/components'
-import { PlanningRunFormDrawer } from './PlanningRunFormDrawer'
+  DataTable, PageHeader, Pagination, StatusChip, Toolbar, type DataTableColumn,
+} from "../../shared/ui/components";
+import { ICON_TINTS } from "../../shared/ui/navConfig";
+import { enumLabel } from "../../lib/enums";
+import type { StatusTone } from "../../theme";
+import { t } from "../../lib/i18n";
+import { fmtDate, fmtQuantity } from "../../lib/locale";
+import { PlanningRunFormDrawer } from "./PlanningRunFormDrawer";
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 20;
 
 const STATUS_TONE: Record<PlanningRunStatus, StatusTone> = {
-  DRAFT: 'info',
-  CONFIRMED: 'success',
-  CANCELLED: 'danger',
-}
+  DRAFT: "open",
+  CONFIRMED: "done",
+  CANCELLED: "cancelled",
+};
 
 interface AppliedFilters {
-  planNumber: string
-  originId: string
-  planningDateFrom: string
-  planningDateTo: string
-  status: PlanningRunStatus | ''
+  planNumber: string;
+  originId: string;
+  planningDateFrom: string;
+  planningDateTo: string;
+  status: PlanningRunStatus | "";
 }
 
-const DEFAULT_FILTERS: AppliedFilters = { planNumber: '', originId: '', planningDateFrom: '', planningDateTo: '', status: '' }
+const DEFAULT_FILTERS: AppliedFilters = {
+  planNumber: "", originId: "", planningDateFrom: "", planningDateTo: "", status: "",
+};
 
-/** Entry point for manual planning: find or open a run, then hand off to `PlanningBoardPage` for
- * everything that happens inside it (`docs/domain/PLANNING_MANUAL_V1.md`, "The flow"). Runs are
- * never edited from here - only listed, filtered and created. */
+/**
+ * La puerta de entrada de la planificación manual: encuentra o abre un plan, y a partir de ahí
+ * todo lo que pasa dentro es del tablero (`PlanningBoardPage`).
+ *
+ * Los planes nunca se editan desde aquí: solo se listan, se filtran y se crean. Un plan es el
+ * contenedor de un día y un origen, y lo que se cambia dentro de él son viajes, no el plan.
+ */
 export function PlanningRunsPage() {
-  const { t } = useTranslation('planning')
-  const enumLabels = useEnumLabels()
-  const { selected, hasPermission } = useCompany()
-  const companyId = selected?.id ?? ''
-  const canManage = hasPermission('planning.plan:manage')
-  const navigate = useNavigate()
+  const { selected, hasPermission } = useCompany();
+  const companyId = selected?.id ?? "";
+  const canManage = hasPermission("planning.plan:manage");
+  const navigate = useNavigate();
 
-  const [page, setPage] = useState(0)
-  const [draftFilters, setDraftFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
-  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS)
-  const [showCreate, setShowCreate] = useState(false)
+  const [page, setPage] = useState(0);
+  const [draft, setDraft] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const [showCreate, setShowCreate] = useState(false);
 
   const runsQuery = useQuery({
-    queryKey: ['planning-runs', companyId, page, filters],
+    queryKey: ["planning-runs", companyId, page, filters],
     queryFn: ({ signal }) =>
       fetchPlanningRuns({
         companyId,
         page,
         size: PAGE_SIZE,
-        sort: 'planningDate,desc',
+        sort: "planningDate,desc",
         planNumber: filters.planNumber || undefined,
         originId: filters.originId || undefined,
         planningDateFrom: filters.planningDateFrom || undefined,
@@ -75,134 +75,107 @@ export function PlanningRunsPage() {
         signal,
       }),
     placeholderData: keepPreviousData,
-  })
+  });
 
   const originsQuery = useQuery({
-    queryKey: ['origins-for-planning-run-filter', companyId],
-    queryFn: ({ signal }) => fetchOrigins({ companyId, size: 200, active: true, sort: 'code,asc', signal }),
-    enabled: companyId !== '',
-  })
-  const origins = originsQuery.data?.content ?? []
+    queryKey: ["origins-for-planning-run-filter", companyId],
+    queryFn: ({ signal }) => fetchOrigins({ companyId, size: 200, active: true, sort: "code,asc", signal }),
+    enabled: companyId !== "",
+  });
 
-  function applyFilters() {
-    setFilters(draftFilters)
-    setPage(0)
-  }
-
-  function resetFilters() {
-    setDraftFilters(DEFAULT_FILTERS)
-    setFilters(DEFAULT_FILTERS)
-    setPage(0)
-  }
+  function applyFilters() { setFilters(draft); setPage(0); }
+  function resetFilters() { setDraft(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); setPage(0); }
 
   const columns: DataTableColumn<PlanningRunView>[] = [
-    { key: 'planNumber', header: 'Plan #', render: (run) => <span className="fw-semibold">{run.planNumber}</span> },
-    { key: 'origin', header: 'Origin', render: (run) => run.originName ?? run.originCode ?? '—' },
-    { key: 'planningDate', header: 'Planning date', render: (run) => run.planningDate },
+    { key: "planNumber", header: t("Plan"), render: (run) => <Typography variant="body2" sx={{ fontWeight: 800 }}>{run.planNumber}</Typography> },
+    { key: "origin", header: t("Origen"), render: (run) => run.originName ?? run.originCode ?? "-" },
+    { key: "planningDate", header: t("Fecha de planificación"), render: (run) => fmtDate(run.planningDate) },
+    { key: "mode", header: t("Modo"), render: (run) => run.mode === "AUTOMATIC" ? t("Automático") : t("Manual") },
     {
-      key: 'status',
-      header: 'Status',
-      render: (run) => <StatusBadge label={enumLabels.planningRunStatus(run.status)} tone={STATUS_TONE[run.status]} />,
+      key: "status",
+      header: t("Estado"),
+      render: (run) => <StatusChip label={enumLabel("planningRunStatus", run.status)} tone={STATUS_TONE[run.status]} />,
     },
-    { key: 'trips', header: 'Trips', className: 'text-end', render: (run) => run.tripCount },
-    { key: 'orders', header: 'Orders assigned', className: 'text-end', render: (run) => run.assignedOrderCount },
+    { key: "trips", header: t("Viajes"), numeric: true, render: (run) => fmtQuantity(run.tripCount) },
+    { key: "orders", header: t("Pedidos asignados"), numeric: true, render: (run) => fmtQuantity(run.assignedOrderCount) },
     {
-      key: 'actions',
-      header: '',
-      className: 'text-end',
+      key: "actions",
+      header: t("Acciones"),
+      actions: true,
       render: (run) => (
-        <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => navigate(`/planning/${run.id}`)}>
-          Open
-        </button>
+        <Button
+          size="small" variant="outlined" endIcon={<OpenInNewRounded />}
+          onClick={(e) => { e.stopPropagation(); navigate(`/planning/${run.id}`); }}
+        >
+          {t("Abrir")}
+        </Button>
       ),
     },
-  ]
+  ];
 
-  const pageData = runsQuery.data
+  const pageData = runsQuery.data;
 
   return (
-    <div>
+    <>
       <PageHeader
-        icon="calendar2-check"
-        title={t('title')}
-        description={t('description')}
-        actions={
-          canManage && (
-            <button type="button" className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onClick={() => setShowCreate(true)}>
-              <i className="bi bi-plus-lg" aria-hidden="true" />
-              {t('new')}
-            </button>
-          )
-        }
+        icon={<ViewKanbanRounded />}
+        tint={ICON_TINTS["/planning"]}
+        title={t("Planificación")}
+        subtitle={t("Un plan por origen y día. Dentro de él se arman los viajes y se les asignan pedidos.")}
+        onRefresh={() => void runsQuery.refetch()}
+        refreshing={runsQuery.isFetching}
+        actions={canManage && (
+          <Button variant="contained" startIcon={<AddRounded />} onClick={() => setShowCreate(true)}>
+            {t("Nuevo plan")}
+          </Button>
+        )}
       />
 
-      <FilterBar onSubmit={applyFilters} onReset={resetFilters}>
-        <div>
-          <label htmlFor="filter-plan-number" className="form-label small mb-1">
-            Plan #
-          </label>
-          <input
-            id="filter-plan-number"
-            className="form-control form-control-sm"
-            value={draftFilters.planNumber}
-            onChange={(event) => setDraftFilters({ ...draftFilters, planNumber: event.target.value })}
-          />
-        </div>
-        <div>
-          <label htmlFor="filter-origin" className="form-label small mb-1">
-            Origin
-          </label>
-          <Select
-            id="filter-origin"
-            size="sm"
-            value={draftFilters.originId}
-            onChange={(next) => setDraftFilters({ ...draftFilters, originId: next })}
-            options={[
-              { value: '', label: 'All origins' },
-              ...origins.map((origin) => ({ value: origin.id, label: origin.name })),
-            ]}
-          />
-        </div>
-        <div>
-          <label htmlFor="filter-date-from" className="form-label small mb-1">
-            Planning date from
-          </label>
-          <input
-            id="filter-date-from"
-            type="date"
-            className="form-control form-control-sm"
-            value={draftFilters.planningDateFrom}
-            onChange={(event) => setDraftFilters({ ...draftFilters, planningDateFrom: event.target.value })}
-          />
-        </div>
-        <div>
-          <label htmlFor="filter-date-to" className="form-label small mb-1">
-            Planning date to
-          </label>
-          <input
-            id="filter-date-to"
-            type="date"
-            className="form-control form-control-sm"
-            value={draftFilters.planningDateTo}
-            onChange={(event) => setDraftFilters({ ...draftFilters, planningDateTo: event.target.value })}
-          />
-        </div>
-        <div>
-          <label htmlFor="filter-status" className="form-label small mb-1">
-            Status
-          </label>
-          <Select
-            id="filter-status"
-            size="sm"
-            value={draftFilters.status}
-            onChange={(next) => setDraftFilters({ ...draftFilters, status: next as PlanningRunStatus | '' })}
-            options={[
-              { value: '', label: 'All statuses' },
-              ...PLANNING_RUN_STATUSES.map((status) => ({ value: status, label: enumLabels.planningRunStatus(status) })),
-            ]}
-          />
-        </div>
-      </FilterBar>
+      <Toolbar
+        onApply={applyFilters}
+        onReset={resetFilters}
+        filters={
+          <>
+            <TextField
+              size="small" label={t("Plan")} value={draft.planNumber}
+              onChange={(e) => setDraft({ ...draft, planNumber: e.target.value })}
+              sx={{ minWidth: 150 }}
+            />
+            <TextField
+              select size="small" label={t("Origen")} value={draft.originId}
+              onChange={(e) => setDraft({ ...draft, originId: e.target.value })}
+              sx={{ minWidth: 200 }}
+            >
+              <MenuItem value="">{t("Todos los orígenes")}</MenuItem>
+              {(originsQuery.data?.content ?? []).map((origin) => (
+                <MenuItem key={origin.id} value={origin.id}>{origin.name}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              size="small" type="date" label={t("Desde")} value={draft.planningDateFrom}
+              onChange={(e) => setDraft({ ...draft, planningDateFrom: e.target.value })}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ minWidth: 160 }}
+            />
+            <TextField
+              size="small" type="date" label={t("Hasta")} value={draft.planningDateTo}
+              onChange={(e) => setDraft({ ...draft, planningDateTo: e.target.value })}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ minWidth: 160 }}
+            />
+            <TextField
+              select size="small" label={t("Estado")} value={draft.status}
+              onChange={(e) => setDraft({ ...draft, status: e.target.value as PlanningRunStatus | "" })}
+              sx={{ minWidth: 180 }}
+            >
+              <MenuItem value="">{t("Todos los estados")}</MenuItem>
+              {PLANNING_RUN_STATUSES.map((status) => (
+                <MenuItem key={status} value={status}>{enumLabel("planningRunStatus", status)}</MenuItem>
+              ))}
+            </TextField>
+          </>
+        }
+      />
 
       <DataTable
         columns={columns}
@@ -212,8 +185,9 @@ export function PlanningRunsPage() {
         isLoading={runsQuery.isPending}
         error={runsQuery.isError ? describeApiError(runsQuery.error as ApiError) : null}
         onRetry={() => void runsQuery.refetch()}
-        emptyTitle="No planning runs found"
-        emptyMessage="Open a run for an origin and a planning date to start assigning orders to trips."
+        emptyTitle={t("Sin planes")}
+        emptyMessage={t("Abre un plan para un origen y una fecha para empezar a asignar pedidos a viajes.")}
+        onRowClick={(run) => navigate(`/planning/${run.id}`)}
         footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
       />
 
@@ -221,9 +195,9 @@ export function PlanningRunsPage() {
         <PlanningRunFormDrawer
           companyId={companyId}
           onClose={() => setShowCreate(false)}
-          onCreated={(run) => navigate(`/planning/${run.run.id}`)}
+          onCreated={(detail) => navigate(`/planning/${detail.run.id}`)}
         />
       )}
-    </div>
-  )
+    </>
+  );
 }

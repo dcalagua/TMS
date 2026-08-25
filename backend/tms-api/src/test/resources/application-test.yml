@@ -9,6 +9,22 @@ spring:
     enabled: false
   jpa:
     open-in-view: false
+  datasource:
+    hikari:
+      # Two connections per context, not the default ten.
+      #
+      # Every @SpringBootTest in the suite shares ONE PostgreSQL container, and Spring caches
+      # each distinct context for the whole run rather than closing it after its class. So the
+      # connections are not held by the test that is running - they are held by every context
+      # that has ever run, all at once, and the total is (contexts x pool size) against a server
+      # whose default max_connections is 100. At ten apiece the suite runs out part way through
+      # and the rest of the run dies as `FATAL: sorry, too many clients already`, which reads
+      # like a broken application and is really just arithmetic.
+      #
+      # Two is enough: these tests drive MockMvc on one thread, and the second connection covers
+      # a test that checks the database directly while a transaction is still open.
+      maximum-pool-size: 2
+      minimum-idle: 0
 
 management:
   endpoints:

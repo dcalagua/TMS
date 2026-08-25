@@ -1,173 +1,154 @@
-import type { Session } from '@supabase/supabase-js'
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import type { Session } from "@supabase/supabase-js";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   onApiResponseError,
   setAuthRefreshHandler,
   setAuthTokenProvider,
   type ApiError,
-} from '../api/httpClient'
-import { isAuthProblem } from '../api/problemMessages'
-import { supabase } from './supabaseClient'
+} from "../api/httpClient";
+import { isAuthProblem } from "../api/problemMessages";
+import { supabase } from "./supabaseClient";
 
-export type AuthStatus = 'loading' | 'signedOut' | 'signedIn'
+export type AuthStatus = "loading" | "signedOut" | "signedIn";
 
 export interface AuthUser {
-  id: string
-  email: string | null
+  id: string;
+  email: string | null;
 }
 
 export interface SignInResult {
-  ok: boolean
-  message?: string
+  ok: boolean;
+  message?: string;
 }
 
 interface AuthContextValue {
-  status: AuthStatus
-  user: AuthUser | null
-  signIn(email: string, password: string): Promise<SignInResult>
-  signOut(): Promise<void>
+  status: AuthStatus;
+  user: AuthUser | null;
+  signIn(email: string, password: string): Promise<SignInResult>;
+  signOut(): Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null)
+const AuthContext = createContext<AuthContextValue | null>(null);
 
 function toAuthUser(session: Session | null): AuthUser | null {
-  if (!session?.user) {
-    return null
-  }
-  return { id: session.user.id, email: session.user.email ?? null }
+  if (!session?.user) return null;
+  return { id: session.user.id, email: session.user.email ?? null };
 }
 
 /**
- * Supabase Auth abstraction: login/logout/session refresh live here and nowhere else.
- * `httpClient` gets its bearer token through {@link setAuthTokenProvider}; business screens
- * never touch the Supabase client directly (V1 rule: Supabase is authentication only).
+ * Abstracción de Supabase Auth: login, logout y refresh de sesión viven aquí y en ningún otro
+ * sitio. `httpClient` obtiene su bearer token por {@link setAuthTokenProvider}; las pantallas
+ * de negocio nunca tocan el cliente de Supabase (regla V1: Supabase es solo autenticación).
  *
- * The session is mirrored into a ref so the token can be read synchronously. Asking
- * `supabase.auth.getSession()` once per request instead made the token arrive an await (and a
- * `navigator.locks` acquisition) later than the `signedIn` status it belongs to: the first
- * request after a sign-in could therefore go out with no `Authorization` header, collect the
- * backend's 401 and tear down a session that was perfectly valid. Holding the session here
- * removes the ordering entirely - `status` and the token it corresponds to are published in
- * the same commit.
+ * La sesión se refleja en un ref para poder leer el token de forma síncrona. Preguntar
+ * `supabase.auth.getSession()` una vez por petición hacía que el token llegara un await (y una
+ * adquisición de `navigator.locks`) más tarde que el estado `signedIn` al que pertenece: la
+ * primera petición tras un login podía salir sin cabecera `Authorization`, recoger el 401 del
+ * backend y tirar abajo una sesión perfectamente válida. Guardar la sesión aquí elimina el
+ * problema de orden — `status` y el token que le corresponde se publican en el mismo commit.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<AuthStatus>('loading')
-  const [user, setUser] = useState<AuthUser | null>(null)
+  const [status, setStatus] = useState<AuthStatus>("loading");
+  const [user, setUser] = useState<AuthUser | null>(null);
 
-  /** The session every outgoing request is authenticated with. */
-  const sessionRef = useRef<Session | null>(null)
-  // Guards against a signOut-triggers-401-triggers-signOut loop: once a forced sign-out is
-  // underway, further auth failures from in-flight requests are ignored until a session
-  // actually arrives again.
-  const signingOutRef = useRef(false)
+  /** La sesión con la que se autentica cada petición saliente. */
+  const sessionRef = useRef<Session | null>(null);
+  // Protege del bucle signOut → 401 → signOut: una vez en marcha un cierre de sesión forzado,
+  // se ignoran los fallos de auth de las peticiones en vuelo hasta que llegue una sesión nueva.
+  const signingOutRef = useRef(false);
 
   const applySession = useCallback((session: Session | null) => {
-    sessionRef.current = session
-    if (session) {
-      signingOutRef.current = false
-    }
-    setUser(toAuthUser(session))
-    setStatus(session ? 'signedIn' : 'signedOut')
-  }, [])
+    sessionRef.current = session;
+    if (session) signingOutRef.current = false;
+    setUser(toAuthUser(session));
+    setStatus(session ? "signedIn" : "signedOut");
+  }, []);
 
   /**
-   * The controlled recovery `httpClient` calls after an authentication failure. Returning a
-   * token means "replay the request once"; returning `null` means the session is gone and the
-   * caller should surface the failure, which is what ends up signing the user out.
+   * La recuperación controlada que `httpClient` invoca tras un fallo de autenticación.
+   * Devolver un token significa "reproduce la petición una vez"; devolver `null` significa que
+   * la sesión se fue y quien llamó debe hacer aflorar el fallo, que es lo que acaba cerrando
+   * la sesión del usuario.
    */
   const refreshAccessToken = useCallback(async (): Promise<string | null> => {
     try {
-      const { data, error } = await supabase.auth.refreshSession()
-      if (error || !data?.session) {
-        return null
-      }
-      applySession(data.session)
-      return data.session.access_token ?? null
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error || !data?.session) return null;
+      applySession(data.session);
+      return data.session.access_token ?? null;
     } catch {
-      return null
+      return null;
     }
-  }, [applySession])
+  }, [applySession]);
 
   useEffect(() => {
-    let active = true
+    let active = true;
 
-    // Registered before the session is resolved. Nothing can issue a business request until
-    // `status` becomes `signedIn`, and that only happens below, so the provider is always in
-    // place by the time the first request is built.
-    setAuthTokenProvider(() => sessionRef.current?.access_token ?? null)
-    setAuthRefreshHandler(refreshAccessToken)
+    // Se registran antes de resolver la sesión. Nada puede lanzar una petición de negocio
+    // hasta que `status` sea `signedIn`, y eso solo ocurre más abajo, así que el proveedor
+    // siempre está puesto cuando se construye la primera petición.
+    setAuthTokenProvider(() => sessionRef.current?.access_token ?? null);
+    setAuthRefreshHandler(refreshAccessToken);
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!active) {
-        return
-      }
-      applySession(session)
-    })
+      if (!active) return;
+      applySession(session);
+    });
 
     void supabase.auth.getSession().then(({ data }) => {
-      // A sign-in may already have published a newer session while this was in flight; the
-      // stored one must not overwrite it.
-      if (!active || sessionRef.current) {
-        return
-      }
-      applySession(data.session ?? null)
-    })
+      // Un login puede haber publicado ya una sesión más nueva mientras esto estaba en vuelo;
+      // la almacenada no debe pisarla.
+      if (!active || sessionRef.current) return;
+      applySession(data.session ?? null);
+    });
 
     return () => {
-      active = false
-      listener.subscription.unsubscribe()
-    }
-  }, [applySession, refreshAccessToken])
+      active = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [applySession, refreshAccessToken]);
 
   useEffect(() => {
     return onApiResponseError((error: ApiError) => {
-      // `httpClient` reports an authentication failure only once its refresh+retry has already
-      // failed, so reaching this point means the session could not be recovered. A failure
-      // while no session is held is not ours to react to - it cannot be fixed by signing out.
-      if (!isAuthProblem(error) || signingOutRef.current || sessionRef.current === null) {
-        return
-      }
-      signingOutRef.current = true
-      sessionRef.current = null
-      void supabase.auth.signOut()
-    })
-  }, [])
+      // `httpClient` reporta un fallo de autenticación solo cuando su refresh+reintento ya
+      // falló, así que llegar aquí significa que la sesión no se pudo recuperar. Un fallo sin
+      // sesión en mano no es cosa nuestra: no se arregla cerrando sesión.
+      if (!isAuthProblem(error) || signingOutRef.current || sessionRef.current === null) return;
+      signingOutRef.current = true;
+      sessionRef.current = null;
+      void supabase.auth.signOut();
+    });
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       status,
       user,
       async signIn(email, password) {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) {
-          return { ok: false, message: error.message }
-        }
-        // Adopt the session from the call that produced it rather than waiting for
-        // `onAuthStateChange`. Both fire, but only this ordering guarantees the token is
-        // readable the instant `status` turns `signedIn`.
-        if (data?.session) {
-          applySession(data.session)
-        }
-        return { ok: true }
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) return { ok: false, message: error.message };
+        // Adopta la sesión de la llamada que la produjo en vez de esperar a
+        // `onAuthStateChange`. Los dos se disparan, pero solo este orden garantiza que el
+        // token es legible en el instante en que `status` pasa a `signedIn`.
+        if (data?.session) applySession(data.session);
+        return { ok: true };
       },
       async signOut() {
-        signingOutRef.current = true
-        sessionRef.current = null
-        await supabase.auth.signOut()
-        setUser(null)
-        setStatus('signedOut')
+        signingOutRef.current = true;
+        sessionRef.current = null;
+        await supabase.auth.signOut();
+        setUser(null);
+        setStatus("signedOut");
       },
     }),
     [applySession, status, user],
-  )
+  );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
-  return context
+  const context = useContext(AuthContext);
+  if (!context) throw new Error("useAuth debe usarse dentro de un AuthProvider");
+  return context;
 }

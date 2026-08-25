@@ -1,99 +1,86 @@
-import { apiRequest } from './httpClient'
+import { apiRequest } from "./httpClient";
 
 /**
- * Mirrors the backend's `NotificationType` (migration V32).
+ * Refleja el `NotificationType` del backend (migración V32).
  *
- * Each value is also a translation key: `notifications:types.<TYPE>.title` and `.message`. That is
- * the whole reason the API sends a type and arguments instead of a sentence - a rendered message
- * would arrive in whichever language the server felt like, and would still be in it after the
- * operator switched. See `docs/domain/ALERTS_NOTIFICATIONS_V1.md` section 4.
+ * Cada valor es además una clave de presentación: la API manda un tipo y unos argumentos en
+ * lugar de una frase, porque un mensaje ya redactado llegaría en el idioma que al servidor le
+ * apeteciera — y seguiría en él después de que el operador cambiara de idioma.
  */
 export const NOTIFICATION_TYPES = [
-  'TRIP_DELAYED',
-  'EXCEPTION_OPENED',
-  'TENDER_REJECTED',
-  'TENDER_EXPIRED',
-  'DRIVER_LICENSE_EXPIRING',
-  'TRIP_COMPLETED',
-  'DELIVERY_FAILED',
-] as const
-export type NotificationType = (typeof NOTIFICATION_TYPES)[number]
+  "TRIP_DELAYED",
+  "EXCEPTION_OPENED",
+  "TENDER_REJECTED",
+  "TENDER_EXPIRED",
+  "DRIVER_LICENSE_EXPIRING",
+  "TRIP_COMPLETED",
+  "DELIVERY_FAILED",
+] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
-/** Mirrors the backend's `NotificationSeverity`. Fixed per type, never chosen by the raiser. */
-export const NOTIFICATION_SEVERITIES = ['INFO', 'WARNING', 'CRITICAL'] as const
-export type NotificationSeverity = (typeof NOTIFICATION_SEVERITIES)[number]
+/** Refleja `NotificationSeverity`. Fija por tipo, nunca la elige quien levanta la alerta. */
+export const NOTIFICATION_SEVERITIES = ["INFO", "WARNING", "CRITICAL"] as const;
+export type NotificationSeverity = (typeof NOTIFICATION_SEVERITIES)[number];
 
-/** Mirrors the backend's `NotificationEntityType` - what the alert is about, and where it goes. */
-export const NOTIFICATION_ENTITY_TYPES = ['TRIP', 'DRIVER'] as const
-export type NotificationEntityType = (typeof NOTIFICATION_ENTITY_TYPES)[number]
+/** Refleja `NotificationEntityType` — de qué va la alerta, y a dónde lleva. */
+export const NOTIFICATION_ENTITY_TYPES = ["TRIP", "DRIVER"] as const;
+export type NotificationEntityType = (typeof NOTIFICATION_ENTITY_TYPES)[number];
 
 /**
- * Mirrors the backend's `NotificationView`.
+ * Refleja el `NotificationView` del backend.
  *
- * `messageArgs` is deliberately loose: it is the placeholder bag for one sentence, its shape
- * differs per type, and typing it per type would put a second copy of the backend's message
- * contract in TypeScript that could disagree with the translation files.
+ * `messageArgs` es deliberadamente laxo: es la bolsa de marcadores de una frase, su forma
+ * cambia por tipo, y tiparlo por tipo pondría una segunda copia del contrato de mensajes del
+ * backend en TypeScript que podría acabar discrepando.
  */
 export interface NotificationView {
-  id: string
-  type: NotificationType
-  severity: NotificationSeverity
-  entityType: NotificationEntityType
-  entityId: string
-  entityLabel: string | null
-  messageArgs: Record<string, string | number | null>
-  occurredAt: string
-  readAt: string | null
-  resolvedAt: string | null
+  id: string;
+  type: NotificationType;
+  severity: NotificationSeverity;
+  entityType: NotificationEntityType;
+  entityId: string;
+  entityLabel: string | null;
+  messageArgs: Record<string, string | number | null>;
+  occurredAt: string;
+  readAt: string | null;
+  resolvedAt: string | null;
 }
 
 /**
- * Mirrors the backend's `NotificationFeedView`.
+ * Refleja el `NotificationFeedView` del backend.
  *
- * `unreadCount` counts the whole history, not `notifications.length` - the list is capped and the
- * badge is not, so a desk that let a hundred alerts pile up says so.
+ * `unreadCount` cuenta todo el histórico, no `notifications.length` — la lista está topada y la
+ * insignia no, así que una mesa que dejó apilarse cien alertas lo dice.
  */
 export interface NotificationFeedView {
-  unreadCount: number
-  notifications: NotificationView[]
+  unreadCount: number;
+  notifications: NotificationView[];
 }
 
 /**
- * The badge and the panel in one request.
+ * La insignia y el panel en una sola petición.
  *
- * No permission is required to call this: the backend answers with the alerts this account is
- * entitled to be told about, which for an account with none of the three relevant permissions is
- * an empty list rather than a 403. The bell is a permanent control, so it has to render for
- * everybody.
+ * No hace falta permiso para llamar: el backend responde con las alertas a las que esta cuenta
+ * tiene derecho, que para una cuenta sin ninguno de los tres permisos relevantes es una lista
+ * vacía en vez de un 403. La campana es un control permanente, así que tiene que pintarse para
+ * todo el mundo.
  */
-export function fetchNotifications(
-  companyId: string,
-  signal?: AbortSignal,
-): Promise<NotificationFeedView> {
-  return apiRequest<NotificationFeedView>('/notifications', { companyId, signal })
+export function fetchNotifications(companyId: string, signal?: AbortSignal): Promise<NotificationFeedView> {
+  return apiRequest<NotificationFeedView>("/notifications", { companyId, signal });
 }
 
 /**
- * Acknowledges one alert on behalf of the company - not of the user. Two dispatchers share one
- * badge on purpose; `docs/domain/ALERTS_NOTIFICATIONS_V1.md` section 5 says why.
+ * Da por vista una alerta en nombre de la empresa, no del usuario. Dos despachadores comparten
+ * una insignia a propósito.
  *
- * Answers with the refreshed feed rather than the one alert, so the badge cannot paint a stale
- * count for a frame.
+ * Responde con el feed refrescado en lugar de con la alerta, para que la insignia no pueda
+ * pintar un conteo obsoleto ni un frame.
  */
-export function markNotificationRead(
-  companyId: string,
-  notificationId: string,
-): Promise<NotificationFeedView> {
-  return apiRequest<NotificationFeedView>(`/notifications/${notificationId}/read`, {
-    method: 'POST',
-    companyId,
-  })
+export function markNotificationRead(companyId: string, notificationId: string): Promise<NotificationFeedView> {
+  return apiRequest<NotificationFeedView>(`/notifications/${notificationId}/read`, { method: "POST", companyId });
 }
 
-/** Clears the badge over every alert this account is entitled to see. */
+/** Limpia la insignia sobre todas las alertas que esta cuenta tiene derecho a ver. */
 export function markAllNotificationsRead(companyId: string): Promise<NotificationFeedView> {
-  return apiRequest<NotificationFeedView>('/notifications/read-all', {
-    method: 'POST',
-    companyId,
-  })
+  return apiRequest<NotificationFeedView>("/notifications/read-all", { method: "POST", companyId });
 }

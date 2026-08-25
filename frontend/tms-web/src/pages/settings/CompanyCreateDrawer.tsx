@@ -1,170 +1,136 @@
-import { useState } from 'react'
-import { useForm } from 'react-hook-form'
-import { useTranslation } from 'react-i18next'
-import { createCompany, type CompanyProfileView } from '../../shared/api/administrationApi'
-import { applyApiFieldErrors } from '../../shared/api/formErrors'
-import type { ApiError } from '../../shared/api/httpClient'
-import { FormField } from '../../shared/ui/components/FormField'
-import { TmsDrawer } from '../../shared/ui/components/TmsDrawer'
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { Alert, Autocomplete, Box, Button, TextField, Typography } from "@mui/material";
+import { AddBusinessRounded } from "@mui/icons-material";
+import { applyApiFieldErrors } from "../../shared/api/formErrors";
+import type { ApiError } from "../../shared/api/httpClient";
+import { createCompany, type CompanyCreateRequest } from "../../shared/api/administrationApi";
+import { FormDrawer } from "../../shared/ui/components";
+import { t } from "../../lib/i18n";
 
-const FORM_ID = 'company-create-form'
+const FORM_ID = "company-create-form";
 
-/** Mirrors `ck_company_code_shape` (migration V2). */
-const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{1,31}$/
+const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
+
+const TIME_ZONES: string[] = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
 
 interface CompanyCreateFormValues {
-  code: string
-  name: string
-  taxIdentifier: string
-  timeZone: string
+  code: string;
+  name: string;
+  taxIdentifier: string;
+  timeZone: string;
 }
-
-const KNOWN_FIELDS = new Set<keyof CompanyCreateFormValues>(['code', 'name', 'taxIdentifier', 'timeZone'])
 
 interface CompanyCreateDrawerProps {
-  /** The company the request is scoped to; its organization receives the new one. */
-  companyId: string
-  organizationName: string
-  onClose: () => void
-  onCreated: (created: CompanyProfileView) => void
+  companyId: string;
+  onClose: () => void;
+  onCreated: () => void;
 }
 
+const KNOWN_FIELDS = new Set<keyof CompanyCreateFormValues>(["code", "name", "taxIdentifier", "timeZone"]);
+
 /**
- * Adds a company to the organization the caller is signed into.
+ * Dar de alta otra empresa dentro de la misma organización.
  *
- * There is no organization picker, and there should not be: the organization is the one the
- * current company belongs to, resolved server-side. A field here would be the only place in the
- * product where a browser names a tenant.
+ * No se pide la organización: se usa la de quien llama. Ofrecer un selector daría a entender que
+ * se puede crear una empresa en la organización de otro, que es exactamente lo que el backend
+ * impide.
  *
- * The drawer is only reachable when the profile said `canCreateCompany`, which means an
- * organization-wide role. That is UX; the endpoint asks the database again and answers 403 to
- * anyone else, so nothing depends on this component having hidden itself.
+ * El código sí se pide aquí y no se vuelve a poder cambiar: es la clave con la que la nombrarán
+ * las integraciones, y una clave que cambia no es una clave.
  */
-export function CompanyCreateDrawer({
-  companyId,
-  organizationName,
-  onClose,
-  onCreated,
-}: CompanyCreateDrawerProps) {
-  const { t } = useTranslation('settings')
-  const { t: tc } = useTranslation('common')
-  const { t: tv } = useTranslation('validations')
-  const [formError, setFormError] = useState<string | null>(null)
+export function CompanyCreateDrawer({ companyId, onClose, onCreated }: CompanyCreateDrawerProps) {
+  const [formError, setFormError] = useState<string | null>(null);
+
   const {
-    register,
-    handleSubmit,
-    setError,
+    register, handleSubmit, setError, setValue, watch,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<CompanyCreateFormValues>({
-    defaultValues: { code: '', name: '', taxIdentifier: '', timeZone: 'America/Lima' },
-  })
+    defaultValues: { code: "", name: "", taxIdentifier: "", timeZone: "America/Lima" },
+  });
 
   async function onSubmit(values: CompanyCreateFormValues) {
-    setFormError(null)
+    setFormError(null);
+    const request: CompanyCreateRequest = {
+      code: values.code.trim(),
+      name: values.name.trim(),
+      taxIdentifier: values.taxIdentifier.trim() || null,
+      timeZone: values.timeZone.trim(),
+    };
+
     try {
-      const created = await createCompany(companyId, {
-        code: values.code.trim().toUpperCase(),
-        name: values.name.trim(),
-        taxIdentifier: values.taxIdentifier.trim() || null,
-        timeZone: values.timeZone.trim(),
-      })
-      onCreated(created)
+      await createCompany(companyId, request);
+      onCreated();
     } catch (error) {
-      // A 403 from the organization-wide check arrives here with no field errors, so it becomes the
-      // form-level message - which is where the person who pressed the button is looking.
-      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, tv('highlightedFields')))
+      setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, t("Corrige los campos marcados.")));
     }
   }
 
   return (
-    <TmsDrawer
+    <FormDrawer
       open
-      title={t('company.newCompany')}
-      subtitle={t('company.newCompanySubtitle', { organization: organizationName })}
+      icon={<AddBusinessRounded />}
+      title={t("Nueva empresa")}
+      subtitle={t("Se crea dentro de tu misma organización.")}
       size="md"
       onClose={onClose}
       dirty={isDirty}
-      closeOnEscape={!isSubmitting}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <button type="button" className="btn btn-outline-secondary" onClick={onClose} disabled={isSubmitting}>
-            {tc('actions.cancel')}
-          </button>
-          <button type="submit" form={FORM_ID} className="btn btn-primary" disabled={isSubmitting}>
-            {isSubmitting ? tc('actions.saving') : tc('actions.create')}
-          </button>
+          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : t("Crear empresa")}
+          </Button>
         </>
       }
     >
-      <form id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && (
-          <div className="alert alert-danger py-2 small" role="alert">
-            {formError}
-          </div>
-        )}
+      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
+        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
 
-        <FormField
-          label={tc('columns.code')}
-          htmlFor="new-company-code"
-          error={errors.code?.message}
-          help={t('company.codeHelp')}
-          required
-        >
-          <input
-            id="new-company-code"
-            className={`form-control${errors.code ? ' is-invalid' : ''}`}
-            {...register('code', {
-              required: tv('required'),
-              maxLength: { value: 32, message: tv('maxLength', { count: 32 }) },
-              pattern: { value: CODE_PATTERN, message: tv('codePattern') },
+        <Box sx={{ display: "grid", gap: 2 }}>
+          <TextField
+            label={t("Código")} required size="small" fullWidth
+            helperText={errors.code?.message ?? t("No se puede cambiar después: es la clave con la que la nombran las integraciones.")}
+            error={Boolean(errors.code)}
+            {...register("code", {
+              required: t("Este campo es obligatorio"),
+              maxLength: { value: 32, message: t("No puede superar los {{count}} caracteres", { count: 32 }) },
+              pattern: { value: CODE_PATTERN, message: t("Solo letras, dígitos, guion bajo o guion") },
             })}
           />
-        </FormField>
-
-        <FormField label={tc('columns.name')} htmlFor="new-company-name" error={errors.name?.message} required>
-          <input
-            id="new-company-name"
-            className={`form-control${errors.name ? ' is-invalid' : ''}`}
-            {...register('name', {
-              required: tv('required'),
-              maxLength: { value: 200, message: tv('maxLength', { count: 200 }) },
-            })}
+          <TextField
+            label={t("Nombre")} required size="small" fullWidth
+            error={Boolean(errors.name)} helperText={errors.name?.message}
+            {...register("name", { required: t("Este campo es obligatorio") })}
           />
-        </FormField>
-
-        <FormField
-          label={t('company.taxIdentifier')}
-          htmlFor="new-company-tax-identifier"
-          error={errors.taxIdentifier?.message}
-        >
-          <input
-            id="new-company-tax-identifier"
-            className={`form-control${errors.taxIdentifier ? ' is-invalid' : ''}`}
-            {...register('taxIdentifier', { maxLength: { value: 60, message: tv('maxLength', { count: 60 }) } })}
+          <TextField
+            label={t("RUC")} size="small" fullWidth
+            error={Boolean(errors.taxIdentifier)} helperText={errors.taxIdentifier?.message}
+            {...register("taxIdentifier")}
           />
-        </FormField>
-
-        <FormField
-          label={t('company.timeZone')}
-          htmlFor="new-company-time-zone"
-          error={errors.timeZone?.message}
-          help={t('company.timeZoneHelp')}
-          required
-        >
-          <input
-            id="new-company-time-zone"
-            className={`form-control${errors.timeZone ? ' is-invalid' : ''}`}
-            placeholder="America/Lima"
-            {...register('timeZone', {
-              required: tv('required'),
-              maxLength: { value: 60, message: tv('maxLength', { count: 60 }) },
-            })}
+          <Autocomplete
+            freeSolo
+            size="small"
+            options={TIME_ZONES}
+            value={watch("timeZone")}
+            onChange={(_e, next) => setValue("timeZone", next ?? "", { shouldDirty: true })}
+            onInputChange={(_e, next) => setValue("timeZone", next, { shouldDirty: true })}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label={t("Zona horaria")} required placeholder="America/Lima"
+                error={Boolean(errors.timeZone)} helperText={errors.timeZone?.message}
+              />
+            )}
           />
-        </FormField>
+          <input type="hidden" {...register("timeZone", { required: t("Este campo es obligatorio") })} />
+        </Box>
 
-        <p className="text-body-secondary small mb-0">{t('company.newCompanyNote')}</p>
-      </form>
-    </TmsDrawer>
-  )
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 2 }}>
+          {t("La zona horaria decide a qué día operativo pertenece una fecha de servicio.")}
+        </Typography>
+      </Box>
+    </FormDrawer>
+  );
 }
