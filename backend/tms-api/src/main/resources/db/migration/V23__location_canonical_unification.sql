@@ -205,15 +205,27 @@ COMMENT ON COLUMN tms.location_role.role IS
 -- (V14 gave those locations the legacy id), so these statements are measurable no-ops on
 -- historical data and only move rows created afterwards.
 
+--
+-- Order matters here, and it was wrong until this was corrected: the repoint has to happen with
+-- the old foreign keys already gone. They still point at tms.origin/tms.destination, so writing a
+-- tms.location id while they are in force is rejected outright - `violates foreign key constraint
+-- fk_transport_order_destination`. It only shows on an upgrade that carries data: on a fresh
+-- install every table below is empty, the UPDATEs touch no rows, and nothing is checked. The case
+-- that fails is exactly the one this migration exists for - a legacy origin and destination that
+-- are the same physical place, merged onto one location whose id matches neither.
+--
+
 -- 3.1 tms.route.origin_id
+ALTER TABLE tms.route
+    DROP CONSTRAINT fk_route_origin,
+    DROP CONSTRAINT fk_route_origin_company;
+
 UPDATE tms.route r
 SET origin_id = o.location_id
 FROM tms.origin o
 WHERE o.id = r.origin_id AND o.location_id IS DISTINCT FROM r.origin_id;
 
 ALTER TABLE tms.route
-    DROP CONSTRAINT fk_route_origin,
-    DROP CONSTRAINT fk_route_origin_company,
     ADD CONSTRAINT fk_route_origin FOREIGN KEY (origin_id)
         REFERENCES tms.location (id) ON DELETE RESTRICT,
     ADD CONSTRAINT fk_route_origin_company FOREIGN KEY (origin_id, company_id)
@@ -224,14 +236,16 @@ COMMENT ON COLUMN tms.route.origin_id IS
     'the application enforces (RouteService); the database enforces existence and tenant.';
 
 -- 3.2 tms.route_stop.destination_id
+ALTER TABLE tms.route_stop
+    DROP CONSTRAINT fk_route_stop_destination,
+    DROP CONSTRAINT fk_route_stop_destination_company;
+
 UPDATE tms.route_stop s
 SET destination_id = d.location_id
 FROM tms.destination d
 WHERE d.id = s.destination_id AND d.location_id IS DISTINCT FROM s.destination_id;
 
 ALTER TABLE tms.route_stop
-    DROP CONSTRAINT fk_route_stop_destination,
-    DROP CONSTRAINT fk_route_stop_destination_company,
     ADD CONSTRAINT fk_route_stop_destination FOREIGN KEY (destination_id)
         REFERENCES tms.location (id) ON DELETE RESTRICT,
     ADD CONSTRAINT fk_route_stop_destination_company FOREIGN KEY (destination_id, company_id)
@@ -246,6 +260,12 @@ COMMENT ON COLUMN tms.route_stop.destination_id IS
 -- roles can now be one end of an order while another is the other end, and the two columns may
 -- even hold the same id if a movement starts and ends at one place. No constraint forbids it,
 -- and none should - that is the model this whole migration is for.
+ALTER TABLE tms.transport_order
+    DROP CONSTRAINT fk_transport_order_origin,
+    DROP CONSTRAINT fk_transport_order_origin_company,
+    DROP CONSTRAINT fk_transport_order_destination,
+    DROP CONSTRAINT fk_transport_order_destination_company;
+
 UPDATE tms.transport_order t
 SET origin_id = o.location_id
 FROM tms.origin o
@@ -257,10 +277,6 @@ FROM tms.destination d
 WHERE d.id = t.destination_id AND d.location_id IS DISTINCT FROM t.destination_id;
 
 ALTER TABLE tms.transport_order
-    DROP CONSTRAINT fk_transport_order_origin,
-    DROP CONSTRAINT fk_transport_order_origin_company,
-    DROP CONSTRAINT fk_transport_order_destination,
-    DROP CONSTRAINT fk_transport_order_destination_company,
     ADD CONSTRAINT fk_transport_order_origin FOREIGN KEY (origin_id)
         REFERENCES tms.location (id) ON DELETE RESTRICT,
     ADD CONSTRAINT fk_transport_order_origin_company FOREIGN KEY (origin_id, company_id)
@@ -277,14 +293,16 @@ COMMENT ON COLUMN tms.transport_order.destination_id IS
     'equal origin_id only if a movement genuinely starts and ends at the same place.';
 
 -- 3.4 tms.planning_run.origin_id
+ALTER TABLE tms.planning_run
+    DROP CONSTRAINT fk_planning_run_origin,
+    DROP CONSTRAINT fk_planning_run_origin_company;
+
 UPDATE tms.planning_run p
 SET origin_id = o.location_id
 FROM tms.origin o
 WHERE o.id = p.origin_id AND o.location_id IS DISTINCT FROM p.origin_id;
 
 ALTER TABLE tms.planning_run
-    DROP CONSTRAINT fk_planning_run_origin,
-    DROP CONSTRAINT fk_planning_run_origin_company,
     ADD CONSTRAINT fk_planning_run_origin FOREIGN KEY (origin_id)
         REFERENCES tms.location (id) ON DELETE RESTRICT,
     ADD CONSTRAINT fk_planning_run_origin_company FOREIGN KEY (origin_id, company_id)
@@ -294,14 +312,16 @@ COMMENT ON COLUMN tms.planning_run.origin_id IS
     'The tms.location this planning session dispatches from; must hold the ORIGIN role.';
 
 -- 3.5 tms.trip_stop.destination_id
+ALTER TABLE tms.trip_stop
+    DROP CONSTRAINT fk_trip_stop_destination,
+    DROP CONSTRAINT fk_trip_stop_destination_company;
+
 UPDATE tms.trip_stop s
 SET destination_id = d.location_id
 FROM tms.destination d
 WHERE d.id = s.destination_id AND d.location_id IS DISTINCT FROM s.destination_id;
 
 ALTER TABLE tms.trip_stop
-    DROP CONSTRAINT fk_trip_stop_destination,
-    DROP CONSTRAINT fk_trip_stop_destination_company,
     ADD CONSTRAINT fk_trip_stop_destination FOREIGN KEY (destination_id)
         REFERENCES tms.location (id) ON DELETE RESTRICT,
     ADD CONSTRAINT fk_trip_stop_destination_company FOREIGN KEY (destination_id, company_id)

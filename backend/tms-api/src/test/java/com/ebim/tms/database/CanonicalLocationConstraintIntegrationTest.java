@@ -420,12 +420,12 @@ class CanonicalLocationConstraintIntegrationTest {
                 // touching anything.
                 statement.execute("""
                         INSERT INTO tms.route (id, company_id, code, name, origin_id)
-                        SELECT '55555555-0000-4000-8000-0000000000r1', o.company_id, 'BF-ROUTE', 'Backfill route',
+                        SELECT '55555555-0000-4000-8000-0000000000f1', o.company_id, 'BF-ROUTE', 'Backfill route',
                                o.id
                         FROM tms.origin o WHERE o.company_id = '%1$s' AND o.code = 'ONLY-ORG';
 
                         INSERT INTO tms.route_stop (route_id, company_id, destination_id, sequence)
-                        SELECT '55555555-0000-4000-8000-0000000000r1', d.company_id, d.id, 1
+                        SELECT '55555555-0000-4000-8000-0000000000f1', d.company_id, d.id, 1
                         FROM tms.destination d WHERE d.company_id = '%1$s' AND d.code = 'ONLY-DST';
 
                         INSERT INTO tms.transport_order
@@ -465,10 +465,12 @@ class CanonicalLocationConstraintIntegrationTest {
                     + " WHERE l.company_id = '" + companyA + "' AND l.code = 'BOTH' ORDER BY 1"))
                     .containsExactly("DESTINATION", "ORIGIN");
 
-            assertThat(value("SELECT l.id::text = o.id::text FROM tms.location l JOIN tms.origin o"
+            // El ::text de fuera es el que importa: sin él PostgreSQL entrega el booleano como
+            // 't', y la comparación con "true" falla por la forma, no por el hecho.
+            assertThat(value("SELECT (l.id::text = o.id::text)::text FROM tms.location l JOIN tms.origin o"
                     + " ON o.location_id = l.id WHERE l.company_id = '" + companyA + "' AND l.code = 'BOTH'"))
                     .isEqualTo("true");
-            assertThat(value("SELECT d.location_id::text = o.id::text FROM tms.destination d JOIN tms.origin o"
+            assertThat(value("SELECT (d.location_id::text = o.id::text)::text FROM tms.destination d JOIN tms.origin o"
                     + " ON o.company_id = d.company_id AND o.code = d.code WHERE d.company_id = '" + companyA
                     + "' AND d.code = 'BOTH'"))
                     .as("the destination points at the merged location, which carries the origin's id")
