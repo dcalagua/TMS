@@ -9,3 +9,10 @@ dist-ssr
 coverage
 *.tsbuildinfo
 .DS_Thumbs
+
+# Artefactos de Playwright y de cobertura
+playwright-report/
+test-results/
+blob-report/
+coverage/
+.playwright/
