@@ -180,7 +180,7 @@ class LocationImportApiIntegrationTest {
         fields[14] = "";
         fields[15] = "";
         fields[16] = "";
-        return String.join(",", fields) + "\n";
+        return csvRow(fields) + "\n";
     }
 
     private static String location(String code) {
@@ -197,7 +197,7 @@ class LocationImportApiIntegrationTest {
         for (int index = 4; index <= 16; index++) {
             fields[index] = "";
         }
-        return String.join(",", fields) + "\n";
+        return csvRow(fields) + "\n";
     }
 
     private RequestBuilder preview(MockMultipartFile file, UUID companyId, String token) {
@@ -243,6 +243,7 @@ class LocationImportApiIntegrationTest {
     @DisplayName("a preview reports what would happen and writes nothing at all")
     void previewWritesNothing() throws Exception {
         long before = count("SELECT count(*) FROM tms.location WHERE company_id = '" + COMPANY_A + "'");
+        long batchesBefore = count("SELECT count(*) FROM tms.import_batch WHERE entity_type = 'LOCATION'");
 
         mockMvc.perform(preview(csv(location("PRV-1")), COMPANY_A, adminToken))
                 .andExpect(status().isOk())
@@ -253,7 +254,8 @@ class LocationImportApiIntegrationTest {
 
         assertThat(count("SELECT count(*) FROM tms.location WHERE company_id = '" + COMPANY_A + "'"))
                 .isEqualTo(before);
-        assertThat(count("SELECT count(*) FROM tms.import_batch WHERE entity_type = 'LOCATION'")).isZero();
+        assertThat(count("SELECT count(*) FROM tms.import_batch WHERE entity_type = 'LOCATION'"))
+                .isEqualTo(batchesBefore);
     }
 
     @Test
@@ -312,6 +314,8 @@ class LocationImportApiIntegrationTest {
     @DisplayName("a file with one bad row imports none of its good ones either")
     void oneBadRowRejectsTheWholeFile() throws Exception {
         long before = count("SELECT count(*) FROM tms.location WHERE company_id = '" + COMPANY_A + "'");
+        long batchesBefore = count("SELECT count(*) FROM tms.import_batch WHERE entity_type = 'LOCATION'"
+                + " AND company_id = '" + COMPANY_A + "'");
         String body = location("GOOD-1") + locationWithoutName("BAD-1");
 
         mockMvc.perform(apply(csv(body), COMPANY_A, adminToken))
@@ -323,7 +327,8 @@ class LocationImportApiIntegrationTest {
         assertThat(count("SELECT count(*) FROM tms.location WHERE company_id = '" + COMPANY_A + "'"))
                 .isEqualTo(before);
         assertThat(count("SELECT count(*) FROM tms.import_batch WHERE entity_type = 'LOCATION'"
-                + " AND company_id = '" + COMPANY_A + "'")).isZero();
+                + " AND company_id = '" + COMPANY_A + "'"))
+                .isEqualTo(batchesBefore);
     }
 
     @Test
@@ -365,5 +370,30 @@ class LocationImportApiIntegrationTest {
 
         assertThat(count("SELECT count(*) FROM tms.location_role lr JOIN tms.location l ON l.id = lr.location_id"
                 + " WHERE l.company_id = '" + COMPANY_A + "' AND l.code = 'MULTI-1'")).isEqualTo(2);
+    }
+
+    /**
+     * One CSV row, quoting any field that contains the delimiter.
+     *
+     * <p>Needed because the roles column legitimately holds {@code ORIGIN,DESTINATION} - the exact
+     * spelling {@code LocationImportTemplate} documents. Joined raw, that comma is a column
+     * separator like any other and the row silently gains a field: the import still succeeds, the
+     * location is created, and it quietly ends up with one role instead of two. RFC 4180 quoting is
+     * what the reader already expects, and what a spreadsheet writes.
+     */
+    private static String csvRow(String[] fields) {
+        StringBuilder row = new StringBuilder();
+        for (int index = 0; index < fields.length; index++) {
+            if (index > 0) {
+                row.append(',');
+            }
+            String field = fields[index] == null ? "" : fields[index];
+            if (field.indexOf(',') >= 0 || field.indexOf('"') >= 0 || field.indexOf('\n') >= 0) {
+                row.append('"').append(field.replace("\"", "\"\"")).append('"');
+            } else {
+                row.append(field);
+            }
+        }
+        return row.toString();
     }
 }

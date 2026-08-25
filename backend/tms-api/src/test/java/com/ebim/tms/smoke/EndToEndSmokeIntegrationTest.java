@@ -234,7 +234,9 @@ class EndToEndSmokeIntegrationTest {
                                  "country":"PE","timeZone":"America/Lima","serviceTimeMinutes":0}
                                 """)), id -> originId = id)
                 .andExpect(jsonPath("$.type").value("WAREHOUSE"))
-                .andExpect(jsonPath("$.roles").value(java.util.List.of("ORIGIN")));
+                // Matchers, not List.of: $.roles is a JSON array, and value(List) compares it
+                // against the raw path result rather than matching it element-wise.
+                .andExpect(jsonPath("$.roles").value(org.hamcrest.Matchers.contains("ORIGIN")));
 
         created(mockMvc.perform(asPlannerA(post(MASTERDATA + "/locations"), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON)

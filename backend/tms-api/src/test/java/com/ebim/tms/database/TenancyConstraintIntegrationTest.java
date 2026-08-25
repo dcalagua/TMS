@@ -199,24 +199,34 @@ class TenancyConstraintIntegrationTest {
         // V3 seeded 29 permissions; V5 completed the catalogue with planning.plan:read,
         // planning.plan:manage and monitoring.transport:read (Step 03 authorization model); V25
         // added planning.trip:execute, granted to every role except VIEWER (execute is not read).
+        // V28-V35 took it to 47: rates.rate_card and rates.trip_cost (V30), planning.tender
+        // (V31), iam.organization, iam.company, iam.user and iam.membership (V34),
+        // integration.client and integration.webhook (V35), and audit.log:read (V22).
+        //
+        // These totals are deliberately exact rather than "at least". The catalogue is a schema
+        // contract: a permission that appears without a migration declaring it, or a grant that
+        // widens a role silently, is the kind of change this test exists to make visible. The
+        // named invariants below are the ones that carry meaning - the counts only anchor them.
         assertThat(count("SELECT count(*) FROM tms.role")).isEqualTo(4);
-        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(33);
+        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(47);
         assertThat(count("SELECT count(*) FROM tms.permission WHERE code = resource || ':' || action"))
-                .isEqualTo(33);
+                .isEqualTo(47);
 
-        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(95);
+        // 47 + 46 + 24 + 15. ORGANIZATION_ADMIN holds the whole catalogue; COMPANY_ADMIN holds
+        // all of it but iam.organization:manage, which is asserted by name further down.
+        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(132);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'ORGANIZATION_ADMIN'"))
-                .isEqualTo(33);
+                .isEqualTo(47);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'COMPANY_ADMIN'"))
-                .isEqualTo(32);
+                .isEqualTo(46);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'PLANNER'"))
-                .isEqualTo(17);
+                .isEqualTo(24);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'VIEWER'"))
-                .isEqualTo(13);
+                .isEqualTo(15);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id"
                 + " JOIN tms.permission p ON p.id = rp.permission_id"

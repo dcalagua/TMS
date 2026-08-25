@@ -234,6 +234,7 @@ class OrderImportApiIntegrationTest {
     @DisplayName("a preview reports what would happen and writes nothing at all")
     void previewWritesNothing() throws Exception {
         long before = count("SELECT count(*) FROM tms.transport_order WHERE company_id = '" + COMPANY_A + "'");
+        long batchesBefore = count("SELECT count(*) FROM tms.order_import_batch");
 
         mockMvc.perform(preview(csv(line("PRV-1", "SKU-1", "2", "10")), COMPANY_A))
                 .andExpect(status().isOk())
@@ -246,7 +247,8 @@ class OrderImportApiIntegrationTest {
 
         assertThat(count("SELECT count(*) FROM tms.transport_order WHERE company_id = '" + COMPANY_A + "'"))
                 .isEqualTo(before);
-        assertThat(count("SELECT count(*) FROM tms.order_import_batch")).isZero();
+        assertThat(count("SELECT count(*) FROM tms.order_import_batch"))
+                .isEqualTo(batchesBefore);
     }
 
     @Test

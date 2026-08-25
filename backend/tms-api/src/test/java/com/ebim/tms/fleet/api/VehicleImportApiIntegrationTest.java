@@ -234,6 +234,7 @@ class VehicleImportApiIntegrationTest {
     @DisplayName("a preview reports what would happen and writes nothing at all")
     void previewWritesNothing() throws Exception {
         long before = count("SELECT count(*) FROM tms.vehicle WHERE company_id = '" + COMPANY_A + "'");
+        long batchesBefore = count("SELECT count(*) FROM tms.import_batch WHERE entity_type = 'VEHICLE'");
 
         mockMvc.perform(preview(csv(vehicle("PRV-1", "PRV-0001")), COMPANY_A, adminToken))
                 .andExpect(status().isOk())
@@ -244,7 +245,8 @@ class VehicleImportApiIntegrationTest {
 
         assertThat(count("SELECT count(*) FROM tms.vehicle WHERE company_id = '" + COMPANY_A + "'"))
                 .isEqualTo(before);
-        assertThat(count("SELECT count(*) FROM tms.import_batch WHERE entity_type = 'VEHICLE'")).isZero();
+        assertThat(count("SELECT count(*) FROM tms.import_batch WHERE entity_type = 'VEHICLE'"))
+                .isEqualTo(batchesBefore);
     }
 
     @Test
@@ -321,6 +323,8 @@ class VehicleImportApiIntegrationTest {
     @DisplayName("a file with one bad row imports none of its good ones either")
     void oneBadRowRejectsTheWholeFile() throws Exception {
         long before = count("SELECT count(*) FROM tms.vehicle WHERE company_id = '" + COMPANY_A + "'");
+        long batchesBefore = count("SELECT count(*) FROM tms.import_batch WHERE entity_type = 'VEHICLE'"
+                + " AND company_id = '" + COMPANY_A + "'");
         String body = vehicle("GOOD-1", "GOOD-0001") + vehicle("BAD-1", "BAD-0001", "CARR-A", null);
 
         mockMvc.perform(apply(csv(body), COMPANY_A, adminToken))
@@ -332,7 +336,8 @@ class VehicleImportApiIntegrationTest {
         assertThat(count("SELECT count(*) FROM tms.vehicle WHERE company_id = '" + COMPANY_A + "'"))
                 .isEqualTo(before);
         assertThat(count("SELECT count(*) FROM tms.import_batch WHERE entity_type = 'VEHICLE'"
-                + " AND company_id = '" + COMPANY_A + "'")).isZero();
+                + " AND company_id = '" + COMPANY_A + "'"))
+                .isEqualTo(batchesBefore);
     }
 
     @Test

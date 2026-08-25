@@ -1303,7 +1303,17 @@ class PlanningApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.trip.status").value("IN_TRANSIT"))
                 .andExpect(jsonPath("$.trip.actualDepartureAt").isNotEmpty()));
-        execute(trip, "complete", null, version)
+
+        // V27 forbids closing a trip over stops nobody resolved, so the stops are walked first.
+        // This is the happy path, so each one is arrived at and completed - what a driver actually
+        // does - rather than skipped, which would need a typed reason and prove something else.
+        for (String stopId : stopIdsOf(trip)) {
+            stopAction(trip, stopId, "arrive").andExpect(status().isOk());
+            stopAction(trip, stopId, "complete").andExpect(status().isOk());
+        }
+
+        // Re-read rather than reusing `version`: resolving the stops moved the trip on too.
+        execute(trip, "complete", null, versionOfTrip(trip))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.trip.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.trip.actualCompletionAt").isNotEmpty())
@@ -1489,6 +1499,22 @@ class PlanningApiIntegrationTest {
         return mockMvc.perform(asAdmin(post(TRIPS + "/" + tripId + "/" + action), COMPANY_A)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body));
+    }
+
+    /** The stops of a trip in sequence, as its detail view reports them. */
+    private java.util.List<String> stopIdsOf(String tripId) throws Exception {
+        String body = mockMvc.perform(asAdmin(get(TRIPS + "/" + tripId), COMPANY_A))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return JsonPath.read(body, "$.stops[*].id");
+    }
+
+    /** One stop-execution transition. The body is empty: occurredAt and notes are both optional. */
+    private org.springframework.test.web.servlet.ResultActions stopAction(
+            String tripId, String stopId, String action) throws Exception {
+        return mockMvc.perform(asAdmin(post(TRIPS + "/" + tripId + "/stops/" + stopId + "/" + action), COMPANY_A)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"));
     }
 
     private long versionOfTrip(String tripId) throws Exception {
