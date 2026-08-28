@@ -12,7 +12,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 |---|---|---|---|---|---|---|---|
 | 01 | Truth Baseline + Documentation | **PASS** | 2026-08-28 01:10 | `f666d63` | none (V35 is head; V36 next) | 1312 / 0 fail | false |
 | 02 | Order Lifecycle V2 | **PASS** | 2026-08-28 01:40 | `32dcc65` | **V36** | 1389 / 0 fail | false |
-| 03 | Ship Units + Partial Allocation | pending | - | - | - | - | - |
+| 03 | Ship Units + Partial Allocation | **PASS** | 2026-08-28 01:58 | `91540cb` | **V37** | 1409 / 0 fail | false |
 | 04 | Routing Matrix + Travel Time | pending | - | - | - | - | - |
 | 05 | Advanced Bulk Planning Engine V2 | pending | - | - | - | - | - |
 | 06 | Rate Engine V2 | pending | - | - | - | - | - |
@@ -27,7 +27,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 15 | Observability + Performance + Security | pending | - | - | - | - | - |
 | 16 | Final Enterprise Certification | pending | - | - | - | - | - |
 
-**LAST_COMPLETED_JOB = 02**
+**LAST_COMPLETED_JOB = 03**
 
 ## Baseline established by JOB 01
 
@@ -93,3 +93,32 @@ by construction.
 `OrderPlanningServiceExecutionTest` (idempotency, replay safety, the row lock),
 `OrderExecutionPropagatorTest`, and six smoke steps driving the vertical over HTTP from dispatch
 through close-out, correction and reopen.
+
+### JOB 03 - 2026-08-28 - PASS
+
+One order can now be split across several trips without being duplicated. **V37** adds the
+allocation ledger's ceiling.
+
+**What was already there.** V11 had written the ledger and said so in its header: the assignment
+row carries *allocated* amounts, capacity already sums that table, and the whole-order unique index
+was deliberately partial so a split would fall outside it. The job was to give it a ceiling, not to
+build it.
+
+**The design call.** `allocated <= ordered` had to survive two planners racing, and a CHECK cannot
+sum a ledger - so the running total lives on the order row. That looks like the thing ADR-009 argued
+against a job earlier; it is not. ADR-009 rejected storing a derived figure *for convenience*. Here
+storing it is the only way the rule becomes a database guarantee instead of a hope.
+
+**No ship_unit table**, and that is deliberate: a ship unit here is a portion of demand in the three
+measures a vehicle is constrained by. Order lines carry their own `uom`, so a fourth "quantity"
+measure would be one nothing else in the product uses. Documented in
+`docs/domain/SHIP_UNITS_AND_ALLOCATION_V1.md`.
+
+**Proved over HTTP**: 70 pallets on one truck, 30 on another, one order row, two assignment rows,
+the stored total agreeing with the ledger recomputed from those rows - and two concurrent
+70-of-100 splits where exactly one wins.
+
+**Known sharp edge**, stated rather than hidden: deliveries record an outcome, not an amount, so an
+order reopened after a *partial* delivery is replanned in full.
+
+**Tests:** 1409 backend (+20), 47 frontend (+5), 33 E2E.
