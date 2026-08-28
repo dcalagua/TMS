@@ -17,7 +17,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 05 | Advanced Bulk Planning Engine V2 | **PASS** | 2026-08-28 02:50 | `586e7ed` | none (V38 head) | 1498 / 0 fail | false |
 | 06 | Rate Engine V2 | **PASS** | 2026-08-28 03:20 | `38172c3` | **V39** | 1517 / 0 fail | false |
 | 07 | Carrier Selection + Tender Waterfall | **PASS** | 2026-08-28 03:45 | `631fa3c` | **V40** | 1536 / 0 fail | false |
-| 08 | Dock / Appointment Scheduling | pending | - | - | - | - | - |
+| 08 | Dock / Appointment Scheduling | **PASS** | 2026-08-28 04:26 | `af57109` | **V41** | 1585 / 0 fail | false |
 | 09 | Fleet Resource Scheduling | pending | - | - | - | - | - |
 | 10 | ETA + Geofencing + Predictive Tracking | pending | - | - | - | - | - |
 | 11 | Freight Audit & Settlement | pending | - | - | - | - | - |
@@ -27,7 +27,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 15 | Observability + Performance + Security | pending | - | - | - | - | - |
 | 16 | Final Enterprise Certification | pending | - | - | - | - | - |
 
-**LAST_COMPLETED_JOB = 07**
+**LAST_COMPLETED_JOB = 08**
 
 ## OPEN TECHNICAL / DOMAIN DEBTS
 
@@ -37,7 +37,7 @@ inconvenient - it moves to RESOLVED with the job that closed it, or to DEFERRED_
 | # | Debt | Status | Notes |
 |---|---|---|---|
 | **D1** | `PlanningKpis.totalCost` is null - a proposal is not priced | **OPEN** | JOB 06 built the rating; a proposed trip's carrier is its vehicle's carrier, so the pieces exist. Must not sum incompatible currencies. Close before Planning V2 is called integrated with Settlement (JOB 11) |
-| **D2** | An accepted tender can leave `shipment.carrier != shipment.vehicle.owner` | **OPEN** | JOB 07 refused silent reassignment. **JOB 09 must resolve the invariant formally** - clear the vehicle, select a compatible one atomically, or model `RESOURCE_ASSIGNMENT_PENDING`. Never leave the previous carrier's vehicle attached |
+| **D2** | An accepted tender can leave `shipment.carrier != shipment.vehicle.owner` | **OPEN** - JOB 09 | JOB 07 refused silent reassignment. **JOB 09 must resolve the invariant formally** - clear the vehicle, select a compatible one atomically, or model `RESOURCE_ASSIGNMENT_PENDING`. Never leave the previous carrier's vehicle attached |
 | **D3** | Delivery records an outcome, not a delivered quantity | **OPEN** | `PARTIAL` implies no demonstrable amount. Must not be inferred from ordered/allocated/planned. Evaluate formally at JOB 10, close before JOB 11 if Settlement needs it |
 | **D4** | No automatic tender scheduler: no system-actor model | **DEFERRED_WITH_REASON** | `requireAppUserId` refuses machines *by design* - an offer is a commercial commitment and the trail must name who made it. No fake user, hardcoded UUID or anonymous principal. Manual waterfall advance stands. Design only, if JOB 15 raises a real requirement |
 
@@ -238,3 +238,35 @@ converted; the majority currency is the reference.
    doing it silently would leave the two disagreeing.
 
 **Delivery quantity** (JOB 03) unchanged and not inferred.
+
+### JOB 08 - 2026-08-28 - PASS
+
+JOB=08 · STARTED_AT=03:55 · COMPLETED_AT=04:26 · HEAD_BEFORE=`1d2d3e5` · HEAD_AFTER=`af57109`
+MIGRATION=**V41** · BACKEND_CLEAN_PASS=1585 · BACKEND_CLEAN_FAIL=0
+FRONTEND_PASS=60 · E2E_PASS=34 · E2E_SKIPPED=7 · RETRIES=6, all recovered
+
+Dock scheduling: doors, local opening hours, closures, and the seven-state appointment lifecycle.
+
+**No double booking is a database fact**, not a service check: `EXCLUDE USING gist` over
+`(resource_id, tstzrange(window_start, window_end))`. A test runs two real threads booking one door
+for one hour at the same instant and asserts exactly one wins. A door takes one vehicle and six
+doors are six rows - PostgreSQL cannot refuse "more than N overlapping", so a capacity column would
+put the invariant back in application code.
+
+**DEFECTS_FOUND=1 (by a CHECK constraint), DEFECTS_FIXED=1.** Opening hours in a `time` column came
+back zone-shifted: `hibernate.jdbc.time_zone: UTC` normalises temporal values on write, turning
+00:00 into `05:00+00` and 23:59 into `04:59+00` - close before open. **Every site's opening hours
+would have silently shifted by its own UTC offset.** Now stored as minutes since local midnight,
+which no configuration can shift.
+
+**Also caught by existing guards:** the trip port written in the wrong module (ModuleBoundaryTest),
+three permissions with no capability (CapabilityTest), and the exact permission counts
+(TenancyConstraintIntegrationTest) - each working exactly as designed.
+
+**No WMS/EWM table, column or view was created.** The boundary is a port, documented in
+`docs/domain/APPOINTMENTS_V1.md`.
+
+OPEN_DEBTS: D1 OPEN · D2 OPEN (JOB 09's) · D3 OPEN, not needed or inferred here ·
+D4 DEFERRED_WITH_REASON, unchanged.
+
+NEXT_JOB=09 Fleet Resource Scheduling, which must resolve D2. Next migration **V42**.
