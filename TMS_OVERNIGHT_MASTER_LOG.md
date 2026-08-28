@@ -27,7 +27,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 15 | Observability + Performance + Security | pending | - | - | - | - | - |
 | 16 | Final Enterprise Certification | pending | - | - | - | - | - |
 
-**LAST_COMPLETED_JOB = 12**
+**LAST_COMPLETED_JOB = 13**
 
 ## OPEN TECHNICAL / DOMAIN DEBTS
 
@@ -427,3 +427,34 @@ D6 OPEN · **D7 OPEN (new)**.
 
 NEXT_JOB=13 Integration Ops, or 15 Hardening if time runs short - the brief ranks hardening above
 JOB 14.
+
+### JOB 13 - 2026-08-28 - PASS
+
+JOB=13 · STARTED_AT=05:49 · COMPLETED_AT=05:59 · HEAD_BEFORE=`83d3917` · HEAD_AFTER=`d06a38d`
+MIGRATION=**none** · BACKEND_CLEAN_PASS=1669 · BACKEND_CLEAN_FAIL=0 · BACKEND_SKIPPED=0
+FRONTEND_PASS=82 · E2E_PASS=34 · E2E_SKIPPED=7 · RETRIES=3, all recovered
+
+**The inspection changed the job.** Integration ops was largely built - delivery list and detail,
+attempt history, per-delivery retry, activate/deactivate, secret rotation, a `SKIP LOCKED`
+dispatcher, an inbound inbox with typed outcomes. Building a second version would have been
+busywork. What was missing is what two paginated lists cannot do: **answer a question**.
+
+One endpoint, carrying the two signals the lists could not. **Age, not count** - a queue of a
+thousand that is draining is healthy and three waiting since Tuesday is not, and a counter cannot
+order those. And **the failure that looks like silence** - deactivating a subscription discards
+nothing and keeps queueing, so a partner switched off during an incident and never switched back on
+produces no errors at all.
+
+**DEFECTS_FOUND=1, DEFECTS_FIXED=1, and it is why `clean test` is the gate.** My cross-entity JPQL
+used `d.subscriptionId`, which does not exist - the entity holds a `@ManyToOne`. **`mvnw compile`
+passed.** Spring validated the query at context startup and took down **323 tests** from one bad
+string, because that repository sits on the shipment event publisher's dependency path. Second time
+this chain has been saved by running `clean test` instead of trusting a compile.
+
+**No bulk retry, deliberately:** the reason forty deliveries failed is usually still true, and
+re-queueing them all turns one broken endpoint into forty more attempts against it.
+
+OPEN_DEBTS: unchanged - D1 CLOSED · D2 CLOSED · D3 OPEN evaluated · D4 DEFERRED_WITH_REASON ·
+D5 OPEN · D6 OPEN · D7 OPEN. No new debt.
+
+NEXT_JOB=15 Hardening, which the brief ranks above JOB 14.
