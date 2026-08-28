@@ -26,9 +26,14 @@ import java.util.List;
  * @param outstandingStops the stops still to be worked on shipments that are out, most overdue
  *     first; {@code summary.outstandingStops()} is the total and
  *     {@code summary.stopsPastWindow()} how many of them are actually late
- * @param blockers shipments that <em>cannot depart</em> in their current state (JOB 12) - the only
- *     panel here that reports what is about to happen rather than what already has.
+ * @param blockers shipments that <em>cannot depart</em> in their current state (JOB 12).
  *     {@code summary.blockedShipments()} is the total
+ * @param advisories things worth knowing that <em>stop nothing</em> (JOB 23) - an open money
+ *     question on a shipment, an arrival estimate that misses its window.
+ *     <b>Deliberately a second list rather than more rows on {@code blockers}</b>: a blocker is a
+ *     state that makes dispatch refuse, and once a panel has cried wolf about a rounding difference
+ *     the shipment that genuinely cannot depart is one row among forty.
+ *     {@code summary.openAdvisories()} is the total
  */
 public record ControlTowerView(
         LocalDate date,
@@ -37,12 +42,14 @@ public record ControlTowerView(
         List<ControlTowerWorkloadView> workload,
         List<ControlTowerExceptionView> openExceptions,
         List<ControlTowerStopView> outstandingStops,
-        List<ControlTowerBlockerView> blockers) {
+        List<ControlTowerBlockerView> blockers,
+        List<ControlTowerAdvisoryView> advisories) {
 
     public ControlTowerView {
         workload = List.copyOf(workload);
         openExceptions = List.copyOf(openExceptions);
         outstandingStops = List.copyOf(outstandingStops);
         blockers = List.copyOf(blockers);
+        advisories = List.copyOf(advisories);
     }
 }

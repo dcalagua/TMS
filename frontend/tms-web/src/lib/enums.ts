@@ -136,6 +136,15 @@ export const ENUM_LABELS = {
     UNMATCHED_TRIP: "Envío sin identificar",
   },
   /** V42/JOB 12: por qué un envío no puede salir hoy. */
+  /**
+   * JOB 23: por qué aparece un aviso. Deliberadamente separado de `blockerReason` — un bloqueador
+   * detiene un camión y un aviso no, y compartir vocabulario sería el primer paso para acabar
+   * mezclándolos en un solo panel.
+   */
+  advisoryType: {
+    SETTLEMENT_DISCREPANCY_OPEN: "Diferencia en factura sin resolver",
+    STOP_ETA_MISSES_WINDOW: "La llegada estimada se sale de la ventana",
+  },
   blockerReason: {
     AWAITING_CARRIER_VEHICLE: "Falta vehículo del transportista",
     DRIVER_UNAVAILABLE: "Conductor no disponible",

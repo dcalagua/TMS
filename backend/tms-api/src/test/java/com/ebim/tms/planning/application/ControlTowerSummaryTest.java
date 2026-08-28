@@ -2,6 +2,7 @@ package com.ebim.tms.planning.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -56,6 +57,9 @@ class ControlTowerSummaryTest {
     private TripStopRepository stopRepository;
     private TripExceptionRepository exceptionRepository;
     private OrderPlanningPort orderPlanningPort;
+    private final com.ebim.tms.shared.reference.SettlementAdvisoryPort settlementAdvisoryPort =
+            mock(com.ebim.tms.shared.reference.SettlementAdvisoryPort.class);
+
     private ControlTowerService service;
 
     @BeforeEach
@@ -82,9 +86,17 @@ class ControlTowerSummaryTest {
         when(orderPlanningPort.searchAssignable(any(), any()))
                 .thenReturn(new PageResponse<>(List.of(), 0, 1, 42));
 
+        // JOB 23: the advisory panel reads two more sources. Stubbed empty here so these
+        // tests stay about what they were about; the panel has its own test.
+        when(stopRepository.findEtaMissingWindowForDay(any(), any(), any(), any(), any()))
+                .thenReturn(List.of());
+        when(settlementAdvisoryPort.findOpenDiscrepancies(any(), any(), anyInt()))
+                .thenReturn(List.of());
+
         service = new ControlTowerService(mock(TripService.class), mock(TripViewAssembler.class),
                 tripRepository, stopRepository, exceptionRepository, mock(DestinationLookupPort.class),
-                mock(VehicleLookupPort.class), orderPlanningPort, availabilityPort);
+                mock(VehicleLookupPort.class), orderPlanningPort, availabilityPort,
+                settlementAdvisoryPort);
     }
 
     private static CompanyScope scopeWith(Set<Permission> permissions) {

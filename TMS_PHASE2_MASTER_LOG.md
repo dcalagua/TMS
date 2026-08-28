@@ -4,15 +4,15 @@
 follows. Phase 1 (JOBS 01–16) is closed and recorded in `TMS_OVERNIGHT_MASTER_LOG.md`.*
 
 ```
-LAST_COMPLETED_JOB=  22
-CURRENT_JOB=         23
+LAST_COMPLETED_JOB=  23
+CURRENT_JOB=         24
 CURRENT_SUBSTEP=     not started
 LATEST_MIGRATION=    V48  (next free: V49)
-LAST_GOOD_HEAD=      pending commit of JOB 22
-TEST_STATUS=         backend 1833/0/0 · frontend 123 · e2e 36 pass 7 skipped · lint/build clean
+LAST_GOOD_HEAD=      pending commit of JOB 23
+TEST_STATUS=         backend 1840/0/0 · frontend 129 · e2e 36 pass 7 skipped · lint/build clean
 KNOWN_FAILURE=       none
 STOP_CHAIN=          false
-NEXT_ACTION=         JOB 23 - Operational Exceptions + Control Tower V3
+NEXT_ACTION=         JOB 24 - Observability & Operations Completion
 ```
 
 ## Open debts
@@ -268,3 +268,34 @@ make own fleet look better than it is.
 
 **D10 untouched and still OPEN**, as instructed: own-fleet costing computes what the transport costs
 and does not decide how that cost is shared.
+
+### JOB 23 — 2026-08-28 — PASS
+
+`STARTED 13:20 · COMPLETED 14:12 · MIGRATION none · BACKEND 1840/0/0 · FRONTEND 129 · E2E 36/7`
+
+**No migration, and that is the honest outcome.** V27 already built the exception model - table,
+lifecycle, human reporter, resolve endpoints - and JOB 12 already kept blockers apart from
+exceptions. What was missing was that **settlement discrepancies never reached an operational
+screen**, and that the tower had nowhere to put a fact worth knowing that stops nothing.
+
+**Three streams, three counts, never summed.** Blockers (computed, stop a truck), operational
+exceptions (a person reported them), advisories (observed, stop nothing).
+`anAdvisoryIsNeverABlocker` is the assertion that holds it: forty cents of rounding produces one
+advisory, zero blockers, and `blockedShipments == 0`.
+
+**Advisories own no state.** The port returns a projection and no entity, so the tower cannot
+acquire the ability to resolve a discrepancy by accident. The panel has no button to close one, and
+the frontend test asserts there is no `button` in a row.
+
+**The port takes trip ids, not a date.** My first version had settlement's JPQL join `Trip` to work
+out "today" - a cross-module dependency hidden inside a string, where ArchUnit cannot see it.
+
+**DEFECTS_FOUND=4, DEFECTS_FIXED=4.** Two are the same lesson twice: `TripStop` has no `tripId` JPA
+attribute and my query used one - **compile passed, the Spring context failed, 365 tests died**,
+exactly JOB 13's defect in a new place. And `mvnw compile` returned **exit 0 against an arity
+mismatch** where I passed 8 arguments to a 7-component record. The chain has now been saved by
+`clean` four times.
+
+**Coverage gap recorded:** the composition is unit-tested and both queries are validated by a real
+Spring context starting, but no test proves a real discrepancy row reaching a real control tower
+response. The query is valid; that it selects exactly the right rows rests on review.

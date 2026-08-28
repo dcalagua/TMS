@@ -26,7 +26,8 @@ import { enumLabel } from "../../lib/enums";
 import type { StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
 import { fmtDateTime, fmtMinutes, fmtQuantity, fmtTime } from "../../lib/locale";
-import { BlockersPanel, ExceptionsPanel, OutstandingStopsPanel, WorkloadPanel } from "./ControlTowerPanels";
+import { BlockersPanel,
+  AdvisoriesPanel, ExceptionsPanel, OutstandingStopsPanel, WorkloadPanel } from "./ControlTowerPanels";
 
 const PAGE_SIZE = 20;
 
@@ -266,6 +267,10 @@ export function ControlTowerPage() {
         <ExceptionsPanel items={overview.openExceptions} total={summary.openExceptions} />
         <OutstandingStopsPanel items={overview.outstandingStops} total={summary.outstandingStops} />
         <BlockersPanel items={overview.blockers} total={summary.blockedShipments} />
+        {/* Debajo de los bloqueadores y visiblemente distinto (JOB 23). Dos corrientes, dos
+            contadores: "qué está atascado" y "qué conviene saber" son preguntas diferentes, y una
+            lista única haría que un redondeo se leyera como un camión parado. */}
+        <AdvisoriesPanel items={overview.advisories} total={summary.openAdvisories} />
       </Box>
 
       <Toolbar

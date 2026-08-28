@@ -1,7 +1,8 @@
 import { Box, Chip, Paper, Typography } from "@mui/material";
 import { Link } from "react-router-dom";
-import { ReportProblemRounded, ScheduleRounded, LocalShippingRounded, BlockRounded } from "@mui/icons-material";
+import { ReportProblemRounded, ScheduleRounded, LocalShippingRounded, BlockRounded, InfoOutlined } from "@mui/icons-material";
 import type {
+  ControlTowerAdvisoryView,
   ControlTowerBlockerView, ControlTowerExceptionView, ControlTowerStopView, ControlTowerWorkloadView,
 } from "../../shared/api/controlTowerApi";
 import { AppCard, StatusChip } from "../../shared/ui/components";
@@ -218,6 +219,69 @@ export function BlockersPanel({ items, total }: { items: ControlTowerBlockerView
               </Box>
               <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
                 {blocker.detail}
+              </Typography>
+            </Paper>
+          ))}
+        </Box>
+      )}
+    </AppCard>
+  );
+}
+
+/**
+ * Lo que conviene saber y no detiene nada (JOB 23, Control Tower V3).
+ *
+ * <h2>Por qué es un panel aparte y no más filas en "No pueden salir"</h2>
+ * Un bloqueador es un estado que hace que el despacho se niegue: el camión no se mueve hasta que
+ * alguien lo arregle. Un aviso es algo que un supervisor debería saber y sobre lo que puede
+ * razonablemente no hacer nada hoy. En cuanto este panel haya dado la voz de alarma por una
+ * diferencia de cuarenta céntimos, el camión que de verdad no puede salir será una fila entre
+ * cuarenta. Por eso van separados, con distinto color y distinto contador.
+ *
+ * <h2>La torre no cierra nada de esto</h2>
+ * Cada fila enlaza al módulo dueño del hecho — una discrepancia se acepta o rechaza en
+ * Liquidaciones — y aquí no hay botón para resolverla. Dos registros de una misma disputa se
+ * separarían la primera vez que alguien resolviera el que no era.
+ */
+export function AdvisoriesPanel({ items, total }: { items: ControlTowerAdvisoryView[]; total: number }) {
+  return (
+    <AppCard title={<PanelTitle icon={<InfoOutlined sx={{ fontSize: 19, color: "info.main" }} />} label={t("Conviene saber")} shown={items.length} total={total} />}>
+      {items.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">{t("Nada pendiente de mirar hoy.")}</Typography>
+      ) : (
+        <Box sx={{ display: "grid", gap: 1 }}>
+          {items.map((advisory) => (
+            <Paper
+              key={`${advisory.type}-${advisory.sourceId}`}
+              component={Link}
+              to={advisory.type === "SETTLEMENT_DISCREPANCY_OPEN"
+                ? `/settlement?discrepancy=${advisory.sourceId}`
+                : `/trips/${advisory.tripId}`}
+              variant="outlined"
+              sx={{
+                p: 1.25, textDecoration: "none", color: "text.primary", display: "block",
+                // Azul y no ámbar: el color es la mitad del mensaje de que esto no detiene nada.
+                borderLeft: "3px solid", borderLeftColor: "info.main",
+                "&:hover": { borderColor: "info.main" },
+              }}
+            >
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  {enumLabel("advisoryType", advisory.type)}
+                </Typography>
+                {advisory.shipmentNumber && (
+                  <Typography variant="caption" color="text.secondary">{advisory.shipmentNumber}</Typography>
+                )}
+                {/* Importe sólo cuando lo hay. Un null significa que los dos lados no se pudieron
+                    comparar, y pintar "0.00" diría que la factura coincide — lo contrario. */}
+                {advisory.amount !== null && (
+                  <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                    {advisory.currency} {advisory.amount.toFixed(2)}
+                  </Typography>
+                )}
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
+                {advisory.detail}
               </Typography>
             </Paper>
           ))}
