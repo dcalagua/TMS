@@ -62,6 +62,7 @@ export const ICON_TINTS: Record<string, string> = {
   "/fleet/vehicles": "#42A5F5",
   "/fleet/drivers": "#CE93D8",
   "/rates/rate-cards": "#FFCA28",
+  "/costing/own-fleet": "#26A69A",
   "/settings/company": "#B0BEC5",
   "/settings/users": "#42A5F5",
   "/settings/integrations": "#26C6DA",
@@ -153,6 +154,21 @@ export const NAV_SECTIONS: NavSection[] = [
     capability: "RATES_VIEW",
     items: [
       { to: "/rates/rate-cards", label: "Tarifarios", icon: <PaidRounded /> },
+    ],
+  },
+  {
+    /**
+     * Costos internos, separados de Comercial a propósito.
+     *
+     * Un tarifario es lo que un transportista nos cobra; esto es lo que nos cuesta a nosotros
+     * operar nuestros propios camiones. Colgarlo del grupo Comercial lo habría escondido tras
+     * `RATES_VIEW`, y un planificador con derecho a ver el costo de un camión y sin derecho a ver
+     * los tarifarios de los transportistas es justo el reparto que una instalación va a querer.
+     */
+    title: "Costos",
+    capability: "OWN_FLEET_COSTING_VIEW",
+    items: [
+      { to: "/costing/own-fleet", label: "Costo de flota propia", icon: <PaidRounded /> },
     ],
   },
   {

@@ -73,5 +73,8 @@ public enum AuditAggregateType {
      * it bills: one invoice can cover ten trips, and "who approved this expenditure" is a question
      * about the invoice.
      */
-    CARRIER_INVOICE
+    CARRIER_INVOICE,
+
+    /** What running one of our own trucks is modelled to cost (V48, JOB 22). */
+    OWN_FLEET_COST_PROFILE
 }

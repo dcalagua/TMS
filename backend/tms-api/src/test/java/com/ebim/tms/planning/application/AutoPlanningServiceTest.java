@@ -157,6 +157,8 @@ class AutoPlanningServiceTest {
         OriginLookupPort originLookupPort = mock(OriginLookupPort.class);
         when(originLookupPort.findAllInCompany(any(), any())).thenReturn(java.util.Map.of());
         CarrierQuotationPort quotationPort = mock(CarrierQuotationPort.class);
+        com.ebim.tms.shared.reference.OwnFleetProposalCostingPort ownFleetCostingPort =
+                mock(com.ebim.tms.shared.reference.OwnFleetProposalCostingPort.class);
         when(quotationPort.quoteWithKnownDistance(any(), any(), any(), any()))
                 .thenReturn(java.util.Optional.empty());
 
@@ -165,9 +167,10 @@ class AutoPlanningServiceTest {
                 routingPort, destinationLookupPort, originLookupPort,
                 orderPlanningPort, vehicleLookupPort, routeTemplateLookupPort,
                 // JOB 11: a real pricer over a mocked quotation port. No carrier has an agreement
-                // in this fixture, so every proposal comes back NO_AGREEMENT_FOR_SOME_TRIP - which
-                // is the honest answer and is asserted in ProposalPricerTest rather than here.
-                serviceCalendarPort, new ProposalPricer(quotationPort), actors, auditRecorder);
+                // in this fixture and no own-fleet profile is configured, so every proposal comes
+                // back unpriced - which is the honest answer and is asserted in ProposalPricerTest
+                // rather than here.
+                serviceCalendarPort, new ProposalPricer(quotationPort, ownFleetCostingPort), actors, auditRecorder);
     }
 
     // --- fixtures ---------------------------------------------------------------------------

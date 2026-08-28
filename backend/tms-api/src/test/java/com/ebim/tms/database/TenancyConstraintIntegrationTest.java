@@ -215,16 +215,24 @@ class TenancyConstraintIntegrationTest {
         // authorities: a single settlement:manage would let whoever keys an invoice approve their
         // own, which is the oldest control failure in accounts payable.
         //
+        // V48 took it to 60 with costing.own_fleet read/write. Its own resource rather than folded
+        // into rates.rate_card: a tariff is a commercial agreement with a carrier and this is a
+        // finance model of our own operation, and an installation will want them in different
+        // hands. PLANNER gains the read - choosing between a carrier and our own truck is their
+        // decision - and not the write, which is a finance decision about the business. VIEWER
+        // gains NEITHER: these rates are what we pay a driver by the hour and what we believe fuel
+        // runs at, which is our cost structure rather than our operation.
+        //
         // These totals are deliberately exact rather than "at least". The catalogue is a schema
         // contract: a permission that appears without a migration declaring it, or a grant that
         // widens a role silently, is the kind of change this test exists to make visible. The
         // named invariants below are the ones that carry meaning - the counts only anchor them.
         assertThat(count("SELECT count(*) FROM tms.role")).isEqualTo(4);
-        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(58);
+        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(60);
         assertThat(count("SELECT count(*) FROM tms.permission WHERE code = resource || ':' || action"))
-                .isEqualTo(58);
+                .isEqualTo(60);
 
-        // 56 + 55 + 28 + 17. ORGANIZATION_ADMIN holds the whole catalogue; COMPANY_ADMIN holds
+        // 60 + 59 + 31 + 18. ORGANIZATION_ADMIN holds the whole catalogue; COMPANY_ADMIN holds
         // all of it but iam.organization:manage, which is asserted by name further down.
         //
         // V46's six settlement permissions do NOT go to everybody, and the gaps are the control.
@@ -232,16 +240,16 @@ class TenancyConstraintIntegrationTest {
         // invoice says - but NOT approve or export: committing money is not a dispatcher's
         // authority, and whoever works the audit queue should not sign off their own conclusions.
         // VIEWER gained only the read.
-        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(163);
+        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(168);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'ORGANIZATION_ADMIN'"))
-                .isEqualTo(58);
+                .isEqualTo(60);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'COMPANY_ADMIN'"))
-                .isEqualTo(57);
+                .isEqualTo(59);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'PLANNER'"))
-                .isEqualTo(30);
+                .isEqualTo(31);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'VIEWER'"))
                 .isEqualTo(18);

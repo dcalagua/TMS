@@ -120,6 +120,18 @@ public enum Permission {
     FLEET_WORK_ASSIGNMENT_READ("fleet.work_assignment:read"),
     FLEET_WORK_ASSIGNMENT_MANAGE("fleet.work_assignment:manage"),
 
+    /**
+     * What running our own trucks is modelled to cost (migration V48).
+     *
+     * <p>Its own resource rather than folded into {@code rates.rate_card}: a tariff is a commercial
+     * agreement with a carrier and this is a finance model of our own operation - driver hourly
+     * cost, depreciation, what we believe fuel runs at - and an installation will want the two in
+     * different hands. Deliberately NOT given to VIEWER, which is the line {@code rates} draws too:
+     * reading these rates discloses our cost structure, not our operation.
+     */
+    COSTING_OWN_FLEET_READ("costing.own_fleet:read"),
+    COSTING_OWN_FLEET_WRITE("costing.own_fleet:write"),
+
     INTEGRATION_CLIENT_READ("integration.client:read"),
     INTEGRATION_CLIENT_MANAGE("integration.client:manage"),
 

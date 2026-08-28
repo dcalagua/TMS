@@ -23,6 +23,9 @@ class ModuleBoundaryTest {
 
     private static final List<String> BUSINESS_MODULES =
             List.of("iam", "masterdata", "fleet", "orders", "planning", "rates", "audit", "integration", "tracking",
+                    // Own-fleet cost modelling (V48, JOB 22). Listed the day it was created:
+                    // a new module missing from here makes this whole rule pass vacuously over it.
+                    "costing",
                     // Owns tms.travel_estimate (V38). A platform capability rather than a business
                     // domain, but listed here for the same reason notification is: it is reached
                     // through com.ebim.tms.shared.reference.RoutingPort by every module that needs

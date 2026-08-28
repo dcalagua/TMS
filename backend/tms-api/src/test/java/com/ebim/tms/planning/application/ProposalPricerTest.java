@@ -50,7 +50,10 @@ class ProposalPricerTest {
     private static final LocalDate DATE = LocalDate.of(2026, 9, 7);
 
     private final CarrierQuotationPort quotationPort = mock(CarrierQuotationPort.class);
-    private final ProposalPricer pricer = new ProposalPricer(quotationPort);
+    private final com.ebim.tms.shared.reference.OwnFleetProposalCostingPort ownFleetCostingPort =
+            mock(com.ebim.tms.shared.reference.OwnFleetProposalCostingPort.class);
+
+    private final ProposalPricer pricer = new ProposalPricer(quotationPort, ownFleetCostingPort);
 
     // --- fixtures ---------------------------------------------------------------------
 
@@ -271,7 +274,7 @@ class ProposalPricerTest {
          * unbeatable.
          */
         @Test
-        @DisplayName("an own-fleet vehicle is not priced at zero")
+        @DisplayName("an own-fleet vehicle nobody has configured is not priced at zero")
         void ownFleetIsNotFree() {
             UUID vehicleId = UUID.randomUUID();
             UUID orderId = UUID.randomUUID();
@@ -283,7 +286,56 @@ class ProposalPricerTest {
                     List.of(new ProposedTrip(vehicleId, null, List.of(orderId), List.of(DEST_A))));
 
             assertThat(pricing.totalCost()).isNull();
-            assertThat(pricing.reason()).isEqualTo(UnpricedReason.NO_AGREEMENT_FOR_SOME_TRIP);
+            // Since V48 this has its own reason. Before it, own fleet was reported as missing an
+            // AGREEMENT - a sentence that sent a planner looking for a contract with themselves.
+            assertThat(pricing.reason()).isEqualTo(UnpricedReason.OWN_FLEET_NOT_COSTABLE);
+        }
+
+        @Test
+        @DisplayName("an own-fleet vehicle with a profile in force is costed (V48, debt D6)")
+        void ownFleetIsCostedFromItsProfile() {
+            UUID vehicleId = UUID.randomUUID();
+            UUID orderId = UUID.randomUUID();
+            when(ownFleetCostingPort.costProposedTrip(eq(COMPANY), eq(vehicleId), eq(DATE), any(), any()))
+                    .thenReturn(java.util.Optional.of(new com.ebim.tms.shared.reference.TransportCostQuote(
+                            com.ebim.tms.shared.reference.TransportCostNature.OWN_FLEET_INTERNAL_COST,
+                            new java.math.BigDecimal("316.60"), "PEN", "Own fleet")));
+
+            ProposalPricing pricing = pricer.price(COMPANY,
+                    input(matrixOver(ORIGIN, DEST_A),
+                            List.of(vehicle(vehicleId, null)),
+                            List.of(order(orderId, DEST_A, 1000))),
+                    List.of(new ProposedTrip(vehicleId, null, List.of(orderId), List.of(DEST_A))));
+
+            assertThat(pricing.totalCost()).isEqualByComparingTo("316.60");
+            // The provenance survives onto the KPI: this total is an internal cost throughout, not
+            // a carrier's price, and the screen has what it needs to say so.
+            assertThat(pricing.ownFleetCostedTrips()).isEqualTo(1);
+            assertThat(pricing.mixesPriceAndCost()).isFalse();
+        }
+
+        @Test
+        @DisplayName("an own-fleet trip whose profile could not be applied leaves the plan unpriced")
+        void ownFleetWithAnUncostableTrip() {
+            UUID vehicleId = UUID.randomUUID();
+            UUID orderId = UUID.randomUUID();
+            // A profile exists and a component it charges for had no quantity: the quote comes back
+            // present and UNCOSTED. Summing what could be calculated would let the trip nobody
+            // could measure make the whole plan look cheap.
+            when(ownFleetCostingPort.costProposedTrip(eq(COMPANY), eq(vehicleId), eq(DATE), any(), any()))
+                    .thenReturn(java.util.Optional.of(
+                            com.ebim.tms.shared.reference.TransportCostQuote.uncosted(
+                                    com.ebim.tms.shared.reference.TransportCostNature.OWN_FLEET_INTERNAL_COST,
+                                    "PEN", "Own fleet")));
+
+            ProposalPricing pricing = pricer.price(COMPANY,
+                    input(matrixOver(ORIGIN, DEST_A),
+                            List.of(vehicle(vehicleId, null)),
+                            List.of(order(orderId, DEST_A, 1000))),
+                    List.of(new ProposedTrip(vehicleId, null, List.of(orderId), List.of(DEST_A))));
+
+            assertThat(pricing.totalCost()).isNull();
+            assertThat(pricing.reason()).isEqualTo(UnpricedReason.OWN_FLEET_NOT_COSTABLE);
         }
 
         @Test

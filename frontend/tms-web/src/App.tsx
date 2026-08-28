@@ -17,6 +17,7 @@ import {
   FrequenciesPage, IntegrationsPage, LocationsPage, OrdersPage, OriginsPage, PlanningBoardPage,
   AppointmentsPage,
   SettlementPage,
+  OwnFleetCostProfilesPage,
   WorkAssignmentsPage,
   PlanningRunsPage, RateCardsPage, ReportsPage, RoutesPage, TripWorkspacePage, TripsPage,
   UsersPage, VehicleTypesPage, VehiclesPage, ZonesPage,
@@ -76,6 +77,9 @@ export default function App() {
                   <Route path="planning/:runId" element={<PlanningBoardPage />} />
 
                   <Route path="rates/rate-cards" element={<RateCardsPage />} />
+                  {/* Bajo `costing` y no bajo `rates`: una tarifa es un acuerdo comercial con un
+                      transportista y esto es un modelo financiero de nuestra propia operación. */}
+                  <Route path="costing/own-fleet" element={<OwnFleetCostProfilesPage />} />
 
                   <Route path="trips" element={<TripsPage />} />
                   <Route path="appointments" element={<AppointmentsPage />} />

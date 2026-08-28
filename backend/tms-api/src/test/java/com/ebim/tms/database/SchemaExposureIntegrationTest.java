@@ -40,6 +40,7 @@ class SchemaExposureIntegrationTest {
             "route", "route_stop", "carrier", "vehicle_type", "vehicle",
             "transport_order", "transport_order_line", "order_import_batch",
             "integration_client", "integration_client_scope", "integration_request",
+            "own_fleet_cost_profile",
             "planning_run", "trip", "trip_stop", "trip_order_assignment",
             "shipment_outbox_event", "import_batch",
             // Append-only logs: SELECT and INSERT only, UPDATE/DELETE revoked from tms_app.
@@ -95,6 +96,7 @@ class SchemaExposureIntegrationTest {
             "frequency_exception", "route", "route_stop", "carrier", "vehicle_type", "vehicle",
             "transport_order", "transport_order_line", "order_import_batch",
             "integration_client", "integration_client_scope", "integration_request",
+            "own_fleet_cost_profile",
             "planning_run", "trip", "trip_stop", "trip_order_assignment",
             "shipment_outbox_event", "import_batch", "driver", "trip_exception",
             "order_delivery", "tracking_position", "rate_card", "trip_cost", "trip_cost_component",

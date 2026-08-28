@@ -4,15 +4,15 @@
 follows. Phase 1 (JOBS 01–16) is closed and recorded in `TMS_OVERNIGHT_MASTER_LOG.md`.*
 
 ```
-LAST_COMPLETED_JOB=  21
-CURRENT_JOB=         22
-CURRENT_SUBSTEP=     starting
-LATEST_MIGRATION=    V47  (next free: V48)
-LAST_GOOD_HEAD=      pending commit of JOB 21
-TEST_STATUS=         backend 1787/0/0 · frontend 114 · e2e 36 pass 7 skipped · lint/build clean
+LAST_COMPLETED_JOB=  22
+CURRENT_JOB=         23
+CURRENT_SUBSTEP=     not started
+LATEST_MIGRATION=    V48  (next free: V49)
+LAST_GOOD_HEAD=      pending commit of JOB 22
+TEST_STATUS=         backend 1833/0/0 · frontend 123 · e2e 36 pass 7 skipped · lint/build clean
 KNOWN_FAILURE=       none
 STOP_CHAIN=          false
-NEXT_ACTION=         JOB 21 - Work Assignments & Resource Sequencing (D5)
+NEXT_ACTION=         JOB 23 - Operational Exceptions + Control Tower V3
 ```
 
 ## Open debts
@@ -24,7 +24,7 @@ NEXT_ACTION=         JOB 21 - Work Assignments & Resource Sequencing (D5)
 | D3 | Delivered quantity | **RESOLVED** (JOB 19, V45) - two grains, ceiling enforced, nothing inferred |
 | D4 | System actor / automatic tender advancement | DEFERRED_WITH_REASON — stays deferred in Phase 2 |
 | D5 | Work assignment model | **RESOLVED** (JOB 21, V47) - sequencing, routing feasibility, concurrency, UI |
-| **D6** | **Own-fleet costing** | **OPEN** → JOB 22 |
+| **D6** | **Own-fleet costing** | **RESOLVED** (JOB 22, V48) - profile, effective dating, components with real quantity sources, provenance, planning integration, UI |
 | **D10** | No cost allocation of an invoice across orders | **OPEN** - new in JOB 20 | V45 supplies delivered quantity so it is now possible; distributing on a rule nobody chose is not. Needs a per-company strategy decision |
 | D7 | Control Tower backend tests | RESOLVED (Phase 1) |
 | D8 | Java enum ↔ DB CHECK guard | **RESOLVED** (JOB 18) - all 46 enum columns guarded and matching |
@@ -152,7 +152,7 @@ exists to direct.
 `decided_by NOT NULL` and `requireAppUserId` refusing machines. An unattended approval cannot be
 represented. **Six permissions**, so whoever keys an invoice cannot approve their own.
 
-**DEFECTS_FOUND=6, DEFECTS_FIXED=6.** The one that mattered: **two approval rows for one
+**DEFECTS_FOUND=7, DEFECTS_FIXED=7.** The one that mattered: **two approval rows for one
 expenditure**, because `transitionTo` returns silently when already in the target state while the
 approval row was still inserted. Also: I wrote V46's audit list from memory and
 `AuditVocabularyMigrationTest` caught it - it is now generated from the enum. Three fixture defects
@@ -218,3 +218,53 @@ destination - wrong by exactly one leg on every join in every day, and the resul
 have looked entirely plausible. Caught on review before any test ran.
 
 **D10 untouched and still OPEN**, as instructed: no default allocation rule was chosen.
+
+### JOB 22 — 2026-08-28 — PASS
+
+`STARTED 12:06 · COMPLETED 13:12 · MIGRATION V48 · BACKEND 1833/0/0 · FRONTEND 123 · E2E 36/7`
+
+**D6 RESOLVED.** All twelve pillars YES with evidence.
+
+**A price and a cost are not the same number**, and the design is mostly that sentence enforced. A
+carrier presents a PRICE — agreed, binding, with their margin inside. Own fleet produces an INTERNAL
+COST ESTIMATE — modelled, binding nobody, no margin, worth exactly what the typed-in rates are worth.
+`TransportCostNature` carries the difference from the calculator to the screen so nothing downstream
+can lose it, and both are labelled wherever both appear.
+
+**Unknown cost never becomes zero cost**, in four places with a test each. The load-bearing
+assertion: had the calculator summed what it had, an un-measurable trip would have scored **100.00**
+against a fully measured **316.60** and won every comparison **by being unmeasurable**.
+
+**Null rate ≠ zero rate.** Null means the profile does not model the component — not charged, nothing
+missing. Zero means it charges nothing for it — charged, and still demanding its quantity. Stated at
+the column, in the domain, at the API boundary and in the drawer's banner.
+
+**The reposition is charged to the trip it repositions *to*.** Across a day: no leg counted twice,
+none dropped. The figure is V47's **frozen** `reposition_minutes`, never re-derived — a day called
+feasible on one number and costed on another would be two answers about one empty leg.
+
+**Precedence is vehicle > vehicle type > no cost.** No company-wide fallback: a fuel rate averaged
+over a van and an articulated truck is wrong for both while looking authoritative. Overlap is a
+database fact (`EXCLUDE USING gist` over a `daterange`), so the resolver never breaks a tie with a
+rule nobody chose.
+
+**`TOLL` is flat per trip and deliberately not per kilometre** — tolls depend on which roads a route
+uses, not how long it is.
+
+**DEFECTS_FOUND=7, DEFECTS_FIXED=7.** The one worth reading: **`costing` was missing from
+`ModuleBoundaryTest`'s module list**, so the boundary rule passed *vacuously* over an entire new
+module. Adding it immediately caught a real violation and forced planning's dependency on costing
+through a port.
+
+**The first full `clean test` failed with 4 failures, and all four were guards working** — one real
+cross-tenant read (`PlanningRunRepository.findById` by bare id, caught by JOB 15's guard), the new
+table undeclared in the schema inventory, and the permission catalogue's exact counts (58 → 60,
+grants 163 → 168). None of it appears in a focused run. **The third time this chain has been saved
+by running `clean test` rather than trusting a targeted one.**
+
+**Known limitation, recorded not hidden:** reposition *distance* is not charged, only its time. V47
+froze minutes and not kilometres. This understates a multi-trip day — in the direction that does not
+make own fleet look better than it is.
+
+**D10 untouched and still OPEN**, as instructed: own-fleet costing computes what the transport costs
+and does not decide how that cost is shared.

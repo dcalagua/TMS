@@ -121,6 +121,17 @@ public enum Capability {
     WORK_ASSIGNMENT_MANAGE(Permission.FLEET_WORK_ASSIGNMENT_MANAGE),
 
     /**
+     * What our own trucks cost to run (migration V48).
+     *
+     * <p>Deliberately NOT folded into {@code RATES_*}. A tariff is a commercial agreement with a
+     * carrier; this is a finance model of our own operation, and gating the screen on RATES_VIEW
+     * would hide it from a planner who is allowed to see the cost and not the tariffs - which is
+     * exactly the pairing an installation is most likely to want.
+     */
+    OWN_FLEET_COSTING_VIEW(Permission.COSTING_OWN_FLEET_READ),
+    OWN_FLEET_COSTING_MANAGE(Permission.COSTING_OWN_FLEET_WRITE),
+
+    /**
      * Deliberately separate from {@code IAM_*}: issuing a machine credential is not the same
      * decision as inviting a person, and an installation may well want the two in different hands.
      *

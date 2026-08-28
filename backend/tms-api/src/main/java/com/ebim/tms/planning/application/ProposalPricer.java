@@ -3,6 +3,8 @@ package com.ebim.tms.planning.application;
 import com.ebim.tms.planning.application.PlanningProposal.ProposedTrip;
 import com.ebim.tms.shared.reference.CarrierQuotationPort;
 import com.ebim.tms.shared.reference.CarrierQuote;
+import com.ebim.tms.shared.reference.OwnFleetProposalCostingPort;
+import com.ebim.tms.shared.reference.TransportCostQuote;
 import com.ebim.tms.shared.reference.CostableTrip;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
@@ -51,8 +53,11 @@ public class ProposalPricer {
 
     private final CarrierQuotationPort quotationPort;
 
-    public ProposalPricer(CarrierQuotationPort quotationPort) {
+    private final OwnFleetProposalCostingPort ownFleetCostingPort;
+
+    public ProposalPricer(CarrierQuotationPort quotationPort, OwnFleetProposalCostingPort ownFleetCostingPort) {
         this.quotationPort = quotationPort;
+        this.ownFleetCostingPort = ownFleetCostingPort;
     }
 
     /**
@@ -78,7 +83,36 @@ public class ProposalPricer {
         String currency = null;
         int priced = 0;
 
+        int ownFleetCosted = 0;
+
         for (ProposedTrip proposed : trips) {
+            VehicleCapacityReference vehicle = vehicles.get(proposed.vehicleId());
+            if (vehicle != null && vehicle.carrierId() == null) {
+                // Our own truck. Before V48 this fell through as "no agreement", which was the
+                // wrong sentence for it - see UnpricedReason.OWN_FLEET_NOT_COSTABLE (debt D6).
+                Optional<TransportCostQuote> costed = ownFleetCostingPort.costProposedTrip(
+                        companyId, proposed.vehicleId(), input.planningDate(),
+                        distanceOf(input, proposed), dutyMinutesOf(input, proposed));
+                // Empty means no profile configured; a present quote with a null amount means a
+                // profile exists and a component it charges for had no quantity. Both leave the
+                // plan without a total, and neither becomes zero.
+                if (costed.isEmpty() || !costed.get().isCosted()) {
+                    return ProposalPricing.none(
+                            ProposalPricing.UnpricedReason.OWN_FLEET_NOT_COSTABLE, priced, trips.size());
+                }
+                TransportCostQuote quoteForOwnFleet = costed.get();
+                if (currency == null) {
+                    currency = quoteForOwnFleet.currency();
+                } else if (!currency.equals(quoteForOwnFleet.currency())) {
+                    return ProposalPricing.none(
+                            ProposalPricing.UnpricedReason.MIXED_CURRENCIES, priced, trips.size());
+                }
+                total = total.add(quoteForOwnFleet.amount());
+                priced++;
+                ownFleetCosted++;
+                continue;
+            }
+
             Optional<CarrierQuote> quote = quote(companyId, input, proposed, vehicles, orders);
             if (quote.isEmpty()) {
                 // One unpriceable trip is enough. Carrying on to produce a sum over the rest would
@@ -97,7 +131,33 @@ public class ProposalPricer {
             priced++;
         }
 
-        return ProposalPricing.of(total, currency, trips.size());
+        return ProposalPricing.of(total, currency, trips.size(), ownFleetCosted);
+    }
+
+    /**
+     * The run's driving and service minutes, or null when any leg of it is unknown.
+     *
+     * <p>The same arithmetic {@code PlanningEngineV2.sequence} uses for the shift check, so a day
+     * the engine called fittable and a day it costed cannot disagree about how long it takes.
+     *
+     * <p>No reposition: a proposal is one day's plan built from a depot, and V47's frozen
+     * reposition belongs to a work assignment that does not exist yet.
+     */
+    private static Long dutyMinutesOf(PlanningInput input, ProposedTrip proposed) {
+        TravelMatrix travel = input.travel();
+        long minutes = 0;
+        UUID from = input.originId();
+        for (UUID stop : proposed.stopLocationIds()) {
+            if (!travel.knows(from, stop)) {
+                // Null and not a short sum, for exactly the reason distanceOf returns null: an hour
+                // rate over legs nobody measured is a cost that looks calculated and is not.
+                return null;
+            }
+            minutes += travel.travelMinutes(from, stop);
+            minutes += input.serviceMinutesAt(stop);
+            from = stop;
+        }
+        return minutes;
     }
 
     private Optional<CarrierQuote> quote(UUID companyId, PlanningInput input, ProposedTrip proposed,
