@@ -27,7 +27,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 15 | Observability + Performance + Security | pending | - | - | - | - | - |
 | 16 | Final Enterprise Certification | pending | - | - | - | - | - |
 
-**LAST_COMPLETED_JOB = 13**
+**LAST_COMPLETED_JOB = 15**
 
 ## OPEN TECHNICAL / DOMAIN DEBTS
 
@@ -43,6 +43,7 @@ inconvenient - it moves to RESOLVED with the job that closed it, or to DEFERRED_
 | **D5** | No work assignment: several shipments cannot be sequenced onto one driver-and-vehicle pair with travel time between them | **OPEN** - new in JOB 09 | Deliberate. V42 delivers the availability layer it would be built on; a table nothing writes to would be scaffolding |
 | **D6** | No internal cost model for own fleet - fuel, driver hours, depreciation | **OPEN** - new in JOB 11 | A plan mixing a carrier's price with an own-fleet estimate compares two unlike numbers. Own fleet is deliberately left unpriced rather than priced at zero |
 | **D7** | Control Tower V1 has no backend tests | **OPEN** - new in JOB 12 | Summary counts, the three V1 panels, capping and the `ordersUnplanned` permission rule (null, not zero, without `orders.order:read`) are uncovered. The V2 blocker panel is covered by 7 tests |
+| **D8** | No guard that each enum column's `CHECK` lists exactly its Java enum's values | **OPEN** - new in JOB 15 | `AuditVocabularyMigrationTest` does it for the vocabulary that drifts most; generalising it is a bigger piece of work than JOB 15's time allowed |
 
 ## Baseline established by JOB 01
 
@@ -458,3 +459,39 @@ OPEN_DEBTS: unchanged - D1 CLOSED · D2 CLOSED · D3 OPEN evaluated · D4 DEFERR
 D5 OPEN · D6 OPEN · D7 OPEN. No new debt.
 
 NEXT_JOB=15 Hardening, which the brief ranks above JOB 14.
+
+### JOB 15 - 2026-08-28 - PASS
+
+JOB=15 · STARTED_AT=06:00 · COMPLETED_AT=06:10 · HEAD_BEFORE=`d958fe3` · HEAD_AFTER=`0a58a06`
+MIGRATION=**none** · BACKEND_CLEAN_PASS=1674 · BACKEND_CLEAN_FAIL=0 · BACKEND_SKIPPED=0
+FRONTEND_PASS=82 · E2E_PASS=34 · E2E_SKIPPED=7 · RETRIES=2, all recovered
+
+**One bar for what counts as hardening:** only mistakes that are silent - they compile, the screen
+works, no test fails, and the damage is found later by somebody outside the team. That ruled out
+most of what could have been added and left four guards.
+
+**Tenancy: the rule written everywhere and checked nowhere.** "Every finder is scoped by
+`companyId`" appears in most repository javadocs, in ADR-003 and in `RLS_STRATEGY.md`, and nothing
+enforced it. Two guards now do, for the case where an attacker supplies the id.
+
+**My first version flagged 31 finders and was wrong.** Finders keyed by a *foreign* id inherit scope
+from whoever resolved the parent, which was itself company-scoped. I narrowed the guard rather than
+exempting them, and said plainly in it that what backs the exclusion is the composite foreign keys
+and `TenancyConstraintIntegrationTest` - not this test. A weaker guard that passed first time would
+have been worse than the failure.
+
+**DEFECTS_FOUND=1, DEFECTS_FIXED=1.** `TenderWaterfallRepository#findByIdForUpdate` - a locking read
+of a waterfall by its own id with **no company predicate and no callers anywhere**. Dead code in the
+exact shape a cross-tenant read takes. Removed.
+
+Also: every persisted enum stored by name (`@Enumerated` defaults to ORDINAL, and inserting a value
+mid-enum silently rewrites the meaning of every stored row), money never floating point, and no view
+carrying a usable secret.
+
+`docs/security/STATIC_GUARDS.md` lists **every** guard in the build, old and new, with what each
+refuses and why - so the document is the whole list rather than the new half of it.
+
+OPEN_DEBTS: D1 CLOSED · D2 CLOSED · D3 OPEN evaluated · D4 DEFERRED_WITH_REASON · D5 OPEN ·
+D6 OPEN · D7 OPEN · **D8 OPEN (new)**.
+
+NEXT_JOB=14 UX, then 16 Certification and the morning report.
