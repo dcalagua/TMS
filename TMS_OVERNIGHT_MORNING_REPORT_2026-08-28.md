@@ -128,3 +128,60 @@ Stated plainly, because a report that claims more than it did is worth less than
   query patterns; it has not been measured.
 * **No accessibility verification exists at all** (D9).
 * **Nothing was pushed.** Every commit sits on `dev`, waiting for you.
+
+---
+
+## Post-run documentation correction
+
+*Added 2026-08-28, after the overnight run closed.*
+
+**The functional execution finished correctly.** All sixteen jobs completed, every automated gate
+passed, and the figures above stand unchanged.
+
+**One contracted deliverable was missing.** JOB 16's execution contract required
+`TMS_ENTERPRISE_READINESS.md`, and the original run did not produce it. This was an omission rather
+than a false claim - `TMS_OVERNIGHT_16_RESULT.md` never asserted the file existed, it simply did not
+create it and did not notice. The filesystem was checked directly before repairing (exact name, any
+case-insensitive variant, and the whole git history); the file had never existed.
+
+**It has now been generated**, and the certification and this report reconciled against it.
+
+**Nothing functional changed.** No product code, no schema, no migration, no test and no runtime
+behaviour was touched by the correction - it added one document and edited two others. The full test
+suite was **not** re-run, and deliberately so: re-running 1684 tests to certify a documentation edit
+would produce a number identical to the one already recorded and imply a verification that did not
+happen. `git diff --check` and `git status --short` were run instead.
+
+**Still no push and no deploy.**
+
+### One thing the correction surfaced that you should know about
+
+Writing the readiness assessment against the code found a real inconsistency between two documents:
+
+> **Settlement does not exist.** `docs/architecture/TMS_CURRENT_CAPABILITY_MAP.md` marks freight
+> audit as MISSING and points at "JOB 11". JOB 11 was *titled* Settlement but delivered **proposal
+> pricing** - closing debt D1 - and its own result file says so plainly. A reader comparing the two
+> could reasonably conclude carrier invoicing shipped. **It did not.** There is no `CarrierInvoice`,
+> no invoice table, no matching, no tolerance, no discrepancy, no approval and no export anywhere in
+> the codebase.
+
+That is now stated explicitly in `TMS_ENTERPRISE_READINESS.md`, every settlement row is classified
+`NOT IMPLEMENTED`, and the proposed QAS checklist marks the settlement scenarios **N/A rather than
+failed** - a test cannot fail against a capability nobody built.
+
+If freight audit was expected from this chain, that expectation was not met, and this is the
+sentence that says so.
+
+### The bottom line of the assessment
+
+```
+READY_FOR_QAS_CODE_PROMOTION = YES
+READY_FOR_PRODUCTION         = NO
+```
+
+Those are different answers on purpose. The remaining unknowns - the deploy, the 7 authenticated E2E
+specs, performance at volume, accessibility - are of a kind a local build **cannot** resolve. Holding
+the code back would not reduce that risk, only delay learning it. Production stays off the table
+until those are answered and until settlement and delivered quantity are decided.
+
+Full detail: **`TMS_ENTERPRISE_READINESS.md`**.
