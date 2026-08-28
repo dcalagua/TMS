@@ -6,7 +6,8 @@
 **Deployment certification:** NOT PERFORMED
 **Shared environment writes:** NONE
 
-**Assessed at commit:** `ab2b0b6` · working tree clean · nothing pushed
+**Assessed at commit:** `ab2b0b6` · **wording and staleness reconciled at `729f155`+ (Phase 2 JOB 17)**
+· working tree clean · nothing pushed
 **Method:** every row below is derived from the source tree, the Flyway history, the test suites and
 the JOB 01–16 RESULT files. Where the older `docs/architecture/TMS_CURRENT_CAPABILITY_MAP.md`
 disagrees with this document, the disagreement is named rather than smoothed over — that map was
@@ -15,7 +16,15 @@ written at commit `0757afb`, before JOBs 08–16 landed, and is stale in specifi
 
 ## Executive Result
 
-**PRODUCTION READY WITH LIMITATIONS — for QAS code promotion only.**
+```
+READY FOR QAS CERTIFICATION
+NOT PRODUCTION CERTIFIED
+```
+
+*(Wording clarified in Phase 2 JOB 17. The previous headline read "PRODUCTION READY WITH LIMITATIONS
+— for QAS code promotion only", which used a per-capability classification as a whole-product verdict
+and could be quoted out of context as "production ready". **The technical matrix below is unchanged**;
+only this headline sentence was rewritten.)*
 
 The platform, tenancy, domain model and automated test discipline are strong and genuinely
 enterprise-grade. The gap between this system and an enterprise TMS is **not** architectural: it is
@@ -43,8 +52,10 @@ provenance:
 - `TMS_OVERNIGHT_MASTER_LOG.md` records the *progression* 1585 → 1674 → 1684 across the session. The
   1684 figure is the current one; earlier figures in per-JOB entries are historical and correct for
   their moment.
-- `docs/architecture/TMS_CURRENT_CAPABILITY_MAP.md` still shows `1585` and `V1–V41`. It was written
-  before JOBs 09–16 and has not been regenerated. **That file is stale, not wrong-at-the-time.**
+- `docs/architecture/TMS_CURRENT_CAPABILITY_MAP.md` showed `1585` and `V1–V41` when this assessment
+  was first written. **Phase 2 JOB 17 reconciled it** to `1684` / `V1–V43`, corrected six capability
+  rows that pointed at jobs since completed, and corrected row 16 — which implied JOB 11 would deliver
+  settlement. Each correction is named in that file rather than silently overwritten.
 
 The **7 skipped E2E specs** are the authenticated ones. They are skipped by an explicit environment
 condition, not by a disabled assertion, and the count has not moved during the whole chain.
@@ -683,7 +694,7 @@ PERFORMANCE_EVIDENCE=      NOT IMPLEMENTED
 ACCESSIBILITY_EVIDENCE=    NOT IMPLEMENTED
 DEPLOYMENT_EVIDENCE=       NOT IMPLEMENTED
 
-OVERALL_ENTERPRISE_READINESS=   PRODUCTION READY WITH LIMITATIONS
+OVERALL_ENTERPRISE_READINESS=   READY FOR QAS CERTIFICATION / NOT PRODUCTION CERTIFIED
 QAS_PROMOTION_RECOMMENDATION=   PROMOTE
 PRODUCTION_RECOMMENDATION=      DO NOT PROMOTE
 ```
