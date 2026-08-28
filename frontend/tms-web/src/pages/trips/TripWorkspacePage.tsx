@@ -42,6 +42,7 @@ import { TripTenderCard } from "./TripTenderCard";
 import { TripTimeline } from "./TripTimeline";
 import { TripTrackingCard } from "./TripTrackingCard";
 import { TripRouteCard } from "./TripRouteCard";
+import { TenderWaterfallCard } from "./TenderWaterfallCard";
 
 function formatServiceWindow(start: string | null, end: string | null): string | null {
   if (!start && !end) return null;
@@ -766,6 +767,16 @@ export function TripWorkspacePage() {
           )}
 
           {canReadCost && <TripCostCard companyId={companyId} tripId={trip.id} canManage={canManageCost} />}
+
+          {/* La cascada antes de las ofertas sueltas: es la que explica por qué existen. */}
+          {canReadTenders && (
+            <TenderWaterfallCard
+              companyId={companyId}
+              tripId={trip.id}
+              canManage={canManageTenders}
+            />
+          )}
+
 
           {canReadTenders && (
             <TripTenderCard

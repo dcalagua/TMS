@@ -233,6 +233,20 @@ export const ENUM_LABELS = {
     IN_MAINTENANCE: "En mantenimiento",
     OUT_OF_SERVICE: "Fuera de servicio",
   },
+  waterfallCandidateStatus: {
+    ACCEPTED: "Aceptó",
+    EXPIRED: "Sin respuesta",
+    OFFERED: "Ofertado",
+    PENDING: "En espera",
+    REJECTED: "Rechazó",
+    SKIPPED: "No ofertado",
+  },
+  waterfallStatus: {
+    ACTIVE: "En curso",
+    ACCEPTED: "Aceptada",
+    CANCELLED: "Detenida",
+    EXHAUSTED: "Agotada",
+  },
   vehicleBodyType: {
     CONTAINER: "Portacontenedor",
     CURTAIN_SIDER: "Cortina lateral",

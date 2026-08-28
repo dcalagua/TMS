@@ -93,11 +93,24 @@ public class TripTenderService {
     private final ShipmentEventPublisher events;
     private final TripAlertPublisher alerts;
     private final AuditActorProvider auditActorProvider;
+    /**
+     * The waterfall, if the shipment is on one (migration V40).
+     *
+     * <p>An {@code ObjectProvider} because the dependency is genuinely circular: a waterfall opens
+     * tenders through this service, and this service tells the waterfall what a carrier answered.
+     * The cycle is in the domain rather than in the wiring - offering and answering are two halves
+     * of one conversation - and the alternatives are worse. An event would make the two records
+     * eventually consistent when they must be written in one transaction; merging the classes would
+     * put hand-made and automatic tendering in one file for no reason.
+     */
+    private final org.springframework.beans.factory.ObjectProvider<TenderWaterfallService> waterfallProvider;
 
     public TripTenderService(TripRepository tripRepository, TripTenderRepository tenderRepository,
             PlanningRunRepository planningRunRepository, CarrierLookupPort carrierLookupPort,
             OriginLookupPort originLookupPort, ShipmentEventPublisher events, TripAlertPublisher alerts,
-            AuditActorProvider auditActorProvider) {
+            AuditActorProvider auditActorProvider,
+            org.springframework.beans.factory.ObjectProvider<TenderWaterfallService> waterfallProvider) {
+        this.waterfallProvider = waterfallProvider;
         this.tripRepository = tripRepository;
         this.tenderRepository = tenderRepository;
         this.planningRunRepository = planningRunRepository;
@@ -106,6 +119,11 @@ public class TripTenderService {
         this.events = events;
         this.alerts = alerts;
         this.auditActorProvider = auditActorProvider;
+    }
+
+    /** The waterfall service, resolved on use rather than injected - see the field. */
+    private TenderWaterfallService waterfall() {
+        return waterfallProvider.getObject();
     }
 
     // -----------------------------------------------------------------------------------------
@@ -142,9 +160,31 @@ public class TripTenderService {
      */
     @Transactional
     public List<TripTenderView> create(CompanyScope scope, UUID tripId, TenderRequest request) {
+        return createFor(scope, tripId, null, request);
+    }
+
+    /**
+     * Opens an offer to a <em>named</em> carrier, which the tender waterfall needs (JOB 07).
+     *
+     * <p>{@code create} offers to the shipment's own carrier - the one that owns its vehicle - and
+     * that is the ordinary case. A waterfall offers the same shipment to carriers that do <b>not</b>
+     * own its vehicle, which is what subcontracting is, so the carrier has to be stated rather than
+     * derived.
+     *
+     * <p><b>What accepting does not do.</b> It records that this carrier agreed to run the
+     * shipment. It does <em>not</em> reassign the trip's vehicle, because the vehicle is what
+     * determines {@code trip.carrierId} today and silently changing it would leave a shipment whose
+     * carrier and whose vehicle's owner disagreed. Putting one of the accepting carrier's vehicles
+     * on the trip stays an explicit planner action - see the JOB 07 result's known limitations.
+     *
+     * @param carrierId the carrier to offer to, or null to offer to the shipment's own
+     */
+    @Transactional
+    public List<TripTenderView> createFor(CompanyScope scope, UUID tripId, UUID carrierId,
+            TenderRequest request) {
         Trip trip = lockedTrip(scope, tripId);
         requireTenderable(trip);
-        UUID carrierId = requireCarrier(trip);
+        UUID offeredTo = carrierId != null ? carrierId : requireCarrier(trip);
         UUID actorId = auditActorProvider.requireAppUserId();
         OffsetDateTime now = OffsetDateTime.now();
 
@@ -157,7 +197,7 @@ public class TripTenderService {
             }
         });
 
-        TripTender tender = new TripTender(scope.companyId(), trip.id(), carrierId,
+        TripTender tender = new TripTender(scope.companyId(), trip.id(), offeredTo,
                 tenderRepository.maxAttempt(trip.id()) + 1, money(request.offeredAmount()),
                 normalizeCurrency(request.currency()), blankToNull(request.notes()), request.expiresAt(), actorId);
         saveWithUniquenessBackstop(tender, trip);
@@ -235,6 +275,10 @@ public class TripTenderService {
         tender.accept(now, TenderResponseSource.OPERATOR, actorId, null, blankToNull(request.notes()));
         saveWithUniquenessBackstop(tender, trip);
         publish(scope, trip, tender, ShipmentEventType.TENDER_ACCEPTED, now);
+        // The waterfall, if this shipment is on one (V40). Told from here rather than from the
+        // carrier-facing path as well, so the two records - the tender's status and the candidate's
+        // - are written in the same transaction and cannot disagree.
+        waterfall().tenderAnswered(scope, trip, tender, TenderStatus.ACCEPTED);
         return toViews(scope, trip, now);
     }
 
@@ -251,6 +295,9 @@ public class TripTenderService {
         tender.reject(now, TenderResponseSource.OPERATOR, actorId, null, reason);
         tenderRepository.saveAndFlush(tender);
         publish(scope, trip, tender, ShipmentEventType.TENDER_REJECTED, now);
+        // A rejection is what a waterfall exists to route around: it offers the shipment to the
+        // next carrier in the same transaction, so a "no" at 19:40 does not wait for morning.
+        waterfall().tenderAnswered(scope, trip, tender, TenderStatus.REJECTED);
         return toViews(scope, trip, now);
     }
 

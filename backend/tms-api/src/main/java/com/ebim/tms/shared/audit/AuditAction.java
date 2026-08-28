@@ -103,5 +103,17 @@ public enum AuditAction {
      * reopened from, so the reason it needed reopening is in the row rather than only in the
      * timeline of the trip that failed.
      */
-    ORDER_REOPENED
+    ORDER_REOPENED,
+
+    /**
+     * A tender waterfall was started, and the moment it ended (migration V40).
+     *
+     * <p>Two actions, not six. Every step in between already produces {@link #TENDER_SENT},
+     * {@link #TENDER_REJECTED} or {@link #TENDER_EXPIRED} against the shipment; minting a parallel
+     * row for each would duplicate the trail rather than extend it. What these two add is the pair
+     * of facts the per-tender rows cannot carry: who decided to run a waterfall at all, over how
+     * many candidates - and how it ended, after how many offers.
+     */
+    WATERFALL_STARTED,
+    WATERFALL_ENDED
 }
