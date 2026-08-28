@@ -27,7 +27,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 15 | Observability + Performance + Security | pending | - | - | - | - | - |
 | 16 | Final Enterprise Certification | pending | - | - | - | - | - |
 
-**LAST_COMPLETED_JOB = 11**
+**LAST_COMPLETED_JOB = 12**
 
 ## OPEN TECHNICAL / DOMAIN DEBTS
 
@@ -42,6 +42,7 @@ inconvenient - it moves to RESOLVED with the job that closed it, or to DEFERRED_
 | **D4** | No automatic tender scheduler: no system-actor model | **DEFERRED_WITH_REASON** | `requireAppUserId` refuses machines *by design* - an offer is a commercial commitment and the trail must name who made it. No fake user, hardcoded UUID or anonymous principal. Manual waterfall advance stands. Design only, if JOB 15 raises a real requirement |
 | **D5** | No work assignment: several shipments cannot be sequenced onto one driver-and-vehicle pair with travel time between them | **OPEN** - new in JOB 09 | Deliberate. V42 delivers the availability layer it would be built on; a table nothing writes to would be scaffolding |
 | **D6** | No internal cost model for own fleet - fuel, driver hours, depreciation | **OPEN** - new in JOB 11 | A plan mixing a carrier's price with an own-fleet estimate compares two unlike numbers. Own fleet is deliberately left unpriced rather than priced at zero |
+| **D7** | Control Tower V1 has no backend tests | **OPEN** - new in JOB 12 | Summary counts, the three V1 panels, capping and the `ordersUnplanned` permission rule (null, not zero, without `orders.order:read`) are uncovered. The V2 blocker panel is covered by 7 tests |
 
 ## Baseline established by JOB 01
 
@@ -392,3 +393,37 @@ OPEN_DEBTS: **D1 CLOSED** · D2 CLOSED · D3 OPEN, evaluated, confirmed not bloc
 D4 DEFERRED_WITH_REASON · D5 OPEN · **D6 OPEN (new)** - no internal cost model for own fleet.
 
 NEXT_JOB=12 Control Tower V2.
+
+### JOB 12 - 2026-08-28 - PASS
+
+JOB=12 · STARTED_AT=05:38 · COMPLETED_AT=05:48 · HEAD_BEFORE=`d8b5ccc` · HEAD_AFTER=`6a2a862`
+MIGRATION=**none** · BACKEND_CLEAN_PASS=1661 · BACKEND_CLEAN_FAIL=0 · BACKEND_SKIPPED=0
+FRONTEND_PASS=79 · E2E_PASS=34 · E2E_SKIPPED=7 · RETRIES=3, all recovered
+
+Everything the control tower reported was **retrospective**. JOBs 09-11 created several states that
+make `dispatch` refuse, and nothing surfaced them until a dispatcher reached the gate. V2 adds one
+panel for that: shipments accepted by a carrier that does not own their vehicle (D2's state), and
+shipments whose vehicle or driver cannot work at the planned departure.
+
+**Nothing here is a new rule** - each reason is a refusal that already exists in three layers, which
+is what makes the panel trustworthy rather than one more badge people learn to ignore.
+
+Asked at each shipment's **own planned departure** and not at `now()`: a truck free this minute and
+in the workshop at 14:00 still cannot run a 14:00 shipment, and one blocked next Tuesday is not a
+blocker today.
+
+**Deliberately one panel and not several.** An appointments tile and an ETA tile would have made the
+job look bigger and the screen worse - mixing hard stops with things that merely worry somebody is
+how a panel stops being actionable. Both are named in the doc as not-built, with the reason.
+
+**FINDING: the control tower had no backend tests at all.** The new panel is covered with 7,
+including the two cases most likely to rot. Backfilling V1 is recorded as **D7** rather than folded
+in here, where it would have turned this job into a test-writing exercise.
+
+DEFECTS_FOUND=0. The change is additive and both new queries are read-only.
+
+OPEN_DEBTS: D1 CLOSED · D2 CLOSED · D3 OPEN, evaluated · D4 DEFERRED_WITH_REASON · D5 OPEN ·
+D6 OPEN · **D7 OPEN (new)**.
+
+NEXT_JOB=13 Integration Ops, or 15 Hardening if time runs short - the brief ranks hardening above
+JOB 14.
