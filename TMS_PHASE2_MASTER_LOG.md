@@ -4,12 +4,12 @@
 follows. Phase 1 (JOBS 01–16) is closed and recorded in `TMS_OVERNIGHT_MASTER_LOG.md`.*
 
 ```
-LAST_COMPLETED_JOB=  20
+LAST_COMPLETED_JOB=  20 (+ maker/checker post-check)
 CURRENT_JOB=         21
 CURRENT_SUBSTEP=     starting
 LATEST_MIGRATION=    V46  (next free: V47)
-LAST_GOOD_HEAD=      pending commit of JOB 20E/20F
-TEST_STATUS=         backend 1756/0/0 · frontend 107 · e2e 35 pass 7 skipped · lint/build clean
+LAST_GOOD_HEAD=      pending commit of the post-check
+TEST_STATUS=         backend 1761/0/0 · frontend 107 · e2e 35 pass 7 skipped · lint/build clean
 KNOWN_FAILURE=       none
 STOP_CHAIN=          false
 NEXT_ACTION=         JOB 21 - Work Assignments & Resource Sequencing (D5)
@@ -161,3 +161,28 @@ were existing invariants my seed data ignored; the constraints were right every 
 **Not built, deliberately:** cost allocation across orders. Now possible thanks to V45, but
 distributing an invoice on a rule nobody chose is worse than surfacing the figures. Recorded as
 **D10**.
+
+### JOB 20 POST-CHECK — 2026-08-28 11:38 — maker/checker
+
+`MIGRATION none · BACKEND 1761/0/0 (+5)`
+
+**The claim was wrong and the post-check was right to ask.** JOB 20's result said *"whoever keys an
+invoice cannot approve their own"* on the strength of `settlement.invoice:manage` and
+`settlement.invoice:approve` being separate permissions. Separate permissions are **separable, not
+separated**: one account can hold both, and `approve()` never compared the actor against
+`created_by`. Verified in code - the behaviour was **PERMITTED**.
+
+**No migration needed:** `carrier_invoice.created_by` already stored the maker reliably.
+`SettlementService.requireDifferentApprover` is the whole fix - the simplest form that is real, with
+no approval matrix, no authorisation limits and no BPM.
+
+**Rejection is deliberately exempt.** Refusing to pay commits nothing and creates no obligation, so a
+clerk who spots their own keying error can reject it rather than needing a second person to undo
+their mistake. The control exists to stop money leaving, not to stop it staying.
+
+Five tests: creator refused, second approver allowed, second person without the permission still
+refused, cross-tenant approver refused, creator may reject. **Three existing tests broke** because
+they had one admin creating and approving - the rule working, and they were moved to the checker
+rather than the rule being weakened.
+
+`TMS_PHASE2_JOB_20_RESULT.md` carries the correction in place, labelled, rather than quietly amended.

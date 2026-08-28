@@ -231,6 +231,18 @@ public class CarrierInvoice {
         return List.copyOf(lines);
     }
 
+    /**
+     * Who recorded this invoice - the <em>maker</em>, in maker/checker terms.
+     *
+     * <p>Exposed so {@code SettlementService} can refuse to let the same person authorise it.
+     * Separate permissions make the two authorities <em>separable</em>; they do not make them
+     * separated, because one account can hold both. This column is what turns the intent into a
+     * rule.
+     */
+    public UUID createdBy() {
+        return createdBy;
+    }
+
     public OffsetDateTime createdAt() {
         return createdAt;
     }

@@ -333,6 +333,7 @@ public class SettlementService {
             return toView(scope, invoice);
         }
 
+        requireDifferentApprover(invoice, actorId);
         requireNoOpenDiscrepancies(scope, invoice);
         invoice.transitionTo(InvoiceStatus.APPROVED, actorId);
 
@@ -343,6 +344,31 @@ public class SettlementService {
                 Map.of("invoiceNumber", invoice.invoiceNumber(),
                         "totalAmount", invoice.totalAmount().toPlainString()));
         return toView(scope, invoice);
+    }
+
+    /**
+     * Maker and checker must be two people.
+     *
+     * <p><b>Separate permissions were not enough, and JOB 20 overstated them.</b> That job said
+     * "whoever keys an invoice cannot approve their own" on the strength of
+     * {@code settlement.invoice:manage} and {@code settlement.invoice:approve} being distinct - but
+     * distinct permissions are <em>separable</em>, not separated: one account can hold both, and
+     * nothing stopped it. This is the rule that makes the claim true.
+     *
+     * <p>Deliberately the simplest form that is real: the person who recorded the invoice may not
+     * authorise it. No approval matrix, no authorisation limits, no BPM - none of which this
+     * product has a requirement for, and each of which would be a model invented ahead of a need.
+     *
+     * <p>Rejection is <b>not</b> covered by this rule, and that asymmetry is the point. Refusing to
+     * pay commits nothing and creates no obligation; a clerk who spots their own keying error must
+     * be able to reject it rather than needing a second person to undo their mistake. The control
+     * exists to stop money leaving, not to stop it staying.
+     */
+    private static void requireDifferentApprover(CarrierInvoice invoice, UUID actorId) {
+        if (actorId.equals(invoice.createdBy())) {
+            throw new ConflictException("The person who recorded an invoice cannot approve it."
+                    + " Somebody else has to authorise this expenditure.");
+        }
     }
 
     /**

@@ -65,9 +65,18 @@ the transition table (`DISCREPANCY` cannot reach `APPROVED`), `requireNoOpenDisc
 approval is not merely forbidden — it cannot be represented.** Debt D4's refusal applied where it
 matters most.
 
-**5. Six permissions, not one.** Whoever keys an invoice must not be able to approve their own — the
-oldest control failure in accounts payable. PLANNER gets `read` and `match`; only administrators get
-`approve` and `export`.
+**5. Six permissions, not one.** Recording, matching, approving and exporting are separate
+authorities. PLANNER gets `read` and `match`; only administrators get `approve` and `export`.
+
+> **CORRECTED after the JOB 20 post-check.** This section originally read *"whoever keys an invoice
+> must not be able to approve their own"*. **That was an overclaim.** Separate permissions make the
+> two authorities *separable* — they do not make them *separated*, because one account can hold both,
+> and at the time nothing stopped a user who did from approving an invoice they had recorded.
+>
+> The post-check verified the real behaviour in code and found it **permitted**. The rule now exists
+> (`SettlementService.requireDifferentApprover`, backed by five tests), so the sentence above is
+> true — but it was not true when this file first claimed it, and the claim is corrected here rather
+> than quietly amended.
 
 **6. Either tolerance bound, not both.** 3% of a 40-unit invoice is pennies, so without an absolute
 floor every rounding difference becomes a queue nobody reads; a flat bound on a 40,000-unit invoice
@@ -113,7 +122,7 @@ Two simultaneous exports → **exactly one** `payable_export` row. Two simultane
 `SettlementApiIntegrationTest` (13) · `settlement.test.ts` (6)
 
 ```
-BACKEND_CLEAN_PASS=  1756
+BACKEND_CLEAN_PASS=  1761  (1756 at JOB 20; +5 from the maker/checker post-check)
 BACKEND_CLEAN_FAIL=  0
 FRONTEND_PASS=       107
 FRONTEND_FAIL=       0
@@ -123,8 +132,8 @@ E2E_SKIPPED=         7
 ACCESSIBILITY=       not addressed (JOB 26)
 PERFORMANCE=         not addressed (JOB 25)
 RETRIES=             0
-DEFECTS_FOUND=       6
-DEFECTS_FIXED=       6
+DEFECTS_FOUND=       7   (6 in the job, 1 in the post-check)
+DEFECTS_FIXED=       7
 ```
 
 ## DEFECTS
@@ -151,6 +160,10 @@ not an agreement. **The constraints were right every time.**
 accepted and then matched as UNMATCHABLE. It is refused at *insert* instead — the isolation is
 stronger than the test assumed, which is the right direction to be surprised in. The test now
 asserts the stronger truth, and the service refuses first with a readable sentence.
+
+**7. Maker and checker were not actually separated** — found by the post-check, not by this job.
+See the correction in DOMAIN_DECISIONS §5. Fixed in `SettlementService.requireDifferentApprover`
+with no migration: `carrier_invoice.created_by` already stored the maker reliably.
 
 **A process note:** one `./mvnw` in this job ran from a subdirectory and printed nothing, which I
 briefly read as success. Re-run from the module root. The same "narrower gate certifies nothing"

@@ -63,6 +63,8 @@ class SettlementApiIntegrationTest {
     private static final UUID ADMIN_AUTH = UUID.fromString("88888888-0000-4000-8000-0000000000e1");
     private static final UUID PLANNER_AUTH = UUID.fromString("88888888-0000-4000-8000-0000000000e2");
     private static final UUID VIEWER_AUTH = UUID.fromString("88888888-0000-4000-8000-0000000000e3");
+    /** A second person who may approve: maker/checker needs two, or it proves nothing. */
+    private static final UUID CHECKER_AUTH = UUID.fromString("88888888-0000-4000-8000-0000000000e4");
 
     private static final AtomicInteger SEQUENCE = new AtomicInteger();
 
@@ -78,6 +80,7 @@ class SettlementApiIntegrationTest {
     private String adminToken;
     private String plannerToken;
     private String viewerToken;
+    private String checkerToken;
 
     @TestConfiguration(proxyBeanMethods = false)
     static class JwtDecoderOverride {
@@ -106,11 +109,13 @@ class SettlementApiIntegrationTest {
         execute("INSERT INTO tms.app_user (auth_user_id, email, full_name) VALUES ('" + ADMIN_AUTH
                 + "', 'stl.admin@example.invalid', 'STL Admin'), ('" + PLANNER_AUTH
                 + "', 'stl.planner@example.invalid', 'STL Planner'), ('" + VIEWER_AUTH
-                + "', 'stl.viewer@example.invalid', 'STL Viewer')");
+                + "', 'stl.viewer@example.invalid', 'STL Viewer'), ('" + CHECKER_AUTH
+                + "', 'stl.checker@example.invalid', 'STL Checker')");
         membership("stl.admin@example.invalid", COMPANY_A, "COMPANY_ADMIN");
         membership("stl.admin@example.invalid", COMPANY_B, "COMPANY_ADMIN");
         membership("stl.planner@example.invalid", COMPANY_A, "PLANNER");
         membership("stl.viewer@example.invalid", COMPANY_A, "VIEWER");
+        membership("stl.checker@example.invalid", COMPANY_A, "COMPANY_ADMIN");
 
         carrierA = carrier(COMPANY_A, "CARR-A");
         carrierB = carrier(COMPANY_B, "CARR-B");
@@ -172,6 +177,7 @@ class SettlementApiIntegrationTest {
         adminToken = TestJwts.validFor(ADMIN_AUTH);
         plannerToken = TestJwts.validFor(PLANNER_AUTH);
         viewerToken = TestJwts.validFor(VIEWER_AUTH);
+        checkerToken = TestJwts.validFor(CHECKER_AUTH);
     }
 
     // --- helpers -------------------------------------------------------------------
@@ -222,7 +228,9 @@ class SettlementApiIntegrationTest {
                     .andExpect(jsonPath("$.match.expectedAmount").value(1450.00))
                     .andExpect(jsonPath("$.match.differenceAmount").value(30.00));
 
-            mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/approve"), COMPANY_A)
+            // Approved by somebody other than whoever recorded it - maker/checker, enforced since
+            // the JOB 20 post-check.
+            mockMvc.perform(asChecker(post(INVOICES + "/" + id + "/approve"), COMPANY_A)
                             .contentType(MediaType.APPLICATION_JSON).content("{\"comment\":\"Within tolerance.\"}"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.status").value("APPROVED"))
@@ -347,6 +355,92 @@ class SettlementApiIntegrationTest {
         }
     }
 
+    // --- maker / checker -----------------------------------------------------------
+
+    @Nested
+    @DisplayName("maker and checker are two people")
+    class MakerChecker {
+
+        /**
+         * <b>The post-check that found this.</b> JOB 20 claimed "whoever keys an invoice cannot
+         * approve their own" on the strength of two separate permissions. Separate permissions are
+         * <em>separable</em>, not separated - one account can hold both, and until now nothing
+         * stopped it. This is the test that makes the claim true rather than aspirational.
+         */
+        @Test
+        @DisplayName("the person who recorded an invoice cannot approve it, even holding the permission")
+        void creatorCannotApproveOwnInvoice() throws Exception {
+            tolerance(COMPANY_A, "3");
+            // Recorded by the admin, who also holds settlement.invoice:approve.
+            String id = receive(invoiceBody(carrierA, nextNumber("MK1"), "1450.00", tripA, "1450.00"), COMPANY_A);
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/match"), COMPANY_A)).andExpect(status().isOk());
+
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/approve"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(status().isConflict());
+
+            // And nothing was written on the way to refusing it.
+            assertThat(count("SELECT count(*) FROM tms.settlement_approval WHERE carrier_invoice_id = '"
+                    + id + "'")).isZero();
+        }
+
+        @Test
+        @DisplayName("a second person holding the permission can approve it")
+        void anotherApproverCan() throws Exception {
+            tolerance(COMPANY_A, "3");
+            String id = receive(invoiceBody(carrierA, nextNumber("MK2"), "1450.00", tripA, "1450.00"), COMPANY_A);
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/match"), COMPANY_A)).andExpect(status().isOk());
+
+            mockMvc.perform(asChecker(post(INVOICES + "/" + id + "/approve"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("APPROVED"));
+        }
+
+        @Test
+        @DisplayName("a second person WITHOUT the permission still cannot")
+        void secondPersonStillNeedsThePermission() throws Exception {
+            tolerance(COMPANY_A, "3");
+            String id = receive(invoiceBody(carrierA, nextNumber("MK3"), "1450.00", tripA, "1450.00"), COMPANY_A);
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/match"), COMPANY_A)).andExpect(status().isOk());
+
+            // The planner is not the maker, and being a different person is not authority.
+            mockMvc.perform(asPlanner(post(INVOICES + "/" + id + "/approve"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("an approver from another company cannot approve it either")
+        void crossTenantApproverIsBlocked() throws Exception {
+            tolerance(COMPANY_A, "3");
+            String id = receive(invoiceBody(carrierA, nextNumber("MK4"), "1450.00", tripA, "1450.00"), COMPANY_A);
+
+            // The admin is a member of COMPANY_B too, and still cannot reach COMPANY_A's invoice
+            // through it: tenancy is checked before anything else.
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/approve"), COMPANY_B)
+                            .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(status().isNotFound());
+        }
+
+        /**
+         * The asymmetry is deliberate. Refusing to pay commits nothing and creates no obligation, so
+         * a clerk who spots their own keying error must be able to reject it rather than needing a
+         * second person to undo their own mistake. The control exists to stop money leaving.
+         */
+        @Test
+        @DisplayName("the creator CAN reject their own invoice - refusing to pay commits nothing")
+        void creatorMayRejectOwnInvoice() throws Exception {
+            String id = receive(invoiceBody(carrierA, nextNumber("MK5"), "1450.00", tripA, "1450.00"), COMPANY_A);
+
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/reject"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"comment\":\"Keyed against the wrong shipment.\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("REJECTED"));
+        }
+    }
+
     // --- tenancy -------------------------------------------------------------------
 
     @Nested
@@ -418,7 +512,7 @@ class SettlementApiIntegrationTest {
             tolerance(COMPANY_A, "3");
             String id = receive(invoiceBody(carrierA, nextNumber("EXP"), "1450.00", tripA, "1450.00"), COMPANY_A);
             mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/match"), COMPANY_A)).andExpect(status().isOk());
-            mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/approve"), COMPANY_A)
+            mockMvc.perform(asChecker(post(INVOICES + "/" + id + "/approve"), COMPANY_A)
                     .contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isOk());
 
             ExecutorService pool = Executors.newFixedThreadPool(2);
@@ -488,7 +582,7 @@ class SettlementApiIntegrationTest {
             try {
                 ready.countDown();
                 go.await();
-                mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/approve"), COMPANY_A)
+                mockMvc.perform(asChecker(post(INVOICES + "/" + id + "/approve"), COMPANY_A)
                         .contentType(MediaType.APPLICATION_JSON).content("{}"));
                 return true;
             } catch (Exception refused) {
@@ -506,6 +600,11 @@ class SettlementApiIntegrationTest {
 
     private MockHttpServletRequestBuilder asPlanner(MockHttpServletRequestBuilder builder, UUID companyId) {
         return builder.header("Authorization", "Bearer " + plannerToken)
+                .header(ApiHeaders.COMPANY_ID, companyId.toString());
+    }
+
+    private MockHttpServletRequestBuilder asChecker(MockHttpServletRequestBuilder builder, UUID companyId) {
+        return builder.header("Authorization", "Bearer " + checkerToken)
                 .header(ApiHeaders.COMPANY_ID, companyId.toString());
     }
 
