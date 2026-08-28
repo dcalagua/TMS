@@ -27,7 +27,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 15 | Observability + Performance + Security | pending | - | - | - | - | - |
 | 16 | Final Enterprise Certification | pending | - | - | - | - | - |
 
-**LAST_COMPLETED_JOB = 14** (chain order 08-13, 15, 14)
+**LAST_COMPLETED_JOB = 16 - CHAIN COMPLETE** (session order 08-13, 15, 14, 16)
 
 ## OPEN TECHNICAL / DOMAIN DEBTS
 
@@ -528,3 +528,29 @@ OPEN_DEBTS: D1 CLOSED · D2 CLOSED · D3 OPEN evaluated · D4 DEFERRED_WITH_REAS
 D6 OPEN · D7 OPEN · D8 OPEN · **D9 OPEN (new)**.
 
 NEXT_JOB=16 Certification, then the morning report.
+
+### JOB 16 - 2026-08-28 - PASS - CHAIN COMPLETE
+
+JOB=16 · COMPLETED_AT=06:17 · HEAD=`c7f39c4` · MIGRATION=none
+
+Every gate **re-run from a clean tree after the final commit**, not quoted from a job's own report:
+backend **1674 pass / 0 fail / 0 skipped**, frontend **97**, E2E **34 pass / 7 skipped**, typecheck,
+lint and build all clean.
+
+Structural invariants verified independently: Flyway **V1-V43 contiguous, no gaps, no duplicates**;
+each of V36-V43 touched by **exactly one commit**, so no applied migration was rewritten; **0** files
+of application DDL in `supabase/`; working tree clean; **29 commits local, nothing pushed**.
+
+**9 defects found and fixed this session**, two of them mine and reported as mine. Defect 8 - invalid
+cross-entity JPQL that `compile` accepted and that killed 323 tests at context startup - is the
+night's clearest vindication of "Maven incremental is not evidence".
+
+**Debt: two closed (D1, D2), five opened (D5-D9).** That direction is correct - D5 to D9 were already
+true and undocumented, and writing them down with what it would take to close each is worth more than
+code that would half-fix one.
+
+**What is explicitly NOT certified:** nothing deployed or verified against a running environment; the
+7 authenticated E2E specs did not execute here; no load or performance testing; no accessibility
+verification at all (D9); Control Tower V1 still untested (D7).
+
+CHAIN_STATUS=COMPLETE · JOBS 01-16 · STOP_CHAIN=false
