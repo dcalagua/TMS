@@ -18,7 +18,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 06 | Rate Engine V2 | **PASS** | 2026-08-28 03:20 | `38172c3` | **V39** | 1517 / 0 fail | false |
 | 07 | Carrier Selection + Tender Waterfall | **PASS** | 2026-08-28 03:45 | `631fa3c` | **V40** | 1536 / 0 fail | false |
 | 08 | Dock / Appointment Scheduling | **PASS** | 2026-08-28 04:26 | `af57109` | **V41** | 1585 / 0 fail | false |
-| 09 | Fleet Resource Scheduling | pending | - | - | - | - | - |
+| 09 | Fleet Resource Scheduling | **PASS** | 2026-08-28 04:55 | `f46b5b0` | **V42** | 1617 / 0 fail | false |
 | 10 | ETA + Geofencing + Predictive Tracking | pending | - | - | - | - | - |
 | 11 | Freight Audit & Settlement | pending | - | - | - | - | - |
 | 12 | Exception Management + Control Tower V2 | pending | - | - | - | - | - |
@@ -27,7 +27,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 15 | Observability + Performance + Security | pending | - | - | - | - | - |
 | 16 | Final Enterprise Certification | pending | - | - | - | - | - |
 
-**LAST_COMPLETED_JOB = 08**
+**LAST_COMPLETED_JOB = 09**
 
 ## OPEN TECHNICAL / DOMAIN DEBTS
 
@@ -37,9 +37,10 @@ inconvenient - it moves to RESOLVED with the job that closed it, or to DEFERRED_
 | # | Debt | Status | Notes |
 |---|---|---|---|
 | **D1** | `PlanningKpis.totalCost` is null - a proposal is not priced | **OPEN** | JOB 06 built the rating; a proposed trip's carrier is its vehicle's carrier, so the pieces exist. Must not sum incompatible currencies. Close before Planning V2 is called integrated with Settlement (JOB 11) |
-| **D2** | An accepted tender can leave `shipment.carrier != shipment.vehicle.owner` | **OPEN** - JOB 09 | JOB 07 refused silent reassignment. **JOB 09 must resolve the invariant formally** - clear the vehicle, select a compatible one atomically, or model `RESOURCE_ASSIGNMENT_PENDING`. Never leave the previous carrier's vehicle attached |
+| **D2** | An accepted tender can leave `shipment.carrier != shipment.vehicle.owner` | **CLOSED (V42, JOB 09)** | JOB 07 refused silent reassignment. **JOB 09 must resolve the invariant formally** - clear the vehicle, select a compatible one atomically, or model `RESOURCE_ASSIGNMENT_PENDING`. Never leave the previous carrier's vehicle attached |
 | **D3** | Delivery records an outcome, not a delivered quantity | **OPEN** | `PARTIAL` implies no demonstrable amount. Must not be inferred from ordered/allocated/planned. Evaluate formally at JOB 10, close before JOB 11 if Settlement needs it |
 | **D4** | No automatic tender scheduler: no system-actor model | **DEFERRED_WITH_REASON** | `requireAppUserId` refuses machines *by design* - an offer is a commercial commitment and the trail must name who made it. No fake user, hardcoded UUID or anonymous principal. Manual waterfall advance stands. Design only, if JOB 15 raises a real requirement |
+| **D5** | No work assignment: several shipments cannot be sequenced onto one driver-and-vehicle pair with travel time between them | **OPEN** - new in JOB 09 | Deliberate. V42 delivers the availability layer it would be built on; a table nothing writes to would be scaffolding |
 
 ## Baseline established by JOB 01
 
@@ -270,3 +271,44 @@ OPEN_DEBTS: D1 OPEN · D2 OPEN (JOB 09's) · D3 OPEN, not needed or inferred her
 D4 DEFERRED_WITH_REASON, unchanged.
 
 NEXT_JOB=09 Fleet Resource Scheduling, which must resolve D2. Next migration **V42**.
+
+### JOB 09 - 2026-08-28 - PASS
+
+JOB=09 · STARTED_AT=04:26 · COMPLETED_AT=04:55 · HEAD_BEFORE=`af57109` · HEAD_AFTER=`f46b5b0`
+MIGRATION=**V42** · BACKEND_CLEAN_PASS=1617 · BACKEND_CLEAN_FAIL=0 · BACKEND_SKIPPED=0
+FRONTEND_PASS=69 · E2E_PASS=34 · E2E_SKIPPED=7 · RETRIES=5, all recovered
+
+**D2 is closed.** Two of the three resolutions the brief offered turned out to be unavailable:
+clearing the vehicle is impossible (`ck_trip_confirmed_is_complete` requires one on every confirmed
+trip, and only confirmed trips are tenderable), and picking one of the accepting carrier's
+automatically would mean choosing among another company's fleet by rules nobody has stated. So the
+third: `accepted_carrier_id` records who agreed, `carrier_id` goes on meaning the owner of the
+assigned vehicle, and **a shipment where the two disagree cannot depart** - refused in the service,
+in the aggregate, and by `ck_trip_departed_carrier_matches_vehicle`. There is no separate resolve
+action: assigning one of the accepting carrier's vehicles is what fixes it.
+
+Also fleet availability - vehicle and driver downtime with overlaps made impossible by two partial
+`EXCLUDE` constraints (two threads, one truck, one row), weekly driver shifts stored as **minutes
+since local midnight**, and `ResourceAvailabilityPort` so planning asks rather than reaches in.
+
+**DEFECTS_FOUND=3, DEFECTS_FIXED=3.** The block delete resolved by bare id, so the driver endpoint
+could remove a vehicle's block and the vehicle endpoint a person's - which would have undone the
+`fleet.driver` / `fleet.vehicle` split V26 made precisely so workshop clerks cannot see who is off
+sick. An integration acceptance would have overwritten `updatedBy` with null. And three existing
+guards - `SchemaExposureIntegrationTest`, `ck_trip_committed_requires_confirmed_at`,
+`ck_trip_ready_actor_pair` - each caught exactly what it was built for.
+
+**No new permission pair**, deliberately: reads and writes ride the existing `fleet.vehicle:*` and
+`fleet.driver:*`, so the personal-data boundary holds and the permission count is unchanged.
+
+**Backend skipped 7 → 0**: Docker was up throughout this run, so the Testcontainers tests skipped
+during JOB 08 all executed. No failing test was converted to a skip anywhere.
+
+**NOT delivered, by decision:** no work-assignment table. Sequencing several shipments onto one
+driver-and-vehicle pair with travel time between them needs a scheduling model, a rebalancing story
+and its own screen; V42 ships the availability layer underneath it. Recorded as **D5**, not claimed.
+
+OPEN_DEBTS: D1 OPEN · **D2 CLOSED** · D3 OPEN (JOB 10's) · D4 DEFERRED_WITH_REASON ·
+**D5 OPEN (new)** - no work assignment.
+
+NEXT_JOB=10 ETA / Geofencing, which must evaluate D3. Next migration **V43**.
