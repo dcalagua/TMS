@@ -4,15 +4,15 @@
 follows. Phase 1 (JOBS 01–16) is closed and recorded in `TMS_OVERNIGHT_MASTER_LOG.md`.*
 
 ```
-LAST_COMPLETED_JOB=  25
-CURRENT_JOB=         26
+LAST_COMPLETED_JOB=  26
+CURRENT_JOB=         27
 CURRENT_SUBSTEP=     not started
 LATEST_MIGRATION=    V48  (next free: V49)
-LAST_GOOD_HEAD=      pending commit of JOB 25
-TEST_STATUS=         backend 1844/0/0 · frontend 129 · e2e 36 pass 7 skipped · lint/build clean
+LAST_GOOD_HEAD=      pending commit of JOB 26
+TEST_STATUS=         backend 1844/0/0 · frontend 136 · e2e 38 pass 7 skipped · lint/build clean
 KNOWN_FAILURE=       none
 STOP_CHAIN=          false
-NEXT_ACTION=         JOB 26 - Accessibility Foundation (D9 -> PARTIAL only)
+NEXT_ACTION=         JOB 27 - Phase 2 Enterprise Certification
 ```
 
 ## Open debts
@@ -355,3 +355,35 @@ first sentence and lists what would close each gap.
 
 **No Gatling/k6/JMeter**, deliberately: a load script with nothing to point it at is a repository
 artefact implying a capability nobody has.
+
+### JOB 26 — 2026-08-28 — PASS · D9 stays OPEN (PARTIAL)
+
+`STARTED 15:28 · COMPLETED 15:52 · MIGRATION none · FRONTEND 136 · E2E 38/7`
+
+**Two real WCAG AA failures found and fixed.**
+
+**The primary button was 2.83:1** - white on `#5AA97F` - so *every contained button in the
+application* was below AA. And `theme.ts` already documented the rule it was breaking: `greenBrand`
+is commented "SOLO fondos/decoración · 2.45:1" and `green` is "★ acción · 4.74:1". The palette knew;
+the theme used the decorative green as the action colour anyway. **A rule written in a comment is not
+a rule that holds.**
+
+**The wordmark was 1.72:1** - `text.disabled` inside a container at 60% opacity, multiplying.
+Opacity changes no declared colour, so no palette review or component test could ever have found it.
+
+**Both were invisible to the component tests.** jsdom has no rendering engine and skips every
+contrast rule in silence; they were found by Playwright in Chromium. **A green component-level a11y
+suite is not evidence about colour** - which is the false assurance this job could have shipped
+instead.
+
+**D9 stays OPEN as instructed, and would have anyway.** axe automates about a third of WCAG, only
+login and 404 are reachable without credentials so every operational screen is unchecked at page
+level, and nothing has been tested by a person. `docs/frontend/ACCESSIBILITY.md` §3 says so before
+anybody quotes the green suite.
+
+**DEFECTS_FOUND=3, DEFECTS_FIXED=3** - the two contrast failures plus mine: `tsc -p
+tsconfig.app.json` passed while `npm run build` failed on a missing type declaration. **JOB 19's
+lesson exactly**, and why the real build stays a mandatory gate.
+
+**Scope note:** the fix changes the shade of green on every primary button. A visible design change,
+made for a real AA failure, flagged rather than slipped in.

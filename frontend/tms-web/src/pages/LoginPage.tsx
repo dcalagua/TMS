@@ -337,13 +337,23 @@ export function LoginPage() {
 
             {/* El lockup cierra el panel como lo hace el acceso del resto de la suite: después de
                 las acciones, discreto, y solo como firma. */}
+            {/*
+              Sin `opacity` en el contenedor y sin `text.disabled` en la firma (JOB 26).
+              Los dos se multiplicaban: `text.disabled` al 60% de opacidad daba **1.72:1** contra
+              los 4.5:1 exigidos, y axe en Chromium lo midió. `text.disabled` es un color para
+              controles apagados, no para texto que se lee; y una opacidad sobre un contenedor
+              atenúa lo que hay dentro sin cambiar ningún color declarado, así que ninguna revisión
+              de la paleta encuentra el fallo — sólo medirlo ya renderizado.
+
+              Discreto se consigue con tamaño y espaciado, que es lo que queda.
+            */}
             <Box sx={{
               display: "flex", alignItems: "center", justifyContent: "center", gap: 1,
-              mt: 4, pt: 3, borderTop: 1, borderColor: "divider", opacity: 0.6,
+              mt: 4, pt: 3, borderTop: 1, borderColor: "divider",
             }}>
               <EbimMark size={19} color={theme.palette.text.secondary} />
               <Typography sx={{ fontSize: T.bodyStrong, fontWeight: 800 }}>eTMS</Typography>
-              <Typography sx={{ fontSize: T.micro, letterSpacing: ".14em", fontWeight: 700, color: "text.disabled" }}>
+              <Typography sx={{ fontSize: T.micro, letterSpacing: ".14em", fontWeight: 700, color: "text.secondary" }}>
                 BY EBIM
               </Typography>
             </Box>

@@ -63,9 +63,15 @@ export function ProductLockup({
         <Typography sx={{ fontWeight: 800, fontSize: nameSize, letterSpacing: -0.4, lineHeight: 1, color: color ?? "text.primary" }}>
           <Box component="span" sx={{ color: accent }}>{first}</Box>{rest}
         </Typography>
+        {/*
+          Sin `opacity` (JOB 26). `text.secondary` ya está calculado para cumplir AA sobre el fondo;
+          bajarlo al 85% lo dejaba en **1.72:1** contra 4.5:1 exigidos, medido por axe en Chromium.
+          Es el fallo más fácil de introducir sin querer: la opacidad no cambia el color declarado,
+          así que ninguna revisión de la paleta lo encuentra — sólo medirlo ya renderizado.
+        */}
         <Typography sx={{
           fontSize: Math.max(8.5, nameSize * 0.42), fontWeight: 700, letterSpacing: "0.22em",
-          color: color ?? "text.secondary", opacity: 0.85, lineHeight: 1.5,
+          color: color ?? "text.secondary", lineHeight: 1.5,
         }}>
           BY EBIM
         </Typography>

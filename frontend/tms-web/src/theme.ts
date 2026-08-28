@@ -172,7 +172,16 @@ export type ThemeKey = "forest" | "indigo" | "cobalt" | "teal" | "graphite" | "a
 
 interface Pal { p: string; pd: string; pc: string; s: string; sd: string; sc: string }
 export const THEMES: Record<Exclude<ThemeKey, "brand">, { light: Pal; dark: Pal }> = {
-  forest:   { light: { p: "#5AA97F", pd: "#3F8A66", pc: "#FFFFFF", s: "#3F8A66", sd: "#2F7A63", sc: "#FFFFFF" },
+  // `p` es #2F8159 y NO #5AA97F, que es lo que había (JOB 26).
+  //
+  // Un botón `contained` pinta texto blanco sobre `primary.main`, y el verde de marca da **2.83:1**
+  // ahí — axe en Chromium lo midió, y jsdom no puede medir contraste en absoluto, así que ninguna
+  // prueba de componente lo habría visto. La regla ya estaba escrita cuatro líneas más arriba en
+  // este mismo fichero: `greenBrand` es "SOLO fondos/decoración" y `green` es "★ acción · 4.74:1".
+  // El tema rompía la regla que la paleta documenta.
+  //
+  // #5AA97F sigue siendo la identidad: los degradados y los fondos decorativos no lo tocan.
+  forest:   { light: { p: "#2F8159", pd: "#3F8A66", pc: "#FFFFFF", s: "#3F8A66", sd: "#2F7A63", sc: "#FFFFFF" },
               dark:  { p: "#5AA97F", pd: "#3F8A66", pc: "#0F1715", s: "#7CC09A", sd: "#3F8A66", sc: "#0F1715" } },
   indigo:   { light: { p: "#6366F1", pd: "#4F46E5", pc: "#FFFFFF", s: "#4F46E5", sd: "#4338CA", sc: "#FFFFFF" },
               dark:  { p: "#818CF8", pd: "#6366F1", pc: "#13102A", s: "#818CF8", sd: "#6366F1", sc: "#13102A" } },
