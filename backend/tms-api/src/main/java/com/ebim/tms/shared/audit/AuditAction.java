@@ -140,5 +140,19 @@ public enum AuditAction {
      * surviving record that it ever existed - which is the point.
      */
     RESOURCE_BLOCKED,
-    RESOURCE_RELEASED
+    RESOURCE_RELEASED,
+
+    /**
+     * Freight audit (migration V46).
+     *
+     * <p>Five, and the last three are the ones an auditor searches for by name: who authorised an
+     * obligation, who refused one, and when it was handed to whoever pays. Receiving and matching
+     * are here because "when did this arrive" and "what did we conclude" are the questions asked
+     * immediately before those three.
+     */
+    INVOICE_RECEIVED,
+    INVOICE_MATCHED,
+    INVOICE_APPROVED,
+    INVOICE_REJECTED,
+    INVOICE_EXPORTED
 }

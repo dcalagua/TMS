@@ -6,11 +6,13 @@ follows. Phase 1 (JOBS 01–16) is closed and recorded in `TMS_OVERNIGHT_MASTER_
 ```
 LAST_COMPLETED_JOB=  19
 CURRENT_JOB=         20
-CURRENT_STEP=        starting
-LATEST_MIGRATION=    V45  (next free: V46)
-LAST_GOOD_HEAD=      pending commit of JOB 19
+CURRENT_SUBSTEP=     20A-20D done (schema, lifecycle, matching, approval, export) - 20E UI, 20F certification remain
+LATEST_MIGRATION=    V46  (next free: V47)
+LAST_GOOD_HEAD=      2de7e27 (JOB 19); 20A-20D committing now
+TEST_STATUS=         backend 1735/0/0 clean
+KNOWN_FAILURE=       none
 STOP_CHAIN=          false
-NEXT_ACTION=         Freight Audit & Settlement V1 - the module that does not exist yet
+NEXT_ACTION=         JOB 20E - settlement workspace UI, then 20F integration tests + certification
 ```
 
 ## Open debts

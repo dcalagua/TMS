@@ -205,32 +205,41 @@ class TenancyConstraintIntegrationTest {
         // to 50: appointments.appointment read/manage and appointments.resource:manage, the last
         // of which is an administrator's - adding a door changes what the whole site can promise.
         //
+        // V46 took it to 56 with six settlement permissions. Six rather than two, because recording
+        // an invoice, deciding it is payable and handing it to accounting are different
+        // authorities: a single settlement:manage would let whoever keys an invoice approve their
+        // own, which is the oldest control failure in accounts payable.
+        //
         // These totals are deliberately exact rather than "at least". The catalogue is a schema
         // contract: a permission that appears without a migration declaring it, or a grant that
         // widens a role silently, is the kind of change this test exists to make visible. The
         // named invariants below are the ones that carry meaning - the counts only anchor them.
         assertThat(count("SELECT count(*) FROM tms.role")).isEqualTo(4);
-        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(50);
+        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(56);
         assertThat(count("SELECT count(*) FROM tms.permission WHERE code = resource || ':' || action"))
-                .isEqualTo(50);
+                .isEqualTo(56);
 
-        // 50 + 49 + 26 + 16. ORGANIZATION_ADMIN holds the whole catalogue; COMPANY_ADMIN holds
-        // all of it but iam.organization:manage, which is asserted by name further down. PLANNER
-        // gained the two appointment permissions but not appointments.resource:manage, and VIEWER
-        // gained only the read - a dock booking carries no price, unlike a tender.
-        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(141);
+        // 56 + 55 + 28 + 17. ORGANIZATION_ADMIN holds the whole catalogue; COMPANY_ADMIN holds
+        // all of it but iam.organization:manage, which is asserted by name further down.
+        //
+        // V46's six settlement permissions do NOT go to everybody, and the gaps are the control.
+        // PLANNER gained read and match - the person who knows whether a shipment ran the way the
+        // invoice says - but NOT approve or export: committing money is not a dispatcher's
+        // authority, and whoever works the audit queue should not sign off their own conclusions.
+        // VIEWER gained only the read.
+        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(156);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'ORGANIZATION_ADMIN'"))
-                .isEqualTo(50);
+                .isEqualTo(56);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'COMPANY_ADMIN'"))
-                .isEqualTo(49);
+                .isEqualTo(55);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'PLANNER'"))
-                .isEqualTo(26);
+                .isEqualTo(28);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'VIEWER'"))
-                .isEqualTo(16);
+                .isEqualTo(17);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id"
                 + " JOIN tms.permission p ON p.id = rp.permission_id"

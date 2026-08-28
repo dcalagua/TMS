@@ -96,6 +96,23 @@ public enum Capability {
     RATES_MANAGE(Permission.RATES_RATE_CARD_MANAGE, Permission.RATES_TRIP_COST_MANAGE),
 
     /**
+     * Freight audit (migration V46). Its own capability rather than folded into rates: the people
+     * who audit invoices are finance, and the people who maintain tariffs are commercial.
+     *
+     * <p>{@code SETTLEMENT_MANAGE} deliberately carries matching but <b>not</b> approval or export.
+     * Deciding an expenditure is payable, and handing it to accounting, are separate authorities
+     * from working the audit queue - and an account that can do the first two by holding the third
+     * would let whoever keys an invoice approve their own.
+     */
+    SETTLEMENT_VIEW(Permission.SETTLEMENT_INVOICE_READ),
+    SETTLEMENT_MANAGE(
+            Permission.SETTLEMENT_INVOICE_MANAGE,
+            Permission.SETTLEMENT_INVOICE_MATCH,
+            Permission.SETTLEMENT_TOLERANCE_MANAGE),
+    SETTLEMENT_APPROVE(Permission.SETTLEMENT_INVOICE_APPROVE),
+    SETTLEMENT_EXPORT(Permission.SETTLEMENT_INVOICE_EXPORT),
+
+    /**
      * Deliberately separate from {@code IAM_*}: issuing a machine credential is not the same
      * decision as inviting a person, and an installation may well want the two in different hands.
      *

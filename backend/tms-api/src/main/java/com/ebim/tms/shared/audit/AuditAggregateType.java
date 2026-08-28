@@ -64,5 +64,14 @@ public enum AuditAggregateType {
      * that is cancelled, and a carrier arguing about a missed slot asks about the booking rather
      * than about the shipment that happened to be behind it.
      */
-    APPOINTMENT
+    APPOINTMENT,
+
+    /**
+     * A carrier's invoice (migration V46).
+     *
+     * <p>Its own aggregate because a freight audit is about the document, not about the shipments
+     * it bills: one invoice can cover ten trips, and "who approved this expenditure" is a question
+     * about the invoice.
+     */
+    CARRIER_INVOICE
 }

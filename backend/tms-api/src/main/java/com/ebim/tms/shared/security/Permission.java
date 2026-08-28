@@ -93,6 +93,23 @@ public enum Permission {
     RATES_TRIP_COST_READ("rates.trip_cost:read"),
     RATES_TRIP_COST_MANAGE("rates.trip_cost:manage"),
 
+    /**
+     * Freight audit (migration V46). Six, and the split is the point.
+     *
+     * <p>Recording an invoice, deciding it is payable and handing it to accounting are three
+     * different authorities, and an installation will want them in different hands: a clerk keys
+     * what arrives, a controller approves the expenditure, and only somebody trusted with the
+     * accounting boundary exports it. Collapsing them into one {@code settlement:manage} would let
+     * whoever types an invoice approve their own.
+     */
+    SETTLEMENT_INVOICE_READ("settlement.invoice:read"),
+    SETTLEMENT_INVOICE_MANAGE("settlement.invoice:manage"),
+    SETTLEMENT_INVOICE_MATCH("settlement.invoice:match"),
+    /** Authorising an expenditure. The one that must never be held by a machine - see debt D4. */
+    SETTLEMENT_INVOICE_APPROVE("settlement.invoice:approve"),
+    SETTLEMENT_INVOICE_EXPORT("settlement.invoice:export"),
+    SETTLEMENT_TOLERANCE_MANAGE("settlement.tolerance:manage"),
+
     INTEGRATION_CLIENT_READ("integration.client:read"),
     INTEGRATION_CLIENT_MANAGE("integration.client:manage"),
 

@@ -4,6 +4,8 @@ import com.ebim.tms.rates.domain.TripCost;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -21,6 +23,13 @@ public interface TripCostRepository extends JpaRepository<TripCost, UUID> {
      * costs, not written ahead of it against a guess about what that screen will want.
      */
     Optional<TripCost> findByTripIdAndCompanyId(UUID tripId, UUID companyId);
+
+    /**
+     * The batched sibling this file predicted, written now that freight settlement (V46) is the
+     * screen that needs it: an invoice with twenty lines resolves its shipments in one query rather
+     * than twenty.
+     */
+    List<TripCost> findByCompanyIdAndTripIdIn(UUID companyId, Collection<UUID> tripIds);
 
     /**
      * What a range of operating days cost, grouped by currency - the whole of

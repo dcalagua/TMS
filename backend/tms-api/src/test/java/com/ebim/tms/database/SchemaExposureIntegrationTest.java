@@ -67,7 +67,12 @@ class SchemaExposureIntegrationTest {
             // V45: what arrived, per order line. No DELETE grant, matching order_delivery itself -
             // what was signed for is a commercial fact somebody may be invoiced or credited
             // against, so a line entered by mistake is corrected to zero and never erased.
-            "order_delivery_line");
+            "order_delivery_line",
+            // V46: freight audit. The approval and the export carry no UPDATE or DELETE grant - a
+            // record of a decision that can be edited is not a record, and an export that can be
+            // deleted is an obligation somebody can make disappear.
+            "carrier_invoice", "carrier_invoice_line", "tolerance_policy", "freight_match",
+            "freight_discrepancy", "settlement_approval", "payable_export");
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the
@@ -96,7 +101,12 @@ class SchemaExposureIntegrationTest {
             "tender_waterfall", "tender_waterfall_candidate",
             "location_resource", "resource_calendar", "resource_blocked_slot", "appointment",
             "resource_unavailability", "driver_shift",
-            "order_delivery_line");
+            "order_delivery_line",
+            // V46: freight audit. The approval and the export carry no UPDATE or DELETE grant - a
+            // record of a decision that can be edited is not a record, and an export that can be
+            // deleted is an obligation somebody can make disappear.
+            "carrier_invoice", "carrier_invoice_line", "tolerance_policy", "freight_match",
+            "freight_discrepancy", "settlement_approval", "payable_export");
 
     /**
      * The only tables allowed to carry a {@code company_id} and <em>not</em> the tenant policy.
