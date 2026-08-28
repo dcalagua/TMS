@@ -4,15 +4,15 @@
 follows. Phase 1 (JOBS 01–16) is closed and recorded in `TMS_OVERNIGHT_MASTER_LOG.md`.*
 
 ```
-LAST_COMPLETED_JOB=  24
-CURRENT_JOB=         25
+LAST_COMPLETED_JOB=  25
+CURRENT_JOB=         26
 CURRENT_SUBSTEP=     not started
 LATEST_MIGRATION=    V48  (next free: V49)
-LAST_GOOD_HEAD=      pending commit of JOB 24
-TEST_STATUS=         backend 1842/0/0 · frontend 129 · e2e 36 pass 7 skipped · lint/build clean
+LAST_GOOD_HEAD=      pending commit of JOB 25
+TEST_STATUS=         backend 1844/0/0 · frontend 129 · e2e 36 pass 7 skipped · lint/build clean
 KNOWN_FAILURE=       none
 STOP_CHAIN=          false
-NEXT_ACTION=         JOB 25 - Performance Harness & Baseline
+NEXT_ACTION=         JOB 26 - Accessibility Foundation (D9 -> PARTIAL only)
 ```
 
 ## Open debts
@@ -328,3 +328,30 @@ largest unaddressed operational risk** rather than inventing a procedure.
 
 **No alert thresholds and no custom health indicator, both on purpose.** There is nowhere to send an
 alert, and a stale partner feed must not take TMS out of a load balancer.
+
+### JOB 25 — 2026-08-28 — PASS
+
+`STARTED 14:55 · COMPLETED 15:24 · MIGRATION none · BACKEND 1844/0/0`
+
+**The harness asserts query counts, not durations.** A duration measured on a laptop in Docker varies
+by a factor of three between runs and would produce a test of the laptop. A query count is
+deterministic and is what actually breaks at volume: an N+1 is invisible at ten rows and fatal at ten
+thousand, because it degrades in proportion to the data.
+
+**27 queries for 5 shipments. 27 for 60.** Twelve times the day, the same number of queries - the
+control tower's read path is batched end to end. An N+1 at this fixture size would have added
+fifty-five statements.
+
+**Building the fixture walked into five constraints and every one was right**: an IN_TRANSIT shipment
+nobody confirmed, a confirmed one with no capacity snapshot, a departure with nobody who dispatched
+it, a shipment in transit never made ready, and a stop pointing at `tms.destination` when a later
+migration had repointed the FK at `tms.location`. Five attempts at a plausible-looking shipment, five
+refusals. **That is the three-layer invariant design working on somebody who knew the schema and
+still got it wrong.**
+
+**Nothing here claims 10,000 orders/day.** No load test, no concurrency, no deployed environment, no
+write path, no RLS cost, no table over a few thousand rows. The baseline document says so in its
+first sentence and lists what would close each gap.
+
+**No Gatling/k6/JMeter**, deliberately: a load script with nothing to point it at is a repository
+artefact implying a capability nobody has.
