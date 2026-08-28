@@ -22,5 +22,16 @@ public enum CostComponentReason {
 
     VOLUME_UNKNOWN,
 
-    PALLETS_UNKNOWN
+    PALLETS_UNKNOWN,
+    /** The shipment has no stops yet, so a per-stop charge has nothing to count (V39). */
+    STOPS_UNKNOWN,
+    /**
+     * Nobody has recorded how long the vehicle waited (V39).
+     *
+     * <p>The ordinary state of an <em>estimate</em>: detention is measured on the road and is not
+     * knowable when a trip is priced. The line appears with this reason rather than being omitted,
+     * so a controller comparing an estimate against an invoice can see that waiting was never in
+     * the estimate rather than wondering whether it was zero.
+     */
+    WAITING_NOT_RECORDED
 }

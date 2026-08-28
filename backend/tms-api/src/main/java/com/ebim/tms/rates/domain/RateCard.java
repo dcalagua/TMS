@@ -102,6 +102,33 @@ public class RateCard {
     @Column(name = "minimum_amount", precision = 14, scale = 2)
     private BigDecimal minimumAmount;
 
+    // The V39 components. Every one nullable, and null means "this agreement says nothing about
+    // it" rather than "it is zero" - the distinction the migration's closing note spends a
+    // paragraph on, because only the first is true.
+    @Column(name = "amount_per_stop", precision = 14, scale = 4)
+    private BigDecimal amountPerStop;
+
+    @Column(name = "fuel_surcharge_percent", precision = 7, scale = 4)
+    private BigDecimal fuelSurchargePercent;
+
+    @Column(name = "amount_per_waiting_hour", precision = 14, scale = 4)
+    private BigDecimal amountPerWaitingHour;
+
+    @Column(name = "toll_amount", precision = 14, scale = 2)
+    private BigDecimal tollAmount;
+
+    @Column(name = "accessorial_amount", precision = 14, scale = 2)
+    private BigDecimal accessorialAmount;
+
+    @Column(name = "accessorial_label")
+    private String accessorialLabel;
+
+    @Column(name = "maximum_amount", precision = 14, scale = 2)
+    private BigDecimal maximumAmount;
+
+    @Column(name = "destination_id")
+    private UUID destinationId;
+
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
@@ -123,10 +150,19 @@ public class RateCard {
         // JPA
     }
 
+    /** The pre-V39 shape: no lane, so no destination. */
     public RateCard(UUID companyId, String code, String name, UUID carrierId, RateCardScope scope, UUID originId,
             UUID routeId, UUID vehicleTypeId, String currency, LocalDate validFrom, LocalDate validTo,
             RateComponents components, UUID actorId) {
+        this(companyId, code, name, carrierId, scope, originId, null, routeId, vehicleTypeId, currency,
+                validFrom, validTo, components, actorId);
+    }
+
+    public RateCard(UUID companyId, String code, String name, UUID carrierId, RateCardScope scope, UUID originId,
+            UUID destinationId, UUID routeId, UUID vehicleTypeId, String currency, LocalDate validFrom,
+            LocalDate validTo, RateComponents components, UUID actorId) {
         this.companyId = companyId;
+        this.destinationId = destinationId;
         this.code = code;
         this.name = name;
         this.carrierId = carrierId;
@@ -241,15 +277,73 @@ public class RateCard {
             case WEIGHT -> amountPerKg;
             case VOLUME -> amountPerM3;
             case PALLETS -> amountPerPallet;
-            case BASE, MINIMUM_ADJUSTMENT -> throw new IllegalArgumentException(
-                    component + " is a flat amount and has no unit rate");
+            case STOP_OFF -> amountPerStop;
+            case FUEL_SURCHARGE -> fuelSurchargePercent;
+            case WAITING_TIME -> amountPerWaitingHour;
+            case BASE, TOLL, OTHER_ACCESSORIAL, MINIMUM_ADJUSTMENT, MAXIMUM_ADJUSTMENT ->
+                    throw new IllegalArgumentException(component + " is a flat amount and has no unit rate");
         };
     }
 
-    /** Whether this card charges anything at all - {@code ck_rate_card_has_a_component}'s twin. */
+    /** The flat amount for one component, or null when this card does not charge it. */
+    public BigDecimal flatAmountFor(RateComponent component) {
+        return switch (component) {
+            case BASE -> baseAmount;
+            case TOLL -> tollAmount;
+            case OTHER_ACCESSORIAL -> accessorialAmount;
+            case DISTANCE, WEIGHT, VOLUME, PALLETS, STOP_OFF, FUEL_SURCHARGE, WAITING_TIME,
+                 MINIMUM_ADJUSTMENT, MAXIMUM_ADJUSTMENT ->
+                    throw new IllegalArgumentException(component + " is not a flat charge");
+        };
+    }
+
+    public BigDecimal amountPerStop() {
+        return amountPerStop;
+    }
+
+    public BigDecimal fuelSurchargePercent() {
+        return fuelSurchargePercent;
+    }
+
+    public BigDecimal amountPerWaitingHour() {
+        return amountPerWaitingHour;
+    }
+
+    public BigDecimal tollAmount() {
+        return tollAmount;
+    }
+
+    public BigDecimal accessorialAmount() {
+        return accessorialAmount;
+    }
+
+    /** What the accessorial appears under on a breakdown. Travels with the amount or not at all. */
+    public String accessorialLabel() {
+        return accessorialLabel;
+    }
+
+    public BigDecimal maximumAmount() {
+        return maximumAmount;
+    }
+
+    /** The lane's far end. Set only for {@link RateCardScope#LANE}. */
+    public UUID destinationId() {
+        return destinationId;
+    }
+
+    /**
+     * Whether this card charges anything at all - {@code ck_rate_card_has_a_component}'s twin.
+     *
+     * <p>Neither the minimum nor the maximum counts, which V30 decided and V39 keeps: a floor is a
+     * rule <em>about</em> other charges, not a charge. A card saying only "never less than 200"
+     * states a constraint on a price that does not exist, and pricing from it would conjure 200
+     * out of nothing.
+     */
     public boolean hasAnyComponent() {
         return baseAmount != null || amountPerKm != null || amountPerKg != null
-                || amountPerM3 != null || amountPerPallet != null;
+                || amountPerM3 != null || amountPerPallet != null
+                || amountPerStop != null || fuelSurchargePercent != null || amountPerWaitingHour != null
+                || tollAmount != null || accessorialAmount != null;
     }
 
     /**
@@ -269,10 +363,17 @@ public class RateCard {
      * it, even if the shipment happens to visit the same places. A route is what the planner
      * <em>chose</em>, and pricing by coincidence is not pricing.
      */
-    public boolean appliesToScopeOf(UUID tripOriginId, UUID tripRouteId) {
+    public boolean appliesToScopeOf(UUID tripOriginId, UUID tripRouteId, UUID tripDestinationId) {
         return switch (scope) {
             case CARRIER -> true;
             case ORIGIN -> Objects.equals(originId, tripOriginId);
+            // Both ends, and a null destination never matches: a multi-drop shipment has no lane
+            // (see CostableTrip.soleDestinationId), and Objects.equals(null, null) would otherwise
+            // price it against whichever lane card also happened to have a null - which is exactly
+            // the "pricing by coincidence" this method's own comment refuses.
+            case LANE -> tripDestinationId != null
+                    && Objects.equals(originId, tripOriginId)
+                    && Objects.equals(destinationId, tripDestinationId);
             case ROUTE -> Objects.equals(routeId, tripRouteId);
         };
     }
@@ -315,10 +416,19 @@ public class RateCard {
      * Edits everything about the agreement except who it is with. {@code carrierId} is absent on
      * purpose - see the field comment.
      */
+    /** The pre-V39 shape: no lane, so no destination. */
     public void applyChanges(String code, String name, RateCardScope scope, UUID originId, UUID routeId,
             UUID vehicleTypeId, String currency, LocalDate validFrom, LocalDate validTo,
             RateComponents components, UUID actorId) {
+        applyChanges(code, name, scope, originId, null, routeId, vehicleTypeId, currency, validFrom, validTo,
+                components, actorId);
+    }
+
+    public void applyChanges(String code, String name, RateCardScope scope, UUID originId, UUID destinationId,
+            UUID routeId, UUID vehicleTypeId, String currency, LocalDate validFrom, LocalDate validTo,
+            RateComponents components, UUID actorId) {
         this.code = code;
+        this.destinationId = destinationId;
         this.name = name;
         this.scope = scope;
         this.originId = originId;
@@ -348,5 +458,12 @@ public class RateCard {
         this.amountPerM3 = components.amountPerM3();
         this.amountPerPallet = components.amountPerPallet();
         this.minimumAmount = components.minimumAmount();
+        this.amountPerStop = components.amountPerStop();
+        this.fuelSurchargePercent = components.fuelSurchargePercent();
+        this.amountPerWaitingHour = components.amountPerWaitingHour();
+        this.tollAmount = components.tollAmount();
+        this.accessorialAmount = components.accessorialAmount();
+        this.accessorialLabel = components.accessorialLabel();
+        this.maximumAmount = components.maximumAmount();
     }
 }

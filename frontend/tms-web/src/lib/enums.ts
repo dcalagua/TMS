@@ -64,12 +64,18 @@ export const ENUM_LABELS = {
   costComponentReason: {
     DISTANCE_UNKNOWN: "Sin distancia conocida",
     PALLETS_UNKNOWN: "Sin pallets declarados",
+    STOPS_UNKNOWN: "Sin paradas registradas",
     VOLUME_UNKNOWN: "Sin volumen declarado",
+    WAITING_NOT_RECORDED: "Espera no registrada",
     WEIGHT_UNKNOWN: "Sin peso declarado",
   },
   costQuantitySource: {
+    LINEHAUL_SUBTOTAL: "Subtotal del flete",
+    MEASURED_ROUTE: "Recorrido medido del viaje",
     ORDER_DECLARED_TOTALS: "Totales declarados de los pedidos",
+    RECORDED_WAITING: "Espera registrada",
     ROUTE_REFERENCE: "Distancia de referencia de la ruta",
+    TRIP_STOPS: "Paradas del viaje",
   },
   deliveryResult: {
     DELIVERED: "Entregado",
@@ -143,15 +149,22 @@ export const ENUM_LABELS = {
   },
   rateCardScope: {
     CARRIER: "Transportista",
+    LANE: "Carril (origen-destino)",
     ORIGIN: "Origen",
     ROUTE: "Ruta",
   },
   rateComponent: {
     BASE: "Base",
     DISTANCE: "Distancia",
+    FUEL_SURCHARGE: "Recargo por combustible",
+    MAXIMUM_ADJUSTMENT: "Ajuste al máximo",
     MINIMUM_ADJUSTMENT: "Ajuste al mínimo",
+    OTHER_ACCESSORIAL: "Accesorio",
     PALLETS: "Pallets",
+    STOP_OFF: "Paradas adicionales",
+    TOLL: "Peajes",
     VOLUME: "Volumen",
+    WAITING_TIME: "Tiempo de espera",
     WEIGHT: "Peso",
   },
   stopExecutionStatus: {

@@ -12,5 +12,17 @@ public enum CostUnit {
     KM,
     KG,
     M3,
-    PALLET
+    PALLET,
+    /** A drop after the first (V39). See {@code RateComponent.STOP_OFF} for why the first is free. */
+    STOP,
+    /** An hour of detention (V39). */
+    HOUR,
+    /**
+     * A percentage of something else (V39) - today only of the linehaul, for the fuel surcharge.
+     *
+     * <p>A unit unlike the others: the quantity it multiplies is an amount rather than a physical
+     * measure, which is exactly why the breakdown shows it. "12% x 840.00" is a line a controller
+     * can check; a bare "100.80" is one they have to reconstruct.
+     */
+    PERCENT
 }

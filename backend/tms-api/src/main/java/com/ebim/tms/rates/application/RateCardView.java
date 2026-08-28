@@ -41,6 +41,17 @@ public record RateCardView(
         BigDecimal amountPerM3,
         BigDecimal amountPerPallet,
         BigDecimal minimumAmount,
+        // The V39 charges, and the lane's far end.
+        UUID destinationId,
+        String destinationCode,
+        String destinationName,
+        BigDecimal amountPerStop,
+        BigDecimal fuelSurchargePercent,
+        BigDecimal amountPerWaitingHour,
+        BigDecimal tollAmount,
+        BigDecimal accessorialAmount,
+        String accessorialLabel,
+        BigDecimal maximumAmount,
         boolean active,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt) {
@@ -48,6 +59,16 @@ public record RateCardView(
     /** Any of the three references may be null - a master that was deactivated still renders its id. */
     public static RateCardView from(RateCard card, MasterReference carrier, MasterReference scopeTarget,
             MasterReference vehicleType) {
+        return from(card, carrier, scopeTarget, vehicleType, null);
+    }
+
+    /**
+     * @param destination the lane's far end, resolved only for {@link RateCardScope#LANE}. A lane
+     *     card renders both ends: "Lima" alone does not tell a reader which agreement they are
+     *     looking at.
+     */
+    public static RateCardView from(RateCard card, MasterReference carrier, MasterReference scopeTarget,
+            MasterReference vehicleType, MasterReference destination) {
         UUID scopeTargetId = card.scope() == RateCardScope.ROUTE ? card.routeId() : card.originId();
         return new RateCardView(
                 card.id(),
@@ -72,6 +93,16 @@ public record RateCardView(
                 card.amountPerM3(),
                 card.amountPerPallet(),
                 card.minimumAmount(),
+                card.destinationId(),
+                destination == null ? null : destination.code(),
+                destination == null ? null : destination.name(),
+                card.amountPerStop(),
+                card.fuelSurchargePercent(),
+                card.amountPerWaitingHour(),
+                card.tollAmount(),
+                card.accessorialAmount(),
+                card.accessorialLabel(),
+                card.maximumAmount(),
                 card.active(),
                 card.createdAt(),
                 card.updatedAt());

@@ -16,8 +16,20 @@ public enum RateCardScope {
     /** Anything leaving this depot, whatever it then serves. */
     ORIGIN(1),
 
+    /**
+     * This origin to this destination (migration V39) - the thing most freight agreements are
+     * actually priced on.
+     *
+     * <p>Narrower than {@link #ORIGIN}, which is everything out of a depot, and wider than
+     * {@link #ROUTE}, which is one named master corridor. A lane rate applies however the
+     * corridor is driven and whichever vehicle runs it, which is how a contract states it.
+     *
+     * <p>Applies only to a shipment with exactly one destination: a multi-drop trip is not on a
+     * lane. See {@code CostableTrip.soleDestinationId}.
+     */
+    LANE(2),
     /** Shipments built from this master corridor - the narrowest thing a card can name. */
-    ROUTE(2);
+    ROUTE(3);
 
     private final int specificity;
 

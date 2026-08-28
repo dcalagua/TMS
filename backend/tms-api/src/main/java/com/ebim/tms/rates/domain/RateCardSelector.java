@@ -64,7 +64,7 @@ public final class RateCardSelector {
         return candidates.stream()
                 .filter(card -> card.carrierId().equals(trip.carrierId()))
                 .filter(card -> card.coversDate(trip.planningDate()))
-                .filter(card -> card.appliesToScopeOf(trip.originId(), trip.routeId()))
+                .filter(card -> card.appliesToScopeOf(trip.originId(), trip.routeId(), trip.soleDestinationId()))
                 .filter(card -> card.appliesToVehicleType(trip.vehicleTypeId()))
                 .min(BEST_FIRST);
     }

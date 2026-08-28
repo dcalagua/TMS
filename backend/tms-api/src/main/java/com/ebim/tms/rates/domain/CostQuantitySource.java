@@ -20,5 +20,19 @@ public enum CostQuantitySource {
      * The summed declared totals of the orders assigned to the trip - the same numbers every
      * capacity check is made against ({@code docs/domain/CAPACITY_MODEL.md}).
      */
-    ORDER_DECLARED_TOTALS
+    ORDER_DECLARED_TOTALS,
+    /**
+     * The distance actually measured over the shipment's own stops (V38, wired in V39).
+     *
+     * <p>Preferred over {@link #ROUTE_REFERENCE} because it is about this shipment rather than
+     * about the corridor it resembles - and because it exists for a trip with no master route at
+     * all, which before V39 simply could not be priced per kilometre.
+     */
+    MEASURED_ROUTE,
+    /** Counted from the shipment's own stop list (V39). */
+    TRIP_STOPS,
+    /** The linehaul subtotal a percentage component multiplies (V39). */
+    LINEHAUL_SUBTOTAL,
+    /** Detention hours somebody recorded against the shipment (V39). */
+    RECORDED_WAITING
 }

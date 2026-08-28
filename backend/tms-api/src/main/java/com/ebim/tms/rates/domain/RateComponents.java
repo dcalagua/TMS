@@ -19,7 +19,24 @@ public record RateComponents(
         BigDecimal amountPerKg,
         BigDecimal amountPerM3,
         BigDecimal amountPerPallet,
-        BigDecimal minimumAmount) {
+        BigDecimal minimumAmount,
+        // The V39 charges. Every one nullable, and null means "this agreement says nothing about
+        // it" rather than "it is zero" - only the first is true, and a breakdown must not show a
+        // line for a charge the contract never mentioned.
+        BigDecimal amountPerStop,
+        BigDecimal fuelSurchargePercent,
+        BigDecimal amountPerWaitingHour,
+        BigDecimal tollAmount,
+        BigDecimal accessorialAmount,
+        String accessorialLabel,
+        BigDecimal maximumAmount) {
+
+    /** The pre-V39 shape, so a caller that charges none of the new components need not say so six times. */
+    public RateComponents(BigDecimal baseAmount, BigDecimal amountPerKm, BigDecimal amountPerKg,
+            BigDecimal amountPerM3, BigDecimal amountPerPallet, BigDecimal minimumAmount) {
+        this(baseAmount, amountPerKm, amountPerKg, amountPerM3, amountPerPallet, minimumAmount,
+                null, null, null, null, null, null, null);
+    }
 
     /** A card that charges one flat amount and nothing else - the simplest legal card, and for tests. */
     public static RateComponents flat(BigDecimal baseAmount) {

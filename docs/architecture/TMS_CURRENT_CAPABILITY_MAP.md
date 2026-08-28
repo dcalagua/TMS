@@ -22,13 +22,13 @@ capability.
 
 | Gate | Command | Result |
 |---|---|---|
-| Backend | `./mvnw -B clean test` | **1312** JOB 01; **1389** JOB 02; **1409** JOB 03; **1466** JOB 04; **1498** JOB 05 - 0 failures |
+| Backend | `./mvnw -B clean test` | **1312** J01; **1389** J02; **1409** J03; **1466** J04; **1498** J05; **1517** J06 - 0 failures |
 | Frontend typecheck | `npm run typecheck` | **PASS** |
 | Frontend lint | `npm run lint` | **PASS** - 0 errors, 17 warnings (pre-existing) |
 | Frontend unit | `npm test` | **37** at JOB 01; **42** JOB 02; **47** JOB 03; **55** JOB 04 - 0 failures |
 | Frontend build | `npm run build` | **PASS** - 1.11 MB bundle, chunk-size warning only |
 | E2E | `npx playwright test` | **33 passed, 7 skipped** (authenticated smoke skips without credentials) |
-| Flyway history | `db/migration` | **V1 - V38**, contiguous. Next available: **V39** |
+| Flyway history | `db/migration` | **V1 - V39**, contiguous. Next available: **V40** |
 
 Docker Desktop was started locally for this run, so the 32 Testcontainers-backed classes ran for
 real. No remote database was touched.
@@ -55,7 +55,7 @@ real. No remote database was touched.
 | 7 | **Manual planning** | IMPLEMENTED | `planning/TripService`, `TripAssignmentService`, `PlanningCapacityService`, `TripStopPlanner`; V11, V19 | `planning`, `planning/:runId` board | `PlanningApiIntegrationTest`, capacity and stop-sync suites | Company-scoped; optimistic version on runs; unique index for concurrent assignment | None |
 | 8 | **Automatic planning** | IMPLEMENTED | `PlanningEngines` registry, `HEURISTIC_V1` + **`PLANNING_V2`** (ship-unit aware, distance-sequenced, shift-constrained), `PlanningKpis` | Engine selector + KPI block in `AutoPlanDrawer` | `PlanningEngineV2Test` (22), `PlanningEngineComparisonTest` (5, head-to-head), `PlanningEnginesTest` | Company-scoped through the materialising service | Default stays `HEURISTIC_V1` by decision. **Cost KPI is null** until a proposal-level rating port exists -> **JOB 06** |
 | 9 | **Distance / travel time** | IMPLEMENTED | `routing` module, `RoutingPort`, `RoutingProviderAdapter`, local geodesic estimator, cache; **V38** (ADR-010) | `TripRouteCard` on the trip workspace | `GeodesicDistanceTest`, `RoutingServiceTest` (21), `RoutingServiceIntegrationTest`, `RoutingCacheConstraintIntegrationTest`, `TripRoutingServiceTest`, smoke step 13b | Company-scoped cache + RLS; verified by `SchemaExposureIntegrationTest` | **No vendor adapter** by decision (ADR-010). Consumed by planning today; rating/ETA attach to the same port |
-| 10 | **Rates and costing** | PARTIAL | `rates/*`, `RateCardService`, `TripCostCalculator`; V30, V33 | `rates/rate-cards`, `TripCostCard`, `ActualCostDrawer` | Rate selection and cost calculation suites | Company-scoped | Components are `BASE`, `DISTANCE`, `WEIGHT`, `VOLUME`, `PALLETS`, `MINIMUM_ADJUSTMENT`. **No maximum, stop-off, fuel surcharge, waiting time, toll, accessorial** -> **JOB 06** |
+| 10 | **Rates and costing** | IMPLEMENTED | `rates/*`; V30, V33, **V39**: 12 components, ordered arithmetic, LANE scope, measured-distance provenance | `rates/rate-cards` form + generic breakdown on `TripCostCard` | `RateEngineV2CalculatorTest` (15), lane selection tests, existing suites | Company-scoped; lane targets validated against active masters | **Proposal pricing still absent** - JOB 05's cost KPI stays null until a rating port takes a proposal |
 | 11 | **Carrier tendering** | PARTIAL | `TripTenderService`, `TenderStatus` with a real transition table; V31 | `TenderDrawer`, `TripTenderCard` | Tender lifecycle and transition tests | Company-scoped; one active tender enforced | Single-carrier tender. **No ranking, no waterfall, no automatic escalation** -> **JOB 07** |
 | 12 | **Trip execution lifecycle** | IMPLEMENTED | `TripExecutionService`, `TripStopExecutionService`, `TripStatus` transition table; V25, V27 | `TripWorkspacePage`, `TripTimeline` | Transition-table unit tests + API integration tests | Company-scoped; atomic state transitions | None |
 | 13 | **Delivery result and POD** | IMPLEMENTED | `TripDeliveryService`, `OrderDelivery`, `DeliveryResult`, `DeliveryEvidenceService`; V28, ADR-006, V36 | `DeliveryDrawer`, `DeliveryEvidenceDrawer` | Delivery result constraint and evidence suites, `OrderExecutionPropagatorTest` | Evidence behind `EvidenceStoragePort`, never a public URL | Delivery facts now **drive order status**, recomputed on every correction so the two cannot drift |

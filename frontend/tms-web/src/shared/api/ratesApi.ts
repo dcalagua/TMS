@@ -2,18 +2,31 @@ import { apiRequest } from './httpClient'
 import type { PageResponse } from './pageResponse'
 
 /** Mirrors the backend's `RateCardScope`. */
-export const RATE_CARD_SCOPES = ['CARRIER', 'ORIGIN', 'ROUTE'] as const
+export const RATE_CARD_SCOPES = ['CARRIER', 'ORIGIN', 'LANE', 'ROUTE'] as const
 export type RateCardScope = (typeof RATE_CARD_SCOPES)[number]
 
 /** Mirrors the backend's `RateComponent`, in the order an estimate is shown in. */
-export const RATE_COMPONENTS = ['BASE', 'DISTANCE', 'WEIGHT', 'VOLUME', 'PALLETS', 'MINIMUM_ADJUSTMENT'] as const
+/**
+ * Mirrors `RateComponent`, **in the order an estimate is calculated and shown** - which is part of
+ * the meaning, not a display preference. See `docs/domain/RATE_ENGINE_V2.md`: the fuel surcharge is
+ * a percentage of the linehaul above it and of nothing below it.
+ */
+export const RATE_COMPONENTS = [
+  'BASE', 'DISTANCE', 'WEIGHT', 'VOLUME', 'PALLETS', 'STOP_OFF',
+  'FUEL_SURCHARGE',
+  'WAITING_TIME', 'TOLL', 'OTHER_ACCESSORIAL',
+  'MINIMUM_ADJUSTMENT', 'MAXIMUM_ADJUSTMENT',
+] as const
 export type RateComponent = (typeof RATE_COMPONENTS)[number]
 
 export type CostComponentStatus = 'APPLIED' | 'NOT_CALCULABLE'
-export type CostUnit = 'KM' | 'KG' | 'M3' | 'PALLET'
+export type CostUnit = 'KM' | 'KG' | 'M3' | 'PALLET' | 'STOP' | 'HOUR' | 'PERCENT'
 
 /** Mirrors the backend's `CostQuantitySource` - where a line's quantity came from. */
-export const COST_QUANTITY_SOURCES = ['ROUTE_REFERENCE', 'ORDER_DECLARED_TOTALS'] as const
+export const COST_QUANTITY_SOURCES = [
+  'ROUTE_REFERENCE', 'ORDER_DECLARED_TOTALS', 'MEASURED_ROUTE', 'TRIP_STOPS', 'LINEHAUL_SUBTOTAL',
+  'RECORDED_WAITING',
+] as const
 export type CostQuantitySource = (typeof COST_QUANTITY_SOURCES)[number]
 
 /** Mirrors the backend's `CostComponentReason` - why a line could not be calculated. */
@@ -49,6 +62,19 @@ export interface RateCardView {
   amountPerM3: number | null
   amountPerPallet: number | null
   minimumAmount: number | null
+  /** El extremo lejano del carril. Solo para scope LANE (V39). */
+  destinationId: string | null
+  destinationCode: string | null
+  destinationName: string | null
+  amountPerStop: number | null
+  /** Porcentaje del flete base, nunca de los accesorios. */
+  fuelSurchargePercent: number | null
+  amountPerWaitingHour: number | null
+  tollAmount: number | null
+  accessorialAmount: number | null
+  /** El nombre bajo el que aparece el accesorio. Viaja con el importe o no viaja. */
+  accessorialLabel: string | null
+  maximumAmount: number | null
   active: boolean
   createdAt: string
   updatedAt: string
@@ -72,6 +98,14 @@ export interface RateCardRequest {
   amountPerM3?: number | null
   amountPerPallet?: number | null
   minimumAmount?: number | null
+  destinationId?: string | null
+  amountPerStop?: number | null
+  fuelSurchargePercent?: number | null
+  amountPerWaitingHour?: number | null
+  tollAmount?: number | null
+  accessorialAmount?: number | null
+  accessorialLabel?: string | null
+  maximumAmount?: number | null
 }
 
 export interface RateCardListParams {

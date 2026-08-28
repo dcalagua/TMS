@@ -51,5 +51,31 @@ public record CostableTrip(
         BigDecimal weightKg,
         BigDecimal volumeM3,
         BigDecimal pallets,
-        boolean costable) {
+        boolean costable,
+        /**
+         * The shipment's only destination, or null when it has none or has several (V39).
+         *
+         * <p>Null for a multi-drop trip <b>on purpose</b>, and that is what makes lane pricing
+         * unambiguous: a lane is one origin to one destination, and a shipment that visits four
+         * places is not on a lane - it is on a route, which is what {@code RateCardScope.ROUTE}
+         * exists for. Picking "the first stop" or "the farthest stop" as the lane would price a
+         * multi-drop shipment against an agreement that was never about it.
+         */
+        UUID soleDestinationId,
+        /**
+         * How many stops the shipment has, or null when that is not known (V39).
+         *
+         * <p>Feeds the per-stop charge, which is levied on drops <em>after the first</em> - see
+         * {@code RateComponent.STOP_OFF}. Null and zero are different: no stops recorded yet is not
+         * the same as a shipment with one drop.
+         */
+        Integer stopCount) {
+
+    /** The pre-V39 shape: no lane and no stop count. */
+    public CostableTrip(UUID tripId, UUID companyId, String shipmentNumber, LocalDate planningDate,
+            UUID carrierId, UUID vehicleTypeId, UUID originId, UUID routeId, BigDecimal weightKg,
+            BigDecimal volumeM3, BigDecimal pallets, boolean costable) {
+        this(tripId, companyId, shipmentNumber, planningDate, carrierId, vehicleTypeId, originId, routeId,
+                weightKg, volumeM3, pallets, costable, null, null);
+    }
 }
