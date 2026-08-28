@@ -27,7 +27,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 15 | Observability + Performance + Security | pending | - | - | - | - | - |
 | 16 | Final Enterprise Certification | pending | - | - | - | - | - |
 
-**LAST_COMPLETED_JOB = 10**
+**LAST_COMPLETED_JOB = 11**
 
 ## OPEN TECHNICAL / DOMAIN DEBTS
 
@@ -36,11 +36,12 @@ inconvenient - it moves to RESOLVED with the job that closed it, or to DEFERRED_
 
 | # | Debt | Status | Notes |
 |---|---|---|---|
-| **D1** | `PlanningKpis.totalCost` is null - a proposal is not priced | **OPEN** | JOB 06 built the rating; a proposed trip's carrier is its vehicle's carrier, so the pieces exist. Must not sum incompatible currencies. Close before Planning V2 is called integrated with Settlement (JOB 11) |
+| **D1** | `PlanningKpis.totalCost` is null - a proposal is not priced | **CLOSED (JOB 11)** | JOB 06 built the rating; a proposed trip's carrier is its vehicle's carrier, so the pieces exist. Must not sum incompatible currencies. Close before Planning V2 is called integrated with Settlement (JOB 11) |
 | **D2** | An accepted tender can leave `shipment.carrier != shipment.vehicle.owner` | **CLOSED (V42, JOB 09)** | JOB 07 refused silent reassignment. **JOB 09 must resolve the invariant formally** - clear the vehicle, select a compatible one atomically, or model `RESOURCE_ASSIGNMENT_PENDING`. Never leave the previous carrier's vehicle attached |
 | **D3** | Delivery records an outcome, not a delivered quantity | **OPEN, formally evaluated (JOB 10)** | `PARTIAL` implies no demonstrable amount. Must not be inferred from ordered/allocated/planned. Evaluate formally at JOB 10, close before JOB 11 if Settlement needs it |
 | **D4** | No automatic tender scheduler: no system-actor model | **DEFERRED_WITH_REASON** | `requireAppUserId` refuses machines *by design* - an offer is a commercial commitment and the trail must name who made it. No fake user, hardcoded UUID or anonymous principal. Manual waterfall advance stands. Design only, if JOB 15 raises a real requirement |
 | **D5** | No work assignment: several shipments cannot be sequenced onto one driver-and-vehicle pair with travel time between them | **OPEN** - new in JOB 09 | Deliberate. V42 delivers the availability layer it would be built on; a table nothing writes to would be scaffolding |
+| **D6** | No internal cost model for own fleet - fuel, driver hours, depreciation | **OPEN** - new in JOB 11 | A plan mixing a carrier's price with an own-fleet estimate compares two unlike numbers. Own fleet is deliberately left unpriced rather than priced at zero |
 
 ## Baseline established by JOB 01
 
@@ -353,3 +354,41 @@ OPEN_DEBTS: D1 OPEN (JOB 11's) · D2 CLOSED · **D3 OPEN, formally evaluated** �
 D4 DEFERRED_WITH_REASON, now also why the ETA has no background job · D5 OPEN.
 
 NEXT_JOB=11 Settlement, which must close D1. Next migration **V44**.
+
+### JOB 11 - 2026-08-28 - PASS
+
+JOB=11 · STARTED_AT=05:24 · COMPLETED_AT=05:36 · HEAD_BEFORE=`25554cc` · HEAD_AFTER=`4e57642`
+MIGRATION=**none** · BACKEND_CLEAN_PASS=1654 · BACKEND_CLEAN_FAIL=0 · BACKEND_SKIPPED=0
+FRONTEND_PASS=76 · E2E_PASS=34 · E2E_SKIPPED=7 · RETRIES=3, all recovered
+
+**No migration, and that is the honest answer rather than a shortfall:** planning KPIs are computed
+per proposal and never stored, so D1 was a correctness debt and not a schema gap. Adding a migration
+to make the job look substantial would have been the empty scaffolding the brief forbids. V43 stands.
+
+**D1 is closed.** The missing piece was a rating port taking a proposal, and it already existed -
+JOB 07's `CarrierQuotationPort` prices a shipment against a carrier it does not have, which is what
+a tender is. A proposal is that question one step earlier, so it is asked through the same port,
+selector and calculator a tender and an invoice use. A plan compared on price and the bill that
+follows it now come from one set of rules.
+
+**Most of the feature is refusals, and 6 of the 11 new tests assert one.** No partial totals - one
+unpriceable trip means no total, because a sum omitting the trips nobody has an agreement for makes
+the *worse* plan look cheaper. No currency conversion (the brief's explicit constraint, enforced by
+a test). No invented distance. Own fleet is not priced at zero.
+
+**DEFECTS_FOUND=2, DEFECTS_FIXED=2.** `TravelMatrix.distanceKm` answers zero for a leg it does not
+know - correct for planning, silently catastrophic once a distance is multiplied by money; fixed
+with `TravelMatrix.knows` and a null distance for the whole run. And my own first `PlanningKpis`
+derived `totalCost` inside the compact constructor, quietly rewriting an argument the caller passed.
+
+**The engines stay pure functions.** Pricing needs a rate card, so it happens once in
+`AutoPlanningService` against the proposal the engine produced - never inside an engine, which would
+cost the reproducibility its whole test suite rests on.
+
+**D3 was not closed, and building Settlement confirmed JOB 10's evaluation:** every rate component
+prices the shipment, none prices the handover. Nothing here created or inferred a delivered quantity.
+
+OPEN_DEBTS: **D1 CLOSED** · D2 CLOSED · D3 OPEN, evaluated, confirmed not blocking ·
+D4 DEFERRED_WITH_REASON · D5 OPEN · **D6 OPEN (new)** - no internal cost model for own fleet.
+
+NEXT_JOB=12 Control Tower V2.
