@@ -15,7 +15,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 03 | Ship Units + Partial Allocation | **PASS** | 2026-08-28 01:58 | `91540cb` | **V37** | 1409 / 0 fail | false |
 | 04 | Routing Matrix + Travel Time | **PASS** | 2026-08-28 02:30 | `29b484c` | **V38** | 1466 / 0 fail | false |
 | 05 | Advanced Bulk Planning Engine V2 | **PASS** | 2026-08-28 02:50 | `586e7ed` | none (V38 head) | 1498 / 0 fail | false |
-| 06 | Rate Engine V2 | pending | - | - | - | - | - |
+| 06 | Rate Engine V2 | **PASS** | 2026-08-28 03:20 | `38172c3` | **V39** | 1517 / 0 fail | false |
 | 07 | Carrier Selection + Tender Waterfall | pending | - | - | - | - | - |
 | 08 | Dock / Appointment Scheduling | pending | - | - | - | - | - |
 | 09 | Fleet Resource Scheduling | pending | - | - | - | - | - |
@@ -27,7 +27,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 15 | Observability + Performance + Security | pending | - | - | - | - | - |
 | 16 | Final Enterprise Certification | pending | - | - | - | - | - |
 
-**LAST_COMPLETED_JOB = 05**
+**LAST_COMPLETED_JOB = 06**
 
 ## Baseline established by JOB 01
 
@@ -174,3 +174,31 @@ lie and the implementation was fixed to match it.
 
 **Open, and named:** service time per location is carried by the input but passed empty, so
 durations are driving-only today. **Delivery quantity** (JOB 03) unchanged and not inferred.
+
+### JOB 06 - 2026-08-28 - PASS
+
+STARTED_AT=02:51 · COMPLETED_AT=03:20 · HEAD_BEFORE=`3ec0d67` · HEAD_AFTER=`38172c3` · MIGRATION=**V39**
+BACKEND_PASS=1517 · BACKEND_FAIL=0 (clean) · FRONTEND_PASS=55 · E2E_PASS=33 · RETRIES=6, all recovered
+
+Six charges added (stop-off, fuel, waiting, toll, accessorial, ceiling) plus **LANE** scope. **The
+order of application is the contract**: fuel is a percentage of the linehaul and of nothing after
+it, and the limits come after the accessorials. On a 175 linehaul with a 50 toll at 12%, the wrong
+reading is off by 6.00 on every shipment - which is why it is asserted rather than assumed.
+
+**The first drop is free**: it is already inside the base. **A multi-drop shipment is on no lane** -
+the matcher refuses a null destination rather than matching by coincidence.
+
+`DISTANCE` now prefers the shipment's **measured route** (JOB 04), so a trip with no master route
+can be priced per kilometre at all.
+
+**The retry worth remembering (#4).** I changed `DISTANCE`'s quantity-source constant to
+`MEASURED_ROUTE` before wiring any measured distance, so every line would have *claimed* it while
+the number still came from the route master. A pre-existing test caught it. Provenance is now a fact
+about the estimate, not a constant on the component.
+
+**Also caught:** I had made a lone minimum count as "a charge", which V30 deliberately refuses - a
+floor is a rule about other charges. Reverted in entity and migration.
+
+**Open:** proposal pricing still unwired, so JOB 05's `totalCost` stays null; the pieces exist but a
+number without tests would be the fabrication JOB 05 refused. **Waiting time** is never populated -
+honest, not broken. **Delivery quantity** (JOB 03) unchanged and not inferred.
