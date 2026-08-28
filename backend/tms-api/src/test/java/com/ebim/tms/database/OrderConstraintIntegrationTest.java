@@ -168,6 +168,64 @@ class OrderConstraintIntegrationTest {
                 + "', '2026-01-01', 'DISPATCHED')"));
     }
 
+    /**
+     * The invariant V37 exists for, asserted where a service cannot be bypassed.
+     *
+     * <p>{@code OrderPlanningService} refuses an over-allocation with a sentence and a 409, and it
+     * takes the order's row lock so two planners cannot both pass that check. This is the layer
+     * beneath: even a statement issued straight at the table cannot leave an order with more of
+     * itself on trucks than the customer ordered.
+     */
+    @Test
+    @DisplayName("an order cannot have more allocated than it has ordered")
+    void allocationCannotExceedTheOrder() throws SQLException {
+        UUID organization = insertOrganization("ORD-ORG");
+        UUID company = insertCompany(organization, "ORD-A");
+        UUID origin = insertOrigin(company, "ORIGIN-A");
+        UUID destination = insertDestination(company, "DEST-A");
+
+        execute("INSERT INTO tms.transport_order"
+                + " (company_id, order_number, origin_id, destination_id, service_date, status,"
+                + " total_weight_kg, total_volume_m3, total_pallets)"
+                + " VALUES ('" + company + "', 'TO-00000001', '" + origin + "', '" + destination
+                + "', '2026-01-01', 'READY_FOR_PLANNING', 1000, 10, 100)");
+
+        // Exactly the whole order is fine - that is an order fully loaded.
+        execute("UPDATE tms.transport_order SET allocated_weight_kg = 1000, allocated_volume_m3 = 10,"
+                + " allocated_pallets = 100 WHERE order_number = 'TO-00000001'");
+
+        // One pallet more is not, and neither is one gram or one cubic centimetre.
+        assertViolates(CHECK_VIOLATION, () -> execute("UPDATE tms.transport_order"
+                + " SET allocated_pallets = 100.01 WHERE order_number = 'TO-00000001'"));
+        assertViolates(CHECK_VIOLATION, () -> execute("UPDATE tms.transport_order"
+                + " SET allocated_weight_kg = 1000.001 WHERE order_number = 'TO-00000001'"));
+        assertViolates(CHECK_VIOLATION, () -> execute("UPDATE tms.transport_order"
+                + " SET allocated_volume_m3 = 10.0001 WHERE order_number = 'TO-00000001'"));
+
+        // And an allocation cannot go below nothing.
+        assertViolates(CHECK_VIOLATION, () -> execute("UPDATE tms.transport_order"
+                + " SET allocated_pallets = -1 WHERE order_number = 'TO-00000001'"));
+    }
+
+    @Test
+    @DisplayName("a new order starts with nothing allocated")
+    void allocationStartsAtZero() throws SQLException {
+        UUID organization = insertOrganization("ORD-ORG");
+        UUID company = insertCompany(organization, "ORD-A");
+        UUID origin = insertOrigin(company, "ORIGIN-A");
+        UUID destination = insertDestination(company, "DEST-A");
+
+        execute("INSERT INTO tms.transport_order"
+                + " (company_id, order_number, origin_id, destination_id, service_date,"
+                + " total_weight_kg, total_volume_m3, total_pallets)"
+                + " VALUES ('" + company + "', 'TO-00000001', '" + origin + "', '" + destination
+                + "', '2026-01-01', 1000, 10, 100)");
+
+        assertThat(count("SELECT count(*) FROM tms.transport_order WHERE order_number = 'TO-00000001'"
+                + " AND allocated_weight_kg = 0 AND allocated_volume_m3 = 0 AND allocated_pallets = 0"))
+                .isEqualTo(1);
+    }
+
     @Test
     @DisplayName("a requested time window must be both present or both absent, and start before end")
     void timeWindowIsValidated() throws SQLException {

@@ -22,13 +22,13 @@ capability.
 
 | Gate | Command | Result |
 |---|---|---|
-| Backend | `./mvnw -B test` | **1312 tests** at JOB 01; **1389** after JOB 02 - 0 failures |
+| Backend | `./mvnw -B test` | **1312** at JOB 01; **1389** after JOB 02; **1409** after JOB 03 - 0 failures |
 | Frontend typecheck | `npm run typecheck` | **PASS** |
 | Frontend lint | `npm run lint` | **PASS** - 0 errors, 17 warnings (pre-existing) |
-| Frontend unit | `npm test` | **37 tests** at JOB 01; **42** after JOB 02 - 0 failures |
+| Frontend unit | `npm test` | **37** at JOB 01; **42** after JOB 02; **47** after JOB 03 - 0 failures |
 | Frontend build | `npm run build` | **PASS** - 1.11 MB bundle, chunk-size warning only |
 | E2E | `npx playwright test` | **33 passed, 7 skipped** (authenticated smoke skips without credentials) |
-| Flyway history | `db/migration` | **V1 - V36**, contiguous. Next available: **V37** |
+| Flyway history | `db/migration` | **V1 - V37**, contiguous. Next available: **V38** |
 
 Docker Desktop was started locally for this run, so the 32 Testcontainers-backed classes ran for
 real. No remote database was touched.
@@ -50,8 +50,8 @@ real. No remote database was touched.
 | 2 | **Master data - Locations** | IMPLEMENTED | `masterdata/LocationController`; V6, V14, V23 canonical unification | `masters/locations`, `origins`, `destinations` | Location eligibility + canonical unification suites | Company-scoped repository queries | None |
 | 3 | **Zones, Frequencies, Routes** | IMPLEMENTED | `ZoneController`, `FrequencyController`, `RouteController`; V6-V8, V15, V24 | `masters/zones`, `frequencies`, `routes` | Frequency calendar, exception and cutoff tests | Company-scoped | None |
 | 4 | **Fleet - carriers, vehicles, types, drivers** | IMPLEMENTED | `fleet/*`; V9, V16, V26 | `fleet/*` (4 screens) | Fleet master + double-booking tests | Company-scoped; external reference uniqueness per company | Availability/shifts are **MISSING** - see #17 |
-| 5 | **Transport orders** | IMPLEMENTED | `orders/*`; V10, V17, **V36 execution lifecycle** | `orders` | Order totals, import, `OrderStatusTest`, `OrderPlanningServiceExecutionTest`, smoke steps 14-19 | Company-scoped; row lock on execution transitions | **8 states**: the lifecycle now carries dispatch, the three delivery outcomes and a reopen for a second attempt (ADR-009). Quantities on a partial are JOB 03's |
-| 6 | **Order splitting / ship units** | MISSING | No `ship_unit` table or type. `trip_order_assignment.whole_order` exists and V11's unique index is deliberately partial on `whole_order = true`, leaving room | Planning board shows whole orders only | - | - | Introduce ship units and allocation ledger -> **JOB 03** |
+| 5 | **Transport orders** | IMPLEMENTED | `orders/*`; V10, V17, **V36 execution lifecycle** | `orders` | Order totals, import, `OrderStatusTest`, `OrderPlanningServiceExecutionTest`, smoke steps 14-19 | Company-scoped; row lock on execution transitions | **8 states**: the lifecycle now carries dispatch, the three delivery outcomes and a reopen for a second attempt (ADR-009). Quantities on a partial are the ship-unit ledger's (JOB 03) |
+| 6 | **Order splitting / partial allocation** | IMPLEMENTED | `OrderAmounts`/`OrderAllocation`, `OrderPlanningPort.allocate`; **V37** allocation ledger with `ck_transport_order_not_over_allocated` | `SplitAssignDrawer`, pending figures on the planning board | `OrderAmountsTest`, 7 split tests in `PlanningApiIntegrationTest` incl. a real concurrency race, DB constraint tests | Company-scoped; order row lock + DB CHECK | One order, several trips, never duplicated. **Delivered quantities** are deferred - see the doc's section 9 |
 | 7 | **Manual planning** | IMPLEMENTED | `planning/TripService`, `TripAssignmentService`, `PlanningCapacityService`, `TripStopPlanner`; V11, V19 | `planning`, `planning/:runId` board | `PlanningApiIntegrationTest`, capacity and stop-sync suites | Company-scoped; optimistic version on runs; unique index for concurrent assignment | None |
 | 8 | **Automatic planning** | PARTIAL | `PlanningEngine` port + `HeuristicPlanningEngine` (`HEURISTIC_V1`), `AutoPlanningService` | Proposal reviewable on the board | Pure unit tests (no DB) | Company-scoped through the materialising service | Engine is a pure function with a clean port. **No KPIs, no cost/time objective, no route feasibility** -> **JOB 05** |
 | 9 | **Distance / travel time** | MISSING | Only `route.reference_distance_km`, a static master-data column | - | - | - | No routing port, no cache, no provider abstraction -> **JOB 04** |
@@ -83,7 +83,8 @@ These already exist and are tested. Extending them is correct; rebuilding them i
 - `OrderDelivery` and the POD evidence port. JOB 02 consumes these facts; it does not re-model them.
 - The integration inbox, its idempotency keys and its scope model. JOB 13 adds operations on top.
 - `trip_order_assignment.whole_order` and its partial unique index, which V11 wrote specifically so
-  that split allocation could arrive later without touching an applied migration.
+  that split allocation could arrive later without touching an applied migration. JOB 03 used it
+  exactly as intended: the ledger needed a ceiling, not a new table.
 
 ## Documentation corrected in this job
 

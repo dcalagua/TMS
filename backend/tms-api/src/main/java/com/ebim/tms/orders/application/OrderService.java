@@ -209,7 +209,7 @@ public class OrderService {
     /**
      * Cancels an order. {@code NOT_READY}/{@code READY_FOR_PLANNING} may always be cancelled;
      * {@code PLANNED} refuses directly (planning must remove it from its trip first, which
-     * {@code OrderPlanningService.releaseFromPlanning} does as part of
+     * {@code OrderPlanningService.releaseAllocation} does as part of
      * {@code TripService.removeOrder}); {@code CANCELLED} refuses as already-final.
      *
      * <p>Since V36 two more refusals, both taken from {@link OrderStatus}'s transition table rather

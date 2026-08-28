@@ -25,6 +25,7 @@ import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.audit.AuditAggregateType;
 import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
+import com.ebim.tms.shared.reference.OrderAmounts;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.RouteTemplate;
 import com.ebim.tms.shared.reference.RouteTemplateLookupPort;
@@ -163,7 +164,7 @@ class AutoPlanningServiceTest {
     private PlannableOrder order(String suffix, UUID destination, double weightKg) {
         PlannableOrder order = new PlannableOrder(id(suffix), "TO-" + suffix, ORIGIN, destination, null, null,
                 DATE, "NORMAL", null, null, BigDecimal.valueOf(weightKg), BigDecimal.ONE, BigDecimal.ONE,
-                null, null);
+                null, null, OrderAmounts.NONE);
         backlog.add(order);
         return order;
     }

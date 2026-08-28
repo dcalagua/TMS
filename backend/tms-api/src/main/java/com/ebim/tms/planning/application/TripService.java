@@ -30,9 +30,12 @@ import com.ebim.tms.shared.reference.RouteTemplateLookupPort;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
+import com.ebim.tms.shared.reference.OrderAllocation;
+import com.ebim.tms.shared.reference.OrderAmounts;
 import com.ebim.tms.shared.settings.CompanySettingsPort;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -264,21 +267,46 @@ public class TripService {
                 .orElseThrow(() -> new InvalidRequestException(
                         "orderId does not reference an order that is ready for planning in this company."));
         requireOrderFitsRun(order, run);
-        requireNotAlreadyAssigned(order);
+        requireNotAlreadyOnThisTrip(trip, order);
+        requireNotAlreadyAssignedWhole(order);
 
-        CapacityLoad load = assignments.currentLoad(trip.id()).plus(CapacityLoad.of(order));
+        // What is actually going on this truck: the slice the planner asked for, or everything of
+        // the order that is still unplanned (migration V37). Reading the pending figure here rather
+        // than the order's totals is what makes "assign the rest of it" work after a first split.
+        OrderAllocation before = allocationOf(order, scope.companyId());
+        OrderAmounts amounts = request.isPartial() ? request.amounts() : before.pending();
+        if (before.isFullyAllocated()) {
+            throw new ConflictException("Order " + order.orderNumber()
+                    + " is already fully assigned to trips.");
+        }
+        if (request.isPartial() && amounts.isZero()) {
+            throw new InvalidRequestException(
+                    "A partial assignment must ask for at least one of weight, volume or pallets.");
+        }
+
+        CapacityLoad load = assignments.currentLoad(trip.id()).plus(CapacityLoad.of(amounts));
         capacityService.requireWithinCapacity(
                 "Order " + order.orderNumber() + " does not fit trip " + trip.tripNumber(),
                 liveLimits(trip, scope.companyId()), load);
 
         UUID actorId = auditActorProvider.requireAppUserId();
-        assignments.open(trip, order, actorId);
-        orderPlanningPort.markPlanned(order.id(), scope.companyId());
+        // The ledger first: it takes the order's row lock and is what refuses an over-allocation,
+        // so a racing planner is stopped before a second assignment row exists to clean up.
+        OrderAllocation after = orderPlanningPort.allocate(order.id(), scope.companyId(), amounts);
+        assignments.open(trip, order, amounts, actorId);
         assignments.refreshStops(trip, scope.companyId(), actorId);
         trip.touch(actorId);
         Trip saved = save(trip);
-        auditRecorder.record(scope, AuditAggregateType.TRIP, saved.id(), AuditAction.ASSIGN_ORDER,
-                Map.of("orderNumber", order.orderNumber()));
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("orderNumber", order.orderNumber());
+        if (!after.isFullyAllocated()) {
+            // A split is worth saying out loud in the trail: "part of this order went somewhere
+            // else" is the fact somebody reconciling a short delivery starts from.
+            detail.put("partial", true);
+            detail.put("pendingPallets", after.pending().pallets().toPlainString());
+            detail.put("pendingWeightKg", after.pending().weightKg().toPlainString());
+        }
+        auditRecorder.record(scope, AuditAggregateType.TRIP, saved.id(), AuditAction.ASSIGN_ORDER, detail);
         return assembler.toDetail(saved, scope.companyId());
     }
 
@@ -325,16 +353,25 @@ public class TripService {
         }
         requireOrderFitsRun(order, targetRun);
 
-        CapacityLoad targetLoad = assignments.currentLoad(target.id()).plus(CapacityLoad.of(order));
+        // What moves is what this row carried, not the whole order (migration V37): a moved split
+        // stays a split, and the trip it lands on is charged the slice it actually receives.
+        OrderAmounts moving = assignment.assigned();
+        requireNotAlreadyOnThisTrip(target, order);
+
+        CapacityLoad targetLoad = assignments.currentLoad(target.id()).plus(CapacityLoad.of(moving));
         capacityService.requireWithinCapacity(
                 "Order " + order.orderNumber() + " does not fit trip " + target.tripNumber(),
                 liveLimits(target, scope.companyId()), targetLoad);
 
         UUID actorId = auditActorProvider.requireAppUserId();
+        // The order's ledger is deliberately untouched: a move takes the same amount off one trip
+        // and puts it on another, so allocated is unchanged and the order's status must not flicker
+        // through READY_FOR_PLANNING on its way. That is why this closes rather than releases.
+        //
         // Close first, then open: the partial unique index is checked per statement, and closing
         // is what frees the order for the new row - see TripAssignmentService.close.
         assignments.close(assignment, "Moved to trip " + target.tripNumber(), actorId);
-        assignments.open(target, order, actorId);
+        assignments.open(target, order, moving, actorId);
         assignments.refreshStops(source, scope.companyId(), actorId);
         assignments.refreshStops(target, scope.companyId(), actorId);
         source.touch(actorId);
@@ -566,12 +603,38 @@ public class TripService {
         }
     }
 
-    private void requireNotAlreadyAssigned(PlannableOrder order) {
+    /**
+     * An order that is wholly on a trip cannot be assigned again - move it instead.
+     *
+     * <p>Scoped to whole-order rows, as it always was, and that is now load-bearing rather than
+     * incidental: a split leaves partial rows that this must <em>not</em> refuse, because the rest
+     * of the order is exactly what the planner is coming back for.
+     */
+    private void requireNotAlreadyAssignedWhole(PlannableOrder order) {
         assignmentRepository.findByOrderIdAndStatusAndWholeOrderTrue(order.id(), AssignmentStatus.ACTIVE)
                 .ifPresent(existing -> {
                     throw new ConflictException("Order " + order.orderNumber()
                             + " is already assigned to a trip. Move it instead of assigning it again.");
                 });
+    }
+
+    /**
+     * The same order twice on one trip is one load, one stop and one delivery record described by
+     * two rows. Refused here with a sentence, and by {@code uq_trip_order_assignment_open_per_trip}
+     * beneath for the two planners who both got past this check in their own snapshot.
+     */
+    private void requireNotAlreadyOnThisTrip(Trip trip, PlannableOrder order) {
+        assignmentRepository.findByTripIdAndOrderIdAndStatus(trip.id(), order.id(), AssignmentStatus.ACTIVE)
+                .ifPresent(existing -> {
+                    throw new ConflictException("Order " + order.orderNumber() + " is already on trip "
+                            + trip.tripNumber() + ". Change what that trip carries instead of assigning it twice.");
+                });
+    }
+
+    /** One order's ledger, for the assignment path. */
+    private OrderAllocation allocationOf(PlannableOrder order, UUID companyId) {
+        return orderPlanningPort.allocationsOf(Set.of(order.id()), companyId)
+                .getOrDefault(order.id(), new OrderAllocation(OrderAmounts.wholeOf(order), OrderAmounts.NONE));
     }
 
     private TripOrderAssignment requireActiveAssignment(Trip trip, UUID orderId) {

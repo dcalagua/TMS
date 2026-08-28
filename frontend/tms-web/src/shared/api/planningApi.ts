@@ -189,6 +189,14 @@ export interface EligibleOrderView {
   totalWeightKg: number
   totalVolumeM3: number
   totalPallets: number
+  /** Lo que queda por planificar (migración V37): igual al total si nadie la ha tocado, menor si
+   * parte del pedido ya viaja en otro camión. Es la cifra sobre la que se decide, no el total. */
+  pendingWeightKg: number
+  pendingVolumeM3: number
+  pendingPallets: number
+  /** Parte del pedido ya está en un viaje. Bandera propia y no una comparación de dos números:
+   * "esto es un reparto" es lo que el tablero tiene que decir en voz alta. */
+  partiallyAllocated: boolean
 }
 
 export interface EligibleOrderListParams {
@@ -598,10 +606,22 @@ export function updateTripDriver(
   return apiRequest<TripDetailView>(`/planning/trips/${id}/driver`, { method: 'PUT', companyId, body: request })
 }
 
-/** Mirrors the backend's `AssignOrderRequest` record. No quantities: the backend snapshots the
- * order's own totals - see `docs/domain/CAPACITY_MODEL.md`, "The frontend is never trusted". */
+/**
+ * Mirrors the backend's `AssignOrderRequest` record.
+ *
+ * Sin cantidades significa "todo lo que queda por planificar de este pedido", que es el caso
+ * ordinario. Con cantidades es un reparto (migración V37): 70 de los 100 pallets suben a este
+ * camión y el resto espera otro.
+ *
+ * El servidor nunca se fía de estas cifras como carga: rechaza la asignación si excede lo
+ * pendiente, en el servicio y otra vez en `ck_transport_order_not_over_allocated`. Ver
+ * `docs/domain/CAPACITY_MODEL.md`, "The frontend is never trusted".
+ */
 export interface AssignOrderRequest {
   orderId: string
+  weightKg?: number
+  volumeM3?: number
+  pallets?: number
 }
 
 export function assignOrderToTrip(

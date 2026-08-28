@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import com.ebim.tms.shared.reference.OrderAmounts;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -106,18 +107,19 @@ public class TripOrderAssignment {
         // JPA
     }
 
-    public TripOrderAssignment(UUID companyId, UUID tripId, UUID orderId, BigDecimal assignedWeightKg,
-            BigDecimal assignedVolumeM3, BigDecimal assignedPallets, UUID actorId) {
+    public TripOrderAssignment(UUID companyId, UUID tripId, UUID orderId, OrderAmounts assigned,
+            boolean wholeOrder, UUID actorId) {
         this.companyId = companyId;
         this.tripId = tripId;
         this.orderId = orderId;
-        // Always true in V1: the UI assigns whole orders. The column is what keeps the partial
-        // unique index from blocking a future split allocation.
-        this.wholeOrder = true;
+        // True when this row carries the entire order, false for a split (migration V37). The flag
+        // is what keeps uq_trip_order_assignment_open_whole_order - a partial index V11 wrote for
+        // exactly this day - from blocking the second half of a split.
+        this.wholeOrder = wholeOrder;
         this.status = AssignmentStatus.ACTIVE;
-        this.assignedWeightKg = assignedWeightKg;
-        this.assignedVolumeM3 = assignedVolumeM3;
-        this.assignedPallets = assignedPallets;
+        this.assignedWeightKg = assigned.weightKg();
+        this.assignedVolumeM3 = assigned.volumeM3();
+        this.assignedPallets = assigned.pallets();
         this.assignedAt = OffsetDateTime.now();
         this.assignedBy = actorId;
         this.createdBy = actorId;
@@ -138,6 +140,11 @@ public class TripOrderAssignment {
 
     public UUID orderId() {
         return orderId;
+    }
+
+    /** What this row carries, as one value - the amount released when it is closed (V37). */
+    public OrderAmounts assigned() {
+        return new OrderAmounts(assignedWeightKg, assignedVolumeM3, assignedPallets);
     }
 
     public boolean wholeOrder() {

@@ -42,5 +42,27 @@ public record PlannableOrder(
         BigDecimal totalVolumeM3,
         BigDecimal totalPallets,
         String externalSource,
-        String externalReference) {
+        String externalReference,
+        /**
+         * What is already on trips (migration V37). Carried on the order the board is already
+         * loading rather than fetched beside it: the pending column is on every row of the
+         * eligible-orders list, and a second lookup per row is the N+1 this record exists to avoid.
+         */
+        OrderAmounts allocated) {
+
+    /** Everything the customer asked for. */
+    public OrderAmounts ordered() {
+        return new OrderAmounts(totalWeightKg, totalVolumeM3, totalPallets);
+    }
+
+    /** What a planner may still place on a truck. Zero for an order that is wholly assigned. */
+    public OrderAmounts pending() {
+        return ordered().minus(allocated == null ? OrderAmounts.NONE : allocated);
+    }
+
+    /** Whether part of this order is already on a trip and part of it is not. */
+    public boolean isPartiallyAllocated() {
+        return new OrderAllocation(ordered(), allocated == null ? OrderAmounts.NONE : allocated)
+                .isPartiallyAllocated();
+    }
 }

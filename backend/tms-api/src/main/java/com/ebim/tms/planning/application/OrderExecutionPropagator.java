@@ -27,7 +27,7 @@ import org.springframework.stereotype.Component;
  * <p><b>What it does not decide.</b> Which lifecycle state a fact puts an order into is an
  * <em>orders</em> rule and is decided in {@code OrderPlanningService}. This class only knows which
  * orders a trip is carrying and which fact to report about them. That division is the same one
- * {@code markPlanned} already runs on and is what keeps {@code OrderStatus} out of planning.
+ * {@code allocate} runs on and is what keeps {@code OrderStatus} out of planning.
  *
  * <p><b>Every call is inside its caller's transaction</b>, so an order can never be left in
  * execution by a departure that was rolled back, and a close-out can never disagree with the

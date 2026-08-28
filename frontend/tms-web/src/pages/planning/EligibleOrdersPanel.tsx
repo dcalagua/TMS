@@ -3,7 +3,7 @@ import { useState } from "react";
 import {
   Box, Button, Divider, IconButton, MenuItem, Paper, TextField, Tooltip, Typography,
 } from "@mui/material";
-import { SearchRounded, CloseRounded, AddTaskRounded } from "@mui/icons-material";
+import { SearchRounded, CloseRounded, AddTaskRounded, CallSplitRounded } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import type { OrderPriority } from "../../shared/api/ordersApi";
 import { fetchDestinations } from "../../shared/api/destinationsApi";
@@ -17,6 +17,7 @@ import { notifyError, notifySuccess } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
 import type { StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
+import { SplitAssignDrawer } from "./SplitAssignDrawer";
 import { fmtDecimal, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
 
 const PAGE_SIZE = 10;
@@ -57,6 +58,7 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
   const [filters, setFilters] = useState({ destinationId: "", orderNumber: "" });
   const [assignTargets, setAssignTargets] = useState<Record<string, string>>({});
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
+  const [splitting, setSplitting] = useState<EligibleOrderView | null>(null);
 
   const draftTrips = trips.filter((trip) => trip.status === "DRAFT");
 
@@ -91,6 +93,34 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
 
   const refreshEligible = () =>
     void queryClient.invalidateQueries({ queryKey: ["eligible-orders", companyId, run.id] });
+
+  /**
+   * Reparte un pedido: sube al viaje solo la parte indicada y deja el resto en la bolsa
+   * (migración V37). El pedido no se duplica y su estado sigue siendo `READY_FOR_PLANNING`
+   * mientras quede algo por colocar.
+   */
+  async function assignPart(
+    order: EligibleOrderView, tripId: string,
+    amounts: { weightKg: number; volumeM3: number; pallets: number },
+  ) {
+    setAssigningOrderId(order.id);
+    try {
+      const detail = await assignOrderToTrip(companyId, tripId, { orderId: order.id, ...amounts });
+      notifySuccess(
+        t("Parte del pedido asignada"),
+        t("{{number}} se repartió hacia el viaje {{trip}}.", {
+          number: order.orderNumber, trip: detail.trip.tripNumber,
+        }),
+      );
+      setSplitting(null);
+      refreshEligible();
+      onAssigned(detail);
+    } catch (error) {
+      notifyError(t("No se pudo repartir el pedido"), describePlanningError(error as ApiError));
+    } finally {
+      setAssigningOrderId(null);
+    }
+  }
 
   async function assign(order: EligibleOrderView) {
     const targetTripId = assignTargets[order.id] ?? draftTrips[0]?.id;
@@ -184,8 +214,21 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
                   {order.customerName && ` · ${order.customerName}`}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontVariantNumeric: "tabular-nums" }}>
-                  {fmtWeightKg(order.totalWeightKg)} · {fmtVolumeM3(order.totalVolumeM3)} · {fmtDecimal(order.totalPallets)} {t("pallets")}
+                  {fmtWeightKg(order.pendingWeightKg)} · {fmtVolumeM3(order.pendingVolumeM3)} · {fmtDecimal(order.pendingPallets)} {t("pallets")}
                 </Typography>
+                {order.partiallyAllocated && (
+                  // Parte ya viaja en otro camión. Se dice explícitamente y se muestra el total
+                  // debajo: sin esto la fila de arriba parece el pedido entero y un planificador
+                  // cargaría de nuevo lo que ya está cargado.
+                  <Typography
+                    variant="caption"
+                    sx={{ display: "block", color: "warning.main", fontVariantNumeric: "tabular-nums" }}
+                  >
+                    {t("Repartido · pendiente de {{total}} pallets", {
+                      total: fmtDecimal(order.totalPallets),
+                    })}
+                  </Typography>
+                )}
 
                 {canManage && draftTrips.length > 0 && (
                   <Box sx={{ display: "flex", gap: 0.75, mt: 1 }}>
@@ -210,6 +253,14 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
                     >
                       {t("Asignar")}
                     </Button>
+                    <Button
+                      size="small" variant="text" startIcon={<CallSplitRounded />}
+                      disabled={assigningOrderId === order.id}
+                      onClick={() => setSplitting(order)}
+                      aria-label={t("Repartir {{number}}", { number: order.orderNumber })}
+                    >
+                      {t("Repartir")}
+                    </Button>
                   </Box>
                 )}
               </Box>
@@ -226,6 +277,15 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
           </Box>
         </>
       )}
+
+      <SplitAssignDrawer
+        open={splitting !== null}
+        order={splitting}
+        trips={draftTrips}
+        submitting={assigningOrderId === splitting?.id}
+        onClose={() => setSplitting(null)}
+        onSubmit={(tripId, amounts) => { if (splitting) void assignPart(splitting, tripId, amounts); }}
+      />
     </Paper>
   );
 }

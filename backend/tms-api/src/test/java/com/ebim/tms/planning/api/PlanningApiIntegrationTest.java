@@ -1540,10 +1540,239 @@ class PlanningApiIntegrationTest {
                         + ",\"version\":" + version + "}"));
     }
 
+    // --- split allocation (migration V37) ------------------------------------------
+
+    /**
+     * The case the whole of V37 exists for, and the one the brief names: one order, two trucks.
+     */
+    @Test
+    @DisplayName("an order too big for one truck is split across two, and the ledger adds up")
+    void anOrderIsSplitAcrossTwoTrips() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String tripA = newTrip(run, vehicle("SPL-A", "10000", "40", 100));
+        String tripB = newTrip(run, vehicle("SPL-B", "10000", "40", 100));
+        // 100 pallets. Neither truck is the problem here - the point is that the order is divisible.
+        String order = order(COMPANY_A, originA, destinationA1, date, "1000", "10", "100", "READY_FOR_PLANNING");
+
+        // 70 on the first truck. The order is NOT planned yet: 30 pallets still need one.
+        assignPart(tripA, order, "700", "7", "70")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.assignments.length()").value(1))
+                .andExpect(jsonPath("$.assignments[0].wholeOrder").value(false))
+                .andExpect(jsonPath("$.trip.capacity.pallets.used").value(70.00));
+        assertThat(orderStatus(order)).isEqualTo("READY_FOR_PLANNING");
+        assertThat(new java.math.BigDecimal(allocated(order, "pallets")))
+                .isEqualByComparingTo("70");
+
+        // Still in the pool, and the board says how much of it is left rather than repeating the
+        // order's total - which is what stops a planner loading 100 more pallets onto truck two.
+        mockMvc.perform(asAdmin(get(PLANNING + "/eligible-orders"), COMPANY_A)
+                        .param("originId", originA).param("serviceDate", date.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.id=='" + order + "')].pendingPallets").value(
+                        org.hamcrest.Matchers.contains(30.00)))
+                .andExpect(jsonPath("$.content[?(@.id=='" + order + "')].partiallyAllocated").value(
+                        org.hamcrest.Matchers.contains(true)));
+
+        // The remaining 30 on the second truck. Omitting the amounts means "the rest of it".
+        assign(tripB, order)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.capacity.pallets.used").value(30.00));
+
+        // Now it is planned, exactly once, and it left the pool.
+        assertThat(orderStatus(order)).isEqualTo("PLANNED");
+        assertThat(activeAssignmentRows(order)).isEqualTo(2);
+        assertThat(new java.math.BigDecimal(allocated(order, "pallets"))).isEqualByComparingTo("100");
+        assertThat(new java.math.BigDecimal(allocated(order, "weight_kg"))).isEqualByComparingTo("1000");
+        mockMvc.perform(asAdmin(get(PLANNING + "/eligible-orders"), COMPANY_A)
+                        .param("originId", originA).param("serviceDate", date.toString()))
+                .andExpect(jsonPath("$.content[?(@.id=='" + order + "')]").isEmpty());
+
+        // The stored running total and the ledger it summarises agree - the invariant the column
+        // exists to make constrainable.
+        assertThat(new java.math.BigDecimal(allocated(order, "pallets")))
+                .isEqualByComparingTo(new java.math.BigDecimal(ledgerSum(order, "pallets")));
+        assertThat(new java.math.BigDecimal(allocated(order, "weight_kg")))
+                .isEqualByComparingTo(new java.math.BigDecimal(ledgerSum(order, "weight_kg")));
+
+        // And the order was never duplicated to achieve it.
+        assertThat(queryLong("SELECT count(*) FROM tms.transport_order WHERE id = '" + order + "'")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a split that would over-allocate the order is refused and changes nothing")
+    void overAllocationIsRefused() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String tripA = newTrip(run, vehicle("OVR-A", "100000", "400", 1000));
+        String tripB = newTrip(run, vehicle("OVR-B", "100000", "400", 1000));
+        String order = order(COMPANY_A, originA, destinationA1, date, "1000", "10", "100", "READY_FOR_PLANNING");
+
+        assignPart(tripA, order, "700", "7", "70").andExpect(status().isOk());
+
+        // 40 more would make 110 of a 100-pallet order. Both trucks have room; the *order* does not.
+        assignPart(tripB, order, "400", "4", "40")
+                .andExpect(status().isConflict());
+
+        assertThat(activeAssignmentRows(order)).isEqualTo(1);
+        assertThat(new java.math.BigDecimal(allocated(order, "pallets"))).isEqualByComparingTo("70");
+        assertThat(orderStatus(order)).isEqualTo("READY_FOR_PLANNING");
+    }
+
+    @Test
+    @DisplayName("an exact split fills the order to the pallet and plans it")
+    void anExactSplitPlansTheOrder() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String tripA = newTrip(run, vehicle("EXA-A", "100000", "400", 1000));
+        String tripB = newTrip(run, vehicle("EXA-B", "100000", "400", 1000));
+        String order = order(COMPANY_A, originA, destinationA1, date, "1000", "10", "100", "READY_FOR_PLANNING");
+
+        assignPart(tripA, order, "700", "7", "70").andExpect(status().isOk());
+        // Trailing zeros: 30.00 and 30 are the same quantity, and a ledger comparing with equals
+        // rather than compareTo would refuse the assignment that exactly finishes the order.
+        assignPart(tripB, order, "300.000", "3.0000", "30.00").andExpect(status().isOk());
+
+        assertThat(orderStatus(order)).isEqualTo("PLANNED");
+        assertThat(new java.math.BigDecimal(allocated(order, "pallets"))).isEqualByComparingTo("100");
+    }
+
+    @Test
+    @DisplayName("removing one half of a split returns only that half to the pool")
+    void removingHalfOfASplitReturnsOnlyThatHalf() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String tripA = newTrip(run, vehicle("REM-A", "100000", "400", 1000));
+        String tripB = newTrip(run, vehicle("REM-B", "100000", "400", 1000));
+        String order = order(COMPANY_A, originA, destinationA1, date, "1000", "10", "100", "READY_FOR_PLANNING");
+
+        assignPart(tripA, order, "700", "7", "70").andExpect(status().isOk());
+        assign(tripB, order).andExpect(status().isOk());
+        assertThat(orderStatus(order)).isEqualTo("PLANNED");
+
+        mockMvc.perform(asAdmin(delete(TRIPS + "/" + tripB + "/assignments/" + order), COMPANY_A))
+                .andExpect(status().isOk());
+
+        // Back in the pool for the 30 that came off - not for the 70 still loaded on truck A.
+        assertThat(orderStatus(order)).isEqualTo("READY_FOR_PLANNING");
+        assertThat(new java.math.BigDecimal(allocated(order, "pallets"))).isEqualByComparingTo("70");
+        assertThat(activeAssignmentRows(order)).isEqualTo(1);
+        assertThat(new java.math.BigDecimal(allocated(order, "pallets")))
+                .isEqualByComparingTo(new java.math.BigDecimal(ledgerSum(order, "pallets")));
+    }
+
+    @Test
+    @DisplayName("the same order cannot be put on the same trip twice")
+    void noTwoAssignmentsOfOneOrderOnOneTrip() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("TWICE", "100000", "400", 1000));
+        String order = order(COMPANY_A, originA, destinationA1, date, "1000", "10", "100", "READY_FOR_PLANNING");
+
+        assignPart(trip, order, "700", "7", "70").andExpect(status().isOk());
+        assignPart(trip, order, "300", "3", "30").andExpect(status().isConflict());
+
+        assertThat(activeAssignmentRows(order)).isEqualTo(1);
+        assertThat(new java.math.BigDecimal(allocated(order, "pallets"))).isEqualByComparingTo("70");
+    }
+
+    @Test
+    @DisplayName("moving half a split carries that half, not the whole order")
+    void movingASplitCarriesOnlyItsOwnShare() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String tripA = newTrip(run, vehicle("MOV-A", "100000", "400", 1000));
+        String tripB = newTrip(run, vehicle("MOV-B", "100000", "400", 1000));
+        String order = order(COMPANY_A, originA, destinationA1, date, "1000", "10", "100", "READY_FOR_PLANNING");
+
+        assignPart(tripA, order, "700", "7", "70").andExpect(status().isOk());
+
+        mockMvc.perform(asAdmin(post(TRIPS + "/" + tripA + "/assignments/" + order + "/move"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetTripId\":\"" + tripB + "\"}"))
+                .andExpect(status().isOk());
+
+        // The ledger is unchanged by a move: the same 70 pallets, on a different truck.
+        assertThat(new java.math.BigDecimal(allocated(order, "pallets"))).isEqualByComparingTo("70");
+        assertThat(orderStatus(order)).isEqualTo("READY_FOR_PLANNING");
+        assertThat(queryLong("SELECT count(*) FROM tms.trip_order_assignment WHERE order_id = '" + order
+                + "' AND trip_id = '" + tripB + "' AND status = 'ACTIVE' AND NOT whole_order")).isEqualTo(1);
+    }
+
+    /**
+     * The race the running total exists for. Two planners each read "nothing allocated", each
+     * conclude there is room for 70 of the 100, and both insert. Exactly one may win.
+     */
+    @Test
+    @DisplayName("two planners splitting the same order concurrently cannot both over-allocate it")
+    void concurrentSplitsCannotOverAllocate() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String tripA = newTrip(run, vehicle("RACE-A", "100000", "400", 1000));
+        String tripB = newTrip(run, vehicle("RACE-B", "100000", "400", 1000));
+        String order = order(COMPANY_A, originA, destinationA1, date, "1000", "10", "100", "READY_FOR_PLANNING");
+
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        java.util.concurrent.CountDownLatch ready = new java.util.concurrent.CountDownLatch(2);
+        java.util.concurrent.CountDownLatch go = new java.util.concurrent.CountDownLatch(1);
+        try {
+            var first = pool.submit(() -> attemptSplit(ready, go, tripA, order));
+            var second = pool.submit(() -> attemptSplit(ready, go, tripB, order));
+            ready.await();
+            go.countDown();
+            int okCount = (first.get() == 200 ? 1 : 0) + (second.get() == 200 ? 1 : 0);
+            assertThat(okCount)
+                    .as("exactly one of two racing 70-pallet splits of a 100-pallet order may succeed")
+                    .isEqualTo(1);
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(new java.math.BigDecimal(allocated(order, "pallets"))).isEqualByComparingTo("70");
+        assertThat(activeAssignmentRows(order)).isEqualTo(1);
+        // And the database itself never held an over-allocated row.
+        assertThat(new java.math.BigDecimal(allocated(order, "pallets")))
+                .isEqualByComparingTo(new java.math.BigDecimal(ledgerSum(order, "pallets")));
+    }
+
+    private int attemptSplit(java.util.concurrent.CountDownLatch ready, java.util.concurrent.CountDownLatch go,
+            String tripId, String orderId) {
+        try {
+            ready.countDown();
+            go.await();
+            return assignPart(tripId, orderId, "700", "7", "70").andReturn().getResponse().getStatus();
+        } catch (Exception failed) {
+            // A lock timeout or a serialisation failure is a refusal, which is the outcome under
+            // test - it is not a pass for the losing thread.
+            return 409;
+        }
+    }
+
     private org.springframework.test.web.servlet.ResultActions assign(String tripId, String orderId) throws Exception {
         return mockMvc.perform(asAdmin(post(TRIPS + "/" + tripId + "/assignments"), COMPANY_A)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"orderId\":\"" + orderId + "\"}"));
+    }
+
+    /** Assigns only part of an order: the split V37 exists for. */
+    private org.springframework.test.web.servlet.ResultActions assignPart(String tripId, String orderId,
+            String weightKg, String volumeM3, String pallets) throws Exception {
+        return mockMvc.perform(asAdmin(post(TRIPS + "/" + tripId + "/assignments"), COMPANY_A)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"orderId\":\"" + orderId + "\",\"weightKg\":" + weightKg + ",\"volumeM3\":"
+                        + volumeM3 + ",\"pallets\":" + pallets + "}"));
+    }
+
+    /** The order's own running total of what is on trucks (V37). */
+    private static String allocated(String orderId, String measure) {
+        return queryString("SELECT allocated_" + measure + " FROM tms.transport_order WHERE id = '" + orderId + "'");
+    }
+
+    /** The same figure recomputed from the ledger, for the consistency assertions. */
+    private static String ledgerSum(String orderId, String measure) {
+        return queryString("SELECT coalesce(sum(assigned_" + measure + "), 0) FROM tms.trip_order_assignment"
+                + " WHERE order_id = '" + orderId + "' AND status = 'ACTIVE'");
     }
 
     private org.springframework.test.web.servlet.ResultActions confirm(Run run) throws Exception {

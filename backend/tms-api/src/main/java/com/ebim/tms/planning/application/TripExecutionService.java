@@ -147,7 +147,7 @@ public class TripExecutionService {
      * {@code DELIVERED}, {@code PARTIALLY_DELIVERED} or {@code DELIVERY_FAILED} according to what
      * {@code tms.order_delivery} says about it at this moment. Planning still does not decide what
      * a fact means for an order - it reports the fulfilment through {@code OrderPlanningPort} and
-     * the orders module maps it, the same direction {@code markPlanned} runs in. An order with
+     * the orders module maps it, the same direction {@code allocate} runs in. An order with
      * nothing recorded closes as failed, which is both the honest reading and the reopenable one.
      * See {@link OrderExecutionPropagator}.
      */

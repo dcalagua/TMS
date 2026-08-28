@@ -9,12 +9,15 @@ import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.reference.OrderAllocation;
+import com.ebim.tms.shared.reference.OrderAmounts;
 import com.ebim.tms.shared.reference.OrderBacklogTotals;
 import com.ebim.tms.shared.reference.OrderFulfillmentStatus;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.PlannableOrderQuery;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
@@ -98,37 +101,87 @@ public class OrderPlanningService implements OrderPlanningPort {
         return byId;
     }
 
+    /**
+     * {@code READY_FOR_PLANNING -> PLANNED} when the whole order lands on a trip, and nothing at
+     * all to the status when only part of it does (migration V37).
+     *
+     * <p><b>Takes the row lock before reading the allocation, and that is the point.</b> Two
+     * planners splitting the same 100-pallet order at the same instant would otherwise each read
+     * "0 allocated", each conclude there is room for 70, and each insert - leaving the order 140%
+     * allocated with two rows that both looked valid when they were written. With the lock the
+     * second transaction reads the first one's total and is refused. V37's
+     * {@code ck_transport_order_not_over_allocated} is the backstop under that, for any caller that
+     * ever reaches the table another way.
+     */
     @Override
     @Transactional
-    public void markPlanned(UUID orderId, UUID companyId) {
-        TransportOrder order = require(orderId, companyId);
+    public OrderAllocation allocate(UUID orderId, UUID companyId, OrderAmounts amounts) {
+        TransportOrder order = requireForUpdate(orderId, companyId);
         if (order.status() != OrderStatus.READY_FOR_PLANNING) {
             throw new ConflictException("Order " + order.orderNumber() + " is not ready for planning (status: "
                     + order.status() + ").");
         }
-        order.markPlanned(auditActorProvider.requireAppUserId());
+        OrderAmounts pending = order.allocation().pending();
+        if (amounts.exceeds(pending)) {
+            throw new ConflictException("Order " + order.orderNumber() + " has only "
+                    + describe(pending) + " left to plan, which is less than this assignment asks for.");
+        }
+        order.allocate(amounts, auditActorProvider.requireAppUserId());
         save(order);
+        return order.allocation();
+    }
+
+    /**
+     * Gives an allocation back. The inverse of {@link #allocate}, under the same lock and for the
+     * same reason.
+     *
+     * <p>Accepts an order in any state that can still hold an allocation, rather than insisting on
+     * {@code PLANNED}: a part-allocated order is {@code READY_FOR_PLANNING} and removing its one
+     * assignment has to work.
+     */
+    @Override
+    @Transactional
+    public OrderAllocation releaseAllocation(UUID orderId, UUID companyId, OrderAmounts amounts) {
+        TransportOrder order = requireForUpdate(orderId, companyId);
+        order.releaseAllocation(amounts, auditActorProvider.requireAppUserId());
+        save(order);
+        return order.allocation();
     }
 
     @Override
-    @Transactional
-    public void releaseFromPlanning(UUID orderId, UUID companyId) {
-        TransportOrder order = require(orderId, companyId);
-        if (order.status() != OrderStatus.PLANNED) {
-            throw new ConflictException("Order " + order.orderNumber() + " is not planned (status: "
-                    + order.status() + "), so it cannot be released back to planning.");
+    @Transactional(readOnly = true)
+    public Map<UUID, OrderAllocation> allocationsOf(Set<UUID> orderIds, UUID companyId) {
+        Map<UUID, OrderAllocation> byId = new HashMap<>();
+        if (orderIds.isEmpty()) {
+            return byId;
         }
-        order.markReadyForPlanning(auditActorProvider.requireAppUserId());
-        save(order);
+        for (TransportOrder order : transportOrderRepository.findByIdInAndCompanyId(orderIds, companyId)) {
+            byId.put(order.id(), order.allocation());
+        }
+        return byId;
+    }
+
+    /** The pending figure in a sentence a planner reads, in whichever measures the order uses. */
+    private static String describe(OrderAmounts pending) {
+        List<String> parts = new ArrayList<>();
+        if (pending.weightKg().signum() > 0) {
+            parts.add(pending.weightKg().stripTrailingZeros().toPlainString() + " kg");
+        }
+        if (pending.volumeM3().signum() > 0) {
+            parts.add(pending.volumeM3().stripTrailingZeros().toPlainString() + " m3");
+        }
+        if (pending.pallets().signum() > 0) {
+            parts.add(pending.pallets().stripTrailingZeros().toPlainString() + " pallets");
+        }
+        return parts.isEmpty() ? "nothing" : String.join(", ", parts);
     }
 
     /**
      * {@code PLANNED -> IN_EXECUTION}, driven by the departure of the trip that carries the order.
      *
-     * <p>Locks the row before reading its status, unlike {@link #markPlanned}: dispatch touches
-     * every order on the trip at once and two dispatchers racing the same shipment would otherwise
-     * both read {@code PLANNED} and both write. {@code markPlanned} does not need this because the
-     * partial unique index on {@code trip_order_assignment} is what serialises assignment.
+     * <p>Locks the row, as {@link #allocate} does and for the same reason: dispatch touches every
+     * order on the trip at once, and two dispatchers racing the same shipment would otherwise both
+     * read {@code PLANNED} and both write.
      *
      * <p>Silently does nothing when the order has already moved on. That is the idempotency the
      * port promises, and it has a second job: a dispatch replayed after somebody closed the trip
@@ -243,7 +296,7 @@ public class OrderPlanningService implements OrderPlanningPort {
         return new PlannableOrder(order.id(), order.orderNumber(), order.originId(), order.destinationId(),
                 order.customerName(), order.customerReference(), order.serviceDate(), order.priority().name(),
                 order.requestedWindowStart(), order.requestedWindowEnd(), order.totalWeightKg(), order.totalVolumeM3(),
-                order.totalPallets(), order.externalSource(), order.externalReference());
+                order.totalPallets(), order.externalSource(), order.externalReference(), order.allocated());
     }
 
     private static Pageable toPageable(PageQuery pageQuery) {
