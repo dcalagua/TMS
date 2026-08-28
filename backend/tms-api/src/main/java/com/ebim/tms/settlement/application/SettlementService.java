@@ -75,6 +75,22 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class SettlementService {
 
+    /**
+     * What happened to money we were asked to pay (JOB 24).
+     *
+     * <p>Tagged by outcome rather than counted once: a rising <b>rejection</b> rate is an operations
+     * signal - a carrier billing off an old tariff, or a matcher tuned too tight - and it is
+     * invisible in a single "invoices processed" number. An approval is business as usual; a
+     * refusal is somebody deciding not to pay, and those want telling apart on a dashboard.
+     *
+     * <p>Counts only. <b>No amounts.</b> A metric endpoint is not an authorisation boundary and
+     * these gauges are readable by anything scraping it, so what a company pays its carriers stays
+     * in the database where RLS covers it.
+     */
+    private static final String DECISION_METRIC = "tms.settlement.decisions";
+
+    private final io.micrometer.core.instrument.MeterRegistry meterRegistry;
+
     private final CarrierInvoiceRepository invoiceRepository;
     private final FreightMatchRepository matchRepository;
     private final FreightDiscrepancyRepository discrepancyRepository;
@@ -93,7 +109,8 @@ public class SettlementService {
             PayableExportRepository exportRepository, TolerancePolicyRepository tolerancePolicyRepository,
             TripCostLookupPort tripCostLookupPort, TripSettlementLookupPort tripSettlementLookupPort,
             CarrierLookupPort carrierLookupPort, PayableExportPort payableExportPort,
-            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder) {
+            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder,
+            io.micrometer.core.instrument.MeterRegistry meterRegistry) {
         this.invoiceRepository = invoiceRepository;
         this.matchRepository = matchRepository;
         this.discrepancyRepository = discrepancyRepository;
@@ -106,6 +123,7 @@ public class SettlementService {
         this.payableExportPort = payableExportPort;
         this.auditActorProvider = auditActorProvider;
         this.auditRecorder = auditRecorder;
+        this.meterRegistry = meterRegistry;
     }
 
     // ------------------------------------------------------------------ receiving
@@ -330,6 +348,9 @@ public class SettlementService {
         // what an approval record exists to make impossible. The pessimistic lock serialises the two
         // transactions; this is what makes the second one a no-op instead of a second signature.
         if (invoice.status() == InvoiceStatus.APPROVED) {
+            // Not counted. The metric answers "how many expenditures were authorised", and a second
+            // click on an already-approved invoice authorised nothing - counting it here would
+            // reproduce the double-approval defect in the telemetry after fixing it in the data.
             return toView(scope, invoice);
         }
 
@@ -339,6 +360,7 @@ public class SettlementService {
 
         approvalRepository.save(new SettlementApproval(scope.companyId(), invoice.id(),
                 SettlementApproval.Decision.APPROVED, actorId, blankToNull(comment)));
+        countDecision("approved");
         invoiceRepository.save(invoice);
         auditRecorder.record(scope, AuditAggregateType.CARRIER_INVOICE, invoice.id(), AuditAction.INVOICE_APPROVED,
                 Map.of("invoiceNumber", invoice.invoiceNumber(),
@@ -405,6 +427,7 @@ public class SettlementService {
 
         approvalRepository.save(new SettlementApproval(scope.companyId(), invoice.id(),
                 SettlementApproval.Decision.REJECTED, actorId, comment.trim()));
+        countDecision("rejected");
         invoiceRepository.save(invoice);
         auditRecorder.record(scope, AuditAggregateType.CARRIER_INVOICE, invoice.id(), AuditAction.INVOICE_REJECTED,
                 Map.of("invoiceNumber", invoice.invoiceNumber(), "reason", comment.trim()));
@@ -575,5 +598,19 @@ public class SettlementService {
     /** Money, never floating point. Kept here so no view has to remember the scale. */
     static BigDecimal money(BigDecimal value) {
         return value == null ? null : value.setScale(2, java.math.RoundingMode.HALF_UP);
+    }
+
+    /**
+     * One decision about money, tagged by which way it went (JOB 24).
+     *
+     * <p>Counts only - never amounts, and never a carrier's name. A metrics endpoint is not an
+     * authorisation boundary, and what a company pays which carrier stays in the database where RLS
+     * covers it. The useful operational signal is the <b>ratio</b>: rejections climbing means a
+     * tariff is out of date or the matcher is tuned too tight, and neither shows up in a single
+     * "invoices processed" count.
+     */
+    private void countDecision(String outcome) {
+        io.micrometer.core.instrument.Counter.builder(DECISION_METRIC)
+                .tag("outcome", outcome).register(meterRegistry).increment();
     }
 }

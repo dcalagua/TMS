@@ -4,15 +4,15 @@
 follows. Phase 1 (JOBS 01–16) is closed and recorded in `TMS_OVERNIGHT_MASTER_LOG.md`.*
 
 ```
-LAST_COMPLETED_JOB=  23
-CURRENT_JOB=         24
+LAST_COMPLETED_JOB=  24
+CURRENT_JOB=         25
 CURRENT_SUBSTEP=     not started
 LATEST_MIGRATION=    V48  (next free: V49)
-LAST_GOOD_HEAD=      pending commit of JOB 23
-TEST_STATUS=         backend 1840/0/0 · frontend 129 · e2e 36 pass 7 skipped · lint/build clean
+LAST_GOOD_HEAD=      pending commit of JOB 24
+TEST_STATUS=         backend 1842/0/0 · frontend 129 · e2e 36 pass 7 skipped · lint/build clean
 KNOWN_FAILURE=       none
 STOP_CHAIN=          false
-NEXT_ACTION=         JOB 24 - Observability & Operations Completion
+NEXT_ACTION=         JOB 25 - Performance Harness & Baseline
 ```
 
 ## Open debts
@@ -299,3 +299,32 @@ mismatch** where I passed 8 arguments to a 7-component record. The chain has now
 **Coverage gap recorded:** the composition is unit-tested and both queries are validated by a real
 Spring context starting, but no test proves a real discrepancy row reaching a real control tower
 response. The query is valid; that it selects exactly the right rows rests on review.
+
+### JOB 24 — 2026-08-28 — PASS
+
+`STARTED 14:20 · COMPLETED 14:52 · MIGRATION none · BACKEND 1842/0/0`
+
+**Observability was not absent - it was undocumented.** Actuator was already configured with real
+security discipline, a correlation id filter existed, and twelve business metrics were already
+emitted. What was missing was `docs/operations/` entirely, any signal from Phase 2's new
+capabilities, and anything keeping a metrics document honest.
+
+**Two metrics, both chosen for 02:00.** `tms.settlement.decisions` tagged approved/rejected, because
+a rising rejection rate means a tariff is out of date and is invisible in a single "invoices
+processed" figure. `tms.costing.own_fleet.quotes` with five outcomes, because "nobody configured
+this truck" and "we could not measure the route" are different jobs for different people.
+
+**Neither carries an amount.** `/actuator/metrics` has no authorisation, so what a company pays its
+carriers stays in the database where RLS covers it.
+
+**`MetricCatalogueTest` failed on its first run against my own document**, which is the case for it
+made by it: I had documented a counter as a timer, named neither real timer, and abbreviated two
+rows so that two live metrics were undocumented. **A hand-written catalogue was wrong within an hour
+of being written.**
+
+**Three documents, and the honest one is `DEPLOYMENT.md`**, which opens with a warning that no
+deployment has been verified and records **forward-only schema with no tested rollback as the
+largest unaddressed operational risk** rather than inventing a procedure.
+
+**No alert thresholds and no custom health indicator, both on purpose.** There is nowhere to send an
+alert, and a stale partner feed must not take TMS out of a load balancer.

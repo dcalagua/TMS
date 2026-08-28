@@ -48,15 +48,33 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class OwnFleetCostingService {
 
+    /**
+     * Whether we could put a number on running our own truck (JOB 24).
+     *
+     * <p>The one metric on this path worth having, and it is a <b>configuration</b> signal rather
+     * than a performance one. Every quote tagged {@code no_profile} or {@code incomplete} is a
+     * shipment planning cannot compare against a carrier - the estimate is correctly withheld, and
+     * the cost of that correctness is a decision somebody is making with less information than they
+     * think. A dashboard where that ratio climbs after a fleet expansion is somebody having added
+     * trucks and not their rates.
+     *
+     * <p>Counts only, never amounts: what our own fleet costs is exactly the kind of figure a
+     * metrics endpoint must not publish.
+     */
+    private static final String QUOTE_METRIC = "tms.costing.own_fleet.quotes";
+
     private final OwnFleetCostProfileRepository profileRepository;
     private final OwnFleetTripLookupPort tripLookupPort;
     private final ResourceDutyLookupPort resourceDutyLookupPort;
+    private final io.micrometer.core.instrument.MeterRegistry meterRegistry;
 
     public OwnFleetCostingService(OwnFleetCostProfileRepository profileRepository,
-            OwnFleetTripLookupPort tripLookupPort, ResourceDutyLookupPort resourceDutyLookupPort) {
+            OwnFleetTripLookupPort tripLookupPort, ResourceDutyLookupPort resourceDutyLookupPort,
+            io.micrometer.core.instrument.MeterRegistry meterRegistry) {
         this.profileRepository = profileRepository;
         this.tripLookupPort = tripLookupPort;
         this.resourceDutyLookupPort = resourceDutyLookupPort;
+        this.meterRegistry = meterRegistry;
     }
 
     /**
@@ -74,12 +92,12 @@ public class OwnFleetCostingService {
                         "No shipment " + tripId + " in this company"));
 
         if (trip.vehicleId() == null) {
-            return unavailable(tripId, OwnFleetQuoteUnavailable.NO_VEHICLE_ASSIGNED);
+            return counted(unavailable(tripId, OwnFleetQuoteUnavailable.NO_VEHICLE_ASSIGNED));
         }
         if (!trip.isOwnFleet()) {
             // A subcontracted shipment has a carrier's PRICE. Modelling an internal cost for it
             // would put a second, softer number beside a real one for the same movement.
-            return unavailable(tripId, OwnFleetQuoteUnavailable.NOT_OWN_FLEET);
+            return counted(unavailable(tripId, OwnFleetQuoteUnavailable.NOT_OWN_FLEET));
         }
 
         LocalDate on = costingDate(trip);
@@ -91,13 +109,13 @@ public class OwnFleetCostingService {
             // No rates configured. NOT a cost of zero - that would make every unconfigured truck
             // the cheapest option on every comparison, which is the failure this job exists to
             // prevent.
-            return unavailable(tripId, OwnFleetQuoteUnavailable.NO_PROFILE_IN_FORCE);
+            return counted(unavailable(tripId, OwnFleetQuoteUnavailable.NO_PROFILE_IN_FORCE));
         }
 
         OwnFleetCostProfile profile = resolved.get();
         OwnFleetCostEstimate estimate =
                 OwnFleetCostCalculator.calculate(profile.rates(), inputsFor(scope, trip));
-        return toView(tripId, profile, estimate);
+        return counted(toView(tripId, profile, estimate));
     }
 
     /** The quote as planning compares it - the nature preserved, the amount nullable. */
@@ -181,5 +199,29 @@ public class OwnFleetCostingService {
                 line.quantitySource(),
                 line.amount(),
                 line.reason());
+    }
+
+    /**
+     * Tags one quote by what came of it, and hands it straight back.
+     *
+     * <p>Four outcomes rather than costed/not: "nobody configured this truck" and "we could not
+     * measure the route" are different jobs for different people, and a single {@code failed}
+     * would send both to whoever read the dashboard first. Same reason the API returns typed
+     * reasons rather than a null.
+     */
+    private OwnFleetQuoteView counted(OwnFleetQuoteView view) {
+        String outcome;
+        if (view.unavailableReason() != null) {
+            outcome = switch (view.unavailableReason()) {
+                case NO_VEHICLE_ASSIGNED -> "no_vehicle";
+                case NOT_OWN_FLEET -> "not_own_fleet";
+                case NO_PROFILE_IN_FORCE -> "no_profile";
+            };
+        } else {
+            outcome = view.complete() ? "costed" : "incomplete";
+        }
+        io.micrometer.core.instrument.Counter.builder(QUOTE_METRIC)
+                .tag("outcome", outcome).register(meterRegistry).increment();
+        return view;
     }
 }
