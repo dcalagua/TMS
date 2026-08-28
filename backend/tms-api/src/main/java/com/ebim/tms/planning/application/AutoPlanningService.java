@@ -16,7 +16,12 @@ import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.audit.AuditAggregateType;
 import com.ebim.tms.shared.audit.AuditRecorder;
+import com.ebim.tms.shared.reference.DestinationLookupPort;
+import com.ebim.tms.shared.reference.GeoPoint;
+import com.ebim.tms.shared.reference.MasterReference;
+import com.ebim.tms.shared.reference.RoutingPort;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
+import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.PlannableOrderQuery;
 import com.ebim.tms.shared.reference.RouteTemplate;
@@ -75,7 +80,10 @@ public class AutoPlanningService {
     private final PlanningRunRepository planningRunRepository;
     private final TripRepository tripRepository;
     private final TripService tripService;
-    private final PlanningEngine engine;
+    private final PlanningEngines engines;
+    private final RoutingPort routingPort;
+    private final DestinationLookupPort destinationLookupPort;
+    private final OriginLookupPort originLookupPort;
     private final OrderPlanningPort orderPlanningPort;
     private final VehicleLookupPort vehicleLookupPort;
     private final RouteTemplateLookupPort routeTemplateLookupPort;
@@ -84,14 +92,19 @@ public class AutoPlanningService {
     private final AuditRecorder auditRecorder;
 
     public AutoPlanningService(PlanningRunRepository planningRunRepository, TripRepository tripRepository,
-            TripService tripService, PlanningEngine engine, OrderPlanningPort orderPlanningPort,
+            TripService tripService, PlanningEngines engines, RoutingPort routingPort,
+            DestinationLookupPort destinationLookupPort, OriginLookupPort originLookupPort,
+            OrderPlanningPort orderPlanningPort,
             VehicleLookupPort vehicleLookupPort, RouteTemplateLookupPort routeTemplateLookupPort,
             ServiceCalendarPort serviceCalendarPort, AuditActorProvider auditActorProvider,
             AuditRecorder auditRecorder) {
         this.planningRunRepository = planningRunRepository;
         this.tripRepository = tripRepository;
         this.tripService = tripService;
-        this.engine = engine;
+        this.engines = engines;
+        this.routingPort = routingPort;
+        this.destinationLookupPort = destinationLookupPort;
+        this.originLookupPort = originLookupPort;
         this.orderPlanningPort = orderPlanningPort;
         this.vehicleLookupPort = vehicleLookupPort;
         this.routeTemplateLookupPort = routeTemplateLookupPort;
@@ -105,10 +118,10 @@ public class AutoPlanningService {
      * would produce - a preview a planner can look at before committing to it.
      */
     @Transactional(readOnly = true)
-    public AutoPlanView preview(CompanyScope scope, UUID runId) {
+    public AutoPlanView preview(CompanyScope scope, UUID runId, String engineName) {
         PlanningRun run = requireDraftRun(scope, runId);
         Snapshot snapshot = snapshot(scope, run);
-        PlanningProposal proposal = propose(snapshot);
+        PlanningProposal proposal = propose(snapshot, engines.select(engineName));
         return AutoPlanView.preview(proposal, snapshot.orderNumbers(), snapshot.vehicleCodes());
     }
 
@@ -127,7 +140,7 @@ public class AutoPlanningService {
         }
 
         Snapshot snapshot = snapshot(scope, run);
-        PlanningProposal proposal = propose(snapshot);
+        PlanningProposal proposal = propose(snapshot, engines.select(request.engine()));
         if (proposal.trips().isEmpty()) {
             return AutoPlanView.applied(proposal, List.of(), snapshot.orderNumbers(), snapshot.vehicleCodes());
         }
@@ -227,15 +240,78 @@ public class AutoPlanningService {
         Map<UUID, String> vehicleCodes = new LinkedHashMap<>();
         vehicles.forEach(vehicle -> vehicleCodes.put(vehicle.id(), vehicle.code()));
 
-        PlanningInput input = new PlanningInput(run.originId(), run.planningDate(), plannable, vehicles, routes);
+        // Distances resolved once, here, and handed to the engine as data (JOB 05). The engine
+        // stays a pure function of its input, which is what makes a proposal reproducible - see
+        // TravelMatrix. An engine that ignores them, like HEURISTIC_V1, simply does not look.
+        Map<UUID, MasterReference> places = resolvePlaces(scope, run, plannable);
+        TravelMatrix travel = resolveTravel(scope, run, plannable, places);
+        Map<UUID, Integer> serviceMinutes = new LinkedHashMap<>();
+
+        PlanningInput input = new PlanningInput(run.originId(), run.planningDate(), plannable, vehicles, routes,
+                travel, serviceMinutes, PlanningShift.DEFAULT);
         return new Snapshot(input, excluded, orderNumbers, vehicleCodes);
     }
 
-    private PlanningProposal propose(Snapshot snapshot) {
+    /** The origin and every destination of the day, in one batched lookup each. */
+    private Map<UUID, MasterReference> resolvePlaces(CompanyScope scope, PlanningRun run,
+            List<PlannableOrder> plannable) {
+        Map<UUID, MasterReference> places = new LinkedHashMap<>();
+        places.putAll(originLookupPort.findAllInCompany(Set.of(run.originId()), scope.companyId()));
+        Set<UUID> destinationIds =
+                plannable.stream().map(PlannableOrder::destinationId).collect(Collectors.toSet());
+        if (!destinationIds.isEmpty()) {
+            places.putAll(destinationLookupPort.findAllInCompany(destinationIds, scope.companyId()));
+        }
+        return places;
+    }
+
+    /**
+     * Every leg the engine could need: origin to each destination, and each destination to every
+     * other.
+     *
+     * <p>Asked as one matrix rather than leg by leg, so a day with fifteen destinations costs one
+     * call into routing instead of two hundred and forty. Places with no coordinates are simply
+     * absent - the matrix reports them unknown and every distance-aware decision degrades to the
+     * behaviour it had before V38.
+     */
+    private TravelMatrix resolveTravel(CompanyScope scope, PlanningRun run, List<PlannableOrder> plannable,
+            Map<UUID, MasterReference> places) {
+        List<UUID> ids = new ArrayList<>();
+        ids.add(run.originId());
+        plannable.stream().map(PlannableOrder::destinationId).distinct().forEach(ids::add);
+
+        Map<GeoPoint, UUID> idByPoint = new LinkedHashMap<>();
+        List<GeoPoint> points = new ArrayList<>();
+        for (UUID id : ids.stream().distinct().toList()) {
+            MasterReference place = places.get(id);
+            GeoPoint point = place == null ? null : GeoPoint.of(place.latitude(), place.longitude());
+            if (point != null && idByPoint.putIfAbsent(point, id) == null) {
+                points.add(point);
+            }
+        }
+        if (points.size() < 2) {
+            return TravelMatrix.EMPTY;
+        }
+
+        TravelMatrix.Builder builder = new TravelMatrix.Builder();
+        routingPort.matrix(scope.companyId(), points, points).forEach((leg, estimate) ->
+                builder.add(idByPoint.get(leg.origin()), idByPoint.get(leg.destination()), estimate));
+        return builder.build();
+    }
+
+    private PlanningProposal propose(Snapshot snapshot, PlanningEngine engine) {
         PlanningProposal proposal = engine.plan(snapshot.input());
         List<UnplannedOrder> unplanned = new ArrayList<>(snapshot.excludedByCalendar());
         unplanned.addAll(proposal.unplanned());
-        PlanningProposal complete = new PlanningProposal(proposal.engine(), proposal.trips(), unplanned);
+        // The calendar exclusions join the engine's own list, so the KPI block's unplanned count
+        // is the whole truth about the day rather than only the part the engine touched.
+        PlanningKpis kpis = new PlanningKpis(
+                proposal.kpis().trips(), proposal.kpis().vehicles(), proposal.kpis().plannedOrders(),
+                unplanned.size(), proposal.kpis().lateOrders(), proposal.kpis().totalDistanceKm(),
+                proposal.kpis().totalDurationMinutes(), proposal.kpis().weightUtilizationPercent(),
+                proposal.kpis().volumeUtilizationPercent(), proposal.kpis().palletUtilizationPercent(),
+                proposal.kpis().distanceEstimated(), proposal.kpis().totalCost());
+        PlanningProposal complete = new PlanningProposal(proposal.engine(), proposal.trips(), unplanned, kpis);
         assertEveryOrderAccountedFor(snapshot, complete);
         return complete;
     }

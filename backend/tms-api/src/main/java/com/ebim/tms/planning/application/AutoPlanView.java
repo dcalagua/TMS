@@ -33,7 +33,13 @@ public record AutoPlanView(
         List<TripDetailView> created,
         List<UnplannedOrderView> unplanned,
         int ordersConsidered,
-        int vehiclesOffered) {
+        int vehiclesOffered,
+        /**
+         * What this proposal costs a day (JOB 05). Never null - an engine that scores nothing
+         * reports {@link PlanningKpis#NONE}. It is what makes previewing the same run under two
+         * engines a comparison rather than two opinions.
+         */
+        PlanningKpis kpis) {
 
     /** One proposed load, in the words of the screen rather than of the engine. */
     public record ProposedTripView(
@@ -47,13 +53,15 @@ public record AutoPlanView(
     static AutoPlanView preview(
             PlanningProposal proposal, Map<UUID, String> orderNumbers, Map<UUID, String> vehicleCodes) {
         return new AutoPlanView(false, proposal.engine(), proposedViews(proposal, orderNumbers, vehicleCodes),
-                List.of(), unplannedViews(proposal), orderNumbers.size(), vehicleCodes.size());
+                List.of(), unplannedViews(proposal), orderNumbers.size(), vehicleCodes.size(),
+                proposal.kpis());
     }
 
     static AutoPlanView applied(PlanningProposal proposal, List<TripDetailView> created,
             Map<UUID, String> orderNumbers, Map<UUID, String> vehicleCodes) {
         return new AutoPlanView(true, proposal.engine(), proposedViews(proposal, orderNumbers, vehicleCodes),
-                List.copyOf(created), unplannedViews(proposal), orderNumbers.size(), vehicleCodes.size());
+                List.copyOf(created), unplannedViews(proposal), orderNumbers.size(), vehicleCodes.size(),
+                proposal.kpis());
     }
 
     private static List<ProposedTripView> proposedViews(

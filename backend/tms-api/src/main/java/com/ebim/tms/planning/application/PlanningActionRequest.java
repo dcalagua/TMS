@@ -18,5 +18,17 @@ import jakarta.validation.constraints.Size;
  */
 public record PlanningActionRequest(
         @NotNull(message = "is required") Long version,
-        @Size(max = 500, message = "must be at most 500 characters") String reason) {
+        @Size(max = 500, message = "must be at most 500 characters") String reason,
+        /**
+         * Which planning engine to run (JOB 05). Null means {@code PlanningEngines.DEFAULT_ENGINE},
+         * which is still {@code HEURISTIC_V1} - so every existing caller keeps the proposals it has
+         * always got, and choosing {@code PLANNING_V2} is a deliberate act rather than a silent
+         * upgrade of what a familiar button does.
+         */
+        @Size(max = 40, message = "must be at most 40 characters") String engine) {
+
+    /** The pre-JOB-05 shape: the default engine. */
+    public PlanningActionRequest(Long version, String reason) {
+        this(version, reason, null);
+    }
 }

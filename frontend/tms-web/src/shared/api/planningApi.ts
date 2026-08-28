@@ -523,6 +523,11 @@ export function createPlanningRun(companyId: string, request: PlanningRunRequest
 export interface PlanningActionRequest {
   version: number
   reason?: string | null
+  /**
+   * Qué motor ejecutar (JOB 05). Ausente significa `HEURISTIC_V1`, el de siempre: cambiar el
+   * algoritmo bajo un botón conocido sin decirlo sería el peor resultado posible.
+   */
+  engine?: string | null
 }
 
 export function confirmPlanningRun(
@@ -552,6 +557,10 @@ export interface UnplannedOrderView {
     | 'NO_FLEET'
     | 'TAKEN_WHILE_PLANNING'
     | 'NOT_SERVICEABLE_ON_DATE'
+    /** Todo el viaje se habría salido de la jornada. Solo PLANNING_V2 lo produce. */
+    | 'EXCEEDS_SHIFT'
+    /** No queda nada por planificar: el pedido ya está entero en viajes (V37). No es un fallo. */
+    | 'FULLY_ALLOCATED'
 }
 
 /** Mirrors `AutoPlanView.ProposedTripView`. */
@@ -567,6 +576,45 @@ export interface ProposedTripView {
  * Mirrors the backend's `AutoPlanView`. Preview and apply return the same shape, differing only
  * in `applied` and `created` - so what the planner reviewed is what they get.
  */
+/**
+ * Mirrors `PlanningKpis` (JOB 05): lo que cuesta una propuesta, en los términos con los que un
+ * planificador la juzga.
+ *
+ * `totalCost` es **siempre null hoy**. Poner precio a un viaje hipotético necesita un puerto de
+ * tarificación que acepte una propuesta y no un envío ya guardado, que es JOB 06. Se deja ausente
+ * a propósito: una cifra inventada sería peor que ninguna, porque alguien compararía dos motores
+ * con ella.
+ *
+ * Los porcentajes de utilización son null — no cero — cuando ningún vehículo declara un límite:
+ * "no se sabe" y "camión vacío" no son lo mismo.
+ */
+export interface PlanningKpis {
+  trips: number
+  vehicles: number
+  plannedOrders: number
+  unplannedOrders: number
+  lateOrders: number
+  totalDistanceKm: number
+  totalDurationMinutes: number
+  weightUtilizationPercent: number | null
+  volumeUtilizationPercent: number | null
+  palletUtilizationPercent: number | null
+  /** Alguna distancia salió del estimador local y no de un enrutador. */
+  distanceEstimated: boolean
+  totalCost: number | null
+  plannedRatePercent: number | null
+  kilometresPerPlannedOrder: number | null
+}
+
+/** Los motores que el backend ofrece. El nombre viaja en la propuesta para poder rastrearla. */
+export type PlanningEngineName = 'HEURISTIC_V1' | 'PLANNING_V2'
+
+export const PLANNING_ENGINES: PlanningEngineName[] = ['HEURISTIC_V1', 'PLANNING_V2']
+
+/**
+ * Mirrors the backend's `AutoPlanView`. Preview and apply return the same shape, differing only
+ * in `applied` and `created` - so what the planner reviewed is what they get.
+ */
 export interface AutoPlanView {
   applied: boolean
   engine: string
@@ -575,11 +623,16 @@ export interface AutoPlanView {
   unplanned: UnplannedOrderView[]
   ordersConsidered: number
   vehiclesOffered: number
+  kpis: PlanningKpis
 }
 
 /** What automatic planning would do. Writes nothing. */
-export function previewAutoPlan(companyId: string, runId: string, signal?: AbortSignal): Promise<AutoPlanView> {
-  return apiRequest<AutoPlanView>(`/planning/runs/${runId}/auto-plan/preview`, { companyId, signal })
+export function previewAutoPlan(
+  companyId: string, runId: string, engine?: PlanningEngineName, signal?: AbortSignal,
+): Promise<AutoPlanView> {
+  return apiRequest<AutoPlanView>(`/planning/runs/${runId}/auto-plan/preview`, {
+    companyId, signal, query: engine ? { engine } : undefined,
+  })
 }
 
 /** Writes the proposal as draft trips. Never confirms them. */

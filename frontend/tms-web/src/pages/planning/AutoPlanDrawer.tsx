@@ -1,11 +1,13 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   Alert, Box, Button, Chip, Paper, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Typography,
+  TableHead, TableRow, ToggleButton, ToggleButtonGroup, Typography,
 } from "@mui/material";
 import { AutoFixHighRounded } from "@mui/icons-material";
 import {
-  applyAutoPlan, previewAutoPlan, type AutoPlanView, type UnplannedOrderView,
+  applyAutoPlan, previewAutoPlan, PLANNING_ENGINES,
+  type AutoPlanView, type PlanningEngineName, type UnplannedOrderView,
 } from "../../shared/api/planningApi";
 import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
@@ -41,9 +43,13 @@ interface AutoPlanDrawerProps {
 export function AutoPlanDrawer({
   companyId, runId, runVersion, canApply, onClose, onApplied,
 }: AutoPlanDrawerProps) {
+  // El motor elegido forma parte de la clave: previsualizar con el otro es otra propuesta, no un
+  // refresco de la misma, y es exactamente así como se comparan los dos sobre el mismo día.
+  const [engine, setEngine] = useState<PlanningEngineName>("HEURISTIC_V1");
+
   const preview = useQuery({
-    queryKey: ["auto-plan-preview", companyId, runId],
-    queryFn: ({ signal }) => previewAutoPlan(companyId, runId, signal),
+    queryKey: ["auto-plan-preview", companyId, runId, engine],
+    queryFn: ({ signal }) => previewAutoPlan(companyId, runId, engine, signal),
     // Una propuesta es una foto de la cola: volver a pedirla mientras el planificador la lee
     // cambiaría justo aquello sobre lo que está decidiendo.
     staleTime: Infinity,
@@ -51,7 +57,7 @@ export function AutoPlanDrawer({
   });
 
   const apply = useMutation({
-    mutationFn: () => applyAutoPlan(companyId, runId, { version: runVersion }),
+    mutationFn: () => applyAutoPlan(companyId, runId, { version: runVersion, engine }),
     onSuccess: (result) => {
       notifySuccess(
         t("Propuesta aplicada"),
@@ -89,6 +95,25 @@ export function AutoPlanDrawer({
         </>
       }
     >
+      {/* Elegir el motor recarga la previsualización. Comparar los dos sobre el mismo día es el
+          punto: el que se aplica es el que está seleccionado, así que la propuesta que el
+          planificador está mirando es la que se va a escribir. */}
+      <SectionHeader title={t("Motor de planificación")} />
+      <ToggleButtonGroup
+        exclusive size="small" value={engine} sx={{ mb: 1 }}
+        onChange={(_, next: PlanningEngineName | null) => { if (next) setEngine(next); }}
+        aria-label={t("Motor de planificación")}
+      >
+        {PLANNING_ENGINES.map((name) => (
+          <ToggleButton key={name} value={name}>{name}</ToggleButton>
+        ))}
+      </ToggleButtonGroup>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 3 }}>
+        {engine === "HEURISTIC_V1"
+          ? t("Agrupa por corredor y llena la unidad más grande disponible. No mira distancias ni jornada.")
+          : t("Además ordena las paradas por cercanía y descarta viajes que no caben en la jornada.")}
+      </Typography>
+
       {preview.isError && (
         <Alert severity="error">{describeApiError(preview.error as ApiError)}</Alert>
       )}
@@ -108,6 +133,11 @@ const REASON_COPY = {
   NO_FLEET: "No hay unidades disponibles para esta fecha.",
   TAKEN_WHILE_PLANNING: "Otro planificador asignó este pedido mientras se escribía el plan. Recarga el tablero.",
   NOT_SERVICEABLE_ON_DATE: "El destino no se atiende en esta fecha según su calendario de servicio.",
+  // PLANNING_V2 los produce. El primero se resuelve con una salida más temprana, una jornada más
+  // larga o paradas más cercanas — nunca con otro camión, que es justo lo que "sin capacidad"
+  // haría buscar.
+  EXCEEDS_SHIFT: "El viaje no cabe en la jornada. Adelanta la salida, amplía la jornada o reparte las paradas.",
+  FULLY_ALLOCATED: "Ya está entero en viajes: no queda nada por planificar.",
 } as const satisfies Record<UnplannedOrderView["reason"], string>;
 
 function AutoPlanBody({ plan }: { plan: AutoPlanView }) {
@@ -136,6 +166,40 @@ function AutoPlanBody({ plan }: { plan: AutoPlanView }) {
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 3 }}>
         {t("Generado por {{engine}}. La misma entrada produce siempre la misma propuesta.", { engine: plan.engine })}
       </Typography>
+
+      {plan.kpis.trips > 0 && (
+        <>
+          <SectionHeader title={t("Indicadores de la propuesta")} />
+          <Paper variant="outlined" sx={{ p: 2, mb: 1.5, display: "flex", flexWrap: "wrap", gap: 2, justifyContent: "space-around" }}>
+            {stat(t("Unidades usadas"), plan.kpis.vehicles)}
+            {stat(t("Kilómetros"), Math.round(plan.kpis.totalDistanceKm))}
+            {stat(t("Minutos"), plan.kpis.totalDurationMinutes)}
+            {stat(t("Pedidos con retraso"), plan.kpis.lateOrders)}
+          </Paper>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 1.5 }}>
+            {plan.kpis.weightUtilizationPercent !== null && (
+              <Chip size="small" variant="outlined"
+                label={t("Peso {{p}}%", { p: plan.kpis.weightUtilizationPercent })} />
+            )}
+            {plan.kpis.volumeUtilizationPercent !== null && (
+              <Chip size="small" variant="outlined"
+                label={t("Volumen {{p}}%", { p: plan.kpis.volumeUtilizationPercent })} />
+            )}
+            {plan.kpis.palletUtilizationPercent !== null && (
+              <Chip size="small" variant="outlined"
+                label={t("Pallets {{p}}%", { p: plan.kpis.palletUtilizationPercent })} />
+            )}
+            {plan.kpis.distanceEstimated && (
+              <Chip size="small" color="warning" variant="outlined" label={t("Distancias estimadas")} />
+            )}
+          </Box>
+          {/* El coste es la única cifra que falta, y se dice en voz alta en vez de mostrar un cero
+              que alguien compararía entre motores. */}
+          <Alert severity="info" variant="outlined" sx={{ mb: 3 }}>
+            {t("El coste todavía no se calcula sobre una propuesta: requiere tarificar un viaje que aún no existe.")}
+          </Alert>
+        </>
+      )}
 
       <SectionHeader title={t("Viajes propuestos")} />
       {plan.proposed.length === 0 ? (

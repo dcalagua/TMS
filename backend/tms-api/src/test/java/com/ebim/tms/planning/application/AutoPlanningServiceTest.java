@@ -25,6 +25,9 @@ import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.audit.AuditAggregateType;
 import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
+import com.ebim.tms.shared.reference.RoutingPort;
+import com.ebim.tms.shared.reference.DestinationLookupPort;
+import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.reference.OrderAmounts;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.RouteTemplate;
@@ -144,8 +147,19 @@ class AutoPlanningServiceTest {
                             .collect(Collectors.toSet());
                 });
 
+        // The registry, not a single engine: the default is still HEURISTIC_V1, so every
+        // assertion in this class goes on describing exactly the behaviour it always described.
+        RoutingPort routingPort = mock(RoutingPort.class);
+        when(routingPort.matrix(any(), any(), any())).thenReturn(java.util.Map.of());
+        DestinationLookupPort destinationLookupPort = mock(DestinationLookupPort.class);
+        when(destinationLookupPort.findAllInCompany(any(), any())).thenReturn(java.util.Map.of());
+        OriginLookupPort originLookupPort = mock(OriginLookupPort.class);
+        when(originLookupPort.findAllInCompany(any(), any())).thenReturn(java.util.Map.of());
+
         service = new AutoPlanningService(planningRunRepository, tripRepository, board.asTripService(),
-                new HeuristicPlanningEngine(), orderPlanningPort, vehicleLookupPort, routeTemplateLookupPort,
+                new PlanningEngines(List.of(new HeuristicPlanningEngine(), new PlanningEngineV2())),
+                routingPort, destinationLookupPort, originLookupPort,
+                orderPlanningPort, vehicleLookupPort, routeTemplateLookupPort,
                 serviceCalendarPort, actors, auditRecorder);
     }
 
@@ -508,7 +522,7 @@ class AutoPlanningServiceTest {
             order("a", 1_000);
             vehicle("truck", 10_000);
 
-            AutoPlanView view = service.preview(SCOPE, RUN);
+            AutoPlanView view = service.preview(SCOPE, RUN, null);
 
             assertThat(view.applied()).isFalse();
             assertThat(view.created()).isEmpty();
