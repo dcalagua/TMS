@@ -26,6 +26,7 @@ export const CORE_MODULES: readonly Module[] = [
 export const OTHER_MODULES: readonly Module[] = [
   { path: "/appointments", label: "Citas de muelle" },
   { path: "/settlement", label: "Auditoría de flete" },
+  { path: "/work-assignments", label: "Días de trabajo" },
   { path: "/masters/origins", label: "Orígenes" },
   { path: "/masters/destinations", label: "Destinos" },
   { path: "/masters/zones", label: "Zonas" },

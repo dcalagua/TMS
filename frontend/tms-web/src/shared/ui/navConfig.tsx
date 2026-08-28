@@ -8,6 +8,7 @@ import {
   ApartmentRounded, GroupsRounded, PowerRounded, HistoryRounded,
   EventAvailableRounded,
   ReceiptLongRounded,
+  EventNoteRounded,
 } from "@mui/icons-material";
 
 /** Una hoja del menú: una pantalla concreta. */
@@ -49,6 +50,7 @@ export const ICON_TINTS: Record<string, string> = {
   "/trips": "#66BB6A",
   "/appointments": "#FFA726",
   "/settlement": "#8D6E63",
+  "/work-assignments": "#7E57C2",
   "/masters/locations": "#4FC3F7",
   "/masters/origins": "#4DB6AC",
   "/masters/destinations": "#7986CB",
@@ -110,6 +112,10 @@ export const NAV_SECTIONS: NavSection[] = [
       // planificó. TMS valida y exporta; el ERP paga.
       { to: "/settlement", label: "Auditoría de flete", icon: <ReceiptLongRounded />,
         capability: "SETTLEMENT_VIEW" },
+      // Junto a Viajes y no en Maestros: mantener la ficha de un camión y planificar su día son
+      // trabajos distintos que hacen personas distintas.
+      { to: "/work-assignments", label: "Días de trabajo", icon: <EventNoteRounded />,
+        capability: "WORK_ASSIGNMENT_VIEW" },
     ],
   },
   {

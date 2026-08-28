@@ -83,6 +83,28 @@ export const ENUM_LABELS = {
     TUESDAY: "Mar",
     WEDNESDAY: "Mié",
   },
+  /**
+   * V47: por qué un conductor y un vehículo no pueden ejecutar un envío.
+   *
+   * Nueve y no un genérico, porque el sistema sabe la causa y cada una la resuelve otra persona.
+   */
+  resourceRejectionReason: {
+    CARRIER_MISMATCH: "Transportista no coincide",
+    DRIVER_UNAVAILABLE: "Conductor no disponible",
+    INSUFFICIENT_REPOSITION_TIME: "Sin tiempo para desplazarse",
+    LICENSE_INVALID: "Licencia no vigente",
+    MAINTENANCE_BLOCK: "Vehículo en taller",
+    ROUTING_UNKNOWN: "Tramo sin medir",
+    SHIFT_CONFLICT: "Fuera del turno",
+    TRIP_OVERLAP: "Envíos solapados",
+    VEHICLE_UNAVAILABLE: "Vehículo no disponible",
+  },
+  /** V47: el estado del día de trabajo. */
+  workAssignmentStatus: {
+    CANCELLED: "Cancelado",
+    CONFIRMED: "Confirmado",
+    PLANNED: "Planificado",
+  },
   /** V46: dónde está una factura de transportista en la auditoría de flete. */
   invoiceStatus: {
     APPROVED: "Aprobada",

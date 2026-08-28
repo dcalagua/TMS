@@ -4,12 +4,12 @@
 follows. Phase 1 (JOBS 01–16) is closed and recorded in `TMS_OVERNIGHT_MASTER_LOG.md`.*
 
 ```
-LAST_COMPLETED_JOB=  20 (+ maker/checker post-check)
-CURRENT_JOB=         21
+LAST_COMPLETED_JOB=  21
+CURRENT_JOB=         22
 CURRENT_SUBSTEP=     starting
-LATEST_MIGRATION=    V46  (next free: V47)
-LAST_GOOD_HEAD=      pending commit of the post-check
-TEST_STATUS=         backend 1761/0/0 · frontend 107 · e2e 35 pass 7 skipped · lint/build clean
+LATEST_MIGRATION=    V47  (next free: V48)
+LAST_GOOD_HEAD=      pending commit of JOB 21
+TEST_STATUS=         backend 1787/0/0 · frontend 114 · e2e 36 pass 7 skipped · lint/build clean
 KNOWN_FAILURE=       none
 STOP_CHAIN=          false
 NEXT_ACTION=         JOB 21 - Work Assignments & Resource Sequencing (D5)
@@ -23,7 +23,7 @@ NEXT_ACTION=         JOB 21 - Work Assignments & Resource Sequencing (D5)
 | D2 | Accepted tender vs vehicle owner | RESOLVED (V42) |
 | D3 | Delivered quantity | **RESOLVED** (JOB 19, V45) - two grains, ceiling enforced, nothing inferred |
 | D4 | System actor / automatic tender advancement | DEFERRED_WITH_REASON — stays deferred in Phase 2 |
-| **D5** | **Work assignment model** | **OPEN** → JOB 21 |
+| D5 | Work assignment model | **RESOLVED** (JOB 21, V47) - sequencing, routing feasibility, concurrency, UI |
 | **D6** | **Own-fleet costing** | **OPEN** → JOB 22 |
 | **D10** | No cost allocation of an invoice across orders | **OPEN** - new in JOB 20 | V45 supplies delivered quantity so it is now possible; distributing on a rule nobody chose is not. Needs a per-company strategy decision |
 | D7 | Control Tower backend tests | RESOLVED (Phase 1) |
@@ -37,8 +37,8 @@ NEXT_ACTION=         JOB 21 - Work Assignments & Resource Sequencing (D5)
 | 17 | Documentation & capability reconciliation | **PASS** | 09:44 | `7547a9b` | none | 1684 / 0 |
 | 18 | Persisted enum / CHECK guard | **PASS** | 09:58 | `8660062` | **V44** | 1688 / 0 |
 | 19 | Delivered Quantity V1 | **PASS** | 10:09 | `2de7e27` | **V45** | 1712 / 0 |
-| 20 | Freight Audit & Settlement V1 | **PASS** | 11:25 | *(this commit)* | **V46** | 1756 / 0 |
-| 21 | Work Assignments & Resource Sequencing | pending | - | - | - | - |
+| 20 | Freight Audit & Settlement V1 | **PASS** | 11:25 | `02ab611` | **V46** | 1756 / 0 |
+| 21 | Work Assignments & Resource Sequencing | **PASS** | 11:56 | *(this commit)* | **V47** | 1787 / 0 |
 | 22 | Own Fleet Costing V1 | pending | - | - | - | - |
 | 23 | Operational Exceptions & Control Tower V3 | pending | - | - | - | - |
 | 24 | Observability & Operations Completion | pending | - | - | - | - |
@@ -186,3 +186,35 @@ they had one admin creating and approving - the rule working, and they were move
 rather than the rule being weakened.
 
 `TMS_PHASE2_JOB_20_RESULT.md` carries the correction in place, labelled, rather than quietly amended.
+
+### JOB 21 — 2026-08-28 — PASS
+
+`STARTED 11:39 · COMPLETED 11:56 · MIGRATION V47 · BACKEND 1787/0/0 · FRONTEND 114 · E2E 36/7`
+
+**D5 RESOLVED.** All nine pillars YES with evidence.
+
+**The rule the job is built around:** a work assignment organises shipments and **never becomes an
+alternative route past a dispatch guard**. A shipment whose accepted carrier does not own the vehicle
+(D2) is reported as `CARRIER_MISMATCH` and repaired nowhere.
+
+**The core invariant is a pure function:** `previous.end + reposition <= next.start`, measured
+through the routing port and never invented. **An unmeasurable leg is `ROUTING_UNKNOWN`, not zero** -
+the third time this chain has had to make that distinction (V43 ETAs, V45 quantities, now this).
+
+**Nine typed reasons, not one generic.** `MAINTENANCE_BLOCK` is separate from `VEHICLE_UNAVAILABLE`
+because a workshop books a truck out and a planner cannot argue with it.
+
+**Every operation revalidates the whole sequence** - one endpoint for add, remove and reorder,
+because moving a shipment breaks the leg into it *and* the leg out of it.
+
+**V42's refusal of overnight shifts respected**, not quietly removed: work crossing midnight is
+refused with `SHIFT_CONFLICT` rather than granted support the model does not have.
+
+**Concurrency is a database fact:** two partial unique indexes, two real two-thread races, exactly
+one winner each.
+
+**DEFECTS_FOUND=1, DEFECTS_FIXED=1.** A shipment's origin was resolved as its first stop's
+destination - wrong by exactly one leg on every join in every day, and the resulting figures would
+have looked entirely plausible. Caught on review before any test ran.
+
+**D10 untouched and still OPEN**, as instructed: no default allocation rule was chosen.
