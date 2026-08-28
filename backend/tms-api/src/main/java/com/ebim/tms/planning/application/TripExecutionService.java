@@ -12,6 +12,7 @@ import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.reference.DriverLicenseStatus;
 import com.ebim.tms.shared.reference.DriverLookupPort;
 import com.ebim.tms.shared.reference.DriverReference;
+import com.ebim.tms.shared.reference.ResourceAvailabilityPort;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.time.Duration;
@@ -63,22 +64,28 @@ public class TripExecutionService {
     private final TripRepository tripRepository;
     private final VehicleLookupPort vehicleLookupPort;
     private final DriverLookupPort driverLookupPort;
+    private final ResourceAvailabilityPort resourceAvailabilityPort;
     private final ShipmentEventPublisher events;
     private final TripTenderService tenders;
     private final TripAlertPublisher alerts;
     private final TripViewAssembler assembler;
+    private final OrderExecutionPropagator orderExecution;
     private final AuditActorProvider auditActorProvider;
 
     public TripExecutionService(TripRepository tripRepository, VehicleLookupPort vehicleLookupPort,
-            DriverLookupPort driverLookupPort, ShipmentEventPublisher events, TripTenderService tenders,
-            TripAlertPublisher alerts, TripViewAssembler assembler, AuditActorProvider auditActorProvider) {
+            DriverLookupPort driverLookupPort, ResourceAvailabilityPort resourceAvailabilityPort,
+            ShipmentEventPublisher events, TripTenderService tenders,
+            TripAlertPublisher alerts, TripViewAssembler assembler, OrderExecutionPropagator orderExecution,
+            AuditActorProvider auditActorProvider) {
         this.tripRepository = tripRepository;
+        this.resourceAvailabilityPort = resourceAvailabilityPort;
         this.vehicleLookupPort = vehicleLookupPort;
         this.driverLookupPort = driverLookupPort;
         this.events = events;
         this.tenders = tenders;
         this.alerts = alerts;
         this.assembler = assembler;
+        this.orderExecution = orderExecution;
         this.auditActorProvider = auditActorProvider;
     }
 
@@ -120,12 +127,16 @@ public class TripExecutionService {
                 (trip, occurredAt) -> {
                     requireOperableVehicle(scope, trip);
                     requireOperableDriver(scope, trip);
+                    requireCarrierOwnsTheVehicle(trip);
+                    requireResourcesAvailable(scope, trip, occurredAt);
                     requireNotBefore(occurredAt, trip.readyAt(), "before the trip was made ready");
                     trip.dispatch(occurredAt, auditActorProvider.requireAppUserId());
                 });
-        tripRepository.findByIdAndCompanyId(tripId, scope.companyId()).ifPresent(trip ->
-                tenders.withdrawOpen(scope, trip, "Shipment " + trip.shipmentNumber()
-                        + " departed before the carrier answered."));
+        tripRepository.findByIdAndCompanyId(tripId, scope.companyId()).ifPresent(trip -> {
+            tenders.withdrawOpen(scope, trip, "Shipment " + trip.shipmentNumber()
+                    + " departed before the carrier answered.");
+            orderExecution.dispatched(scope, trip);
+        });
         return dispatched;
     }
 
@@ -138,19 +149,26 @@ public class TripExecutionService {
      * override flag - a stop that genuinely should not be counted is skipped, which takes a typed
      * reason and is the honest way to say so.
      *
-     * <p>Leaves the orders it carried {@code PLANNED}. There is no delivery status for them to
-     * move to - {@code orders.domain.OrderStatus} stops there, and inventing a {@code DELIVERED}
-     * from the planning module would be putting an order rule in the wrong place. See migration
-     * V25, "Deliberately NOT here".
+     * <p><b>Closes out the orders it carried</b> (migration V36): each one moves to
+     * {@code DELIVERED}, {@code PARTIALLY_DELIVERED} or {@code DELIVERY_FAILED} according to what
+     * {@code tms.order_delivery} says about it at this moment. Planning still does not decide what
+     * a fact means for an order - it reports the fulfilment through {@code OrderPlanningPort} and
+     * the orders module maps it, the same direction {@code allocate} runs in. An order with
+     * nothing recorded closes as failed, which is both the honest reading and the reopenable one.
+     * See {@link OrderExecutionPropagator}.
      */
     @Transactional
     public TripDetailView complete(CompanyScope scope, UUID tripId, TripExecutionRequest request) {
-        return transition(scope, tripId, TripStatus.COMPLETED, request, ShipmentEventType.SHIPMENT_COMPLETED,
+        TripDetailView completed = transition(scope, tripId, TripStatus.COMPLETED, request,
+                ShipmentEventType.SHIPMENT_COMPLETED,
                 (trip, occurredAt) -> {
                     requireEveryStopResolved(trip);
                     requireNotBefore(occurredAt, trip.actualDepartureAt(), "before the vehicle departed");
                     trip.complete(occurredAt, auditActorProvider.requireAppUserId());
                 });
+        tripRepository.findByIdAndCompanyId(tripId, scope.companyId())
+                .ifPresent(trip -> orderExecution.closedOut(scope, trip));
+        return completed;
     }
 
     /**
@@ -245,6 +263,37 @@ public class TripExecutionService {
      * leave a shipment permanently {@code IN_TRANSIT}, which is worse than the fleet edit it is
      * reacting to.
      */
+    /**
+     * A shipment accepted by one carrier may not depart on another carrier's vehicle (V42, debt D2).
+     *
+     * <p>The sentence a dispatcher reads. {@code Trip.dispatch} refuses again in the aggregate and
+     * {@code ck_trip_departed_carrier_matches_vehicle} refuses in the database - the three-layer
+     * shape every invariant in this codebase has. Only the first of the three says what to do
+     * about it.
+     */
+    private void requireCarrierOwnsTheVehicle(Trip trip) {
+        if (trip.awaitsCarrierVehicle()) {
+            throw new ConflictException("Trip " + trip.tripNumber() + " was accepted by a carrier that does not"
+                    + " own the vehicle assigned to it. Assign one of that carrier's vehicles before dispatching.");
+        }
+    }
+
+    /**
+     * Neither the vehicle nor the driver may be blocked at the moment of departure (V42).
+     *
+     * <p>Checked at the gate rather than only when the shipment was planned, for the reason the
+     * licence check is: a truck booked into the workshop this morning was assignable last night,
+     * and the record of why it did not run is worth more than the shipment that pretended it did.
+     */
+    private void requireResourcesAvailable(CompanyScope scope, Trip trip, OffsetDateTime at) {
+        resourceAvailabilityPort.findBlock(scope.companyId(), trip.vehicleId(), trip.driverId(), at)
+                .ifPresent(block -> {
+                    throw new ConflictException("Trip " + trip.tripNumber() + " cannot depart: its "
+                            + block.resource() + " is unavailable (" + block.reason() + ") until "
+                            + block.endsAt() + ".");
+                });
+    }
+
     private void requireOperableVehicle(CompanyScope scope, Trip trip) {
         UUID vehicleId = trip.vehicleId();
         if (vehicleId == null) {

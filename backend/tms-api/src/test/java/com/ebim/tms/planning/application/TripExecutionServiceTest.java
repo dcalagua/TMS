@@ -23,6 +23,7 @@ import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.reference.DriverLookupPort;
 import com.ebim.tms.shared.reference.DriverReference;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
+import com.ebim.tms.shared.reference.ResourceAvailabilityPort;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.math.BigDecimal;
@@ -83,6 +84,8 @@ class TripExecutionServiceTest {
     private DriverLookupPort driverLookupPort;
     private ShipmentEventPublisher events;
     private TripAlertPublisher alerts;
+    private OrderExecutionPropagator orderExecution;
+    private ResourceAvailabilityPort availabilityPort;
     private TripExecutionService service;
 
     @BeforeEach
@@ -96,11 +99,14 @@ class TripExecutionServiceTest {
         AuditActorProvider actors = mock(AuditActorProvider.class);
         when(actors.requireAppUserId()).thenReturn(ACTOR);
 
-        service = new TripExecutionService(tripRepository, vehicleLookupPort, driverLookupPort, events,
-                mock(TripTenderService.class), alerts, assembler, actors);
+        orderExecution = mock(OrderExecutionPropagator.class);
+        availabilityPort = mock(ResourceAvailabilityPort.class);
+        when(availabilityPort.findBlock(any(), any(), any(), any())).thenReturn(Optional.empty());
+        service = new TripExecutionService(tripRepository, vehicleLookupPort, driverLookupPort, availabilityPort,
+                events, mock(TripTenderService.class), alerts, assembler, orderExecution, actors);
         when(tripRepository.saveAndFlush(any(Trip.class))).thenAnswer(call -> call.getArgument(0));
         when(assembler.toDetail(any(Trip.class), eq(COMPANY)))
-                .thenAnswer(call -> new TripDetailView(null, List.of(), List.of(), List.of(), List.of()));
+                .thenAnswer(call -> new TripDetailView(null, List.of(), List.of(), List.of(), List.of(), TripRouteMetrics.NONE));
         when(vehicleLookupPort.findAssignable(VEHICLE, COMPANY)).thenReturn(Optional.of(availableVehicle()));
         when(driverLookupPort.findAssignable(DRIVER, COMPANY)).thenReturn(Optional.of(driverWithLicenceExpiring(null)));
     }

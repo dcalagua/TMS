@@ -58,6 +58,16 @@ export const RateCardsPage = lazy(() =>
 
 export const TripsPage = lazy(() =>
   import("../pages/trips/TripsPage").then((m) => ({ default: m.TripsPage })));
+
+export const AppointmentsPage = lazy(() =>
+  import("../pages/appointments/AppointmentsPage").then((m) => ({ default: m.AppointmentsPage })));
+export const SettlementPage = lazy(() =>
+  import("../pages/settlement/SettlementPage").then((m) => ({ default: m.SettlementPage })));
+export const WorkAssignmentsPage = lazy(() =>
+  import("../pages/fleet/WorkAssignmentsPage").then((m) => ({ default: m.WorkAssignmentsPage })));
+export const OwnFleetCostProfilesPage = lazy(() =>
+  import("../pages/costing/OwnFleetCostProfilesPage")
+    .then((m) => ({ default: m.OwnFleetCostProfilesPage })));
 export const TripWorkspacePage = lazy(() =>
   import("../pages/trips/TripWorkspacePage").then((m) => ({ default: m.TripWorkspacePage })));
 

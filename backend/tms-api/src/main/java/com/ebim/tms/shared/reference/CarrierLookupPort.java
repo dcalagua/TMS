@@ -1,5 +1,6 @@
 package com.ebim.tms.shared.reference;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -34,4 +35,14 @@ public interface CarrierLookupPort {
 
     /** See {@link OriginLookupPort#findAllInCompany(Set, UUID)} - batched, active or not. */
     Map<UUID, MasterReference> findAllInCompany(Set<UUID> ids, UUID companyId);
+
+    /**
+     * Every active carrier of the company, for building a tender ranking (JOB 07).
+     *
+     * <p>The whole list rather than a page: a waterfall ranks all of them and offers a handful, and
+     * a paged answer would make the ranking depend on which page it happened to see. A company's
+     * carrier list is a master-data set of tens, not thousands - a company with a thousand carriers
+     * has a procurement problem this port is not the place to solve.
+     */
+    List<MasterReference> findAllActiveInCompany(UUID companyId);
 }

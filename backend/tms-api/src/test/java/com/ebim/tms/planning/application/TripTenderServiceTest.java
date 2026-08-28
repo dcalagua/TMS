@@ -79,6 +79,7 @@ class TripTenderServiceTest {
     private TripTenderRepository tenderRepository;
     private ShipmentEventPublisher events;
     private TripTenderService service;
+    private TenderWaterfallService waterfall;
 
     @BeforeEach
     void setUp() {
@@ -89,9 +90,17 @@ class TripTenderServiceTest {
         when(actors.requireAppUserId()).thenReturn(PLANNER);
         when(actors.writerAppUserId()).thenReturn(PLANNER);
 
+        // A waterfall that is never on any of these shipments: every assertion in this class is
+        // about hand-made tendering, which must go on behaving exactly as it did.
+        waterfall = mock(TenderWaterfallService.class);
+        org.springframework.beans.factory.ObjectProvider<TenderWaterfallService> waterfallProvider =
+                mock(org.springframework.beans.factory.ObjectProvider.class);
+        when(waterfallProvider.getObject()).thenReturn(waterfall);
+
         service = new TripTenderService(tripRepository, tenderRepository, mock(PlanningRunRepository.class),
                 mock(CarrierLookupPort.class), mock(OriginLookupPort.class), events,
-                mock(TripAlertPublisher.class), actors);
+                mock(TripAlertPublisher.class), actors,
+                waterfallProvider);
 
         when(tenderRepository.saveAndFlush(any(TripTender.class))).thenAnswer(call -> call.getArgument(0));
     }

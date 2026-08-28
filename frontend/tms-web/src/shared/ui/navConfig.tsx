@@ -6,6 +6,9 @@ import {
   BusinessRounded, AccountTreeRounded, LocalShippingRounded, BadgeRounded,
   PaidRounded,
   ApartmentRounded, GroupsRounded, PowerRounded, HistoryRounded,
+  EventAvailableRounded,
+  ReceiptLongRounded,
+  EventNoteRounded,
 } from "@mui/icons-material";
 
 /** Una hoja del menú: una pantalla concreta. */
@@ -45,6 +48,9 @@ export const ICON_TINTS: Record<string, string> = {
   "/orders": "#29B6F6",
   "/planning": "#B085F5",
   "/trips": "#66BB6A",
+  "/appointments": "#FFA726",
+  "/settlement": "#8D6E63",
+  "/work-assignments": "#7E57C2",
   "/masters/locations": "#4FC3F7",
   "/masters/origins": "#4DB6AC",
   "/masters/destinations": "#7986CB",
@@ -56,6 +62,7 @@ export const ICON_TINTS: Record<string, string> = {
   "/fleet/vehicles": "#42A5F5",
   "/fleet/drivers": "#CE93D8",
   "/rates/rate-cards": "#FFCA28",
+  "/costing/own-fleet": "#26A69A",
   "/settings/company": "#B0BEC5",
   "/settings/users": "#42A5F5",
   "/settings/integrations": "#26C6DA",
@@ -96,6 +103,20 @@ export const NAV_SECTIONS: NavSection[] = [
       { to: "/orders", label: "Pedidos", icon: <AssignmentTurnedInRounded />, capability: "ORDERS_VIEW" },
       { to: "/planning", label: "Planificación", icon: <ViewKanbanRounded />, capability: "PLANNING_VIEW" },
       { to: "/trips", label: "Viajes", icon: <MapRounded />, capability: "TRIPS_VIEW" },
+      // Después de Viajes: una cita existe por un viaje, y la garita la lee justo antes de que
+      // llegue. Su propia entrada y no una pestaña del workspace porque quien la mira - patio,
+      // garita, almacén - no planifica envíos.
+      { to: "/appointments", label: "Citas de muelle", icon: <EventAvailableRounded />,
+        capability: "APPOINTMENTS_VIEW" },
+      // Después de las citas y antes de Maestros: la auditoría de flete es lo último que pasa con
+      // un envío, y quien la mira es finanzas - no planifica, pero necesita llegar a lo que se
+      // planificó. TMS valida y exporta; el ERP paga.
+      { to: "/settlement", label: "Auditoría de flete", icon: <ReceiptLongRounded />,
+        capability: "SETTLEMENT_VIEW" },
+      // Junto a Viajes y no en Maestros: mantener la ficha de un camión y planificar su día son
+      // trabajos distintos que hacen personas distintas.
+      { to: "/work-assignments", label: "Días de trabajo", icon: <EventNoteRounded />,
+        capability: "WORK_ASSIGNMENT_VIEW" },
     ],
   },
   {
@@ -133,6 +154,21 @@ export const NAV_SECTIONS: NavSection[] = [
     capability: "RATES_VIEW",
     items: [
       { to: "/rates/rate-cards", label: "Tarifarios", icon: <PaidRounded /> },
+    ],
+  },
+  {
+    /**
+     * Costos internos, separados de Comercial a propósito.
+     *
+     * Un tarifario es lo que un transportista nos cobra; esto es lo que nos cuesta a nosotros
+     * operar nuestros propios camiones. Colgarlo del grupo Comercial lo habría escondido tras
+     * `RATES_VIEW`, y un planificador con derecho a ver el costo de un camión y sin derecho a ver
+     * los tarifarios de los transportistas es justo el reparto que una instalación va a querer.
+     */
+    title: "Costos",
+    capability: "OWN_FLEET_COSTING_VIEW",
+    items: [
+      { to: "/costing/own-fleet", label: "Costo de flota propia", icon: <PaidRounded /> },
     ],
   },
   {

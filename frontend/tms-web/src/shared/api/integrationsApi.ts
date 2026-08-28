@@ -284,6 +284,46 @@ export function setWebhookSubscriptionActive(
   })
 }
 
+/**
+ * Mirrors `IntegrationHealthView` (JOB 13): si las integraciones funcionan **ahora mismo**.
+ *
+ * Todo esto ya se podía averiguar paginando dos listas, que es justo el problema: quien abre la
+ * pantalla después de una mala noche debería obtener una respuesta, no una búsqueda.
+ *
+ * Dos cifras pesan más que el resto, y las dos van de que la cola no avanza. Mil entregas
+ * pendientes que se están enviando es sano; tres que esperan desde el martes no lo es, y un
+ * contador solo no distingue una cosa de la otra — por eso `oldestPendingAt` va al lado.
+ */
+export interface IntegrationHealthView {
+  deliveriesPending: number
+  /** Cuándo se creó la más vieja que sigue esperando, o null si no espera ninguna. **La edad es la señal.** */
+  oldestPendingAt: string | null
+  /** Agotaron sus reintentos: no se enviarán salvo que alguien las reintente. Es una cola de trabajo, no una estadística. */
+  deliveriesFailed: number
+  deliveriesProcessed: number
+  /**
+   * Suscripciones apagadas que **siguen acumulando** entregas detrás.
+   *
+   * El modo de fallo que parece silencio: desactivar no descarta nada, así que un socio apagado
+   * "una hora" durante una incidencia y nunca vuelto a encender no produce ningún error.
+   */
+  inactiveSubscriptionsWithBacklog: number
+  /** El inicio de la ventana que cubren las cifras de entrada. */
+  requestsSince: string
+  requestsSucceeded: number
+  requestsPartial: number
+  /** Rechazadas por su contenido: el problema es del socio. */
+  requestsRejected: number
+  /** TMS no pudo procesarlas: **el problema es nuestro**, y es la cifra que hay que mirar. */
+  requestsFailed: number
+}
+
+export function fetchIntegrationHealth(
+  companyId: string, signal?: AbortSignal,
+): Promise<IntegrationHealthView> {
+  return apiRequest<IntegrationHealthView>('/webhooks/health', { companyId, signal })
+}
+
 export function fetchWebhookDeliveries(
   companyId: string,
   params: PageParams & { subscriptionId?: string; status?: WebhookDeliveryStatus } = {},

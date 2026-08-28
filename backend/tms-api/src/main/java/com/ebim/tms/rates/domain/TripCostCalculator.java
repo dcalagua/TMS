@@ -40,9 +40,22 @@ public final class TripCostCalculator {
 
     static final BigDecimal ZERO_MONEY = BigDecimal.ZERO.setScale(MONEY_SCALE, RoundingMode.UNNECESSARY);
 
-    /** Ordered as they are calculated and as they are shown; {@code BASE} and the floor are handled apart. */
-    private static final List<RateComponent> MEASURED_COMPONENTS = List.of(
-            RateComponent.DISTANCE, RateComponent.WEIGHT, RateComponent.VOLUME, RateComponent.PALLETS);
+    /**
+     * The linehaul's measured components, in the order they are calculated and shown.
+     *
+     * <p>{@code STOP_OFF} joins them in V39 and belongs here rather than with the accessorials: a
+     * multi-drop charge is part of what the haul costs, and the fuel surcharge is taken on it.
+     * {@code BASE} and the adjustments are handled apart because they are flat.
+     */
+    private static final List<RateComponent> LINEHAUL_MEASURED = List.of(
+            RateComponent.DISTANCE, RateComponent.WEIGHT, RateComponent.VOLUME, RateComponent.PALLETS,
+            RateComponent.STOP_OFF);
+
+    /** The flat accessorials, after the fuel surcharge and before the adjustments. */
+    private static final List<RateComponent> FLAT_ACCESSORIALS =
+            List.of(RateComponent.TOLL, RateComponent.OTHER_ACCESSORIAL);
+
+    private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
 
     private TripCostCalculator() {
     }
@@ -60,29 +73,73 @@ public final class TripCostCalculator {
         }
 
         List<CostLine> lines = new ArrayList<>();
+
+        // 1. The linehaul: the base, then everything charged per unit of the haul itself.
         if (card.baseAmount() != null) {
             lines.add(CostLine.flat(RateComponent.BASE, money(card.baseAmount())));
         }
-        for (RateComponent component : MEASURED_COMPONENTS) {
-            BigDecimal rate = card.rateFor(component);
-            if (rate == null) {
-                continue;
-            }
-            BigDecimal quantity = inputs.quantityFor(component);
-            if (quantity == null) {
-                lines.add(CostLine.notCalculable(component));
-            } else {
-                lines.add(CostLine.measured(component, rate, quantity, money(rate.multiply(quantity))));
+        for (RateComponent component : LINEHAUL_MEASURED) {
+            addMeasured(lines, card, inputs, component);
+        }
+        BigDecimal linehaul = sum(lines);
+
+        // 2. The fuel surcharge, on the linehaul and on nothing after it (V39). Taken on the
+        // subtotal as it stands here, which is why this sits between the two groups rather than at
+        // the end: a percentage of a toll is not a fuel surcharge anybody bills.
+        BigDecimal fuelPercent = card.fuelSurchargePercent();
+        if (fuelPercent != null) {
+            BigDecimal surcharge = money(linehaul.multiply(fuelPercent).divide(ONE_HUNDRED, 10, RoundingMode.HALF_UP));
+            lines.add(CostLine.measured(RateComponent.FUEL_SURCHARGE, fuelPercent, linehaul, surcharge));
+        }
+
+        // 3. The accessorials: detention, then the flat pass-throughs.
+        addMeasured(lines, card, inputs, RateComponent.WAITING_TIME);
+        for (RateComponent component : FLAT_ACCESSORIALS) {
+            BigDecimal amount = card.flatAmountFor(component);
+            if (amount != null) {
+                lines.add(CostLine.flat(component, money(amount)));
             }
         }
 
+        // 4. The floor and the ceiling, on the finished total. Mutually exclusive by arithmetic -
+        // ck_rate_card_maximum_above_minimum makes a card where both could fire impossible - so a
+        // breakdown never shows an adjustment up followed by an adjustment down.
         BigDecimal subtotal = sum(lines);
         BigDecimal minimum = card.minimumAmount();
+        BigDecimal maximum = card.maximumAmount();
         if (minimum != null && subtotal.compareTo(money(minimum)) < 0) {
             lines.add(CostLine.flat(RateComponent.MINIMUM_ADJUSTMENT, money(minimum).subtract(subtotal)));
+        } else if (maximum != null && subtotal.compareTo(money(maximum)) > 0) {
+            // Negative: the only line on a breakdown that ever is, and it has to be, because a
+            // ceiling that appeared as a positive number would read as another charge.
+            lines.add(CostLine.flat(RateComponent.MAXIMUM_ADJUSTMENT, money(maximum).subtract(subtotal)));
         }
 
         return new CostEstimate(card.currency(), sum(lines), lines);
+    }
+
+    /**
+     * Adds one measured line, or the non-calculable placeholder that says which quantity is
+     * missing.
+     *
+     * <p>A card that says nothing about a component contributes no line at all, which is different
+     * again: "this agreement does not charge for weight" and "this agreement charges for weight and
+     * we do not know the weight" are two different statements and a breakdown must not conflate
+     * them.
+     */
+    private static void addMeasured(List<CostLine> lines, RateCard card, CostInputs inputs,
+            RateComponent component) {
+        BigDecimal rate = card.rateFor(component);
+        if (rate == null) {
+            return;
+        }
+        BigDecimal quantity = inputs.quantityFor(component);
+        if (quantity == null) {
+            lines.add(CostLine.notCalculable(component));
+        } else {
+            lines.add(CostLine.measured(component, rate, quantity, money(rate.multiply(quantity)),
+                    inputs.sourceFor(component)));
+        }
     }
 
     private static BigDecimal sum(List<CostLine> lines) {

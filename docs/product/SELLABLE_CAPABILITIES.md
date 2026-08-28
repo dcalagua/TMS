@@ -136,7 +136,7 @@ has is **skipped, not duplicated**.
 | # | Capability | Status | Notes |
 |---|---|---|---|
 | 68 | **Spanish and English**, Spanish by default, with exact key parity enforced by a test | IMPLEMENTED | 20 i18n namespaces |
-| 69 | **Bootstrap-based design system** with a monochrome premium palette, drawers for CRUD and SweetAlert2 for destructive confirmations | IMPLEMENTED | `shared/ui` |
+| 69 | **MUI-based design system** (ADR-008) with a monochrome premium palette, drawers for CRUD and a shared `confirmDialog` for destructive confirmations | IMPLEMENTED | `shared/ui` |
 | 70 | **Empty, loading and error states with retry on every list screen**, and on every card added since | IMPLEMENTED | `DataTable`, plus the job 14 fixes |
 | 71 | **Google Maps** for picking a location, drawing stops and drawing a trip, degrading to manual lat/long with no key | IMPLEMENTED | `GOOGLE_MAPS.md` |
 | 72 | **Correlation id** on every request, echoed to the caller, on every log line and inside the error document | IMPLEMENTED | `CorrelationIdFilter` |

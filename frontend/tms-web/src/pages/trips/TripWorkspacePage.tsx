@@ -41,6 +41,8 @@ import { TripProblemDrawer, type TripProblemMode, type TripProblemValues } from 
 import { TripTenderCard } from "./TripTenderCard";
 import { TripTimeline } from "./TripTimeline";
 import { TripTrackingCard } from "./TripTrackingCard";
+import { TripRouteCard } from "./TripRouteCard";
+import { TenderWaterfallCard } from "./TenderWaterfallCard";
 
 function formatServiceWindow(start: string | null, end: string | null): string | null {
   if (!start && !end) return null;
@@ -343,6 +345,9 @@ export function TripWorkspacePage() {
         receiverName: values.receiverName,
         receiverDocument: values.receiverDocument,
         notes: values.notes,
+        // V45: null cuando el operador no registró cantidades. Se manda tal cual - convertirlo a
+        // ceros aquí sería inventar un faltante.
+        quantities: values.quantities,
       });
     } catch (error) {
       throw new Error(describePlanningError(error as ApiError));
@@ -751,8 +756,11 @@ export function TripWorkspacePage() {
           )}
         </Box>
 
-        {/* Columna derecha: lo que se lee — rastreo, dinero, ofertas, incidencias y la historia. */}
+        {/* Columna derecha: lo que se lee — recorrido, rastreo, dinero, ofertas, incidencias y la historia. */}
         <Box sx={{ display: "grid", gap: 3, minWidth: 0 }}>
+          {/* Primero el recorrido: es la pregunta que se hace antes de salir, no después. */}
+          <TripRouteCard routing={detail.routing} />
+
           {canMonitor && (
             <TripTrackingCard
               tracking={trackingQuery.data}
@@ -762,6 +770,16 @@ export function TripWorkspacePage() {
           )}
 
           {canReadCost && <TripCostCard companyId={companyId} tripId={trip.id} canManage={canManageCost} />}
+
+          {/* La cascada antes de las ofertas sueltas: es la que explica por qué existen. */}
+          {canReadTenders && (
+            <TenderWaterfallCard
+              companyId={companyId}
+              tripId={trip.id}
+              canManage={canManageTenders}
+            />
+          )}
+
 
           {canReadTenders && (
             <TripTenderCard

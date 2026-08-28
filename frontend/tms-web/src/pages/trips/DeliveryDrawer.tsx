@@ -5,7 +5,7 @@ import { InventoryRounded } from "@mui/icons-material";
 import {
   DELIVERY_RESULTS, DELIVERY_RESULTS_NEEDING_NOTES, DELIVERY_RESULTS_NEEDING_TIME,
   DELIVERY_RESULTS_WITH_RECEIVER,
-  type DeliveryResult, type OrderDeliveryView,
+  type DeliveryQuantitiesRequest, type DeliveryResult, type OrderDeliveryView,
 } from "../../shared/api/planningApi";
 import { FormDrawer } from "../../shared/ui/components";
 import { enumLabel } from "../../lib/enums";
@@ -19,6 +19,14 @@ export interface DeliveryValues {
   receiverName: string | null;
   receiverDocument: string | null;
   notes: string | null;
+  /**
+   * Las cantidades (V45, deuda D3). **`null` = no registrado, que no es cero.**
+   *
+   * Registrar sólo el resultado sigue siendo legítimo — es lo que hacía toda entrega antes de V45.
+   * Lo que la pantalla no debe hacer nunca es mandar ceros cuando el operador no escribió nada:
+   * eso afirmaría que el cliente no se llevó nada.
+   */
+  quantities: DeliveryQuantitiesRequest | null;
 }
 
 interface DeliveryDrawerProps {
@@ -57,19 +65,21 @@ export function DeliveryDrawer({ stopLabel, orderNumber, existing, onClose, onSu
   const {
     register, control, handleSubmit,
     formState: { errors, isDirty, isSubmitting },
-  } = useForm<{
-    result: DeliveryResult;
-    deliveredAt: string;
-    receiverName: string;
-    receiverDocument: string;
-    notes: string;
-  }>({
+  } = useForm<DeliveryFormValues>({
     defaultValues: {
       result: existing?.result ?? "DELIVERED",
       deliveredAt: toLocalInput(existing?.deliveredAt),
       receiverName: existing?.receiverName ?? "",
       receiverDocument: existing?.receiverDocument ?? "",
       notes: existing?.notes ?? "",
+      // Vacío, no cero. Un campo en blanco significa "no lo estoy diciendo"; un 0 escrito a mano
+      // significa "no se entregó nada", y son afirmaciones distintas.
+      attemptedWeightKg: numberInput(existing?.quantities?.attemptedWeightKg),
+      deliveredWeightKg: numberInput(existing?.quantities?.deliveredWeightKg),
+      refusedWeightKg: numberInput(existing?.quantities?.refusedWeightKg),
+      attemptedPallets: numberInput(existing?.quantities?.attemptedPallets),
+      deliveredPallets: numberInput(existing?.quantities?.deliveredPallets),
+      refusedPallets: numberInput(existing?.quantities?.refusedPallets),
     },
   });
 
@@ -78,9 +88,12 @@ export function DeliveryDrawer({ stopLabel, orderNumber, existing, onClose, onSu
   const hasReceiver = DELIVERY_RESULTS_WITH_RECEIVER.includes(result);
   const needsNotes = DELIVERY_RESULTS_NEEDING_NOTES.includes(result);
 
-  async function submit(values: {
-    result: DeliveryResult; deliveredAt: string; receiverName: string; receiverDocument: string; notes: string;
-  }) {
+  // Un aviso, no una defensa. El backend revalida cada medida por separado - confiar en que el
+  // formulario impida el exceso sería confiar en el cliente para un invariante de dominio.
+  const watched = useWatch({ control });
+  const overDelivered = exceedsAttempted(watched as Partial<DeliveryFormValues>);
+
+  async function submit(values: DeliveryFormValues) {
     setFormError(null);
     try {
       await onSubmit({
@@ -92,6 +105,7 @@ export function DeliveryDrawer({ stopLabel, orderNumber, existing, onClose, onSu
         receiverName: hasReceiver ? (values.receiverName.trim() || null) : null,
         receiverDocument: hasReceiver ? (values.receiverDocument.trim() || null) : null,
         notes: values.notes.trim() || null,
+        quantities: quantitiesOf(values),
       });
     } catch (error) {
       setFormError((error as Error).message);
@@ -164,6 +178,52 @@ export function DeliveryDrawer({ stopLabel, orderNumber, existing, onClose, onSu
             </>
           )}
 
+          {/* V45, deuda D3. Opcional a propósito: dejarlo en blanco es no afirmar nada sobre
+              cantidades, que es lo que hacía toda entrega antes de V45 y sigue valiendo. Lo que la
+              pantalla nunca hace es rellenar ceros por comodidad — eso convertiría "no lo dije" en
+              "no llegó nada". */}
+          <Typography variant="overline" color="text.secondary" sx={{ mt: 1 }}>
+            {t("Cantidades (opcional)")}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
+            {t("Déjalo en blanco si no vas a registrar cantidades. En blanco no es cero: un cero dice que el cliente no se llevó nada.")}
+          </Typography>
+
+          <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" } }}>
+            <TextField
+              label={t("Llevado (kg)")} size="small" type="number" fullWidth
+              {...register("attemptedWeightKg")}
+            />
+            <TextField
+              label={t("Entregado (kg)")} size="small" type="number" fullWidth
+              {...register("deliveredWeightKg")}
+            />
+            <TextField
+              label={t("Rechazado (kg)")} size="small" type="number" fullWidth
+              {...register("refusedWeightKg")}
+            />
+            <TextField
+              label={t("Llevado (pallets)")} size="small" type="number" fullWidth
+              {...register("attemptedPallets")}
+            />
+            <TextField
+              label={t("Entregado (pallets)")} size="small" type="number" fullWidth
+              {...register("deliveredPallets")}
+            />
+            <TextField
+              label={t("Rechazado (pallets)")} size="small" type="number" fullWidth
+              {...register("refusedPallets")}
+            />
+          </Box>
+
+          {/* El servidor vuelve a validar esto y rechaza la entrega; el aviso está aquí para que el
+              operador lo vea antes de mandarla, no para sustituir la validación. */}
+          {overDelivered && (
+            <Alert severity="warning" variant="outlined">
+              {t("Entregado más rechazado no puede superar lo llevado. El servidor lo va a rechazar.")}
+            </Alert>
+          )}
+
           <TextField
             label={t("Notas")} size="small" fullWidth multiline rows={3}
             required={needsNotes}
@@ -182,4 +242,62 @@ export function DeliveryDrawer({ stopLabel, orderNumber, existing, onClose, onSu
       </Box>
     </FormDrawer>
   );
+}
+
+/** Los campos del formulario, incluidos los seis números que el operador puede dejar en blanco. */
+interface DeliveryFormValues {
+  result: DeliveryResult;
+  deliveredAt: string;
+  receiverName: string;
+  receiverDocument: string;
+  notes: string;
+  attemptedWeightKg: string;
+  deliveredWeightKg: string;
+  refusedWeightKg: string;
+  attemptedPallets: string;
+  deliveredPallets: string;
+  refusedPallets: string;
+}
+
+/** Un número que puede no existir se edita como texto vacío, nunca como 0. */
+function numberInput(value: number | null | undefined): string {
+  return value === null || value === undefined ? "" : String(value);
+}
+
+/**
+ * El bloque de cantidades, o `null` si el operador no registró ninguna.
+ *
+ * **La regla que importa**: si el campo de "llevado" está vacío, no se manda nada. Rellenar ceros
+ * por comodidad convertiría "no lo dije" en "no llegó nada", que es exactamente el faltante
+ * inventado que la deuda D3 prohíbe.
+ *
+ * El volumen no se pide en el formulario — el operador de muelle cuenta bultos y pesa, no calcula
+ * metros cúbicos — así que viaja en 0 junto a un peso y unos pallets reales. El servidor valida
+ * cada medida por separado, de modo que un 0 en volumen no puede tapar un faltante en las otras.
+ */
+function quantitiesOf(values: DeliveryFormValues): DeliveryQuantitiesRequest | null {
+  if (values.attemptedWeightKg.trim() === "") {
+    return null;
+  }
+  const number = (raw: string) => (raw.trim() === "" ? 0 : Number(raw));
+  return {
+    attemptedWeightKg: number(values.attemptedWeightKg),
+    attemptedVolumeM3: 0,
+    attemptedPallets: number(values.attemptedPallets),
+    deliveredWeightKg: number(values.deliveredWeightKg),
+    deliveredVolumeM3: 0,
+    deliveredPallets: number(values.deliveredPallets),
+    refusedWeightKg: number(values.refusedWeightKg),
+    refusedVolumeM3: 0,
+    refusedPallets: number(values.refusedPallets),
+  };
+}
+
+/** Sólo para avisar en pantalla. La regla de verdad vive en el servidor y en la base de datos. */
+function exceedsAttempted(values: Partial<DeliveryFormValues>): boolean {
+  const num = (raw: string | undefined) => (raw === undefined || raw.trim() === "" ? 0 : Number(raw));
+  if ((values.attemptedWeightKg ?? "").trim() === "") return false;
+  const weightOver = num(values.deliveredWeightKg) + num(values.refusedWeightKg) > num(values.attemptedWeightKg);
+  const palletsOver = num(values.deliveredPallets) + num(values.refusedPallets) > num(values.attemptedPallets);
+  return weightOver || palletsOver;
 }

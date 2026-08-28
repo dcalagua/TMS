@@ -15,6 +15,7 @@ import com.ebim.tms.shared.security.TestJwts;
 import com.jayway.jsonpath.JsonPath;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,7 +70,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 @ActiveProfiles("test")
 @Import(EndToEndSmokeIntegrationTest.JwtDecoderOverride.class)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-@DisplayName("Step 13 smoke: authenticate -> masters -> fleet -> order -> plan -> confirm")
+@DisplayName("Smoke: authenticate -> masters -> fleet -> order -> plan -> confirm -> dispatch -> deliver -> close out -> reopen")
 class EndToEndSmokeIntegrationTest {
 
     private static final String MASTERDATA = "/api/v1/masterdata";
@@ -562,12 +563,224 @@ class EndToEndSmokeIntegrationTest {
                 + "' AND status = 'ACTIVE'")).isEqualTo(1);
     }
 
+    // --- 14-19. the execution half of the order lifecycle (migration V36) ------------
+    //
+    // Everything above stops at CONFIRMED, which is where the product stopped before V36: the
+    // order read PLANNED and went on reading PLANNED whatever happened on the road. These steps
+    // drive the shipment to its end and assert, at every stage, that the order followed.
+    //
+    // Deliberately after the two isolation steps: those assert the trip is still CONFIRMED, and
+    // moving them would weaken a tenancy check to make room for a lifecycle one.
+
+    @Test
+    @Order(13)
+    @DisplayName("13b. the trip reports how far it drives, measured through the routing port")
+    void theTripCarriesItsOwnDistance() throws Exception {
+        // The first real consumer of RoutingPort (V38). With no vendor configured the figures come
+        // from the local estimator, which is why `estimated` is true and says so - a total built
+        // from straight lines is useful and must not be readable as a measurement.
+        mockMvc.perform(asPlannerA(get(TRIPS + "/" + tripId), COMPANY_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.routing").exists())
+                .andExpect(jsonPath("$.routing.legs.length()").value(1))
+                .andExpect(jsonPath("$.routing.legs[0].fromStopSequence").doesNotExist())
+                .andExpect(jsonPath("$.routing.legs[0].toStopSequence").value(1))
+                .andExpect(jsonPath("$.routing.estimated").value(true))
+                .andExpect(jsonPath("$.routing.unmeasurableLegs").value(0))
+                .andExpect(jsonPath("$.routing.provider").value("LOCAL_GEODESIC_V1"));
+
+        // A real number, not a placeholder: the smoke's origin and destination are different
+        // places, so the drive between them has to be greater than zero.
+        String body = mockMvc.perform(asPlannerA(get(TRIPS + "/" + tripId), COMPANY_A))
+                .andReturn().getResponse().getContentAsString();
+        Number distance = JsonPath.read(body, "$.routing.totalDistanceKm");
+        assertThat(distance.doubleValue()).isGreaterThan(0.0);
+
+        // And it was cached, so the second read costs no arithmetic.
+        assertThat(queryLong("SELECT count(*) FROM tms.travel_estimate WHERE company_id = '"
+                + COMPANY_A + "'")).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    @Order(14)
+    @DisplayName("14. the trip is made ready and dispatched, and its order becomes IN_EXECUTION")
+    void dispatchMovesTheOrderIntoExecution() throws Exception {
+        mockMvc.perform(asPlannerA(post(TRIPS + "/" + tripId + "/ready"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":" + tripVersion() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.status").value("READY_FOR_DISPATCH"));
+
+        // Being ready to leave is not having left: the order has not moved.
+        assertThat(orderStatus(orderId)).isEqualTo("PLANNED");
+
+        mockMvc.perform(asPlannerA(post(TRIPS + "/" + tripId + "/dispatch"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":" + tripVersion() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.status").value("IN_TRANSIT"));
+
+        // The fact this whole job exists for: the order knows the vehicle left.
+        assertThat(orderStatus(orderId)).isEqualTo("IN_EXECUTION");
+
+        mockMvc.perform(asPlannerA(get(ORDERS + "/" + orderId), COMPANY_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("IN_EXECUTION"));
+    }
+
+    @Test
+    @Order(15)
+    @DisplayName("15. an order on a departed vehicle can no longer be cancelled or edited")
+    void anOrderInExecutionIsClosedToChanges() throws Exception {
+        mockMvc.perform(asPlannerA(post(ORDERS + "/" + orderId + "/cancel"), COMPANY_A))
+                .andExpect(status().isConflict());
+        mockMvc.perform(asPlannerA(put(ORDERS + "/" + orderId), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"originId":"%s","destinationId":"%s","serviceDate":"%s","priority":"URGENT",
+                                 "version":0,
+                                 "lines":[{"materialCode":"X","materialDescription":"X","quantity":1,"uom":"EA"}]}
+                                """.formatted(originId, destinationId, SERVICE_DATE)))
+                .andExpect(status().isConflict());
+
+        // Refusals, not partial writes.
+        assertThat(orderStatus(orderId)).isEqualTo("IN_EXECUTION");
+    }
+
+    @Test
+    @Order(16)
+    @DisplayName("16. a partial delivery recorded mid-trip does not close the order out early")
+    void aDeliveryMidTripDoesNotCloseTheOrder() throws Exception {
+        String stopId = stopId();
+
+        mockMvc.perform(asPlannerA(post(TRIPS + "/" + tripId + "/stops/" + stopId + "/arrive"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(asPlannerA(post(TRIPS + "/" + tripId + "/stops/" + stopId + "/complete"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(asPlannerA(put(TRIPS + "/" + tripId + "/stops/" + stopId + "/orders/" + orderId
+                        + "/delivery"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"result":"PARTIAL","deliveredAt":"%s","receiverName":"R. Quispe",
+                                 "notes":"Two pallets refused at the dock.",
+                                 "quantities":{
+                                   "attemptedWeightKg":1000,"attemptedVolumeM3":2,"attemptedPallets":2,
+                                   "deliveredWeightKg":700,"deliveredVolumeM3":1.4,"deliveredPallets":1,
+                                   "refusedWeightKg":300,"refusedVolumeM3":0.6,"refusedPallets":1}}
+                                """.formatted(OffsetDateTime.now().toString())))
+                .andExpect(status().isOk())
+                // V45, debt D3: the amounts come back on the delivery, with the outstanding figure
+                // derived server-side rather than left to each screen to subtract.
+                .andExpect(jsonPath("$.deliveries[0].quantities.deliveredWeightKg").value(700))
+                .andExpect(jsonPath("$.deliveries[0].quantities.refusedWeightKg").value(300))
+                .andExpect(jsonPath("$.deliveries[0].quantities.outstandingWeightKg").value(0));
+
+        // The trip is still running, so the order is still in execution: a later stop could still
+        // change what it is owed. Closing out here would be closing out early.
+        assertThat(orderStatus(orderId)).isEqualTo("IN_EXECUTION");
+    }
+
+    @Test
+    @Order(17)
+    @DisplayName("17. completing the trip closes the order out as PARTIALLY_DELIVERED")
+    void completingTheTripClosesTheOrderOut() throws Exception {
+        mockMvc.perform(asPlannerA(post(TRIPS + "/" + tripId + "/complete"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":" + tripVersion() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.status").value("COMPLETED"));
+
+        assertThat(orderStatus(orderId)).isEqualTo("PARTIALLY_DELIVERED");
+    }
+
+    @Test
+    @Order(18)
+    @DisplayName("18. a delivery corrected after completion moves the order with it - no drift")
+    void aCorrectionAfterCompletionMovesTheOrder() throws Exception {
+        String stopId = stopId();
+
+        // The signed note comes back at 18:40 and says everything arrived after all.
+        mockMvc.perform(asPlannerA(put(TRIPS + "/" + tripId + "/stops/" + stopId + "/orders/" + orderId
+                        + "/delivery"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"result":"DELIVERED","deliveredAt":"%s","receiverName":"R. Quispe"}
+                                """.formatted(OffsetDateTime.now().toString())))
+                .andExpect(status().isOk());
+
+        assertThat(orderStatus(orderId)).isEqualTo("DELIVERED");
+
+        // A delivered order is finished work: not reopenable and not cancellable.
+        mockMvc.perform(asPlannerA(post(ORDERS + "/" + orderId + "/reopen"), COMPANY_A))
+                .andExpect(status().isConflict());
+        mockMvc.perform(asPlannerA(post(ORDERS + "/" + orderId + "/cancel"), COMPANY_A))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @Order(19)
+    @DisplayName("19. a refused delivery can be reopened for a second attempt, and is audited")
+    void aFailedOrderGoesBackIntoThePool() throws Exception {
+        String stopId = stopId();
+
+        // Corrected again: the customer actually refused the goods.
+        mockMvc.perform(asPlannerA(put(TRIPS + "/" + tripId + "/stops/" + stopId + "/orders/" + orderId
+                        + "/delivery"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"result":"REJECTED","receiverName":"R. Quispe","notes":"Wrong material."}
+                                """))
+                .andExpect(status().isOk());
+
+        assertThat(orderStatus(orderId)).isEqualTo("DELIVERY_FAILED");
+
+        // This is the transition the whole job exists for. Before V36 the order stopped here
+        // forever: not plannable, not cancellable, not deliverable.
+        mockMvc.perform(asPlannerA(post(ORDERS + "/" + orderId + "/reopen"), COMPANY_A)
+                        .param("reason", "Customer agreed to a redelivery on Thursday."))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("READY_FOR_PLANNING"));
+
+        assertThat(orderStatus(orderId)).isEqualTo("READY_FOR_PLANNING");
+
+        // And it is genuinely back in the pool a planner draws from.
+        mockMvc.perform(asPlannerA(get(PLANNING + "/eligible-orders"), COMPANY_A)
+                        .param("originId", originId)
+                        .param("serviceDate", SERVICE_DATE.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1));
+
+        // The decision to spend a second truck is recorded against a person, with what it was
+        // reopened from - which is the record of why a redelivery was needed.
+        assertThat(queryLong("SELECT count(*) FROM tms.audit_event WHERE aggregate_id = '" + orderId
+                + "' AND action = 'ORDER_REOPENED'")).isEqualTo(1);
+
+        // The first attempt is history, not erased: it is what lets "this has failed before" be
+        // answered at all.
+        assertThat(queryLong("SELECT count(*) FROM tms.order_delivery WHERE order_id = '" + orderId + "'"))
+                .isEqualTo(1);
+    }
+
     // --- helpers ----------------------------------------------------------------------
 
     private long tripVersion() throws Exception {
         Number version = JsonPath.read(mockMvc.perform(asPlannerA(get(TRIPS + "/" + tripId), COMPANY_A))
                 .andReturn().getResponse().getContentAsString(), "$.trip.version");
         return version.longValue();
+    }
+
+    /** The id of the trip's only stop, which every delivery in this smoke is recorded against. */
+    private String stopId() throws Exception {
+        return JsonPath.read(mockMvc.perform(asPlannerA(get(TRIPS + "/" + tripId), COMPANY_A))
+                .andReturn().getResponse().getContentAsString(), "$.stops[0].id");
+    }
+
+    /** The order's status, read straight from the table rather than through the view that renders it. */
+    private static String orderStatus(String orderId) {
+        return queryString("SELECT status FROM tms.transport_order WHERE id = '" + orderId + "'");
     }
 
     private long runVersion() throws Exception {

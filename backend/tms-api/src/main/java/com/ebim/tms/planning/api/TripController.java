@@ -14,6 +14,7 @@ import com.ebim.tms.planning.application.TripExecutionRequest;
 import com.ebim.tms.planning.application.TripExecutionService;
 import com.ebim.tms.planning.application.TripFilter;
 import com.ebim.tms.planning.application.TripRouteRequest;
+import com.ebim.tms.planning.application.StopEtaService;
 import com.ebim.tms.planning.application.TripService;
 import com.ebim.tms.planning.application.TripStopExecutionRequest;
 import com.ebim.tms.planning.application.TripStopExecutionService;
@@ -76,13 +77,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class TripController {
 
     private final TripService tripService;
+    private final StopEtaService stopEtaService;
     private final TripExecutionService executionService;
     private final TripStopExecutionService stopExecutionService;
     private final TripExceptionService exceptionService;
 
-    public TripController(TripService tripService, TripExecutionService executionService,
+    public TripController(TripService tripService, StopEtaService stopEtaService,
+            TripExecutionService executionService,
             TripStopExecutionService stopExecutionService, TripExceptionService exceptionService) {
         this.tripService = tripService;
+        this.stopEtaService = stopEtaService;
         this.executionService = executionService;
         this.stopExecutionService = stopExecutionService;
         this.exceptionService = exceptionService;
@@ -141,6 +145,28 @@ public class TripController {
     public TripDetailView updateDriver(
             CompanyScope scope, @PathVariable UUID id, @Valid @RequestBody TripDriverRequest request) {
         return tripService.updateDriver(scope, id, request);
+    }
+
+    /**
+     * Recomputes when the shipment is expected at each stop (migration V43, ADR-011).
+     *
+     * <p>{@code planning.trip:manage} <b>or</b> {@code planning.trip:execute}: an ETA is asked for
+     * by whoever is looking at the shipment, and both halves of the day look at it. It writes no
+     * business fact - the arrival a dispatcher records is still {@code actual_arrival_at}, entered
+     * by a person - so it needs no authority sharper than "may work on this shipment".
+     *
+     * <p>Explicit, and not run on every write. A shipment whose stops changed has a stale estimate
+     * until somebody asks, and {@code etaCalculatedAt} on each stop is how a reader tells. See
+     * {@link StopEtaService} for why there is no background job.
+     */
+    @PostMapping("/{id}/eta")
+    @PreAuthorize("hasAuthority('planning.trip:manage') or hasAuthority('planning.trip:execute')")
+    @Operation(summary = "Recompute the expected arrival at each stop from the routing estimates")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TripDetailView recomputeEta(CompanyScope scope, @PathVariable UUID id) {
+        stopEtaService.recompute(scope, id);
+        return tripService.get(scope, id);
     }
 
     @PostMapping("/{id}/assignments")

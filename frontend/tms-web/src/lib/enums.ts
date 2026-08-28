@@ -61,15 +61,127 @@ export const ENUM_LABELS = {
     TRIP_COST: "Costo del viaje",
     VEHICLE: "Vehículo",
   },
+  appointmentPurpose: {
+    DELIVERY: "Entrega",
+    PICKUP: "Recojo",
+  },
+  appointmentStatus: {
+    ARRIVED: "En la puerta",
+    CANCELLED: "Cancelada",
+    COMPLETED: "Atendida",
+    CONFIRMED: "Confirmada",
+    NO_SHOW: "No se presentó",
+    REQUESTED: "Solicitada",
+    RESCHEDULED: "Reprogramada",
+  },
+  dayOfWeek: {
+    FRIDAY: "Vie",
+    MONDAY: "Lun",
+    SATURDAY: "Sáb",
+    SUNDAY: "Dom",
+    THURSDAY: "Jue",
+    TUESDAY: "Mar",
+    WEDNESDAY: "Mié",
+  },
+  /**
+   * V47: por qué un conductor y un vehículo no pueden ejecutar un envío.
+   *
+   * Nueve y no un genérico, porque el sistema sabe la causa y cada una la resuelve otra persona.
+   */
+  resourceRejectionReason: {
+    CARRIER_MISMATCH: "Transportista no coincide",
+    DRIVER_UNAVAILABLE: "Conductor no disponible",
+    INSUFFICIENT_REPOSITION_TIME: "Sin tiempo para desplazarse",
+    LICENSE_INVALID: "Licencia no vigente",
+    MAINTENANCE_BLOCK: "Vehículo en taller",
+    ROUTING_UNKNOWN: "Tramo sin medir",
+    SHIFT_CONFLICT: "Fuera del turno",
+    TRIP_OVERLAP: "Envíos solapados",
+    VEHICLE_UNAVAILABLE: "Vehículo no disponible",
+  },
+  /** V47: el estado del día de trabajo. */
+  workAssignmentStatus: {
+    CANCELLED: "Cancelado",
+    CONFIRMED: "Confirmado",
+    PLANNED: "Planificado",
+  },
+  /** V46: dónde está una factura de transportista en la auditoría de flete. */
+  invoiceStatus: {
+    APPROVED: "Aprobada",
+    DISCREPANCY: "Con diferencias",
+    EXPORTED: "Exportada",
+    MATCHED: "Cuadrada",
+    MATCHING: "Cuadrando",
+    RECEIVED: "Recibida",
+    REJECTED: "Rechazada",
+    UNDER_REVIEW: "En revisión",
+  },
+  /**
+   * V46: el veredicto de la comparación.
+   *
+   * `UNMATCHABLE` no dice que la factura esté mal: dice que TMS **no tiene con qué compararla**.
+   */
+  matchStatus: {
+    DISCREPANCY: "Con diferencias",
+    MATCHED: "Cuadra",
+    UNMATCHABLE: "Sin comparación posible",
+  },
+  /** V46: por qué una factura no cuadra. */
+  discrepancyType: {
+    CURRENCY_MISMATCH: "Moneda distinta",
+    DUPLICATE_INVOICE: "Factura duplicada",
+    LINE_AMOUNT: "Importe de línea",
+    MISSING_EXPECTED_COST: "Sin coste esperado",
+    TOTAL_AMOUNT: "Importe total",
+    UNMATCHED_TRIP: "Envío sin identificar",
+  },
+  /** V42/JOB 12: por qué un envío no puede salir hoy. */
+  /**
+   * JOB 23: por qué aparece un aviso. Deliberadamente separado de `blockerReason` — un bloqueador
+   * detiene un camión y un aviso no, y compartir vocabulario sería el primer paso para acabar
+   * mezclándolos en un solo panel.
+   */
+  advisoryType: {
+    SETTLEMENT_DISCREPANCY_OPEN: "Diferencia en factura sin resolver",
+    STOP_ETA_MISSES_WINDOW: "La llegada estimada se sale de la ventana",
+  },
+  blockerReason: {
+    AWAITING_CARRIER_VEHICLE: "Falta vehículo del transportista",
+    DRIVER_UNAVAILABLE: "Conductor no disponible",
+    VEHICLE_UNAVAILABLE: "Vehículo no disponible",
+  },
+  /** V42: por qué un vehículo o un conductor no puede trabajar. */
+  unavailabilityReason: {
+    ABSENCE: "Ausencia",
+    HOLIDAY: "Vacaciones",
+    INSPECTION: "Inspección",
+    MAINTENANCE: "Mantenimiento",
+    MEDICAL: "Baja médica",
+    OTHER: "Otro",
+    REPAIR: "Reparación",
+    TRAINING: "Capacitación",
+  },
+  resourceType: {
+    BAY: "Bahía",
+    DOCK: "Muelle",
+    DOOR: "Puerta",
+    YARD: "Patio",
+  },
   costComponentReason: {
     DISTANCE_UNKNOWN: "Sin distancia conocida",
     PALLETS_UNKNOWN: "Sin pallets declarados",
+    STOPS_UNKNOWN: "Sin paradas registradas",
     VOLUME_UNKNOWN: "Sin volumen declarado",
+    WAITING_NOT_RECORDED: "Espera no registrada",
     WEIGHT_UNKNOWN: "Sin peso declarado",
   },
   costQuantitySource: {
+    LINEHAUL_SUBTOTAL: "Subtotal del flete",
+    MEASURED_ROUTE: "Recorrido medido del viaje",
     ORDER_DECLARED_TOTALS: "Totales declarados de los pedidos",
+    RECORDED_WAITING: "Espera registrada",
     ROUTE_REFERENCE: "Distancia de referencia de la ruta",
+    TRIP_STOPS: "Paradas del viaje",
   },
   deliveryResult: {
     DELIVERED: "Entregado",
@@ -128,7 +240,11 @@ export const ENUM_LABELS = {
   },
   orderStatus: {
     CANCELLED: "Cancelado",
+    DELIVERED: "Entregado",
+    DELIVERY_FAILED: "Entrega fallida",
+    IN_EXECUTION: "En ruta",
     NOT_READY: "No listo",
+    PARTIALLY_DELIVERED: "Entregado parcialmente",
     PLANNED: "Planificado",
     READY_FOR_PLANNING: "Listo para planificar",
   },
@@ -139,15 +255,22 @@ export const ENUM_LABELS = {
   },
   rateCardScope: {
     CARRIER: "Transportista",
+    LANE: "Carril (origen-destino)",
     ORIGIN: "Origen",
     ROUTE: "Ruta",
   },
   rateComponent: {
     BASE: "Base",
     DISTANCE: "Distancia",
+    FUEL_SURCHARGE: "Recargo por combustible",
+    MAXIMUM_ADJUSTMENT: "Ajuste al máximo",
     MINIMUM_ADJUSTMENT: "Ajuste al mínimo",
+    OTHER_ACCESSORIAL: "Accesorio",
     PALLETS: "Pallets",
+    STOP_OFF: "Paradas adicionales",
+    TOLL: "Peajes",
     VOLUME: "Volumen",
+    WAITING_TIME: "Tiempo de espera",
     WEIGHT: "Peso",
   },
   stopExecutionStatus: {
@@ -215,6 +338,20 @@ export const ENUM_LABELS = {
     AVAILABLE: "Disponible",
     IN_MAINTENANCE: "En mantenimiento",
     OUT_OF_SERVICE: "Fuera de servicio",
+  },
+  waterfallCandidateStatus: {
+    ACCEPTED: "Aceptó",
+    EXPIRED: "Sin respuesta",
+    OFFERED: "Ofertado",
+    PENDING: "En espera",
+    REJECTED: "Rechazó",
+    SKIPPED: "No ofertado",
+  },
+  waterfallStatus: {
+    ACTIVE: "En curso",
+    ACCEPTED: "Aceptada",
+    CANCELLED: "Detenida",
+    EXHAUSTED: "Agotada",
   },
   vehicleBodyType: {
     CONTAINER: "Portacontenedor",

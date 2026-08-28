@@ -201,32 +201,58 @@ class TenancyConstraintIntegrationTest {
         // added planning.trip:execute, granted to every role except VIEWER (execute is not read).
         // V28-V35 took it to 47: rates.rate_card and rates.trip_cost (V30), planning.tender
         // (V31), iam.organization, iam.company, iam.user and iam.membership (V34),
-        // integration.client and integration.webhook (V35), and audit.log:read (V22).
+        // integration.client and integration.webhook (V35), and audit.log:read (V22). V41 took it
+        // to 50: appointments.appointment read/manage and appointments.resource:manage, the last
+        // of which is an administrator's - adding a door changes what the whole site can promise.
+        //
+        // V47 took it to 58 with fleet.work_assignment read/manage - under fleet and not planning,
+        // because the thing being scheduled is a resource and the people who build a driver's day
+        // are the people who maintain the drivers. VIEWER gets the read: the yard and the gate need
+        // to know which truck is doing what, and neither of them plans it.
+        //
+        // V46 took it to 56 with six settlement permissions. Six rather than two, because recording
+        // an invoice, deciding it is payable and handing it to accounting are different
+        // authorities: a single settlement:manage would let whoever keys an invoice approve their
+        // own, which is the oldest control failure in accounts payable.
+        //
+        // V48 took it to 60 with costing.own_fleet read/write. Its own resource rather than folded
+        // into rates.rate_card: a tariff is a commercial agreement with a carrier and this is a
+        // finance model of our own operation, and an installation will want them in different
+        // hands. PLANNER gains the read - choosing between a carrier and our own truck is their
+        // decision - and not the write, which is a finance decision about the business. VIEWER
+        // gains NEITHER: these rates are what we pay a driver by the hour and what we believe fuel
+        // runs at, which is our cost structure rather than our operation.
         //
         // These totals are deliberately exact rather than "at least". The catalogue is a schema
         // contract: a permission that appears without a migration declaring it, or a grant that
         // widens a role silently, is the kind of change this test exists to make visible. The
         // named invariants below are the ones that carry meaning - the counts only anchor them.
         assertThat(count("SELECT count(*) FROM tms.role")).isEqualTo(4);
-        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(47);
+        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(60);
         assertThat(count("SELECT count(*) FROM tms.permission WHERE code = resource || ':' || action"))
-                .isEqualTo(47);
+                .isEqualTo(60);
 
-        // 47 + 46 + 24 + 15. ORGANIZATION_ADMIN holds the whole catalogue; COMPANY_ADMIN holds
+        // 60 + 59 + 31 + 18. ORGANIZATION_ADMIN holds the whole catalogue; COMPANY_ADMIN holds
         // all of it but iam.organization:manage, which is asserted by name further down.
-        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(132);
+        //
+        // V46's six settlement permissions do NOT go to everybody, and the gaps are the control.
+        // PLANNER gained read and match - the person who knows whether a shipment ran the way the
+        // invoice says - but NOT approve or export: committing money is not a dispatcher's
+        // authority, and whoever works the audit queue should not sign off their own conclusions.
+        // VIEWER gained only the read.
+        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(168);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'ORGANIZATION_ADMIN'"))
-                .isEqualTo(47);
+                .isEqualTo(60);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'COMPANY_ADMIN'"))
-                .isEqualTo(46);
+                .isEqualTo(59);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'PLANNER'"))
-                .isEqualTo(24);
+                .isEqualTo(31);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'VIEWER'"))
-                .isEqualTo(15);
+                .isEqualTo(18);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id"
                 + " JOIN tms.permission p ON p.id = rp.permission_id"

@@ -40,6 +40,7 @@ class SchemaExposureIntegrationTest {
             "route", "route_stop", "carrier", "vehicle_type", "vehicle",
             "transport_order", "transport_order_line", "order_import_batch",
             "integration_client", "integration_client_scope", "integration_request",
+            "own_fleet_cost_profile",
             "planning_run", "trip", "trip_stop", "trip_order_assignment",
             "shipment_outbox_event", "import_batch",
             // Append-only logs: SELECT and INSERT only, UPDATE/DELETE revoked from tms_app.
@@ -48,7 +49,34 @@ class SchemaExposureIntegrationTest {
             "rate_card", "trip_cost", "trip_cost_component", "trip_tender", "notification",
             // V34: the one settings row per company. V35: outbound webhooks.
             "company_settings", "webhook_subscription", "webhook_subscription_event",
-            "webhook_delivery", "webhook_delivery_attempt");
+            "webhook_delivery", "webhook_delivery_attempt",
+            // V38: the routing cache. A cache rather than a record - rows are disposable and
+            // tms_app may DELETE them - but company-scoped like everything else, because the
+            // coordinates that key it are a tenant's master data.
+            "travel_estimate",
+            // V40: the tender waterfall and its ranked candidates. No DELETE grant: who was offered
+            // a shipment, and in what order, is exactly what a carrier disputing a rate asks for.
+            "tender_waterfall", "tender_waterfall_candidate",
+            // V41: dock scheduling. The appointment has no DELETE grant - who booked which door and
+            // what happened is what a carrier disputing a detention charge asks for; it is
+            // cancelled, never removed. The three master tables are ordinary master data.
+            "location_resource", "resource_calendar", "resource_blocked_slot", "appointment",
+            // V42: fleet availability. Both carry a DELETE grant, unlike the appointment: lifting a
+            // block is not an operational outcome to keep, it is a correction, and the decision
+            // survives on the audit trail (RESOURCE_BLOCKED / RESOURCE_RELEASED).
+            "resource_unavailability", "driver_shift",
+            // V45: what arrived, per order line. No DELETE grant, matching order_delivery itself -
+            // what was signed for is a commercial fact somebody may be invoiced or credited
+            // against, so a line entered by mistake is corrected to zero and never erased.
+            "order_delivery_line",
+            // V46: freight audit. The approval and the export carry no UPDATE or DELETE grant - a
+            // record of a decision that can be edited is not a record, and an export that can be
+            // deleted is an obligation somebody can make disappear.
+            "carrier_invoice", "carrier_invoice_line", "tolerance_policy", "freight_match",
+            "freight_discrepancy", "settlement_approval", "payable_export",
+            // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
+            // morning as shipments are added, dropped and reordered.
+            "work_assignment", "work_assignment_trip");
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the
@@ -68,12 +96,25 @@ class SchemaExposureIntegrationTest {
             "frequency_exception", "route", "route_stop", "carrier", "vehicle_type", "vehicle",
             "transport_order", "transport_order_line", "order_import_batch",
             "integration_client", "integration_client_scope", "integration_request",
+            "own_fleet_cost_profile",
             "planning_run", "trip", "trip_stop", "trip_order_assignment",
             "shipment_outbox_event", "import_batch", "driver", "trip_exception",
             "order_delivery", "tracking_position", "rate_card", "trip_cost", "trip_cost_component",
             "trip_tender", "notification",
             "company_settings", "webhook_subscription", "webhook_subscription_event",
-            "webhook_delivery", "webhook_delivery_attempt");
+            "webhook_delivery", "webhook_delivery_attempt", "travel_estimate",
+            "tender_waterfall", "tender_waterfall_candidate",
+            "location_resource", "resource_calendar", "resource_blocked_slot", "appointment",
+            "resource_unavailability", "driver_shift",
+            "order_delivery_line",
+            // V46: freight audit. The approval and the export carry no UPDATE or DELETE grant - a
+            // record of a decision that can be edited is not a record, and an export that can be
+            // deleted is an obligation somebody can make disappear.
+            "carrier_invoice", "carrier_invoice_line", "tolerance_policy", "freight_match",
+            "freight_discrepancy", "settlement_approval", "payable_export",
+            // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
+            // morning as shipments are added, dropped and reordered.
+            "work_assignment", "work_assignment_trip");
 
     /**
      * The only tables allowed to carry a {@code company_id} and <em>not</em> the tenant policy.

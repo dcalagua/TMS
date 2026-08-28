@@ -151,6 +151,74 @@ class RateCardSelectorTest {
         }
     }
 
+    @Nested
+    @DisplayName("lane pricing (V39)")
+    class Lanes {
+
+        private static final UUID DESTINATION = UUID.randomUUID();
+        private static final UUID OTHER_DESTINATION = UUID.randomUUID();
+
+        /** A trip with exactly one destination is on a lane; one with several is not. */
+        private static CostableTrip singleDrop(UUID destinationId) {
+            return new CostableTrip(UUID.randomUUID(), COMPANY, "SH-00000001", PLANNING_DATE, CARRIER,
+                    VEHICLE_TYPE, ORIGIN, null, BigDecimal.valueOf(1000), BigDecimal.valueOf(12),
+                    BigDecimal.valueOf(10), true, destinationId, 1);
+        }
+
+        private static RateCard lane(String code, UUID originId, UUID destinationId) {
+            return new RateCard(COMPANY, code, code, CARRIER, RateCardScope.LANE, originId, destinationId, null,
+                    null, "PEN", PLANNING_DATE.minusDays(30), null,
+                    RateComponents.flat(BigDecimal.valueOf(100)), UUID.randomUUID());
+        }
+
+        @Test
+        @DisplayName("a lane card prices the shipment that runs that lane")
+        void matchesTheLane() {
+            RateCard card = lane("LANE-1", ORIGIN, DESTINATION);
+
+            assertThat(RateCardSelector.select(singleDrop(DESTINATION), List.of(card))).contains(card);
+        }
+
+        @Test
+        @DisplayName("a lane card does not price a shipment going somewhere else")
+        void wrongDestination() {
+            RateCard card = lane("LANE-1", ORIGIN, DESTINATION);
+
+            assertThat(RateCardSelector.select(singleDrop(OTHER_DESTINATION), List.of(card))).isEmpty();
+        }
+
+        /**
+         * The case that would price a multi-drop shipment against a contract that was never about
+         * it. A four-stop trip has no lane, and {@code Objects.equals(null, null)} would otherwise
+         * have matched every lane card whose destination happened to be null - which is exactly the
+         * pricing-by-coincidence the scope rule refuses.
+         */
+        @Test
+        @DisplayName("a multi-drop shipment is on no lane and is priced by no lane card")
+        void multiDropHasNoLane() {
+            CostableTrip multiDrop = new CostableTrip(UUID.randomUUID(), COMPANY, "SH-2", PLANNING_DATE,
+                    CARRIER, VEHICLE_TYPE, ORIGIN, null, BigDecimal.valueOf(1000), BigDecimal.valueOf(12),
+                    BigDecimal.valueOf(10), true, null, 4);
+
+            assertThat(RateCardSelector.select(multiDrop, List.of(lane("LANE-1", ORIGIN, DESTINATION))))
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("a lane beats an origin card, and a route card beats a lane")
+        void specificityOrder() {
+            RateCard byCarrier = card("CAR", CARRIER, RateCardScope.CARRIER, null, null, null,
+                    PLANNING_DATE.minusDays(30), null);
+            RateCard byOrigin = card("ORG", CARRIER, RateCardScope.ORIGIN, ORIGIN, null, null,
+                    PLANNING_DATE.minusDays(30), null);
+            RateCard byLane = lane("LANE", ORIGIN, DESTINATION);
+
+            assertThat(RateCardSelector.select(singleDrop(DESTINATION), List.of(byCarrier, byOrigin, byLane)))
+                    .as("the lane is more specific than the depot it leaves")
+                    .contains(byLane);
+        }
+    }
+
     private static CostableTrip trip() {
         return trip(CARRIER, VEHICLE_TYPE, ROUTE);
     }

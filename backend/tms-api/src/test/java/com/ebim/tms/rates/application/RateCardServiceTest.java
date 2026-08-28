@@ -18,6 +18,7 @@ import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.reference.CarrierLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
+import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.reference.RouteTemplate;
 import com.ebim.tms.shared.reference.RouteTemplateLookupPort;
@@ -61,13 +62,14 @@ class RateCardServiceTest {
         rateCardRepository = mock(RateCardRepository.class);
         CarrierLookupPort carriers = mock(CarrierLookupPort.class);
         OriginLookupPort origins = mock(OriginLookupPort.class);
+        DestinationLookupPort destinations = mock(DestinationLookupPort.class);
         RouteTemplateLookupPort routes = mock(RouteTemplateLookupPort.class);
         VehicleTypeLookupPort vehicleTypes = mock(VehicleTypeLookupPort.class);
         AuditActorProvider actors = mock(AuditActorProvider.class);
         when(actors.requireAppUserId()).thenReturn(ACTOR);
 
-        service = new RateCardService(rateCardRepository, carriers, origins, routes, vehicleTypes, actors,
-                mock(AuditRecorder.class));
+        service = new RateCardService(rateCardRepository, carriers, origins, destinations, routes,
+                vehicleTypes, actors, mock(AuditRecorder.class));
 
         when(carriers.findActiveInCompany(CARRIER, COMPANY))
                 .thenReturn(Optional.of(MasterReference.of(CARRIER, "CAR-1", "Transportes Uno")));
@@ -144,7 +146,7 @@ class RateCardServiceTest {
 
             assertThatExceptionOfType(InvalidRequestException.class)
                     .isThrownBy(() -> service.create(SCOPE, empty))
-                    .withMessageContaining("at least one of baseAmount");
+                    .withMessageContaining("at least one charge: baseAmount");
         }
 
         @Test
@@ -155,7 +157,7 @@ class RateCardServiceTest {
 
             assertThatExceptionOfType(InvalidRequestException.class)
                     .isThrownBy(() -> service.create(SCOPE, floorOnly))
-                    .withMessageContaining("at least one of baseAmount");
+                    .withMessageContaining("at least one charge: baseAmount");
         }
 
         @Test

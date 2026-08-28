@@ -30,6 +30,7 @@ import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.audit.AuditActor;
 import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
+import com.ebim.tms.shared.reference.OrderAmounts;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.math.BigDecimal;
@@ -77,6 +78,7 @@ class TripDeliveryServiceTest {
     private TripOrderAssignmentRepository assignmentRepository;
     private OrderPlanningPort orderPlanningPort;
     private ShipmentEventPublisher eventPublisher;
+    private OrderExecutionPropagator orderExecution;
     private TripDeliveryService service;
     private Trip trip;
     private TripStop stop;
@@ -93,8 +95,10 @@ class TripDeliveryServiceTest {
         when(actors.current()).thenReturn(Optional.of(
                 AuditActor.person(ACTOR, "dispatcher@example.com", COMPANY, UUID.randomUUID(), "corr")));
 
+        orderExecution = mock(OrderExecutionPropagator.class);
         service = new TripDeliveryService(tripRepository, deliveryRepository, assignmentRepository,
-                orderPlanningPort, eventPublisher, mock(TripAlertPublisher.class), assembler, actors);
+                orderPlanningPort, eventPublisher, mock(TripAlertPublisher.class), assembler, orderExecution,
+                actors);
 
         stop = mock(TripStop.class);
         when(stop.id()).thenReturn(STOP_ID);
@@ -119,12 +123,13 @@ class TripDeliveryServiceTest {
                 .thenReturn(Optional.empty());
         when(deliveryRepository.saveAndFlush(any(OrderDelivery.class))).thenAnswer(call -> call.getArgument(0));
         when(assembler.toDetail(any(Trip.class), eq(COMPANY)))
-                .thenAnswer(call -> new TripDetailView(null, List.of(), List.of(), List.of(), List.of()));
+                .thenAnswer(call -> new TripDetailView(null, List.of(), List.of(), List.of(), List.of(), TripRouteMetrics.NONE));
     }
 
     private static PlannableOrder order(UUID destinationId) {
         return new PlannableOrder(ORDER_ID, "ORD-0001", UUID.randomUUID(), destinationId, "Customer", null,
-                LocalDate.now(), "NORMAL", null, null, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, null, null);
+                LocalDate.now(), "NORMAL", null, null, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, null, null,
+                OrderAmounts.NONE);
     }
 
     private static DeliveryResultRequest delivered(OffsetDateTime at) {

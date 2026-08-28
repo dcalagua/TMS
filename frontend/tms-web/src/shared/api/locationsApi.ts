@@ -48,6 +48,16 @@ export interface LocationView {
   zoneCode: string | null
   zoneName: string | null
   serviceTimeMinutes: number
+  /**
+   * El radio del geocerco de este sitio, en metros, o null cuando no tiene (migración V43).
+   *
+   * Sólo lectura aquí: se configura por su propio endpoint, porque se define una vez al dar de alta
+   * el sitio y no se edita cada vez que alguien corrige una dirección.
+   *
+   * **ADR-007 sigue en pie**: una posición dentro de este círculo informa a una persona y no mueve
+   * ningún ciclo de vida. La llegada que vale sigue siendo la que registra alguien.
+   */
+  geofenceRadiusM: number | null
   externalSystem: string | null
   externalReference: string | null
   active: boolean
@@ -136,4 +146,18 @@ export interface LocationImportPreview {
   serviceTimeMinutes: number
   externalSystem: string | null
   externalReference: string | null
+}
+
+/**
+ * Fija o quita el círculo alrededor de un sitio (migración V43, ADR-011).
+ *
+ * `radiusMetres` null **borra** el geocerco - por eso viaja en un cuerpo y no como parámetro de
+ * consulta, que no podría distinguir "quítalo" de "no lo mandé".
+ */
+export function setLocationGeofence(
+  companyId: string, id: string, radiusMetres: number | null,
+): Promise<LocationView> {
+  return apiRequest<LocationView>(`/masterdata/locations/${id}/geofence`, {
+    method: 'PUT', companyId, body: { radiusMetres },
+  })
 }

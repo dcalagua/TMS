@@ -15,6 +15,10 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 import {
   AuditPage, CarriersPage, CompanySettingsPage, ControlTowerPage, DestinationsPage, DriversPage,
   FrequenciesPage, IntegrationsPage, LocationsPage, OrdersPage, OriginsPage, PlanningBoardPage,
+  AppointmentsPage,
+  SettlementPage,
+  OwnFleetCostProfilesPage,
+  WorkAssignmentsPage,
   PlanningRunsPage, RateCardsPage, ReportsPage, RoutesPage, TripWorkspacePage, TripsPage,
   UsersPage, VehicleTypesPage, VehiclesPage, ZonesPage,
 } from "./app/lazyRoutes";
@@ -73,8 +77,14 @@ export default function App() {
                   <Route path="planning/:runId" element={<PlanningBoardPage />} />
 
                   <Route path="rates/rate-cards" element={<RateCardsPage />} />
+                  {/* Bajo `costing` y no bajo `rates`: una tarifa es un acuerdo comercial con un
+                      transportista y esto es un modelo financiero de nuestra propia operación. */}
+                  <Route path="costing/own-fleet" element={<OwnFleetCostProfilesPage />} />
 
                   <Route path="trips" element={<TripsPage />} />
+                  <Route path="appointments" element={<AppointmentsPage />} />
+                  <Route path="settlement" element={<SettlementPage />} />
+                  <Route path="work-assignments" element={<WorkAssignmentsPage />} />
                   {/* Una ruta completa y no un drawer sobre la lista: un despachador se queda
                       dentro de un viaje durante minutos, y `/trips/{id}` es lo que se pega en un
                       chat cuando alguien pregunta dónde está un camión. */}

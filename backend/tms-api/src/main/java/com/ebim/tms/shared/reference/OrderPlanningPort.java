@@ -46,19 +46,72 @@ public interface OrderPlanningPort {
     Map<UUID, PlannableOrder> findAllInCompany(Set<UUID> ids, UUID companyId);
 
     /**
-     * {@code READY_FOR_PLANNING → PLANNED}, called by planning when an assignment is created.
-     * Refuses any other source status, so a double assignment cannot slip through even if the
-     * assignment invariant were ever weakened.
+     * Puts part or all of an order onto a trip, and returns what is left (migration V37).
+     *
+     * <p>This replaced {@code markPlanned}. The difference is the whole of split allocation: a
+     * planner no longer says "this order is planned", they say "this much of it is on this trip",
+     * and the order's status is a <em>consequence</em> of the ledger rather than an independent
+     * assertion beside it. An order becomes {@code PLANNED} when it is fully allocated and stays
+     * {@code READY_FOR_PLANNING} while any of it is still waiting, which is what lets the
+     * remainder be planned without inventing a ninth status for "partly planned".
+     *
+     * <p>Refused with a 409 if it would over-allocate, and refused again by V37's
+     * {@code ck_transport_order_not_over_allocated} beneath. The implementation takes the order's
+     * row lock first, so two planners splitting the same order serialise rather than both reading
+     * the same remaining capacity.
+     *
+     * @return the order's allocation after this call, whose {@code pending()} is what a board shows
      */
-    void markPlanned(UUID orderId, UUID companyId);
+    OrderAllocation allocate(UUID orderId, UUID companyId, OrderAmounts amounts);
 
     /**
-     * {@code PLANNED → READY_FOR_PLANNING}, called when an assignment is closed and the order
-     * returns to the pool. This is the "unassign" semantics {@code OrderService.cancel}'s
-     * message ("unassign it from its trip first") deferred to planning - see
-     * {@code docs/overnight/09_ORDERS.md} section 8, point 2.
+     * Gives an allocation back: the order came off a trip, or moved to another one.
+     *
+     * <p>The exact inverse of {@link #allocate}, which is what makes a move safe - it releases from
+     * the source and allocates to the target in one transaction, and the two cancel out. Releasing
+     * part of a fully allocated order returns it to {@code READY_FOR_PLANNING} with the rest still
+     * on its trip.
      */
-    void releaseFromPlanning(UUID orderId, UUID companyId);
+    OrderAllocation releaseAllocation(UUID orderId, UUID companyId, OrderAmounts amounts);
+
+    /**
+     * What is ordered and what is already on trips, for a planner deciding how to split the rest.
+     * Batched, never one call per row: the pending column is on every line of the board.
+     */
+    Map<UUID, OrderAllocation> allocationsOf(Set<UUID> orderIds, UUID companyId);
+
+    /**
+     * The order's vehicle has left the dock: {@code PLANNED -> IN_EXECUTION}.
+     *
+     * <p>Called by {@code TripExecutionService.dispatch} for every order the departing trip
+     * carries. Idempotent - a retried dispatch moves nothing twice - and silent about orders that
+     * are already further along, so a replay cannot drag a closed-out order backwards.
+     *
+     * <p>Planning reports the <em>fact</em> and orders decides what it means for the lifecycle.
+     * That is the same direction {@code markPlanned} already runs in, and it is why planning does
+     * not simply write a status: which state a departure puts an order into is an order rule.
+     */
+    void markInExecution(UUID orderId, UUID companyId);
+
+    /**
+     * The trip carrying this order has been closed out, and this is how the order ended.
+     *
+     * <p>Called by {@code TripExecutionService.complete}, and again by
+     * {@code TripDeliveryService.record} for every correction keyed after completion - the window
+     * stays open on purpose, because the paperwork comes back later. Both callers pass the
+     * fulfilment derived from {@code tms.order_delivery} at that moment, so the order's state is
+     * recomputed from the fact rather than remembered alongside it and cannot drift from it.
+     *
+     * <p>The mapping from fulfilment to lifecycle state belongs to the orders module and is
+     * asserted there: only {@link OrderFulfillmentStatus#DELIVERED} closes an order as delivered,
+     * a partial closes it as partially delivered, and everything else - refused, failed, never
+     * attempted, and nothing recorded at all - closes it as failed, which is both the honest
+     * reading and the safe one, because failed is reopenable and delivered is not.
+     *
+     * <p>Idempotent. An order that is not in execution is left alone rather than refused: a
+     * completion replayed after somebody reopened and replanned the order must not undo that.
+     */
+    void closeOut(UUID orderId, UUID companyId, OrderFulfillmentStatus fulfillment);
 
     /**
      * How many of the orders serviced between {@code from} and {@code to} (both inclusive) are on a

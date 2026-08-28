@@ -169,4 +169,36 @@ public interface TripStopRepository extends JpaRepository<TripStop, UUID> {
 
         long getWindowsMissed();
     }
+
+    /**
+     * Stops whose <em>estimated</em> arrival falls outside their window (V43, JOB 23).
+     *
+     * <p>Restricted to shipments that have not finished: an estimate about a stop already served is
+     * a prediction about the past, and putting it on an operational panel would ask a supervisor to
+     * act on something that has already happened one way or the other.
+     *
+     * <p>Deliberately NOT the same query as {@code findOutstandingForDay}. That one reports stops
+     * that <b>have</b> run late; this reports stops predicted to. One is history and the other is
+     * still actionable, and a panel that mixed them would be telling a supervisor to leave earlier
+     * for a delivery that is already three hours old.
+     */
+    @Query("SELECT s FROM TripStop s JOIN FETCH s.trip t WHERE s.companyId = :companyId "
+            + "AND t.companyId = :companyId AND t.planningDate = :date "
+            + "AND s.etaMissesWindow = true AND t.status IN :activeStatuses "
+            + "AND s.executionStatus IN :outstanding "
+            + "ORDER BY s.etaArrivalAt ASC")
+    List<TripStop> findEtaMissingWindowForDay(@Param("companyId") UUID companyId,
+            @Param("date") java.time.LocalDate date,
+            @Param("activeStatuses") java.util.Collection<TripStatus> activeStatuses,
+            @Param("outstanding") java.util.Collection<StopExecutionStatus> outstanding,
+            Pageable pageable);
+
+    @Query("SELECT count(s) FROM TripStop s JOIN s.trip t WHERE s.companyId = :companyId "
+            + "AND t.companyId = :companyId AND t.planningDate = :date "
+            + "AND s.etaMissesWindow = true AND t.status IN :activeStatuses "
+            + "AND s.executionStatus IN :outstanding")
+    long countEtaMissingWindowForDay(@Param("companyId") UUID companyId,
+            @Param("date") java.time.LocalDate date,
+            @Param("activeStatuses") java.util.Collection<TripStatus> activeStatuses,
+            @Param("outstanding") java.util.Collection<StopExecutionStatus> outstanding);
 }

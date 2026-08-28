@@ -23,6 +23,19 @@ class ModuleBoundaryTest {
 
     private static final List<String> BUSINESS_MODULES =
             List.of("iam", "masterdata", "fleet", "orders", "planning", "rates", "audit", "integration", "tracking",
+                    // Own-fleet cost modelling (V48, JOB 22). Listed the day it was created:
+                    // a new module missing from here makes this whole rule pass vacuously over it.
+                    "costing",
+                    // Owns tms.travel_estimate (V38). A platform capability rather than a business
+                    // domain, but listed here for the same reason notification is: it is reached
+                    // through com.ebim.tms.shared.reference.RoutingPort by every module that needs
+                    // a distance, and leaving it unconstrained would let planning reach into its
+                    // cache instead of asking the port.
+                    "routing",
+                    // Owns tms.appointment and the dock master data (V41). A business module like
+                    // any other: it asks planning about shipments and masterdata about places
+                    // through ports, and reads neither's tables.
+                    "appointments",
                     // Owns tms.notification (V32). Listed here, and not left as an unconstrained
                     // package, precisely because it is the module every other one has a reason to
                     // call: an alert is a by-product of half the writes in the product. The rule

@@ -1,3 +1,11 @@
+import { expect } from 'vitest'
+import * as axeMatchers from 'vitest-axe/matchers'
+
+// Los matchers de accesibilidad se registran una vez, aquí, en lugar de importarse en cada
+// fichero de pruebas (JOB 26). El import de conveniencia de vitest-axe no se engancha con
+// esta versión de Vitest, y un `expect.extend` explícito no depende de ese detalle.
+expect.extend(axeMatchers)
+
 /**
  * Arranque común de Vitest, ya declarado por `vite.config.ts` (`test.setupFiles`).
  *

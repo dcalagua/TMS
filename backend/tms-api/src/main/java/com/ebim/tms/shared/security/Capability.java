@@ -73,12 +73,63 @@ public enum Capability {
     TRANSPORT_MONITOR_VIEW(Permission.MONITORING_TRANSPORT_READ),
 
     /**
+     * The dock board (migration V41).
+     *
+     * <p>Its own capability rather than folded into trips: the people who read it are the yard, the
+     * gate and the warehouse, and none of them plans shipments. A viewer holds the read for the
+     * same reason - a booking carries no price, unlike a tender.
+     */
+    APPOINTMENTS_VIEW(Permission.APPOINTMENTS_APPOINTMENT_READ),
+    APPOINTMENTS_MANAGE(
+            Permission.APPOINTMENTS_APPOINTMENT_MANAGE,
+            // Configuring a door and booking one are separate authorities and stay separate where
+            // they are enforced. They share this capability because they share a screen, which is
+            // the question a capability answers.
+            Permission.APPOINTMENTS_RESOURCE_MANAGE),
+
+    /**
      * Tariffs and what a shipment cost (migration V30). One capability over both resources: they
      * share a screen group, and the finer question - may this account see the <em>agreement</em>
      * as well as the figure - stays where it is enforced, on the two permissions.
      */
     RATES_VIEW(Permission.RATES_RATE_CARD_READ, Permission.RATES_TRIP_COST_READ),
     RATES_MANAGE(Permission.RATES_RATE_CARD_MANAGE, Permission.RATES_TRIP_COST_MANAGE),
+
+    /**
+     * Freight audit (migration V46). Its own capability rather than folded into rates: the people
+     * who audit invoices are finance, and the people who maintain tariffs are commercial.
+     *
+     * <p>{@code SETTLEMENT_MANAGE} deliberately carries matching but <b>not</b> approval or export.
+     * Deciding an expenditure is payable, and handing it to accounting, are separate authorities
+     * from working the audit queue - and an account that can do the first two by holding the third
+     * would let whoever keys an invoice approve their own.
+     */
+    SETTLEMENT_VIEW(Permission.SETTLEMENT_INVOICE_READ),
+    SETTLEMENT_MANAGE(
+            Permission.SETTLEMENT_INVOICE_MANAGE,
+            Permission.SETTLEMENT_INVOICE_MATCH,
+            Permission.SETTLEMENT_TOLERANCE_MANAGE),
+    SETTLEMENT_APPROVE(Permission.SETTLEMENT_INVOICE_APPROVE),
+    SETTLEMENT_EXPORT(Permission.SETTLEMENT_INVOICE_EXPORT),
+
+    /**
+     * Resource scheduling (migration V47). Its own capability rather than folded into the fleet
+     * masters: maintaining a truck's record and planning its day are different jobs, done by
+     * different people, on different screens.
+     */
+    WORK_ASSIGNMENT_VIEW(Permission.FLEET_WORK_ASSIGNMENT_READ),
+    WORK_ASSIGNMENT_MANAGE(Permission.FLEET_WORK_ASSIGNMENT_MANAGE),
+
+    /**
+     * What our own trucks cost to run (migration V48).
+     *
+     * <p>Deliberately NOT folded into {@code RATES_*}. A tariff is a commercial agreement with a
+     * carrier; this is a finance model of our own operation, and gating the screen on RATES_VIEW
+     * would hide it from a planner who is allowed to see the cost and not the tariffs - which is
+     * exactly the pairing an installation is most likely to want.
+     */
+    OWN_FLEET_COSTING_VIEW(Permission.COSTING_OWN_FLEET_READ),
+    OWN_FLEET_COSTING_MANAGE(Permission.COSTING_OWN_FLEET_WRITE),
 
     /**
      * Deliberately separate from {@code IAM_*}: issuing a machine credential is not the same

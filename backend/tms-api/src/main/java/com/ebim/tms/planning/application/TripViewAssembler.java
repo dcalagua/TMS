@@ -41,6 +41,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 
 /**
@@ -66,6 +67,7 @@ public class TripViewAssembler {
     private final TripStopRepository tripStopRepository;
     private final TripExceptionRepository tripExceptionRepository;
     private final OrderDeliveryRepository orderDeliveryRepository;
+    private final TripRoutingService tripRoutingService;
     private final DeliveryEvidenceRepository evidenceRepository;
     private final OriginLookupPort originLookupPort;
     private final VehicleLookupPort vehicleLookupPort;
@@ -83,12 +85,14 @@ public class TripViewAssembler {
             OriginLookupPort originLookupPort, VehicleLookupPort vehicleLookupPort,
             CarrierLookupPort carrierLookupPort, DriverLookupPort driverLookupPort,
             RouteTemplateLookupPort routeTemplateLookupPort, DestinationLookupPort destinationLookupPort,
-            OrderPlanningPort orderPlanningPort, PlanningCapacityService capacityService) {
+            OrderPlanningPort orderPlanningPort, PlanningCapacityService capacityService,
+            TripRoutingService tripRoutingService) {
         this.planningRunRepository = planningRunRepository;
         this.assignmentRepository = assignmentRepository;
         this.tripStopRepository = tripStopRepository;
         this.tripExceptionRepository = tripExceptionRepository;
         this.orderDeliveryRepository = orderDeliveryRepository;
+        this.tripRoutingService = tripRoutingService;
         this.evidenceRepository = evidenceRepository;
         this.originLookupPort = originLookupPort;
         this.vehicleLookupPort = vehicleLookupPort;
@@ -144,7 +148,8 @@ public class TripViewAssembler {
                 assignmentRepository.loadByTripId(trip.id(), AssignmentStatus.ACTIVE));
         // One trip: its stops are already being rendered below, so counting them in memory
         // costs nothing extra - unlike the board above, this is not an N+1.
-        TripView view = toView(trip, load, referencesOf(List.of(trip), companyId), trip.stops().size());
+        ShipmentReferences references = referencesOf(List.of(trip), companyId);
+        TripView view = toView(trip, load, references, trip.stops().size());
 
         List<TripAssignmentView> assignmentViews = assignments.stream()
                 .map(assignment -> toAssignmentView(assignment, orders.get(assignment.orderId()), destinations))
@@ -172,8 +177,14 @@ public class TripViewAssembler {
                 .map(exception -> toExceptionView(exception, stopsById, destinations))
                 .toList();
 
+        // The run's distance and drive time (V38), measured over references this method has
+        // already loaded - so the first consumer of RoutingPort costs the detail view no extra
+        // master-data query, only the cache reads the port itself makes.
+        TripRouteMetrics routing = tripRoutingService.measure(
+                trip, originOf(trip, references), destinations);
+
         return new TripDetailView(view, assignmentViews, stopViews, exceptionViews,
-                toDeliveryViews(deliveries, stopsById, orders, companyId));
+                toDeliveryViews(deliveries, stopsById, orders, companyId), routing);
     }
 
     /**
@@ -211,7 +222,10 @@ public class TripViewAssembler {
                             delivery.source(), delivery.actorDisplayName(), delivery.recordedAt(),
                             evidence.getOrDefault(delivery.id(), List.of()).stream()
                                     .map(TripViewAssembler::toEvidenceView)
-                                    .toList());
+                                    .toList(),
+                            // V45: null for a delivery that recorded no amounts, so a screen
+                            // renders the gap rather than inventing a zero.
+                            OrderDeliveryView.DeliveryQuantitiesView.of(delivery.quantities()));
                 })
                 .toList();
     }
@@ -334,6 +348,12 @@ public class TripViewAssembler {
      * to another tenant must not be loadable even though the trips that named it were already
      * scoped.
      */
+    /** The run's origin, which is where the vehicle starts from. Null when the run is unresolvable. */
+    private MasterReference originOf(Trip trip, ShipmentReferences references) {
+        PlanningRun run = references.runs().get(trip.planningRunId());
+        return run == null ? null : references.origins().get(run.originId());
+    }
+
     private ShipmentReferences referencesOf(List<Trip> trips, UUID companyId) {
         if (trips.isEmpty()) {
             return ShipmentReferences.EMPTY;
@@ -344,7 +364,11 @@ public class TripViewAssembler {
         Map<UUID, MasterReference> origins = originLookupPort.findAllInCompany(
                 runs.values().stream().map(PlanningRun::originId).collect(Collectors.toSet()), companyId);
         Map<UUID, MasterReference> carriers =
-                carrierLookupPort.findAllInCompany(idsOf(trips, Trip::carrierId), companyId);
+                carrierLookupPort.findAllInCompany(
+                        // Both carriers, in one lookup. A subcontracted shipment names the carrier
+                        // that accepted it as well as the owner of the vehicle on it (V42), and a
+                        // second query per board would be the N+1 this batching exists to avoid.
+                        idsOf(trips, Trip::carrierId, Trip::acceptedCarrierId), companyId);
         // Display-grade, active or not: a driver who has left the fleet must still render on the
         // shipments they ran - the same contract CarrierLookupPort documents.
         Map<UUID, DriverReference> drivers =
@@ -356,6 +380,15 @@ public class TripViewAssembler {
 
     private static Set<UUID> idsOf(List<Trip> trips, Function<Trip, UUID> extractor) {
         return trips.stream().map(extractor).filter(Objects::nonNull).collect(Collectors.toSet());
+    }
+
+    /** The union over several id-bearing fields, for a master a trip can name more than once (V42). */
+    @SafeVarargs
+    private static Set<UUID> idsOf(List<Trip> trips, Function<Trip, UUID>... extractors) {
+        return trips.stream()
+                .flatMap(trip -> Stream.of(extractors).map(extractor -> extractor.apply(trip)))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
     }
 
     private Map<UUID, CapacityLoad> loadsOf(List<Trip> trips) {
@@ -374,6 +407,8 @@ public class TripViewAssembler {
         VehicleCapacityReference vehicle = trip.vehicleId() == null ? null : references.vehicles().get(trip.vehicleId());
         // Resolved from the trip's own carrier_id, not from the vehicle: see CarrierLookupPort.
         MasterReference carrier = trip.carrierId() == null ? null : references.carriers().get(trip.carrierId());
+        MasterReference acceptedCarrier = trip.acceptedCarrierId() == null
+                ? null : references.carriers().get(trip.acceptedCarrierId());
         DriverReference driver = trip.driverId() == null ? null : references.drivers().get(trip.driverId());
         RouteTemplate route = trip.routeId() == null ? null : references.routes().get(trip.routeId());
 
@@ -386,6 +421,8 @@ public class TripViewAssembler {
                 trip.vehicleId(), vehicle == null ? null : vehicle.code(),
                 vehicle == null ? null : vehicle.licensePlate(), vehicle == null ? null : vehicle.vehicleTypeCode(),
                 trip.carrierId(), carrier == null ? null : carrier.name(),
+                trip.acceptedCarrierId(), acceptedCarrier == null ? null : acceptedCarrier.name(),
+                trip.awaitsCarrierVehicle(),
                 trip.driverId(), driver == null ? null : driver.code(), driver == null ? null : driver.fullName(),
                 driver == null ? null : driver.phone(), driver == null ? null : driver.licenseNumber(),
                 driver == null ? null : driver.licenseExpiresOn(),
@@ -440,7 +477,9 @@ public class TripViewAssembler {
                 stop.serviceWindowStart(), stop.serviceWindowEnd(), orderCount,
                 stop.executionStatus(), allowed, stop.actualArrivalAt(), stop.serviceStartedAt(),
                 stop.actualDepartureAt(), stop.executionNotes(),
-                dwellMinutes(stop.actualArrivalAt(), stop.actualDepartureAt()), (int) openExceptionCount);
+                dwellMinutes(stop.actualArrivalAt(), stop.actualDepartureAt()), (int) openExceptionCount,
+                stop.etaArrivalAt(), stop.etaDepartureAt(), stop.etaSource(), stop.etaCalculatedAt(),
+                stop.etaMissesWindow());
     }
 
     /** Null until both ends are known: a stop still being served has no dwell time yet, only a start. */

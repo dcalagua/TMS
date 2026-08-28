@@ -1,7 +1,12 @@
 package com.ebim.tms.planning.application;
 
 import com.ebim.tms.planning.domain.DeliveryResult;
+import com.ebim.tms.planning.domain.DeliveryQuantities;
+import com.ebim.tms.shared.reference.OrderAmounts;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
+import java.math.BigDecimal;
 import jakarta.validation.constraints.Size;
 import java.time.OffsetDateTime;
 
@@ -37,5 +42,60 @@ public record DeliveryResultRequest(
         OffsetDateTime deliveredAt,
         @Size(max = 120, message = "must be at most 120 characters") String receiverName,
         @Size(max = 60, message = "must be at most 60 characters") String receiverDocument,
-        @Size(max = 1000, message = "must be at most 1000 characters") String notes) {
+        @Size(max = 1000, message = "must be at most 1000 characters") String notes,
+        /**
+         * How much was taken to the customer, how much they took and how much they refused
+         * (migration V45, debt D3).
+         *
+         * <p><b>Optional, and null means "not recorded" - never zero.</b> Recording an outcome
+         * without amounts stays a legitimate way to work, and is what every delivery written before
+         * V45 did. A caller that omits this block is making no claim about quantities; a caller that
+         * sends zeros is claiming the customer took nothing.
+         */
+        @Valid DeliveryQuantitiesRequest quantities) {
+
+    /**
+     * An outcome with no amounts - what every delivery recorded before V45 was, and a legitimate
+     * way to work still. Kept as its own constructor rather than making callers pass an explicit
+     * null, so "I am not claiming a quantity" reads differently from "I forgot the argument".
+     */
+    public DeliveryResultRequest(DeliveryResult result, OffsetDateTime deliveredAt, String receiverName,
+            String receiverDocument, String notes) {
+        this(result, deliveredAt, receiverName, receiverDocument, notes, null);
+    }
+
+    /**
+     * The three measures, each optional as a whole.
+     *
+     * <p>Deliberately not defaulted to zero by the binder: {@code null} has to survive all the way
+     * to {@code DeliveryQuantities}, which is the type that knows absence is not a delivery of
+     * nothing.
+     */
+    public record DeliveryQuantitiesRequest(
+            @NotNull(message = "is required") @PositiveOrZero(message = "cannot be negative")
+            BigDecimal attemptedWeightKg,
+            @NotNull(message = "is required") @PositiveOrZero(message = "cannot be negative")
+            BigDecimal attemptedVolumeM3,
+            @NotNull(message = "is required") @PositiveOrZero(message = "cannot be negative")
+            BigDecimal attemptedPallets,
+            @NotNull(message = "is required") @PositiveOrZero(message = "cannot be negative")
+            BigDecimal deliveredWeightKg,
+            @NotNull(message = "is required") @PositiveOrZero(message = "cannot be negative")
+            BigDecimal deliveredVolumeM3,
+            @NotNull(message = "is required") @PositiveOrZero(message = "cannot be negative")
+            BigDecimal deliveredPallets,
+            @NotNull(message = "is required") @PositiveOrZero(message = "cannot be negative")
+            BigDecimal refusedWeightKg,
+            @NotNull(message = "is required") @PositiveOrZero(message = "cannot be negative")
+            BigDecimal refusedVolumeM3,
+            @NotNull(message = "is required") @PositiveOrZero(message = "cannot be negative")
+            BigDecimal refusedPallets) {
+
+        public DeliveryQuantities toDomain() {
+            return DeliveryQuantities.of(
+                    new OrderAmounts(attemptedWeightKg, attemptedVolumeM3, attemptedPallets),
+                    new OrderAmounts(deliveredWeightKg, deliveredVolumeM3, deliveredPallets),
+                    new OrderAmounts(refusedWeightKg, refusedVolumeM3, refusedPallets));
+        }
+    }
 }

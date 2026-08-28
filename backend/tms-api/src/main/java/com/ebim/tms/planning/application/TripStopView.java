@@ -1,5 +1,6 @@
 package com.ebim.tms.planning.application;
 
+import com.ebim.tms.planning.domain.EtaSource;
 import com.ebim.tms.planning.domain.StopExecutionStatus;
 import java.math.BigDecimal;
 import java.time.LocalTime;
@@ -54,5 +55,22 @@ public record TripStopView(
         OffsetDateTime actualDepartureAt,
         String executionNotes,
         Long dwellMinutes,
-        int openExceptionCount) {
+        int openExceptionCount,
+        /**
+         * When the vehicle is expected here (migration V43). Null means <b>no estimate</b> - a leg
+         * on the way could not be measured, so this stop and every stop after it have none. A
+         * board must render the gap rather than fill it: a plausible arrival time that is wrong
+         * looks exactly like a right one.
+         */
+        OffsetDateTime etaArrivalAt,
+        OffsetDateTime etaDepartureAt,
+        /**
+         * What the weakest leg feeding this stop was measured over. {@code FALLBACK} means at least
+         * one leg was a straight line - the estimate is still useful and is not the same claim as a
+         * measured road, and the screen says which.
+         */
+        EtaSource etaSource,
+        OffsetDateTime etaCalculatedAt,
+        /** The schedule has the vehicle arriving after this stop's window closes. */
+        boolean etaMissesWindow) {
 }

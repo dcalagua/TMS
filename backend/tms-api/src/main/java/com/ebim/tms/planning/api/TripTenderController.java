@@ -3,6 +3,8 @@ package com.ebim.tms.planning.api;
 import com.ebim.tms.planning.application.TenderRequest;
 import com.ebim.tms.planning.application.TenderResponseRequest;
 import com.ebim.tms.planning.application.TenderWithdrawRequest;
+import com.ebim.tms.planning.application.TenderWaterfallService;
+import com.ebim.tms.planning.application.TenderWaterfallView;
 import com.ebim.tms.planning.application.TripTenderService;
 import com.ebim.tms.planning.application.TripTenderView;
 import com.ebim.tms.shared.security.CompanyScope;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -52,9 +55,63 @@ import org.springframework.web.bind.annotation.RestController;
 public class TripTenderController {
 
     private final TripTenderService tenderService;
+    private final TenderWaterfallService waterfallService;
 
-    public TripTenderController(TripTenderService tenderService) {
+    public TripTenderController(TripTenderService tenderService, TenderWaterfallService waterfallService) {
         this.tenderService = tenderService;
+        this.waterfallService = waterfallService;
+    }
+
+    @GetMapping("/waterfall")
+    @PreAuthorize("hasAuthority('planning.tender:read')")
+    @Operation(summary = "The tender waterfall for this shipment, if it has one",
+            description = "The ranked candidate list with what each carrier was quoted and what each "
+                    + "answered - which is how a dispatcher sees who has already turned the shipment "
+                    + "down and who is left. 404 when the shipment has never been on a waterfall.")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TenderWaterfallView waterfall(CompanyScope scope, @PathVariable UUID tripId) {
+        return waterfallService.current(scope, tripId)
+                .orElseThrow(() -> new com.ebim.tms.shared.api.ResourceNotFoundException(
+                        "This shipment has not been tendered through a waterfall."));
+    }
+
+    @PostMapping("/waterfall")
+    @PreAuthorize("hasAuthority('planning.tender:manage')")
+    @Operation(summary = "Rank the company's carriers for this shipment and offer it to the first",
+            description = "Ranks every active carrier by what it would charge - a carrier with no "
+                    + "applicable tariff still ranks, but last, because \"no price\" is not \"free\" - "
+                    + "stores the list, and sends the first offer. Never accepts and never dispatches.")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TenderWaterfallView startWaterfall(CompanyScope scope, @PathVariable UUID tripId,
+            @RequestParam(name = "maxAttempts", required = false) Integer maxAttempts,
+            @RequestParam(name = "responseMinutes", required = false) Integer responseMinutes) {
+        return waterfallService.start(scope, tripId, maxAttempts, responseMinutes);
+    }
+
+    @PostMapping("/waterfall/advance")
+    @PreAuthorize("hasAuthority('planning.tender:manage')")
+    @Operation(summary = "Move a lapsed offer on to the next carrier",
+            description = "Refused while the current offer is still live: advancing early would "
+                    + "withdraw an offer a carrier may be about to accept. Withdraw it explicitly "
+                    + "if that is what you mean.")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TenderWaterfallView advanceWaterfall(CompanyScope scope, @PathVariable UUID tripId) {
+        return waterfallService.advance(scope, tripId);
+    }
+
+    @PostMapping("/waterfall/stop")
+    @PreAuthorize("hasAuthority('planning.tender:manage')")
+    @Operation(summary = "Stop the waterfall - the manual override",
+            description = "Withdraws the offer that is out, so a carrier cannot accept a shipment "
+                    + "whose waterfall a planner has just stopped.")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public TenderWaterfallView stopWaterfall(CompanyScope scope, @PathVariable UUID tripId,
+            @RequestParam(name = "reason", required = false) String reason) {
+        return waterfallService.stop(scope, tripId, reason);
     }
 
     @GetMapping

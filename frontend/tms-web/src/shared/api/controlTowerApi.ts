@@ -63,6 +63,44 @@ export interface ControlTowerSummaryView {
   /** `null`, and not `0`, when the caller does not hold `orders.order:read`: zero would be a claim
    * about a backlog the response was not allowed to look at. */
   ordersUnplanned: number | null
+  /**
+   * Cuántos envíos de hoy **no pueden salir** en su estado actual (JOB 12).
+   *
+   * El total detrás de `ControlTowerView.blockers`, que viene recortado como todos los paneles.
+   * Cero se muestra como cero: "no hay nada atascado" es un dato que un despachador quiere leer, no
+   * deducir de una lista vacía.
+   */
+  blockedShipments: number
+  /**
+   * Cuántos avisos lleva el día (JOB 23).
+   *
+   * **Se cuenta aparte de `blockedShipments` y jamás se suma con él.** Responden preguntas
+   * distintas — "¿hay algo atascado?" y "¿hay algo que convenga saber?" — y un total único haría
+   * que tres diferencias de céntimos se leyeran como tres camiones que no pueden salir.
+   */
+  openAdvisories: number
+}
+
+/**
+ * Mirrors `ControlTowerBlockerView` (JOB 12): un envío que hoy no sale si nadie hace algo.
+ *
+ * Es el único panel que informa de lo que está **a punto** de pasar en vez de lo que ya pasó. Cada
+ * motivo es un rechazo que ya existe en el servicio, en el agregado y en la base de datos - aquí no
+ * se inventa ninguna regla, sólo se dice antes de que el camión llegue a la puerta.
+ */
+export interface ControlTowerBlockerView {
+  tripId: string
+  tripNumber: number | null
+  shipmentNumber: string
+  /**
+   * - `AWAITING_CARRIER_VEHICLE` — aceptado por un transportista que no es dueño del vehículo
+   *   asignado (V42). Lo resuelve un planificador asignando un vehículo de ese transportista.
+   * - `VEHICLE_UNAVAILABLE` / `DRIVER_UNAVAILABLE` — el recurso no puede trabajar a la hora de
+   *   salida planificada (V42).
+   */
+  reason: 'AWAITING_CARRIER_VEHICLE' | 'VEHICLE_UNAVAILABLE' | 'DRIVER_UNAVAILABLE'
+  /** El detalle concreto, para leer. Nunca se hace un switch sobre él. */
+  detail: string
 }
 
 /** Mirrors the backend's `ControlTowerWorkloadView` record. */
@@ -123,6 +161,40 @@ export interface ControlTowerView {
   workload: ControlTowerWorkloadView[]
   openExceptions: ControlTowerExceptionView[]
   outstandingStops: ControlTowerStopView[]
+  /** Lo que impedirá salir a un camión hoy, antes de que se lo impida. */
+  blockers: ControlTowerBlockerView[]
+  /**
+   * Lo que conviene saber y **no detiene nada** (JOB 23).
+   *
+   * Una segunda lista a propósito, no más filas en `blockers`. Un bloqueador es un estado que hace
+   * que `dispatch` se niegue; un aviso es algo que un supervisor debería saber y sobre lo que puede
+   * razonablemente no hacer nada hoy. En cuanto un panel ha dado la voz de alarma por una
+   * diferencia de redondeo, el camión que de verdad no puede salir es una fila entre cuarenta.
+   */
+  advisories: ControlTowerAdvisoryView[]
+}
+
+/** Mirrors `ControlTowerAdvisoryView.AdvisoryType`. */
+export type AdvisoryType = 'SETTLEMENT_DISCREPANCY_OPEN' | 'STOP_ETA_MISSES_WINDOW'
+
+/**
+ * Mirrors `ControlTowerAdvisoryView` (JOB 23).
+ *
+ * **La torre no es dueña de nada de esto.** Una discrepancia de liquidación se resuelve en la
+ * pantalla de liquidaciones; esta fila enlaza con ella y no ofrece cerrarla. Dos registros de una
+ * misma disputa se separarían la primera vez que alguien resolviera el que no era.
+ */
+export interface ControlTowerAdvisoryView {
+  type: AdvisoryType
+  tripId: string
+  shipmentNumber: string | null
+  /** El id del registro en su propio módulo, para enlazar allí. */
+  sourceId: string
+  /** **Null cuando los dos lados no se pudieron comparar** — nunca un cero que se leería como
+   * "la factura coincide", que es justo lo contrario (V46). */
+  amount: number | null
+  currency: string | null
+  detail: string
 }
 
 /** Mirrors the backend's `ControlTowerTripView` record - one row of the operational table.

@@ -18,6 +18,7 @@ import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.PlannableOrderQuery;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
+import com.ebim.tms.shared.reference.ResourceAvailabilityPort;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.security.Permission;
@@ -27,6 +28,7 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.Comparator;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
@@ -119,6 +121,26 @@ public class ControlTowerService {
      * Derived from {@link StopExecutionStatus#isOutstanding()} rather than listed, so adding an
      * outcome to the enum cannot leave this screen silently counting the wrong stops.
      */
+    /**
+     * The states in which a blocker still matters: committed, and not yet gone.
+     *
+     * <p>A draft is not going anywhere today either, but nothing is stopping it - it simply has not
+     * been committed - and listing drafts here would bury the shipments somebody has to act on.
+     */
+    /**
+     * The shipments an advisory is worth raising against: the ones still in play.
+     *
+     * <p>Wider than {@code BLOCKABLE_STATES}, which is about departure. A money question is worth
+     * raising on a shipment that has already run - the invoice arrives afterwards - and a cancelled
+     * one is worth raising nothing about at all.
+     */
+    private static final Set<TripStatus> ADVISORY_TRIP_STATES = Stream.of(TripStatus.values())
+            .filter(status -> status != TripStatus.CANCELLED)
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
+
+    private static final Set<TripStatus> BLOCKABLE_STATES =
+            Set.copyOf(EnumSet.of(TripStatus.CONFIRMED, TripStatus.READY_FOR_DISPATCH));
+
     private static final Set<StopExecutionStatus> OUTSTANDING_STOPS = Stream.of(StopExecutionStatus.values())
             .filter(StopExecutionStatus::isOutstanding)
             .collect(Collectors.toUnmodifiableSet());
@@ -131,11 +153,21 @@ public class ControlTowerService {
     private final DestinationLookupPort destinationLookupPort;
     private final VehicleLookupPort vehicleLookupPort;
     private final OrderPlanningPort orderPlanningPort;
+    private final ResourceAvailabilityPort resourceAvailabilityPort;
+
+    /**
+     * Read-only, and the tower holds nothing it reads through this. A discrepancy is resolved on
+     * the settlement screen; this panel links to one and cannot close it.
+     */
+    private final com.ebim.tms.shared.reference.SettlementAdvisoryPort settlementAdvisoryPort;
 
     public ControlTowerService(TripService tripService, TripViewAssembler assembler, TripRepository tripRepository,
             TripStopRepository tripStopRepository, TripExceptionRepository tripExceptionRepository,
             DestinationLookupPort destinationLookupPort, VehicleLookupPort vehicleLookupPort,
-            OrderPlanningPort orderPlanningPort) {
+            OrderPlanningPort orderPlanningPort, ResourceAvailabilityPort resourceAvailabilityPort,
+            com.ebim.tms.shared.reference.SettlementAdvisoryPort settlementAdvisoryPort) {
+        this.resourceAvailabilityPort = resourceAvailabilityPort;
+        this.settlementAdvisoryPort = settlementAdvisoryPort;
         this.tripService = tripService;
         this.assembler = assembler;
         this.tripRepository = tripRepository;
@@ -163,8 +195,14 @@ public class ControlTowerService {
         List<ControlTowerExceptionView> exceptions = openExceptions(scope, date);
         List<ControlTowerStopView> stops = outstandingStops(scope, date, zone, now);
 
-        return new ControlTowerView(date, now, summary(scope, date, zone, now),
-                workload(scope, date), exceptions, stops);
+        List<ControlTowerBlockerView> blockers = blockers(scope, date);
+        // Built beside the blockers and never merged into them (JOB 23). A blocker stops a truck;
+        // an advisory is worth knowing and may reasonably wait. One list of both is how a panel
+        // stops being read.
+        List<ControlTowerAdvisoryView> advisories = advisories(scope, date);
+
+        return new ControlTowerView(date, now, summary(scope, date, zone, now, blockers.size(), advisories.size()),
+                workload(scope, date), exceptions, stops, blockers, advisories);
     }
 
     /**
@@ -207,7 +245,53 @@ public class ControlTowerService {
 
     // --- the KPI strip -------------------------------------------------------------------
 
-    private ControlTowerSummaryView summary(CompanyScope scope, LocalDate date, ZoneId zone, OffsetDateTime now) {
+    /**
+     * What will stop a truck today, before it stops it (JOB 12).
+     *
+     * <p>Every other panel reports what has already happened. This reports the states that make
+     * {@code TripExecutionService.dispatch} refuse - so a dispatcher learns at 06:00 rather than at
+     * the gate. Nothing here is a new rule: each reason is a refusal that already exists in the
+     * service, the aggregate and the database.
+     *
+     * <p>Only shipments that have not left. One already in transit either resolved its blocker or
+     * never had one, and a cancelled shipment is not going anywhere regardless.
+     */
+    private List<ControlTowerBlockerView> blockers(CompanyScope scope, LocalDate date) {
+        List<ControlTowerBlockerView> blockers = new ArrayList<>();
+
+        for (Trip trip : tripRepository.findAwaitingCarrierVehicleForDay(
+                scope.companyId(), date, BLOCKABLE_STATES)) {
+            blockers.add(new ControlTowerBlockerView(trip.id(), trip.tripNumber(), trip.shipmentNumber(),
+                    ControlTowerBlockerView.BlockerReason.AWAITING_CARRIER_VEHICLE,
+                    "Accepted by a carrier that does not own the vehicle assigned to it."));
+        }
+
+        // Availability lives in the fleet module, so it is asked through the port rather than
+        // joined in SQL - the boundary ModuleBoundaryTest enforces. Asked at the shipment's own
+        // planned departure and not at now(): a truck free this minute and in the workshop at 14:00
+        // still cannot run a 14:00 shipment, and that is the one a dispatcher needs to hear about.
+        for (Trip trip : tripRepository.findAwaitingDepartureWithResourcesForDay(
+                scope.companyId(), date, BLOCKABLE_STATES)) {
+            if (trip.plannedDepartureAt() == null) {
+                continue;
+            }
+            resourceAvailabilityPort
+                    .findBlock(scope.companyId(), trip.vehicleId(), trip.driverId(), trip.plannedDepartureAt())
+                    .ifPresent(block -> blockers.add(new ControlTowerBlockerView(
+                            trip.id(), trip.tripNumber(), trip.shipmentNumber(),
+                            "vehicle".equals(block.resource())
+                                    ? ControlTowerBlockerView.BlockerReason.VEHICLE_UNAVAILABLE
+                                    : ControlTowerBlockerView.BlockerReason.DRIVER_UNAVAILABLE,
+                            "Unavailable (" + block.reason() + ") until " + block.endsAt() + ".")));
+        }
+
+        // Capped like every other panel, with the true total travelling in the summary - so a
+        // shortened list reads as "the first twenty of forty" and never as "forty".
+        return blockers.size() <= PANEL_SIZE ? List.copyOf(blockers) : List.copyOf(blockers.subList(0, PANEL_SIZE));
+    }
+
+    private ControlTowerSummaryView summary(CompanyScope scope, LocalDate date, ZoneId zone, OffsetDateTime now,
+            int blockedShipments, int openAdvisories) {
         UUID companyId = scope.companyId();
         Map<TripStatus, Long> byStatus = new EnumMap<>(TripStatus.class);
         tripRepository.countByStatusForDay(companyId, date)
@@ -234,7 +318,9 @@ public class ControlTowerService {
                 tripExceptionRepository.countByStatusForDay(companyId, TripExceptionStatus.OPEN, date),
                 outstandingStops,
                 stopsPastWindow,
-                unplannedOrders(scope, date));
+                unplannedOrders(scope, date),
+                blockedShipments,
+                openAdvisories);
     }
 
     /**
@@ -444,5 +530,104 @@ public class ControlTowerService {
         }
         return tripRepository.findByIdInAndCompanyId(ids, scope.companyId()).stream()
                 .collect(Collectors.toMap(Trip::id, Function.identity()));
+    }
+
+    /**
+     * The advisory panel: facts worth knowing that stop nothing (JOB 23, Control Tower V3).
+     *
+     * <p><b>Kept apart from {@link #blockers} on purpose.</b> A blocker is a state that makes
+     * {@code dispatch} refuse - the truck is not moving until somebody fixes it. An advisory is
+     * something a supervisor should know and may reasonably do nothing about today. JOB 12 kept the
+     * blockers panel to hard stops and named mixing them as the thing not to do; this adds the
+     * second stream beside it rather than into it.
+     *
+     * <p><b>Nothing here owns any state.</b> Both sources are read from the module that owns the
+     * fact. A settlement discrepancy is accepted or rejected on the settlement screen; this row
+     * links to it and offers no way to close it, because two records of one dispute drift apart the
+     * first time somebody resolves the wrong one.
+     *
+     * <p>Capped like every other panel, with the true total on the summary.
+     */
+    private List<ControlTowerAdvisoryView> advisories(CompanyScope scope, LocalDate date) {
+        List<ControlTowerAdvisoryView> advisories = new java.util.ArrayList<>();
+        advisories.addAll(settlementAdvisories(scope, date));
+        advisories.addAll(etaAdvisories(scope, date));
+        return List.copyOf(advisories);
+    }
+
+    /**
+     * Open money questions on today's shipments (V46, through {@code SettlementAdvisoryPort}).
+     *
+     * <p>The day's trips are resolved here and passed in, because settlement has no concept of an
+     * operating day and a query there joining {@code Trip} to find one would be a cross-module
+     * dependency hidden inside a string.
+     */
+    private List<ControlTowerAdvisoryView> settlementAdvisories(CompanyScope scope, LocalDate date) {
+        Map<UUID, Trip> tripsOfDay = tripRepository
+                .findByCompanyIdAndPlanningDateAndStatusIn(scope.companyId(), date, ADVISORY_TRIP_STATES,
+                        // Bounded like the workload scan: a day is a few hundred shipments, and an
+                        // unbounded read here would be the one query that grows without a ceiling.
+                        PageRequest.of(0, WORKLOAD_SCAN_LIMIT))
+                .stream().collect(Collectors.toMap(Trip::id, java.util.function.Function.identity(),
+                        (first, second) -> first));
+        if (tripsOfDay.isEmpty()) {
+            return List.of();
+        }
+        return settlementAdvisoryPort
+                .findOpenDiscrepancies(scope.companyId(), tripsOfDay.keySet(), PANEL_SIZE)
+                .stream()
+                .map(advisory -> {
+                    Trip trip = tripsOfDay.get(advisory.tripId());
+                    return new ControlTowerAdvisoryView(
+                            ControlTowerAdvisoryView.AdvisoryType.SETTLEMENT_DISCREPANCY_OPEN,
+                            advisory.tripId(),
+                            trip == null ? null : trip.shipmentNumber(),
+                            advisory.discrepancyId(),
+                            // Null when the two sides could not be compared. Carried through as
+                            // null rather than shown as a difference of zero, which would read as
+                            // "the invoice agrees" - the opposite of what it means (V46).
+                            advisory.differenceAmount(),
+                            advisory.currency(),
+                            advisory.detail());
+                })
+                .toList();
+    }
+
+    /**
+     * Stops whose <em>estimated</em> arrival falls outside their window (V43).
+     *
+     * <p>Not the same fact as {@code outstandingStops}, which reports stops that <b>have</b> run
+     * late. This is a prediction somebody can still act on; that is history. A panel mixing them
+     * would tell a supervisor to leave earlier for a delivery already three hours old.
+     *
+     * <p>An estimate, and the row says so - ADR-011's rule that a stop with an unmeasurable leg has
+     * no ETA at all means every row here rests on a leg that was actually measured.
+     */
+    private List<ControlTowerAdvisoryView> etaAdvisories(CompanyScope scope, LocalDate date) {
+        List<TripStop> stops = tripStopRepository.findEtaMissingWindowForDay(
+                scope.companyId(), date, ADVISORY_TRIP_STATES, OUTSTANDING_STOPS,
+                PageRequest.of(0, PANEL_SIZE));
+        if (stops.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, Trip> trips = tripsById(scope, stops.stream().map(TripStop::tripId).collect(Collectors.toSet()));
+        Map<UUID, MasterReference> destinations = destinationLookupPort.findAllInCompany(
+                stops.stream().map(TripStop::destinationId).collect(Collectors.toSet()), scope.companyId());
+
+        return stops.stream().map(stop -> {
+            Trip trip = trips.get(stop.tripId());
+            MasterReference destination = destinations.get(stop.destinationId());
+            String where = destination == null ? "a stop" : destination.name();
+            return new ControlTowerAdvisoryView(
+                    ControlTowerAdvisoryView.AdvisoryType.STOP_ETA_MISSES_WINDOW,
+                    stop.tripId(),
+                    trip == null ? null : trip.shipmentNumber(),
+                    stop.id(),
+                    null,
+                    null,
+                    "The estimated arrival at " + where + " falls outside its service window."
+                            + " Nobody is late yet - this is an estimate, and it is still early"
+                            + " enough to do something about it.");
+        }).toList();
     }
 }

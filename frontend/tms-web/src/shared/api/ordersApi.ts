@@ -2,15 +2,40 @@ import { apiDownload, apiRequest, apiUpload, type DownloadedFile } from './httpC
 import type { PageResponse } from './pageResponse'
 
 /** Mirrors the backend's `OrderStatus` enum (`orders/domain/OrderStatus.java`). See
- * `docs/domain/ORDER_LIFECYCLE_V1.md` for the full lifecycle. */
-export type OrderStatus = 'NOT_READY' | 'READY_FOR_PLANNING' | 'PLANNED' | 'CANCELLED'
+ * `docs/domain/ORDER_LIFECYCLE_V2.md` for the full lifecycle, planning and execution. */
+export type OrderStatus =
+  | 'NOT_READY'
+  | 'READY_FOR_PLANNING'
+  | 'PLANNED'
+  | 'IN_EXECUTION'
+  | 'DELIVERED'
+  | 'PARTIALLY_DELIVERED'
+  | 'DELIVERY_FAILED'
+  | 'CANCELLED'
 
-export const ORDER_STATUSES: OrderStatus[] = ['NOT_READY', 'READY_FOR_PLANNING', 'PLANNED', 'CANCELLED']
+/** In lifecycle order, which is the order a filter should offer them in. */
+export const ORDER_STATUSES: OrderStatus[] = [
+  'NOT_READY',
+  'READY_FOR_PLANNING',
+  'PLANNED',
+  'IN_EXECUTION',
+  'DELIVERED',
+  'PARTIALLY_DELIVERED',
+  'DELIVERY_FAILED',
+  'CANCELLED',
+]
 
 /**
- * What happened to the goods, which `OrderStatus` deliberately does not say: an order stays
- * `PLANNED` while it is delivered, refused or brought back. Derived by the backend from the
- * delivery rows (migration V28) rather than stored - see `OrderFulfillmentStatus` there.
+ * The statuses an order can be reopened from: it came back short and the customer is still owed
+ * something. Mirrors `OrderStatus.isReopenable()` - the rule is the backend's and it refuses
+ * anything else with a 409; this only decides whether the button is worth rendering.
+ */
+export const REOPENABLE_ORDER_STATUSES: OrderStatus[] = ['PARTIALLY_DELIVERED', 'DELIVERY_FAILED']
+
+/**
+ * What happened to the goods at the dock, per stop and correctable - the live view that
+ * `OrderStatus`'s closed-out states are the lifecycle consequence of. Derived by the backend from
+ * the delivery rows (migration V28) rather than stored - see `OrderFulfillmentStatus` there.
  */
 export type OrderFulfillmentStatus =
   | 'PENDING'
@@ -163,6 +188,22 @@ export function markOrderReadyForPlanning(companyId: string, id: string): Promis
 
 export function cancelOrder(companyId: string, id: string, reason?: string): Promise<OrderDetailView> {
   return apiRequest<OrderDetailView>(`/orders/${id}/cancel`, {
+    method: 'POST', companyId, query: reason ? { reason } : undefined,
+  })
+}
+
+/**
+ * Puts an order that came back short into the plannable pool for another delivery attempt
+ * (migration V36). Only `PARTIALLY_DELIVERED` and `DELIVERY_FAILED` are accepted; anything else
+ * comes back 409 with a sentence explaining why.
+ *
+ * The reason is optional to the API and asked for in the UI: a redelivery costs a truck, and the
+ * audit row is where "why did we go twice" gets answered.
+ */
+export function reopenOrderForPlanning(
+  companyId: string, id: string, reason?: string,
+): Promise<OrderDetailView> {
+  return apiRequest<OrderDetailView>(`/orders/${id}/reopen`, {
     method: 'POST', companyId, query: reason ? { reason } : undefined,
   })
 }

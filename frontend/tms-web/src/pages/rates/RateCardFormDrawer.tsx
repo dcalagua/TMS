@@ -6,6 +6,7 @@ import { PaidRounded } from "@mui/icons-material";
 import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchCarriers } from "../../shared/api/carriersApi";
+import { fetchDestinations } from "../../shared/api/destinationsApi";
 import { fetchOrigins } from "../../shared/api/originsApi";
 import { fetchRoutes } from "../../shared/api/routesApi";
 import { fetchVehicleTypes } from "../../shared/api/vehicleTypesApi";
@@ -29,6 +30,7 @@ interface RateCardFormValues {
   carrierId: string;
   scope: RateCardScope;
   originId: string;
+  destinationId: string;
   routeId: string;
   vehicleTypeId: string;
   currency: string;
@@ -40,6 +42,13 @@ interface RateCardFormValues {
   amountPerM3: string;
   amountPerPallet: string;
   minimumAmount: string;
+  amountPerStop: string;
+  fuelSurchargePercent: string;
+  amountPerWaitingHour: string;
+  tollAmount: string;
+  accessorialAmount: string;
+  accessorialLabel: string;
+  maximumAmount: string;
 }
 
 interface RateCardFormDrawerProps {
@@ -50,9 +59,10 @@ interface RateCardFormDrawerProps {
 }
 
 const KNOWN_FIELDS = new Set<keyof RateCardFormValues>([
-  "code", "name", "carrierId", "scope", "originId", "routeId", "vehicleTypeId", "currency",
+  "code", "name", "carrierId", "scope", "originId", "destinationId", "routeId", "vehicleTypeId", "currency",
   "validFrom", "validTo", "baseAmount", "amountPerKm", "amountPerKg", "amountPerM3",
-  "amountPerPallet", "minimumAmount",
+  "amountPerPallet", "minimumAmount", "amountPerStop", "fuelSurchargePercent",
+  "amountPerWaitingHour", "tollAmount", "accessorialAmount", "accessorialLabel", "maximumAmount",
 ]);
 
 const toAmount = (value: string): number | null => (value.trim() === "" ? null : Number(value));
@@ -80,6 +90,10 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
     queryKey: ["origins-for-rate-form", companyId],
     queryFn: ({ signal }) => fetchOrigins({ companyId, size: 200, active: true, sort: "code,asc", signal }),
   });
+  const destinationsQuery = useQuery({
+    queryKey: ["destinations-for-rate-form", companyId],
+    queryFn: ({ signal }) => fetchDestinations({ companyId, size: 200, active: true, sort: "code,asc", signal }),
+  });
   const routesQuery = useQuery({
     queryKey: ["routes-for-rate-form", companyId],
     queryFn: ({ signal }) => fetchRoutes({ companyId, size: 200, active: true, sort: "code,asc", signal }),
@@ -98,7 +112,9 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
       name: rateCard?.name ?? "",
       carrierId: rateCard?.carrierId ?? "",
       scope: rateCard?.scope ?? "CARRIER",
-      originId: rateCard?.scope === "ORIGIN" ? (rateCard.scopeTargetId ?? "") : "",
+      originId: rateCard?.scope === "ORIGIN" || rateCard?.scope === "LANE"
+        ? (rateCard.scopeTargetId ?? "") : "",
+      destinationId: rateCard?.destinationId ?? "",
       routeId: rateCard?.scope === "ROUTE" ? (rateCard.scopeTargetId ?? "") : "",
       vehicleTypeId: rateCard?.vehicleTypeId ?? "",
       currency: rateCard?.currency ?? "PEN",
@@ -110,6 +126,13 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
       amountPerM3: rateCard?.amountPerM3?.toString() ?? "",
       amountPerPallet: rateCard?.amountPerPallet?.toString() ?? "",
       minimumAmount: rateCard?.minimumAmount?.toString() ?? "",
+      amountPerStop: rateCard?.amountPerStop?.toString() ?? "",
+      fuelSurchargePercent: rateCard?.fuelSurchargePercent?.toString() ?? "",
+      amountPerWaitingHour: rateCard?.amountPerWaitingHour?.toString() ?? "",
+      tollAmount: rateCard?.tollAmount?.toString() ?? "",
+      accessorialAmount: rateCard?.accessorialAmount?.toString() ?? "",
+      accessorialLabel: rateCard?.accessorialLabel ?? "",
+      maximumAmount: rateCard?.maximumAmount?.toString() ?? "",
     },
   });
 
@@ -123,7 +146,10 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
       carrierId: values.carrierId,
       scope: values.scope,
       // Solo el objetivo del alcance elegido viaja: mandar los dos sería contradecirse.
-      originId: values.scope === "ORIGIN" ? (values.originId || null) : null,
+      // Solo el objetivo que el ámbito necesita: el backend rechaza cualquier otra combinación,
+      // y enviar los tres haría que un cambio de ámbito arrastrara el anterior.
+      originId: values.scope === "ORIGIN" || values.scope === "LANE" ? (values.originId || null) : null,
+      destinationId: values.scope === "LANE" ? (values.destinationId || null) : null,
       routeId: values.scope === "ROUTE" ? (values.routeId || null) : null,
       vehicleTypeId: values.vehicleTypeId || null,
       currency: values.currency.trim().toUpperCase(),
@@ -135,6 +161,15 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
       amountPerM3: toAmount(values.amountPerM3),
       amountPerPallet: toAmount(values.amountPerPallet),
       minimumAmount: toAmount(values.minimumAmount),
+      amountPerStop: toAmount(values.amountPerStop),
+      fuelSurchargePercent: toAmount(values.fuelSurchargePercent),
+      amountPerWaitingHour: toAmount(values.amountPerWaitingHour),
+      tollAmount: toAmount(values.tollAmount),
+      accessorialAmount: toAmount(values.accessorialAmount),
+      // El nombre viaja con el importe o no viaja: un cargo que nadie puede nombrar es un cargo
+      // que nadie puede aprobar, y el backend lo rechaza igual.
+      accessorialLabel: values.accessorialLabel.trim() || null,
+      maximumAmount: toAmount(values.maximumAmount),
     };
 
     try {
@@ -224,7 +259,7 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
 
           {/* Solo el objetivo que el ámbito elegido necesita. Los tres a la vez invitan a
               rellenar dos, y el backend rechaza esa combinación. */}
-          {scope === "ORIGIN" && (
+          {(scope === "ORIGIN" || scope === "LANE") && (
             <Controller
               control={control}
               name="originId"
@@ -238,6 +273,27 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
                   <MenuItem value="">{t("Selecciona un origen")}</MenuItem>
                   {(originsQuery.data?.content ?? []).map((origin) => (
                     <MenuItem key={origin.id} value={origin.id}>{origin.code} · {origin.name}</MenuItem>
+                  ))}
+                </TextField>
+              )}
+            />
+          )}
+          {scope === "LANE" && (
+            <Controller
+              control={control}
+              name="destinationId"
+              rules={{ required: t("Este campo es obligatorio") }}
+              render={({ field }) => (
+                <TextField
+                  select label={t("Destino")} required size="small" fullWidth
+                  value={field.value} onChange={(e) => field.onChange(e.target.value)}
+                  error={Boolean(errors.destinationId)} helperText={errors.destinationId?.message}
+                >
+                  <MenuItem value="">{t("Selecciona un destino")}</MenuItem>
+                  {(destinationsQuery.data?.content ?? []).map((destination) => (
+                    <MenuItem key={destination.id} value={destination.id}>
+                      {destination.code} · {destination.name}
+                    </MenuItem>
                   ))}
                 </TextField>
               )}
@@ -316,7 +372,13 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
             ["amountPerKg", "Por kilogramo"],
             ["amountPerM3", "Por m³"],
             ["amountPerPallet", "Por pallet"],
+            ["amountPerStop", "Por parada adicional"],
+            ["fuelSurchargePercent", "Recargo combustible (%)"],
+            ["amountPerWaitingHour", "Por hora de espera"],
+            ["tollAmount", "Peajes"],
+            ["accessorialAmount", "Accesorio"],
             ["minimumAmount", "Mínimo"],
+            ["maximumAmount", "Máximo"],
           ] as const).map(([name, label]) => (
             <TextField
               key={name}

@@ -13,7 +13,10 @@ import java.math.BigDecimal;
  *
  * @param rate     what the card charges per unit, or null for a flat component
  * @param quantity what the shipment supplied, or null for a flat component
- * @param amount   never null and never negative; {@code 0.00} for a non-calculable line, so that
+ * @param amount   never null, and never negative except for {@code MAXIMUM_ADJUSTMENT} - a ceiling
+ *                 adjusts the total down, and rendering that as a positive number would read as one
+ *                 more charge (V39, {@code ck_trip_cost_component_amount_sign}). {@code 0.00} for a
+ *                 non-calculable line, so that
  *                 every sum over these lines is a plain sum
  */
 public record CostLine(
@@ -30,9 +33,21 @@ public record CostLine(
         return new CostLine(component, CostComponentStatus.APPLIED, null, null, null, null, amount, null);
     }
 
-    static CostLine measured(RateComponent component, BigDecimal rate, BigDecimal quantity, BigDecimal amount) {
+    /**
+     * A measured line whose quantity source is stated by the caller.
+     *
+     * <p>Since V39 the distance's provenance is a fact about the estimate rather than about the
+     * component - a shipment measured over its own stops and one falling back to a master
+     * corridor are priced the same way and traced differently.
+     */
+    static CostLine measured(RateComponent component, BigDecimal rate, BigDecimal quantity, BigDecimal amount,
+            CostQuantitySource source) {
         return new CostLine(component, CostComponentStatus.APPLIED, rate, quantity, component.unit(),
-                component.quantitySource(), amount, null);
+                source, amount, null);
+    }
+
+    static CostLine measured(RateComponent component, BigDecimal rate, BigDecimal quantity, BigDecimal amount) {
+        return measured(component, rate, quantity, amount, component.quantitySource());
     }
 
     static CostLine notCalculable(RateComponent component) {

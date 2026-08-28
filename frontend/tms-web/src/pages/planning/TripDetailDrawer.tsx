@@ -6,15 +6,16 @@ import {
 } from "@mui/material";
 import {
   LocalShippingRounded, ArrowUpwardRounded, ArrowDownwardRounded, DeleteRounded,
-  SwapHorizRounded, SaveRounded, BadgeRounded, AltRouteRounded, CancelRounded,
+  SwapHorizRounded, SaveRounded, BadgeRounded, AltRouteRounded, CancelRounded, ScheduleRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchRoutes } from "../../shared/api/routesApi";
 import {
-  cancelTrip, fetchTrip, moveOrderToTrip, removeOrderFromTrip, reorderTripStops, updateTripRoute,
+  cancelTrip, fetchTrip, moveOrderToTrip, recomputeTripEta, removeOrderFromTrip, reorderTripStops,
+  updateTripRoute,
   type TripDetailView, type TripView,
 } from "../../shared/api/planningApi";
-import { describePlanningError } from "../../shared/api/problemMessages";
+import { describeApiError, describePlanningError } from "../../shared/api/problemMessages";
 import { TripStopMap, type TripStopMapOrigin, type TripStopMapStop } from "../../shared/maps/TripStopMap";
 import {
   CapacityBar, DetailGrid, DetailItem, FormDrawer, SectionHeader, StatusChip,
@@ -241,6 +242,28 @@ export function TripDetailDrawer({
 
   const trip = detail?.trip;
   const stopsSorted = detail ? stopOrder.map((id) => detail.stops.find((s) => s.destinationId === id)) : [];
+  // Si ninguna parada tiene estimación, el envío simplemente no la ha pedido nunca - decir "no se
+  // pudo medir un tramo" en ese caso sería inventar una causa. El aviso sólo aparece cuando el
+  // resto del viaje sí está estimado y esta parada se quedó fuera.
+  const anyStopScheduled = (detail?.stops ?? []).some((stop) => stop.etaArrivalAt !== null);
+  const [recomputingEta, setRecomputingEta] = useState(false);
+  // Sin salida planificada no hay desde cuándo contar, y el backend lo rechaza diciéndolo. Ocultar
+  // el botón evita ofrecer una acción que sólo puede fallar.
+  const canRecomputeEta = Boolean(detail?.trip.plannedDepartureAt) && (detail?.stops.length ?? 0) > 0;
+
+  async function recomputeEta() {
+    if (!detail) return;
+    setRecomputingEta(true);
+    try {
+      await recomputeTripEta(companyId, detail.trip.id);
+      notifySuccess(t("ETA recalculada"));
+      onChanged();
+    } catch (error) {
+      notifyError(t("No se pudo recalcular la ETA"), describeApiError(error as ApiError));
+    } finally {
+      setRecomputingEta(false);
+    }
+  }
   const stopOrderDirty = stopOrder.join("|") !== serverStopsKey;
 
   return (
@@ -296,6 +319,24 @@ export function TripDetailDrawer({
               <DetailItem label={t("Origen")} value={trip.originName ?? trip.originCode} />
               <DetailItem label={t("Vehículo")} value={trip.vehicleCode ? `${trip.vehicleCode} · ${trip.vehicleLicensePlate}` : null} />
               <DetailItem label={t("Transportista")} value={trip.carrierName} />
+              {/* V42: sólo cuando los dos discrepan. Mostrarlo siempre repetiría el transportista
+                  en la mitad de las pantallas y escondería el caso que importa entre el ruido. */}
+              {trip.awaitsCarrierVehicle && (
+                <DetailItem
+                  label={t("Aceptado por")}
+                  value={(
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+                      {trip.acceptedCarrierName ?? "—"}
+                      <Chip
+                        size="small"
+                        color="warning"
+                        variant="outlined"
+                        label={t("Falta vehículo del transportista")}
+                      />
+                    </Box>
+                  )}
+                />
+              )}
               <DetailItem
                 label={t("Conductor")}
                 value={trip.driverName ? (
@@ -440,15 +481,30 @@ export function TripDetailDrawer({
             <Box sx={{ mt: 3 }}>
               <SectionHeader
                 title={t("Paradas")}
-                actions={editable && stopOrderDirty && (
-                  <Button
-                    size="small" variant="contained" startIcon={<SaveRounded />}
-                    disabled={savingStops}
-                    onClick={() => void saveStopOrder()}
-                  >
-                    {t("Guardar el orden")}
-                  </Button>
-                )}
+                actions={
+                  <Box sx={{ display: "flex", gap: 1 }}>
+                    {/* V43. Explícito y no automático: recalcular necesita que alguien lo pida,
+                        porque un proceso de fondo necesitaría un actor a quien atribuirlo (D4). */}
+                    {canRecomputeEta && (
+                      <Button
+                        size="small" variant="outlined" startIcon={<ScheduleRounded />}
+                        disabled={recomputingEta}
+                        onClick={() => void recomputeEta()}
+                      >
+                        {recomputingEta ? t("Calculando...") : t("Recalcular ETA")}
+                      </Button>
+                    )}
+                    {editable && stopOrderDirty && (
+                      <Button
+                        size="small" variant="contained" startIcon={<SaveRounded />}
+                        disabled={savingStops}
+                        onClick={() => void saveStopOrder()}
+                      >
+                        {t("Guardar el orden")}
+                      </Button>
+                    )}
+                  </Box>
+                }
               />
 
               {isNarrow && (
@@ -507,6 +563,18 @@ export function TripDetailDrawer({
                             <Typography variant="caption" color="text.secondary">
                               {[stop.address, window].filter(Boolean).join(" · ") || stop.destinationCode}
                             </Typography>
+                            {/* V43: el hueco se muestra, no se rellena. Una hora plausible pero
+                                equivocada se ve igual que una correcta, y nada diría cuál es cuál. */}
+                            {stop.etaArrivalAt ? (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                                {t("Llegada estimada: {{time}}", { time: fmtDateTime(stop.etaArrivalAt) })}
+                                {stop.etaSource === "FALLBACK" && ` · ${t("línea recta")}`}
+                              </Typography>
+                            ) : anyStopScheduled ? (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                                {t("Sin estimación: un tramo del camino no se pudo medir.")}
+                              </Typography>
+                            ) : null}
                           </Box>
                           <StatusChip
                             label={enumLabel("stopExecutionStatus", stop.executionStatus)}
@@ -514,6 +582,9 @@ export function TripDetailDrawer({
                           />
                           {stop.openExceptionCount > 0 && (
                             <Chip size="small" color="error" label={t("{{count}} incidencias", { count: stop.openExceptionCount })} />
+                          )}
+                          {stop.etaMissesWindow && (
+                            <Chip size="small" color="warning" variant="outlined" label={t("Fuera de ventana")} />
                           )}
                           {editable && (
                             <Box sx={{ display: "flex", gap: 0.25 }}>

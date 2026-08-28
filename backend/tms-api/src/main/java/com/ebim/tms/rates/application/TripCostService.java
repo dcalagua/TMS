@@ -2,6 +2,7 @@ package com.ebim.tms.rates.application;
 
 import com.ebim.tms.rates.domain.CostEstimate;
 import com.ebim.tms.rates.domain.CostInputs;
+import com.ebim.tms.rates.domain.CostQuantitySource;
 import com.ebim.tms.rates.domain.RateCard;
 import com.ebim.tms.rates.domain.RateCardSelector;
 import com.ebim.tms.rates.domain.TripCost;
@@ -206,7 +207,13 @@ public class TripCostService {
      * figure and the confirmation-time figure cannot differ.
      */
     private TripCost applyEstimate(CompanyScope scope, CostableTrip trip, RateCard card, UUID actorId) {
-        CostEstimate estimate = TripCostCalculator.calculate(card, CostInputs.of(trip, referenceDistanceKm(trip)));
+        // The shipment's own measured run where there is one, the master corridor's reference
+        // distance otherwise (V39). Which of the two was used travels onto the breakdown, because a
+        // per-kilometre charge that cannot be traced to the kilometres it multiplied is a number
+        // nobody can dispute.
+        Distance distance = distanceFor(scope, trip);
+        CostEstimate estimate = TripCostCalculator.calculate(card,
+                CostInputs.of(trip, distance.km(), distance.source(), trip.stopCount(), null));
         TripCost cost = tripCostRepository.findByTripIdAndCompanyId(trip.tripId(), trip.companyId())
                 .orElseGet(() -> new TripCost(trip.companyId(), trip.tripId(), trip.planningDate(),
                         estimate.currency(), actorId));
@@ -248,6 +255,31 @@ public class TripCostService {
             return null;
         }
         return routeTemplateLookupPort.findReferenceDistanceKm(trip.routeId(), trip.companyId()).orElse(null);
+    }
+
+    /** A distance and where it came from. */
+    private record Distance(BigDecimal km, CostQuantitySource source) {
+    }
+
+    /**
+     * The measured run first, the master corridor's reference distance second, nothing third.
+     *
+     * <p>Measured wins because it is about this shipment rather than about a corridor it resembles,
+     * and because it exists for a trip with no master route at all - which before V39 could not be
+     * priced per kilometre however long it actually was.
+     *
+     * <p>Nothing is still a legitimate answer, and it is what makes the per-km component report
+     * itself non-calculable instead of being multiplied by a zero nobody meant: the "do not invent
+     * the distance" rule, unchanged since V30 and now with one more place to look first.
+     */
+    private Distance distanceFor(CompanyScope scope, CostableTrip trip) {
+        BigDecimal measured = tripCostingLookupPort
+                .findMeasuredDistanceKm(trip.tripId(), scope.companyId())
+                .orElse(null);
+        if (measured != null && measured.signum() > 0) {
+            return new Distance(measured, CostQuantitySource.MEASURED_ROUTE);
+        }
+        return new Distance(referenceDistanceKm(trip), CostQuantitySource.ROUTE_REFERENCE);
     }
 
     private CostableTrip requireTrip(CompanyScope scope, UUID tripId) {

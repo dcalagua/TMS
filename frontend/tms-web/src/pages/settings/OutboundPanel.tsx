@@ -6,7 +6,8 @@ import {
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
-  fetchWebhookDeliveries, fetchWebhookSubscriptions, retryWebhookDelivery, rotateWebhookSecret,
+  fetchIntegrationHealth, fetchWebhookDeliveries, fetchWebhookSubscriptions, retryWebhookDelivery,
+  rotateWebhookSecret,
   setWebhookSubscriptionActive,
   type WebhookDeliveryStatus, type WebhookDeliveryView,
   type WebhookSubscriptionSecretView, type WebhookSubscriptionView,
@@ -54,6 +55,13 @@ export function OutboundPanel({ companyId, canManage }: OutboundPanelProps) {
   const [creating, setCreating] = useState(false);
   const [secret, setSecret] = useState<WebhookSubscriptionSecretView | null>(null);
   const [openDeliveryId, setOpenDeliveryId] = useState<string | null>(null);
+
+  // JOB 13: una respuesta antes que una búsqueda. Los dos listados de abajo son a dónde se va
+  // *después* de que esto diga dónde mirar.
+  const healthQuery = useQuery({
+    queryKey: ["integration-health", companyId],
+    queryFn: ({ signal }) => fetchIntegrationHealth(companyId, signal),
+  });
 
   const subsQuery = useQuery({
     queryKey: ["webhook-subscriptions", companyId, subsPage],
@@ -265,8 +273,57 @@ export function OutboundPanel({ companyId, canManage }: OutboundPanelProps) {
     });
   }
 
+  const health = healthQuery.data;
+
   return (
     <>
+      {health && (
+        <>
+          <SectionHeader title={t("Estado de las integraciones")} level={2} />
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 4 }}>
+            {/* Pendientes no es un problema por sí solo; la EDAD sí. Mil que avanzan es sano, tres
+                que esperan desde el martes no, y un contador solo no distingue una cosa de otra. */}
+            <Chip
+              size="small"
+              variant="outlined"
+              color={health.oldestPendingAt ? "warning" : "default"}
+              label={health.oldestPendingAt
+                ? t("{{n}} pendientes · la más vieja del {{when}}", {
+                    n: health.deliveriesPending, when: fmtDateTime(health.oldestPendingAt),
+                  })
+                : t("{{n}} pendientes", { n: health.deliveriesPending })}
+            />
+            <Chip
+              size="small"
+              variant="outlined"
+              color={health.deliveriesFailed > 0 ? "error" : "default"}
+              label={t("{{n}} agotaron reintentos", { n: health.deliveriesFailed })}
+            />
+            {/* El fallo que parece silencio. Sólo se muestra cuando existe: un cero aquí sería ruido
+                permanente en una pantalla que ya tiene bastante. */}
+            {health.inactiveSubscriptionsWithBacklog > 0 && (
+              <Chip
+                size="small"
+                color="warning"
+                label={t("{{n}} suscripciones apagadas acumulando cola", {
+                  n: health.inactiveSubscriptionsWithBacklog,
+                })}
+              />
+            )}
+            <Chip
+              size="small"
+              variant="outlined"
+              color={health.requestsFailed > 0 ? "error" : "default"}
+              label={t("Entrada 24h: {{ok}} ok · {{rejected}} rechazadas · {{failed}} con error nuestro", {
+                ok: health.requestsSucceeded,
+                rejected: health.requestsRejected,
+                failed: health.requestsFailed,
+              })}
+            />
+          </Box>
+        </>
+      )}
+
       <SectionHeader
         title={t("Suscripciones")}
         level={2}

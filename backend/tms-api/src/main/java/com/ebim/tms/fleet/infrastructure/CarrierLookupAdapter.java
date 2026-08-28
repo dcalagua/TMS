@@ -4,6 +4,7 @@ import com.ebim.tms.fleet.domain.Carrier;
 import com.ebim.tms.shared.reference.CarrierLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -34,6 +35,13 @@ class CarrierLookupAdapter implements CarrierLookupPort {
         return carrierRepository.findByIdAndCompanyId(id, companyId)
                 .filter(Carrier::active)
                 .map(carrier -> MasterReference.of(carrier.id(), carrier.code(), carrier.businessName()));
+    }
+
+    @Override
+    public List<MasterReference> findAllActiveInCompany(UUID companyId) {
+        return carrierRepository.findByCompanyIdAndActiveTrueOrderByCodeAsc(companyId).stream()
+                .map(carrier -> MasterReference.of(carrier.id(), carrier.code(), carrier.businessName()))
+                .toList();
     }
 
     @Override

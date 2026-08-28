@@ -7,8 +7,8 @@ import com.ebim.tms.planning.domain.TripStop;
 import com.ebim.tms.planning.infrastructure.TripOrderAssignmentRepository;
 import com.ebim.tms.shared.api.ConflictException;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
+import com.ebim.tms.shared.reference.OrderAmounts;
 import com.ebim.tms.shared.reference.PlannableOrder;
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -66,10 +66,13 @@ public class TripAssignmentService {
      * snapshot and then both tried to insert. One of them lands here and is told, in the language
      * of the planning board, to reload.
      */
-    public TripOrderAssignment open(Trip trip, PlannableOrder order, UUID actorId) {
-        TripOrderAssignment assignment = new TripOrderAssignment(trip.companyId(), trip.id(), order.id(),
-                zeroIfNull(order.totalWeightKg()), zeroIfNull(order.totalVolumeM3()), zeroIfNull(order.totalPallets()),
-                actorId);
+    public TripOrderAssignment open(Trip trip, PlannableOrder order, OrderAmounts amounts, UUID actorId) {
+        // The whole order, or a slice of it (migration V37). A row that covers everything the
+        // customer ordered is flagged whole, which is what puts it under V11's installation-wide
+        // unique index; a slice is flagged false and is deliberately outside it.
+        boolean wholeOrder = amounts.covers(OrderAmounts.wholeOf(order));
+        TripOrderAssignment assignment =
+                new TripOrderAssignment(trip.companyId(), trip.id(), order.id(), amounts, wholeOrder, actorId);
         try {
             assignmentRepository.saveAndFlush(assignment);
         } catch (DataIntegrityViolationException raced) {
@@ -95,10 +98,16 @@ public class TripAssignmentService {
         assignmentRepository.saveAndFlush(assignment);
     }
 
-    /** Closes an assignment and returns its order to the eligible pool. */
+    /**
+     * Closes an assignment and gives its amounts back to the order's pending pool (migration V37).
+     *
+     * <p>Releases exactly what this row carried, not "the whole order": with split allocation the
+     * order may still be on another trip, and returning all of it would leave the ledger claiming
+     * that nothing is on a truck while a truck is loaded.
+     */
     public void closeAndRelease(TripOrderAssignment assignment, String reason, UUID actorId) {
         close(assignment, reason, actorId);
-        orderPlanningPort.releaseFromPlanning(assignment.orderId(), assignment.companyId());
+        orderPlanningPort.releaseAllocation(assignment.orderId(), assignment.companyId(), assignment.assigned());
     }
 
     /** Closes every active assignment of a trip and releases all of its orders - trip or run cancellation. */
@@ -152,7 +161,4 @@ public class TripAssignmentService {
         trip.assertStopSequenceIntegrity();
     }
 
-    private static BigDecimal zeroIfNull(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO : value;
-    }
 }

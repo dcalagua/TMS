@@ -97,7 +97,7 @@ class TripDriverAssignmentTest {
 
         when(tripRepository.saveAndFlush(any(Trip.class))).thenAnswer(call -> call.getArgument(0));
         when(assembler.toDetail(any(Trip.class), eq(COMPANY)))
-                .thenAnswer(call -> new TripDetailView(null, List.of(), List.of(), List.of(), List.of()));
+                .thenAnswer(call -> new TripDetailView(null, List.of(), List.of(), List.of(), List.of(), TripRouteMetrics.NONE));
         when(driverLookupPort.findAssignable(DRIVER, COMPANY)).thenReturn(Optional.of(driver(null, CARRIER)));
     }
 

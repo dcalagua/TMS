@@ -189,6 +189,14 @@ export interface EligibleOrderView {
   totalWeightKg: number
   totalVolumeM3: number
   totalPallets: number
+  /** Lo que queda por planificar (migración V37): igual al total si nadie la ha tocado, menor si
+   * parte del pedido ya viaja en otro camión. Es la cifra sobre la que se decide, no el total. */
+  pendingWeightKg: number
+  pendingVolumeM3: number
+  pendingPallets: number
+  /** Parte del pedido ya está en un viaje. Bandera propia y no una comparación de dos números:
+   * "esto es un reparto" es lo que el tablero tiene que decir en voz alta. */
+  partiallyAllocated: boolean
 }
 
 export interface EligibleOrderListParams {
@@ -258,6 +266,19 @@ export interface TripView {
   /** The carrier the shipment was *planned* with, resolved from `carrierId` - not the vehicle's
    * current carrier, which may since have changed (see `CarrierLookupPort`). */
   carrierName: string | null
+  /**
+   * El transportista que **aceptó** un tender de este envío (migración V42), cuando no es el dueño
+   * del vehículo asignado. Null en casi todos los envíos, y null no significa "desconocido": es
+   * "nada contradice a `carrierId`".
+   */
+  acceptedCarrierId: string | null
+  acceptedCarrierName: string | null
+  /**
+   * El envío está acordado con un transportista y lleva el camión de otro. Es un estado de
+   * planificación ordinario que bloquea una sola cosa: **no puede salir** hasta que se le asigne un
+   * vehículo del transportista que aceptó.
+   */
+  awaitsCarrierVehicle: boolean
   driverId: string | null
   driverCode: string | null
   /** "Last, first" - composed server-side so no screen has to guess the order of the two columns. */
@@ -350,6 +371,24 @@ export interface TripStopView {
   /** Minutes between arrival and departure, or null until both ends are known. */
   dwellMinutes: number | null
   openExceptionCount: number
+  /**
+   * Cuándo se espera al vehículo aquí (migración V43). **Null significa que no hay estimación** -
+   * un tramo del camino no se pudo medir, así que ni esta parada ni ninguna posterior la tienen.
+   *
+   * La pantalla muestra el hueco y no lo rellena: una hora de llegada plausible pero equivocada se
+   * ve exactamente igual que una correcta, y nada en el tablero diría cuál es cuál.
+   */
+  etaArrivalAt: string | null
+  etaDepartureAt: string | null
+  /**
+   * Sobre qué se midió el tramo más débil que llega hasta aquí. `FALLBACK` significa que al menos
+   * uno fue una línea recta: la estimación sigue sirviendo y no es la misma afirmación que una
+   * carretera medida, así que la pantalla lo dice.
+   */
+  etaSource: 'MEASURED_ROUTE' | 'FALLBACK' | null
+  etaCalculatedAt: string | null
+  /** El horario hace llegar al vehículo después de que la ventana de esta parada cierra. */
+  etaMissesWindow: boolean
 }
 
 /** Mirrors the backend's `TransportEventView` record - one entry of a trip's timeline.
@@ -426,12 +465,74 @@ export interface OrderDeliveryView {
   /** When the row was typed, against `deliveredAt`'s when-it-happened. */
   recordedAt: string
   evidence: DeliveryEvidenceView[]
+  /**
+   * Cuánto se llevó, cuánto se entregó, cuánto se rechazó y cuánto quedó pendiente (migración V45).
+   *
+   * **`null` significa NO REGISTRADO, nunca cero.** Toda entrega anterior a V45 llega con `null` y
+   * no afirmó nada sobre cantidades; pintarla como "0 entregado" inventaría un faltante que nunca
+   * ocurrió. La pantalla muestra el hueco.
+   */
+  quantities: DeliveryQuantitiesView | null
+}
+
+/**
+ * Mirrors `OrderDeliveryView.DeliveryQuantitiesView`.
+ *
+ * `outstanding` lo calcula el servidor y no cada pantalla: es lo que llevaría un segundo intento, y
+ * dos clientes restando por su cuenta es como terminan discrepando.
+ */
+export interface DeliveryQuantitiesView {
+  attemptedWeightKg: number
+  attemptedVolumeM3: number
+  attemptedPallets: number
+  deliveredWeightKg: number
+  deliveredVolumeM3: number
+  deliveredPallets: number
+  refusedWeightKg: number
+  refusedVolumeM3: number
+  refusedPallets: number
+  outstandingWeightKg: number
+  outstandingVolumeM3: number
+  outstandingPallets: number
 }
 
 /** Mirrors the backend's `TripDetailView` record.
  *
  * The timeline is deliberately absent: it grows over a long day and is fetched on its own through
  * `fetchTripEvents`, rather than being re-sent by every mutation that returns a trip. */
+/** Mirrors `TripRouteMetrics.TripRouteLegView` - un tramo del recorrido. */
+export interface TripRouteLegView {
+  /** `null` en el tramo que sale del origen: el origen no es la parada cero. */
+  fromStopSequence: number | null
+  fromLabel: string
+  toStopSequence: number
+  toLabel: string
+  distanceKm: number
+  travelMinutes: number
+  estimated: boolean
+}
+
+/**
+ * Mirrors the backend's `TripRouteMetrics` (migración V38): cuánto conduce el viaje y cuánto tarda.
+ *
+ * `estimated` es la bandera importante. Sin un proveedor de rutas configurado las cifras salen del
+ * estimador local — línea recta por un factor de carretera — y eso es útil pero no es una medición.
+ * La pantalla tiene que decirlo, no esconderlo.
+ *
+ * `totalDuration` es solo conducción: el tiempo en el muelle es el `serviceTimeMinutes` de la
+ * ubicación y mezclar ambos daría una cifra que no es ni un trayecto ni una jornada.
+ */
+export interface TripRouteMetrics {
+  totalDistanceKm: number
+  totalMinutes: number
+  legs: TripRouteLegView[]
+  provider: string | null
+  estimated: boolean
+  /** Tramos que no se pudieron medir porque una ubicación no tiene coordenadas. */
+  unmeasurableLegs: number
+  complete: boolean
+}
+
 export interface TripDetailView {
   trip: TripView
   assignments: TripAssignmentView[]
@@ -440,6 +541,8 @@ export interface TripDetailView {
   exceptions: TripExceptionView[]
   /** In visiting order. An assigned order with no entry here has not been recorded yet. */
   deliveries: OrderDeliveryView[]
+  /** Nunca null: un viaje sin recorrido medible trae ceros y sus tramos no medidos contados. */
+  routing: TripRouteMetrics
 }
 
 export interface PlanningRunListParams {
@@ -480,6 +583,11 @@ export function createPlanningRun(companyId: string, request: PlanningRunRequest
 export interface PlanningActionRequest {
   version: number
   reason?: string | null
+  /**
+   * Qué motor ejecutar (JOB 05). Ausente significa `HEURISTIC_V1`, el de siempre: cambiar el
+   * algoritmo bajo un botón conocido sin decirlo sería el peor resultado posible.
+   */
+  engine?: string | null
 }
 
 export function confirmPlanningRun(
@@ -509,6 +617,10 @@ export interface UnplannedOrderView {
     | 'NO_FLEET'
     | 'TAKEN_WHILE_PLANNING'
     | 'NOT_SERVICEABLE_ON_DATE'
+    /** Todo el viaje se habría salido de la jornada. Solo PLANNING_V2 lo produce. */
+    | 'EXCEEDS_SHIFT'
+    /** No queda nada por planificar: el pedido ya está entero en viajes (V37). No es un fallo. */
+    | 'FULLY_ALLOCATED'
 }
 
 /** Mirrors `AutoPlanView.ProposedTripView`. */
@@ -524,6 +636,72 @@ export interface ProposedTripView {
  * Mirrors the backend's `AutoPlanView`. Preview and apply return the same shape, differing only
  * in `applied` and `created` - so what the planner reviewed is what they get.
  */
+/**
+ * Mirrors `PlanningKpis` (JOB 05): lo que cuesta una propuesta, en los términos con los que un
+ * planificador la juzga.
+ *
+ * `totalCost` ya no es siempre null (JOB 11): la propuesta se cotiza por `CarrierQuotationPort`,
+ * el mismo puerto, selector y calculadora que usan un tender y una factura, para que el plan que se
+ * compara por precio y la factura que le sigue salgan de un solo juego de reglas.
+ *
+ * Sigue siendo null cuando **no puede cubrir el plan entero**, y `pricing.reason` dice por qué.
+ * Nunca es una suma parcial: un total que se saltara en silencio los tres viajes sin acuerdo haría
+ * que el peor plan pareciera el más barato, y comparar motores por coste es justo para lo que sirve
+ * la cifra.
+ *
+ * Los porcentajes de utilización son null — no cero — cuando ningún vehículo declara un límite:
+ * "no se sabe" y "camión vacío" no son lo mismo.
+ */
+/**
+ * Mirrors `ProposalPricing` (JOB 11). Lo que costaría el plan, o por qué no se puede decir.
+ *
+ * `pricedTrips` se informa aunque no haya total: "7 de 10 tienen acuerdo" es la frase que le dice a
+ * un planificador qué arreglar, y no es un precio.
+ */
+export interface ProposalPricing {
+  totalCost: number | null
+  currency: string | null
+  /**
+   * - `NO_TRIPS` — el motor no colocó ningún viaje.
+   * - `NO_AGREEMENT_FOR_SOME_TRIP` — algún viaje no tiene tarifa aplicable. **No se cotiza a cero**:
+   *   un transportista sin acuerdo no es gratis, y un plan que usara tres ganaría toda comparación.
+   * - `MIXED_CURRENCIES` — los acuerdos no están todos en la misma moneda. **No se convierte**: este
+   *   producto no inventa un tipo de cambio.
+   */
+  reason: 'NO_TRIPS' | 'NO_AGREEMENT_FOR_SOME_TRIP' | 'MIXED_CURRENCIES' | null
+  pricedTrips: number
+  totalTrips: number
+}
+
+export interface PlanningKpis {
+  trips: number
+  vehicles: number
+  plannedOrders: number
+  unplannedOrders: number
+  lateOrders: number
+  totalDistanceKm: number
+  totalDurationMinutes: number
+  weightUtilizationPercent: number | null
+  volumeUtilizationPercent: number | null
+  palletUtilizationPercent: number | null
+  /** Alguna distancia salió del estimador local y no de un enrutador. */
+  distanceEstimated: boolean
+  totalCost: number | null
+  /** La respuesta completa de tarificación. Nunca null. */
+  pricing: ProposalPricing
+  plannedRatePercent: number | null
+  kilometresPerPlannedOrder: number | null
+}
+
+/** Los motores que el backend ofrece. El nombre viaja en la propuesta para poder rastrearla. */
+export type PlanningEngineName = 'HEURISTIC_V1' | 'PLANNING_V2'
+
+export const PLANNING_ENGINES: PlanningEngineName[] = ['HEURISTIC_V1', 'PLANNING_V2']
+
+/**
+ * Mirrors the backend's `AutoPlanView`. Preview and apply return the same shape, differing only
+ * in `applied` and `created` - so what the planner reviewed is what they get.
+ */
 export interface AutoPlanView {
   applied: boolean
   engine: string
@@ -532,11 +710,16 @@ export interface AutoPlanView {
   unplanned: UnplannedOrderView[]
   ordersConsidered: number
   vehiclesOffered: number
+  kpis: PlanningKpis
 }
 
 /** What automatic planning would do. Writes nothing. */
-export function previewAutoPlan(companyId: string, runId: string, signal?: AbortSignal): Promise<AutoPlanView> {
-  return apiRequest<AutoPlanView>(`/planning/runs/${runId}/auto-plan/preview`, { companyId, signal })
+export function previewAutoPlan(
+  companyId: string, runId: string, engine?: PlanningEngineName, signal?: AbortSignal,
+): Promise<AutoPlanView> {
+  return apiRequest<AutoPlanView>(`/planning/runs/${runId}/auto-plan/preview`, {
+    companyId, signal, query: engine ? { engine } : undefined,
+  })
 }
 
 /** Writes the proposal as draft trips. Never confirms them. */
@@ -598,10 +781,22 @@ export function updateTripDriver(
   return apiRequest<TripDetailView>(`/planning/trips/${id}/driver`, { method: 'PUT', companyId, body: request })
 }
 
-/** Mirrors the backend's `AssignOrderRequest` record. No quantities: the backend snapshots the
- * order's own totals - see `docs/domain/CAPACITY_MODEL.md`, "The frontend is never trusted". */
+/**
+ * Mirrors the backend's `AssignOrderRequest` record.
+ *
+ * Sin cantidades significa "todo lo que queda por planificar de este pedido", que es el caso
+ * ordinario. Con cantidades es un reparto (migración V37): 70 de los 100 pallets suben a este
+ * camión y el resto espera otro.
+ *
+ * El servidor nunca se fía de estas cifras como carga: rechaza la asignación si excede lo
+ * pendiente, en el servicio y otra vez en `ck_transport_order_not_over_allocated`. Ver
+ * `docs/domain/CAPACITY_MODEL.md`, "The frontend is never trusted".
+ */
 export interface AssignOrderRequest {
   orderId: string
+  weightKg?: number
+  volumeM3?: number
+  pallets?: number
 }
 
 export function assignOrderToTrip(
@@ -666,6 +861,17 @@ export function cancelTrip(
   companyId: string, id: string, request: PlanningActionRequest,
 ): Promise<TripDetailView> {
   return apiRequest<TripDetailView>(`/planning/trips/${id}/cancel`, { method: 'POST', companyId, body: request })
+}
+
+/**
+ * Recalcula cuándo se espera al envío en cada parada (migración V43, ADR-011).
+ *
+ * Explícito y no automático: un envío al que le cambiaron las paradas tiene una estimación vieja
+ * hasta que alguien la pide, y `etaCalculatedAt` en cada parada es cómo se nota. Un proceso de
+ * fondo necesitaría un actor a quien atribuir la escritura, que es la deuda D4.
+ */
+export function recomputeTripEta(companyId: string, id: string): Promise<TripDetailView> {
+  return apiRequest<TripDetailView>(`/planning/trips/${id}/eta`, { method: 'POST', companyId })
 }
 
 // --- trip execution --------------------------------------------------------------------
@@ -839,6 +1045,26 @@ export interface DeliveryResultRequest {
   receiverName?: string | null
   receiverDocument?: string | null
   notes?: string | null
+  /**
+   * Las cantidades (V45, deuda D3). **Opcional**: omitirlo es no afirmar nada sobre cantidades, que
+   * es lo que hacía toda entrega antes de V45 y sigue siendo una forma legítima de trabajar.
+   *
+   * Mandar ceros NO es lo mismo: eso afirma que el cliente no se llevó nada.
+   */
+  quantities?: DeliveryQuantitiesRequest | null
+}
+
+/** Los nueve números viajan juntos o no viaja ninguno - el servidor rechaza medio bloque. */
+export interface DeliveryQuantitiesRequest {
+  attemptedWeightKg: number
+  attemptedVolumeM3: number
+  attemptedPallets: number
+  deliveredWeightKg: number
+  deliveredVolumeM3: number
+  deliveredPallets: number
+  refusedWeightKg: number
+  refusedVolumeM3: number
+  refusedPallets: number
 }
 
 export function recordDelivery(

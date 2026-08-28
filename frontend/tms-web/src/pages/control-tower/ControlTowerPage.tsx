@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Box, Chip, MenuItem, TextField, Typography } from "@mui/material";
 import {
-  BroadcastOnPersonalRounded, DirectionsRunRounded, ScheduleRounded, ReportProblemRounded,
+  BroadcastOnPersonalRounded, DirectionsRunRounded, ScheduleRounded, ReportProblemRounded, BlockRounded,
   DoneAllRounded, HourglassBottomRounded, PendingActionsRounded,
 } from "@mui/icons-material";
 import { fetchCarriers } from "../../shared/api/carriersApi";
@@ -26,7 +26,8 @@ import { enumLabel } from "../../lib/enums";
 import type { StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
 import { fmtDateTime, fmtMinutes, fmtQuantity, fmtTime } from "../../lib/locale";
-import { ExceptionsPanel, OutstandingStopsPanel, WorkloadPanel } from "./ControlTowerPanels";
+import { BlockersPanel,
+  AdvisoriesPanel, ExceptionsPanel, OutstandingStopsPanel, WorkloadPanel } from "./ControlTowerPanels";
 
 const PAGE_SIZE = 20;
 
@@ -240,6 +241,12 @@ export function ControlTowerPage() {
         />
         <KpiCard icon={<PendingActionsRounded />} color="error.main" title={t("Salieron tarde")} value={fmtQuantity(summary.tripsDepartedLate)} />
         <KpiCard icon={<ReportProblemRounded />} color="error.main" title={t("Incidencias abiertas")} value={fmtQuantity(summary.openExceptions)} />
+        {/* JOB 12: lo único de esta fila que mira hacia adelante. */}
+        <KpiCard
+          icon={<BlockRounded />} color="warning.main"
+          title={t("No pueden salir")} sub={t("Bloqueados ahora mismo")}
+          value={fmtQuantity(summary.blockedShipments)}
+        />
         <KpiCard
           icon={<ScheduleRounded />} color="warning.main"
           title={t("Paradas pendientes")} sub={t("{{n}} fuera de ventana", { n: fmtQuantity(summary.stopsPastWindow) })}
@@ -259,6 +266,11 @@ export function ControlTowerPage() {
         <WorkloadPanel items={overview.workload} total={summary.tripsInTransit + summary.tripsScheduled} />
         <ExceptionsPanel items={overview.openExceptions} total={summary.openExceptions} />
         <OutstandingStopsPanel items={overview.outstandingStops} total={summary.outstandingStops} />
+        <BlockersPanel items={overview.blockers} total={summary.blockedShipments} />
+        {/* Debajo de los bloqueadores y visiblemente distinto (JOB 23). Dos corrientes, dos
+            contadores: "qué está atascado" y "qué conviene saber" son preguntas diferentes, y una
+            lista única haría que un redondeo se leyera como un camión parado. */}
+        <AdvisoriesPanel items={overview.advisories} total={summary.openAdvisories} />
       </Box>
 
       <Toolbar

@@ -15,6 +15,7 @@ import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.audit.AuditAggregateType;
 import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.reference.CarrierLookupPort;
+import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.reference.RouteTemplate;
@@ -66,18 +67,21 @@ public class RateCardService {
     private final RateCardRepository rateCardRepository;
     private final CarrierLookupPort carrierLookupPort;
     private final OriginLookupPort originLookupPort;
+    private final DestinationLookupPort destinationLookupPort;
     private final RouteTemplateLookupPort routeTemplateLookupPort;
     private final VehicleTypeLookupPort vehicleTypeLookupPort;
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
 
     public RateCardService(RateCardRepository rateCardRepository, CarrierLookupPort carrierLookupPort,
-            OriginLookupPort originLookupPort, RouteTemplateLookupPort routeTemplateLookupPort,
+            OriginLookupPort originLookupPort,
+            DestinationLookupPort destinationLookupPort, RouteTemplateLookupPort routeTemplateLookupPort,
             VehicleTypeLookupPort vehicleTypeLookupPort, AuditActorProvider auditActorProvider,
             AuditRecorder auditRecorder) {
         this.rateCardRepository = rateCardRepository;
         this.carrierLookupPort = carrierLookupPort;
         this.originLookupPort = originLookupPort;
+        this.destinationLookupPort = destinationLookupPort;
         this.routeTemplateLookupPort = routeTemplateLookupPort;
         this.vehicleTypeLookupPort = vehicleTypeLookupPort;
         this.auditActorProvider = auditActorProvider;
@@ -115,8 +119,8 @@ public class RateCardService {
 
         UUID actorId = auditActorProvider.requireAppUserId();
         RateCard card = new RateCard(scope.companyId(), code, request.name().trim(), request.carrierId(),
-                request.scope(), target.originId(), target.routeId(), request.vehicleTypeId(), currency,
-                request.validFrom(), request.validTo(), components, actorId);
+                request.scope(), target.originId(), target.destinationId(), target.routeId(),
+                request.vehicleTypeId(), currency, request.validFrom(), request.validTo(), components, actorId);
         RateCard saved = saveOrConflict(card, code);
         auditRecorder.record(scope, AuditAggregateType.RATE_CARD, saved.id(), AuditAction.CREATE,
                 Map.of("code", saved.code(), "scope", saved.scope().name(), "currency", saved.currency()));
@@ -144,8 +148,9 @@ public class RateCardService {
         requireNoOverlap(scope, request, target, id);
 
         UUID actorId = auditActorProvider.requireAppUserId();
-        card.applyChanges(code, request.name().trim(), request.scope(), target.originId(), target.routeId(),
-                request.vehicleTypeId(), currency, request.validFrom(), request.validTo(), components, actorId);
+        card.applyChanges(code, request.name().trim(), request.scope(), target.originId(),
+                target.destinationId(), target.routeId(), request.vehicleTypeId(), currency,
+                request.validFrom(), request.validTo(), components, actorId);
         RateCard saved = saveOrConflict(card, code);
         auditRecorder.record(scope, AuditAggregateType.RATE_CARD, saved.id(), AuditAction.UPDATE,
                 Map.of("code", saved.code(), "scope", saved.scope().name(), "currency", saved.currency()));
@@ -206,6 +211,10 @@ public class RateCardService {
         Map<UUID, MasterReference> routes = new HashMap<>();
         routeTemplateLookupPort.findAllInCompany(idsOf(cards, RateCard::routeId), companyId)
                 .forEach((routeId, route) -> routes.put(routeId, toReference(route)));
+        // The lane's far end, batched with everything else: a page of lane cards must not cost a
+        // lookup per row.
+        Map<UUID, MasterReference> destinations = destinationLookupPort.findAllInCompany(
+                idsOf(cards, RateCard::destinationId), companyId);
 
         return cards.stream()
                 .map(card -> RateCardView.from(card,
@@ -213,7 +222,8 @@ public class RateCardService {
                         card.scope() == RateCardScope.ROUTE
                                 ? lookup(routes, card.routeId())
                                 : lookup(origins, card.originId()),
-                        lookup(vehicleTypes, card.vehicleTypeId())))
+                        lookup(vehicleTypes, card.vehicleTypeId()),
+                        lookup(destinations, card.destinationId())))
                 .toList();
     }
 
@@ -247,24 +257,39 @@ public class RateCardService {
         return switch (request.scope()) {
             case CARRIER -> {
                 requireAbsent(request.originId(), "originId", RateCardScope.CARRIER);
+                requireAbsent(request.destinationId(), "destinationId", RateCardScope.CARRIER);
                 requireAbsent(request.routeId(), "routeId", RateCardScope.CARRIER);
-                yield new ScopeTarget(null, null);
+                yield new ScopeTarget(null, null, null);
             }
             case ORIGIN -> {
                 requireAbsent(request.routeId(), "routeId", RateCardScope.ORIGIN);
+                requireAbsent(request.destinationId(), "destinationId", RateCardScope.ORIGIN);
                 UUID originId = requirePresent(request.originId(), "originId", RateCardScope.ORIGIN);
                 originLookupPort.findActiveInCompany(originId, scope.companyId())
                         .orElseThrow(() -> new InvalidRequestException(
                                 "originId does not name an active origin of this company."));
-                yield new ScopeTarget(originId, null);
+                yield new ScopeTarget(originId, null, null);
+            }
+            case LANE -> {
+                requireAbsent(request.routeId(), "routeId", RateCardScope.LANE);
+                UUID originId = requirePresent(request.originId(), "originId", RateCardScope.LANE);
+                UUID destinationId = requirePresent(request.destinationId(), "destinationId", RateCardScope.LANE);
+                originLookupPort.findActiveInCompany(originId, scope.companyId())
+                        .orElseThrow(() -> new InvalidRequestException(
+                                "originId does not name an active origin of this company."));
+                destinationLookupPort.findActiveInCompany(destinationId, scope.companyId())
+                        .orElseThrow(() -> new InvalidRequestException(
+                                "destinationId does not name an active destination of this company."));
+                yield new ScopeTarget(originId, destinationId, null);
             }
             case ROUTE -> {
                 requireAbsent(request.originId(), "originId", RateCardScope.ROUTE);
+                requireAbsent(request.destinationId(), "destinationId", RateCardScope.ROUTE);
                 UUID routeId = requirePresent(request.routeId(), "routeId", RateCardScope.ROUTE);
                 routeTemplateLookupPort.findActiveInCompany(routeId, scope.companyId())
                         .orElseThrow(() -> new InvalidRequestException(
                                 "routeId does not name an active route of this company."));
-                yield new ScopeTarget(null, routeId);
+                yield new ScopeTarget(null, null, routeId);
             }
         };
     }
@@ -296,15 +321,37 @@ public class RateCardService {
      * shipment of that carrier cost exactly the minimum with no line explaining why.
      */
     private static RateComponents requireComponents(RateCardRequest request) {
+        // The label and the amount travel together (ck_rate_card_accessorial_pair): a labelled
+        // nothing and an unlabelled charge are both rows nobody can approve.
+        String label = request.accessorialLabel() == null || request.accessorialLabel().isBlank()
+                ? null
+                : request.accessorialLabel().trim();
+        if ((request.accessorialAmount() == null) != (label == null)) {
+            throw new InvalidRequestException(
+                    "accessorialAmount and accessorialLabel must be given together: a charge nobody "
+                            + "can name is a charge nobody can approve.");
+        }
+        if (request.maximumAmount() != null && request.minimumAmount() != null
+                && request.maximumAmount().compareTo(request.minimumAmount()) < 0) {
+            throw new InvalidRequestException("maximumAmount cannot be below minimumAmount.");
+        }
+
         RateComponents components = new RateComponents(request.baseAmount(), request.amountPerKm(),
-                request.amountPerKg(), request.amountPerM3(), request.amountPerPallet(), request.minimumAmount());
+                request.amountPerKg(), request.amountPerM3(), request.amountPerPallet(), request.minimumAmount(),
+                request.amountPerStop(), request.fuelSurchargePercent(), request.amountPerWaitingHour(),
+                request.tollAmount(), request.accessorialAmount(), label, request.maximumAmount());
+        // The floor and the ceiling are deliberately not on this list, for the reason
+        // RateCard.hasAnyComponent gives: a limit is a rule about other charges, not a charge.
         boolean hasComponent = components.baseAmount() != null || components.amountPerKm() != null
                 || components.amountPerKg() != null || components.amountPerM3() != null
-                || components.amountPerPallet() != null;
+                || components.amountPerPallet() != null || components.amountPerStop() != null
+                || components.fuelSurchargePercent() != null || components.amountPerWaitingHour() != null
+                || components.tollAmount() != null || components.accessorialAmount() != null;
         if (!hasComponent) {
             throw new InvalidRequestException(
-                    "A rate card must define at least one of baseAmount, amountPerKm, amountPerKg, "
-                            + "amountPerM3 or amountPerPallet.");
+                    "A rate card must define at least one charge: baseAmount, amountPerKm, amountPerKg, "
+                            + "amountPerM3, amountPerPallet, amountPerStop, fuelSurchargePercent, "
+                            + "amountPerWaitingHour, tollAmount or accessorialAmount.");
         }
         return components;
     }
@@ -392,6 +439,6 @@ public class RateCardService {
     }
 
     /** The scope's resolved target: exactly one of the two is non-null, or neither for {@code CARRIER}. */
-    private record ScopeTarget(UUID originId, UUID routeId) {
+    private record ScopeTarget(UUID originId, UUID destinationId, UUID routeId) {
     }
 }

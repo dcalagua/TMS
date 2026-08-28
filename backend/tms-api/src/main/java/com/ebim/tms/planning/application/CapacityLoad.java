@@ -1,6 +1,7 @@
 package com.ebim.tms.planning.application;
 
 import com.ebim.tms.planning.infrastructure.TripOrderAssignmentRepository;
+import com.ebim.tms.shared.reference.OrderAmounts;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import java.math.BigDecimal;
 
@@ -22,6 +23,16 @@ public record CapacityLoad(BigDecimal weightKg, BigDecimal volumeM3, BigDecimal 
     public static CapacityLoad of(PlannableOrder order) {
         return new CapacityLoad(zeroIfNull(order.totalWeightKg()), zeroIfNull(order.totalVolumeM3()),
                 zeroIfNull(order.totalPallets()), 1);
+    }
+
+    /**
+     * The load one <em>allocation</em> adds - the whole order, or the slice of it going on this
+     * trip (migration V37). The order count is one either way: a truck carrying part of an order is
+     * carrying that order, and counting it as a fraction would make the board's order count
+     * meaningless.
+     */
+    public static CapacityLoad of(OrderAmounts amounts) {
+        return new CapacityLoad(amounts.weightKg(), amounts.volumeM3(), amounts.pallets(), 1);
     }
 
     /** The database's grouped answer for one trip, mapped straight through. */

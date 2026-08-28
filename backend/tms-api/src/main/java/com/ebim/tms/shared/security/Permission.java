@@ -77,6 +77,11 @@ public enum Permission {
      */
     PLANNING_TENDER_READ("planning.tender:read"),
     PLANNING_TENDER_MANAGE("planning.tender:manage"),
+    /** Dock scheduling (migration V41). VIEWER holds the read: a booking carries no price. */
+    APPOINTMENTS_APPOINTMENT_READ("appointments.appointment:read"),
+    APPOINTMENTS_APPOINTMENT_MANAGE("appointments.appointment:manage"),
+    /** Configuring doors is an administrator's job: adding one changes what the site can promise. */
+    APPOINTMENTS_RESOURCE_MANAGE("appointments.resource:manage"),
 
     /**
      * The commercial agreement a carrier is paid under (migration V30). Separate from
@@ -87,6 +92,45 @@ public enum Permission {
     RATES_RATE_CARD_MANAGE("rates.rate_card:manage"),
     RATES_TRIP_COST_READ("rates.trip_cost:read"),
     RATES_TRIP_COST_MANAGE("rates.trip_cost:manage"),
+
+    /**
+     * Freight audit (migration V46). Six, and the split is the point.
+     *
+     * <p>Recording an invoice, deciding it is payable and handing it to accounting are three
+     * different authorities, and an installation will want them in different hands: a clerk keys
+     * what arrives, a controller approves the expenditure, and only somebody trusted with the
+     * accounting boundary exports it. Collapsing them into one {@code settlement:manage} would let
+     * whoever types an invoice approve their own.
+     */
+    SETTLEMENT_INVOICE_READ("settlement.invoice:read"),
+    SETTLEMENT_INVOICE_MANAGE("settlement.invoice:manage"),
+    SETTLEMENT_INVOICE_MATCH("settlement.invoice:match"),
+    /** Authorising an expenditure. The one that must never be held by a machine - see debt D4. */
+    SETTLEMENT_INVOICE_APPROVE("settlement.invoice:approve"),
+    SETTLEMENT_INVOICE_EXPORT("settlement.invoice:export"),
+    SETTLEMENT_TOLERANCE_MANAGE("settlement.tolerance:manage"),
+
+    /**
+     * A driver-and-vehicle pairing's day (migration V47).
+     *
+     * <p>Under {@code fleet} rather than {@code planning} because the thing being scheduled is a
+     * resource, not a shipment - and because the people who build a day are the same people who
+     * maintain the trucks and the drivers. Read and manage, split as everywhere else.
+     */
+    FLEET_WORK_ASSIGNMENT_READ("fleet.work_assignment:read"),
+    FLEET_WORK_ASSIGNMENT_MANAGE("fleet.work_assignment:manage"),
+
+    /**
+     * What running our own trucks is modelled to cost (migration V48).
+     *
+     * <p>Its own resource rather than folded into {@code rates.rate_card}: a tariff is a commercial
+     * agreement with a carrier and this is a finance model of our own operation - driver hourly
+     * cost, depreciation, what we believe fuel runs at - and an installation will want the two in
+     * different hands. Deliberately NOT given to VIEWER, which is the line {@code rates} draws too:
+     * reading these rates discloses our cost structure, not our operation.
+     */
+    COSTING_OWN_FLEET_READ("costing.own_fleet:read"),
+    COSTING_OWN_FLEET_WRITE("costing.own_fleet:write"),
 
     INTEGRATION_CLIENT_READ("integration.client:read"),
     INTEGRATION_CLIENT_MANAGE("integration.client:manage"),

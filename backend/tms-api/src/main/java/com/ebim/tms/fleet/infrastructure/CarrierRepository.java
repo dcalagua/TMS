@@ -32,4 +32,7 @@ public interface CarrierRepository extends JpaRepository<Carrier, UUID>, JpaSpec
 
     /** Which of a bulk import file's codes this company already holds - see {@code CarrierImportService}. */
     List<Carrier> findByCompanyIdAndCodeIn(UUID companyId, Collection<String> codes);
+
+    /** Every active carrier of the company, by code - the tender ranking's candidate pool (V40). */
+    List<Carrier> findByCompanyIdAndActiveTrueOrderByCodeAsc(UUID companyId);
 }

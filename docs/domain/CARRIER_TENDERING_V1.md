@@ -83,6 +83,13 @@ vehicle planned on it (V11), and the vehicle may only be swapped while the trip 
 tender naming a second carrier would produce a shipment whose accepted tender and whose
 `carrier_id` disagree.
 
+> **Superseded in part by V42.** The waterfall (V40) does offer a shipment to carriers that do not
+> own its vehicle - that is what subcontracting is - and since V42 the disagreement is expressible
+> rather than refused: `accepted_carrier_id` records who agreed, `carrier_id` goes on meaning the
+> owner of the assigned vehicle, and a shipment where the two differ **cannot depart**. See
+> `docs/domain/FLEET_AVAILABILITY_V1.md` section 1. What stays true here is the reasoning: the
+> acceptance is never silently written over `carrier_id`, and no vehicle is ever invented.
+
 ### 3.1 What that costs, stated plainly
 
 **A rejected shipment cannot be re-offered to a different carrier without cancelling and replanning

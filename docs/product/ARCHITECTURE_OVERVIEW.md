@@ -12,7 +12,7 @@ each claim below names the one that carries it.
 ## 1. The shape, in one diagram
 
 ```
-                        Browser (React + TypeScript + Bootstrap)
+                        Browser (React + TypeScript + MUI)
                                         │
                      Supabase Auth ─────┤ sign in only: a JWT, nothing else
                                         │

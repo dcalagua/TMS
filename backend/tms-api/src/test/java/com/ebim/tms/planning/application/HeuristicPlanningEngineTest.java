@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.ebim.tms.planning.application.PlanningProposal.ProposedTrip;
 import com.ebim.tms.planning.application.PlanningProposal.UnplannedOrder;
 import com.ebim.tms.planning.application.PlanningProposal.UnplannedReason;
+import com.ebim.tms.shared.reference.OrderAmounts;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.RouteTemplate;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
@@ -51,7 +52,7 @@ class HeuristicPlanningEngineTest {
             double weightKg, double volumeM3, double pallets) {
         return new PlannableOrder(id(suffix), "TO-" + suffix, ORIGIN, destination, null, null, DATE, priority,
                 null, null, BigDecimal.valueOf(weightKg), BigDecimal.valueOf(volumeM3),
-                BigDecimal.valueOf(pallets), null, null);
+                BigDecimal.valueOf(pallets), null, null, OrderAmounts.NONE);
     }
 
     private static VehicleCapacityReference vehicle(String suffix, double maxWeightKg, double maxVolumeM3,

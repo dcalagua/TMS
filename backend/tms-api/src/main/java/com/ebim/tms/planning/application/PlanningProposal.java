@@ -16,15 +16,27 @@ import java.util.UUID;
  * @param trips    proposed loads, in the order the engine built them - trip 1 is the first one
  * @param unplanned every order left over, each with a reason a dispatcher can act on
  */
-public record PlanningProposal(String engine, List<ProposedTrip> trips, List<UnplannedOrder> unplanned) {
+public record PlanningProposal(String engine, List<ProposedTrip> trips, List<UnplannedOrder> unplanned,
+        /**
+         * What this proposal costs a day, in the terms a planner judges one by (JOB 05). Never
+         * null: an engine that computes no KPIs reports {@link PlanningKpis#NONE} rather than
+         * leaving a caller to decide what absent means.
+         */
+        PlanningKpis kpis) {
 
     public PlanningProposal {
         trips = List.copyOf(trips);
         unplanned = List.copyOf(unplanned);
+        kpis = kpis == null ? PlanningKpis.NONE : kpis;
+    }
+
+    /** The pre-JOB-05 shape, for an engine that scores nothing. */
+    public PlanningProposal(String engine, List<ProposedTrip> trips, List<UnplannedOrder> unplanned) {
+        this(engine, trips, unplanned, PlanningKpis.NONE);
     }
 
     public static PlanningProposal empty(String engine) {
-        return new PlanningProposal(engine, List.of(), List.of());
+        return new PlanningProposal(engine, List.of(), List.of(), PlanningKpis.NONE);
     }
 
     /**
@@ -85,6 +97,23 @@ public record PlanningProposal(String engine, List<ProposedTrip> trips, List<Unp
          * orders removed. They still appear in the proposal, because "the engine never saw it"
          * and "nobody has to deal with it" are different statements.
          */
-        NOT_SERVICEABLE_ON_DATE
+        NOT_SERVICEABLE_ON_DATE,
+        /**
+         * Every trip that could carry it would have run past the end of the shift (JOB 05).
+         *
+         * <p>Its own reason rather than {@code NO_VEHICLE_AVAILABLE}, because the two call for
+         * different actions: a capacity problem is solved with another truck, and this one is
+         * solved with an earlier departure, a longer shift or a closer set of stops. Telling a
+         * planner "no vehicle" when the fleet is idle would send them looking for the wrong thing.
+         */
+        EXCEEDS_SHIFT,
+        /**
+         * The order carries no unplanned remainder: all of it is already on trips (V37).
+         *
+         * <p>Reached when a run is replanned after somebody assigned part of an order by hand.
+         * Distinct from every other reason here because nothing is wrong - the work is done, and
+         * reporting it as a failure to plan would put a solved order on a planner's exception list.
+         */
+        FULLY_ALLOCATED
     }
 }

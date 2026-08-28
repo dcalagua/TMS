@@ -7,6 +7,7 @@ import com.ebim.tms.masterdata.application.LocationFrequencyDateRangeRequest;
 import com.ebim.tms.masterdata.application.LocationFrequencyRequest;
 import com.ebim.tms.masterdata.application.LocationFrequencyService;
 import com.ebim.tms.masterdata.application.LocationFrequencyView;
+import com.ebim.tms.masterdata.application.GeofenceRequest;
 import com.ebim.tms.masterdata.application.LocationRequest;
 import com.ebim.tms.masterdata.application.LocationService;
 import com.ebim.tms.masterdata.application.LocationView;
@@ -104,6 +105,27 @@ public class LocationController {
     public LocationView update(
             CompanyScope scope, @PathVariable UUID id, @Valid @RequestBody LocationRequest request) {
         return locationService.update(scope, id, request);
+    }
+
+    /**
+     * Sets or clears this place's geofence (migration V43, ADR-011).
+     *
+     * <p>Its own endpoint rather than a field on the update body, because a geofence is configured
+     * once when a site is set up and an address correction should not re-send a radius nobody
+     * looked at. A null {@code radiusMetres} clears it.
+     *
+     * <p><b>What this does not do.</b> ADR-007 still holds: a position inside this circle informs a
+     * person and moves no lifecycle. There is no transition this enables, and the arrival a
+     * dispatcher records is still entered by a person.
+     */
+    @PutMapping("/{id}/geofence")
+    @PreAuthorize("hasAuthority('masterdata.location:manage')")
+    @Operation(summary = "Set or clear the circle around this location; null clears it")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public LocationView setGeofence(
+            CompanyScope scope, @PathVariable UUID id, @Valid @RequestBody GeofenceRequest request) {
+        return locationService.setGeofence(scope, id, request.radiusMetres());
     }
 
     @PostMapping("/{id}/activate")

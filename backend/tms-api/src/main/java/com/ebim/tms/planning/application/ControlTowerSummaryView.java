@@ -49,7 +49,23 @@ public record ControlTowerSummaryView(
         long openExceptions,
         long outstandingStops,
         long stopsPastWindow,
-        Long ordersUnplanned) {
+        Long ordersUnplanned,
+        /**
+         * How many of today's shipments cannot depart in their current state (JOB 12).
+         *
+         * <p>The total behind {@code ControlTowerView.blockers}, which is capped like every other
+         * panel. Zero is the ordinary reading and is worth showing as zero: "nothing is stuck" is a
+         * fact a dispatcher wants stated, not inferred from an empty list.
+         */
+        long blockedShipments,
+        /**
+         * How many advisories today's shipments carry (JOB 23).
+         *
+         * <p>Counted separately from {@code blockedShipments} and never added to it. They answer
+         * different questions - "is anything stuck" and "is anything worth knowing" - and a single
+         * total would let three rounding differences read as three trucks that cannot leave.
+         */
+        long openAdvisories) {
 
     // No derived accessors here. A record's non-component methods are not part of what Jackson
     // puts on the wire (see PageResponse, whose totalPages/hasNext are likewise server-side only),

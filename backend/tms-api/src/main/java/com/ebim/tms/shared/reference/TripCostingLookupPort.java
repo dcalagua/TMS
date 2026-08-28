@@ -25,4 +25,17 @@ public interface TripCostingLookupPort {
      * What a caller may <em>do</em> with each is {@code TripCostService}'s rule, not this port's.
      */
     Optional<CostableTrip> findCostableTrip(UUID tripId, UUID companyId);
+
+    /**
+     * The distance the shipment actually drives, measured over its own stops (V38, used from V39).
+     *
+     * <p>Empty when the shipment has no stops with coordinates, in which case pricing falls back to
+     * the master route's reference distance - and the breakdown says which it used, through
+     * {@code CostQuantitySource}.
+     *
+     * <p><b>Why this is better than the reference distance.</b> A reference distance is a number
+     * typed onto a corridor; this is about <em>this</em> shipment, and it exists for a trip with no
+     * master route at all - which before V39 simply could not be priced per kilometre.
+     */
+    Optional<java.math.BigDecimal> findMeasuredDistanceKm(UUID tripId, UUID companyId);
 }

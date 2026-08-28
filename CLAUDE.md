@@ -8,7 +8,7 @@ This repository is TMS by EBIM. TMS is independent from EWM by EBIM and must int
 
 - Database/platform: Supabase/PostgreSQL, PostGIS, RLS, Supabase Auth where applicable.
 - Backend: Java 21 + Spring Boot.
-- Frontend: React + TypeScript + Bootstrap + SweetAlert2.
+- Frontend: React + TypeScript + MUI (see ADR-008).
 
 ## Mandatory architecture
 
@@ -50,7 +50,11 @@ Never print secrets or read real `.env` secret files. Use `.env.example` with pl
 
 ## Frontend style
 
-Use Bootstrap as the visual base and SweetAlert2 for confirmations/critical feedback. Avoid MUI as the primary library. Build reusable enterprise components and responsive dense screens.
+Use MUI as the visual base (ADR-008). Route confirmations and critical feedback through
+`confirmDialog` / `confirmWithReason` in `src/lib/ui.tsx` - screens never build their own.
+Build reusable enterprise components and responsive dense screens; prefer drawers and side
+panels over large modals. Do not reintroduce Bootstrap, SweetAlert2, Tailwind or Ant because a
+historical report mentions them.
 
 ## Scale target
 
@@ -62,7 +66,7 @@ Simple now + correctly separable + scalable later.
 
 ## Repository layout
 
-    frontend/tms-web      React + TypeScript + Vite + Bootstrap + SweetAlert2
+    frontend/tms-web      React + TypeScript + Vite + MUI
     backend/tms-api       Java 21 + Spring Boot + Flyway (canonical application DDL)
     supabase              Local Supabase platform config; no duplicate application DDL
     docs                  Architecture, ADRs, database, security, overnight reports
@@ -87,10 +91,27 @@ Authoritative documents live under `docs/architecture/`:
   store behind `EvidenceStoragePort`, never into a column and never behind a public URL. Disabled
   by default; a local-volume implementation ships for deployments that want it, and Supabase
   Storage becomes one more implementation with no change to any caller.
+- `ADR-011-stop-eta-and-geofence-observation.md` - a stop's arrival estimate is computed from the
+  routing port, the service time and the window, stamped with the provenance of its weakest leg,
+  and absent wherever a leg could not be measured. Geofences inform and move no lifecycle;
+  automatic arrival detection stays deferred. Supersedes in part V27's refusal of per-stop planned
+  times.
 - `ADR-007-tracking-provider-port.md` - vehicle tracking is a normalised contract behind two ports
   (`TrackingIntakePort` for feeds that push, `TrackingProviderPort` for those that poll), with no
   vendor adapter in V1. Positions inform people and never move a lifecycle, so losing them costs a
   map and no business fact.
+- `ADR-008-frontend-design-system-mui.md` - MUI is the frontend design system of record. The
+  earlier Bootstrap + SweetAlert2 rule is withdrawn; the frontend has carried neither dependency
+  for some time and 91 source files import MUI.
+- `ADR-010-routing-provider-port.md` - distance and travel time behind `RoutingPort`, with a
+  company-scoped cache and a local geodesic estimator that is the whole of routing when no vendor
+  is configured. No vendor adapter, following ADR-007. Routing never fails a decision, and an
+  estimate stays visibly an estimate even after it has been cached.
+- `ADR-009-order-execution-lifecycle.md` - the order lifecycle carries the execution states
+  (`IN_EXECUTION`, `DELIVERED`, `PARTIALLY_DELIVERED`, `DELIVERY_FAILED`) beside the derived
+  `OrderFulfillmentStatus`, which is unchanged. Its status is recomputed from the delivery rows in
+  the same transaction as every change to them, so the two cannot drift; a failed delivery becomes
+  reopenable for a second attempt.
 
 Database and security detail lives in `docs/database/DATA_MODEL.md`,
 `docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.
@@ -109,5 +130,15 @@ OR-Tools/route optimization, EWM integration, ERP integration, Kafka/microservic
 
 GPS/telematics has left this list under ADR-007, and only as far as the ADR goes: TMS owns a
 normalised position contract, its storage and its sampling policy, and ships **no vendor adapter**.
-Writing one against a specific telematics provider still needs a concrete customer requirement. ETA
-calculation, geofencing and automatic arrival detection remain deferred.
+Writing one against a specific telematics provider still needs a concrete customer requirement.
+
+Stop ETA has left this list under ADR-011, because the objection to it expired rather than being
+overruled: V27 refused per-stop planned times on the grounds that "there is nothing to put in
+them", and V38/ADR-010 (per-leg driving time), V14 (service time) and V11 (service windows) have
+since supplied every term. TMS computes an arrival estimate on request, stamps it with the
+provenance of the weakest leg behind it, and leaves a visible gap wherever a leg could not be
+measured. Route optimisation - choosing the sequence rather than scheduling it - stays deferred.
+
+Geofencing is a circle on a location and nothing more (ADR-011). **Automatic arrival detection
+remains deferred**, and ADR-007's rule is not weakened by the circle existing: a position informs a
+person and never moves a lifecycle. `actual_arrival_at` is written by whoever arrived.

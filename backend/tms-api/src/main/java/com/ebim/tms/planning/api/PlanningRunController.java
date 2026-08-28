@@ -30,6 +30,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -126,11 +127,14 @@ public class PlanningRunController {
      */
     @GetMapping("/runs/{id}/auto-plan/preview")
     @PreAuthorize("hasAuthority('planning.plan:read') and hasAuthority('orders.order:read')")
-    @Operation(summary = "Preview an automatic plan for a draft run, writing nothing")
+    @Operation(summary = "Preview an automatic plan for a draft run, writing nothing",
+            description = "Optional `engine` selects the algorithm: HEURISTIC_V1 (default) or PLANNING_V2. "
+                    + "Previewing both is how two proposals are compared on the same day's data.")
     @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
             description = "Id of a company the caller is a member of")
-    public AutoPlanView previewAutoPlan(CompanyScope scope, @PathVariable UUID id) {
-        return autoPlanningService.preview(scope, id);
+    public AutoPlanView previewAutoPlan(CompanyScope scope, @PathVariable UUID id,
+            @RequestParam(name = "engine", required = false) String engine) {
+        return autoPlanningService.preview(scope, id, engine);
     }
 
     /**

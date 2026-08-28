@@ -91,5 +91,68 @@ public enum AuditAction {
      * themselves stay {@link #CREATE}, {@link #ACTIVATE} and {@link #DEACTIVATE} on
      * {@link AuditAggregateType#MEMBERSHIP}, which already say exactly what happened.
      */
-    ROLES_CHANGED
+    ROLES_CHANGED,
+
+    /**
+     * An order that came back short was put into the plannable pool for another attempt
+     * (migration V36).
+     *
+     * <p>Its own action rather than an {@link #UPDATE}, because it is the one moment a delivery
+     * that failed becomes work somebody still owes a customer, and "who decided to try again, and
+     * why" is the whole question a second attempt raises. The metadata carries the status it was
+     * reopened from, so the reason it needed reopening is in the row rather than only in the
+     * timeline of the trip that failed.
+     */
+    ORDER_REOPENED,
+
+    /**
+     * A tender waterfall was started, and the moment it ended (migration V40).
+     *
+     * <p>Two actions, not six. Every step in between already produces {@link #TENDER_SENT},
+     * {@link #TENDER_REJECTED} or {@link #TENDER_EXPIRED} against the shipment; minting a parallel
+     * row for each would duplicate the trail rather than extend it. What these two add is the pair
+     * of facts the per-tender rows cannot carry: who decided to run a waterfall at all, over how
+     * many candidates - and how it ended, after how many offers.
+     */
+    WATERFALL_STARTED,
+    WATERFALL_ENDED,
+
+    /**
+     * What a person decides about a dock booking (migration V41).
+     *
+     * <p>Four actions and not seven. Booking, moving, cancelling and marking a no-show are each a
+     * commercial fact somebody may later be charged for - detention, a missed slot, a wasted trip.
+     * Arriving and completing are recorded on the appointment row itself and produce no separate
+     * action, exactly as V27 decided for stop transitions: a row per operational step would bury
+     * the four that matter.
+     */
+    APPOINTMENT_BOOKED,
+    APPOINTMENT_RESCHEDULED,
+    APPOINTMENT_CANCELLED,
+    APPOINTMENT_NO_SHOW,
+
+    /**
+     * A vehicle or a driver was taken out of service, or put back (migration V42).
+     *
+     * <p>Recorded against the VEHICLE or the DRIVER, not against a new aggregate type: what changed
+     * is the availability of an existing master, and a planner asking "why did truck TR-04 not run
+     * on the 14th" reads it on the truck. Releasing deletes the block row, so this pair is the only
+     * surviving record that it ever existed - which is the point.
+     */
+    RESOURCE_BLOCKED,
+    RESOURCE_RELEASED,
+
+    /**
+     * Freight audit (migration V46).
+     *
+     * <p>Five, and the last three are the ones an auditor searches for by name: who authorised an
+     * obligation, who refused one, and when it was handed to whoever pays. Receiving and matching
+     * are here because "when did this arrive" and "what did we conclude" are the questions asked
+     * immediately before those three.
+     */
+    INVOICE_RECEIVED,
+    INVOICE_MATCHED,
+    INVOICE_APPROVED,
+    INVOICE_REJECTED,
+    INVOICE_EXPORTED
 }

@@ -25,6 +25,11 @@ import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.audit.AuditAggregateType;
 import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
+import com.ebim.tms.shared.reference.RoutingPort;
+import com.ebim.tms.shared.reference.DestinationLookupPort;
+import com.ebim.tms.shared.reference.CarrierQuotationPort;
+import com.ebim.tms.shared.reference.OriginLookupPort;
+import com.ebim.tms.shared.reference.OrderAmounts;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.RouteTemplate;
 import com.ebim.tms.shared.reference.RouteTemplateLookupPort;
@@ -143,9 +148,29 @@ class AutoPlanningServiceTest {
                             .collect(Collectors.toSet());
                 });
 
+        // The registry, not a single engine: the default is still HEURISTIC_V1, so every
+        // assertion in this class goes on describing exactly the behaviour it always described.
+        RoutingPort routingPort = mock(RoutingPort.class);
+        when(routingPort.matrix(any(), any(), any())).thenReturn(java.util.Map.of());
+        DestinationLookupPort destinationLookupPort = mock(DestinationLookupPort.class);
+        when(destinationLookupPort.findAllInCompany(any(), any())).thenReturn(java.util.Map.of());
+        OriginLookupPort originLookupPort = mock(OriginLookupPort.class);
+        when(originLookupPort.findAllInCompany(any(), any())).thenReturn(java.util.Map.of());
+        CarrierQuotationPort quotationPort = mock(CarrierQuotationPort.class);
+        com.ebim.tms.shared.reference.OwnFleetProposalCostingPort ownFleetCostingPort =
+                mock(com.ebim.tms.shared.reference.OwnFleetProposalCostingPort.class);
+        when(quotationPort.quoteWithKnownDistance(any(), any(), any(), any()))
+                .thenReturn(java.util.Optional.empty());
+
         service = new AutoPlanningService(planningRunRepository, tripRepository, board.asTripService(),
-                new HeuristicPlanningEngine(), orderPlanningPort, vehicleLookupPort, routeTemplateLookupPort,
-                serviceCalendarPort, actors, auditRecorder);
+                new PlanningEngines(List.of(new HeuristicPlanningEngine(), new PlanningEngineV2())),
+                routingPort, destinationLookupPort, originLookupPort,
+                orderPlanningPort, vehicleLookupPort, routeTemplateLookupPort,
+                // JOB 11: a real pricer over a mocked quotation port. No carrier has an agreement
+                // in this fixture and no own-fleet profile is configured, so every proposal comes
+                // back unpriced - which is the honest answer and is asserted in ProposalPricerTest
+                // rather than here.
+                serviceCalendarPort, new ProposalPricer(quotationPort, ownFleetCostingPort), actors, auditRecorder);
     }
 
     // --- fixtures ---------------------------------------------------------------------------
@@ -163,7 +188,7 @@ class AutoPlanningServiceTest {
     private PlannableOrder order(String suffix, UUID destination, double weightKg) {
         PlannableOrder order = new PlannableOrder(id(suffix), "TO-" + suffix, ORIGIN, destination, null, null,
                 DATE, "NORMAL", null, null, BigDecimal.valueOf(weightKg), BigDecimal.ONE, BigDecimal.ONE,
-                null, null);
+                null, null, OrderAmounts.NONE);
         backlog.add(order);
         return order;
     }
@@ -507,7 +532,7 @@ class AutoPlanningServiceTest {
             order("a", 1_000);
             vehicle("truck", 10_000);
 
-            AutoPlanView view = service.preview(SCOPE, RUN);
+            AutoPlanView view = service.preview(SCOPE, RUN, null);
 
             assertThat(view.applied()).isFalse();
             assertThat(view.created()).isEmpty();
@@ -691,16 +716,22 @@ class AutoPlanningServiceTest {
             for (int index = 0; index < destinations.size(); index++) {
                 stops.add(new TripStopView(id("stop-" + tripId + "-" + index), index + 1, destinations.get(index),
                         null, null, null, null, null, null, null, 1L, null, Set.of(), null, null, null,
-                        null, null, 0));
+                        null, null, 0,
+                        // V43: no ETA in this fixture - these stops were never scheduled, which is
+                        // what four nulls and a false say.
+                        null, null, null, null, false));
             }
 
             TripView trip = new TripView(tripId, COMPANY, RUN, null, DATE, 1, "SH-" + tripId,
                     cancelledTrips.contains(tripId) ? TripStatus.CANCELLED : TripStatus.DRAFT,
                     ORIGIN, null, null, null, null, vehicleByTrip.get(tripId), null, null, null, null, null,
+                    // V42: acceptedCarrierId, acceptedCarrierName, awaitsCarrierVehicle - no
+                    // subcontracting in this fixture, which is what false says.
+                    null, null, false,
                     null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                     null, null, Set.of(), null, stops.size(), orders.size(), versionByTrip.get(tripId),
                     null, null);
-            return new TripDetailView(trip, List.of(), stops, List.of(), List.of());
+            return new TripDetailView(trip, List.of(), stops, List.of(), List.of(), TripRouteMetrics.NONE);
         }
     }
 }
