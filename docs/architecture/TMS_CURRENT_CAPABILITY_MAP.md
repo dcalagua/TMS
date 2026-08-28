@@ -22,13 +22,13 @@ capability.
 
 | Gate | Command | Result |
 |---|---|---|
-| Backend | `./mvnw -B test` | **1312** at JOB 01; **1389** after JOB 02; **1409** after JOB 03 - 0 failures |
+| Backend | `./mvnw -B clean test` | **1312** at JOB 01; **1389** JOB 02; **1409** JOB 03; **1466** JOB 04 - 0 failures |
 | Frontend typecheck | `npm run typecheck` | **PASS** |
 | Frontend lint | `npm run lint` | **PASS** - 0 errors, 17 warnings (pre-existing) |
-| Frontend unit | `npm test` | **37** at JOB 01; **42** after JOB 02; **47** after JOB 03 - 0 failures |
+| Frontend unit | `npm test` | **37** at JOB 01; **42** JOB 02; **47** JOB 03; **55** JOB 04 - 0 failures |
 | Frontend build | `npm run build` | **PASS** - 1.11 MB bundle, chunk-size warning only |
 | E2E | `npx playwright test` | **33 passed, 7 skipped** (authenticated smoke skips without credentials) |
-| Flyway history | `db/migration` | **V1 - V37**, contiguous. Next available: **V38** |
+| Flyway history | `db/migration` | **V1 - V38**, contiguous. Next available: **V39** |
 
 Docker Desktop was started locally for this run, so the 32 Testcontainers-backed classes ran for
 real. No remote database was touched.
@@ -54,7 +54,7 @@ real. No remote database was touched.
 | 6 | **Order splitting / partial allocation** | IMPLEMENTED | `OrderAmounts`/`OrderAllocation`, `OrderPlanningPort.allocate`; **V37** allocation ledger with `ck_transport_order_not_over_allocated` | `SplitAssignDrawer`, pending figures on the planning board | `OrderAmountsTest`, 7 split tests in `PlanningApiIntegrationTest` incl. a real concurrency race, DB constraint tests | Company-scoped; order row lock + DB CHECK | One order, several trips, never duplicated. **Delivered quantities** are deferred - see the doc's section 9 |
 | 7 | **Manual planning** | IMPLEMENTED | `planning/TripService`, `TripAssignmentService`, `PlanningCapacityService`, `TripStopPlanner`; V11, V19 | `planning`, `planning/:runId` board | `PlanningApiIntegrationTest`, capacity and stop-sync suites | Company-scoped; optimistic version on runs; unique index for concurrent assignment | None |
 | 8 | **Automatic planning** | PARTIAL | `PlanningEngine` port + `HeuristicPlanningEngine` (`HEURISTIC_V1`), `AutoPlanningService` | Proposal reviewable on the board | Pure unit tests (no DB) | Company-scoped through the materialising service | Engine is a pure function with a clean port. **No KPIs, no cost/time objective, no route feasibility** -> **JOB 05** |
-| 9 | **Distance / travel time** | MISSING | Only `route.reference_distance_km`, a static master-data column | - | - | - | No routing port, no cache, no provider abstraction -> **JOB 04** |
+| 9 | **Distance / travel time** | IMPLEMENTED | `routing` module, `RoutingPort`, `RoutingProviderAdapter`, local geodesic estimator, cache; **V38** (ADR-010) | `TripRouteCard` on the trip workspace | `GeodesicDistanceTest`, `RoutingServiceTest` (21), `RoutingServiceIntegrationTest`, `RoutingCacheConstraintIntegrationTest`, `TripRoutingServiceTest`, smoke step 13b | Company-scoped cache + RLS; verified by `SchemaExposureIntegrationTest` | **No vendor adapter** by decision (ADR-010). Consumed by planning today; rating/ETA attach to the same port |
 | 10 | **Rates and costing** | PARTIAL | `rates/*`, `RateCardService`, `TripCostCalculator`; V30, V33 | `rates/rate-cards`, `TripCostCard`, `ActualCostDrawer` | Rate selection and cost calculation suites | Company-scoped | Components are `BASE`, `DISTANCE`, `WEIGHT`, `VOLUME`, `PALLETS`, `MINIMUM_ADJUSTMENT`. **No maximum, stop-off, fuel surcharge, waiting time, toll, accessorial** -> **JOB 06** |
 | 11 | **Carrier tendering** | PARTIAL | `TripTenderService`, `TenderStatus` with a real transition table; V31 | `TenderDrawer`, `TripTenderCard` | Tender lifecycle and transition tests | Company-scoped; one active tender enforced | Single-carrier tender. **No ranking, no waterfall, no automatic escalation** -> **JOB 07** |
 | 12 | **Trip execution lifecycle** | IMPLEMENTED | `TripExecutionService`, `TripStopExecutionService`, `TripStatus` transition table; V25, V27 | `TripWorkspacePage`, `TripTimeline` | Transition-table unit tests + API integration tests | Company-scoped; atomic state transitions | None |
@@ -70,7 +70,7 @@ real. No remote database was touched.
 | 22 | **Audit trail** | IMPLEMENTED | `audit/*`, `AuditAction`; V22 | `security/audit` | Audit query and rendering tests | Company-scoped; actor type recorded | Extend to new modules as they land |
 | 23 | **KPIs and reporting** | IMPLEMENTED | `KpiService` with cost, orders, shipments, service, tender, utilization, exceptions views + export | `reporting` | `ReportsPage.test.tsx`, KPI service suites | Company-scoped | Planning KPIs -> **JOB 05** |
 | 24 | **Master data import** | IMPLEMENTED | 5 import controllers, `MasterDataImportBatch`; V21 | Import drawers on masters screens | Import batch suites | Company-scoped | None |
-| 25 | **Observability** | PARTIAL | Correlation ID in MDC (visible in every log line), structured logging | - | - | No secrets logged | **No Micrometer counters/timers** on planning, routing, tender, integration -> **JOB 15** |
+| 25 | **Observability** | PARTIAL | Correlation ID in MDC, structured logging, Micrometer on tracking/audit/notification/integration and **routing** (V38) | - | Metric assertions in `RoutingServiceTest` | No secrets logged | Planning and tender metrics still absent -> **JOB 15** |
 
 ## What this run must not re-create
 

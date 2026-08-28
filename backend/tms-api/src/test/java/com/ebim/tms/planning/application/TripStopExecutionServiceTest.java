@@ -100,7 +100,7 @@ class TripStopExecutionServiceTest {
         when(tripRepository.findByIdAndCompanyIdForUpdate(TRIP_ID, COMPANY)).thenReturn(Optional.of(trip));
         when(tripRepository.saveAndFlush(any(Trip.class))).thenAnswer(call -> call.getArgument(0));
         when(assembler.toDetail(any(Trip.class), eq(COMPANY)))
-                .thenAnswer(call -> new TripDetailView(null, List.of(), List.of(), List.of(), List.of()));
+                .thenAnswer(call -> new TripDetailView(null, List.of(), List.of(), List.of(), List.of(), TripRouteMetrics.NONE));
         when(exceptionRepository.saveAndFlush(any(TripException.class)))
                 .thenAnswer(call -> call.getArgument(0));
     }

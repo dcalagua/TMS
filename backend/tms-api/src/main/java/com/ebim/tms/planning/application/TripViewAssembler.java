@@ -66,6 +66,7 @@ public class TripViewAssembler {
     private final TripStopRepository tripStopRepository;
     private final TripExceptionRepository tripExceptionRepository;
     private final OrderDeliveryRepository orderDeliveryRepository;
+    private final TripRoutingService tripRoutingService;
     private final DeliveryEvidenceRepository evidenceRepository;
     private final OriginLookupPort originLookupPort;
     private final VehicleLookupPort vehicleLookupPort;
@@ -83,12 +84,14 @@ public class TripViewAssembler {
             OriginLookupPort originLookupPort, VehicleLookupPort vehicleLookupPort,
             CarrierLookupPort carrierLookupPort, DriverLookupPort driverLookupPort,
             RouteTemplateLookupPort routeTemplateLookupPort, DestinationLookupPort destinationLookupPort,
-            OrderPlanningPort orderPlanningPort, PlanningCapacityService capacityService) {
+            OrderPlanningPort orderPlanningPort, PlanningCapacityService capacityService,
+            TripRoutingService tripRoutingService) {
         this.planningRunRepository = planningRunRepository;
         this.assignmentRepository = assignmentRepository;
         this.tripStopRepository = tripStopRepository;
         this.tripExceptionRepository = tripExceptionRepository;
         this.orderDeliveryRepository = orderDeliveryRepository;
+        this.tripRoutingService = tripRoutingService;
         this.evidenceRepository = evidenceRepository;
         this.originLookupPort = originLookupPort;
         this.vehicleLookupPort = vehicleLookupPort;
@@ -144,7 +147,8 @@ public class TripViewAssembler {
                 assignmentRepository.loadByTripId(trip.id(), AssignmentStatus.ACTIVE));
         // One trip: its stops are already being rendered below, so counting them in memory
         // costs nothing extra - unlike the board above, this is not an N+1.
-        TripView view = toView(trip, load, referencesOf(List.of(trip), companyId), trip.stops().size());
+        ShipmentReferences references = referencesOf(List.of(trip), companyId);
+        TripView view = toView(trip, load, references, trip.stops().size());
 
         List<TripAssignmentView> assignmentViews = assignments.stream()
                 .map(assignment -> toAssignmentView(assignment, orders.get(assignment.orderId()), destinations))
@@ -172,8 +176,14 @@ public class TripViewAssembler {
                 .map(exception -> toExceptionView(exception, stopsById, destinations))
                 .toList();
 
+        // The run's distance and drive time (V38), measured over references this method has
+        // already loaded - so the first consumer of RoutingPort costs the detail view no extra
+        // master-data query, only the cache reads the port itself makes.
+        TripRouteMetrics routing = tripRoutingService.measure(
+                trip, originOf(trip, references), destinations);
+
         return new TripDetailView(view, assignmentViews, stopViews, exceptionViews,
-                toDeliveryViews(deliveries, stopsById, orders, companyId));
+                toDeliveryViews(deliveries, stopsById, orders, companyId), routing);
     }
 
     /**
@@ -334,6 +344,12 @@ public class TripViewAssembler {
      * to another tenant must not be loadable even though the trips that named it were already
      * scoped.
      */
+    /** The run's origin, which is where the vehicle starts from. Null when the run is unresolvable. */
+    private MasterReference originOf(Trip trip, ShipmentReferences references) {
+        PlanningRun run = references.runs().get(trip.planningRunId());
+        return run == null ? null : references.origins().get(run.originId());
+    }
+
     private ShipmentReferences referencesOf(List<Trip> trips, UUID companyId) {
         if (trips.isEmpty()) {
             return ShipmentReferences.EMPTY;

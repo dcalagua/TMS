@@ -41,6 +41,7 @@ import { TripProblemDrawer, type TripProblemMode, type TripProblemValues } from 
 import { TripTenderCard } from "./TripTenderCard";
 import { TripTimeline } from "./TripTimeline";
 import { TripTrackingCard } from "./TripTrackingCard";
+import { TripRouteCard } from "./TripRouteCard";
 
 function formatServiceWindow(start: string | null, end: string | null): string | null {
   if (!start && !end) return null;
@@ -751,8 +752,11 @@ export function TripWorkspacePage() {
           )}
         </Box>
 
-        {/* Columna derecha: lo que se lee — rastreo, dinero, ofertas, incidencias y la historia. */}
+        {/* Columna derecha: lo que se lee — recorrido, rastreo, dinero, ofertas, incidencias y la historia. */}
         <Box sx={{ display: "grid", gap: 3, minWidth: 0 }}>
+          {/* Primero el recorrido: es la pregunta que se hace antes de salir, no después. */}
+          <TripRouteCard routing={detail.routing} />
+
           {canMonitor && (
             <TripTrackingCard
               tracking={trackingQuery.data}

@@ -573,6 +573,35 @@ class EndToEndSmokeIntegrationTest {
     // moving them would weaken a tenancy check to make room for a lifecycle one.
 
     @Test
+    @Order(13)
+    @DisplayName("13b. the trip reports how far it drives, measured through the routing port")
+    void theTripCarriesItsOwnDistance() throws Exception {
+        // The first real consumer of RoutingPort (V38). With no vendor configured the figures come
+        // from the local estimator, which is why `estimated` is true and says so - a total built
+        // from straight lines is useful and must not be readable as a measurement.
+        mockMvc.perform(asPlannerA(get(TRIPS + "/" + tripId), COMPANY_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.routing").exists())
+                .andExpect(jsonPath("$.routing.legs.length()").value(1))
+                .andExpect(jsonPath("$.routing.legs[0].fromStopSequence").doesNotExist())
+                .andExpect(jsonPath("$.routing.legs[0].toStopSequence").value(1))
+                .andExpect(jsonPath("$.routing.estimated").value(true))
+                .andExpect(jsonPath("$.routing.unmeasurableLegs").value(0))
+                .andExpect(jsonPath("$.routing.provider").value("LOCAL_GEODESIC_V1"));
+
+        // A real number, not a placeholder: the smoke's origin and destination are different
+        // places, so the drive between them has to be greater than zero.
+        String body = mockMvc.perform(asPlannerA(get(TRIPS + "/" + tripId), COMPANY_A))
+                .andReturn().getResponse().getContentAsString();
+        Number distance = JsonPath.read(body, "$.routing.totalDistanceKm");
+        assertThat(distance.doubleValue()).isGreaterThan(0.0);
+
+        // And it was cached, so the second read costs no arithmetic.
+        assertThat(queryLong("SELECT count(*) FROM tms.travel_estimate WHERE company_id = '"
+                + COMPANY_A + "'")).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
     @Order(14)
     @DisplayName("14. the trip is made ready and dispatched, and its order becomes IN_EXECUTION")
     void dispatchMovesTheOrderIntoExecution() throws Exception {

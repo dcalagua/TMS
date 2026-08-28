@@ -102,7 +102,7 @@ class TripExecutionServiceTest {
                 mock(TripTenderService.class), alerts, assembler, orderExecution, actors);
         when(tripRepository.saveAndFlush(any(Trip.class))).thenAnswer(call -> call.getArgument(0));
         when(assembler.toDetail(any(Trip.class), eq(COMPANY)))
-                .thenAnswer(call -> new TripDetailView(null, List.of(), List.of(), List.of(), List.of()));
+                .thenAnswer(call -> new TripDetailView(null, List.of(), List.of(), List.of(), List.of(), TripRouteMetrics.NONE));
         when(vehicleLookupPort.findAssignable(VEHICLE, COMPANY)).thenReturn(Optional.of(availableVehicle()));
         when(driverLookupPort.findAssignable(DRIVER, COMPANY)).thenReturn(Optional.of(driverWithLicenceExpiring(null)));
     }

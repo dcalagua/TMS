@@ -98,6 +98,10 @@ Authoritative documents live under `docs/architecture/`:
 - `ADR-008-frontend-design-system-mui.md` - MUI is the frontend design system of record. The
   earlier Bootstrap + SweetAlert2 rule is withdrawn; the frontend has carried neither dependency
   for some time and 91 source files import MUI.
+- `ADR-010-routing-provider-port.md` - distance and travel time behind `RoutingPort`, with a
+  company-scoped cache and a local geodesic estimator that is the whole of routing when no vendor
+  is configured. No vendor adapter, following ADR-007. Routing never fails a decision, and an
+  estimate stays visibly an estimate even after it has been cached.
 - `ADR-009-order-execution-lifecycle.md` - the order lifecycle carries the execution states
   (`IN_EXECUTION`, `DELIVERED`, `PARTIALLY_DELIVERED`, `DELIVERY_FAILED`) beside the derived
   `OrderFulfillmentStatus`, which is unchanged. Its status is recomputed from the delivery rows in

@@ -701,7 +701,7 @@ class AutoPlanningServiceTest {
                     null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                     null, null, Set.of(), null, stops.size(), orders.size(), versionByTrip.get(tripId),
                     null, null);
-            return new TripDetailView(trip, List.of(), stops, List.of(), List.of());
+            return new TripDetailView(trip, List.of(), stops, List.of(), List.of(), TripRouteMetrics.NONE);
         }
     }
 }

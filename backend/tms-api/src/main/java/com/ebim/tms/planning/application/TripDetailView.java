@@ -26,5 +26,12 @@ public record TripDetailView(
         List<TripAssignmentView> assignments,
         List<TripStopView> stops,
         List<TripExceptionView> exceptions,
-        List<OrderDeliveryView> deliveries) {
+        List<OrderDeliveryView> deliveries,
+        /**
+         * How far the shipment drives and how long that takes (migration V38). Never null: a trip
+         * whose route cannot be measured carries {@link TripRouteMetrics#NONE} with its
+         * unmeasurable legs counted, because a board that cannot render a distance must still
+         * render.
+         */
+        TripRouteMetrics routing) {
 }

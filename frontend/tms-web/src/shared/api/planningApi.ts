@@ -440,6 +440,39 @@ export interface OrderDeliveryView {
  *
  * The timeline is deliberately absent: it grows over a long day and is fetched on its own through
  * `fetchTripEvents`, rather than being re-sent by every mutation that returns a trip. */
+/** Mirrors `TripRouteMetrics.TripRouteLegView` - un tramo del recorrido. */
+export interface TripRouteLegView {
+  /** `null` en el tramo que sale del origen: el origen no es la parada cero. */
+  fromStopSequence: number | null
+  fromLabel: string
+  toStopSequence: number
+  toLabel: string
+  distanceKm: number
+  travelMinutes: number
+  estimated: boolean
+}
+
+/**
+ * Mirrors the backend's `TripRouteMetrics` (migración V38): cuánto conduce el viaje y cuánto tarda.
+ *
+ * `estimated` es la bandera importante. Sin un proveedor de rutas configurado las cifras salen del
+ * estimador local — línea recta por un factor de carretera — y eso es útil pero no es una medición.
+ * La pantalla tiene que decirlo, no esconderlo.
+ *
+ * `totalDuration` es solo conducción: el tiempo en el muelle es el `serviceTimeMinutes` de la
+ * ubicación y mezclar ambos daría una cifra que no es ni un trayecto ni una jornada.
+ */
+export interface TripRouteMetrics {
+  totalDistanceKm: number
+  totalMinutes: number
+  legs: TripRouteLegView[]
+  provider: string | null
+  estimated: boolean
+  /** Tramos que no se pudieron medir porque una ubicación no tiene coordenadas. */
+  unmeasurableLegs: number
+  complete: boolean
+}
+
 export interface TripDetailView {
   trip: TripView
   assignments: TripAssignmentView[]
@@ -448,6 +481,8 @@ export interface TripDetailView {
   exceptions: TripExceptionView[]
   /** In visiting order. An assigned order with no entry here has not been recorded yet. */
   deliveries: OrderDeliveryView[]
+  /** Nunca null: un viaje sin recorrido medible trae ceros y sus tramos no medidos contados. */
+  routing: TripRouteMetrics
 }
 
 export interface PlanningRunListParams {

@@ -23,6 +23,12 @@ class ModuleBoundaryTest {
 
     private static final List<String> BUSINESS_MODULES =
             List.of("iam", "masterdata", "fleet", "orders", "planning", "rates", "audit", "integration", "tracking",
+                    // Owns tms.travel_estimate (V38). A platform capability rather than a business
+                    // domain, but listed here for the same reason notification is: it is reached
+                    // through com.ebim.tms.shared.reference.RoutingPort by every module that needs
+                    // a distance, and leaving it unconstrained would let planning reach into its
+                    // cache instead of asking the port.
+                    "routing",
                     // Owns tms.notification (V32). Listed here, and not left as an unconstrained
                     // package, precisely because it is the module every other one has a reason to
                     // call: an alert is a by-product of half the writes in the product. The rule
