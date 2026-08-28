@@ -34,7 +34,7 @@ Full detail: [`docs/architecture/TMS_ARCHITECTURE_V1.md`](docs/architecture/TMS_
 ## Repository layout
 
     backend/tms-api      Java 21 + Spring Boot 4 + Flyway (canonical application DDL)
-    frontend/tms-web     React + TypeScript + Vite + Bootstrap + SweetAlert2
+    frontend/tms-web     React + TypeScript + Vite + MUI
     supabase             Local Supabase platform config; no duplicate application DDL
     docs                 Architecture, ADRs, database, security, overnight reports
     scripts              Local developer helper scripts

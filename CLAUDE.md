@@ -8,7 +8,7 @@ This repository is TMS by EBIM. TMS is independent from EWM by EBIM and must int
 
 - Database/platform: Supabase/PostgreSQL, PostGIS, RLS, Supabase Auth where applicable.
 - Backend: Java 21 + Spring Boot.
-- Frontend: React + TypeScript + Bootstrap + SweetAlert2.
+- Frontend: React + TypeScript + MUI (see ADR-008).
 
 ## Mandatory architecture
 
@@ -50,7 +50,11 @@ Never print secrets or read real `.env` secret files. Use `.env.example` with pl
 
 ## Frontend style
 
-Use Bootstrap as the visual base and SweetAlert2 for confirmations/critical feedback. Avoid MUI as the primary library. Build reusable enterprise components and responsive dense screens.
+Use MUI as the visual base (ADR-008). Route confirmations and critical feedback through
+`confirmDialog` / `confirmWithReason` in `src/lib/ui.tsx` - screens never build their own.
+Build reusable enterprise components and responsive dense screens; prefer drawers and side
+panels over large modals. Do not reintroduce Bootstrap, SweetAlert2, Tailwind or Ant because a
+historical report mentions them.
 
 ## Scale target
 
@@ -62,7 +66,7 @@ Simple now + correctly separable + scalable later.
 
 ## Repository layout
 
-    frontend/tms-web      React + TypeScript + Vite + Bootstrap + SweetAlert2
+    frontend/tms-web      React + TypeScript + Vite + MUI
     backend/tms-api       Java 21 + Spring Boot + Flyway (canonical application DDL)
     supabase              Local Supabase platform config; no duplicate application DDL
     docs                  Architecture, ADRs, database, security, overnight reports
@@ -91,6 +95,9 @@ Authoritative documents live under `docs/architecture/`:
   (`TrackingIntakePort` for feeds that push, `TrackingProviderPort` for those that poll), with no
   vendor adapter in V1. Positions inform people and never move a lifecycle, so losing them costs a
   map and no business fact.
+- `ADR-008-frontend-design-system-mui.md` - MUI is the frontend design system of record. The
+  earlier Bootstrap + SweetAlert2 rule is withdrawn; the frontend has carried neither dependency
+  for some time and 91 source files import MUI.
 
 Database and security detail lives in `docs/database/DATA_MODEL.md`,
 `docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.

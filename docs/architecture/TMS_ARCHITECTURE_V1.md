@@ -37,7 +37,7 @@ requires a new ADR that states the authorization model for that path.
 
 ## 3. Component layout
 
-    frontend/tms-web      React + TypeScript + Vite + Bootstrap + SweetAlert2
+    frontend/tms-web      React + TypeScript + Vite + MUI
     backend/tms-api       Java 21 + Spring Boot, Flyway migrations, OpenAPI contract
     supabase              Local Supabase config (config.toml, seed for local only)
     docs                  Architecture, ADRs, database, security, overnight reports
