@@ -42,7 +42,7 @@ inconvenient - it moves to RESOLVED with the job that closed it, or to DEFERRED_
 | **D4** | No automatic tender scheduler: no system-actor model | **DEFERRED_WITH_REASON** | `requireAppUserId` refuses machines *by design* - an offer is a commercial commitment and the trail must name who made it. No fake user, hardcoded UUID or anonymous principal. Manual waterfall advance stands. Design only, if JOB 15 raises a real requirement |
 | **D5** | No work assignment: several shipments cannot be sequenced onto one driver-and-vehicle pair with travel time between them | **OPEN** - new in JOB 09 | Deliberate. V42 delivers the availability layer it would be built on; a table nothing writes to would be scaffolding |
 | **D6** | No internal cost model for own fleet - fuel, driver hours, depreciation | **OPEN** - new in JOB 11 | A plan mixing a carrier's price with an own-fleet estimate compares two unlike numbers. Own fleet is deliberately left unpriced rather than priced at zero |
-| **D7** | Control Tower V1 has no backend tests | **OPEN** - new in JOB 12 | Summary counts, the three V1 panels, capping and the `ordersUnplanned` permission rule (null, not zero, without `orders.order:read`) are uncovered. The V2 blocker panel is covered by 7 tests |
+| **D7** | Control Tower V1 has no backend tests | **CLOSED (post-certification, 06:22)** | Summary counts, the three V1 panels, capping and the `ordersUnplanned` permission rule (null, not zero, without `orders.order:read`) are uncovered. The V2 blocker panel is covered by 7 tests |
 | **D8** | No guard that each enum column's `CHECK` lists exactly its Java enum's values | **OPEN** - new in JOB 15 | `AuditVocabularyMigrationTest` does it for the vocabulary that drifts most; generalising it is a bigger piece of work than JOB 15's time allowed |
 | **D9** | No accessibility testing anywhere in the project | **OPEN** - new in JOB 14 | No axe, no a11y assertions, no keyboard coverage. Bigger than a job slot: wants an axe pass over every authenticated screen, which needs the 7 skipped E2E specs running first |
 
@@ -554,3 +554,19 @@ code that would half-fix one.
 verification at all (D9); Control Tower V1 still untested (D7).
 
 CHAIN_STATUS=COMPLETE · JOBS 01-16 · STOP_CHAIN=false
+
+### POST-CERTIFICATION - 2026-08-28 06:22 - D7 closed
+
+The chain certified at 06:17 with time still on the clock, so rather than idle I closed the debt JOB
+12 had opened and deliberately not folded in.
+
+**D7 - Control Tower V1 had no backend tests at all.** `ControlTowerSummaryTest` (10 tests) now
+covers the status roll-up, the window cutoff for a past, present and future day, tenancy on every
+count, and the rule that was the reason to bother: **the unplanned backlog is `null` and not `0` for
+a caller without `orders.order:read`**, and the query is not even run. Zero would be the response
+asserting an empty backlog it was never allowed to look at - a one-line rule, invisible to every
+integration test that runs as an admin, and nothing was checking it.
+
+BACKEND_CLEAN_PASS **1674 → 1684** (+10). Everything else unchanged.
+
+**The certification was re-run afterwards rather than left quoting stale figures.**

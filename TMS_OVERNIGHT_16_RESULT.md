@@ -2,7 +2,8 @@
 
 **RESULT = PASS** · **CHAIN COMPLETE: JOBS 01-16** · **MIGRATION = none**
 
-Certified at **2026-08-28 06:15 America/Lima**, from a clean tree at `594bed8`.
+Certified at **2026-08-28 06:15**, and **re-certified at 06:22** after closing debt D7 with the
+time that remained. The figures below are from the re-run.
 
 ---
 
@@ -12,7 +13,7 @@ Every figure below comes from a command run **after** the last commit, not from 
 
 | Gate | Command | Result |
 |---|---|---|
-| Backend | `./mvnw clean test` | **1674 pass · 0 fail · 0 error · 0 skipped** · BUILD SUCCESS |
+| Backend | `./mvnw clean test` | **1684 pass · 0 fail · 0 error · 0 skipped** · BUILD SUCCESS |
 | Frontend unit | `vitest run` | **97 pass** · exit 0 |
 | E2E | `playwright test` | **34 pass · 7 skipped** · exit 0 |
 | Typecheck | `tsc --noEmit` | clean · exit 0 |
@@ -105,13 +106,22 @@ assertion.
 | D4 | No system-actor model | **DEFERRED_WITH_REASON** |
 | D5 | No work assignment | **OPEN** (new, JOB 09) |
 | D6 | No own-fleet cost model | **OPEN** (new, JOB 11) |
-| D7 | Control Tower V1 untested | **OPEN** (new, JOB 12) |
+| D7 | Control Tower V1 untested | **CLOSED** - opened by JOB 12, closed after certification with the time that remained |
 | D8 | No enum/`CHECK` coverage guard | **OPEN** (new, JOB 15) |
 | D9 | No accessibility testing anywhere | **OPEN** (new, JOB 14) |
 
-**Two closed, five opened.** That is the correct direction for a night of this kind: D5 to D9 are
-things that were already true and undocumented, and writing them down is worth more than the two
-lines of code that would have half-fixed any of them. Each names what it would take to close.
+**Three closed (D1, D2, D7), four still open from five raised.** That direction is correct for a
+night of this kind: D5, D6, D8 and D9 were already true and undocumented, and writing them down with
+what it would take to close each is worth more than code that would half-fix one.
+
+D7 is the exception and is worth noting as one. JOB 12 found that the control tower had **no backend
+tests at all** and recorded the gap rather than folding a backfill into a feature job. With the
+chain certified and time still on the clock, that backfill was done: `ControlTowerSummaryTest` (10
+tests) covers the status roll-up, the window cutoff across a past, present and future day, tenancy on
+every count, and the rule that made it worth doing - **the unplanned backlog is `null` and not `0`
+for a caller without `orders.order:read`**, and the query is not even run. Zero would be the response
+asserting an empty backlog it was never allowed to look at. That rule is invisible to every
+integration test that runs as an admin, and nothing was checking it.
 
 ## 7. Certification statement
 
@@ -129,7 +139,6 @@ is worth less than none:
 * **No load, performance or soak testing was done.** The 10,000-orders/day scale target is a design
   constraint honoured in the schema and the query patterns; it has not been measured.
 * **No accessibility verification exists at all** (D9).
-* **Control Tower V1 remains untested** (D7); only the panel added tonight is covered.
 
 ---
 

@@ -23,10 +23,15 @@ driver's medical absence - undoing a permission split V26 made on purpose. And i
 `mvnw compile` accepted took down 323 tests the moment Spring validated it: **the second time this
 chain was saved by running `clean test` instead of trusting a compile.**
 
-**3. Five new debts were opened.** That is the right direction, not a failure. D5 to D9 were already
-true last night and simply undocumented - no work assignment model, no own-fleet cost model, no tests
-on Control Tower V1, no enum/`CHECK` coverage guard, and **no accessibility testing anywhere in the
-project**. Each says what it would take to close.
+**3. Five new debts were raised and one of them was then closed.** That is the right direction, not
+a failure. D5, D6, D8 and D9 were already true last night and simply undocumented - no work
+assignment model, no own-fleet cost model, no enum/`CHECK` coverage guard, and **no accessibility
+testing anywhere in the project**. Each says what it would take to close.
+
+D7 - the control tower having no backend tests at all - was closed after certification with the time
+that remained, because it was tractable and the rule it left uncovered is a real disclosure rule: the
+unplanned backlog must be `null` and not `0` for a caller who may not read orders, and no test that
+runs as an admin can ever see that.
 
 ---
 
@@ -34,14 +39,14 @@ project**. Each says what it would take to close.
 
 | | |
 |---|---|
-| Backend | **1674 pass · 0 fail · 0 skipped** (`./mvnw clean test`) |
+| Backend | **1684 pass · 0 fail · 0 skipped** (`./mvnw clean test`) |
 | Frontend unit | **97 pass** |
 | E2E | **34 pass · 7 skipped** |
 | Typecheck / lint / build | clean |
 | Flyway | **V1-V43**, contiguous, each written once |
 | Working tree | clean · **all commits local, none pushed** |
 
-Backend tests went **1585 → 1674** across this session. The one apparent drop - backend `skipped`
+Backend tests went **1585 → 1684** across this session. The one apparent drop - backend `skipped`
 going 7 → 0 at JOB 09 - is Docker being up for the whole run rather than part of it. **No failing
 test was ever converted into a skip.**
 
@@ -59,7 +64,7 @@ test was ever converted into a skip.**
 | **13** | - | Integration health: age, not count |
 | **15** | - | Four static guards over the whole codebase; one unscoped finder removed |
 | **14** | - | Fifteen component tests over the sentences that make the new screens honest |
-| **16** | - | Certification, re-run from a clean tree |
+| **16** | - | Certification, re-run from a clean tree - then **D7 closed** and re-certified |
 
 ---
 
@@ -121,6 +126,5 @@ Stated plainly, because a report that claims more than it did is worth less than
   they would prove is unproven by this run.
 * **No load or performance testing.** The 10,000-orders/day target is honoured in the schema and the
   query patterns; it has not been measured.
-* **No accessibility verification exists at all** (D9), and **Control Tower V1 is still untested**
-  (D7).
+* **No accessibility verification exists at all** (D9).
 * **Nothing was pushed.** Every commit sits on `dev`, waiting for you.
