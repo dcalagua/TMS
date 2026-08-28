@@ -27,7 +27,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 15 | Observability + Performance + Security | pending | - | - | - | - | - |
 | 16 | Final Enterprise Certification | pending | - | - | - | - | - |
 
-**LAST_COMPLETED_JOB = 15**
+**LAST_COMPLETED_JOB = 14** (chain order 08-13, 15, 14)
 
 ## OPEN TECHNICAL / DOMAIN DEBTS
 
@@ -44,6 +44,7 @@ inconvenient - it moves to RESOLVED with the job that closed it, or to DEFERRED_
 | **D6** | No internal cost model for own fleet - fuel, driver hours, depreciation | **OPEN** - new in JOB 11 | A plan mixing a carrier's price with an own-fleet estimate compares two unlike numbers. Own fleet is deliberately left unpriced rather than priced at zero |
 | **D7** | Control Tower V1 has no backend tests | **OPEN** - new in JOB 12 | Summary counts, the three V1 panels, capping and the `ordersUnplanned` permission rule (null, not zero, without `orders.order:read`) are uncovered. The V2 blocker panel is covered by 7 tests |
 | **D8** | No guard that each enum column's `CHECK` lists exactly its Java enum's values | **OPEN** - new in JOB 15 | `AuditVocabularyMigrationTest` does it for the vocabulary that drifts most; generalising it is a bigger piece of work than JOB 15's time allowed |
+| **D9** | No accessibility testing anywhere in the project | **OPEN** - new in JOB 14 | No axe, no a11y assertions, no keyboard coverage. Bigger than a job slot: wants an axe pass over every authenticated screen, which needs the 7 skipped E2E specs running first |
 
 ## Baseline established by JOB 01
 
@@ -495,3 +496,35 @@ OPEN_DEBTS: D1 CLOSED · D2 CLOSED · D3 OPEN evaluated · D4 DEFERRED_WITH_REAS
 D6 OPEN · D7 OPEN · **D8 OPEN (new)**.
 
 NEXT_JOB=14 UX, then 16 Certification and the morning report.
+
+### JOB 14 - 2026-08-28 - PASS
+
+JOB=14 · STARTED_AT=06:11 · COMPLETED_AT=06:13 · HEAD_BEFORE=`0a58a06` · HEAD_AFTER=`f272ac0`
+MIGRATION=**none** · BACKEND_CLEAN_PASS=1674 (unchanged, no backend change) · BACKEND_SKIPPED=0
+FRONTEND_PASS=97 · E2E_PASS=34 · E2E_SKIPPED=7 · RETRIES=1, recovered
+
+**The temptation with a deadline in sight was to restyle screens. I refused it.** Every screen built
+tonight carries one sentence that is the whole point of it, and not one was tested - a typechecker
+sees none of them and a layout refactor loses any of them silently.
+
+"Ningún envío bloqueado hoy" instead of an empty panel, because empty means either "nothing is
+stuck" or "nobody looked". Different reason lists per resource, because both are `string[]` to a
+typechecker and the server rejects the wrong one. "No cambia el estado de ninguna parada", because
+the geofence screen is where somebody could configure it believing they had switched on automatic
+arrival detection. "2 de 40", because "there are 20" sends a reader away believing they saw it all.
+
+Fifteen component tests over exactly those, following `TripRouteCard.test.tsx`'s stated pattern:
+what is protected is not the layout.
+
+DEFECTS_FOUND=0. One test failed on the way and it was **mine** - a lowercase assertion against a
+capitalised clause. The component was right, so the test was fixed rather than the assertion relaxed
+to match whatever the code said.
+
+**Not done, deliberately:** no restyling (unreviewable churn at this hour, and nothing conflicts with
+ADR-008), and no visual regression baseline (a screenshot suite approved by a machine at 06:00 is
+worth nothing). **Recorded D9: the project has no accessibility testing at all.**
+
+OPEN_DEBTS: D1 CLOSED · D2 CLOSED · D3 OPEN evaluated · D4 DEFERRED_WITH_REASON · D5 OPEN ·
+D6 OPEN · D7 OPEN · D8 OPEN · **D9 OPEN (new)**.
+
+NEXT_JOB=16 Certification, then the morning report.
