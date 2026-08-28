@@ -29,6 +29,18 @@ that its RESULT still matches the working tree, and continue from the next pendi
 
 **LAST_COMPLETED_JOB = 07**
 
+## OPEN TECHNICAL / DOMAIN DEBTS
+
+Carried forward and re-stated after every job. A debt is never deleted because it has become
+inconvenient - it moves to RESOLVED with the job that closed it, or to DEFERRED_WITH_REASON.
+
+| # | Debt | Status | Notes |
+|---|---|---|---|
+| **D1** | `PlanningKpis.totalCost` is null - a proposal is not priced | **OPEN** | JOB 06 built the rating; a proposed trip's carrier is its vehicle's carrier, so the pieces exist. Must not sum incompatible currencies. Close before Planning V2 is called integrated with Settlement (JOB 11) |
+| **D2** | An accepted tender can leave `shipment.carrier != shipment.vehicle.owner` | **OPEN** | JOB 07 refused silent reassignment. **JOB 09 must resolve the invariant formally** - clear the vehicle, select a compatible one atomically, or model `RESOURCE_ASSIGNMENT_PENDING`. Never leave the previous carrier's vehicle attached |
+| **D3** | Delivery records an outcome, not a delivered quantity | **OPEN** | `PARTIAL` implies no demonstrable amount. Must not be inferred from ordered/allocated/planned. Evaluate formally at JOB 10, close before JOB 11 if Settlement needs it |
+| **D4** | No automatic tender scheduler: no system-actor model | **DEFERRED_WITH_REASON** | `requireAppUserId` refuses machines *by design* - an offer is a commercial commitment and the trail must name who made it. No fake user, hardcoded UUID or anonymous principal. Manual waterfall advance stands. Design only, if JOB 15 raises a real requirement |
+
 ## Baseline established by JOB 01
 
 Every gate measured, all green. Later red is therefore attributable to the job that caused it.

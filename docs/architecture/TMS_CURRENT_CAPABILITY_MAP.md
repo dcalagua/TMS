@@ -22,13 +22,13 @@ capability.
 
 | Gate | Command | Result |
 |---|---|---|
-| Backend | `./mvnw -B clean test` | **1312** J01; **1389** J02; **1409** J03; **1466** J04; **1498** J05; **1517** J06; **1536** J07 - 0 failures |
+| Backend | `./mvnw -B clean test` | **1312** J01 → **1536** J07 → **1585** J08 - 0 failures throughout |
 | Frontend typecheck | `npm run typecheck` | **PASS** |
 | Frontend lint | `npm run lint` | **PASS** - 0 errors, 17 warnings (pre-existing) |
-| Frontend unit | `npm test` | **37** at JOB 01; **42** JOB 02; **47** JOB 03; **55** JOB 04 - 0 failures |
+| Frontend unit | `npm test` | **37** J01 → **55** J04 → **60** J08 - 0 failures |
 | Frontend build | `npm run build` | **PASS** - 1.11 MB bundle, chunk-size warning only |
-| E2E | `npx playwright test` | **33 passed, 7 skipped** (authenticated smoke skips without credentials) |
-| Flyway history | `db/migration` | **V1 - V40**, contiguous. Next available: **V41** |
+| E2E | `npx playwright test` | **34 passed, 7 skipped** (authenticated smoke skips without credentials) |
+| Flyway history | `db/migration` | **V1 - V41**, contiguous. Next available: **V42** |
 
 Docker Desktop was started locally for this run, so the 32 Testcontainers-backed classes ran for
 real. No remote database was touched.
@@ -60,7 +60,7 @@ real. No remote database was touched.
 | 12 | **Trip execution lifecycle** | IMPLEMENTED | `TripExecutionService`, `TripStopExecutionService`, `TripStatus` transition table; V25, V27 | `TripWorkspacePage`, `TripTimeline` | Transition-table unit tests + API integration tests | Company-scoped; atomic state transitions | None |
 | 13 | **Delivery result and POD** | IMPLEMENTED | `TripDeliveryService`, `OrderDelivery`, `DeliveryResult`, `DeliveryEvidenceService`; V28, ADR-006, V36 | `DeliveryDrawer`, `DeliveryEvidenceDrawer` | Delivery result constraint and evidence suites, `OrderExecutionPropagatorTest` | Evidence behind `EvidenceStoragePort`, never a public URL | Delivery facts now **drive order status**, recomputed on every correction so the two cannot drift |
 | 14 | **Tracking positions** | PARTIAL | `tracking/*`, `TrackingIntakePort`/`TrackingProviderPort` (ADR-007); V29 | `TripTrackingCard` | Sampling rule, position validation, ingestion tests | Provider scope on integration clients | Positions are stored and shown. **No ETA, no geofence, no deviation, no arrival detection** -> **JOB 10** |
-| 15 | **Appointments / dock scheduling** | MISSING | No table, no type. `dock` appears only in prose | - | - | - | Location resources, calendars, slots -> **JOB 08** |
+| 15 | **Appointments / dock scheduling** | IMPLEMENTED | `appointments` module, 4 tables, **V41** with `EXCLUDE USING gist` making double-booking impossible | `/appointments` dock board + booking drawer | `AppointmentStatusTest` (27), `AppointmentServiceIntegrationTest` (22) incl. a real two-dispatcher race | 4 company-scoped tables + RLS; composite FKs pin doors to their company | Opening hours stored as minutes-of-day - a `time` column was being zone-shifted. **No WMS table shared**, by design |
 | 16 | **Freight audit and settlement** | MISSING | `TripCost` records estimated and actual cost, which is the foundation; there is **no carrier invoice, no match, no discrepancy, no approval, no export** | `ActualCostDrawer` records actual cost only | Cost calculation tests | Company-scoped | Invoice -> match -> approve -> export -> **JOB 11** |
 | 17 | **Fleet resource scheduling** | MISSING | No driver availability, shift, vehicle block or maintenance table. V16 prevents vehicle double-booking on overlapping trips, which is the only constraint that exists | - | Double-booking tests | - | Availability model + Planning V2 integration -> **JOB 09** |
 | 18 | **Exceptions and control tower** | PARTIAL | `TripException` (trip-scoped, typed, resolvable); `ControlTowerService` with summary, trips, stops, workload views | `control-tower` with panels | Control tower filter and view tests, exception lifecycle tests | Company-scoped | Exceptions are **trip-only**. No generic operational exception across orders, tenders, tracking or invoices; no SLA, no dedup, no assignment -> **JOB 12** |

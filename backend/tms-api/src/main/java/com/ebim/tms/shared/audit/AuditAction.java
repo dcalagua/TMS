@@ -115,5 +115,19 @@ public enum AuditAction {
      * many candidates - and how it ended, after how many offers.
      */
     WATERFALL_STARTED,
-    WATERFALL_ENDED
+    WATERFALL_ENDED,
+
+    /**
+     * What a person decides about a dock booking (migration V41).
+     *
+     * <p>Four actions and not seven. Booking, moving, cancelling and marking a no-show are each a
+     * commercial fact somebody may later be charged for - detention, a missed slot, a wasted trip.
+     * Arriving and completing are recorded on the appointment row itself and produce no separate
+     * action, exactly as V27 decided for stop transitions: a row per operational step would bury
+     * the four that matter.
+     */
+    APPOINTMENT_BOOKED,
+    APPOINTMENT_RESCHEDULED,
+    APPOINTMENT_CANCELLED,
+    APPOINTMENT_NO_SHOW
 }

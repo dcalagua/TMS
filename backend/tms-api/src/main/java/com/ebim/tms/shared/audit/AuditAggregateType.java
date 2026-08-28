@@ -49,5 +49,20 @@ public enum AuditAggregateType {
      * Somebody investigating a leak asks the second question, and it should not require reading
      * through every credential change to find it.
      */
-    WEBHOOK_SUBSCRIPTION
+    WEBHOOK_SUBSCRIPTION,
+
+    /**
+     * A dock, door, bay or yard slot (migration V41). Master data, audited like every other master:
+     * taking a door out of service changes what the whole site can promise.
+     */
+    LOCATION_RESOURCE,
+
+    /**
+     * A booking against a door (migration V41).
+     *
+     * <p>Its own aggregate rather than a note on a trip: it exists before a trip does, outlives one
+     * that is cancelled, and a carrier arguing about a missed slot asks about the booking rather
+     * than about the shipment that happened to be behind it.
+     */
+    APPOINTMENT
 }

@@ -73,6 +73,21 @@ public enum Capability {
     TRANSPORT_MONITOR_VIEW(Permission.MONITORING_TRANSPORT_READ),
 
     /**
+     * The dock board (migration V41).
+     *
+     * <p>Its own capability rather than folded into trips: the people who read it are the yard, the
+     * gate and the warehouse, and none of them plans shipments. A viewer holds the read for the
+     * same reason - a booking carries no price, unlike a tender.
+     */
+    APPOINTMENTS_VIEW(Permission.APPOINTMENTS_APPOINTMENT_READ),
+    APPOINTMENTS_MANAGE(
+            Permission.APPOINTMENTS_APPOINTMENT_MANAGE,
+            // Configuring a door and booking one are separate authorities and stay separate where
+            // they are enforced. They share this capability because they share a screen, which is
+            // the question a capability answers.
+            Permission.APPOINTMENTS_RESOURCE_MANAGE),
+
+    /**
      * Tariffs and what a shipment cost (migration V30). One capability over both resources: they
      * share a screen group, and the finer question - may this account see the <em>agreement</em>
      * as well as the figure - stays where it is enforced, on the two permissions.

@@ -77,6 +77,11 @@ public enum Permission {
      */
     PLANNING_TENDER_READ("planning.tender:read"),
     PLANNING_TENDER_MANAGE("planning.tender:manage"),
+    /** Dock scheduling (migration V41). VIEWER holds the read: a booking carries no price. */
+    APPOINTMENTS_APPOINTMENT_READ("appointments.appointment:read"),
+    APPOINTMENTS_APPOINTMENT_MANAGE("appointments.appointment:manage"),
+    /** Configuring doors is an administrator's job: adding one changes what the site can promise. */
+    APPOINTMENTS_RESOURCE_MANAGE("appointments.resource:manage"),
 
     /**
      * The commercial agreement a carrier is paid under (migration V30). Separate from

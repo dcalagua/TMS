@@ -6,6 +6,7 @@ import {
   BusinessRounded, AccountTreeRounded, LocalShippingRounded, BadgeRounded,
   PaidRounded,
   ApartmentRounded, GroupsRounded, PowerRounded, HistoryRounded,
+  EventAvailableRounded,
 } from "@mui/icons-material";
 
 /** Una hoja del menú: una pantalla concreta. */
@@ -45,6 +46,7 @@ export const ICON_TINTS: Record<string, string> = {
   "/orders": "#29B6F6",
   "/planning": "#B085F5",
   "/trips": "#66BB6A",
+  "/appointments": "#FFA726",
   "/masters/locations": "#4FC3F7",
   "/masters/origins": "#4DB6AC",
   "/masters/destinations": "#7986CB",
@@ -96,6 +98,11 @@ export const NAV_SECTIONS: NavSection[] = [
       { to: "/orders", label: "Pedidos", icon: <AssignmentTurnedInRounded />, capability: "ORDERS_VIEW" },
       { to: "/planning", label: "Planificación", icon: <ViewKanbanRounded />, capability: "PLANNING_VIEW" },
       { to: "/trips", label: "Viajes", icon: <MapRounded />, capability: "TRIPS_VIEW" },
+      // Después de Viajes: una cita existe por un viaje, y la garita la lee justo antes de que
+      // llegue. Su propia entrada y no una pestaña del workspace porque quien la mira - patio,
+      // garita, almacén - no planifica envíos.
+      { to: "/appointments", label: "Citas de muelle", icon: <EventAvailableRounded />,
+        capability: "APPOINTMENTS_VIEW" },
     ],
   },
   {

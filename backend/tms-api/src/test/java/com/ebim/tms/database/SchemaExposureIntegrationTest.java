@@ -55,7 +55,11 @@ class SchemaExposureIntegrationTest {
             "travel_estimate",
             // V40: the tender waterfall and its ranked candidates. No DELETE grant: who was offered
             // a shipment, and in what order, is exactly what a carrier disputing a rate asks for.
-            "tender_waterfall", "tender_waterfall_candidate");
+            "tender_waterfall", "tender_waterfall_candidate",
+            // V41: dock scheduling. The appointment has no DELETE grant - who booked which door and
+            // what happened is what a carrier disputing a detention charge asks for; it is
+            // cancelled, never removed. The three master tables are ordinary master data.
+            "location_resource", "resource_calendar", "resource_blocked_slot", "appointment");
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the
@@ -81,7 +85,8 @@ class SchemaExposureIntegrationTest {
             "trip_tender", "notification",
             "company_settings", "webhook_subscription", "webhook_subscription_event",
             "webhook_delivery", "webhook_delivery_attempt", "travel_estimate",
-            "tender_waterfall", "tender_waterfall_candidate");
+            "tender_waterfall", "tender_waterfall_candidate",
+            "location_resource", "resource_calendar", "resource_blocked_slot", "appointment");
 
     /**
      * The only tables allowed to carry a {@code company_id} and <em>not</em> the tenant policy.

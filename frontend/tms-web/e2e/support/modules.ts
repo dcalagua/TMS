@@ -24,6 +24,7 @@ export const CORE_MODULES: readonly Module[] = [
 
 /** El resto del menú, para que el smoke no se limite a las obligatorias. */
 export const OTHER_MODULES: readonly Module[] = [
+  { path: "/appointments", label: "Citas de muelle" },
   { path: "/masters/origins", label: "Orígenes" },
   { path: "/masters/destinations", label: "Destinos" },
   { path: "/masters/zones", label: "Zonas" },
