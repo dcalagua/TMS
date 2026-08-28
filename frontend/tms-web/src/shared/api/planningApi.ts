@@ -611,14 +611,39 @@ export interface ProposedTripView {
  * Mirrors `PlanningKpis` (JOB 05): lo que cuesta una propuesta, en los términos con los que un
  * planificador la juzga.
  *
- * `totalCost` es **siempre null hoy**. Poner precio a un viaje hipotético necesita un puerto de
- * tarificación que acepte una propuesta y no un envío ya guardado, que es JOB 06. Se deja ausente
- * a propósito: una cifra inventada sería peor que ninguna, porque alguien compararía dos motores
- * con ella.
+ * `totalCost` ya no es siempre null (JOB 11): la propuesta se cotiza por `CarrierQuotationPort`,
+ * el mismo puerto, selector y calculadora que usan un tender y una factura, para que el plan que se
+ * compara por precio y la factura que le sigue salgan de un solo juego de reglas.
+ *
+ * Sigue siendo null cuando **no puede cubrir el plan entero**, y `pricing.reason` dice por qué.
+ * Nunca es una suma parcial: un total que se saltara en silencio los tres viajes sin acuerdo haría
+ * que el peor plan pareciera el más barato, y comparar motores por coste es justo para lo que sirve
+ * la cifra.
  *
  * Los porcentajes de utilización son null — no cero — cuando ningún vehículo declara un límite:
  * "no se sabe" y "camión vacío" no son lo mismo.
  */
+/**
+ * Mirrors `ProposalPricing` (JOB 11). Lo que costaría el plan, o por qué no se puede decir.
+ *
+ * `pricedTrips` se informa aunque no haya total: "7 de 10 tienen acuerdo" es la frase que le dice a
+ * un planificador qué arreglar, y no es un precio.
+ */
+export interface ProposalPricing {
+  totalCost: number | null
+  currency: string | null
+  /**
+   * - `NO_TRIPS` — el motor no colocó ningún viaje.
+   * - `NO_AGREEMENT_FOR_SOME_TRIP` — algún viaje no tiene tarifa aplicable. **No se cotiza a cero**:
+   *   un transportista sin acuerdo no es gratis, y un plan que usara tres ganaría toda comparación.
+   * - `MIXED_CURRENCIES` — los acuerdos no están todos en la misma moneda. **No se convierte**: este
+   *   producto no inventa un tipo de cambio.
+   */
+  reason: 'NO_TRIPS' | 'NO_AGREEMENT_FOR_SOME_TRIP' | 'MIXED_CURRENCIES' | null
+  pricedTrips: number
+  totalTrips: number
+}
+
 export interface PlanningKpis {
   trips: number
   vehicles: number
@@ -633,6 +658,8 @@ export interface PlanningKpis {
   /** Alguna distancia salió del estimador local y no de un enrutador. */
   distanceEstimated: boolean
   totalCost: number | null
+  /** La respuesta completa de tarificación. Nunca null. */
+  pricing: ProposalPricing
   plannedRatePercent: number | null
   kilometresPerPlannedOrder: number | null
 }

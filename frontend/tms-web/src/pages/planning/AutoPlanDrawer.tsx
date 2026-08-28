@@ -14,7 +14,7 @@ import { describeApiError } from "../../shared/api/problemMessages";
 import { FormDrawer, SectionHeader, dataTableSx } from "../../shared/ui/components";
 import { notifyError, notifySuccess } from "../../lib/ui";
 import { t } from "../../lib/i18n";
-import { fmtQuantity } from "../../lib/locale";
+import { fmtDecimal, fmtQuantity } from "../../lib/locale";
 
 interface AutoPlanDrawerProps {
   companyId: string;
@@ -193,11 +193,29 @@ function AutoPlanBody({ plan }: { plan: AutoPlanView }) {
               <Chip size="small" color="warning" variant="outlined" label={t("Distancias estimadas")} />
             )}
           </Box>
-          {/* El coste es la única cifra que falta, y se dice en voz alta en vez de mostrar un cero
-              que alguien compararía entre motores. */}
-          <Alert severity="info" variant="outlined" sx={{ mb: 3 }}>
-            {t("El coste todavía no se calcula sobre una propuesta: requiere tarificar un viaje que aún no existe.")}
-          </Alert>
+          {/* JOB 11: el coste ya se calcula, y cuando NO se puede se dice por qué en vez de
+              mostrar un cero o una suma parcial que alguien compararía entre motores. */}
+          {plan.kpis.pricing.totalCost !== null ? (
+            <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+              <Typography variant="overline" color="text.secondary">{t("Coste estimado")}</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                {fmtDecimal(plan.kpis.pricing.totalCost, 2)} {plan.kpis.pricing.currency}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {t("Sobre los acuerdos vigentes de cada transportista, con las mismas reglas que la factura.")}
+              </Typography>
+            </Paper>
+          ) : (
+            <Alert severity="info" variant="outlined" sx={{ mb: 3 }}>
+              {plan.kpis.pricing.reason === "MIXED_CURRENCIES"
+                ? t("Sin coste total: los acuerdos no están todos en la misma moneda, y este producto no inventa un tipo de cambio.")
+                : plan.kpis.pricing.reason === "NO_AGREEMENT_FOR_SOME_TRIP"
+                  ? t("Sin coste total: {{priced}} de {{total}} viajes tienen tarifa aplicable. Un total parcial haría parecer más barato al peor plan.", {
+                      priced: plan.kpis.pricing.pricedTrips, total: plan.kpis.pricing.totalTrips,
+                    })
+                  : t("Sin coste: la propuesta no colocó ningún viaje.")}
+            </Alert>
+          )}
         </>
       )}
 

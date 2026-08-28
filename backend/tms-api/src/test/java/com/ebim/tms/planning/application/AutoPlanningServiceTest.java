@@ -27,6 +27,7 @@ import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.RoutingPort;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
+import com.ebim.tms.shared.reference.CarrierQuotationPort;
 import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.reference.OrderAmounts;
 import com.ebim.tms.shared.reference.PlannableOrder;
@@ -155,12 +156,18 @@ class AutoPlanningServiceTest {
         when(destinationLookupPort.findAllInCompany(any(), any())).thenReturn(java.util.Map.of());
         OriginLookupPort originLookupPort = mock(OriginLookupPort.class);
         when(originLookupPort.findAllInCompany(any(), any())).thenReturn(java.util.Map.of());
+        CarrierQuotationPort quotationPort = mock(CarrierQuotationPort.class);
+        when(quotationPort.quoteWithKnownDistance(any(), any(), any(), any()))
+                .thenReturn(java.util.Optional.empty());
 
         service = new AutoPlanningService(planningRunRepository, tripRepository, board.asTripService(),
                 new PlanningEngines(List.of(new HeuristicPlanningEngine(), new PlanningEngineV2())),
                 routingPort, destinationLookupPort, originLookupPort,
                 orderPlanningPort, vehicleLookupPort, routeTemplateLookupPort,
-                serviceCalendarPort, actors, auditRecorder);
+                // JOB 11: a real pricer over a mocked quotation port. No carrier has an agreement
+                // in this fixture, so every proposal comes back NO_AGREEMENT_FOR_SOME_TRIP - which
+                // is the honest answer and is asserted in ProposalPricerTest rather than here.
+                serviceCalendarPort, new ProposalPricer(quotationPort), actors, auditRecorder);
     }
 
     // --- fixtures ---------------------------------------------------------------------------

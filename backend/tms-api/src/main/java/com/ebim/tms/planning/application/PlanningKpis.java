@@ -31,11 +31,18 @@ import java.util.List;
  * @param distanceEstimated  true when any leg came from the local estimator rather than a router.
  *                           Carried onto the KPI block so a comparison of two engines cannot be
  *                           read as more precise than the distances underneath it
- * @param totalCost          <b>always null today.</b> Pricing a hypothetical trip needs a rating
- *                           port that takes a proposal rather than a persisted shipment, which is
- *                           JOB 06's. Left explicitly absent rather than filled with a plausible
- *                           number: a fabricated cost is worse than a missing one, because somebody
- *                           would compare two engines on it
+ * @param totalCost          what the plan would cost, or null (JOB 11, closing debt D1). Priced
+ *                           through {@code CarrierQuotationPort} - the same port, selector and
+ *                           calculator a tender and an invoice use, so a plan compared on price and
+ *                           the bill that follows it come from one set of rules.
+ *                           <b>Never a partial sum.</b> If any proposed trip has no applicable
+ *                           agreement, or the agreements are not all in one currency, this is null
+ *                           and {@code pricing} says which - a total that quietly omitted three
+ *                           trips would make the worse plan look cheaper, and comparing engines on
+ *                           cost is the whole purpose of the figure
+ * @param pricing            the full pricing answer: the total, its currency, the reason there is
+ *                           none, and how many of the trips priced. Never null; {@code NOT_ASKED}
+ *                           when nothing was priced at all
  */
 public record PlanningKpis(
         int trips,
@@ -49,7 +56,37 @@ public record PlanningKpis(
         BigDecimal volumeUtilizationPercent,
         BigDecimal palletUtilizationPercent,
         boolean distanceEstimated,
-        BigDecimal totalCost) {
+        BigDecimal totalCost,
+        ProposalPricing pricing) {
+
+    /**
+     * Keeps {@code pricing} non-null for every caller, so no screen has to guard it.
+     *
+     * <p>Deliberately does <b>not</b> derive {@code totalCost} from it. Overwriting a component the
+     * caller passed would make the two fields silently disagree with what was handed in, and a
+     * record that quietly rewrites its own arguments is the kind of thing nobody finds twice.
+     * {@link #pricedWith} sets both together, which is the only place they are both decided.
+     */
+    public PlanningKpis {
+        pricing = pricing == null ? ProposalPricing.NOT_ASKED : pricing;
+    }
+
+    /** The pre-JOB-11 shape, for the engines: they compute everything but the price. */
+    public PlanningKpis(int trips, int vehicles, int plannedOrders, int unplannedOrders, int lateOrders,
+            BigDecimal totalDistanceKm, long totalDurationMinutes, BigDecimal weightUtilizationPercent,
+            BigDecimal volumeUtilizationPercent, BigDecimal palletUtilizationPercent,
+            boolean distanceEstimated, BigDecimal totalCost) {
+        this(trips, vehicles, plannedOrders, unplannedOrders, lateOrders, totalDistanceKm,
+                totalDurationMinutes, weightUtilizationPercent, volumeUtilizationPercent,
+                palletUtilizationPercent, distanceEstimated, totalCost, ProposalPricing.NOT_ASKED);
+    }
+
+    /** The same block with a price attached, once the proposal has been quoted. */
+    public PlanningKpis pricedWith(ProposalPricing pricing) {
+        return new PlanningKpis(trips, vehicles, plannedOrders, unplannedOrders, lateOrders,
+                totalDistanceKm, totalDurationMinutes, weightUtilizationPercent, volumeUtilizationPercent,
+                palletUtilizationPercent, distanceEstimated, pricing.totalCost(), pricing);
+    }
 
     public static final PlanningKpis NONE = new PlanningKpis(
             0, 0, 0, 0, 0, BigDecimal.ZERO, 0, null, null, null, false, null);

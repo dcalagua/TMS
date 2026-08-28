@@ -72,6 +72,21 @@ public class CarrierQuotationService implements CarrierQuotationPort {
         return quoteAgainst(companyId, trip, carrierId, inputsFor(companyId, trip));
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<CarrierQuote> quoteWithKnownDistance(UUID companyId, CostableTrip trip, UUID carrierId,
+            BigDecimal distanceKm) {
+        // MEASURED_ROUTE, and only because the caller measured it: a planning run resolves every
+        // leg of every proposal through the same RoutingPort a confirmed shipment uses. A null
+        // distance stays null - see the port's contract for why it is not a zero.
+        // No waiting hours: a proposal has not run, so nothing has waited. Null rather than zero -
+        // "nobody waited yet" and "the truck waited no time" are different claims, and V30's
+        // NOT_CALCULABLE line is the honest rendering of the first.
+        CostInputs inputs = CostInputs.of(trip, distanceKm, CostQuantitySource.MEASURED_ROUTE,
+                trip.stopCount(), null);
+        return quoteAgainst(companyId, trip, carrierId, inputs);
+    }
+
     /**
      * Prices the shipment as if {@code carrierId} were running it.
      *

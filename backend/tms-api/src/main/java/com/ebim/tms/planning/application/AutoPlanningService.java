@@ -91,13 +91,17 @@ public class AutoPlanningService {
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
 
+    private final ProposalPricer proposalPricer;
+
     public AutoPlanningService(PlanningRunRepository planningRunRepository, TripRepository tripRepository,
             TripService tripService, PlanningEngines engines, RoutingPort routingPort,
             DestinationLookupPort destinationLookupPort, OriginLookupPort originLookupPort,
             OrderPlanningPort orderPlanningPort,
             VehicleLookupPort vehicleLookupPort, RouteTemplateLookupPort routeTemplateLookupPort,
-            ServiceCalendarPort serviceCalendarPort, AuditActorProvider auditActorProvider,
+            ServiceCalendarPort serviceCalendarPort, ProposalPricer proposalPricer,
+            AuditActorProvider auditActorProvider,
             AuditRecorder auditRecorder) {
+        this.proposalPricer = proposalPricer;
         this.planningRunRepository = planningRunRepository;
         this.tripRepository = tripRepository;
         this.tripService = tripService;
@@ -121,7 +125,7 @@ public class AutoPlanningService {
     public AutoPlanView preview(CompanyScope scope, UUID runId, String engineName) {
         PlanningRun run = requireDraftRun(scope, runId);
         Snapshot snapshot = snapshot(scope, run);
-        PlanningProposal proposal = propose(snapshot, engines.select(engineName));
+        PlanningProposal proposal = propose(scope, snapshot, engines.select(engineName));
         return AutoPlanView.preview(proposal, snapshot.orderNumbers(), snapshot.vehicleCodes());
     }
 
@@ -140,7 +144,7 @@ public class AutoPlanningService {
         }
 
         Snapshot snapshot = snapshot(scope, run);
-        PlanningProposal proposal = propose(snapshot, engines.select(request.engine()));
+        PlanningProposal proposal = propose(scope, snapshot, engines.select(request.engine()));
         if (proposal.trips().isEmpty()) {
             return AutoPlanView.applied(proposal, List.of(), snapshot.orderNumbers(), snapshot.vehicleCodes());
         }
@@ -299,7 +303,7 @@ public class AutoPlanningService {
         return builder.build();
     }
 
-    private PlanningProposal propose(Snapshot snapshot, PlanningEngine engine) {
+    private PlanningProposal propose(CompanyScope scope, Snapshot snapshot, PlanningEngine engine) {
         PlanningProposal proposal = engine.plan(snapshot.input());
         List<UnplannedOrder> unplanned = new ArrayList<>(snapshot.excludedByCalendar());
         unplanned.addAll(proposal.unplanned());
@@ -310,7 +314,11 @@ public class AutoPlanningService {
                 unplanned.size(), proposal.kpis().lateOrders(), proposal.kpis().totalDistanceKm(),
                 proposal.kpis().totalDurationMinutes(), proposal.kpis().weightUtilizationPercent(),
                 proposal.kpis().volumeUtilizationPercent(), proposal.kpis().palletUtilizationPercent(),
-                proposal.kpis().distanceEstimated(), proposal.kpis().totalCost());
+                proposal.kpis().distanceEstimated(), proposal.kpis().totalCost())
+                // JOB 11, debt D1: the engines compute everything but the price, because pricing
+                // needs a rate card and an engine must stay a pure function of its input. The
+                // quote happens here, once, against the proposal the engine actually produced.
+                .pricedWith(proposalPricer.price(scope.companyId(), snapshot.input(), proposal.trips()));
         PlanningProposal complete = new PlanningProposal(proposal.engine(), proposal.trips(), unplanned, kpis);
         assertEveryOrderAccountedFor(snapshot, complete);
         return complete;

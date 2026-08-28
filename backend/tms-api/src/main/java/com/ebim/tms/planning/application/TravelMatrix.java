@@ -42,6 +42,19 @@ public record TravelMatrix(Map<Leg, TravelEstimate> legs) {
         return from != null && to != null && (from.equals(to) || legs.containsKey(new Leg(from, to)));
     }
 
+    /**
+     * Whether this matrix actually has the leg, as against returning zero for it.
+     *
+     * <p>{@link #distanceKm} answers zero for an unknown leg, which is right for planning - an
+     * engine must place orders on a day where half the destinations are ungeocoded - and
+     * <b>wrong for pricing</b>. A per-kilometre charge over a summed-up pile of zeros is a price
+     * that looks calculated and is not, which is the "do not invent the distance" rule V30 states.
+     * Callers that will multiply a distance by money ask this first.
+     */
+    public boolean knows(UUID from, UUID to) {
+        return from != null && from.equals(to) || legs.containsKey(new Leg(from, to));
+    }
+
     /** Kilometres, or zero when the leg is unknown or is a place to itself. */
     public BigDecimal distanceKm(UUID from, UUID to) {
         if (from != null && from.equals(to)) {

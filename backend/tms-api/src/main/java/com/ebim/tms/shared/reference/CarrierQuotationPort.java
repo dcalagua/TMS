@@ -29,4 +29,25 @@ public interface CarrierQuotationPort {
 
     /** One carrier, for the paths that already know which one they mean. */
     Optional<CarrierQuote> quote(UUID companyId, CostableTrip trip, UUID carrierId);
+
+    /**
+     * Prices a shipment whose distance the caller already knows, and that may not exist yet
+     * (JOB 11).
+     *
+     * <p>The other two overloads resolve the distance by looking the persisted trip up. A
+     * <em>proposal</em> has no row to look up and does not need one: the planning run measured
+     * every leg it is made of before the engine ran, so the distance is already in hand and a
+     * lookup would be a second, worse answer to a question already settled.
+     *
+     * <p>{@code distanceKm} may be null, and null is not zero. A proposal whose legs could not all
+     * be measured has no distance, and a per-kilometre component must report itself non-calculable
+     * rather than be multiplied by a zero nobody meant - the same rule {@code TripCostService}
+     * follows for a shipment with no route.
+     *
+     * <p>Everything else - card selection, dates, scope, vehicle type, the calculator - is the
+     * path a confirmed shipment takes. That is the point: a plan compared on price and the invoice
+     * that follows it must come from one set of rules.
+     */
+    Optional<CarrierQuote> quoteWithKnownDistance(UUID companyId, CostableTrip trip, UUID carrierId,
+            java.math.BigDecimal distanceKm);
 }
