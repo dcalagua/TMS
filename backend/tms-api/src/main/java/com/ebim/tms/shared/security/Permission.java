@@ -110,6 +110,16 @@ public enum Permission {
     SETTLEMENT_INVOICE_EXPORT("settlement.invoice:export"),
     SETTLEMENT_TOLERANCE_MANAGE("settlement.tolerance:manage"),
 
+    /**
+     * A driver-and-vehicle pairing's day (migration V47).
+     *
+     * <p>Under {@code fleet} rather than {@code planning} because the thing being scheduled is a
+     * resource, not a shipment - and because the people who build a day are the same people who
+     * maintain the trucks and the drivers. Read and manage, split as everywhere else.
+     */
+    FLEET_WORK_ASSIGNMENT_READ("fleet.work_assignment:read"),
+    FLEET_WORK_ASSIGNMENT_MANAGE("fleet.work_assignment:manage"),
+
     INTEGRATION_CLIENT_READ("integration.client:read"),
     INTEGRATION_CLIENT_MANAGE("integration.client:manage"),
 

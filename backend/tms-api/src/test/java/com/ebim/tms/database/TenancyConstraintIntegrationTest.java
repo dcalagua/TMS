@@ -205,6 +205,11 @@ class TenancyConstraintIntegrationTest {
         // to 50: appointments.appointment read/manage and appointments.resource:manage, the last
         // of which is an administrator's - adding a door changes what the whole site can promise.
         //
+        // V47 took it to 58 with fleet.work_assignment read/manage - under fleet and not planning,
+        // because the thing being scheduled is a resource and the people who build a driver's day
+        // are the people who maintain the drivers. VIEWER gets the read: the yard and the gate need
+        // to know which truck is doing what, and neither of them plans it.
+        //
         // V46 took it to 56 with six settlement permissions. Six rather than two, because recording
         // an invoice, deciding it is payable and handing it to accounting are different
         // authorities: a single settlement:manage would let whoever keys an invoice approve their
@@ -215,9 +220,9 @@ class TenancyConstraintIntegrationTest {
         // widens a role silently, is the kind of change this test exists to make visible. The
         // named invariants below are the ones that carry meaning - the counts only anchor them.
         assertThat(count("SELECT count(*) FROM tms.role")).isEqualTo(4);
-        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(56);
+        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(58);
         assertThat(count("SELECT count(*) FROM tms.permission WHERE code = resource || ':' || action"))
-                .isEqualTo(56);
+                .isEqualTo(58);
 
         // 56 + 55 + 28 + 17. ORGANIZATION_ADMIN holds the whole catalogue; COMPANY_ADMIN holds
         // all of it but iam.organization:manage, which is asserted by name further down.
@@ -227,19 +232,19 @@ class TenancyConstraintIntegrationTest {
         // invoice says - but NOT approve or export: committing money is not a dispatcher's
         // authority, and whoever works the audit queue should not sign off their own conclusions.
         // VIEWER gained only the read.
-        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(156);
+        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(163);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'ORGANIZATION_ADMIN'"))
-                .isEqualTo(56);
+                .isEqualTo(58);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'COMPANY_ADMIN'"))
-                .isEqualTo(55);
+                .isEqualTo(57);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'PLANNER'"))
-                .isEqualTo(28);
+                .isEqualTo(30);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'VIEWER'"))
-                .isEqualTo(17);
+                .isEqualTo(18);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id"
                 + " JOIN tms.permission p ON p.id = rp.permission_id"

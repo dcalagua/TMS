@@ -113,6 +113,14 @@ public enum Capability {
     SETTLEMENT_EXPORT(Permission.SETTLEMENT_INVOICE_EXPORT),
 
     /**
+     * Resource scheduling (migration V47). Its own capability rather than folded into the fleet
+     * masters: maintaining a truck's record and planning its day are different jobs, done by
+     * different people, on different screens.
+     */
+    WORK_ASSIGNMENT_VIEW(Permission.FLEET_WORK_ASSIGNMENT_READ),
+    WORK_ASSIGNMENT_MANAGE(Permission.FLEET_WORK_ASSIGNMENT_MANAGE),
+
+    /**
      * Deliberately separate from {@code IAM_*}: issuing a machine credential is not the same
      * decision as inviting a person, and an installation may well want the two in different hands.
      *

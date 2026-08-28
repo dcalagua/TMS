@@ -72,7 +72,10 @@ class SchemaExposureIntegrationTest {
             // record of a decision that can be edited is not a record, and an export that can be
             // deleted is an obligation somebody can make disappear.
             "carrier_invoice", "carrier_invoice_line", "tolerance_policy", "freight_match",
-            "freight_discrepancy", "settlement_approval", "payable_export");
+            "freight_discrepancy", "settlement_approval", "payable_export",
+            // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
+            // morning as shipments are added, dropped and reordered.
+            "work_assignment", "work_assignment_trip");
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the
@@ -106,7 +109,10 @@ class SchemaExposureIntegrationTest {
             // record of a decision that can be edited is not a record, and an export that can be
             // deleted is an obligation somebody can make disappear.
             "carrier_invoice", "carrier_invoice_line", "tolerance_policy", "freight_match",
-            "freight_discrepancy", "settlement_approval", "payable_export");
+            "freight_discrepancy", "settlement_approval", "payable_export",
+            // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
+            // morning as shipments are added, dropped and reordered.
+            "work_assignment", "work_assignment_trip");
 
     /**
      * The only tables allowed to carry a {@code company_id} and <em>not</em> the tenant policy.
