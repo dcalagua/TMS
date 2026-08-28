@@ -474,7 +474,9 @@ public class TripViewAssembler {
                 stop.serviceWindowStart(), stop.serviceWindowEnd(), orderCount,
                 stop.executionStatus(), allowed, stop.actualArrivalAt(), stop.serviceStartedAt(),
                 stop.actualDepartureAt(), stop.executionNotes(),
-                dwellMinutes(stop.actualArrivalAt(), stop.actualDepartureAt()), (int) openExceptionCount);
+                dwellMinutes(stop.actualArrivalAt(), stop.actualDepartureAt()), (int) openExceptionCount,
+                stop.etaArrivalAt(), stop.etaDepartureAt(), stop.etaSource(), stop.etaCalculatedAt(),
+                stop.etaMissesWindow());
     }
 
     /** Null until both ends are known: a stop still being served has no dwell time yet, only a start. */

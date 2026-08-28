@@ -706,7 +706,10 @@ class AutoPlanningServiceTest {
             for (int index = 0; index < destinations.size(); index++) {
                 stops.add(new TripStopView(id("stop-" + tripId + "-" + index), index + 1, destinations.get(index),
                         null, null, null, null, null, null, null, 1L, null, Set.of(), null, null, null,
-                        null, null, 0));
+                        null, null, 0,
+                        // V43: no ETA in this fixture - these stops were never scheduled, which is
+                        // what four nulls and a false say.
+                        null, null, null, null, false));
             }
 
             TripView trip = new TripView(tripId, COMPANY, RUN, null, DATE, 1, "SH-" + tripId,

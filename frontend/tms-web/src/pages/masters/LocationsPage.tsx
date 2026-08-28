@@ -6,7 +6,7 @@ import {
 } from "@mui/material";
 import {
   AddRounded, UploadRounded, EditRounded, BlockRounded, CheckCircleRounded,
-  PlaceRounded, TripOriginRounded, PinDropRounded,
+  PlaceRounded, TripOriginRounded, PinDropRounded, MyLocationRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
@@ -28,6 +28,7 @@ import {
 import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
+import { GeofenceDrawer } from "./GeofenceDrawer";
 import { LocationFormDrawer } from "./LocationFormDrawer";
 
 const DEFAULT_PAGE_SIZE = 25;
@@ -84,6 +85,7 @@ export function LocationsPage({ view }: LocationsPageProps = {}) {
   const [draft, setDraft] = useState<AppliedFilters>(defaultFilters);
   const [filters, setFilters] = useState<AppliedFilters>(defaultFilters);
   const [modal, setModal] = useState<ModalState>(null);
+  const [geofenceFor, setGeofenceFor] = useState<LocationView | null>(null);
   const [showImport, setShowImport] = useState(false);
 
   const scope = view === "ORIGIN" ? "origins" : view === "DESTINATION" ? "destinations" : "locations";
@@ -215,6 +217,12 @@ export function LocationsPage({ view }: LocationsPageProps = {}) {
         <ActionMenu
           items={[
             { key: "edit", label: t("Editar"), icon: <EditRounded />, onSelect: () => setModal({ mode: "edit", location }) },
+            {
+              key: "geofence",
+              label: t("Geocerco"),
+              icon: <MyLocationRounded />,
+              onSelect: () => setGeofenceFor(location),
+            },
             {
               key: "active",
               label: location.active ? t("Desactivar") : t("Activar"),
@@ -387,6 +395,15 @@ export function LocationsPage({ view }: LocationsPageProps = {}) {
             notifySaved(wasEdit);
             refresh();
           }}
+        />
+      )}
+
+      {geofenceFor && (
+        <GeofenceDrawer
+          companyId={companyId}
+          location={geofenceFor}
+          onClose={() => setGeofenceFor(null)}
+          onSaved={() => { setGeofenceFor(null); refresh(); }}
         />
       )}
 

@@ -141,6 +141,33 @@ public class LocationService {
         return LocationView.from(saved, zone);
     }
 
+    /**
+     * Sets or clears this place's geofence (migration V43, ADR-011).
+     *
+     * <p>Its own operation rather than a field on {@link #update}: a geofence is configured once by
+     * whoever set the site up, and folding it into the general edit would mean every address
+     * correction re-sent a radius that nobody looked at. Null clears it.
+     *
+     * <p>Recorded as an ordinary {@code UPDATE} on the location. Drawing a circle around a
+     * warehouse is a configuration change and not a new class of decision, and a verb of its own
+     * would dilute the ones that are compliance facts.
+     */
+    @Transactional
+    public LocationView setGeofence(CompanyScope scope, UUID id, Integer radiusMetres) {
+        Location location = find(scope, id);
+        if (radiusMetres != null && !location.hasCoordinates()) {
+            throw new InvalidRequestException("Location " + location.code() + " has no coordinates,"
+                    + " so a circle around it would be a circle around nothing. Set its latitude and"
+                    + " longitude first.");
+        }
+        UUID actorId = auditActorProvider.writerAppUserId();
+        location.setGeofence(radiusMetres, actorId);
+        Location saved = locationRepository.save(location);
+        auditRecorder.record(scope, AuditAggregateType.LOCATION, saved.id(), AuditAction.UPDATE,
+                Map.of("code", saved.code(), "geofenceRadiusM", String.valueOf(radiusMetres)));
+        return LocationView.from(saved, requireZoneInScope(scope, saved.zoneId()));
+    }
+
     @Transactional
     public LocationView activate(CompanyScope scope, UUID id) {
         return setActive(scope, id, true);

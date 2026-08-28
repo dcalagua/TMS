@@ -87,6 +87,40 @@ public class TripStop {
     @Column(name = "execution_notes")
     private String executionNotes;
 
+    /**
+     * When the vehicle is expected here (migration V43, ADR-011).
+     *
+     * <p><b>Null means there is no estimate</b>, not that it is zero or unknown-but-soon. A leg on
+     * the way could not be measured, so this stop and every stop after it have none - see
+     * {@link StopScheduleEngine}. The five ETA fields are written together and cleared together
+     * ({@code ck_trip_stop_eta_complete}), so a reader never sees half an estimate.
+     *
+     * <p>Stamped rather than derived on read, the way V30 stored cost lines: a time a person saw
+     * and acted on has to stay reproducible after the master data behind it changed.
+     */
+    @Column(name = "eta_arrival_at")
+    private OffsetDateTime etaArrivalAt;
+
+    @Column(name = "eta_departure_at")
+    private OffsetDateTime etaDepartureAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "eta_source")
+    private EtaSource etaSource;
+
+    @Column(name = "eta_calculated_at")
+    private OffsetDateTime etaCalculatedAt;
+
+    /**
+     * Whether the schedule has the vehicle arriving after this stop's window closes.
+     *
+     * <p>Stored rather than derived, because it is a property of the calculation and not of the
+     * row: recomputing it later against a window somebody has since widened would quietly erase
+     * the warning a planner acted on.
+     */
+    @Column(name = "eta_misses_window", nullable = false)
+    private boolean etaMissesWindow;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false, nullable = false)
     private OffsetDateTime createdAt;
@@ -141,6 +175,53 @@ public class TripStop {
 
     public UUID companyId() {
         return companyId;
+    }
+
+    /**
+     * Writes a computed schedule onto this stop, or clears it when the schedule has none.
+     *
+     * <p>All five fields move together. A stop that could not be scheduled is cleared rather than
+     * left holding a previous run's numbers - a stale arrival time beside a route that has changed
+     * is worse than a blank, because it looks current.
+     */
+    public void applySchedule(StopSchedule schedule, OffsetDateTime calculatedAt) {
+        if (schedule.isScheduled()) {
+            this.etaArrivalAt = schedule.arrivalAt();
+            this.etaDepartureAt = schedule.departureAt();
+            this.etaSource = schedule.source();
+            this.etaCalculatedAt = calculatedAt;
+            this.etaMissesWindow = schedule.missesWindow();
+        } else {
+            clearSchedule();
+        }
+    }
+
+    public void clearSchedule() {
+        this.etaArrivalAt = null;
+        this.etaDepartureAt = null;
+        this.etaSource = null;
+        this.etaCalculatedAt = null;
+        this.etaMissesWindow = false;
+    }
+
+    public OffsetDateTime etaArrivalAt() {
+        return etaArrivalAt;
+    }
+
+    public OffsetDateTime etaDepartureAt() {
+        return etaDepartureAt;
+    }
+
+    public EtaSource etaSource() {
+        return etaSource;
+    }
+
+    public OffsetDateTime etaCalculatedAt() {
+        return etaCalculatedAt;
+    }
+
+    public boolean etaMissesWindow() {
+        return etaMissesWindow;
     }
 
     public UUID destinationId() {

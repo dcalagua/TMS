@@ -371,6 +371,24 @@ export interface TripStopView {
   /** Minutes between arrival and departure, or null until both ends are known. */
   dwellMinutes: number | null
   openExceptionCount: number
+  /**
+   * Cuándo se espera al vehículo aquí (migración V43). **Null significa que no hay estimación** -
+   * un tramo del camino no se pudo medir, así que ni esta parada ni ninguna posterior la tienen.
+   *
+   * La pantalla muestra el hueco y no lo rellena: una hora de llegada plausible pero equivocada se
+   * ve exactamente igual que una correcta, y nada en el tablero diría cuál es cuál.
+   */
+  etaArrivalAt: string | null
+  etaDepartureAt: string | null
+  /**
+   * Sobre qué se midió el tramo más débil que llega hasta aquí. `FALLBACK` significa que al menos
+   * uno fue una línea recta: la estimación sigue sirviendo y no es la misma afirmación que una
+   * carretera medida, así que la pantalla lo dice.
+   */
+  etaSource: 'MEASURED_ROUTE' | 'FALLBACK' | null
+  etaCalculatedAt: string | null
+  /** El horario hace llegar al vehículo después de que la ventana de esta parada cierra. */
+  etaMissesWindow: boolean
 }
 
 /** Mirrors the backend's `TransportEventView` record - one entry of a trip's timeline.
@@ -787,6 +805,17 @@ export function cancelTrip(
   companyId: string, id: string, request: PlanningActionRequest,
 ): Promise<TripDetailView> {
   return apiRequest<TripDetailView>(`/planning/trips/${id}/cancel`, { method: 'POST', companyId, body: request })
+}
+
+/**
+ * Recalcula cuándo se espera al envío en cada parada (migración V43, ADR-011).
+ *
+ * Explícito y no automático: un envío al que le cambiaron las paradas tiene una estimación vieja
+ * hasta que alguien la pide, y `etaCalculatedAt` en cada parada es cómo se nota. Un proceso de
+ * fondo necesitaría un actor a quien atribuir la escritura, que es la deuda D4.
+ */
+export function recomputeTripEta(companyId: string, id: string): Promise<TripDetailView> {
+  return apiRequest<TripDetailView>(`/planning/trips/${id}/eta`, { method: 'POST', companyId })
 }
 
 // --- trip execution --------------------------------------------------------------------

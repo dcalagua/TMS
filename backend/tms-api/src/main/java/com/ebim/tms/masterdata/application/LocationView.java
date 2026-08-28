@@ -37,6 +37,12 @@ public record LocationView(
         String zoneCode,
         String zoneName,
         int serviceTimeMinutes,
+        /**
+         * The radius of this place's geofence, in metres, or null when it has none (migration V43).
+         * Read-only here: it is set through its own endpoint, because it is configured once when
+         * the site is set up rather than edited alongside an address.
+         */
+        Integer geofenceRadiusM,
         String externalSystem,
         String externalReference,
         boolean active,
@@ -54,7 +60,8 @@ public record LocationView(
                 location.district(), location.province(), location.department(), location.country(),
                 location.timeZone(), location.latitude(), location.longitude(), location.zoneId(),
                 zone == null ? null : zone.code(), zone == null ? null : zone.name(),
-                location.serviceTimeMinutes(), location.externalSystem(), location.externalReference(),
+                location.serviceTimeMinutes(), location.geofenceRadiusM(), location.externalSystem(),
+                location.externalReference(),
                 location.active(), location.createdAt(), location.updatedAt());
     }
 }

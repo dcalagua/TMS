@@ -217,6 +217,123 @@ class PlanningApiIntegrationTest {
         assertThat(orderStatus(ready)).isEqualTo("PLANNED");
     }
 
+    // --- stop ETA (V43, ADR-011) --------------------------------------------------
+
+    /**
+     * The wiring the pure {@code StopScheduleEngineTest} cannot prove: that the legs, the service
+     * times and the windows actually reach the engine, and that what it returns lands on the stops.
+     *
+     * <p>The fixture's {@code ORIGIN-A} deliberately has no coordinates, so this run is measured
+     * from a geocoded origin created here. No routing vendor is configured - ADR-010 ships none -
+     * so the leg falls back to a straight line and the estimate says so. Asserting the source and
+     * not only the times is the point: a FALLBACK figure is useful and is not the same claim as a
+     * measured road, and the API has to keep the two apart.
+     */
+    @Test
+    @DisplayName("recomputing an ETA stamps every stop, with the provenance of what it was built on")
+    void etaIsComputedAndStamped() throws Exception {
+        LocalDate date = nextDate();
+        String geocodedOrigin = insertLocation(COMPANY_A, "ORIGIN-ETA-" + date.toString().replace("-", ""),
+                "Origin with coordinates", "ORIGIN", ", latitude, longitude", ", -12.020000, -77.100000");
+        Run run = newRunFrom(geocodedOrigin, date);
+        String trip = newTrip(run, vehicle("ETA", "10000", "40", 20));
+        assign(trip, order(COMPANY_A, geocodedOrigin, destinationA1, date, "1000", "2", "2",
+                "READY_FOR_PLANNING")).andExpect(status().isOk());
+
+        mockMvc.perform(asAdmin(post(TRIPS + "/" + trip + "/eta"), COMPANY_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stops[0].etaArrivalAt").exists())
+                .andExpect(jsonPath("$.stops[0].etaDepartureAt").exists())
+                .andExpect(jsonPath("$.stops[0].etaCalculatedAt").exists())
+                // Straight-line, because no vendor adapter is configured. Named, not laundered.
+                .andExpect(jsonPath("$.stops[0].etaSource").value("FALLBACK"));
+
+        // And it is stamped, not derived on read: an ordinary GET returns the same numbers.
+        mockMvc.perform(asAdmin(get(TRIPS + "/" + trip), COMPANY_A))
+                .andExpect(jsonPath("$.stops[0].etaArrivalAt").exists())
+                .andExpect(jsonPath("$.stops[0].etaSource").value("FALLBACK"));
+    }
+
+    /**
+     * Rule 1 of {@code StopScheduleEngine}, end to end and not only in the unit test: the fixture's
+     * {@code ORIGIN-A} has no coordinates, so the very first leg cannot be measured and <b>no stop
+     * gets an estimate</b>.
+     *
+     * <p>The alternative - filling the gap with something plausible - is what makes a board show
+     * arrival times of which several are wrong, with nothing saying which. A visible blank is the
+     * honest answer, and this asserts the API actually returns one.
+     */
+    @Test
+    @DisplayName("an origin with no coordinates leaves every stop without an ETA, rather than with a guess")
+    void etaIsAbsentWhenTheFirstLegCannotBeMeasured() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("ETA-NOGEO", "10000", "40", 20));
+        assign(trip, order(COMPANY_A, originA, destinationA1, date, "1000", "2", "2", "READY_FOR_PLANNING"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(asAdmin(post(TRIPS + "/" + trip + "/eta"), COMPANY_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stops[0].etaArrivalAt").doesNotExist())
+                .andExpect(jsonPath("$.stops[0].etaSource").doesNotExist())
+                // Not "misses its window" either: a stop with no estimate has not been shown to
+                // miss anything, and a warning nobody can act on is worse than none.
+                .andExpect(jsonPath("$.stops[0].etaMissesWindow").value(false));
+    }
+
+    /**
+     * A schedule needs a starting instant. Falling back to {@code now()} would produce a board whose
+     * arrival times changed every time somebody refreshed it, which is worse than not having one.
+     */
+    @Test
+    @DisplayName("a shipment with no planned departure is refused, and told why")
+    void etaNeedsADeparture() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, null);
+        assign(trip, order(COMPANY_A, originA, destinationA1, date, "1000", "2", "2", "READY_FOR_PLANNING"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(asAdmin(post(TRIPS + "/" + trip + "/eta"), COMPANY_A))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail")
+                        .value(org.hamcrest.Matchers.containsString("no planned departure")));
+    }
+
+    @Test
+    @DisplayName("a trip with no stops schedules nothing and does not fail doing it")
+    void etaOfAnEmptyTripIsEmpty() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("ETA-EMPTY", "10000", "40", 20));
+
+        mockMvc.perform(asAdmin(post(TRIPS + "/" + trip + "/eta"), COMPANY_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stops").isEmpty());
+    }
+
+    @Test
+    @DisplayName("a viewer cannot recompute an ETA")
+    void etaRequiresAWriteAuthority() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("ETA-AUTH", "10000", "40", 20));
+
+        mockMvc.perform(asViewer(post(TRIPS + "/" + trip + "/eta"), COMPANY_A))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("another company cannot recompute this company's ETA")
+    void etaIsCompanyScoped() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String trip = newTrip(run, vehicle("ETA-TENANT", "10000", "40", 20));
+
+        mockMvc.perform(asAdmin(post(TRIPS + "/" + trip + "/eta"), COMPANY_B))
+                .andExpect(status().isNotFound());
+    }
+
     // --- capacity -----------------------------------------------------------------
 
     @Test
@@ -1788,6 +1905,16 @@ class PlanningApiIntegrationTest {
                 .andExpect(jsonPath("$.run.planNumber").value(org.hamcrest.Matchers.startsWith("PL-")))
                 .andExpect(jsonPath("$.run.status").value("DRAFT"))
                 .andExpect(jsonPath("$.run.mode").value("MANUAL"))
+                .andReturn().getResponse().getContentAsString();
+        return new Run(JsonPath.read(response, "$.run.id"), date);
+    }
+
+    /** A run from a named origin, for the cases that need one with coordinates. */
+    private Run newRunFrom(String originId, LocalDate date) throws Exception {
+        String response = mockMvc.perform(asAdmin(post(PLANNING + "/runs"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"originId\":\"" + originId + "\",\"planningDate\":\"" + date + "\"}"))
+                .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return new Run(JsonPath.read(response, "$.run.id"), date);
     }

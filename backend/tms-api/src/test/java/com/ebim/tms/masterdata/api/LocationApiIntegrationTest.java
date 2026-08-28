@@ -187,6 +187,95 @@ class LocationApiIntegrationTest {
     }
 
     @Nested
+    @DisplayName("the geofence (V43)")
+    class Geofence {
+
+        @Test
+        @DisplayName("a location starts with no geofence, and null is not zero")
+        void noneByDefault() throws Exception {
+            String body = create(COMPANY_A, locationRequest("GEO-NONE", "STORE", "[\"DESTINATION\"]", null, null, null));
+
+            assertThat((Integer) JsonPath.read(body, "$.geofenceRadiusM")).isNull();
+        }
+
+        @Test
+        @DisplayName("a radius is set through its own endpoint and read back on the location")
+        void setAndRead() throws Exception {
+            String id = JsonPath.read(
+                    create(COMPANY_A, locationRequest("GEO-SET", "STORE", "[\"DESTINATION\"]", null, null, null)),
+                    "$.id");
+
+            mockMvc.perform(asAdmin(put(BASE + "/" + id + "/geofence"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"radiusMetres\":250}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.geofenceRadiusM").value(250));
+
+            mockMvc.perform(asAdmin(get(BASE + "/" + id), COMPANY_A))
+                    .andExpect(jsonPath("$.geofenceRadiusM").value(250));
+        }
+
+        /** Null clears it - which is why the radius travels in a body and not as a query parameter. */
+        @Test
+        @DisplayName("null clears the geofence rather than being read as 'not supplied'")
+        void nullClears() throws Exception {
+            String id = JsonPath.read(
+                    create(COMPANY_A, locationRequest("GEO-CLEAR", "STORE", "[\"DESTINATION\"]", null, null, null)),
+                    "$.id");
+            mockMvc.perform(asAdmin(put(BASE + "/" + id + "/geofence"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"radiusMetres\":250}"))
+                    .andExpect(status().isOk());
+
+            mockMvc.perform(asAdmin(put(BASE + "/" + id + "/geofence"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"radiusMetres\":null}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.geofenceRadiusM").doesNotExist());
+        }
+
+        /**
+         * Consumer GPS is not accurate below 25 metres, so a tighter circle would be a feature that
+         * never fires; over 20km it stops distinguishing this site from the next town.
+         */
+        @Test
+        @DisplayName("a radius outside the usable range is refused")
+        void boundsAreEnforced() throws Exception {
+            String id = JsonPath.read(
+                    create(COMPANY_A, locationRequest("GEO-BOUNDS", "STORE", "[\"DESTINATION\"]", null, null, null)),
+                    "$.id");
+
+            mockMvc.perform(asAdmin(put(BASE + "/" + id + "/geofence"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"radiusMetres\":5}"))
+                    .andExpect(status().isBadRequest());
+            mockMvc.perform(asAdmin(put(BASE + "/" + id + "/geofence"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"radiusMetres\":50000}"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("a viewer cannot draw a circle round a warehouse")
+        void requiresManage() throws Exception {
+            String id = JsonPath.read(
+                    create(COMPANY_A, locationRequest("GEO-AUTH", "STORE", "[\"DESTINATION\"]", null, null, null)),
+                    "$.id");
+
+            mockMvc.perform(asViewer(put(BASE + "/" + id + "/geofence"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"radiusMetres\":250}"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("another company cannot set a geofence on this company's location")
+        void isCompanyScoped() throws Exception {
+            String id = JsonPath.read(
+                    create(COMPANY_A, locationRequest("GEO-TENANT", "STORE", "[\"DESTINATION\"]", null, null, null)),
+                    "$.id");
+
+            mockMvc.perform(asAdmin(put(BASE + "/" + id + "/geofence"), COMPANY_B)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"radiusMetres\":250}"))
+                    .andExpect(status().isNotFound());
+        }
+    }
+
+    @Nested
     @DisplayName("tenancy and authorization")
     class Tenancy {
 

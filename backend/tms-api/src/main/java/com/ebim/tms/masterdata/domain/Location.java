@@ -98,6 +98,20 @@ public class Location {
     @Column(name = "service_time_minutes", nullable = false)
     private int serviceTimeMinutes;
 
+    /**
+     * The radius, in metres, of a circle around this place (migration V43, ADR-011).
+     *
+     * <p>Null is <b>no geofence</b>, not a geofence of zero - the same distinction V22 drew for
+     * capacity overrides. A circle of zero metres would be a geofence nothing can ever be inside,
+     * which is a different statement from "this site does not use one".
+     *
+     * <p><b>ADR-007 still holds.</b> A position inside this circle informs a person and moves no
+     * lifecycle. Nothing on {@code tms.trip_stop} is written from it, no transition is enabled by
+     * it, and {@code actual_arrival_at} goes on being entered by whoever arrived.
+     */
+    @Column(name = "geofence_radius_m")
+    private Integer geofenceRadiusM;
+
     @Column(name = "external_system")
     private String externalSystem;
 
@@ -211,6 +225,37 @@ public class Location {
 
     public UUID zoneId() {
         return zoneId;
+    }
+
+    /**
+     * Sets or clears this place's circle (migration V43).
+     *
+     * <p>Its own method, and its own endpoint, rather than another parameter on the seventeen-place
+     * constructor: a geofence is configured once by whoever set the site up, not edited every time
+     * somebody corrects an address. Null clears it, which is how a site stops using one.
+     */
+    public void setGeofence(Integer radiusMetres, UUID actorId) {
+        if (radiusMetres != null && (radiusMetres < 25 || radiusMetres > 20_000)) {
+            // The same bounds ck_location_geofence_radius states, refused here with a sentence:
+            // consumer GPS is not accurate below 25m, and a circle over 20km stops distinguishing
+            // this site from the next town.
+            throw new IllegalArgumentException("a geofence radius must be between 25 and 20000 metres");
+        }
+        this.geofenceRadiusM = radiusMetres;
+        this.updatedBy = actorId;
+    }
+
+    public Integer geofenceRadiusM() {
+        return geofenceRadiusM;
+    }
+
+    /** Whether this place has a circle at all. Coordinates are needed too - a radius around nothing is nothing. */
+    public boolean hasGeofence() {
+        return geofenceRadiusM != null && hasCoordinates();
+    }
+
+    public boolean hasCoordinates() {
+        return latitude != null && longitude != null;
     }
 
     public int serviceTimeMinutes() {

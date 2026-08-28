@@ -91,6 +91,11 @@ Authoritative documents live under `docs/architecture/`:
   store behind `EvidenceStoragePort`, never into a column and never behind a public URL. Disabled
   by default; a local-volume implementation ships for deployments that want it, and Supabase
   Storage becomes one more implementation with no change to any caller.
+- `ADR-011-stop-eta-and-geofence-observation.md` - a stop's arrival estimate is computed from the
+  routing port, the service time and the window, stamped with the provenance of its weakest leg,
+  and absent wherever a leg could not be measured. Geofences inform and move no lifecycle;
+  automatic arrival detection stays deferred. Supersedes in part V27's refusal of per-stop planned
+  times.
 - `ADR-007-tracking-provider-port.md` - vehicle tracking is a normalised contract behind two ports
   (`TrackingIntakePort` for feeds that push, `TrackingProviderPort` for those that poll), with no
   vendor adapter in V1. Positions inform people and never move a lifecycle, so losing them costs a
@@ -125,5 +130,15 @@ OR-Tools/route optimization, EWM integration, ERP integration, Kafka/microservic
 
 GPS/telematics has left this list under ADR-007, and only as far as the ADR goes: TMS owns a
 normalised position contract, its storage and its sampling policy, and ships **no vendor adapter**.
-Writing one against a specific telematics provider still needs a concrete customer requirement. ETA
-calculation, geofencing and automatic arrival detection remain deferred.
+Writing one against a specific telematics provider still needs a concrete customer requirement.
+
+Stop ETA has left this list under ADR-011, because the objection to it expired rather than being
+overruled: V27 refused per-stop planned times on the grounds that "there is nothing to put in
+them", and V38/ADR-010 (per-leg driving time), V14 (service time) and V11 (service windows) have
+since supplied every term. TMS computes an arrival estimate on request, stamps it with the
+provenance of the weakest leg behind it, and leaves a visible gap wherever a leg could not be
+measured. Route optimisation - choosing the sequence rather than scheduling it - stays deferred.
+
+Geofencing is a circle on a location and nothing more (ADR-011). **Automatic arrival detection
+remains deferred**, and ADR-007's rule is not weakened by the circle existing: a position informs a
+person and never moves a lifecycle. `actual_arrival_at` is written by whoever arrived.
