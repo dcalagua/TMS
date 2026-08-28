@@ -561,6 +561,7 @@ const EN_DATA: Record<string, string> = {
   "Entrega rechazada": "Delivery rejected",
   "Entrega registrada": "Delivery recorded",
   "Entregado": "Delivered",
+  "Entregado parcialmente": "Partially delivered",
   "Entregas completas": "Complete deliveries",
   "Entregas completas / registradas": "Deliveries complete / recorded",
   "Enviada el {{at}}": "Sent {{at}}",
@@ -1431,7 +1432,6 @@ const EN_DATA: Record<string, string> = {
   "Zona": "Zone",
   "Zona horaria": "Time zone",
   "Zonas": "Zones",};
-
 // ── Textos escritos para esta reconstruccion (shell, drawers, tableros y avisos) ──
 // Van en su propio mapa y no mezclados con EN_DATA: aquel viene de fundir los namespaces
 // heredados y se puede regenerar; este se mantiene a mano.
@@ -1571,6 +1571,7 @@ const EN_APP: Record<string, string> = {
   "El mapa no está disponible. Puedes ingresar la latitud y la longitud manualmente.": "The map is unavailable. You can enter latitude and longitude manually.",
   "El orden de la lista ES la secuencia de paradas. Deja el tiempo de atención vacío para heredar el de la ubicación.": "The list order IS the stop sequence. Leave the service time empty to inherit the location's.",
   "El orden de paradas tiene cambios sin guardar.": "The stop order has unsaved changes.",
+  "El pedido vuelve a la bolsa planificable para un segundo intento de entrega. Conserva el registro del primer intento.": "The order returns to the plannable pool for a second delivery attempt. The record of the first attempt is kept.",
   "El secreto anterior sigue valiendo hasta {{until}}, para que el socio tenga tiempo de cambiarlo.": "The previous secret stays valid until {{until}}, so the partner has time to change it.",
   "El viaje {{number}} quedará cancelado y sus pedidos volverán al pool.": "Trip {{number}} will be cancelled and its orders return to the pool.",
   "El último día en que la licencia es válida. Déjalo vacío si no se registra.": "The last day the licence is valid. Leave it empty if it is not recorded.",
@@ -1702,6 +1703,7 @@ const EN_APP: Record<string, string> = {
   "Modo claro": "Light mode",
   "Modo oscuro": "Dark mode",
   "Moneda": "Currency",
+  "Motivo de la reapertura": "Reason for reopening",
   "Motivo": "Reason",
   "Mover": "Move",
   "Mover {{number}}": "Move {{number}}",
@@ -1767,6 +1769,7 @@ const EN_APP: Record<string, string> = {
   "Pedido asignado": "Order assigned",
   "Pedido movido": "Order moved",
   "Pedido quitado del viaje": "Order removed from the trip",
+  "Pedido reabierto para planificar": "Order reopened for planning",
   "Pedidos asignados": "Assigned orders",
   "Pedidos de entrada": "Input orders",
   "Pedidos de transporte: cabecera más líneas. Los totales siempre los calcula y controla el backend.": "Transport orders: header plus lines. Totals are always calculated and owned by the backend.",
@@ -1802,6 +1805,8 @@ const EN_APP: Record<string, string> = {
   "Qué hay conectado a esta empresa, en las dos direcciones.": "What is connected to this company, in both directions.",
   "Qué se le paga a cada transportista y sobre qué base se calcula.": "What each carrier is paid, and on what basis it is calculated.",
   "RUC, DNI, ...": "Tax ID, national ID, ...",
+  "Reabrir para planificar": "Reopen for planning",
+  "Reabrir pedido": "Reopen order",
   "Rechazadas": "Rejected",
   "Rechazados": "Rejected",
   "Rechazar": "Reject",

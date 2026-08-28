@@ -10,6 +10,7 @@ import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.reference.OrderBacklogTotals;
+import com.ebim.tms.shared.reference.OrderFulfillmentStatus;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.PlannableOrderQuery;
@@ -122,12 +123,79 @@ public class OrderPlanningService implements OrderPlanningPort {
     }
 
     /**
+     * {@code PLANNED -> IN_EXECUTION}, driven by the departure of the trip that carries the order.
+     *
+     * <p>Locks the row before reading its status, unlike {@link #markPlanned}: dispatch touches
+     * every order on the trip at once and two dispatchers racing the same shipment would otherwise
+     * both read {@code PLANNED} and both write. {@code markPlanned} does not need this because the
+     * partial unique index on {@code trip_order_assignment} is what serialises assignment.
+     *
+     * <p>Silently does nothing when the order has already moved on. That is the idempotency the
+     * port promises, and it has a second job: a dispatch replayed after somebody closed the trip
+     * out must not drag a delivered order back onto the road.
+     */
+    @Override
+    @Transactional
+    public void markInExecution(UUID orderId, UUID companyId) {
+        TransportOrder order = requireForUpdate(orderId, companyId);
+        if (order.status() == OrderStatus.NOT_READY || order.status() == OrderStatus.READY_FOR_PLANNING
+                || order.status() == OrderStatus.CANCELLED) {
+            throw new ConflictException("Order " + order.orderNumber() + " is " + order.status()
+                    + " and cannot be dispatched.");
+        }
+        if (order.markInExecution(auditActorProvider.requireAppUserId())) {
+            save(order);
+        }
+    }
+
+    /**
+     * The trip closed out; this is how the order ended.
+     *
+     * <p>The fulfilment-to-lifecycle mapping is here, in the module that owns {@code OrderStatus},
+     * and it is deliberately blunt: only a full handover closes an order as delivered. Refused,
+     * failed, never attempted and <em>nothing recorded at all</em> all close it as
+     * {@code DELIVERY_FAILED}, which is the honest reading of "the trip is over and we cannot show
+     * the customer got it" and also the safe one - a failed order is reopenable and a delivered one
+     * is not, so the mistake this makes is the recoverable mistake. A delivery keyed late then
+     * corrects it, because the recording window stays open after completion and every correction
+     * calls back here.
+     *
+     * <p>An order that is not in execution is left alone rather than refused. A completion replayed
+     * after somebody reopened and replanned the order must not undo the replan, and the transition
+     * table is what makes that safe: {@code READY_FOR_PLANNING} cannot reach an outcome.
+     */
+    @Override
+    @Transactional
+    public void closeOut(UUID orderId, UUID companyId, OrderFulfillmentStatus fulfillment) {
+        TransportOrder order = requireForUpdate(orderId, companyId);
+        OrderStatus outcome = closureFor(fulfillment);
+        if (!order.status().canTransitionTo(outcome) && order.status() != outcome) {
+            return;
+        }
+        if (order.closeOut(outcome, auditActorProvider.requireAppUserId())) {
+            save(order);
+        }
+    }
+
+    /**
+     * What each fulfilment means for the lifecycle. Exhaustive on purpose - a new
+     * {@code OrderFulfillmentStatus} must not silently fall through to a default.
+     */
+    static OrderStatus closureFor(OrderFulfillmentStatus fulfillment) {
+        return switch (fulfillment) {
+            case DELIVERED -> OrderStatus.DELIVERED;
+            case PARTIALLY_DELIVERED -> OrderStatus.PARTIALLY_DELIVERED;
+            case REJECTED, FAILED, NOT_ATTEMPTED, PENDING -> OrderStatus.DELIVERY_FAILED;
+        };
+    }
+
+    /**
      * The planned-versus-unplanned figure, counted in one grouped query.
      *
      * <p>Read back through a map keyed on the enum rather than by position, so a state the range
      * happens to contain none of defaults to zero instead of shifting every count one place along.
-     * A fifth {@code OrderStatus} would still need a line here, which is why
-     * {@code OrderBacklogTotals} names all four rather than carrying a total and a residue.
+     * A ninth {@code OrderStatus} would still need a line here, which is why
+     * {@code OrderBacklogTotals} names every state rather than carrying a total and a residue.
      */
     @Override
     @Transactional(readOnly = true)
@@ -136,14 +204,24 @@ public class OrderPlanningService implements OrderPlanningPort {
         transportOrderRepository.countByStatusForServiceDates(companyId, from, to)
                 .forEach(count -> byStatus.put(count.getStatus(), count.getOrderCount()));
         return new OrderBacklogTotals(
-                byStatus.getOrDefault(OrderStatus.PLANNED, 0L),
-                byStatus.getOrDefault(OrderStatus.READY_FOR_PLANNING, 0L),
                 byStatus.getOrDefault(OrderStatus.NOT_READY, 0L),
+                byStatus.getOrDefault(OrderStatus.READY_FOR_PLANNING, 0L),
+                byStatus.getOrDefault(OrderStatus.PLANNED, 0L),
+                byStatus.getOrDefault(OrderStatus.IN_EXECUTION, 0L),
+                byStatus.getOrDefault(OrderStatus.DELIVERED, 0L),
+                byStatus.getOrDefault(OrderStatus.PARTIALLY_DELIVERED, 0L)
+                        + byStatus.getOrDefault(OrderStatus.DELIVERY_FAILED, 0L),
                 byStatus.getOrDefault(OrderStatus.CANCELLED, 0L));
     }
 
     private TransportOrder require(UUID orderId, UUID companyId) {
         return transportOrderRepository.findByIdAndCompanyId(orderId, companyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
+    }
+
+    /** {@link #require} under the row lock the execution transitions take - see the repository. */
+    private TransportOrder requireForUpdate(UUID orderId, UUID companyId) {
+        return transportOrderRepository.findByIdAndCompanyIdForUpdate(orderId, companyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
     }
 

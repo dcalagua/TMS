@@ -1,6 +1,7 @@
 # TMS by EBIM - Current Capability Map
 
-**Reconstructed from code on 2026-08-28**, at commit `0757afb`, branch `dev`.
+**Reconstructed from code on 2026-08-28**, at commit `0757afb`, branch `dev`. Rows are kept
+current as the chain proceeds; the job that changed one is named in its Next step.
 
 This document is derived from the source tree, the Flyway history and the test suites - **not**
 from earlier reports. Where a historical document disagrees with this one, this one is right and
@@ -21,13 +22,13 @@ capability.
 
 | Gate | Command | Result |
 |---|---|---|
-| Backend | `./mvnw -B test` | **1312 tests, 0 failures, 0 errors** - BUILD SUCCESS |
+| Backend | `./mvnw -B test` | **1312 tests** at JOB 01; **1389** after JOB 02 - 0 failures |
 | Frontend typecheck | `npm run typecheck` | **PASS** |
 | Frontend lint | `npm run lint` | **PASS** - 0 errors, 17 warnings (pre-existing) |
-| Frontend unit | `npm test` | **37 tests, 4 files, 0 failures** |
+| Frontend unit | `npm test` | **37 tests** at JOB 01; **42** after JOB 02 - 0 failures |
 | Frontend build | `npm run build` | **PASS** - 1.11 MB bundle, chunk-size warning only |
 | E2E | `npx playwright test` | **33 passed, 7 skipped** (authenticated smoke skips without credentials) |
-| Flyway history | `db/migration` | **V1 - V35**, contiguous. Next available: **V36** |
+| Flyway history | `db/migration` | **V1 - V36**, contiguous. Next available: **V37** |
 
 Docker Desktop was started locally for this run, so the 32 Testcontainers-backed classes ran for
 real. No remote database was touched.
@@ -49,7 +50,7 @@ real. No remote database was touched.
 | 2 | **Master data - Locations** | IMPLEMENTED | `masterdata/LocationController`; V6, V14, V23 canonical unification | `masters/locations`, `origins`, `destinations` | Location eligibility + canonical unification suites | Company-scoped repository queries | None |
 | 3 | **Zones, Frequencies, Routes** | IMPLEMENTED | `ZoneController`, `FrequencyController`, `RouteController`; V6-V8, V15, V24 | `masters/zones`, `frequencies`, `routes` | Frequency calendar, exception and cutoff tests | Company-scoped | None |
 | 4 | **Fleet - carriers, vehicles, types, drivers** | IMPLEMENTED | `fleet/*`; V9, V16, V26 | `fleet/*` (4 screens) | Fleet master + double-booking tests | Company-scoped; external reference uniqueness per company | Availability/shifts are **MISSING** - see #17 |
-| 5 | **Transport orders** | PARTIAL | `orders/*`; V10, V17 declared totals | `orders` | Order totals, import, lifecycle tests | Company-scoped | **Lifecycle is 4 states** (`NOT_READY`, `READY_FOR_PLANNING`, `PLANNED`, `CANCELLED`). No execution or delivery outcome states -> **JOB 02** |
+| 5 | **Transport orders** | IMPLEMENTED | `orders/*`; V10, V17, **V36 execution lifecycle** | `orders` | Order totals, import, `OrderStatusTest`, `OrderPlanningServiceExecutionTest`, smoke steps 14-19 | Company-scoped; row lock on execution transitions | **8 states**: the lifecycle now carries dispatch, the three delivery outcomes and a reopen for a second attempt (ADR-009). Quantities on a partial are JOB 03's |
 | 6 | **Order splitting / ship units** | MISSING | No `ship_unit` table or type. `trip_order_assignment.whole_order` exists and V11's unique index is deliberately partial on `whole_order = true`, leaving room | Planning board shows whole orders only | - | - | Introduce ship units and allocation ledger -> **JOB 03** |
 | 7 | **Manual planning** | IMPLEMENTED | `planning/TripService`, `TripAssignmentService`, `PlanningCapacityService`, `TripStopPlanner`; V11, V19 | `planning`, `planning/:runId` board | `PlanningApiIntegrationTest`, capacity and stop-sync suites | Company-scoped; optimistic version on runs; unique index for concurrent assignment | None |
 | 8 | **Automatic planning** | PARTIAL | `PlanningEngine` port + `HeuristicPlanningEngine` (`HEURISTIC_V1`), `AutoPlanningService` | Proposal reviewable on the board | Pure unit tests (no DB) | Company-scoped through the materialising service | Engine is a pure function with a clean port. **No KPIs, no cost/time objective, no route feasibility** -> **JOB 05** |
@@ -57,7 +58,7 @@ real. No remote database was touched.
 | 10 | **Rates and costing** | PARTIAL | `rates/*`, `RateCardService`, `TripCostCalculator`; V30, V33 | `rates/rate-cards`, `TripCostCard`, `ActualCostDrawer` | Rate selection and cost calculation suites | Company-scoped | Components are `BASE`, `DISTANCE`, `WEIGHT`, `VOLUME`, `PALLETS`, `MINIMUM_ADJUSTMENT`. **No maximum, stop-off, fuel surcharge, waiting time, toll, accessorial** -> **JOB 06** |
 | 11 | **Carrier tendering** | PARTIAL | `TripTenderService`, `TenderStatus` with a real transition table; V31 | `TenderDrawer`, `TripTenderCard` | Tender lifecycle and transition tests | Company-scoped; one active tender enforced | Single-carrier tender. **No ranking, no waterfall, no automatic escalation** -> **JOB 07** |
 | 12 | **Trip execution lifecycle** | IMPLEMENTED | `TripExecutionService`, `TripStopExecutionService`, `TripStatus` transition table; V25, V27 | `TripWorkspacePage`, `TripTimeline` | Transition-table unit tests + API integration tests | Company-scoped; atomic state transitions | None |
-| 13 | **Delivery result and POD** | IMPLEMENTED | `TripDeliveryService`, `OrderDelivery`, `DeliveryResult`, `DeliveryEvidenceService`; V28, ADR-006 | `DeliveryDrawer`, `DeliveryEvidenceDrawer` | Delivery result constraint and evidence suites | Evidence behind `EvidenceStoragePort`, never a public URL | Delivery facts exist but **do not drive order status** -> **JOB 02** |
+| 13 | **Delivery result and POD** | IMPLEMENTED | `TripDeliveryService`, `OrderDelivery`, `DeliveryResult`, `DeliveryEvidenceService`; V28, ADR-006, V36 | `DeliveryDrawer`, `DeliveryEvidenceDrawer` | Delivery result constraint and evidence suites, `OrderExecutionPropagatorTest` | Evidence behind `EvidenceStoragePort`, never a public URL | Delivery facts now **drive order status**, recomputed on every correction so the two cannot drift |
 | 14 | **Tracking positions** | PARTIAL | `tracking/*`, `TrackingIntakePort`/`TrackingProviderPort` (ADR-007); V29 | `TripTrackingCard` | Sampling rule, position validation, ingestion tests | Provider scope on integration clients | Positions are stored and shown. **No ETA, no geofence, no deviation, no arrival detection** -> **JOB 10** |
 | 15 | **Appointments / dock scheduling** | MISSING | No table, no type. `dock` appears only in prose | - | - | - | Location resources, calendars, slots -> **JOB 08** |
 | 16 | **Freight audit and settlement** | MISSING | `TripCost` records estimated and actual cost, which is the foundation; there is **no carrier invoice, no match, no discrepancy, no approval, no export** | `ActualCostDrawer` records actual cost only | Cost calculation tests | Company-scoped | Invoice -> match -> approve -> export -> **JOB 11** |

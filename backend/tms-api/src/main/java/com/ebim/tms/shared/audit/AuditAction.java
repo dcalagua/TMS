@@ -91,5 +91,17 @@ public enum AuditAction {
      * themselves stay {@link #CREATE}, {@link #ACTIVATE} and {@link #DEACTIVATE} on
      * {@link AuditAggregateType#MEMBERSHIP}, which already say exactly what happened.
      */
-    ROLES_CHANGED
+    ROLES_CHANGED,
+
+    /**
+     * An order that came back short was put into the plannable pool for another attempt
+     * (migration V36).
+     *
+     * <p>Its own action rather than an {@link #UPDATE}, because it is the one moment a delivery
+     * that failed becomes work somebody still owes a customer, and "who decided to try again, and
+     * why" is the whole question a second attempt raises. The metadata carries the status it was
+     * reopened from, so the reason it needed reopening is in the row rather than only in the
+     * timeline of the trip that failed.
+     */
+    ORDER_REOPENED
 }

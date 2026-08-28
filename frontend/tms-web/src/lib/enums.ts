@@ -128,7 +128,11 @@ export const ENUM_LABELS = {
   },
   orderStatus: {
     CANCELLED: "Cancelado",
+    DELIVERED: "Entregado",
+    DELIVERY_FAILED: "Entrega fallida",
+    IN_EXECUTION: "En ruta",
     NOT_READY: "No listo",
+    PARTIALLY_DELIVERED: "Entregado parcialmente",
     PLANNED: "Planificado",
     READY_FOR_PLANNING: "Listo para planificar",
   },

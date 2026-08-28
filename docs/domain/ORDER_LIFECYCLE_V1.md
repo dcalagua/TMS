@@ -1,5 +1,11 @@
 # TMS by EBIM - order lifecycle (V1)
 
+> **Superseded by `ORDER_LIFECYCLE_V2.md` (migration V36).** The four-state lifecycle described
+> below shipped as written and this document is the record of it, including of *why* it stopped at
+> `PLANNED`. It stopped there because nothing downstream existed yet; everything downstream now
+> does, and V2 carries the order through dispatch, delivery and a second attempt. Read V2 for the
+> current rules.
+
 Owner: `com.ebim.tms.orders` (backend), schema owner `backend/tms-api/src/main/resources/db/migration/V10__orders.sql`.
 Scope: the transport order status lifecycle introduced in Step 09. Manual planning (Step 10) is
 now built - `docs/domain/PLANNING_MANUAL_V1.md` owns the `PLANNED` transition and everything

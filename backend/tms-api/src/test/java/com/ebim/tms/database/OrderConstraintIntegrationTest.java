@@ -140,17 +140,32 @@ class OrderConstraintIntegrationTest {
     }
 
     @Test
-    @DisplayName("status is restricted to its catalogue")
+    @DisplayName("status is restricted to its catalogue, which V36 widened to the execution states")
     void statusIsRestricted() throws SQLException {
         UUID organization = insertOrganization("ORD-ORG");
         UUID company = insertCompany(organization, "ORD-A");
         UUID origin = insertOrigin(company, "ORIGIN-A");
         UUID destination = insertDestination(company, "DEST-A");
 
+        // Every one of the eight is accepted. Asserted rather than assumed: this test used to use
+        // 'DELIVERED' as its example of a value outside the catalogue, and the day that became a
+        // real state was the day the assertion silently stopped meaning anything.
+        String[] catalogue = {"NOT_READY", "READY_FOR_PLANNING", "PLANNED", "IN_EXECUTION",
+                "DELIVERED", "PARTIALLY_DELIVERED", "DELIVERY_FAILED", "CANCELLED"};
+        int sequence = 1;
+        for (String status : catalogue) {
+            String orderNumber = String.format("TO-%08d", sequence++);
+            execute("INSERT INTO tms.transport_order"
+                    + " (company_id, order_number, origin_id, destination_id, service_date, status)"
+                    + " VALUES ('" + company + "', '" + orderNumber + "', '" + origin + "', '" + destination
+                    + "', '2026-01-01', '" + status + "')");
+        }
+
+        // And something genuinely outside it is still refused.
         assertViolates(CHECK_VIOLATION, () -> execute("INSERT INTO tms.transport_order"
                 + " (company_id, order_number, origin_id, destination_id, service_date, status)"
-                + " VALUES ('" + company + "', 'TO-00000001', '" + origin + "', '" + destination
-                + "', '2026-01-01', 'DELIVERED')"));
+                + " VALUES ('" + company + "', 'TO-00000099', '" + origin + "', '" + destination
+                + "', '2026-01-01', 'DISPATCHED')"));
     }
 
     @Test

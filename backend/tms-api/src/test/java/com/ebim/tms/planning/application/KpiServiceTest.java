@@ -345,7 +345,11 @@ class KpiServiceTest {
 
     private void stubOrders() {
         when(orderPlanningPort.backlogTotals(COMPANY, FROM, TO))
-                .thenReturn(new OrderBacklogTotals(30, 15, 5, 4));
+                // notReady, readyToPlan, onTrip, inExecution, delivered, shortfall, cancelled.
+                // The committed 30 is spread across the four states an order reaches after a
+                // planner commits it, so planned() is still 30 and the report is unchanged -
+                // which is the point of deriving it rather than storing it (V36).
+                .thenReturn(new OrderBacklogTotals(5, 15, 12, 8, 7, 3, 4));
     }
 
     private static CompanyScope scope(Permission... permissions) {

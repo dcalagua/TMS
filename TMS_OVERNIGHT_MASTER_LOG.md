@@ -10,7 +10,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 
 | Job | Title | Result | Finished | Commit | Migration | Backend tests | STOP_CHAIN |
 |---|---|---|---|---|---|---|---|
-| 01 | Truth Baseline + Documentation | **PASS** | 2026-08-28 01:10 | `pending` | none (V35 is head; V36 next) | 1312 / 0 fail | false |
+| 01 | Truth Baseline + Documentation | **PASS** | 2026-08-28 01:10 | `f666d63` | none (V35 is head; V36 next) | 1312 / 0 fail | false |
 | 02 | Order Lifecycle V2 | pending | - | - | - | - | - |
 | 03 | Ship Units + Partial Allocation | pending | - | - | - | - | - |
 | 04 | Routing Matrix + Travel Time | pending | - | - | - | - | - |

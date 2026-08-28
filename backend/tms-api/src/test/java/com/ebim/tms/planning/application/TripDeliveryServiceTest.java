@@ -77,6 +77,7 @@ class TripDeliveryServiceTest {
     private TripOrderAssignmentRepository assignmentRepository;
     private OrderPlanningPort orderPlanningPort;
     private ShipmentEventPublisher eventPublisher;
+    private OrderExecutionPropagator orderExecution;
     private TripDeliveryService service;
     private Trip trip;
     private TripStop stop;
@@ -93,8 +94,10 @@ class TripDeliveryServiceTest {
         when(actors.current()).thenReturn(Optional.of(
                 AuditActor.person(ACTOR, "dispatcher@example.com", COMPANY, UUID.randomUUID(), "corr")));
 
+        orderExecution = mock(OrderExecutionPropagator.class);
         service = new TripDeliveryService(tripRepository, deliveryRepository, assignmentRepository,
-                orderPlanningPort, eventPublisher, mock(TripAlertPublisher.class), assembler, actors);
+                orderPlanningPort, eventPublisher, mock(TripAlertPublisher.class), assembler, orderExecution,
+                actors);
 
         stop = mock(TripStop.class);
         when(stop.id()).thenReturn(STOP_ID);

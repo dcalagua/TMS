@@ -2,6 +2,7 @@ package com.ebim.tms.orders.infrastructure;
 
 import com.ebim.tms.orders.domain.OrderStatus;
 import com.ebim.tms.orders.domain.TransportOrder;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -9,7 +10,9 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /**
  * Company-scoped persistence for {@link TransportOrder}. See {@code LocationRepository} for the
@@ -18,6 +21,20 @@ import org.springframework.data.jpa.repository.Query;
 public interface TransportOrderRepository extends JpaRepository<TransportOrder, UUID>, JpaSpecificationExecutor<TransportOrder> {
 
     Optional<TransportOrder> findByIdAndCompanyId(UUID id, UUID companyId);
+
+    /**
+     * The same row, taken under a write lock, for the execution transitions.
+     *
+     * <p>Dispatching a trip moves every order it carries in one transaction, and closing it out
+     * does the same. Two dispatchers racing the same shipment would otherwise both read
+     * {@code PLANNED} and both write, and the loser's optimistic-lock failure would abort a
+     * departure that had already half happened. Taking the row lock first turns that race into a
+     * short wait. Assignment does not need this - the partial unique index on
+     * {@code trip_order_assignment} is what serialises it.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from TransportOrder o where o.id = :id and o.companyId = :companyId")
+    Optional<TransportOrder> findByIdAndCompanyIdForUpdate(@Param("id") UUID id, @Param("companyId") UUID companyId);
 
     /**
      * The batched sibling of {@link #findByIdAndCompanyId}, for resolving a page's worth of

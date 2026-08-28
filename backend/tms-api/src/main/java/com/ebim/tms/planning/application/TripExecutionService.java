@@ -67,11 +67,13 @@ public class TripExecutionService {
     private final TripTenderService tenders;
     private final TripAlertPublisher alerts;
     private final TripViewAssembler assembler;
+    private final OrderExecutionPropagator orderExecution;
     private final AuditActorProvider auditActorProvider;
 
     public TripExecutionService(TripRepository tripRepository, VehicleLookupPort vehicleLookupPort,
             DriverLookupPort driverLookupPort, ShipmentEventPublisher events, TripTenderService tenders,
-            TripAlertPublisher alerts, TripViewAssembler assembler, AuditActorProvider auditActorProvider) {
+            TripAlertPublisher alerts, TripViewAssembler assembler, OrderExecutionPropagator orderExecution,
+            AuditActorProvider auditActorProvider) {
         this.tripRepository = tripRepository;
         this.vehicleLookupPort = vehicleLookupPort;
         this.driverLookupPort = driverLookupPort;
@@ -79,6 +81,7 @@ public class TripExecutionService {
         this.tenders = tenders;
         this.alerts = alerts;
         this.assembler = assembler;
+        this.orderExecution = orderExecution;
         this.auditActorProvider = auditActorProvider;
     }
 
@@ -123,9 +126,11 @@ public class TripExecutionService {
                     requireNotBefore(occurredAt, trip.readyAt(), "before the trip was made ready");
                     trip.dispatch(occurredAt, auditActorProvider.requireAppUserId());
                 });
-        tripRepository.findByIdAndCompanyId(tripId, scope.companyId()).ifPresent(trip ->
-                tenders.withdrawOpen(scope, trip, "Shipment " + trip.shipmentNumber()
-                        + " departed before the carrier answered."));
+        tripRepository.findByIdAndCompanyId(tripId, scope.companyId()).ifPresent(trip -> {
+            tenders.withdrawOpen(scope, trip, "Shipment " + trip.shipmentNumber()
+                    + " departed before the carrier answered.");
+            orderExecution.dispatched(scope, trip);
+        });
         return dispatched;
     }
 
@@ -138,19 +143,26 @@ public class TripExecutionService {
      * override flag - a stop that genuinely should not be counted is skipped, which takes a typed
      * reason and is the honest way to say so.
      *
-     * <p>Leaves the orders it carried {@code PLANNED}. There is no delivery status for them to
-     * move to - {@code orders.domain.OrderStatus} stops there, and inventing a {@code DELIVERED}
-     * from the planning module would be putting an order rule in the wrong place. See migration
-     * V25, "Deliberately NOT here".
+     * <p><b>Closes out the orders it carried</b> (migration V36): each one moves to
+     * {@code DELIVERED}, {@code PARTIALLY_DELIVERED} or {@code DELIVERY_FAILED} according to what
+     * {@code tms.order_delivery} says about it at this moment. Planning still does not decide what
+     * a fact means for an order - it reports the fulfilment through {@code OrderPlanningPort} and
+     * the orders module maps it, the same direction {@code markPlanned} runs in. An order with
+     * nothing recorded closes as failed, which is both the honest reading and the reopenable one.
+     * See {@link OrderExecutionPropagator}.
      */
     @Transactional
     public TripDetailView complete(CompanyScope scope, UUID tripId, TripExecutionRequest request) {
-        return transition(scope, tripId, TripStatus.COMPLETED, request, ShipmentEventType.SHIPMENT_COMPLETED,
+        TripDetailView completed = transition(scope, tripId, TripStatus.COMPLETED, request,
+                ShipmentEventType.SHIPMENT_COMPLETED,
                 (trip, occurredAt) -> {
                     requireEveryStopResolved(trip);
                     requireNotBefore(occurredAt, trip.actualDepartureAt(), "before the vehicle departed");
                     trip.complete(occurredAt, auditActorProvider.requireAppUserId());
                 });
+        tripRepository.findByIdAndCompanyId(tripId, scope.companyId())
+                .ifPresent(trip -> orderExecution.closedOut(scope, trip));
+        return completed;
     }
 
     /**

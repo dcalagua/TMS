@@ -354,4 +354,86 @@ public class TransportOrder {
         this.cancelReason = reason;
         this.updatedBy = actorId;
     }
+
+    /**
+     * {@code PLANNED -> IN_EXECUTION}: the vehicle carrying this order has left the dock. Driven by
+     * {@code TripExecutionService.dispatch} through {@code OrderPlanningPort.markInExecution}.
+     *
+     * <p>Idempotent by design, and it has to be: dispatch is retried, and a trip carrying forty
+     * orders must not fail its second attempt because the first already moved half of them. An
+     * order already in execution is left exactly as it is, and so is a closed-out one - a correction
+     * keyed after the trip completed must not be dragged backwards by a replayed dispatch.
+     *
+     * @return whether this call changed anything, so the caller can audit only real moves
+     */
+    public boolean markInExecution(UUID actorId) {
+        if (status == OrderStatus.IN_EXECUTION || status.isClosedOut()) {
+            return false;
+        }
+        transitionTo(OrderStatus.IN_EXECUTION);
+        this.updatedBy = actorId;
+        return true;
+    }
+
+    /**
+     * {@code IN_EXECUTION -> DELIVERED | PARTIALLY_DELIVERED | DELIVERY_FAILED}: the trip has been
+     * closed out and this is what the road did with the goods. Driven by
+     * {@code TripExecutionService.complete}, and again by {@code TripDeliveryService.record} for
+     * every correction keyed after completion - which is why the three outcomes are mutually
+     * reachable and why this can never drift from {@code tms.order_delivery}: it is recomputed from
+     * those rows in the same transaction that changes them.
+     *
+     * <p>Idempotent for the same reason {@link #markInExecution} is. A closed-out order that is
+     * reopened and planned again is out of reach here by the transition table, not by a flag:
+     * {@code READY_FOR_PLANNING} and {@code PLANNED} cannot move straight to an outcome, so a late
+     * correction against the <em>old</em> trip is refused rather than silently undoing the replan.
+     *
+     * @param outcome one of the three closed-out states
+     * @return whether this call changed anything
+     */
+    public boolean closeOut(OrderStatus outcome, UUID actorId) {
+        if (!outcome.isClosedOut()) {
+            throw new IllegalArgumentException(outcome + " is not a delivery outcome.");
+        }
+        if (status == outcome) {
+            return false;
+        }
+        transitionTo(outcome);
+        this.updatedBy = actorId;
+        return true;
+    }
+
+    /**
+     * {@code PARTIALLY_DELIVERED | DELIVERY_FAILED -> READY_FOR_PLANNING}: the customer is still
+     * owed something, so the order goes back into the plannable pool for another attempt.
+     *
+     * <p>This is the transition that makes multiple delivery attempts possible at all. Before it
+     * existed a failed order stayed {@code PLANNED} forever: not plannable, not cancellable, not
+     * deliverable. Legality is asserted here and refused first, with a sentence a planner can read,
+     * by {@code OrderService.reopenForPlanning}.
+     */
+    public void reopenForPlanning(UUID actorId) {
+        transitionTo(OrderStatus.READY_FOR_PLANNING);
+        this.updatedBy = actorId;
+    }
+
+    /**
+     * The last line of defense under the execution transitions, in the shape {@code Trip} uses:
+     * the service refuses first with a message for a human, and the entity refuses again so that a
+     * second caller - a future driver app, a batch job - cannot reach an illegal state by skipping
+     * the service. {@code OrderStatus} is the single place the rule is written down; migration V36's
+     * CHECK constraint is the backstop under both.
+     *
+     * <p>The older transitions ({@code applyChanges}, {@code markReadyForPlanning},
+     * {@code markPlanned}, {@code cancel}) deliberately keep their existing shape, where legality is
+     * the service's concern alone. Retrofitting assertions onto them is a behaviour change to paths
+     * that are already covered by tests and carries no benefit this job needs.
+     */
+    private void transitionTo(OrderStatus target) {
+        if (!status.canTransitionTo(target)) {
+            throw new IllegalStateException(
+                    "Order " + orderNumber + " cannot move from " + status + " to " + target + ".");
+        }
+        this.status = target;
+    }
 }

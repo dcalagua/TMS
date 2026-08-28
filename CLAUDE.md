@@ -98,6 +98,11 @@ Authoritative documents live under `docs/architecture/`:
 - `ADR-008-frontend-design-system-mui.md` - MUI is the frontend design system of record. The
   earlier Bootstrap + SweetAlert2 rule is withdrawn; the frontend has carried neither dependency
   for some time and 91 source files import MUI.
+- `ADR-009-order-execution-lifecycle.md` - the order lifecycle carries the execution states
+  (`IN_EXECUTION`, `DELIVERED`, `PARTIALLY_DELIVERED`, `DELIVERY_FAILED`) beside the derived
+  `OrderFulfillmentStatus`, which is unchanged. Its status is recomputed from the delivery rows in
+  the same transaction as every change to them, so the two cannot drift; a failed delivery becomes
+  reopenable for a second attempt.
 
 Database and security detail lives in `docs/database/DATA_MODEL.md`,
 `docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.

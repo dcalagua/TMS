@@ -28,6 +28,7 @@ import com.ebim.tms.shared.settings.CompanySettingsPort;
 import java.math.BigDecimal;
 import java.time.LocalTime;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -210,6 +211,14 @@ public class OrderService {
      * {@code PLANNED} refuses directly (planning must remove it from its trip first, which
      * {@code OrderPlanningService.releaseFromPlanning} does as part of
      * {@code TripService.removeOrder}); {@code CANCELLED} refuses as already-final.
+     *
+     * <p>Since V36 two more refusals, both taken from {@link OrderStatus}'s transition table rather
+     * than restated as conditions here. {@code IN_EXECUTION} refuses because the goods are on a
+     * moving vehicle and "this order did not happen" has stopped being a true statement - the same
+     * reasoning that denies a departed trip a move to cancelled. {@code DELIVERED} refuses because
+     * it already happened. A shortfall - {@code PARTIALLY_DELIVERED} or {@code DELIVERY_FAILED} -
+     * <em>may</em> be cancelled: giving up on a redelivery is a real business decision and this is
+     * where it is recorded.
      */
     @Transactional
     public OrderDetailView cancel(CompanyScope scope, UUID id, String reason) {
@@ -220,11 +229,64 @@ public class OrderService {
         if (order.status() == OrderStatus.PLANNED) {
             throw new ConflictException("A planned order cannot be cancelled directly; unassign it from its trip first.");
         }
+        if (order.status() == OrderStatus.IN_EXECUTION) {
+            throw new ConflictException("Order " + order.orderNumber() + " is on a vehicle that has already departed "
+                    + "and cannot be cancelled. Record what happened at the stop instead.");
+        }
+        if (order.status() == OrderStatus.DELIVERED) {
+            throw new ConflictException("Order " + order.orderNumber() + " has been delivered and cannot be cancelled.");
+        }
 
         order.cancel(blankToNull(reason), auditActorProvider.writerAppUserId());
         TransportOrder saved = saveOrConflict(order);
         auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.CANCEL,
                 Map.of("orderNumber", saved.orderNumber()));
+        return toDetailView(scope, saved);
+    }
+
+    /**
+     * Puts an order that came back short into the plannable pool for another attempt:
+     * {@code PARTIALLY_DELIVERED | DELIVERY_FAILED -> READY_FOR_PLANNING}.
+     *
+     * <p><b>This is the transition that makes redelivery possible at all.</b> Before V36 an order
+     * whose delivery was refused stayed {@code PLANNED} forever - not plannable, so it never
+     * returned to the pool; not cancellable, because cancel refuses a planned order; not
+     * deliverable, because its trip was closed. A customer waiting for a second attempt was
+     * invisible to the system that owed them.
+     *
+     * <p><b>Why a person does this and not the close-out.</b> A redelivery costs a truck. A system
+     * that silently re-queued every refusal would plan work nobody agreed to pay for, so the
+     * decision is explicit, permissioned and audited with the status it was taken from - which is
+     * also the record of <em>why</em> a second attempt was needed.
+     *
+     * <p>{@code DELIVERED} is refused: there is nothing left to deliver. {@code CANCELLED} is
+     * refused: it is terminal. Both refusals come from {@link OrderStatus#isReopenable()}, so the
+     * rule is stated once.
+     *
+     * <p>The order keeps its delivery rows. They are the history of the first attempt, and the
+     * fulfilment view goes on reporting the most recent one - which is what lets "this has failed
+     * twice" be answered at all.
+     */
+    @Transactional
+    public OrderDetailView reopenForPlanning(CompanyScope scope, UUID id, String reason) {
+        TransportOrder order = find(scope, id);
+        if (!order.status().isReopenable()) {
+            throw new ConflictException("Only an order that came back short can be reopened for planning "
+                    + "(current status: " + order.status() + ").");
+        }
+
+        OrderStatus reopenedFrom = order.status();
+        order.reopenForPlanning(auditActorProvider.writerAppUserId());
+        TransportOrder saved = saveOrConflict(order);
+
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("orderNumber", saved.orderNumber());
+        detail.put("reopenedFrom", reopenedFrom.name());
+        String note = blankToNull(reason);
+        if (note != null) {
+            detail.put("reason", note);
+        }
+        auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.ORDER_REOPENED, detail);
         return toDetailView(scope, saved);
     }
 

@@ -37,8 +37,8 @@ import org.springframework.web.bind.annotation.RestController;
  * endpoint returns {@link OrderDetailView} (the full line list) - see those records' class
  * comments for why the shapes differ.
  *
- * <p>There is no delete endpoint and no generic status-set endpoint: {@code mark-ready} and
- * {@code cancel} are the only two transitions this step exposes, matching
+ * <p>There is no delete endpoint and no generic status-set endpoint: {@code mark-ready},
+ * {@code cancel} and {@code reopen} are the only transitions this controller exposes, matching
  * {@code docs/domain/ORDER_LIFECYCLE_V1.md}. Nothing here sets {@code PLANNED} - that is
  * reserved for a future Planning module (step 10).
  */
@@ -108,5 +108,17 @@ public class OrderController {
     public OrderDetailView cancel(
             CompanyScope scope, @PathVariable UUID id, @RequestParam(name = "reason", required = false) String reason) {
         return orderService.cancel(scope, id, reason);
+    }
+
+    @PostMapping("/{id}/reopen")
+    @PreAuthorize("hasAuthority('orders.order:manage')")
+    @Operation(summary = "Reopen an order that came back short, putting it back in the plannable pool",
+            description = "Only a PARTIALLY_DELIVERED or DELIVERY_FAILED order can be reopened. The order returns to "
+                    + "READY_FOR_PLANNING for another delivery attempt and keeps the delivery records of the first.")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public OrderDetailView reopenForPlanning(
+            CompanyScope scope, @PathVariable UUID id, @RequestParam(name = "reason", required = false) String reason) {
+        return orderService.reopenForPlanning(scope, id, reason);
     }
 }

@@ -61,6 +61,39 @@ public interface OrderPlanningPort {
     void releaseFromPlanning(UUID orderId, UUID companyId);
 
     /**
+     * The order's vehicle has left the dock: {@code PLANNED -> IN_EXECUTION}.
+     *
+     * <p>Called by {@code TripExecutionService.dispatch} for every order the departing trip
+     * carries. Idempotent - a retried dispatch moves nothing twice - and silent about orders that
+     * are already further along, so a replay cannot drag a closed-out order backwards.
+     *
+     * <p>Planning reports the <em>fact</em> and orders decides what it means for the lifecycle.
+     * That is the same direction {@code markPlanned} already runs in, and it is why planning does
+     * not simply write a status: which state a departure puts an order into is an order rule.
+     */
+    void markInExecution(UUID orderId, UUID companyId);
+
+    /**
+     * The trip carrying this order has been closed out, and this is how the order ended.
+     *
+     * <p>Called by {@code TripExecutionService.complete}, and again by
+     * {@code TripDeliveryService.record} for every correction keyed after completion - the window
+     * stays open on purpose, because the paperwork comes back later. Both callers pass the
+     * fulfilment derived from {@code tms.order_delivery} at that moment, so the order's state is
+     * recomputed from the fact rather than remembered alongside it and cannot drift from it.
+     *
+     * <p>The mapping from fulfilment to lifecycle state belongs to the orders module and is
+     * asserted there: only {@link OrderFulfillmentStatus#DELIVERED} closes an order as delivered,
+     * a partial closes it as partially delivered, and everything else - refused, failed, never
+     * attempted, and nothing recorded at all - closes it as failed, which is both the honest
+     * reading and the safe one, because failed is reopenable and delivered is not.
+     *
+     * <p>Idempotent. An order that is not in execution is left alone rather than refused: a
+     * completion replayed after somebody reopened and replanned the order must not undo that.
+     */
+    void closeOut(UUID orderId, UUID companyId, OrderFulfillmentStatus fulfillment);
+
+    /**
      * How many of the orders serviced between {@code from} and {@code to} (both inclusive) are on a
      * shipment and how many are not - the KPI report's planned-versus-unplanned figure, counted in
      * one grouped query.

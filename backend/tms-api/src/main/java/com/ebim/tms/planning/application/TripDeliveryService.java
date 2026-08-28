@@ -70,12 +70,13 @@ public class TripDeliveryService {
     private final ShipmentEventPublisher eventPublisher;
     private final TripAlertPublisher alerts;
     private final TripViewAssembler assembler;
+    private final OrderExecutionPropagator orderExecution;
     private final AuditActorProvider auditActorProvider;
 
     public TripDeliveryService(TripRepository tripRepository, OrderDeliveryRepository deliveryRepository,
             TripOrderAssignmentRepository assignmentRepository, OrderPlanningPort orderPlanningPort,
             ShipmentEventPublisher eventPublisher, TripAlertPublisher alerts, TripViewAssembler assembler,
-            AuditActorProvider auditActorProvider) {
+            OrderExecutionPropagator orderExecution, AuditActorProvider auditActorProvider) {
         this.tripRepository = tripRepository;
         this.deliveryRepository = deliveryRepository;
         this.assignmentRepository = assignmentRepository;
@@ -83,6 +84,7 @@ public class TripDeliveryService {
         this.eventPublisher = eventPublisher;
         this.alerts = alerts;
         this.assembler = assembler;
+        this.orderExecution = orderExecution;
         this.auditActorProvider = auditActorProvider;
     }
 
@@ -153,6 +155,14 @@ public class TripDeliveryService {
         // to DELIVERED resolves it. See TripAlertPublisher.deliveryRecorded - a delivery record is
         // edited in place, so an alert that only ever appeared would outlive the problem.
         alerts.deliveryRecorded(scope, trip, stop, delivery, order.orderNumber(), recordedAt);
+
+        // And, on a shipment that has already been closed out, the order's own lifecycle (V36).
+        // The window above stays open after completion because the signed notes come back later;
+        // without this, an order closed out as failed at 18:00 would still read failed after the
+        // note proving delivery was keyed at 18:40. Inside this transaction, so the delivery row
+        // and the status it implies move together. No-op while the trip is still running - the
+        // close-out at completion is what reads the rows then.
+        orderExecution.deliveryRecorded(scope, trip, orderId);
 
         return assembler.toDetail(trip, scope.companyId());
     }

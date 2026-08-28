@@ -3,12 +3,13 @@ import { useState } from "react";
 import { Box, Button, MenuItem, TextField, Tooltip, Typography } from "@mui/material";
 import {
   AddRounded, UploadRounded, AssignmentTurnedInRounded, EditRounded, VisibilityRounded,
-  CheckCircleRounded, CancelRounded, ScaleRounded, ViewInArRounded, LayersRounded,
+  CheckCircleRounded, CancelRounded, ReplayRounded, ScaleRounded, ViewInArRounded, LayersRounded,
 } from "@mui/icons-material";
 import { fetchDestinations } from "../../shared/api/destinationsApi";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
-  ORDER_PRIORITIES, ORDER_STATUSES, cancelOrder, fetchOrders, markOrderReadyForPlanning,
+  ORDER_PRIORITIES, ORDER_STATUSES, REOPENABLE_ORDER_STATUSES, cancelOrder, fetchOrders,
+  markOrderReadyForPlanning, reopenOrderForPlanning,
   type OrderFulfillmentStatus, type OrderPriority, type OrderStatus, type OrderView,
 } from "../../shared/api/ordersApi";
 import { fetchOrigins } from "../../shared/api/originsApi";
@@ -19,7 +20,7 @@ import {
   type DataTableColumn,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
-import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
+import { confirmDialog, notifyError, notifySuccess, promptDialog } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
 import type { StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
@@ -29,10 +30,22 @@ import { OrderImportDrawer } from "./OrderImportDrawer";
 
 const PAGE_SIZE = 25;
 
+/**
+ * Los colores del ciclo de vida del pedido (migración V36).
+ *
+ * `PLANNED` es `done` porque para el planificador el trabajo terminó: el pedido está en un
+ * camión. `IN_EXECUTION` es `inProgress` — está pasando ahora mismo. Las dos formas de volver
+ * corto, `PARTIALLY_DELIVERED` y `DELIVERY_FAILED`, son `overdue` y no `cancelled`: son trabajo
+ * que alguien todavía le debe a un cliente, que es exactamente lo que hay que ver en la lista.
+ */
 const STATUS_TONE: Record<OrderStatus, StatusTone> = {
   NOT_READY: "neutral",
   READY_FOR_PLANNING: "open",
   PLANNED: "done",
+  IN_EXECUTION: "inProgress",
+  DELIVERED: "done",
+  PARTIALLY_DELIVERED: "overdue",
+  DELIVERY_FAILED: "overdue",
   CANCELLED: "cancelled",
 };
 
@@ -174,6 +187,31 @@ export function OrdersPage() {
     }
   }
 
+  /**
+   * Devuelve a la bolsa planificable un pedido que volvió corto (migración V36).
+   *
+   * Pide el motivo en lugar de solo confirmar: una reentrega cuesta un camión, y "por qué fuimos
+   * dos veces" es la pregunta que hace el cliente. El motivo viaja al registro de auditoría.
+   */
+  async function reopen(order: OrderView) {
+    const reason = await promptDialog({
+      title: t("¿Reabrir el pedido?"),
+      text: t("El pedido vuelve a la bolsa planificable para un segundo intento de entrega. Conserva el registro del primer intento."),
+      inputLabel: t("Motivo de la reapertura"),
+      maxLength: 500,
+      confirmLabel: t("Reabrir pedido"),
+    });
+    if (reason === null) return;
+
+    try {
+      await reopenOrderForPlanning(companyId, order.id, reason);
+      notifySuccess(t("Pedido reabierto para planificar"), order.orderNumber);
+      refresh();
+    } catch (error) {
+      notifyError(t("No se pudo reabrir el pedido"), describeApiError(error as ApiError));
+    }
+  }
+
   const columns: DataTableColumn<OrderView>[] = [
     {
       key: "orderNumber",
@@ -241,7 +279,12 @@ export function OrdersPage() {
       actions: true,
       render: (order) => {
         const editable = order.status === "NOT_READY" || order.status === "READY_FOR_PLANNING";
-        const cancellable = order.status !== "CANCELLED" && order.status !== "PLANNED";
+        // Espejo de OrderStatus: un pedido en ruta no se cancela (la mercancía se está moviendo)
+        // y uno entregado tampoco (ya pasó). La regla la impone el backend con un 409; esto solo
+        // decide si vale la pena dibujar el botón.
+        const cancellable = order.status !== "CANCELLED" && order.status !== "PLANNED"
+          && order.status !== "IN_EXECUTION" && order.status !== "DELIVERED";
+        const reopenable = REOPENABLE_ORDER_STATUSES.includes(order.status);
         return (
           <ActionMenu
             items={[
@@ -257,6 +300,14 @@ export function OrdersPage() {
                     label: t("Marcar listo"),
                     icon: <CheckCircleRounded />,
                     onSelect: () => void markReady(order),
+                  }]
+                : []),
+              ...(reopenable
+                ? [{
+                    key: "reopen",
+                    label: t("Reabrir para planificar"),
+                    icon: <ReplayRounded />,
+                    onSelect: () => void reopen(order),
                   }]
                 : []),
               ...(cancellable
