@@ -63,6 +63,36 @@ export interface ControlTowerSummaryView {
   /** `null`, and not `0`, when the caller does not hold `orders.order:read`: zero would be a claim
    * about a backlog the response was not allowed to look at. */
   ordersUnplanned: number | null
+  /**
+   * Cuántos envíos de hoy **no pueden salir** en su estado actual (JOB 12).
+   *
+   * El total detrás de `ControlTowerView.blockers`, que viene recortado como todos los paneles.
+   * Cero se muestra como cero: "no hay nada atascado" es un dato que un despachador quiere leer, no
+   * deducir de una lista vacía.
+   */
+  blockedShipments: number
+}
+
+/**
+ * Mirrors `ControlTowerBlockerView` (JOB 12): un envío que hoy no sale si nadie hace algo.
+ *
+ * Es el único panel que informa de lo que está **a punto** de pasar en vez de lo que ya pasó. Cada
+ * motivo es un rechazo que ya existe en el servicio, en el agregado y en la base de datos - aquí no
+ * se inventa ninguna regla, sólo se dice antes de que el camión llegue a la puerta.
+ */
+export interface ControlTowerBlockerView {
+  tripId: string
+  tripNumber: number | null
+  shipmentNumber: string
+  /**
+   * - `AWAITING_CARRIER_VEHICLE` — aceptado por un transportista que no es dueño del vehículo
+   *   asignado (V42). Lo resuelve un planificador asignando un vehículo de ese transportista.
+   * - `VEHICLE_UNAVAILABLE` / `DRIVER_UNAVAILABLE` — el recurso no puede trabajar a la hora de
+   *   salida planificada (V42).
+   */
+  reason: 'AWAITING_CARRIER_VEHICLE' | 'VEHICLE_UNAVAILABLE' | 'DRIVER_UNAVAILABLE'
+  /** El detalle concreto, para leer. Nunca se hace un switch sobre él. */
+  detail: string
 }
 
 /** Mirrors the backend's `ControlTowerWorkloadView` record. */
@@ -123,6 +153,8 @@ export interface ControlTowerView {
   workload: ControlTowerWorkloadView[]
   openExceptions: ControlTowerExceptionView[]
   outstandingStops: ControlTowerStopView[]
+  /** Lo que impedirá salir a un camión hoy, antes de que se lo impida. */
+  blockers: ControlTowerBlockerView[]
 }
 
 /** Mirrors the backend's `ControlTowerTripView` record - one row of the operational table.

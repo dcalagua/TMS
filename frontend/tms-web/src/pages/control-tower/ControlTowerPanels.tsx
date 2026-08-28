@@ -1,8 +1,8 @@
 import { Box, Chip, Paper, Typography } from "@mui/material";
 import { Link } from "react-router-dom";
-import { ReportProblemRounded, ScheduleRounded, LocalShippingRounded } from "@mui/icons-material";
+import { ReportProblemRounded, ScheduleRounded, LocalShippingRounded, BlockRounded } from "@mui/icons-material";
 import type {
-  ControlTowerExceptionView, ControlTowerStopView, ControlTowerWorkloadView,
+  ControlTowerBlockerView, ControlTowerExceptionView, ControlTowerStopView, ControlTowerWorkloadView,
 } from "../../shared/api/controlTowerApi";
 import { AppCard, StatusChip } from "../../shared/ui/components";
 import { STOP_EXECUTION_TONE, TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
@@ -172,6 +172,55 @@ export function OutstandingStopsPanel({ items, total }: { items: ControlTowerSto
               </Paper>
             );
           })}
+        </Box>
+      )}
+    </AppCard>
+  );
+}
+
+/**
+ * Lo que impedirá salir a un camión hoy, antes de que se lo impida.
+ *
+ * <h2>Por qué este panel es distinto de los demás</h2>
+ * Todos los otros cuentan lo que **ya pasó**: una parada fuera de ventana, una salida ya tarde, una
+ * incidencia que alguien levantó. Éste cuenta lo que está **a punto** de pasar — los estados que
+ * hacen que `dispatch` se niegue — para que un despachador se entere a las 06:00 y no en la puerta.
+ *
+ * Aquí no se inventa ninguna regla: cada motivo es un rechazo que ya existe en el servicio, en el
+ * agregado y en la base de datos. Un envío de esta lista **realmente no puede salir**.
+ */
+export function BlockersPanel({ items, total }: { items: ControlTowerBlockerView[]; total: number }) {
+  return (
+    <AppCard title={<PanelTitle icon={<BlockRounded sx={{ fontSize: 19, color: "warning.main" }} />} label={t("No pueden salir")} shown={items.length} total={total} />}>
+      {items.length === 0 ? (
+        // Se dice en voz alta. "No hay nada atascado" es un dato que un despachador quiere leer,
+        // no deducir de un panel vacío.
+        <Typography variant="body2" color="text.secondary">{t("Ningún envío bloqueado hoy.")}</Typography>
+      ) : (
+        <Box sx={{ display: "grid", gap: 1 }}>
+          {items.map((blocker) => (
+            <Paper
+              key={`${blocker.tripId}-${blocker.reason}`}
+              component={Link}
+              to={`/trips/${blocker.tripId}`}
+              variant="outlined"
+              sx={{
+                p: 1.25, textDecoration: "none", color: "text.primary", display: "block",
+                borderLeft: "3px solid", borderLeftColor: "warning.main",
+                "&:hover": { borderColor: "warning.main" },
+              }}
+            >
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  {enumLabel("blockerReason", blocker.reason)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">{blocker.shipmentNumber}</Typography>
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
+                {blocker.detail}
+              </Typography>
+            </Paper>
+          ))}
         </Box>
       )}
     </AppCard>

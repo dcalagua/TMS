@@ -232,3 +232,70 @@ Two places read rows rather than counting them, and both are bounded deliberatel
   `@SpringBootTest` slice yet; the existing ones are Testcontainers-gated and Docker is unavailable
   in the current environment, so one would have been written blind and skipped. It belongs beside
   `PlanningApiIntegrationTest` when Docker returns.
+
+
+---
+
+# Control Tower V2 - what will stop a truck today
+
+*JOB 12. No migration: every figure below is a query over tables that already exist.*
+
+## The thesis
+
+Everything V1 reports is **retrospective**. A stop past its window, a departure already late, an
+exception somebody raised - all true, all about what has happened. That is most of what a control
+tower is for, and it is not all of it.
+
+JOBs 09 to 11 created several states that make `TripExecutionService.dispatch` **refuse**, and
+nothing surfaced any of them until a dispatcher walked to the gate and found out. V2 adds one panel
+for exactly that: the shipments that cannot leave today, with the reason and who can clear it.
+
+## The panel
+
+`ControlTowerView.blockers`, with `summary.blockedShipments` as its true total - capped at twenty
+like every other panel, so a shortened list reads as "the first twenty of forty" and never as
+"forty".
+
+| Reason | What it means | Who clears it |
+|---|---|---|
+| `AWAITING_CARRIER_VEHICLE` | Accepted by a carrier that does not own the vehicle on it (V42, debt D2) | A planner, by assigning one of that carrier's vehicles |
+| `VEHICLE_UNAVAILABLE` | The vehicle is out of service at the planned departure (V42) | The workshop, or a planner swapping the truck |
+| `DRIVER_UNAVAILABLE` | The driver cannot work at the planned departure (V42) | A supervisor, by naming somebody else |
+
+**Nothing here is a new rule.** Each reason is a refusal that already exists in the service, the
+aggregate and the database. A shipment on this list genuinely cannot depart in its current state -
+which is what makes the panel worth reading rather than one more advisory badge people learn to
+ignore.
+
+## Two decisions that keep it honest
+
+**Asked at the shipment's own planned departure, not at `now()`.** A truck free this minute and in
+the workshop at 14:00 still cannot run a 14:00 shipment, and that is precisely the one a dispatcher
+needs to hear about this morning. Conversely a vehicle blocked next Tuesday is not a blocker today.
+Judging against the clock would make the panel's contents depend on when somebody opened the screen.
+
+**Only committed shipments that have not left.** A draft is not going anywhere today either, but
+nothing is *stopping* it - it simply has not been committed - and listing drafts would bury the
+shipments somebody has to act on. One already in transit either resolved its blocker or never had
+one.
+
+A shipment with no planned departure is skipped rather than asked about at `now()`.
+
+**Zero is shown as zero.** "Nothing is stuck" is a fact a dispatcher wants stated, not inferred from
+an empty panel that might equally mean nobody looked.
+
+## Where the availability answer comes from
+
+`ResourceAvailabilityPort`, not a join. Vehicle and driver downtime live in the fleet module's
+tables, and `ModuleBoundaryTest` refuses to let planning read them - so the question is asked per
+shipment through the port. The candidate set is bounded by the day's committed shipments, which the
+scale target puts well inside a single screen's worth of work.
+
+## Not built
+
+* **No appointment blocker.** A dock booking (V41) that has been missed is a real problem, but it
+  does not stop a departure - the truck leaves and arrives to a closed door, which is a different
+  panel and a different phone call. Listing it beside things that genuinely block would dilute the
+  one property that makes this panel trustworthy.
+* **No ETA blocker.** A stop whose ETA misses its window (V43) is a warning, not a refusal. It
+  appears on the shipment, where it belongs.

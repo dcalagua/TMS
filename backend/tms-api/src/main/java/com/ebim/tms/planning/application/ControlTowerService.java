@@ -18,6 +18,7 @@ import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.PlannableOrderQuery;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
+import com.ebim.tms.shared.reference.ResourceAvailabilityPort;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.security.Permission;
@@ -27,6 +28,7 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.Comparator;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
@@ -119,6 +121,15 @@ public class ControlTowerService {
      * Derived from {@link StopExecutionStatus#isOutstanding()} rather than listed, so adding an
      * outcome to the enum cannot leave this screen silently counting the wrong stops.
      */
+    /**
+     * The states in which a blocker still matters: committed, and not yet gone.
+     *
+     * <p>A draft is not going anywhere today either, but nothing is stopping it - it simply has not
+     * been committed - and listing drafts here would bury the shipments somebody has to act on.
+     */
+    private static final Set<TripStatus> BLOCKABLE_STATES =
+            Set.copyOf(EnumSet.of(TripStatus.CONFIRMED, TripStatus.READY_FOR_DISPATCH));
+
     private static final Set<StopExecutionStatus> OUTSTANDING_STOPS = Stream.of(StopExecutionStatus.values())
             .filter(StopExecutionStatus::isOutstanding)
             .collect(Collectors.toUnmodifiableSet());
@@ -131,11 +142,13 @@ public class ControlTowerService {
     private final DestinationLookupPort destinationLookupPort;
     private final VehicleLookupPort vehicleLookupPort;
     private final OrderPlanningPort orderPlanningPort;
+    private final ResourceAvailabilityPort resourceAvailabilityPort;
 
     public ControlTowerService(TripService tripService, TripViewAssembler assembler, TripRepository tripRepository,
             TripStopRepository tripStopRepository, TripExceptionRepository tripExceptionRepository,
             DestinationLookupPort destinationLookupPort, VehicleLookupPort vehicleLookupPort,
-            OrderPlanningPort orderPlanningPort) {
+            OrderPlanningPort orderPlanningPort, ResourceAvailabilityPort resourceAvailabilityPort) {
+        this.resourceAvailabilityPort = resourceAvailabilityPort;
         this.tripService = tripService;
         this.assembler = assembler;
         this.tripRepository = tripRepository;
@@ -163,8 +176,10 @@ public class ControlTowerService {
         List<ControlTowerExceptionView> exceptions = openExceptions(scope, date);
         List<ControlTowerStopView> stops = outstandingStops(scope, date, zone, now);
 
-        return new ControlTowerView(date, now, summary(scope, date, zone, now),
-                workload(scope, date), exceptions, stops);
+        List<ControlTowerBlockerView> blockers = blockers(scope, date);
+
+        return new ControlTowerView(date, now, summary(scope, date, zone, now, blockers.size()),
+                workload(scope, date), exceptions, stops, blockers);
     }
 
     /**
@@ -207,7 +222,53 @@ public class ControlTowerService {
 
     // --- the KPI strip -------------------------------------------------------------------
 
-    private ControlTowerSummaryView summary(CompanyScope scope, LocalDate date, ZoneId zone, OffsetDateTime now) {
+    /**
+     * What will stop a truck today, before it stops it (JOB 12).
+     *
+     * <p>Every other panel reports what has already happened. This reports the states that make
+     * {@code TripExecutionService.dispatch} refuse - so a dispatcher learns at 06:00 rather than at
+     * the gate. Nothing here is a new rule: each reason is a refusal that already exists in the
+     * service, the aggregate and the database.
+     *
+     * <p>Only shipments that have not left. One already in transit either resolved its blocker or
+     * never had one, and a cancelled shipment is not going anywhere regardless.
+     */
+    private List<ControlTowerBlockerView> blockers(CompanyScope scope, LocalDate date) {
+        List<ControlTowerBlockerView> blockers = new ArrayList<>();
+
+        for (Trip trip : tripRepository.findAwaitingCarrierVehicleForDay(
+                scope.companyId(), date, BLOCKABLE_STATES)) {
+            blockers.add(new ControlTowerBlockerView(trip.id(), trip.tripNumber(), trip.shipmentNumber(),
+                    ControlTowerBlockerView.BlockerReason.AWAITING_CARRIER_VEHICLE,
+                    "Accepted by a carrier that does not own the vehicle assigned to it."));
+        }
+
+        // Availability lives in the fleet module, so it is asked through the port rather than
+        // joined in SQL - the boundary ModuleBoundaryTest enforces. Asked at the shipment's own
+        // planned departure and not at now(): a truck free this minute and in the workshop at 14:00
+        // still cannot run a 14:00 shipment, and that is the one a dispatcher needs to hear about.
+        for (Trip trip : tripRepository.findAwaitingDepartureWithResourcesForDay(
+                scope.companyId(), date, BLOCKABLE_STATES)) {
+            if (trip.plannedDepartureAt() == null) {
+                continue;
+            }
+            resourceAvailabilityPort
+                    .findBlock(scope.companyId(), trip.vehicleId(), trip.driverId(), trip.plannedDepartureAt())
+                    .ifPresent(block -> blockers.add(new ControlTowerBlockerView(
+                            trip.id(), trip.tripNumber(), trip.shipmentNumber(),
+                            "vehicle".equals(block.resource())
+                                    ? ControlTowerBlockerView.BlockerReason.VEHICLE_UNAVAILABLE
+                                    : ControlTowerBlockerView.BlockerReason.DRIVER_UNAVAILABLE,
+                            "Unavailable (" + block.reason() + ") until " + block.endsAt() + ".")));
+        }
+
+        // Capped like every other panel, with the true total travelling in the summary - so a
+        // shortened list reads as "the first twenty of forty" and never as "forty".
+        return blockers.size() <= PANEL_SIZE ? List.copyOf(blockers) : List.copyOf(blockers.subList(0, PANEL_SIZE));
+    }
+
+    private ControlTowerSummaryView summary(CompanyScope scope, LocalDate date, ZoneId zone, OffsetDateTime now,
+            int blockedShipments) {
         UUID companyId = scope.companyId();
         Map<TripStatus, Long> byStatus = new EnumMap<>(TripStatus.class);
         tripRepository.countByStatusForDay(companyId, date)
@@ -234,7 +295,8 @@ public class ControlTowerService {
                 tripExceptionRepository.countByStatusForDay(companyId, TripExceptionStatus.OPEN, date),
                 outstandingStops,
                 stopsPastWindow,
-                unplannedOrders(scope, date));
+                unplannedOrders(scope, date),
+                blockedShipments);
     }
 
     /**

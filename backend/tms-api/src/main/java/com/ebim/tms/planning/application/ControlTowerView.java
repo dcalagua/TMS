@@ -26,6 +26,9 @@ import java.util.List;
  * @param outstandingStops the stops still to be worked on shipments that are out, most overdue
  *     first; {@code summary.outstandingStops()} is the total and
  *     {@code summary.stopsPastWindow()} how many of them are actually late
+ * @param blockers shipments that <em>cannot depart</em> in their current state (JOB 12) - the only
+ *     panel here that reports what is about to happen rather than what already has.
+ *     {@code summary.blockedShipments()} is the total
  */
 public record ControlTowerView(
         LocalDate date,
@@ -33,11 +36,13 @@ public record ControlTowerView(
         ControlTowerSummaryView summary,
         List<ControlTowerWorkloadView> workload,
         List<ControlTowerExceptionView> openExceptions,
-        List<ControlTowerStopView> outstandingStops) {
+        List<ControlTowerStopView> outstandingStops,
+        List<ControlTowerBlockerView> blockers) {
 
     public ControlTowerView {
         workload = List.copyOf(workload);
         openExceptions = List.copyOf(openExceptions);
         outstandingStops = List.copyOf(outstandingStops);
+        blockers = List.copyOf(blockers);
     }
 }

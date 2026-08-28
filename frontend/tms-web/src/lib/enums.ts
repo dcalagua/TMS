@@ -83,6 +83,12 @@ export const ENUM_LABELS = {
     TUESDAY: "Mar",
     WEDNESDAY: "Mié",
   },
+  /** V42/JOB 12: por qué un envío no puede salir hoy. */
+  blockerReason: {
+    AWAITING_CARRIER_VEHICLE: "Falta vehículo del transportista",
+    DRIVER_UNAVAILABLE: "Conductor no disponible",
+    VEHICLE_UNAVAILABLE: "Vehículo no disponible",
+  },
   /** V42: por qué un vehículo o un conductor no puede trabajar. */
   unavailabilityReason: {
     ABSENCE: "Ausencia",

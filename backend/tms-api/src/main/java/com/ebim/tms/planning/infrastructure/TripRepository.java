@@ -190,6 +190,34 @@ public interface TripRepository extends JpaRepository<Trip, UUID>, JpaSpecificat
     long countDepartedLateForDay(@Param("companyId") UUID companyId, @Param("date") LocalDate date);
 
     /**
+     * Shipments agreed with a carrier that does not own the vehicle on them (V42, JOB 12).
+     *
+     * <p>These <b>cannot depart</b> - {@code ck_trip_departed_carrier_matches_vehicle} sees to that
+     * - and until now nothing said so before a dispatcher tried. Restricted to the states where it
+     * still matters: a cancelled shipment is not going anywhere anyway, and one already in transit
+     * resolved it or never had it.
+     */
+    @Query("SELECT t FROM Trip t WHERE t.companyId = :companyId AND t.planningDate = :date "
+            + "AND t.acceptedCarrierId IS NOT NULL AND t.acceptedCarrierId <> t.carrierId "
+            + "AND t.status IN :statuses ORDER BY t.tripNumber")
+    List<Trip> findAwaitingCarrierVehicleForDay(@Param("companyId") UUID companyId,
+            @Param("date") LocalDate date, @Param("statuses") Collection<TripStatus> statuses);
+
+    /**
+     * Today's shipments that have not left yet, with a vehicle or a driver on them.
+     *
+     * <p>The candidate set for the availability check (V42): whether any of them is booked into the
+     * workshop or has a driver off sick is a question for the fleet module, through
+     * {@code ResourceAvailabilityPort}, and is asked per shipment rather than in SQL because the
+     * blocks live in another module's table.
+     */
+    @Query("SELECT t FROM Trip t WHERE t.companyId = :companyId AND t.planningDate = :date "
+            + "AND t.status IN :statuses AND (t.vehicleId IS NOT NULL OR t.driverId IS NOT NULL) "
+            + "ORDER BY t.tripNumber")
+    List<Trip> findAwaitingDepartureWithResourcesForDay(@Param("companyId") UUID companyId,
+            @Param("date") LocalDate date, @Param("statuses") Collection<TripStatus> statuses);
+
+    /**
      * Trips that were due to leave and still have not - the unmeasured half of "which ones are
      * late", and the one a dispatcher can still do something about.
      *
