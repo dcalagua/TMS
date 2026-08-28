@@ -4,16 +4,23 @@
 follows. Phase 1 (JOBS 01–16) is closed and recorded in `TMS_OVERNIGHT_MASTER_LOG.md`.*
 
 ```
-LAST_COMPLETED_JOB=  26
-CURRENT_JOB=         27
-CURRENT_SUBSTEP=     not started
+LAST_COMPLETED_JOB=  27
+CURRENT_JOB=         none - PHASE 2 COMPLETE
+CURRENT_SUBSTEP=     -
 LATEST_MIGRATION=    V48  (next free: V49)
-LAST_GOOD_HEAD=      pending commit of JOB 26
+LAST_GOOD_HEAD=      0366e6c
 TEST_STATUS=         backend 1844/0/0 · frontend 136 · e2e 38 pass 7 skipped · lint/build clean
 KNOWN_FAILURE=       none
 STOP_CHAIN=          false
-NEXT_ACTION=         JOB 27 - Phase 2 Enterprise Certification
+NEXT_ACTION=         human review; nothing pushed
 ```
+
+## A note on the timestamps above
+
+The per-job times are the **commit times from git**, in the company's zone. An earlier revision of
+this log carried estimated clock times for JOBs 22-26 that were between one and two hours out - they
+were written from a sense of elapsed effort rather than read from anything. Corrected here rather
+than left, because a log whose easily-checkable facts are invented is not worth more than no log.
 
 ## Open debts
 
@@ -221,7 +228,7 @@ have looked entirely plausible. Caught on review before any test ran.
 
 ### JOB 22 — 2026-08-28 — PASS
 
-`STARTED 12:06 · COMPLETED 13:12 · MIGRATION V48 · BACKEND 1833/0/0 · FRONTEND 123 · E2E 36/7`
+`STARTED 12:06 · COMMITTED 12:47 · MIGRATION V48 · BACKEND 1833/0/0 · FRONTEND 123 · E2E 36/7`
 
 **D6 RESOLVED.** All twelve pillars YES with evidence.
 
@@ -271,7 +278,7 @@ and does not decide how that cost is shared.
 
 ### JOB 23 — 2026-08-28 — PASS
 
-`STARTED 13:20 · COMPLETED 14:12 · MIGRATION none · BACKEND 1840/0/0 · FRONTEND 129 · E2E 36/7`
+`COMMITTED 13:03 · MIGRATION none · BACKEND 1840/0/0 · FRONTEND 129 · E2E 36/7`
 
 **No migration, and that is the honest outcome.** V27 already built the exception model - table,
 lifecycle, human reporter, resolve endpoints - and JOB 12 already kept blockers apart from
@@ -302,7 +309,7 @@ response. The query is valid; that it selects exactly the right rows rests on re
 
 ### JOB 24 — 2026-08-28 — PASS
 
-`STARTED 14:20 · COMPLETED 14:52 · MIGRATION none · BACKEND 1842/0/0`
+`COMMITTED 13:12 · MIGRATION none · BACKEND 1842/0/0`
 
 **Observability was not absent - it was undocumented.** Actuator was already configured with real
 security discipline, a correlation id filter existed, and twelve business metrics were already
@@ -331,7 +338,7 @@ alert, and a stale partner feed must not take TMS out of a load balancer.
 
 ### JOB 25 — 2026-08-28 — PASS
 
-`STARTED 14:55 · COMPLETED 15:24 · MIGRATION none · BACKEND 1844/0/0`
+`COMMITTED 13:22 · MIGRATION none · BACKEND 1844/0/0`
 
 **The harness asserts query counts, not durations.** A duration measured on a laptop in Docker varies
 by a factor of three between runs and would produce a test of the laptop. A query count is
@@ -358,7 +365,7 @@ artefact implying a capability nobody has.
 
 ### JOB 26 — 2026-08-28 — PASS · D9 stays OPEN (PARTIAL)
 
-`STARTED 15:28 · COMPLETED 15:52 · MIGRATION none · FRONTEND 136 · E2E 38/7`
+`COMMITTED 13:28 · MIGRATION none · FRONTEND 136 · E2E 38/7`
 
 **Two real WCAG AA failures found and fixed.**
 
@@ -387,3 +394,32 @@ lesson exactly**, and why the real build stays a mandatory gate.
 
 **Scope note:** the fix changes the shade of green on every primary button. A visible design change,
 made for a real AA failure, flagged rather than slipped in.
+
+### JOB 27 — 2026-08-28 — PASS · PHASE 2 COMPLETE
+
+`COMMITTED 13:38 · MIGRATION none · BACKEND 1844/0/0 · FRONTEND 136 · E2E 38/7`
+
+**Certified at `0366e6c`.** Every gate re-run from clean after the last commit - measurements, not
+quotations. Flyway V1-V48 contiguous, V44-V48 each written once, `supabase/migrations/` still empty,
+tree clean, **50 commits on local `dev` and none pushed**.
+
+**Six debts resolved across Phase 2** (D3, D5, D6, D8 here; D1, D2, D7 in Phase 1). D4 stays deferred
+with reason and is load-bearing rather than dormant - it is why no machine can approve an
+expenditure. **D9 and D10 stay OPEN and honestly labelled.**
+
+**Five of eleven Phase 2 jobs shipped no migration**, and that is the honest outcome: JOB 23 found
+the exception model already built and the panels already separated, JOB 24 found twelve metrics
+already emitted.
+
+**Twenty-five defects found and fixed.** The most repeated lesson of both phases, four times over:
+**`clean` catches what an incremental run cannot**. The most uncomfortable one was not mine to find -
+the settlement maker/checker was PERMITTED while I had claimed it was enforced.
+
+**What is not certified is stated in §7 of the result**: no deployment verified, the 7 authenticated
+specs never executed, no capacity measured, accessibility a foundation and not a claim, no rollback
+procedure.
+
+```
+READY_FOR_QAS_CODE_PROMOTION = YES
+READY_FOR_PRODUCTION         = NO
+```
