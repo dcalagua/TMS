@@ -13,7 +13,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 01 | Truth Baseline + Documentation | **PASS** | 2026-08-28 01:10 | `f666d63` | none (V35 is head; V36 next) | 1312 / 0 fail | false |
 | 02 | Order Lifecycle V2 | **PASS** | 2026-08-28 01:40 | `32dcc65` | **V36** | 1389 / 0 fail | false |
 | 03 | Ship Units + Partial Allocation | **PASS** | 2026-08-28 01:58 | `91540cb` | **V37** | 1409 / 0 fail | false |
-| 04 | Routing Matrix + Travel Time | pending | - | - | - | - | - |
+| 04 | Routing Matrix + Travel Time | **PASS** | 2026-08-28 02:30 | `29b484c` | **V38** | 1466 / 0 fail | false |
 | 05 | Advanced Bulk Planning Engine V2 | pending | - | - | - | - | - |
 | 06 | Rate Engine V2 | pending | - | - | - | - | - |
 | 07 | Carrier Selection + Tender Waterfall | pending | - | - | - | - | - |
@@ -27,7 +27,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 15 | Observability + Performance + Security | pending | - | - | - | - | - |
 | 16 | Final Enterprise Certification | pending | - | - | - | - | - |
 
-**LAST_COMPLETED_JOB = 03**
+**LAST_COMPLETED_JOB = 04**
 
 ## Baseline established by JOB 01
 
@@ -122,3 +122,29 @@ the stored total agreeing with the ledger recomputed from those rows - and two c
 order reopened after a *partial* delivery is replanned in full.
 
 **Tests:** 1409 backend (+20), 47 frontend (+5), 33 E2E.
+
+### JOB 04 - 2026-08-28 - PASS
+
+STARTED_AT=02:06 · COMPLETED_AT=02:30 · HEAD_BEFORE=`2f7dca6` · HEAD_AFTER=`29b484c` · MIGRATION=**V38**
+BACKEND_PASS=1466 · BACKEND_FAIL=0 (clean build) · FRONTEND_PASS=55 · E2E_PASS=33 · RETRIES=2, both recovered
+
+Distance and travel time now live behind `RoutingPort` with a company-scoped cache
+(`tms.travel_estimate`), a `RoutingProviderAdapter` seam and a local geodesic estimator that is the
+whole of routing when no vendor is configured. **ADR-010** records the reasoning, which follows
+ADR-007's for tracking.
+
+**Not scaffolding.** `TripRoutingService` is a real consumer: a trip reports how far it drives and
+how long that takes, on the API and on the workspace, and names the legs it could not measure.
+
+**The defect worth remembering.** `RoutingSource` originally had a `CACHE` value, so serving a
+cached row overwrote its source - silently turning a straight-line estimate into something
+indistinguishable from a measured road the moment it was stored. The smoke run caught it on the
+second read of the same trip. Fixed at the design level: *how a number was produced* and *where the
+read came from* are now two independent fields. A per-km charge computed from a straight line stays
+visibly so.
+
+**Also caught:** `ck_travel_estimate_expiry_after_calculation` refused a test that was manufacturing
+a row born already expired. The constraint was right; the test now ages rows honestly.
+
+**Delivery quantity** (JOB 03's known limitation) is unchanged and was not needed here. Nothing in
+JOB 04 inferred a quantity.
