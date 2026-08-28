@@ -27,7 +27,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 15 | Observability + Performance + Security | pending | - | - | - | - | - |
 | 16 | Final Enterprise Certification | pending | - | - | - | - | - |
 
-**LAST_COMPLETED_JOB = 09**
+**LAST_COMPLETED_JOB = 10**
 
 ## OPEN TECHNICAL / DOMAIN DEBTS
 
@@ -38,7 +38,7 @@ inconvenient - it moves to RESOLVED with the job that closed it, or to DEFERRED_
 |---|---|---|---|
 | **D1** | `PlanningKpis.totalCost` is null - a proposal is not priced | **OPEN** | JOB 06 built the rating; a proposed trip's carrier is its vehicle's carrier, so the pieces exist. Must not sum incompatible currencies. Close before Planning V2 is called integrated with Settlement (JOB 11) |
 | **D2** | An accepted tender can leave `shipment.carrier != shipment.vehicle.owner` | **CLOSED (V42, JOB 09)** | JOB 07 refused silent reassignment. **JOB 09 must resolve the invariant formally** - clear the vehicle, select a compatible one atomically, or model `RESOURCE_ASSIGNMENT_PENDING`. Never leave the previous carrier's vehicle attached |
-| **D3** | Delivery records an outcome, not a delivered quantity | **OPEN** | `PARTIAL` implies no demonstrable amount. Must not be inferred from ordered/allocated/planned. Evaluate formally at JOB 10, close before JOB 11 if Settlement needs it |
+| **D3** | Delivery records an outcome, not a delivered quantity | **OPEN, formally evaluated (JOB 10)** | `PARTIAL` implies no demonstrable amount. Must not be inferred from ordered/allocated/planned. Evaluate formally at JOB 10, close before JOB 11 if Settlement needs it |
 | **D4** | No automatic tender scheduler: no system-actor model | **DEFERRED_WITH_REASON** | `requireAppUserId` refuses machines *by design* - an offer is a commercial commitment and the trail must name who made it. No fake user, hardcoded UUID or anonymous principal. Manual waterfall advance stands. Design only, if JOB 15 raises a real requirement |
 | **D5** | No work assignment: several shipments cannot be sequenced onto one driver-and-vehicle pair with travel time between them | **OPEN** - new in JOB 09 | Deliberate. V42 delivers the availability layer it would be built on; a table nothing writes to would be scaffolding |
 
@@ -312,3 +312,44 @@ OPEN_DEBTS: D1 OPEN · **D2 CLOSED** · D3 OPEN (JOB 10's) · D4 DEFERRED_WITH_R
 **D5 OPEN (new)** - no work assignment.
 
 NEXT_JOB=10 ETA / Geofencing, which must evaluate D3. Next migration **V43**.
+
+### JOB 10 - 2026-08-28 - PASS
+
+JOB=10 · STARTED_AT=04:57 · COMPLETED_AT=05:22 · HEAD_BEFORE=`362f586` · HEAD_AFTER=`d5d49f8`
+MIGRATION=**V43** · BACKEND_CLEAN_PASS=1643 · BACKEND_CLEAN_FAIL=0 · BACKEND_SKIPPED=0
+FRONTEND_PASS=72 · E2E_PASS=34 · E2E_SKIPPED=7 · RETRIES=4, all recovered
+
+**This job opened with a conflict against `CLAUDE.md`**, which defers ETA, geofencing and automatic
+arrival detection. The repository's own rule - add an ADR rather than diverge silently - was
+followed: **ADR-011** moves exactly one of the three. ETA moves because V27's objection to it was
+about *inputs* ("there is nothing to put in them") and V38, V14 and V11 have since supplied every
+term. **Automatic arrival detection does not move**, because ADR-007 says positions inform people
+and never move a lifecycle, and because no vendor adapter exists to supply the feed. `CLAUDE.md` was
+updated to say so rather than left contradicting the code.
+
+Three rules carry the feature, and the first is what it is judged by: **an unmeasurable leg ends the
+chain** - no guess, no previous stop's time, no zero, for that stop and every stop after it.
+Provenance degrades and never upgrades (no `CACHE` value, for the reason V38 records). A window is
+never made to fit: early is a wait, late is flagged and not moved to the next morning.
+
+**DEFECTS_FOUND=2, DEFECTS_FIXED=2.** The service asked one lookup port for both origins and
+destinations, which returns an empty map for the other half and silently loses the whole run's ETA
+while appearing to work. And an end-to-end test asserted arrival times from an origin the fixture
+deliberately leaves un-geocoded - the code was right, so the test was split rather than weakened,
+and rule 1 gained end-to-end coverage out of the failure.
+
+**A defect looked for and not found:** the stop's service window is a `time` column, the exact shape
+JOB 08 proved gets shifted. Investigated before building on it; the round trip is symmetric and
+already covered in `OrderApiIntegrationTest`. A probe test written during the investigation was
+**deleted rather than kept** - it exercised raw JDBC and could not support the claim its javadoc
+made.
+
+**D3 formally evaluated** (`docs/domain/DELIVERED_QUANTITY_EVALUATION.md`): a missing capability and
+not a defect; must not be inferred from ordered, allocated or planned, each of which is wrong in
+precisely the `PARTIAL` case; and **it does not block JOB 11**, because every rate component prices
+the shipment rather than the handover.
+
+OPEN_DEBTS: D1 OPEN (JOB 11's) · D2 CLOSED · **D3 OPEN, formally evaluated** ·
+D4 DEFERRED_WITH_REASON, now also why the ETA has no background job · D5 OPEN.
+
+NEXT_JOB=11 Settlement, which must close D1. Next migration **V44**.
