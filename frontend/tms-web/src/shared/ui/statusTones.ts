@@ -1,6 +1,7 @@
 import type {
   DeliveryResult, StopExecutionStatus, TripExceptionStatus, TripStatus,
 } from "../api/planningApi";
+import type { InvoiceStatus, MatchStatus } from "../api/settlementApi";
 import type { TenderStatus } from "../api/tendersApi";
 import type { StatusTone } from "../../theme";
 
@@ -76,4 +77,29 @@ export const TENDER_STATUS_TONE: Record<TenderStatus, StatusTone> = {
   REJECTED: "overdue",
   EXPIRED: "inProgress",
   CANCELLED: "neutral",
+};
+
+/**
+ * V46: la auditoría de flete.
+ *
+ * `DISCREPANCY` es `inProgress` (ámbar) y no `overdue`: una diferencia es trabajo pendiente, no un
+ * fracaso, y el ámbar es lo que hace visible de un vistazo la cola de auditoría del día.
+ * `UNMATCHABLE` es `neutral` a propósito - TMS no tiene con qué comparar, y pintarlo como problema
+ * mandaría a un auditor a discutir con un transportista que no hizo nada mal.
+ */
+export const INVOICE_STATUS_TONE: Record<InvoiceStatus, StatusTone> = {
+  RECEIVED: "neutral",
+  MATCHING: "inProgress",
+  MATCHED: "open",
+  DISCREPANCY: "inProgress",
+  UNDER_REVIEW: "inProgress",
+  APPROVED: "done",
+  REJECTED: "cancelled",
+  EXPORTED: "done",
+};
+
+export const MATCH_STATUS_TONE: Record<MatchStatus, StatusTone> = {
+  MATCHED: "done",
+  DISCREPANCY: "inProgress",
+  UNMATCHABLE: "neutral",
 };

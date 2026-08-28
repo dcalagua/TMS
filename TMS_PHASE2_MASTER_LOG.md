@@ -4,15 +4,15 @@
 follows. Phase 1 (JOBS 01–16) is closed and recorded in `TMS_OVERNIGHT_MASTER_LOG.md`.*
 
 ```
-LAST_COMPLETED_JOB=  19
-CURRENT_JOB=         20
-CURRENT_SUBSTEP=     20A-20D done (schema, lifecycle, matching, approval, export) - 20E UI, 20F certification remain
+LAST_COMPLETED_JOB=  20
+CURRENT_JOB=         21
+CURRENT_SUBSTEP=     starting
 LATEST_MIGRATION=    V46  (next free: V47)
-LAST_GOOD_HEAD=      2de7e27 (JOB 19); 20A-20D committing now
-TEST_STATUS=         backend 1735/0/0 clean
+LAST_GOOD_HEAD=      pending commit of JOB 20E/20F
+TEST_STATUS=         backend 1756/0/0 · frontend 107 · e2e 35 pass 7 skipped · lint/build clean
 KNOWN_FAILURE=       none
 STOP_CHAIN=          false
-NEXT_ACTION=         JOB 20E - settlement workspace UI, then 20F integration tests + certification
+NEXT_ACTION=         JOB 21 - Work Assignments & Resource Sequencing (D5)
 ```
 
 ## Open debts
@@ -25,6 +25,7 @@ NEXT_ACTION=         JOB 20E - settlement workspace UI, then 20F integration tes
 | D4 | System actor / automatic tender advancement | DEFERRED_WITH_REASON — stays deferred in Phase 2 |
 | **D5** | **Work assignment model** | **OPEN** → JOB 21 |
 | **D6** | **Own-fleet costing** | **OPEN** → JOB 22 |
+| **D10** | No cost allocation of an invoice across orders | **OPEN** - new in JOB 20 | V45 supplies delivered quantity so it is now possible; distributing on a rule nobody chose is not. Needs a per-company strategy decision |
 | D7 | Control Tower backend tests | RESOLVED (Phase 1) |
 | D8 | Java enum ↔ DB CHECK guard | **RESOLVED** (JOB 18) - all 46 enum columns guarded and matching |
 | **D9** | **Accessibility testing** | **OPEN** → JOB 26 (partial only; full closure needs QAS) |
@@ -35,8 +36,8 @@ NEXT_ACTION=         JOB 20E - settlement workspace UI, then 20F integration tes
 |---|---|---|---|---|---|---|
 | 17 | Documentation & capability reconciliation | **PASS** | 09:44 | `7547a9b` | none | 1684 / 0 |
 | 18 | Persisted enum / CHECK guard | **PASS** | 09:58 | `8660062` | **V44** | 1688 / 0 |
-| 19 | Delivered Quantity V1 | **PASS** | 10:09 | *(this commit)* | **V45** | 1712 / 0 |
-| 20 | Freight Audit & Settlement V1 | pending | - | - | - | - |
+| 19 | Delivered Quantity V1 | **PASS** | 10:09 | `2de7e27` | **V45** | 1712 / 0 |
+| 20 | Freight Audit & Settlement V1 | **PASS** | 11:25 | *(this commit)* | **V46** | 1756 / 0 |
 | 21 | Work Assignments & Resource Sequencing | pending | - | - | - | - |
 | 22 | Own Fleet Costing V1 | pending | - | - | - | - |
 | 23 | Operational Exceptions & Control Tower V3 | pending | - | - | - | - |
@@ -130,3 +131,33 @@ instance of the narrower gate certifying nothing**.
 
 Not modelled, deliberately: DAMAGED/MISSING/RETURNED (each needs semantics nothing can supply yet)
 and a cross-attempt total column (a second answer that can drift).
+
+### JOB 20 — 2026-08-28 — PASS
+
+`STARTED 10:37 · COMPLETED 11:25 · MIGRATION V46 · BACKEND 1756/0/0 · FRONTEND 107 · E2E 35/7`
+
+**Freight audit and settlement now exist.** Verified absent at the start of the job - no
+`CarrierInvoice`, no invoice table, no matching, no tolerance, no discrepancy, no approval, no
+export. All nine capability pillars are now YES with evidence, listed in the result file.
+
+**The boundary is the design:** TMS validates and exports, the ERP pays. No ledger, no payment.
+Nothing duplicates `trip_cost` - V30 already holds expected and actual, and settlement reads them
+through a port and never writes back.
+
+**Unknown is never zero**, carried from V45 into the money. `UNMATCHABLE` is a third verdict, not a
+discrepancy: telling an auditor that a correct invoice is disputed wastes the attention this module
+exists to direct.
+
+**No path from a discrepancy to payable skips a person** - four layers, ending in
+`decided_by NOT NULL` and `requireAppUserId` refusing machines. An unattended approval cannot be
+represented. **Six permissions**, so whoever keys an invoice cannot approve their own.
+
+**DEFECTS_FOUND=6, DEFECTS_FIXED=6.** The one that mattered: **two approval rows for one
+expenditure**, because `transitionTo` returns silently when already in the target state while the
+approval row was still inserted. Also: I wrote V46's audit list from memory and
+`AuditVocabularyMigrationTest` caught it - it is now generated from the enum. Three fixture defects
+were existing invariants my seed data ignored; the constraints were right every time.
+
+**Not built, deliberately:** cost allocation across orders. Now possible thanks to V45, but
+distributing an invoice on a rule nobody chose is worse than surfacing the figures. Recorded as
+**D10**.

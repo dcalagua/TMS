@@ -83,6 +83,36 @@ export const ENUM_LABELS = {
     TUESDAY: "Mar",
     WEDNESDAY: "Mié",
   },
+  /** V46: dónde está una factura de transportista en la auditoría de flete. */
+  invoiceStatus: {
+    APPROVED: "Aprobada",
+    DISCREPANCY: "Con diferencias",
+    EXPORTED: "Exportada",
+    MATCHED: "Cuadrada",
+    MATCHING: "Cuadrando",
+    RECEIVED: "Recibida",
+    REJECTED: "Rechazada",
+    UNDER_REVIEW: "En revisión",
+  },
+  /**
+   * V46: el veredicto de la comparación.
+   *
+   * `UNMATCHABLE` no dice que la factura esté mal: dice que TMS **no tiene con qué compararla**.
+   */
+  matchStatus: {
+    DISCREPANCY: "Con diferencias",
+    MATCHED: "Cuadra",
+    UNMATCHABLE: "Sin comparación posible",
+  },
+  /** V46: por qué una factura no cuadra. */
+  discrepancyType: {
+    CURRENCY_MISMATCH: "Moneda distinta",
+    DUPLICATE_INVOICE: "Factura duplicada",
+    LINE_AMOUNT: "Importe de línea",
+    MISSING_EXPECTED_COST: "Sin coste esperado",
+    TOTAL_AMOUNT: "Importe total",
+    UNMATCHED_TRIP: "Envío sin identificar",
+  },
   /** V42/JOB 12: por qué un envío no puede salir hoy. */
   blockerReason: {
     AWAITING_CARRIER_VEHICLE: "Falta vehículo del transportista",

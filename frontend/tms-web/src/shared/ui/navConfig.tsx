@@ -7,6 +7,7 @@ import {
   PaidRounded,
   ApartmentRounded, GroupsRounded, PowerRounded, HistoryRounded,
   EventAvailableRounded,
+  ReceiptLongRounded,
 } from "@mui/icons-material";
 
 /** Una hoja del menú: una pantalla concreta. */
@@ -47,6 +48,7 @@ export const ICON_TINTS: Record<string, string> = {
   "/planning": "#B085F5",
   "/trips": "#66BB6A",
   "/appointments": "#FFA726",
+  "/settlement": "#8D6E63",
   "/masters/locations": "#4FC3F7",
   "/masters/origins": "#4DB6AC",
   "/masters/destinations": "#7986CB",
@@ -103,6 +105,11 @@ export const NAV_SECTIONS: NavSection[] = [
       // garita, almacén - no planifica envíos.
       { to: "/appointments", label: "Citas de muelle", icon: <EventAvailableRounded />,
         capability: "APPOINTMENTS_VIEW" },
+      // Después de las citas y antes de Maestros: la auditoría de flete es lo último que pasa con
+      // un envío, y quien la mira es finanzas - no planifica, pero necesita llegar a lo que se
+      // planificó. TMS valida y exporta; el ERP paga.
+      { to: "/settlement", label: "Auditoría de flete", icon: <ReceiptLongRounded />,
+        capability: "SETTLEMENT_VIEW" },
     ],
   },
   {
