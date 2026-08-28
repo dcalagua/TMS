@@ -1,7 +1,7 @@
 # Morning report - 2026-08-28
 
 **Chain complete: JOBS 01-16, all PASS.** Nothing was pushed, deployed, or written to any shared
-environment. 31 commits are waiting on your local `dev` branch for you to review.
+environment. 32 commits are waiting on your local `dev` branch for you to review.
 
 ---
 
@@ -39,7 +39,7 @@ project**. Each says what it would take to close.
 | E2E | **34 pass · 7 skipped** |
 | Typecheck / lint / build | clean |
 | Flyway | **V1-V43**, contiguous, each written once |
-| Working tree | clean · **31 commits local, none pushed** |
+| Working tree | clean · **32 commits local, none pushed** |
 
 Backend tests went **1585 → 1674** across this session. The one apparent drop - backend `skipped`
 going 7 → 0 at JOB 09 - is Docker being up for the whole run rather than part of it. **No failing
@@ -107,7 +107,7 @@ not-built, with the reason.
    you decide about invoicing.
 4. **`docs/security/STATIC_GUARDS.md`** - every guard the build now enforces, old and new, and what
    each refuses.
-5. `git log --oneline -31` - the commits, newest first.
+5. `git log --oneline -32` - the commits, newest first.
 
 ---
 
@@ -123,4 +123,4 @@ Stated plainly, because a report that claims more than it did is worth less than
   query patterns; it has not been measured.
 * **No accessibility verification exists at all** (D9), and **Control Tower V1 is still untested**
   (D7).
-* **Nothing was pushed.** 31 commits sit on `dev`, waiting for you.
+* **Nothing was pushed.** 32 commits sit on `dev`, waiting for you.
