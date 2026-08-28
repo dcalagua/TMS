@@ -63,7 +63,11 @@ class SchemaExposureIntegrationTest {
             // V42: fleet availability. Both carry a DELETE grant, unlike the appointment: lifting a
             // block is not an operational outcome to keep, it is a correction, and the decision
             // survives on the audit trail (RESOURCE_BLOCKED / RESOURCE_RELEASED).
-            "resource_unavailability", "driver_shift");
+            "resource_unavailability", "driver_shift",
+            // V45: what arrived, per order line. No DELETE grant, matching order_delivery itself -
+            // what was signed for is a commercial fact somebody may be invoiced or credited
+            // against, so a line entered by mistake is corrected to zero and never erased.
+            "order_delivery_line");
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the
@@ -91,7 +95,8 @@ class SchemaExposureIntegrationTest {
             "webhook_delivery", "webhook_delivery_attempt", "travel_estimate",
             "tender_waterfall", "tender_waterfall_candidate",
             "location_resource", "resource_calendar", "resource_blocked_slot", "appointment",
-            "resource_unavailability", "driver_shift");
+            "resource_unavailability", "driver_shift",
+            "order_delivery_line");
 
     /**
      * The only tables allowed to carry a {@code company_id} and <em>not</em> the tenant policy.

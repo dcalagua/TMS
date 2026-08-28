@@ -665,9 +665,18 @@ class EndToEndSmokeIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"result":"PARTIAL","deliveredAt":"%s","receiverName":"R. Quispe",
-                                 "notes":"Two pallets refused at the dock."}
+                                 "notes":"Two pallets refused at the dock.",
+                                 "quantities":{
+                                   "attemptedWeightKg":1000,"attemptedVolumeM3":2,"attemptedPallets":2,
+                                   "deliveredWeightKg":700,"deliveredVolumeM3":1.4,"deliveredPallets":1,
+                                   "refusedWeightKg":300,"refusedVolumeM3":0.6,"refusedPallets":1}}
                                 """.formatted(OffsetDateTime.now().toString())))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                // V45, debt D3: the amounts come back on the delivery, with the outstanding figure
+                // derived server-side rather than left to each screen to subtract.
+                .andExpect(jsonPath("$.deliveries[0].quantities.deliveredWeightKg").value(700))
+                .andExpect(jsonPath("$.deliveries[0].quantities.refusedWeightKg").value(300))
+                .andExpect(jsonPath("$.deliveries[0].quantities.outstandingWeightKg").value(0));
 
         // The trip is still running, so the order is still in execution: a later stop could still
         // change what it is owed. Closing out here would be closing out early.

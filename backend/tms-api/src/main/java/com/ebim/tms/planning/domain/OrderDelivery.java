@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
@@ -76,6 +77,39 @@ public class OrderDelivery {
 
     @Column(name = "notes")
     private String notes;
+
+    // --- how much (migration V45, debt D3) -------------------------------------------------
+    //
+    // Nine nullable columns behind one value object. Null throughout means NOT RECORDED, which is
+    // not a delivery of nothing: every row written before V45 has no quantities and must keep
+    // meaning what it meant - an outcome, and no claim about amounts. See DeliveryQuantities.
+
+    @Column(name = "attempted_weight_kg")
+    private BigDecimal attemptedWeightKg;
+
+    @Column(name = "attempted_volume_m3")
+    private BigDecimal attemptedVolumeM3;
+
+    @Column(name = "attempted_pallets")
+    private BigDecimal attemptedPallets;
+
+    @Column(name = "delivered_weight_kg")
+    private BigDecimal deliveredWeightKg;
+
+    @Column(name = "delivered_volume_m3")
+    private BigDecimal deliveredVolumeM3;
+
+    @Column(name = "delivered_pallets")
+    private BigDecimal deliveredPallets;
+
+    @Column(name = "refused_weight_kg")
+    private BigDecimal refusedWeightKg;
+
+    @Column(name = "refused_volume_m3")
+    private BigDecimal refusedVolumeM3;
+
+    @Column(name = "refused_pallets")
+    private BigDecimal refusedPallets;
 
     /**
      * Where this recording came from. Reuses {@link TransportEventSource} rather than declaring a
@@ -215,6 +249,49 @@ public class OrderDelivery {
 
     public UUID orderId() {
         return orderId;
+    }
+
+    /**
+     * How much was taken, delivered and refused, or {@link DeliveryQuantities#NOT_RECORDED}.
+     *
+     * <p>Never null, so no caller has to guard it - but {@code isRecorded()} is false for every
+     * delivery that predates V45 and for every one recorded on outcome alone, which remains a
+     * legitimate way to work.
+     */
+    public DeliveryQuantities quantities() {
+        return DeliveryQuantities.fromColumns(
+                attemptedWeightKg, attemptedVolumeM3, attemptedPallets,
+                deliveredWeightKg, deliveredVolumeM3, deliveredPallets,
+                refusedWeightKg, refusedVolumeM3, refusedPallets);
+    }
+
+    /**
+     * Writes the amounts, or clears them.
+     *
+     * <p>All nine move together - the invariant lives in {@link DeliveryQuantities}'s constructor,
+     * which refuses a block that is half-present or over-delivered before a single column is
+     * touched. {@code ck_order_delivery_not_over_delivered} refuses the same thing in the
+     * transaction that reached the database another way.
+     */
+    public void recordQuantities(DeliveryQuantities quantities) {
+        DeliveryQuantities value = quantities == null ? DeliveryQuantities.NOT_RECORDED : quantities;
+        if (value.isRecorded() && result == DeliveryResult.NOT_ATTEMPTED
+                && value.deliveredAnything()) {
+            // Mirrors ck_order_delivery_not_attempted_delivers_nothing. Goods that never came off
+            // the vehicle cannot have been handed over, and a lifecycle asked to interpret that
+            // contradiction would have to guess.
+            throw new IllegalArgumentException(
+                    "NOT_ATTEMPTED cannot deliver anything: the goods never left the vehicle");
+        }
+        this.attemptedWeightKg = value.attemptedWeight();
+        this.attemptedVolumeM3 = value.attemptedVolume();
+        this.attemptedPallets = value.attemptedPallets();
+        this.deliveredWeightKg = value.deliveredWeight();
+        this.deliveredVolumeM3 = value.deliveredVolume();
+        this.deliveredPallets = value.deliveredPallets();
+        this.refusedWeightKg = value.refusedWeight();
+        this.refusedVolumeM3 = value.refusedVolume();
+        this.refusedPallets = value.refusedPallets();
     }
 
     public DeliveryResult result() {

@@ -1,6 +1,8 @@
 package com.ebim.tms.planning.application;
 
 import com.ebim.tms.planning.domain.AssignmentStatus;
+import com.ebim.tms.planning.domain.DeliveryQuantities;
+import com.ebim.tms.planning.domain.TripOrderAssignment;
 import com.ebim.tms.planning.domain.DeliveryResult;
 import com.ebim.tms.planning.domain.OrderDelivery;
 import com.ebim.tms.planning.domain.ShipmentEventType;
@@ -17,6 +19,7 @@ import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.audit.AuditActor;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.reference.OrderAmounts;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.security.CompanyScope;
@@ -134,6 +137,16 @@ public class TripDeliveryService {
             delivery.record(result, deliveredAt, receiverName, receiverDocument, notes, source, actor.appUserId(),
                     actor.email(), actor.machineActorLabel());
         }
+
+        // V45, debt D3. Applied after the outcome so NOT_ATTEMPTED is judged against the result the
+        // caller is setting now, not the one the row happened to hold.
+        DeliveryQuantities quantities = request.quantities() == null
+                ? DeliveryQuantities.NOT_RECORDED
+                : request.quantities().toDomain();
+        if (quantities.isRecorded()) {
+            requireWithinAllocation(scope, trip, orderId, delivery, quantities);
+        }
+        delivery.recordQuantities(quantities);
         // The returned instance is kept: the alert below is keyed on the delivery's id, and on the
         // insert path that id does not exist until this flush.
         delivery = deliveryRepository.saveAndFlush(delivery);
@@ -188,6 +201,59 @@ public class TripDeliveryService {
      * The shipment has left and has not been cancelled. {@link TripStatus#COMPLETED} is allowed on
      * purpose - see the class comment on the recording window.
      */
+    /**
+     * Nothing may be delivered beyond what was allocated to this shipment (V45, debt D3).
+     *
+     * <p><b>The cross-attempt ceiling</b>, and the reason it cannot be a database CHECK: it spans
+     * rows. An order allocated 100 that received 70 on Monday cannot receive 40 on Tuesday, and no
+     * single row knows that - the sum does. So this is a service refusal with a sentence a
+     * dispatcher can act on, backed by the row-level {@code ck_order_delivery_not_over_delivered}
+     * for what one row can express, and by the pessimistic trip lock this method already runs under
+     * for the race.
+     *
+     * <p>The delivery being corrected is <b>excluded</b> from the running total. Correcting
+     * Monday's 70 down to 60 must not read as delivering another 70 on top of it - that would make
+     * a correction impossible, which is precisely the double-count the brief forbids.
+     *
+     * <p>Measured against the <em>allocation</em> rather than the order's whole demand: an order
+     * split across two trips has each trip's share as its own ceiling, and charging the whole order
+     * against one of them would refuse a legitimate delivery.
+     */
+    private void requireWithinAllocation(CompanyScope scope, Trip trip, UUID orderId, OrderDelivery current,
+            DeliveryQuantities quantities) {
+        OrderAmounts allocated = assignmentRepository
+                .findByTripIdAndOrderIdAndStatus(trip.id(), orderId, AssignmentStatus.ACTIVE)
+                .map(TripOrderAssignment::assigned)
+                .orElse(null);
+        if (allocated == null) {
+            // No active assignment. requireOrderOnStop already refused that case, so reaching here
+            // means it was removed concurrently, and there is no ceiling left to measure against.
+            return;
+        }
+
+        OrderAmounts alreadyDelivered = deliveryRepository
+                .findByCompanyIdAndOrderIdIn(scope.companyId(), Set.of(orderId)).stream()
+                .filter(other -> current.id() == null || !current.id().equals(other.id()))
+                .map(OrderDelivery::quantities)
+                .filter(DeliveryQuantities::isRecorded)
+                .map(DeliveryQuantities::delivered)
+                .reduce(OrderAmounts.NONE, OrderAmounts::plus);
+
+        if (alreadyDelivered.plus(quantities.delivered()).exceeds(allocated)) {
+            throw new ConflictException("This order is allocated " + describe(allocated)
+                    + " on this shipment and " + describe(alreadyDelivered) + " has already been delivered."
+                    + " Delivering " + describe(quantities.delivered())
+                    + " more would exceed that allocation.");
+        }
+    }
+
+    /** The three measures in a sentence a dispatcher can act on, rather than a triple of numbers. */
+    private static String describe(OrderAmounts amounts) {
+        return amounts.weightKg().stripTrailingZeros().toPlainString() + " kg / "
+                + amounts.volumeM3().stripTrailingZeros().toPlainString() + " m3 / "
+                + amounts.pallets().stripTrailingZeros().toPlainString() + " pallets";
+    }
+
     private static void requireRecordable(Trip trip) {
         if (trip.status() != TripStatus.IN_TRANSIT && trip.status() != TripStatus.COMPLETED) {
             throw new ConflictException("Trip " + trip.shipmentNumber() + " is " + trip.status()

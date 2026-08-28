@@ -465,6 +465,35 @@ export interface OrderDeliveryView {
   /** When the row was typed, against `deliveredAt`'s when-it-happened. */
   recordedAt: string
   evidence: DeliveryEvidenceView[]
+  /**
+   * Cuánto se llevó, cuánto se entregó, cuánto se rechazó y cuánto quedó pendiente (migración V45).
+   *
+   * **`null` significa NO REGISTRADO, nunca cero.** Toda entrega anterior a V45 llega con `null` y
+   * no afirmó nada sobre cantidades; pintarla como "0 entregado" inventaría un faltante que nunca
+   * ocurrió. La pantalla muestra el hueco.
+   */
+  quantities: DeliveryQuantitiesView | null
+}
+
+/**
+ * Mirrors `OrderDeliveryView.DeliveryQuantitiesView`.
+ *
+ * `outstanding` lo calcula el servidor y no cada pantalla: es lo que llevaría un segundo intento, y
+ * dos clientes restando por su cuenta es como terminan discrepando.
+ */
+export interface DeliveryQuantitiesView {
+  attemptedWeightKg: number
+  attemptedVolumeM3: number
+  attemptedPallets: number
+  deliveredWeightKg: number
+  deliveredVolumeM3: number
+  deliveredPallets: number
+  refusedWeightKg: number
+  refusedVolumeM3: number
+  refusedPallets: number
+  outstandingWeightKg: number
+  outstandingVolumeM3: number
+  outstandingPallets: number
 }
 
 /** Mirrors the backend's `TripDetailView` record.
@@ -1016,6 +1045,26 @@ export interface DeliveryResultRequest {
   receiverName?: string | null
   receiverDocument?: string | null
   notes?: string | null
+  /**
+   * Las cantidades (V45, deuda D3). **Opcional**: omitirlo es no afirmar nada sobre cantidades, que
+   * es lo que hacía toda entrega antes de V45 y sigue siendo una forma legítima de trabajar.
+   *
+   * Mandar ceros NO es lo mismo: eso afirma que el cliente no se llevó nada.
+   */
+  quantities?: DeliveryQuantitiesRequest | null
+}
+
+/** Los nueve números viajan juntos o no viaja ninguno - el servidor rechaza medio bloque. */
+export interface DeliveryQuantitiesRequest {
+  attemptedWeightKg: number
+  attemptedVolumeM3: number
+  attemptedPallets: number
+  deliveredWeightKg: number
+  deliveredVolumeM3: number
+  deliveredPallets: number
+  refusedWeightKg: number
+  refusedVolumeM3: number
+  refusedPallets: number
 }
 
 export function recordDelivery(

@@ -4,13 +4,13 @@
 follows. Phase 1 (JOBS 01–16) is closed and recorded in `TMS_OVERNIGHT_MASTER_LOG.md`.*
 
 ```
-LAST_COMPLETED_JOB=  18
-CURRENT_JOB=         19
+LAST_COMPLETED_JOB=  19
+CURRENT_JOB=         20
 CURRENT_STEP=        starting
-LATEST_MIGRATION=    V44  (next free: V45)
-LAST_GOOD_HEAD=      pending commit of JOB 18
+LATEST_MIGRATION=    V45  (next free: V46)
+LAST_GOOD_HEAD=      pending commit of JOB 19
 STOP_CHAIN=          false
-NEXT_ACTION=         Delivered Quantity V1 (D3) - the model, then lifecycle derivation
+NEXT_ACTION=         Freight Audit & Settlement V1 - the module that does not exist yet
 ```
 
 ## Open debts
@@ -19,7 +19,7 @@ NEXT_ACTION=         Delivered Quantity V1 (D3) - the model, then lifecycle deri
 |---|---|---|
 | D1 | `PlanningKpis.totalCost` | RESOLVED (Phase 1 JOB 11) |
 | D2 | Accepted tender vs vehicle owner | RESOLVED (V42) |
-| **D3** | **Delivered quantity** | **OPEN** → JOB 19 |
+| D3 | Delivered quantity | **RESOLVED** (JOB 19, V45) - two grains, ceiling enforced, nothing inferred |
 | D4 | System actor / automatic tender advancement | DEFERRED_WITH_REASON — stays deferred in Phase 2 |
 | **D5** | **Work assignment model** | **OPEN** → JOB 21 |
 | **D6** | **Own-fleet costing** | **OPEN** → JOB 22 |
@@ -32,8 +32,8 @@ NEXT_ACTION=         Delivered Quantity V1 (D3) - the model, then lifecycle deri
 | JOB | Title | Result | Completed | HEAD after | Migration | Backend |
 |---|---|---|---|---|---|---|
 | 17 | Documentation & capability reconciliation | **PASS** | 09:44 | `7547a9b` | none | 1684 / 0 |
-| 18 | Persisted enum / CHECK guard | **PASS** | 09:58 | *(this commit)* | **V44** | 1688 / 0 |
-| 19 | Delivered Quantity V1 | pending | - | - | - | - |
+| 18 | Persisted enum / CHECK guard | **PASS** | 09:58 | `8660062` | **V44** | 1688 / 0 |
+| 19 | Delivered Quantity V1 | **PASS** | 10:09 | *(this commit)* | **V45** | 1712 / 0 |
 | 20 | Freight Audit & Settlement V1 | pending | - | - | - | - |
 | 21 | Work Assignments & Resource Sequencing | pending | - | - | - | - |
 | 22 | Own Fleet Costing V1 | pending | - | - | - | - |
@@ -97,3 +97,34 @@ Coverage is now **46 of 46**, and the test asserts that rather than a threshold.
 
 The guard carries its own **controlled negative** (`catchesAValueMissingFromTheCheck`): without it, a
 bug in the query would make it pass on every schema including a broken one.
+
+### JOB 19 — 2026-08-28 — PASS
+
+`STARTED 09:47 · COMPLETED 10:09 · MIGRATION V45 · BACKEND 1712/0/0 · FRONTEND 101 · RETRIES 0`
+
+**D3 RESOLVED**, on the terms its own JOB 10 evaluation set.
+
+**Quantities land in two places** because two questions are being asked. The three summable measures
+go on `order_delivery`, where the V37 allocation ceiling can be enforced; the per-product truth goes
+in `order_delivery_line`, in the line's own unit, because *which product was refused* cannot be
+answered in kilos. Neither is derived from the other.
+
+**Absent is not zero, and there is no back-fill.** Back-filling would have asserted "nothing was
+delivered" across the installation's entire history - the most damaging thing this migration could
+do, and it would have looked like data. Carried through to the form, which sends `null` when the
+operator types nothing.
+
+**`delivered + refused <= attempted`**, not `=`: goods carried back are neither delivered nor
+refused, and that difference is what a second attempt would carry. Checked per measure, never netted.
+
+**Lifecycle now derives from the sum across attempts** - 60 on Monday plus 40 on Tuesday is a
+complete delivery, and the latest row alone cannot say so. Backward compatible by construction:
+1700 tests passed before a single new assertion was added.
+
+**DEFECTS_FOUND=3, DEFECTS_FIXED=3.** My constraint fixture broke three *existing* rules (the
+constraints were right, the fixture was lazy); a bean cycle needed `@Lazy`; and a type error in a
+test file that `tsc -p tsconfig.app.json` does not cover but `npm run build` does - **another
+instance of the narrower gate certifying nothing**.
+
+Not modelled, deliberately: DAMAGED/MISSING/RETURNED (each needs semantics nothing can supply yet)
+and a cross-attempt total column (a second answer that can drift).

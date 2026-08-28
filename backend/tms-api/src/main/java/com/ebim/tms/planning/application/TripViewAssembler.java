@@ -222,7 +222,10 @@ public class TripViewAssembler {
                             delivery.source(), delivery.actorDisplayName(), delivery.recordedAt(),
                             evidence.getOrDefault(delivery.id(), List.of()).stream()
                                     .map(TripViewAssembler::toEvidenceView)
-                                    .toList());
+                                    .toList(),
+                            // V45: null for a delivery that recorded no amounts, so a screen
+                            // renders the gap rather than inventing a zero.
+                            OrderDeliveryView.DeliveryQuantitiesView.of(delivery.quantities()));
                 })
                 .toList();
     }

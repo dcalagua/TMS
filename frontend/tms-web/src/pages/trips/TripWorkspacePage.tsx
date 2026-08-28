@@ -345,6 +345,9 @@ export function TripWorkspacePage() {
         receiverName: values.receiverName,
         receiverDocument: values.receiverDocument,
         notes: values.notes,
+        // V45: null cuando el operador no registró cantidades. Se manda tal cual - convertirlo a
+        // ceros aquí sería inventar un faltante.
+        quantities: values.quantities,
       });
     } catch (error) {
       throw new Error(describePlanningError(error as ApiError));

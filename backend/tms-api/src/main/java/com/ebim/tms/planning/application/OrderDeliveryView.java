@@ -2,6 +2,9 @@ package com.ebim.tms.planning.application;
 
 import com.ebim.tms.planning.domain.DeliveryResult;
 import com.ebim.tms.planning.domain.TransportEventSource;
+import com.ebim.tms.planning.domain.DeliveryQuantities;
+import com.ebim.tms.shared.reference.OrderAmounts;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -41,5 +44,38 @@ public record OrderDeliveryView(
         TransportEventSource source,
         String recordedByName,
         OffsetDateTime recordedAt,
-        List<DeliveryEvidenceView> evidence) {
+        List<DeliveryEvidenceView> evidence,
+        /**
+         * How much was taken, delivered, refused and left outstanding (migration V45, debt D3).
+         *
+         * <p><b>Null means not recorded</b>, and a screen must render that as a gap rather than as
+         * zero. Every delivery written before V45 carries null here and made no claim about
+         * amounts; showing them as "0 delivered" would invent a shortfall that never happened.
+         */
+        DeliveryQuantitiesView quantities) {
+
+    /**
+     * The four figures, flattened for the wire. {@code outstanding} is derived server-side rather
+     * than left to each screen to subtract - it is the amount a second attempt would carry, and two
+     * clients computing it separately is how they come to disagree.
+     */
+    public record DeliveryQuantitiesView(
+            BigDecimal attemptedWeightKg, BigDecimal attemptedVolumeM3, BigDecimal attemptedPallets,
+            BigDecimal deliveredWeightKg, BigDecimal deliveredVolumeM3, BigDecimal deliveredPallets,
+            BigDecimal refusedWeightKg, BigDecimal refusedVolumeM3, BigDecimal refusedPallets,
+            BigDecimal outstandingWeightKg, BigDecimal outstandingVolumeM3, BigDecimal outstandingPallets) {
+
+        /** Null for a delivery that recorded no amounts - the caller renders a gap, not a zero. */
+        public static DeliveryQuantitiesView of(DeliveryQuantities quantities) {
+            if (quantities == null || !quantities.isRecorded()) {
+                return null;
+            }
+            OrderAmounts outstanding = quantities.outstanding();
+            return new DeliveryQuantitiesView(
+                    quantities.attemptedWeight(), quantities.attemptedVolume(), quantities.attemptedPallets(),
+                    quantities.deliveredWeight(), quantities.deliveredVolume(), quantities.deliveredPallets(),
+                    quantities.refusedWeight(), quantities.refusedVolume(), quantities.refusedPallets(),
+                    outstanding.weightKg(), outstanding.volumeM3(), outstanding.pallets());
+        }
+    }
 }
