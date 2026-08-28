@@ -14,7 +14,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 02 | Order Lifecycle V2 | **PASS** | 2026-08-28 01:40 | `32dcc65` | **V36** | 1389 / 0 fail | false |
 | 03 | Ship Units + Partial Allocation | **PASS** | 2026-08-28 01:58 | `91540cb` | **V37** | 1409 / 0 fail | false |
 | 04 | Routing Matrix + Travel Time | **PASS** | 2026-08-28 02:30 | `29b484c` | **V38** | 1466 / 0 fail | false |
-| 05 | Advanced Bulk Planning Engine V2 | pending | - | - | - | - | - |
+| 05 | Advanced Bulk Planning Engine V2 | **PASS** | 2026-08-28 02:50 | `586e7ed` | none (V38 head) | 1498 / 0 fail | false |
 | 06 | Rate Engine V2 | pending | - | - | - | - | - |
 | 07 | Carrier Selection + Tender Waterfall | pending | - | - | - | - | - |
 | 08 | Dock / Appointment Scheduling | pending | - | - | - | - | - |
@@ -27,7 +27,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 15 | Observability + Performance + Security | pending | - | - | - | - | - |
 | 16 | Final Enterprise Certification | pending | - | - | - | - | - |
 
-**LAST_COMPLETED_JOB = 04**
+**LAST_COMPLETED_JOB = 05**
 
 ## Baseline established by JOB 01
 
@@ -148,3 +148,29 @@ a row born already expired. The constraint was right; the test now ages rows hon
 
 **Delivery quantity** (JOB 03's known limitation) is unchanged and was not needed here. Nothing in
 JOB 04 inferred a quantity.
+
+### JOB 05 - 2026-08-28 - PASS
+
+STARTED_AT=02:31 · COMPLETED_AT=02:50 · HEAD_BEFORE=`714d16c` · HEAD_AFTER=`586e7ed` · MIGRATION=**none**
+BACKEND_PASS=1498 · BACKEND_FAIL=0 (clean) · FRONTEND_PASS=55 · E2E_PASS=33 · RETRIES=3, all recovered
+
+`PLANNING_V2` joins `HEURISTIC_V1` behind the same port. It packs against **pending** amounts (V37),
+sequences stops nearest-neighbour on the **travel matrix** (V38), and refuses trips that will not
+fit a shift. **Default remains `HEURISTIC_V1`** - opt-in per run, so no existing caller's proposals
+change silently.
+
+**The comparison is measured, not asserted.** Six stops fed farthest-first: V1 drives out and back,
+V2 drives 85 km straight out with identical loads. No matrix → identical trips. One-hour shift → V2
+plans **fewer** orders, correctly, and that case is in the suite on purpose.
+
+**Cost is null and stays null.** Pricing a proposal needs a rating port that takes a proposal, not a
+persisted shipment - JOB 06. Documented, and said on screen, rather than filled with a number two
+engines would be compared on.
+
+**Caught in passing.** My first V2 carried its own copy of `Corridors` that ignored
+`route.active()`. Extracted V1's instead: two engines must group identically or the comparison is
+meaningless. Also: a javadoc claiming "in registration order" over a `Map.copyOf` - the doc was the
+lie and the implementation was fixed to match it.
+
+**Open, and named:** service time per location is carried by the input but passed empty, so
+durations are driving-only today. **Delivery quantity** (JOB 03) unchanged and not inferred.
