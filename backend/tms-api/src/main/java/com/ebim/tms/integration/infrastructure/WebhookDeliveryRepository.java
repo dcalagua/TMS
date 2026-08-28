@@ -36,6 +36,50 @@ public interface WebhookDeliveryRepository extends JpaRepository<WebhookDelivery
             UUID companyId, UUID subscriptionId, WebhookDeliveryStatus status, Pageable pageable);
 
     /**
+     * How many deliveries are in each state right now (JOB 13).
+     *
+     * <p>Grouped in SQL rather than counted three times, and read for the health summary rather
+     * than for a page: an operator asking "is anything broken" should not have to page through
+     * deliveries to find out.
+     */
+    @Query("SELECT d.status AS status, COUNT(d) AS deliveryCount FROM WebhookDelivery d "
+            + "WHERE d.companyId = :companyId GROUP BY d.status")
+    List<DeliveryStatusCount> countByStatus(@Param("companyId") UUID companyId);
+
+    /** One row of {@link #countByStatus}. */
+    interface DeliveryStatusCount {
+        WebhookDeliveryStatus getStatus();
+
+        long getDeliveryCount();
+    }
+
+    /**
+     * The oldest delivery still waiting, if any.
+     *
+     * <p><b>The signal that matters most.</b> A queue with a thousand pending rows that is draining
+     * is healthy; a queue with three that have been waiting since Tuesday is not, and a plain count
+     * cannot tell those apart. What this exposes is age, which is what "the integration is stuck"
+     * actually looks like.
+     */
+    @Query("SELECT MIN(d.createdAt) FROM WebhookDelivery d "
+            + "WHERE d.companyId = :companyId AND d.status = :status")
+    Optional<OffsetDateTime> findOldestCreatedAt(@Param("companyId") UUID companyId,
+            @Param("status") WebhookDeliveryStatus status);
+
+    /**
+     * Subscriptions that are switched off and still have deliveries queued behind them (JOB 13).
+     *
+     * <p><b>The failure mode that looks like silence.</b> Deactivating a subscription stops
+     * deliveries being sent and discards nothing - events keep queueing, exactly as the deactivate
+     * endpoint documents - so a partner switched off "for an hour" during an incident and never
+     * switched back on produces no errors at all. Nothing else on this screen would show it.
+     */
+    @Query("SELECT COUNT(DISTINCT d.subscription.id) FROM WebhookDelivery d "
+            + "WHERE d.companyId = :companyId AND d.subscription.active = false AND d.status = :status")
+    long countInactiveSubscriptionsWithBacklog(@Param("companyId") UUID companyId,
+            @Param("status") WebhookDeliveryStatus status);
+
+    /**
      * The dispatcher's queue read: the deliveries that are due, locked so that no other instance
      * takes the same ones.
      *

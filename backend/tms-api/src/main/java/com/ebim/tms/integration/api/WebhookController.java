@@ -1,6 +1,8 @@
 package com.ebim.tms.integration.api;
 
 import com.ebim.tms.integration.application.WebhookDeliveryDetailView;
+import com.ebim.tms.integration.application.IntegrationHealthService;
+import com.ebim.tms.integration.application.IntegrationHealthView;
 import com.ebim.tms.integration.application.WebhookDeliveryView;
 import com.ebim.tms.integration.application.WebhookSubscriptionRequest;
 import com.ebim.tms.integration.application.WebhookSubscriptionSecretView;
@@ -52,9 +54,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class WebhookController {
 
     private final WebhookSubscriptionService subscriptionService;
+    private final IntegrationHealthService healthService;
 
-    public WebhookController(WebhookSubscriptionService subscriptionService) {
+    public WebhookController(WebhookSubscriptionService subscriptionService,
+            IntegrationHealthService healthService) {
         this.subscriptionService = subscriptionService;
+        this.healthService = healthService;
     }
 
     /**
@@ -157,6 +162,27 @@ public class WebhookController {
             description = "Id of a company the caller is a member of")
     public WebhookSubscriptionView deactivate(CompanyScope scope, @PathVariable UUID id) {
         return subscriptionService.setActive(scope, id, false);
+    }
+
+    /**
+     * Whether this company's integrations are working right now (JOB 13).
+     *
+     * <p>{@code integration.webhook:read}, the same authority the delivery list carries: this is
+     * that list summarised, and a caller who may not see deliveries must not learn how many are
+     * failing from a count instead.
+     *
+     * <p>Deliberately on the webhook controller although it also reports the inbound side. The two
+     * halves of an integration fail together in practice - a partner whose credentials expired
+     * stops sending and stops receiving - and making an operator open two screens to notice that
+     * is how it goes unnoticed.
+     */
+    @GetMapping("/health")
+    @PreAuthorize("hasAuthority('integration.webhook:read')")
+    @Operation(summary = "Whether integrations are working: the outbound queue, and inbound requests over 24h")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public IntegrationHealthView health(CompanyScope scope) {
+        return healthService.health(scope);
     }
 
     @GetMapping("/deliveries")
