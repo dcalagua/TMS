@@ -11,7 +11,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | Job | Title | Result | Finished | Commit | Migration | Backend tests | STOP_CHAIN |
 |---|---|---|---|---|---|---|---|
 | 01 | Truth Baseline + Documentation | **PASS** | 2026-08-28 01:10 | `f666d63` | none (V35 is head; V36 next) | 1312 / 0 fail | false |
-| 02 | Order Lifecycle V2 | pending | - | - | - | - | - |
+| 02 | Order Lifecycle V2 | **PASS** | 2026-08-28 01:40 | `32dcc65` | **V36** | 1389 / 0 fail | false |
 | 03 | Ship Units + Partial Allocation | pending | - | - | - | - | - |
 | 04 | Routing Matrix + Travel Time | pending | - | - | - | - | - |
 | 05 | Advanced Bulk Planning Engine V2 | pending | - | - | - | - | - |
@@ -27,7 +27,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 15 | Observability + Performance + Security | pending | - | - | - | - | - |
 | 16 | Final Enterprise Certification | pending | - | - | - | - | - |
 
-**LAST_COMPLETED_JOB = 01**
+**LAST_COMPLETED_JOB = 02**
 
 ## Baseline established by JOB 01
 
@@ -39,7 +39,7 @@ Every gate measured, all green. Later red is therefore attributable to the job t
     Frontend     npm test                37 tests, 4 files, 0 failures
     Build        npm run build           1.11 MB bundle, chunk-size advisory only
     E2E          npx playwright test     33 passed, 7 skipped (auth smoke, no credentials)
-    Flyway       V1 - V35 contiguous     next available: V36
+    Flyway       V1 - V35 contiguous     next available: V36 (JOB 02 used it; V37 is next)
 
 Docker Desktop was started locally, so the 32 Testcontainers classes ran for real. No remote
 environment was contacted at any point.
@@ -67,3 +67,29 @@ Micrometer metrics.
 
 Published `docs/architecture/TMS_CURRENT_CAPABILITY_MAP.md` - 25 rows, each partial or missing
 capability carrying the job that closes it.
+
+### JOB 02 - 2026-08-28 - PASS
+
+The order lifecycle now reaches the end of the road. **V36** adds `IN_EXECUTION`, `DELIVERED`,
+`PARTIALLY_DELIVERED` and `DELIVERY_FAILED`, plus `POST /orders/{id}/reopen` for a second attempt.
+
+**The defect this closed.** An order whose delivery was refused stayed `PLANNED` forever: not
+plannable, not cancellable, not deliverable. A customer waiting for a redelivery was invisible to
+the system that owed them.
+
+**The design tension.** `OrderFulfillmentStatus` carried a reasoned objection to storing delivery
+outcomes on the order. It was upheld rather than overruled: the new states are the lifecycle
+*consequence* of the delivery fact, not a copy of it, and drift is prevented structurally - the
+status is recomputed from the delivery rows in the same transaction as every change to them,
+including corrections keyed after the trip closed. `OrderFulfillmentStatus` is unchanged.
+Recorded in **ADR-009**; the lifecycle is documented in `docs/domain/ORDER_LIFECYCLE_V2.md`.
+
+**Caught in passing.** `OrderBacklogTotals` would have silently dropped departed orders out of the
+KPI planned-rate - a reporting regression no existing test would have flagged, because the figure
+would still have been a number. It now derives `planned()` from leaf counters so the identity holds
+by construction.
+
+**Tests:** 1389 backend (+77), 42 frontend (+5), 33 E2E. New: `OrderStatusTest` (40 pure-domain),
+`OrderPlanningServiceExecutionTest` (idempotency, replay safety, the row lock),
+`OrderExecutionPropagatorTest`, and six smoke steps driving the vertical over HTTP from dispatch
+through close-out, correction and reopen.
