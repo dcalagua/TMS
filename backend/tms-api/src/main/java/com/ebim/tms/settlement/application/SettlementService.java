@@ -123,6 +123,8 @@ public class SettlementService {
                     + request.invoiceNumber().trim() + ".");
         }
 
+        requireTripsInScope(scope, request);
+
         CarrierInvoice invoice = new CarrierInvoice(scope.companyId(), request.carrierId(),
                 request.invoiceNumber().trim(), request.invoiceDate(), request.currency().toUpperCase(java.util.Locale.ROOT),
                 request.totalAmount(), blankToNull(request.externalReference()), blankToNull(request.notes()),
@@ -134,6 +136,31 @@ public class SettlementService {
                 Map.of("invoiceNumber", saved.invoiceNumber(), "totalAmount", saved.totalAmount().toPlainString(),
                         "currency", saved.currency()));
         return toView(scope, saved);
+    }
+
+    /**
+     * Every shipment a line names must belong to this company.
+     *
+     * <p>{@code fk_carrier_invoice_line_trip_company} refuses it in the database, which is what makes
+     * the isolation a fact rather than a check somebody can forget. This exists so the refusal
+     * arrives as a sentence naming the line rather than as a constraint violation the operator has
+     * to interpret - the readable layer above a structural guarantee, which is the shape every
+     * invariant in this codebase has.
+     */
+    private void requireTripsInScope(CompanyScope scope, CarrierInvoiceRequest request) {
+        Set<UUID> named = request.lines().stream()
+                .map(CarrierInvoiceRequest.LineRequest::tripId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (named.isEmpty()) {
+            return;
+        }
+        Set<UUID> ours = tripSettlementLookupPort.findForSettlement(named, scope.companyId()).keySet();
+        List<UUID> foreign = named.stream().filter(id -> !ours.contains(id)).toList();
+        if (!foreign.isEmpty()) {
+            throw new InvalidRequestException("This invoice bills " + foreign.size() + " shipment"
+                    + (foreign.size() == 1 ? "" : "s") + " that do not belong to this company.");
+        }
     }
 
     private List<CarrierInvoiceLine> linesOf(CompanyScope scope, CarrierInvoiceRequest request) {
@@ -294,6 +321,18 @@ public class SettlementService {
         UUID actorId = auditActorProvider.requireAppUserId();
         CarrierInvoice invoice = lockedInvoice(scope, invoiceId);
 
+        // Already authorised: return what is, and write NOTHING.
+        //
+        // Found by twoApprovalsOneDecision, and it was a real defect rather than a test artefact.
+        // Trip.transitionTo returns silently when the invoice is already in the target state - which
+        // is right for a transition and wrong for what follows it, because the approval row was
+        // still being inserted. Two rows meant one expenditure authorised twice, which is precisely
+        // what an approval record exists to make impossible. The pessimistic lock serialises the two
+        // transactions; this is what makes the second one a no-op instead of a second signature.
+        if (invoice.status() == InvoiceStatus.APPROVED) {
+            return toView(scope, invoice);
+        }
+
         requireNoOpenDiscrepancies(scope, invoice);
         invoice.transitionTo(InvoiceStatus.APPROVED, actorId);
 
@@ -332,6 +371,10 @@ public class SettlementService {
             throw new InvalidRequestException("A rejection must say why: the carrier has to be able to answer it.");
         }
         CarrierInvoice invoice = lockedInvoice(scope, invoiceId);
+        // The same no-op as approval, for the same reason: one refusal, one record.
+        if (invoice.status() == InvoiceStatus.REJECTED) {
+            return toView(scope, invoice);
+        }
         invoice.transitionTo(InvoiceStatus.REJECTED, actorId);
 
         approvalRepository.save(new SettlementApproval(scope.companyId(), invoice.id(),
