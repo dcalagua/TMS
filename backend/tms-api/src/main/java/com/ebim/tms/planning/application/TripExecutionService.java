@@ -12,6 +12,7 @@ import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.reference.DriverLicenseStatus;
 import com.ebim.tms.shared.reference.DriverLookupPort;
 import com.ebim.tms.shared.reference.DriverReference;
+import com.ebim.tms.shared.reference.ResourceAvailabilityPort;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.time.Duration;
@@ -63,6 +64,7 @@ public class TripExecutionService {
     private final TripRepository tripRepository;
     private final VehicleLookupPort vehicleLookupPort;
     private final DriverLookupPort driverLookupPort;
+    private final ResourceAvailabilityPort resourceAvailabilityPort;
     private final ShipmentEventPublisher events;
     private final TripTenderService tenders;
     private final TripAlertPublisher alerts;
@@ -71,10 +73,12 @@ public class TripExecutionService {
     private final AuditActorProvider auditActorProvider;
 
     public TripExecutionService(TripRepository tripRepository, VehicleLookupPort vehicleLookupPort,
-            DriverLookupPort driverLookupPort, ShipmentEventPublisher events, TripTenderService tenders,
+            DriverLookupPort driverLookupPort, ResourceAvailabilityPort resourceAvailabilityPort,
+            ShipmentEventPublisher events, TripTenderService tenders,
             TripAlertPublisher alerts, TripViewAssembler assembler, OrderExecutionPropagator orderExecution,
             AuditActorProvider auditActorProvider) {
         this.tripRepository = tripRepository;
+        this.resourceAvailabilityPort = resourceAvailabilityPort;
         this.vehicleLookupPort = vehicleLookupPort;
         this.driverLookupPort = driverLookupPort;
         this.events = events;
@@ -123,6 +127,8 @@ public class TripExecutionService {
                 (trip, occurredAt) -> {
                     requireOperableVehicle(scope, trip);
                     requireOperableDriver(scope, trip);
+                    requireCarrierOwnsTheVehicle(trip);
+                    requireResourcesAvailable(scope, trip, occurredAt);
                     requireNotBefore(occurredAt, trip.readyAt(), "before the trip was made ready");
                     trip.dispatch(occurredAt, auditActorProvider.requireAppUserId());
                 });
@@ -257,6 +263,37 @@ public class TripExecutionService {
      * leave a shipment permanently {@code IN_TRANSIT}, which is worse than the fleet edit it is
      * reacting to.
      */
+    /**
+     * A shipment accepted by one carrier may not depart on another carrier's vehicle (V42, debt D2).
+     *
+     * <p>The sentence a dispatcher reads. {@code Trip.dispatch} refuses again in the aggregate and
+     * {@code ck_trip_departed_carrier_matches_vehicle} refuses in the database - the three-layer
+     * shape every invariant in this codebase has. Only the first of the three says what to do
+     * about it.
+     */
+    private void requireCarrierOwnsTheVehicle(Trip trip) {
+        if (trip.awaitsCarrierVehicle()) {
+            throw new ConflictException("Trip " + trip.tripNumber() + " was accepted by a carrier that does not"
+                    + " own the vehicle assigned to it. Assign one of that carrier's vehicles before dispatching.");
+        }
+    }
+
+    /**
+     * Neither the vehicle nor the driver may be blocked at the moment of departure (V42).
+     *
+     * <p>Checked at the gate rather than only when the shipment was planned, for the reason the
+     * licence check is: a truck booked into the workshop this morning was assignable last night,
+     * and the record of why it did not run is worth more than the shipment that pretended it did.
+     */
+    private void requireResourcesAvailable(CompanyScope scope, Trip trip, OffsetDateTime at) {
+        resourceAvailabilityPort.findBlock(scope.companyId(), trip.vehicleId(), trip.driverId(), at)
+                .ifPresent(block -> {
+                    throw new ConflictException("Trip " + trip.tripNumber() + " cannot depart: its "
+                            + block.resource() + " is unavailable (" + block.reason() + ") until "
+                            + block.endsAt() + ".");
+                });
+    }
+
     private void requireOperableVehicle(CompanyScope scope, Trip trip) {
         UUID vehicleId = trip.vehicleId();
         if (vehicleId == null) {

@@ -6,7 +6,9 @@ import {
 } from "@mui/material";
 import {
   AddRounded, UploadRounded, LocalShippingRounded, EditRounded, BlockRounded, CheckCircleRounded,
+  BuildCircleRounded,
 } from "@mui/icons-material";
+import { AvailabilityDrawer } from "./AvailabilityDrawer";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchCarriers } from "../../shared/api/carriersApi";
 import { fetchVehicleTypes } from "../../shared/api/vehicleTypesApi";
@@ -66,6 +68,7 @@ export function VehiclesPage() {
   const [draft, setDraft] = useState<AppliedFilters>(DEFAULT_FILTERS);
   const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS);
   const [modal, setModal] = useState<ModalState>(null);
+  const [availability, setAvailability] = useState<VehicleView | null>(null);
   const [showImport, setShowImport] = useState(false);
 
   const vehiclesQuery = useQuery({
@@ -152,6 +155,12 @@ export function VehiclesPage() {
         <ActionMenu
           items={[
             { key: "edit", label: t("Editar"), icon: <EditRounded />, onSelect: () => setModal({ mode: "edit", vehicle }) },
+            {
+              key: "availability",
+              label: t("Disponibilidad"),
+              icon: <BuildCircleRounded />,
+              onSelect: () => setAvailability(vehicle),
+            },
             {
               key: "active",
               label: vehicle.active ? t("Desactivar") : t("Activar"),
@@ -270,6 +279,17 @@ export function VehiclesPage() {
             notifySaved(wasEdit);
             refresh();
           }}
+        />
+      )}
+
+      {availability && (
+        <AvailabilityDrawer
+          companyId={companyId}
+          resource="vehicle"
+          resourceId={availability.id}
+          resourceLabel={`${availability.code} · ${availability.licensePlate}`}
+          canManage={canManage}
+          onClose={() => setAvailability(null)}
         />
       )}
 

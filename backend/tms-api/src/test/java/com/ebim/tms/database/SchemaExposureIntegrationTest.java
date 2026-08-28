@@ -59,7 +59,11 @@ class SchemaExposureIntegrationTest {
             // V41: dock scheduling. The appointment has no DELETE grant - who booked which door and
             // what happened is what a carrier disputing a detention charge asks for; it is
             // cancelled, never removed. The three master tables are ordinary master data.
-            "location_resource", "resource_calendar", "resource_blocked_slot", "appointment");
+            "location_resource", "resource_calendar", "resource_blocked_slot", "appointment",
+            // V42: fleet availability. Both carry a DELETE grant, unlike the appointment: lifting a
+            // block is not an operational outcome to keep, it is a correction, and the decision
+            // survives on the audit trail (RESOURCE_BLOCKED / RESOURCE_RELEASED).
+            "resource_unavailability", "driver_shift");
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the
@@ -86,7 +90,8 @@ class SchemaExposureIntegrationTest {
             "company_settings", "webhook_subscription", "webhook_subscription_event",
             "webhook_delivery", "webhook_delivery_attempt", "travel_estimate",
             "tender_waterfall", "tender_waterfall_candidate",
-            "location_resource", "resource_calendar", "resource_blocked_slot", "appointment");
+            "location_resource", "resource_calendar", "resource_blocked_slot", "appointment",
+            "resource_unavailability", "driver_shift");
 
     /**
      * The only tables allowed to carry a {@code company_id} and <em>not</em> the tenant policy.

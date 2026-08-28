@@ -296,6 +296,24 @@ export function TripDetailDrawer({
               <DetailItem label={t("Origen")} value={trip.originName ?? trip.originCode} />
               <DetailItem label={t("Vehículo")} value={trip.vehicleCode ? `${trip.vehicleCode} · ${trip.vehicleLicensePlate}` : null} />
               <DetailItem label={t("Transportista")} value={trip.carrierName} />
+              {/* V42: sólo cuando los dos discrepan. Mostrarlo siempre repetiría el transportista
+                  en la mitad de las pantallas y escondería el caso que importa entre el ruido. */}
+              {trip.awaitsCarrierVehicle && (
+                <DetailItem
+                  label={t("Aceptado por")}
+                  value={(
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+                      {trip.acceptedCarrierName ?? "—"}
+                      <Chip
+                        size="small"
+                        color="warning"
+                        variant="outlined"
+                        label={t("Falta vehículo del transportista")}
+                      />
+                    </Box>
+                  )}
+                />
+              )}
               <DetailItem
                 label={t("Conductor")}
                 value={trip.driverName ? (

@@ -41,6 +41,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 
 /**
@@ -360,7 +361,11 @@ public class TripViewAssembler {
         Map<UUID, MasterReference> origins = originLookupPort.findAllInCompany(
                 runs.values().stream().map(PlanningRun::originId).collect(Collectors.toSet()), companyId);
         Map<UUID, MasterReference> carriers =
-                carrierLookupPort.findAllInCompany(idsOf(trips, Trip::carrierId), companyId);
+                carrierLookupPort.findAllInCompany(
+                        // Both carriers, in one lookup. A subcontracted shipment names the carrier
+                        // that accepted it as well as the owner of the vehicle on it (V42), and a
+                        // second query per board would be the N+1 this batching exists to avoid.
+                        idsOf(trips, Trip::carrierId, Trip::acceptedCarrierId), companyId);
         // Display-grade, active or not: a driver who has left the fleet must still render on the
         // shipments they ran - the same contract CarrierLookupPort documents.
         Map<UUID, DriverReference> drivers =
@@ -372,6 +377,15 @@ public class TripViewAssembler {
 
     private static Set<UUID> idsOf(List<Trip> trips, Function<Trip, UUID> extractor) {
         return trips.stream().map(extractor).filter(Objects::nonNull).collect(Collectors.toSet());
+    }
+
+    /** The union over several id-bearing fields, for a master a trip can name more than once (V42). */
+    @SafeVarargs
+    private static Set<UUID> idsOf(List<Trip> trips, Function<Trip, UUID>... extractors) {
+        return trips.stream()
+                .flatMap(trip -> Stream.of(extractors).map(extractor -> extractor.apply(trip)))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
     }
 
     private Map<UUID, CapacityLoad> loadsOf(List<Trip> trips) {
@@ -390,6 +404,8 @@ public class TripViewAssembler {
         VehicleCapacityReference vehicle = trip.vehicleId() == null ? null : references.vehicles().get(trip.vehicleId());
         // Resolved from the trip's own carrier_id, not from the vehicle: see CarrierLookupPort.
         MasterReference carrier = trip.carrierId() == null ? null : references.carriers().get(trip.carrierId());
+        MasterReference acceptedCarrier = trip.acceptedCarrierId() == null
+                ? null : references.carriers().get(trip.acceptedCarrierId());
         DriverReference driver = trip.driverId() == null ? null : references.drivers().get(trip.driverId());
         RouteTemplate route = trip.routeId() == null ? null : references.routes().get(trip.routeId());
 
@@ -402,6 +418,8 @@ public class TripViewAssembler {
                 trip.vehicleId(), vehicle == null ? null : vehicle.code(),
                 vehicle == null ? null : vehicle.licensePlate(), vehicle == null ? null : vehicle.vehicleTypeCode(),
                 trip.carrierId(), carrier == null ? null : carrier.name(),
+                trip.acceptedCarrierId(), acceptedCarrier == null ? null : acceptedCarrier.name(),
+                trip.awaitsCarrierVehicle(),
                 trip.driverId(), driver == null ? null : driver.code(), driver == null ? null : driver.fullName(),
                 driver == null ? null : driver.phone(), driver == null ? null : driver.licenseNumber(),
                 driver == null ? null : driver.licenseExpiresOn(),

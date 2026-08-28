@@ -274,6 +274,7 @@ public class TripTenderService {
 
         tender.accept(now, TenderResponseSource.OPERATOR, actorId, null, blankToNull(request.notes()));
         saveWithUniquenessBackstop(tender, trip);
+        recordAcceptanceOnTrip(trip, tender, actorId);
         publish(scope, trip, tender, ShipmentEventType.TENDER_ACCEPTED, now);
         // The waterfall, if this shipment is on one (V40). Told from here rather than from the
         // carrier-facing path as well, so the two records - the tender's status and the candidate's
@@ -470,6 +471,10 @@ public class TripTenderService {
         if (accepted) {
             tender.accept(now, TenderResponseSource.INTEGRATION, null, integrationClientId, blankToNull(notes));
             saveWithUniquenessBackstop(tender, trip);
+            // No app user: a carrier answered over the integration API, so there is no person to
+            // name. requireAppUserId would reject the machine by design (JOB 07), and inventing a
+            // principal to satisfy an audit column is exactly what that refusal was about.
+            recordAcceptanceOnTrip(trip, tender, null);
             publish(scope, trip, tender, ShipmentEventType.TENDER_ACCEPTED, now);
         } else {
             tender.reject(now, TenderResponseSource.INTEGRATION, null, integrationClientId, requireReason(notes));
@@ -677,6 +682,24 @@ public class TripTenderService {
      * what the trip's row lock cannot cover: a planner and a carrier served by two application
      * instances at the same instant.
      */
+    /**
+     * Writes the acceptance onto the shipment (migration V42), closing the debt JOB 07 opened.
+     *
+     * <p>Until V42 an acceptance lived only on the tender, because writing it to
+     * {@code trip.carrier_id} would have produced a shipment whose carrier and whose vehicle's
+     * owner disagreed, and there was nowhere else to put it. There is now:
+     * {@code accepted_carrier_id} says who agreed, {@code carrier_id} goes on being the vehicle's
+     * owner, and a shipment where the two differ cannot depart.
+     *
+     * <p>Nothing here picks a vehicle. When the accepting carrier already owns the one on the
+     * shipment - the ordinary case, a carrier accepting its own truck's work - the two fields agree
+     * on the spot and nobody has anything to do.
+     */
+    private void recordAcceptanceOnTrip(Trip trip, TripTender tender, UUID actorId) {
+        trip.recordCarrierAcceptance(tender.carrierId(), actorId);
+        tripRepository.save(trip);
+    }
+
     private void saveWithUniquenessBackstop(TripTender tender, Trip trip) {
         try {
             tenderRepository.saveAndFlush(tender);

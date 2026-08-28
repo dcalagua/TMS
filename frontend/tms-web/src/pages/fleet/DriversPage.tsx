@@ -1,7 +1,10 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Box, Button, MenuItem, TextField, Typography } from "@mui/material";
-import { AddRounded, BadgeRounded, EditRounded, BlockRounded, CheckCircleRounded } from "@mui/icons-material";
+import {
+  AddRounded, BadgeRounded, BuildCircleRounded, EditRounded, BlockRounded, CheckCircleRounded,
+} from "@mui/icons-material";
+import { AvailabilityDrawer } from "./AvailabilityDrawer";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchCarriers } from "../../shared/api/carriersApi";
 import {
@@ -63,6 +66,7 @@ export function DriversPage() {
   const [draft, setDraft] = useState<AppliedFilters>(DEFAULT_FILTERS);
   const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS);
   const [modal, setModal] = useState<ModalState>(null);
+  const [availability, setAvailability] = useState<DriverView | null>(null);
 
   const driversQuery = useQuery({
     queryKey: ["drivers", companyId, page, filters],
@@ -141,6 +145,12 @@ export function DriversPage() {
         <ActionMenu
           items={[
             { key: "edit", label: t("Editar"), icon: <EditRounded />, onSelect: () => setModal({ mode: "edit", driver }) },
+            {
+              key: "availability",
+              label: t("Disponibilidad"),
+              icon: <BuildCircleRounded />,
+              onSelect: () => setAvailability(driver),
+            },
             {
               key: "active",
               label: driver.active ? t("Desactivar") : t("Activar"),
@@ -244,6 +254,17 @@ export function DriversPage() {
             notifySaved(wasEdit);
             refresh();
           }}
+        />
+      )}
+
+      {availability && (
+        <AvailabilityDrawer
+          companyId={companyId}
+          resource="driver"
+          resourceId={availability.id}
+          resourceLabel={`${availability.code} · ${availability.firstName} ${availability.lastName}`}
+          canManage={canManage}
+          onClose={() => setAvailability(null)}
         />
       )}
     </>

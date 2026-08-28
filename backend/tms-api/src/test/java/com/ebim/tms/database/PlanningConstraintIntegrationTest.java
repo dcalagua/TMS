@@ -473,6 +473,73 @@ class PlanningConstraintIntegrationTest {
                 + "', " + confirmedAt + ", " + cancelledAt + ") RETURNING id");
     }
 
+    // --- V42: the accepted tender may not contradict the vehicle -------------------
+
+    /**
+     * The database half of open debt D2. The aggregate refuses first
+     * ({@code TripAcceptedCarrierTest}) and {@code TripExecutionService} refuses with a sentence a
+     * dispatcher can read; this is the layer under both, and the one that holds when a raw data fix
+     * writes the row directly.
+     */
+    @Test
+    @DisplayName("a shipment cannot have departed under a carrier that does not own its vehicle")
+    void departedShipmentMustMatchItsVehiclesCarrier() throws SQLException {
+        Fixture fixture = fixture("ACCEPTCARRIER");
+        UUID owner = insertCarrierFor(fixture, "OWNER");
+        UUID other = insertCarrierFor(fixture, "OTHER");
+
+        assertViolates(CHECK_VIOLATION, () -> execute("INSERT INTO tms.trip (company_id, planning_run_id,"
+                + " planning_date, trip_number, status, vehicle_id, carrier_id, accepted_carrier_id,"
+                + " planned_departure_at, snapshot_max_weight_kg, snapshot_max_volume_m3, snapshot_max_pallets,"
+                + " capacity_snapshot_at, confirmed_at, ready_at, actual_departure_at) VALUES ('"
+                + fixture.companyId + "', '" + fixture.runId + "', '2026-04-01', 1, 'IN_TRANSIT', '"
+                + fixture.vehicleId + "', '" + owner + "', '" + other + "', now(), 10000, 40, 20, now(), now(),"
+                + " now(), now())"));
+    }
+
+    /**
+     * The same row before departure is legal, and that is the point of the state rather than an
+     * oversight: a shipment agreed with one carrier and carrying another's truck is a real
+     * operational moment, and only leaving the yard is forbidden in it.
+     */
+    @Test
+    @DisplayName("but a confirmed shipment may sit in that state while it is still being planned")
+    void aReadyShipmentMayAwaitTheCarriersVehicle() throws SQLException {
+        Fixture fixture = fixture("ACCEPTPENDING");
+        UUID owner = insertCarrierFor(fixture, "OWNER");
+        UUID other = insertCarrierFor(fixture, "OTHER");
+
+        execute("INSERT INTO tms.trip (company_id, planning_run_id, planning_date, trip_number, status,"
+                + " vehicle_id, carrier_id, accepted_carrier_id, planned_departure_at, snapshot_max_weight_kg,"
+                + " snapshot_max_volume_m3, snapshot_max_pallets, capacity_snapshot_at, confirmed_at)"
+                + " VALUES ('" + fixture.companyId + "', '" + fixture.runId + "', '2026-04-01', 1, 'CONFIRMED', '"
+                + fixture.vehicleId + "', '" + owner + "', '" + other + "', now(), 10000, 40, 20, now(), now())");
+
+        assertThat(scalar("SELECT COUNT(*) FROM tms.trip WHERE planning_run_id = '" + fixture.runId
+                + "' AND accepted_carrier_id = '" + other + "'")).isEqualTo("1");
+    }
+
+    @Test
+    @DisplayName("the accepting carrier must belong to the shipment's company")
+    void acceptedCarrierIsTenantScoped() throws SQLException {
+        Fixture companyA = fixture("ACCEPTTENANT-A");
+        Fixture companyB = fixture("ACCEPTTENANT-B");
+        UUID foreign = insertCarrierFor(companyB, "FOREIGN");
+
+        assertViolates(FOREIGN_KEY_VIOLATION, () -> execute("INSERT INTO tms.trip (company_id, planning_run_id,"
+                + " planning_date, trip_number, accepted_carrier_id) VALUES ('" + companyA.companyId + "', '"
+                + companyA.runId + "', '2026-04-01', 1, '" + foreign + "')"));
+    }
+
+    private UUID insertCarrierFor(Fixture fixture, String suffix) throws SQLException {
+        return insertReturningId("INSERT INTO tms.carrier (company_id, code, business_name, tax_id_type,"
+                + " tax_id_value) VALUES ('" + fixture.companyId + "', 'CARR-" + suffix + "-"
+                + fixture.companyId.toString().substring(0, 8).toUpperCase(java.util.Locale.ROOT)
+                + "', 'Carrier " + suffix + "', 'RUC', '"
+                + String.format(java.util.Locale.ROOT, "20%09d", Math.abs((suffix + fixture.companyId).hashCode())
+                        % 1_000_000_000) + "') RETURNING id");
+    }
+
     // --- V19: shipment number and the route suggestion ----------------------------
 
     @Test

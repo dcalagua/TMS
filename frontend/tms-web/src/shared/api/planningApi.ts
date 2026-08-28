@@ -266,6 +266,19 @@ export interface TripView {
   /** The carrier the shipment was *planned* with, resolved from `carrierId` - not the vehicle's
    * current carrier, which may since have changed (see `CarrierLookupPort`). */
   carrierName: string | null
+  /**
+   * El transportista que **aceptó** un tender de este envío (migración V42), cuando no es el dueño
+   * del vehículo asignado. Null en casi todos los envíos, y null no significa "desconocido": es
+   * "nada contradice a `carrierId`".
+   */
+  acceptedCarrierId: string | null
+  acceptedCarrierName: string | null
+  /**
+   * El envío está acordado con un transportista y lleva el camión de otro. Es un estado de
+   * planificación ordinario que bloquea una sola cosa: **no puede salir** hasta que se le asigne un
+   * vehículo del transportista que aceptó.
+   */
+  awaitsCarrierVehicle: boolean
   driverId: string | null
   driverCode: string | null
   /** "Last, first" - composed server-side so no screen has to guess the order of the two columns. */

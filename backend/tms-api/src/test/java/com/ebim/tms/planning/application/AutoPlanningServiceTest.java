@@ -712,6 +712,9 @@ class AutoPlanningServiceTest {
             TripView trip = new TripView(tripId, COMPANY, RUN, null, DATE, 1, "SH-" + tripId,
                     cancelledTrips.contains(tripId) ? TripStatus.CANCELLED : TripStatus.DRAFT,
                     ORIGIN, null, null, null, null, vehicleByTrip.get(tripId), null, null, null, null, null,
+                    // V42: acceptedCarrierId, acceptedCarrierName, awaitsCarrierVehicle - no
+                    // subcontracting in this fixture, which is what false says.
+                    null, null, false,
                     null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                     null, null, Set.of(), null, stops.size(), orders.size(), versionByTrip.get(tripId),
                     null, null);

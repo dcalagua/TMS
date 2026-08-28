@@ -129,5 +129,16 @@ public enum AuditAction {
     APPOINTMENT_BOOKED,
     APPOINTMENT_RESCHEDULED,
     APPOINTMENT_CANCELLED,
-    APPOINTMENT_NO_SHOW
+    APPOINTMENT_NO_SHOW,
+
+    /**
+     * A vehicle or a driver was taken out of service, or put back (migration V42).
+     *
+     * <p>Recorded against the VEHICLE or the DRIVER, not against a new aggregate type: what changed
+     * is the availability of an existing master, and a planner asking "why did truck TR-04 not run
+     * on the 14th" reads it on the truck. Releasing deletes the block row, so this pair is the only
+     * surviving record that it ever existed - which is the point.
+     */
+    RESOURCE_BLOCKED,
+    RESOURCE_RELEASED
 }

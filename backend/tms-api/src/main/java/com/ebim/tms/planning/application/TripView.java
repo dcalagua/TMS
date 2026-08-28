@@ -77,6 +77,20 @@ public record TripView(
         String vehicleTypeCode,
         UUID carrierId,
         String carrierName,
+        /**
+         * The carrier that accepted a tender for this shipment, when that is not the owner of the
+         * vehicle on it (migration V42). Null on almost every shipment, and null does not mean
+         * unknown - it means nothing contradicts {@code carrierId}.
+         */
+        UUID acceptedCarrierId,
+        String acceptedCarrierName,
+        /**
+         * True when {@code acceptedCarrierId} and {@code carrierId} disagree: the shipment is
+         * agreed with a carrier and has somebody else's truck on it. An ordinary planning state
+         * that blocks one thing - the shipment cannot depart until a vehicle of the accepting
+         * carrier is assigned.
+         */
+        boolean awaitsCarrierVehicle,
         UUID driverId,
         String driverCode,
         String driverName,

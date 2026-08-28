@@ -98,6 +98,23 @@ public class Trip {
     private UUID carrierId;
 
     /**
+     * The carrier that <em>accepted</em> a tender for this shipment, which is not necessarily the
+     * owner of the vehicle on it (migration V42).
+     *
+     * <p>{@link #carrierId} goes on meaning what it has always meant: the owner of the assigned
+     * vehicle, set by {@link #assignVehicle}. Subcontracting makes the two legitimately disagree
+     * for a while - the carrier is agreed, the truck is not sorted out yet - and this field is what
+     * makes that state expressible instead of silently lost. It is also what makes it
+     * <em>blocking</em>: {@link #dispatch} refuses while the two disagree, and
+     * {@code ck_trip_departed_carrier_matches_vehicle} refuses in the database.
+     *
+     * <p>Null on every shipment nobody has tendered elsewhere, which is almost all of them. Null
+     * means "no acceptance says anything different from the vehicle", not "unknown".
+     */
+    @Column(name = "accepted_carrier_id")
+    private UUID acceptedCarrierId;
+
+    /**
      * The driver planned to run this shipment, or null when none has been named yet (migration
      * V26). Not required by any state - see {@link #assignDriver}.
      */
@@ -234,6 +251,21 @@ public class Trip {
         return vehicleId;
     }
 
+    public UUID acceptedCarrierId() {
+        return acceptedCarrierId;
+    }
+
+    /**
+     * Whether this shipment is agreed with a carrier that does not own the vehicle on it.
+     *
+     * <p>True is an ordinary planning state and not an error: somebody accepted, and a compatible
+     * vehicle has still to be put on. It is a state a shipment may sit in, be edited in and be
+     * re-planned in - and may not depart in.
+     */
+    public boolean awaitsCarrierVehicle() {
+        return acceptedCarrierId != null && !acceptedCarrierId.equals(carrierId);
+    }
+
     public UUID carrierId() {
         return carrierId;
     }
@@ -360,6 +392,26 @@ public class Trip {
     }
 
     /**
+     * Records that a carrier accepted a tender for this shipment (migration V42).
+     *
+     * <p>Deliberately does <b>not</b> touch {@link #vehicleId} or {@link #carrierId}. Clearing the
+     * vehicle is impossible - {@code ck_trip_confirmed_is_complete} requires one on every confirmed
+     * trip, and only confirmed trips are tenderable - and choosing one of the accepting carrier's
+     * automatically would mean picking among another company's fleet by rules nobody has stated.
+     * So the acceptance is recorded as the fact it is, and the shipment is stopped from departing
+     * until a planner resolves it. See {@link #awaitsCarrierVehicle}.
+     */
+    public void recordCarrierAcceptance(UUID acceptingCarrierId, UUID actorId) {
+        this.acceptedCarrierId = acceptingCarrierId;
+        // Null when a carrier answered over the integration API and there is no person to name.
+        // Left alone rather than written, because overwriting the last human who touched this
+        // shipment with "nobody" loses a fact to record the absence of one.
+        if (actorId != null) {
+            this.updatedBy = actorId;
+        }
+    }
+
+    /**
      * Names the driver who will run this shipment, or clears the name when {@code driverId} is
      * null.
      *
@@ -424,6 +476,11 @@ public class Trip {
      */
     public void dispatch(OffsetDateTime actualDepartureAt, UUID actorId) {
         requireTransitionTo(TripStatus.IN_TRANSIT);
+        if (awaitsCarrierVehicle()) {
+            throw new IllegalStateException("trip " + shipmentNumber + " was accepted by a carrier that does not"
+                    + " own the vehicle assigned to it, and cannot depart until one of that carrier's vehicles"
+                    + " is assigned");
+        }
         this.status = TripStatus.IN_TRANSIT;
         this.actualDepartureAt = actualDepartureAt;
         this.dispatchedBy = actorId;

@@ -83,6 +83,17 @@ export const ENUM_LABELS = {
     TUESDAY: "Mar",
     WEDNESDAY: "Mié",
   },
+  /** V42: por qué un vehículo o un conductor no puede trabajar. */
+  unavailabilityReason: {
+    ABSENCE: "Ausencia",
+    HOLIDAY: "Vacaciones",
+    INSPECTION: "Inspección",
+    MAINTENANCE: "Mantenimiento",
+    MEDICAL: "Baja médica",
+    OTHER: "Otro",
+    REPAIR: "Reparación",
+    TRAINING: "Capacitación",
+  },
   resourceType: {
     BAY: "Bahía",
     DOCK: "Muelle",
