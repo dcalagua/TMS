@@ -16,7 +16,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 04 | Routing Matrix + Travel Time | **PASS** | 2026-08-28 02:30 | `29b484c` | **V38** | 1466 / 0 fail | false |
 | 05 | Advanced Bulk Planning Engine V2 | **PASS** | 2026-08-28 02:50 | `586e7ed` | none (V38 head) | 1498 / 0 fail | false |
 | 06 | Rate Engine V2 | **PASS** | 2026-08-28 03:20 | `38172c3` | **V39** | 1517 / 0 fail | false |
-| 07 | Carrier Selection + Tender Waterfall | pending | - | - | - | - | - |
+| 07 | Carrier Selection + Tender Waterfall | **PASS** | 2026-08-28 03:45 | `631fa3c` | **V40** | 1536 / 0 fail | false |
 | 08 | Dock / Appointment Scheduling | pending | - | - | - | - | - |
 | 09 | Fleet Resource Scheduling | pending | - | - | - | - | - |
 | 10 | ETA + Geofencing + Predictive Tracking | pending | - | - | - | - | - |
@@ -27,7 +27,7 @@ that its RESULT still matches the working tree, and continue from the next pendi
 | 15 | Observability + Performance + Security | pending | - | - | - | - | - |
 | 16 | Final Enterprise Certification | pending | - | - | - | - | - |
 
-**LAST_COMPLETED_JOB = 06**
+**LAST_COMPLETED_JOB = 07**
 
 ## Baseline established by JOB 01
 
@@ -202,3 +202,27 @@ floor is a rule about other charges. Reverted in entity and migration.
 **Open:** proposal pricing still unwired, so JOB 05's `totalCost` stays null; the pieces exist but a
 number without tests would be the fabrication JOB 05 refused. **Waiting time** is never populated -
 honest, not broken. **Delivery quantity** (JOB 03) unchanged and not inferred.
+
+### JOB 07 - 2026-08-28 - PASS
+
+STARTED_AT=03:22 · COMPLETED_AT=03:45 · HEAD_BEFORE=`3ec0d67` · HEAD_AFTER=`631fa3c` · MIGRATION=**V40**
+BACKEND_PASS=1536 · BACKEND_FAIL=0 (clean) · FRONTEND_PASS=55 · E2E_PASS=33 · RETRIES=4, all recovered
+
+The waterfall: A rejected → B expired → C accepted, ranked by what each carrier would charge through
+**the same selector and calculator that price the invoice**. The ranking is **stored**, not
+recomputed, so the list walked is the list approved.
+
+**"No tariff entered" is not "free"** - such a carrier ranks last, not first. Currencies are never
+converted; the majority currency is the reference.
+
+**Two limits are decisions, and both are documented rather than worked around:**
+
+1. **No background scheduler.** `requireAppUserId` refuses a machine *by design* - an offer to a
+   carrier is a commercial commitment and the trail must name who made it. A sweep needs a
+   system-actor concept this product does not have, and inventing one at speed would put an
+   unattributable commitment into the history. The waterfall reports `currentOfferLapsed` and a
+   dispatcher advances. The follow-up design is written down in the domain doc.
+2. **Accepting does not reassign the vehicle** - a shipment's carrier is its vehicle's owner, so
+   doing it silently would leave the two disagreeing.
+
+**Delivery quantity** (JOB 03) unchanged and not inferred.
