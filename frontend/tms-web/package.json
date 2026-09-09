@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "description": "eTMS by EBIM - transport management web client",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

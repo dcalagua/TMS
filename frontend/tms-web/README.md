@@ -9,6 +9,7 @@ Solo frontend: no hay backend en este repositorio. Todo dato de negocio viaja
 ## Arrancar
 
 ```bash
+nvm use                        # Node 22, el de `.nvmrc`
 npm install
 cp .env.example .env.local     # y rellena los valores
 npm run dev                    # http://localhost:5173
@@ -21,6 +22,23 @@ npm run dev                    # http://localhost:5173
 | `npm run typecheck` | Solo la comprobación de tipos |
 | `npm run lint` | oxlint |
 | `npm run test` | Vitest (la capa está configurada; los tests se escriben según haga falta) |
+
+### La versión de Node no es opcional
+
+**`^20.19.0 || >=22.12.0`**, declarado en `engines` y fijado en `.nvmrc`. Es el suelo que
+imponen Vite 8 —que empaqueta con rolldown, y rolldown importa `styleText` de `node:util`— y
+oxlint, que resuelve su binario nativo por `engines`.
+
+Lo que hace que merezca estar escrito es cómo se manifiesta cuando no se cumple: con Node 18 no
+sale un mensaje sobre la versión, salen tres fallos que no se parecen entre sí. `vite build`
+muere con `SyntaxError: ... does not provide an export named 'styleText'`; `npm run lint` muere
+con `ERR_UNKNOWN_FILE_EXTENSION`, porque `npm ci` se saltó en silencio el binding nativo de la
+plataforma al no cumplirse su `engines`; y `tsc -b` pasa sin quejarse, que es justo lo que hace
+creer que el entorno está bien. `npm run test` cae con el mismo `styleText` que el build, así
+que en un Node viejo **la comprobación de tipos es la única puerta que llega a ejecutarse**.
+
+Declararlo convierte los cuatro en un `EBADENGINE` de `npm ci`, y deja escrito en el repositorio
+lo mismo que `amplify.yml` instala en `preBuild` antes de construir.
 
 ## Conexiones
 
