@@ -34,7 +34,10 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    // 'hidden' emits the maps for whoever needs them but drops the //# sourceMappingURL comment,
+    // so a browser does not fetch them and an anonymous visitor is not handed the full source of
+    // a private product. `true` published exactly that to anyone who opened dev tools.
+    sourcemap: 'hidden',
   },
   test: {
     environment: 'jsdom',

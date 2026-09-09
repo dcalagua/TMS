@@ -96,6 +96,14 @@ tms:
     application-name: TMS by EBIM
     # OpenAPI/Swagger UI without authentication. Overridden to false in prod.
     public-documentation: true
+  release:
+    # The revision this build is running, published by GET /api/v1/system/info so an operator can
+    # answer "which build is live" without a dashboard. Declared here to be discoverable, not
+    # because anything needs setting: empty falls through to RENDER_GIT_COMMIT, which Render
+    # injects on its own, and then to build-info. Deliberately no literal default - absent must
+    # stay absent, so "did not record its revision" stays distinguishable from "is the wrong
+    # revision".
+    commit: ${TMS_RELEASE_COMMIT:}
   security:
     jwt:
       # Supabase Auth coordinates. No default: a deployment that does not set these fails at
