@@ -2225,3 +2225,85 @@ need Docker.
 
 None. The only access path is the primary key.
 
+## 29. The grants this document already described (migration V50)
+
+This section adds no table and no column. It records that a claim repeated throughout sections
+20 to 28 - and in `docs/security/RLS_STRATEGY.md` and `SchemaExposureIntegrationTest`'s own
+comments - was not true of the deployed schema until V50, and is now.
+
+### 29.1 Why "no `DELETE` grant" was not a `DELETE` grant that was missing
+
+V13 gave `tms_app` its table privileges twice:
+
+```sql
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA tms TO tms_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA tms
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO tms_app;
+```
+
+The second statement fires at `CREATE TABLE` time for every table Flyway creates afterwards.
+So `GRANT SELECT, INSERT, UPDATE ON tms.notification TO tms_app;` (section 26.5, "`UPDATE`
+granted, `DELETE` withheld") **withheld nothing**: `GRANT` is additive, `DELETE` was attached
+the instant the table was created, and a shorter grant neither adds nor removes.
+
+V22 noticed and wrote the `REVOKE` that does the work - "the REVOKE below is what actually
+withholds the two that matter" - and V23, V27, V28 and V29 followed. Eleven tables created
+between V20 and V46 stopped at the `GRANT`:
+
+| Table | Migration that described the narrowing | Verbs V50 revoked |
+|---|---|---|
+| `tms.shipment_outbox_event` | V20 | `UPDATE`, `DELETE` |
+| `tms.notification` | V32 (section 26.5) | `DELETE` |
+| `tms.company_settings` | V34 (section 28) | `DELETE` |
+| `tms.webhook_delivery` | V35 | `DELETE` |
+| `tms.webhook_delivery_attempt` | V35 | `UPDATE`, `DELETE` |
+| `tms.tender_waterfall` | V40 | `DELETE` |
+| `tms.tender_waterfall_candidate` | V40 | `DELETE` |
+| `tms.appointment` | V41 | `DELETE` |
+| `tms.order_delivery_line` | V45 | `DELETE` |
+| `tms.settlement_approval` | V46 | `UPDATE`, `DELETE` |
+| `tms.payable_export` | V46 | `UPDATE`, `DELETE` |
+
+Each was checked against the Java side before the verb was taken away: no repository method,
+`@Modifying` query, JDBC statement, dirty-checked setter or `orphanRemoval` collection issues
+any of them today. `tms.tender_waterfall_candidate` was the one worth the check -
+`TenderWaterfall` maps it with `cascade = ALL, orphanRemoval = true`, so the day something
+clears that list Hibernate would emit `DELETE` with nobody deciding to. It now fails loudly
+instead.
+
+### 29.2 The authorization catalogue is read-only to the runtime role
+
+`tms.role`, `tms.permission` and `tms.role_permission` are schema-contract reference data,
+seeded by V3/V5 and extended by V14/V18/V23. No JPA entity maps them, and the only Java that
+names them - `JdbcIdentityRepository`, `UserAdministrationRepository` - `JOIN`s them.
+
+They nevertheless carried all four verbs for `tms_app`, and their policy is `p_backend_managed`
+(`USING (true) WITH CHECK (true)`), because they are read before a company scope exists. So RLS
+contributed no filter and the grant was the entire control - the widest one in the schema, on
+the three tables that decide who may do what. Effective permissions are resolved by joining
+`tms.role_permission`, so an injected `INSERT` under any company-scoped request would have
+granted a permission to a role for every user of every tenant.
+
+V50 revoked `INSERT`, `UPDATE` and `DELETE` on all three. `tms.membership` and
+`tms.membership_role` keep their four verbs: the user-administration surface writes them.
+
+### 29.3 `tms.set_updated_at()` pins its `search_path`
+
+The schema's other function, `tms.current_company_id()`, has pinned
+`SET search_path = pg_catalog, pg_temp` since V13. This one, written in V1 and attached to 34
+triggers, inherited the caller's. V50 replaced it with `CREATE OR REPLACE`, which keeps the
+function's OID - so every trigger binding survives - and keeps V4's `REVOKE ... FROM PUBLIC`.
+See `docs/security/RLS_STRATEGY.md` section 2.6 for why it was not exploitable and was pinned
+anyway.
+
+### 29.4 What V50 deliberately did not do
+
+It did not set `FORCE ROW LEVEL SECURITY`. `docs/security/RLS_STRATEGY.md` section 2.4 carries
+the reasoning and the counted evidence: 19 cross-company data backfills in this history run as
+the owner and would silently update zero rows, and `WebhookDispatchScheduler` would drain zero
+rows instead of every company's queue.
+
+### 29.5 Indexes added by V50
+
+None. It changes privileges and one function body.
+
