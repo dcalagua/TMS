@@ -191,6 +191,46 @@ class MigrationConventionTest {
                 .allSatisfy(table -> assertThat(withRls).contains(table));
     }
 
+    /**
+     * Every sequence names the runtime role in a grant of its own.
+     *
+     * <p>V13 gave {@code tms_app} its sequence privileges twice over: once with
+     * {@code GRANT ... ON ALL SEQUENCES}, which is a one-off over the sequences that existed at
+     * the time, and once with {@code ALTER DEFAULT PRIVILEGES}, which applies only to objects
+     * created by the very role that executed it. Neither survives a rebuild performed under a
+     * different administrative role, and a sequence that ends up without an ACL entry for
+     * {@code tms_app} fails at {@code nextval} under {@link
+     * com.ebim.tms.shared.security.TenantScopedDataSource} - the business stops rather than
+     * leaking, and nothing in the migration history says why.
+     *
+     * <p>Tables never had that problem because each one carries its own named grant. This rule
+     * holds sequences to the same standard, and it is checked against the SQL text because the
+     * container-backed alternative is skipped on exactly the machine where a new sequence gets
+     * added without one.
+     */
+    @Test
+    @DisplayName("every sequence created by a migration grants the runtime role by name")
+    void everySequenceGrantsTheRuntimeRole() {
+        Pattern created = Pattern.compile("create\\s+sequence\\s+(?:if\\s+not\\s+exists\\s+)?tms\\.([a-z_]+)");
+        Pattern granted = Pattern.compile("grant\\s+[^;]*?\\bon\\s+tms\\.([a-z_]+)\\s+to\\s+tms_app");
+
+        List<String> sequences = new java.util.ArrayList<>();
+        java.util.Set<String> withGrant = new java.util.LinkedHashSet<>();
+        for (Path script : SCRIPTS) {
+            String sql = MigrationScripts.withoutComments(MigrationScripts.read(script)).toLowerCase(Locale.ROOT);
+            created.matcher(sql).results().map(match -> match.group(1)).forEach(sequences::add);
+            granted.matcher(sql).results().map(match -> match.group(1)).forEach(withGrant::add);
+        }
+
+        assertThat(sequences).as("the migration history is expected to create sequences").isNotEmpty();
+        assertThat(sequences)
+                .as("every tms sequence must be granted to tms_app by name somewhere in the history. "
+                        + "V13's blanket grant covers only what existed then, and its default "
+                        + "privileges bind to the creating role, so a later sequence relying on "
+                        + "either can lose the privilege in a rebuild and stop nextval dead.")
+                .allSatisfy(sequence -> assertThat(withGrant).contains(sequence));
+    }
+
     @Test
     @DisplayName("Flyway is the only migration history: supabase/migrations does not exist")
     void supabaseCarriesNoParallelMigrationHistory() {

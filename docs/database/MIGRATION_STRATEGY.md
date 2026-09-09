@@ -21,6 +21,12 @@ Rules, enforced by `MigrationConventionTest` (which needs no database, so it run
 - no migration inserts tenant data (`organization`, `company`, `app_user`, `membership`,
   `membership_role`) or a credential;
 - no migration grants privileges to `anon` or `authenticated`;
+- every table created by a migration enables Row Level Security somewhere in the history;
+- every sequence created by a migration grants `tms_app` **by name**. V13's
+  `GRANT ... ON ALL SEQUENCES` covered only the sequences that existed when it ran, and its
+  `ALTER DEFAULT PRIVILEGES` binds to the role that executed it, so neither survives a
+  rebuild performed under a different administrative role. That is the gap V49 closed for
+  `tms.shipment_number_seq`, and the rule now stops it reopening;
 - `supabase/migrations` must not exist.
 
 ## 2. Immutability
@@ -152,7 +158,10 @@ This is deliberate: undo scripts are rarely exercised and give false confidence.
 3. `created_at`, `updated_at`, `set_updated_at` trigger, actor columns where an actor exists.
 4. Explicit constraint names (`pk_`, `fk_`, `uq_`, `ck_`, `ix_`), `ON DELETE RESTRICT`
    unless the row is pure configuration.
-5. `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` for every new table, in the same migration.
+5. `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` for every new table, in the same migration,
+   plus its tenant policy and its named `GRANT ... TO tms_app`. A new **sequence** gets an
+   explicit `GRANT USAGE, SELECT ... TO tms_app` too - V13's default privileges are not a
+   substitute, because they bind to a creating role rather than to the schema.
 6. `COMMENT ON` for anything whose reason is not obvious from its name.
 7. Tests: constraints, tenant isolation, and the migration replay suite stays green.
 8. Never edit an applied file.
