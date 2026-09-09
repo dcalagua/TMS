@@ -203,9 +203,28 @@ browser changes nothing, because every endpoint re-checks server-side.
 | the Java permission enum matches the migrated catalogue | `IdentityResolutionIntegrationTest.permissionEnumMatchesTheDatabaseCatalogue` |
 | missing auth configuration stops startup; production rejects a local configuration | `SupabaseJwtDecodersTest` |
 | controllers cannot bypass the service layer to reach a repository | `LayeringTest` |
+| a resource id belonging to another company is queried inside the caller's company, so the row is not there | `CrossTenantAttackTest.readingAForeignOrderIsScopedToTheCaller`, `aForeignTripIsLookedUpInTheCallersCompany` |
+| a refused company selection never reaches a repository at all | `CrossTenantAttackTest.HeaderManipulation` |
+| a foreign id is answered with 404, indistinguishable from one that exists nowhere | `CrossTenantAttackTest.theRefusalDoesNotDiscloseExistence` |
+| a write against another company's row writes nothing and records no audit entry | `CrossTenantAttackTest.updatingAForeignOrderWritesNothing`, `cancellingAForeignOrderWritesNothing` |
+| `companyId`/`organizationId` in a request body do not choose the tenant | `CrossTenantAttackTest.tenantFieldsInTheBodyAreIgnored` |
+| an authentic token asserting `role`, `company_id` and `permissions` claims gains nothing from them | `CrossTenantAttackTest.ClaimManipulation` |
+| the preflight accepts `X-Company-Id`/`X-Correlation-Id` and the response exposes the correlation id | `ApiSecurityTest.CrossOrigin` |
+| no endpoint is unguarded without a written reason, and every guarded one declares its company | `EndpointContractTest` |
+| no finder hands out a row by bare id | `TenantScopedRepositoryTest` |
 
 No test contacts an authentication service, and no signing key exists outside the JVM that
 generated it.
+
+### 8.1 What runs without Docker, and why that matters
+
+`CrossTenantAttackTest` and `ApiSecurityTest` need no container: they drive the production filter
+chain over mocked repositories, so the assertion is *what the database would have been asked* -
+which is the fact the tenancy property rests on - rather than what it answered. Every
+`*ApiIntegrationTest` that proves the same isolation against real SQL is
+`@EnabledIf(DockerAvailability)` and is therefore **skipped, not passed**, on a machine with no
+container runtime. Both halves are needed: the suites above show the application layer refuses
+cross-tenant access, and only the Testcontainers suites show RLS refuses it a second time.
 
 ## 9. Known limits of this baseline
 
