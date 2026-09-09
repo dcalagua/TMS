@@ -1,0 +1,274 @@
+# TMS by EBIM - continuous integration.
+#
+# WHAT THIS CLOSES
+# ----------------
+# Until this file existed there was no CI at all. The only gate any code passed before being
+# published was the AWS Amplify build - `tsc -b && vite build` on the frontend - and the backend
+# passed through nothing whatsoever: `backend/tms-api/Dockerfile` builds with `-DskipTests` and
+# says so, on the correct grounds that "CI owns that gate". CI did not exist to own it.
+#
+# WHAT RUNS WHERE, AND WHY THAT SPLIT
+# -----------------------------------
+# GitHub-hosted `ubuntu-latest` runners ship a Docker daemon and Node and Java are installed by
+# the setup actions, so a runner can do things this project's development machine cannot:
+# Testcontainers integration tests (no Docker locally), and Vite 8 / Vitest 4 / oxlint (they need
+# Node 20.19+/22.12+, and the local machine has Node 18 with no version manager).
+#
+# What a runner still cannot do is reach an environment. There is no QAS URL in this repository
+# and no deployment credential in this workflow, so nothing here deploys, migrates or smoke-tests
+# a running system. That work is `scripts/ops/verify-deployment.sh`, run by a person against a
+# real host after a promotion - see docs/operations/PROMOTION.md. Deliberately nothing in this
+# file needs a secret; a green run therefore means "this revision builds and its tests pass", not
+# "this revision is live".
+#
+# HOW THIS GATES A PROMOTION
+# --------------------------
+# A push to `qas` IS the deploy trigger (Render and Amplify watch a branch set in their own
+# dashboards). CI running on that push starts at the same moment as the deploy and so gates
+# nothing. For these checks to actually block a bad revision, `qas` must be reached through a
+# pull request from `dev` with these jobs required by branch protection. That is a repository
+# setting, not something this file can assert - it is written down in
+# docs/operations/PROMOTION.md section 2.
+
+name: CI
+
+on:
+  push:
+    branches: [dev, qas, main]
+  pull_request:
+    branches: [dev, qas, main]
+  workflow_dispatch:
+
+# Read-only. Nothing here publishes an artefact anywhere but the run itself.
+permissions:
+  contents: read
+
+# A superseded run on the same branch is wasted compute and a confusing status. Never cancel on
+# the deployed branches, where the run is the record of what was pushed.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/qas' && github.ref != 'refs/heads/main' }}
+
+env:
+  # The frontend build is a compile: VITE_* values are baked in, so a CI build has to be given
+  # some value. This one is deliberately unroutable (.invalid is reserved by RFC 2606) so that a
+  # CI-built bundle can never accidentally be published and talk to something real, while still
+  # being a legitimate https URL ending in /api/v1 - which is what lets CI exercise the same
+  # environment gate the Amplify build runs.
+  CI_VITE_API_BASE_URL: https://tms-api.ci.invalid/api/v1
+  CI_VITE_SUPABASE_URL: https://ci.supabase.invalid
+  CI_VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key-not-a-credential
+
+jobs:
+  # ===========================================================================================
+  # Backend. Compile first, then the suite: two steps rather than one `verify` so that "it does
+  # not compile" and "a test fails" are distinguishable at a glance in the run summary.
+  # ===========================================================================================
+  backend:
+    name: Backend (Java 21)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # Fail loudly rather than let Testcontainers tests be silently skipped. The whole reason
+      # the backend suite is run here and not locally is that this daemon exists.
+      - name: Docker must be available for Testcontainers
+        run: |
+          if ! docker info >/dev/null 2>&1; then
+            echo "::error::No Docker daemon on this runner. The integration tests need one and"
+            echo "::error::must not be skipped into a green build. Use a GitHub-hosted ubuntu"
+            echo "::error::runner, or provide a daemon."
+            exit 1
+          fi
+          docker version --format '{{.Server.Version}}'
+
+      - name: Compile and package
+        working-directory: backend/tms-api
+        run: ./mvnw -B -ntp -DskipTests package
+
+      # `verify` covers surefire and every Testcontainers-backed integration test. Nothing is
+      # excluded and no failure is tolerated: this is the gate the Dockerfile defers to.
+      - name: Test
+        working-directory: backend/tms-api
+        run: ./mvnw -B -ntp verify
+
+      - name: Publish test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-surefire-reports
+          path: |
+            backend/tms-api/target/surefire-reports/**
+            backend/tms-api/target/failsafe-reports/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ===========================================================================================
+  # Frontend. Typecheck, lint and unit tests, then a real production build that is put through
+  # exactly the gates the Amplify build must run - including a self-test proving the environment
+  # gate refuses an empty configuration instead of waving it through.
+  # ===========================================================================================
+  frontend:
+    name: Frontend (Node 22)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # The version the repository already pins, rather than a second copy of the number.
+          node-version-file: frontend/tms-web/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/tms-web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend/tms-web
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: frontend/tms-web
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: frontend/tms-web
+        run: npm run lint
+
+      - name: Unit tests
+        working-directory: frontend/tms-web
+        run: npm test
+
+      # The gate is only worth having if it refuses. This asserts the refusal, so the day
+      # somebody "fixes" the script into a no-op, CI notices instead of the deploy doing.
+      - name: Environment gate refuses an empty configuration (fail-closed self-test)
+        run: |
+          set +e
+          env -u VITE_API_BASE_URL -u VITE_SUPABASE_URL -u VITE_SUPABASE_ANON_KEY \
+            bash scripts/ci/check-frontend-env.sh >/dev/null 2>&1
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "::error::check-frontend-env.sh accepted a configuration with no VITE_API_BASE_URL."
+            echo "::error::The gate is not fail-closed, so a build with no API URL would publish a"
+            echo "::error::bundle that calls http://localhost:8080 from every visitor's browser."
+            exit 1
+          fi
+          echo "The gate refused the empty configuration (exit $status), as it must."
+
+      - name: Environment gate on this build
+        working-directory: frontend/tms-web
+        env:
+          VITE_API_BASE_URL: ${{ env.CI_VITE_API_BASE_URL }}
+          VITE_SUPABASE_URL: ${{ env.CI_VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ env.CI_VITE_SUPABASE_ANON_KEY }}
+        run: bash ../../scripts/ci/check-frontend-env.sh
+
+      - name: Production build
+        working-directory: frontend/tms-web
+        env:
+          VITE_API_BASE_URL: ${{ env.CI_VITE_API_BASE_URL }}
+          VITE_SUPABASE_URL: ${{ env.CI_VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ env.CI_VITE_SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      # GITHUB_SHA is what the manifest picks up here; AWS_COMMIT_ID is what it picks up in the
+      # Amplify build. Running it in CI is what proves the script works before a deploy depends
+      # on it.
+      - name: Stamp the artefact with this commit
+        working-directory: frontend/tms-web
+        env:
+          VITE_API_BASE_URL: ${{ env.CI_VITE_API_BASE_URL }}
+        run: bash ../../scripts/ci/write-release-manifest.sh dist
+
+      - name: Assert the artefact is publishable
+        working-directory: frontend/tms-web
+        env:
+          VITE_API_BASE_URL: ${{ env.CI_VITE_API_BASE_URL }}
+        run: bash ../../scripts/ci/assert-frontend-bundle.sh dist
+
+      - name: Show the release manifest
+        working-directory: frontend/tms-web
+        run: cat dist/release.json
+
+  # ===========================================================================================
+  # End-to-end, against the built bundle.
+  #
+  # Playwright's webServer runs `npm run build && vite preview`, so this exercises the files that
+  # would be deployed rather than the dev server. What it CANNOT cover is the SPA rewrite rule:
+  # `vite preview` serves index.html for an unknown path by itself, while AWS Amplify answers 404
+  # until a rewrite is configured in the console. So the 24 navigation specs pass here and can
+  # still all fail in QAS - only scripts/ops/verify-deployment.sh checks the real thing.
+  #
+  # The authenticated specs skip themselves visibly when E2E_USER_EMAIL / E2E_USER_PASSWORD are
+  # absent, which they are here: no credential belongs in this workflow.
+  # ===========================================================================================
+  e2e:
+    name: E2E (built bundle, unauthenticated)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/tms-web/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/tms-web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend/tms-web
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: frontend/tms-web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright
+        working-directory: frontend/tms-web
+        env:
+          VITE_API_BASE_URL: ${{ env.CI_VITE_API_BASE_URL }}
+          VITE_SUPABASE_URL: ${{ env.CI_VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ env.CI_VITE_SUPABASE_ANON_KEY }}
+        run: npm run e2e
+
+      - name: Publish the Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/tms-web/playwright-report/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ===========================================================================================
+  # One status to require in branch protection, so adding a job later does not mean editing the
+  # protection rule and forgetting to. `if: always()` plus an explicit result check: a skipped or
+  # cancelled dependency must not read as a pass.
+  # ===========================================================================================
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, e2e]
+    if: always()
+    steps:
+      - name: Every gate must have passed
+        run: |
+          results="backend=${{ needs.backend.result }} frontend=${{ needs.frontend.result }} e2e=${{ needs.e2e.result }}"
+          echo "$results"
+          case "$results" in
+            *failure*|*cancelled*|*skipped*)
+              echo "::error::At least one gate did not pass: $results"
+              exit 1
+              ;;
+          esac
+          echo "All gates passed."

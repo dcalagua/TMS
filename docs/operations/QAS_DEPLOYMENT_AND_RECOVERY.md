@@ -20,11 +20,31 @@ matters: *did a deployed backend actually start against this database?*
 `spring.flyway.enabled` is `true` under `prod` with no variable to switch it off, and the readiness
 probe reports UP only after Flyway finishes. So:
 
-> **`tms.flyway_schema_history` advancing from V35 to V48 is direct, non-repudiable evidence that a
-> real backend booted against this database.** Nothing else writes that table.
+> **`tms.flyway_schema_history` advancing is direct, non-repudiable evidence that a real backend
+> booted against this database.** Nothing else writes that table.
 
 It is a better signal than a deploy dashboard, because it proves the application ran rather than
 that a container was built.
+
+> ### ⚠ 2026-09-08: that table did not advance, and this is the open HIGH finding
+>
+> The sentence above was written as the test this promotion would pass. **It failed.** The
+> `dev → qas` promotion merged cleanly (PR #9, `70861e6`) and `tms.flyway_schema_history` did not
+> move — it has read **V35 since 2026-08-25** — and the Supabase logs show no application
+> connection in the window. The Phase 1 promotion carried V43 and this database is still at V35, so
+> it is a pattern, not a slow build.
+>
+> Recorded as **QAS-H1** in `TMS_QAS_RUNTIME_CERTIFICATION.md`: *no deployment channel reaches this
+> database.* Not a code defect — it is resolvable only from the Render and Amplify consoles, and the
+> leading candidate is that the Render service tracks a branch other than `qas` (`main` sits at an
+> old unrelated commit). See `docs/operations/PROMOTION.md` §1.
+>
+> The thirteen pending migrations were deliberately **not** applied by hand, although the access
+> existed: a schema built through a SQL client is not the product of `V1..Vn`, and writing history
+> rows to claim otherwise would have made this page and that table both lie.
+>
+> Everything below therefore describes the recovery properties of an environment whose **database is
+> real and whose deployed application has never been observed.**
 
 ## 2. Code rollback
 

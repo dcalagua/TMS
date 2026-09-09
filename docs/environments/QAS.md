@@ -21,8 +21,14 @@ quien lee, y las coordenadas concretas viven donde deben vivir, en las variables
 
 ## Flyway es la única fuente de verdad del esquema
 
-El esquema de QAS se construye ejecutando `V1 … V35` desde
-`backend/tms-api/src/main/resources/db/migration/`. Nada más lo toca:
+El esquema de QAS se construye ejecutando `V1 … Vn` desde
+`backend/tms-api/src/main/resources/db/migration/`, donde `Vn` es la última migración del
+directorio en el commit desplegado —no un número escrito aquí, que se queda viejo y hace que este
+documento mienta. En el commit en que se escribe esto son 49 ficheros, `V1 … V49`. La cuenta real:
+
+    ls backend/tms-api/src/main/resources/db/migration | wc -l
+
+Nada más toca el esquema:
 
 - **No** se aplica DDL a mano por Studio ni por el editor SQL.
 - **No** se usan las migraciones de Supabase para objetos de la aplicación (ADR-002, ADR-004).
@@ -40,9 +46,10 @@ procedimiento es reconstruir, no reparar:
 
     1. DROP SCHEMA tms CASCADE;              -- sólo `tms`; auth/storage/realtime no se tocan
     2. Arrancar el backend con SPRING_PROFILES_ACTIVE=prod contra QAS
-       -> Flyway aplica V1..V35 y crea su historia nueva
+       -> Flyway aplica V1..Vn y crea su historia nueva
     3. Ejecutar supabase/seeds/qas_seed.sql
-    4. Comprobar: latest = V35, applied = 35, failed = 0
+    4. Comprobar: latest = Vn, applied = n, failed = 0
+       donde n es el número de ficheros del directorio de migraciones en el commit desplegado
 
 El paso 2 usa el mecanismo real del despliegue, no un cliente SQL: lo que valida el entorno es
 que arranque *el backend*, no que las sentencias se dejen ejecutar.
@@ -101,6 +108,19 @@ El frontend **no** se despliega por Docker. `render.yaml` declaraba un servicio 
 apuntaba a un `Dockerfile` retirado en `00f9386`, cuando la publicación pasó a Amplify; ese
 servicio se retiró del blueprint el 2026-08-25 para que la configuración deje de contradecirse.
 
+> ### ⚠ Ningún despliegue a QAS se ha observado nunca
+>
+> `render.yaml` **no** declara `branch:` y `amplify.yml` no puede declararlo: qué rama despliega
+> dónde es un ajuste de cada panel y no se sabe desde el repositorio. Dos promociones se han
+> empujado a `qas` y `tms.flyway_schema_history` sigue en **V35 desde el 2026-08-25** — y esa tabla
+> sólo la escribe un backend arrancando. Está registrado como **QAS-H1** en
+> `TMS_QAS_RUNTIME_CERTIFICATION.md`, y el candidato principal es que Render siga a `main`, que está
+> en un commit viejo y ajeno.
+>
+> **Antes de la próxima promoción, confirmar en consola qué rama sigue cada servicio.** El
+> procedimiento completo, con el punto en el que cada paso falla cerrado, está en
+> `docs/operations/PROMOTION.md`.
+
 Variables que el despliegue espera (sus valores viven en el panel, nunca en el repositorio):
 
     Backend   SPRING_PROFILES_ACTIVE=prod
@@ -114,6 +134,33 @@ Variables que el despliegue espera (sus valores viven en el panel, nunca en el r
 
 `TMS_FLYWAY_ENABLED` no se declara y no hace falta: bajo `prod` el perfil fija `enabled: true` y
 no hay variable que lo apague.
+
+**Si falta `VITE_API_BASE_URL` en el panel, el bundle hornea `http://localhost:8080/api/v1` sin
+avisar** (`frontend/tms-web/src/shared/config/env.ts`), porque los valores `VITE_*` se compilan y
+`env.ts` tiene ese valor por defecto. `scripts/ci/check-frontend-env.sh` rechaza el build antes de
+que eso ocurra y `scripts/ci/assert-frontend-bundle.sh` comprueba el artefacto después; los dos
+deben ejecutarse desde `amplify.yml`. Cambiar la variable en el panel exige **reconstruir**:
+reiniciar no cambia un valor ya compilado.
+
+### Dos acciones que sólo existen en consola
+
+1. **Regla de rewrite SPA.** No está declarada en ninguna parte del repositorio y `amplify.yml` no
+   puede expresarla. Sin ella, Amplify responde 404 a `/masters/locations` y a cualquier enlace
+   profundo, y las 32 pruebas de `e2e/navigation.spec.ts` fallarían en QAS aunque pasen en CI —
+   `vite preview` hace el fallback por su cuenta. Los valores exactos, y por qué `json` y `map`
+   tienen que quedar en la lista de exclusiones, en `docs/operations/PROMOTION.md` §4.1.
+2. **Las variables `VITE_*` por rama**, no sólo a nivel de aplicación. Una variable puesta en la
+   rama equivocada es indistinguible de una que falta.
+
+### Qué commit está vivo
+
+    curl -s https://<api-qas>/api/v1/system/info | ...    -> campo `commit`
+    curl -s https://<web-qas>/release.json                -> campo `commit`
+
+El backend lo toma de `TMS_RELEASE_COMMIT`, si no de `RENDER_GIT_COMMIT` (que Render pone solo), y
+el frontend de `AWS_COMMIT_ID` (que Amplify pone solo). Ninguno de los dos necesita configuración
+en los canales actuales. `scripts/ops/verify-deployment.sh --commit <sha>` convierte la comparación
+en una puerta que falla cerrada.
 
 ## Cuentas de prueba
 
