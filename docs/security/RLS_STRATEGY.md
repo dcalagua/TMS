@@ -139,6 +139,37 @@ Role creation is therefore back inside a migration, and `MigrationConventionTest
 to match the real rule: a migration may create a role, but never one carrying a password and
 never one that can log in.
 
+### Which role a deployment actually connected as, and how it says so
+
+Until now nothing announced it. The role comes from `TMS_DB_USERNAME` and from nowhere else
+(`application-prod.yml`), no code asserts anything about it, and both ways of getting it wrong
+are quiet:
+
+- **The runtime role cannot be entered.** `V13` grants `tms_app` to `CURRENT_USER` - *the role
+  that applied the migration*. A deployment whose runtime credential is a different role, or a
+  project restored without that grant, fails every company-scoped request on `SET ROLE` while
+  every migration still applies cleanly and `/actuator/health` still answers `UP`. It does not
+  reproduce locally: a Testcontainers run migrates as a superuser, which may set any role.
+- **The application connected *as* `tms_app`.** Then Flyway is not the owner and `SET ROLE` is a
+  no-op, so the downgrade this whole section rests on has silently stopped happening.
+
+`TenantRuntimeRoleCheck` reports both, once, on `ApplicationReadyEvent`: it reads
+`session_user`/`current_user` and then performs a real `SET ROLE tms_app` / `RESET ROLE` rather
+than asking `pg_has_role`, because the member privilege `SET ROLE` needs is spelled differently
+across PostgreSQL versions and the operation itself is free. The expected posture logs at INFO;
+an unreachable runtime role logs at ERROR and names the `GRANT` that fixes it. It never fails
+startup - refusing to boot would turn a defence-in-depth misconfiguration into an outage, and
+ADR-003's application-side scoping is unaffected either way.
+
+> **`docs/operations/DEPLOYMENT.md` contradicts this section and is wrong.** It instructs
+> operators to make "the application connect as `tms_app`, not as the schema owner", and lists
+> "confirm the application connects as `tms_app`" as a pre-deployment step;
+> `docs/operations/RUNBOOK_INCIDENTS.md` repeats it. That configuration cannot exist: `tms_app`
+> is `NOLOGIN` and passwordless by design, so a deployment that follows the instruction cannot
+> start. The correct statement is the one above - connect as the owner, and confirm that
+> `tms_app` **can be entered**. Those documents are owned elsewhere and have not been changed
+> here.
+
 ## 5. If the Data API is ever opened (design sketch, not applied)
 
 Should a future ADR justify exposing a table through PostgREST, the policies must be
