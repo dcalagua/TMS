@@ -1,7 +1,6 @@
 package com.ebim.tms.routing.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -393,16 +392,51 @@ class RoutingServiceTest {
             verifyNoInteractions(cache);
         }
 
+        /**
+         * The regression this pair exists for.
+         *
+         * <p>{@code matrix} used to throw {@link IllegalArgumentException} above the budget, which
+         * contradicted {@code RoutingPort}'s own "never throws" contract and ADR-010's "routing
+         * never fails a decision". It was not a corner: {@code AutoPlanningService} asks N x N over
+         * a run's origin and destinations, so fifty geocoded destinations asked for 2550 legs
+         * against the default budget of 2500 and turned an ordinary planning run into an opaque
+         * 500. The budget is a cost guard, not a veto.
+         */
         @Test
-        @DisplayName("a matrix beyond the configured limit is refused rather than attempted")
-        void limitIsEnforced() {
-            RoutingProperties tiny = new RoutingProperties(null, null, null, null, null, 2);
-            RoutingService service = new RoutingService(cache, List.of(local), local, tiny, meterRegistry, clock);
+        @DisplayName("a matrix beyond the budget is answered in part rather than refused")
+        void overBudgetIsAnsweredInPart() {
+            RoutingService service = overBudget();
 
-            assertThatThrownBy(() -> service.matrix(COMPANY, List.of(LIMA, CALLAO, AREQUIPA),
-                    List.of(LIMA, CALLAO, AREQUIPA)))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("exceeds the configured limit");
+            Map<RoutingPort.Leg, TravelEstimate> answers =
+                    service.matrix(COMPANY, List.of(LIMA, CALLAO, AREQUIPA), List.of(LIMA, CALLAO, AREQUIPA));
+
+            // Six off-diagonal pairs wanted, a budget of two: two answered, four left unknown, and
+            // an unknown leg is a state every caller already models.
+            assertThat(answers).hasSize(2);
+            assertThat(counter("tms.routing.lookups", "over-budget")).isEqualTo(1);
+            verify(cache, times(2)).findLeg(any(), any(), any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("the legs that survive the budget are the caller's first ones, the same ones twice")
+        void truncationIsReproducibleAndKeepsTheOriginRow() {
+            List<GeoPoint> points = List.of(LIMA, CALLAO, AREQUIPA);
+
+            Map<RoutingPort.Leg, TravelEstimate> first = overBudget().matrix(COMPANY, points, points);
+            Map<RoutingPort.Leg, TravelEstimate> again = overBudget().matrix(COMPANY, points, points);
+
+            // The caller's own order, so a truncated matrix is reproducible rather than whatever a
+            // hash iteration yielded - and for an N x N that prefix is the first point's whole row,
+            // which is the half a caller sequencing from an origin needs most.
+            assertThat(first).containsOnlyKeys(
+                    new RoutingPort.Leg(LIMA, CALLAO), new RoutingPort.Leg(LIMA, AREQUIPA));
+            assertThat(again.keySet()).isEqualTo(first.keySet());
+        }
+
+        /** A service whose budget two points already exceed. */
+        private RoutingService overBudget() {
+            RoutingProperties tiny = new RoutingProperties(null, null, null, null, null, 2);
+            return new RoutingService(cache, List.of(local), local, tiny, meterRegistry, clock);
         }
     }
 

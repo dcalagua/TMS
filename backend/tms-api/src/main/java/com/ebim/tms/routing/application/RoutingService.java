@@ -104,19 +104,46 @@ public class RoutingService implements RoutingPort {
         return Optional.of(resolve(companyId, origin, destination));
     }
 
+    /**
+     * Every distinct off-diagonal pair, up to what one call is allowed to cost.
+     *
+     * <p><b>A request larger than the budget is answered in part, never refused.</b> This method
+     * used to throw {@link IllegalArgumentException} above {@code matrixLimit}, which contradicted
+     * the one rule {@link RoutingPort} states in its own contract - "never throws for a road it
+     * cannot measure" - and ADR-010's "routing never fails a decision". The cost was not
+     * theoretical: {@code AutoPlanningService} asks for N x N over a run's origin and destinations,
+     * so a planning run touching fifty geocoded destinations asked for 2550 legs against a default
+     * budget of 2500 and died. The API can only render that as an opaque 500, and no planner can
+     * act on it - the plan simply became impossible, for a reason nothing on the board named.
+     *
+     * <p>An unanswered leg, by contrast, is a state every caller already models: {@code
+     * TravelMatrix} reports it unknown, {@code StopScheduleEngine} rule 1 stops estimating from
+     * there, and both planning engines degrade to their pre-V38 behaviour. The budget stays a real
+     * guard on how much work one call may do; it stops being a licence to refuse the call.
+     *
+     * <p>Which legs survive is the caller's own order ({@link #distinctLegs} keeps it), so the
+     * truncation is reproducible rather than whatever a hash iteration happened to yield - and for
+     * an N x N the surviving prefix is the origin's whole row first, which is the half a caller
+     * sequencing from an origin needs most.
+     */
     @Override
     @Transactional
     public Map<Leg, TravelEstimate> matrix(UUID companyId, List<GeoPoint> origins, List<GeoPoint> destinations) {
         Timer.Sample sample = Timer.start(meterRegistry);
         try {
             Set<Leg> wanted = distinctLegs(origins, destinations);
-            if (wanted.size() > properties.matrixLimit()) {
-                throw new IllegalArgumentException("a routing matrix of " + wanted.size()
-                        + " legs exceeds the configured limit of " + properties.matrixLimit());
+            int budget = properties.matrixLimit();
+            List<Leg> asked = List.copyOf(wanted);
+            if (asked.size() > budget) {
+                count(LOOKUP_METRIC, "over-budget");
+                log.warn("Routing was asked for {} legs, over the configured budget of {}; answering the"
+                        + " first {} in the caller's order and leaving the rest unknown.",
+                        asked.size(), budget, budget);
+                asked = asked.subList(0, budget);
             }
 
             Map<Leg, TravelEstimate> answers = new LinkedHashMap<>();
-            for (Leg leg : wanted) {
+            for (Leg leg : asked) {
                 estimate(companyId, leg.origin(), leg.destination())
                         .ifPresent(estimate -> answers.put(leg, estimate));
             }

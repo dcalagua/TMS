@@ -108,6 +108,28 @@ property away.
 `AutoPlanningService` asks routing for the whole matrix in one call — a day with fifteen
 destinations costs one call instead of 240.
 
+### A day too large to measure
+
+The call is N x N over the run's origin and its geocoded destinations, so it grows as the square of
+the destinations: fifty of them ask for 2550 legs against `tms.routing.matrix-limit`, which defaults
+to 2500.
+
+`RoutingService.matrix` used to **throw** above that budget. Since the only production caller is
+this one, the effect was that automatic planning simply stopped working above roughly fifty
+destinations, and did so as an opaque 500 — not a message a planner could act on, and a direct
+contradiction of `RoutingPort`'s own contract and ADR-010's "routing never fails a decision".
+Routing now answers such a request **in part**: the caller's first `matrix-limit` legs, in the
+caller's own order, with the rest left unknown, one `WARN` and a
+`tms.routing.lookups{outcome="over-budget"}` count.
+
+`AutoPlanningService` then **discards a partial answer entirely** and plans the run with
+`TravelMatrix.EMPTY`. Half a matrix would be worse than none: an absent leg reads as zero
+kilometres, so `PlanningEngineV2.nearest` would rank every unmeasured destination as the closest
+one and sequence the day towards exactly the stops nobody could measure, while the shift check ran
+on undercounted driving time. No distances is a supported, tested state (§7); a measurable half is
+not. The run still plans, the log says why it lost its distances, and raising
+`tms.routing.matrix-limit` (hard ceiling 10 000, i.e. 100 places) is the deployment-side answer.
+
 ## 7. Degrading without distances
 
 A company whose locations are not geocoded must still be able to plan. With `TravelMatrix.EMPTY`:
