@@ -303,6 +303,14 @@ integration.api.IntegrationTenderController
 The adapter is a pass-through on purpose. Every rule about what may be answered and when lives in one
 service, so the M2M path and the UI path cannot diverge on any of them.
 
+> Sharing a service is what makes that possible; it does not make it automatic. The two paths *did*
+> diverge once the waterfall (V40) arrived: `accept` and `reject` told it what the carrier answered
+> and `respondAsCarrier` did not, so an integrated carrier's answer left the waterfall reading a
+> state that had not happened. Both doors now report every outcome — see
+> `docs/domain/CARRIER_SELECTION_AND_WATERFALL_V1.md` §4.1. What they still do differently is what
+> §8 there explains and this section's rule never covered: a machine's answer is recorded, and only
+> a person's answer sends the next offer.
+
 ## 11. Deliberately not in V1
 
 * **No multi-carrier tender and no bidding.** Offering one load to three carriers at once needs a
@@ -332,7 +340,8 @@ service, so the M2M path and the UI path cannot diverge on any of them.
 |---|---|
 | `planning/domain/TenderStatusTest` | the transition table, terminality, and that `DRAFT` is the only editable state |
 | `planning/domain/TripTenderTest` | the entity's own rules: the offer pair, the deadline, the response source/actor pairing, and `effectiveStatus` |
-| `planning/application/TripTenderServiceTest` | the service rules - tenderable states, one live attempt, one acceptance, lapse resolution, and what each transition publishes |
+| `planning/application/TripTenderServiceTest` | the service rules - tenderable states, one live attempt, one acceptance, lapse resolution, what each transition publishes, and that every door reports the outcome to the waterfall |
+| `planning/application/TenderWaterfallResponseRoutingTest` | what the waterfall does with an answer depending on who gave it: a person's rejection walks on to rank 2, a machine's is recorded and waits, an acceptance ends it either way |
 | `pages/trips/TripTenderCard.test.tsx` | what the card renders and which buttons it offers per state |
 
 The database half - the two partial unique indexes actually refusing a second row, the CHECK

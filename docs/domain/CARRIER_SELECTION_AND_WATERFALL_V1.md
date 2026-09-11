@@ -52,6 +52,28 @@ status and the candidate's cannot disagree.
 Candidates never reached become `SKIPPED`, not left `PENDING`: a finished waterfall showing pending
 candidates reads as one still waiting to continue.
 
+### 4.1 Every answer reports here, whoever gave it
+
+`TripTenderService` tells the waterfall about **every** outcome, and from every door: the acceptance
+or rejection a colleague types in, the one the carrier's own system sends over
+`POST /integration/v1/tenders/{shipmentNumber}/response`, the withdrawal a planner makes by hand,
+and the shipment that stops being offerable because it was cancelled or departed.
+
+Until this was true the integration path wrote the tender and told nobody, and the two records the
+sequence above depends on came apart exactly where it mattered most — on the carrier that has a
+system rather than a phone:
+
+| What arrived over the M2M API | What the waterfall showed |
+|---|---|
+| the carrier accepted | still `ACTIVE`, candidate still `OFFERED`, and the next `advance` walked on to a second carrier before `requireNotPlaced` refused it |
+| the carrier rejected | candidate still `OFFERED` for good; a later `advance` recorded it as `EXPIRED`, which is not what happened |
+
+**Recording an answer and sending the next offer are two different rights.** Anyone who may answer
+may have their answer written down; only a person may commit the company to another offer — see §8.
+So a rejection over the M2M API settles its candidate as `REJECTED` and the waterfall waits at that
+rank for a dispatcher, exactly as it already waits after a lapse. Ending a waterfall commits the
+company to nothing, so an **acceptance** ends it whoever sent it.
+
 ## 5. Guarantees
 
 | Guarantee | How |
@@ -63,6 +85,8 @@ candidates reads as one still waiting to continue.
 | Response deadline | `response_minutes`, snapshotted on the waterfall |
 | Max attempts | `max_attempts`, counted in the aggregate |
 | Idempotency | `finish` is a no-op on a finished waterfall; `offerNext` is a no-op while an offer is out |
+| A repeated carrier response advances nothing twice | the replay returns before the tender changes, so the waterfall is never told a second time (V31 §7.3) |
+| No waterfall outlives its shipment | `withdrawOpen` ends it when the trip is cancelled or dispatched, with or without a live tender to point at |
 | Concurrency | every mutation takes the **trip's** row lock, the same point every other trip write uses |
 | Immutable history | attempts are appended; nothing is rewritten |
 
@@ -82,6 +106,12 @@ carrier cannot accept a shipment whose waterfall a planner has just stopped. A t
 hand also ends the waterfall: withdrawing is a decision to stop, not a refusal to route around, and
 continuing down the list would re-offer a shipment somebody just pulled back.
 
+`stop` ends the waterfall **before** it withdraws the offer, and that order is load-bearing rather
+than tidy: a withdrawal reports itself to the waterfall (§4.1), so a still-active waterfall would be
+ended a second time under *"the offer to rank N was withdrawn by hand"* and lose the reason the
+planner actually gave. `finish` is idempotent, so the second notification finds a finished waterfall
+and does nothing.
+
 ## 8. Two limits, stated plainly
 
 ### There is no background scheduler
@@ -96,9 +126,18 @@ does not have. Inventing one at speed would put an unattributable commercial com
 history, so instead: the waterfall **reports** `currentOfferLapsed` (computed on read, never stored)
 and a dispatcher advances it with one click.
 
+The same rule has a second consequence, and it is the honest price of §4.1: **a rejection that
+arrives from the carrier's own system does not send the next offer either.** The request is a
+machine's, so there is no `app_user` to sign the commitment it would make. The candidate is settled
+`REJECTED` — that much is a fact, and recording it is the whole point — and the waterfall waits at
+that rank for a dispatcher's `advance`, which is the click it already waits for after a lapse. The
+alternative, letting `requireAppUserId` throw from inside the carrier's own request, would throw the
+carrier's answer away over a rule that has nothing to do with it.
+
 **The follow-up this needs**, if unattended tendering is wanted: a first-class system actor with its
 own audit identity, a `@Scheduled` sweep using `FOR UPDATE ... SKIP LOCKED` so multiple instances do
-not duplicate work, and a company setting to opt in. That is a design, not a patch.
+not duplicate work, and a company setting to opt in. That is a design, not a patch, and
+`TenderWaterfallService.offerNextIfAttributable` is the one place it plugs into.
 
 ### Accepting does not reassign the vehicle
 
