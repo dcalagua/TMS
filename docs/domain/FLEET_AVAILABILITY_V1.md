@@ -191,13 +191,48 @@ run is worth more than a shipment that pretended it did.
 
 ---
 
-## 5. Deliberately not built
+## 5. Deliberately not built in V42, and what V47 added
 
-**No work-assignment table.** Sequencing several shipments onto one driver-and-vehicle pair, with
-travel time between them, is a real feature and a large one - it needs a scheduling model, a
-rebalancing story and its own screen. V42 delivers the layer underneath it: availability that every
-planner and every engine can already read. Shipping an empty table nothing writes to would have
-been scaffolding.
+**V42 built no work-assignment table.** Sequencing several shipments onto one driver-and-vehicle
+pair, with travel time between them, is a real feature and a large one - it needs a scheduling
+model, a rebalancing story and its own screen. V42 delivered the layer underneath it: availability
+that every planner and every engine can already read. Shipping an empty table nothing writes to
+would have been scaffolding. That debt was **D5**.
+
+**V47 closed it.** `tms.work_assignment` holds one driver-and-vehicle pairing's day, and
+`WorkSequenceValidator` - a pure function, no repository and no clock - decides whether the
+sequence can actually be run: the overlap between consecutive shipments, the drive between them
+measured through `RoutingPort` and **never invented**, the driver's shift, their licence, and every
+block from section 2 above.
+
+### Confirming is the only gate, so nothing may walk round it
+
+A planner may build an impossible day and look at it - that is how a problem gets diagnosed - and
+`POST /confirm` is the single place feasibility is *enforced*, refusing a day that does not work and
+naming every conflict.
+
+**An edit that changes what was checked therefore returns a `CONFIRMED` day to `PLANNED`.** Without
+that rule the gate was not broken, it was bypassed: confirm a feasible day, then `PUT` a different
+vehicle, a different driver or a different sequence onto it, and the row went on saying `CONFIRMED`
+while naming shipments nobody had ever checked together. The status is a statement that the sequence
+was validated, and changing the sequence retires the statement.
+
+Reverting rather than refusing the edit, deliberately. A confirmed day can become infeasible from
+the outside - a truck booked into the workshop, a shipment re-timed - and refusing every edit that
+did not immediately produce a feasible day would trap a planner halfway through repairing one.
+
+**An edit that changes nothing leaves the status alone.** The `PUT` carries the whole day, so a
+client re-submitting the same vehicle, driver and shipment order must not quietly reopen a
+commitment; notes never un-confirm anything either, because what somebody wrote beside a day says
+nothing about whether it works. `WorkAssignmentTest` asserts both halves with no database.
+
+**The operational date is the day's identity, not a field of it.** `operational_date` is not
+updatable and `uq_work_assignment_vehicle_day` is keyed on it, so a `PUT` naming a different date is
+refused rather than silently answered with the day it addressed - which read to the caller as a move
+that had happened. Cancel the day and open one on the new date.
+
+**And none of it grants authority to depart.** A shipment in somebody's day is still refused at the
+gate by every guard that refuses it now; `TripExecutionService` is unaffected by anything here.
 
 **No hours-of-service model.** `PlanningShift` is a configurable ceiling and this product holds no
 jurisdiction's driving rules. A number an operation sets to what it actually does is worth more than

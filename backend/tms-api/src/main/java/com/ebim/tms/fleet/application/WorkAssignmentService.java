@@ -110,11 +110,18 @@ public class WorkAssignmentService {
      * caller sends, and all three have identical consequences for the rest of the day - so giving
      * them separate endpoints would be three ways to reach one revalidation, and three places for
      * it to be forgotten.
+     *
+     * <p><b>An edit that changes the vehicle, the driver or the sequence un-confirms the day</b>
+     * ({@link WorkAssignment#replaceTrips}). {@link #confirm} is the only place feasibility is
+     * enforced, so a confirmed day rewritten afterwards would be a commitment nobody checked - the
+     * gate walked past rather than opened. Re-sending what the day already says changes nothing and
+     * leaves the status alone.
      */
     @Transactional
     public WorkAssignmentView update(CompanyScope scope, UUID assignmentId, WorkAssignmentRequest request) {
         UUID actorId = auditActorProvider.requireAppUserId();
         WorkAssignment assignment = lockedAssignment(scope, assignmentId);
+        requireSameOperationalDate(assignment, request.operationalDate());
         requireVehicle(scope, request.vehicleId());
         if (request.driverId() != null) {
             requireDriver(scope, request.driverId());
@@ -122,7 +129,24 @@ public class WorkAssignmentService {
 
         assignment.assignVehicle(request.vehicleId(), actorId);
         assignment.assignDriver(request.driverId(), actorId);
+        assignment.annotate(blankToNull(request.notes()), actorId);
         return saveWithSequence(scope, assignment, request.tripIds(), actorId);
+    }
+
+    /**
+     * The operational date is the day's identity, not one of its fields.
+     *
+     * <p>{@code operational_date} is {@code updatable = false} and
+     * {@code uq_work_assignment_vehicle_day} is keyed on it, so a PUT naming a different date was
+     * answered with the day it addressed, unchanged - which reads to the caller as a move that
+     * happened. Refused instead, naming both dates and what to do about it.
+     */
+    private static void requireSameOperationalDate(WorkAssignment assignment, LocalDate requested) {
+        if (!assignment.operationalDate().equals(requested)) {
+            throw new InvalidRequestException("This day's work is planned for "
+                    + assignment.operationalDate() + " and cannot be moved to " + requested
+                    + ". Cancel it and open a day on the new date.");
+        }
     }
 
     /**
