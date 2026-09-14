@@ -70,6 +70,13 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li><b>Export twice.</b> {@code uq_payable_export_invoice} makes that a database fact; this
  *       service returns the existing export rather than failing, so a retried click is idempotent
  *       rather than an error the operator has to interpret.
+ *   <li><b>Let a shipment be paid for twice in silence.</b> {@code uq_carrier_invoice_number} stops
+ *       one document arriving twice and says nothing about the same shipment appearing on two
+ *       documents with different numbers - or twice on one. {@link #billedElsewhere} asks the
+ *       question the constraint cannot, {@link FreightMatcher} asks it within the document, and
+ *       either answer is a {@link DiscrepancyType#DUPLICATE_INVOICE} that
+ *       {@code requireNoOpenDiscrepancies} will not let anybody approve past. Evidence for a
+ *       person, not a refusal: re-billing after a credit note is legal.
  * </ul>
  */
 @Service
@@ -217,7 +224,8 @@ public class SettlementService {
 
         Tolerance tolerance = toleranceFor(scope, invoice.carrierId());
         FreightMatchResult result = FreightMatcher.match(invoice.currency(), invoice.totalAmount(),
-                matcherLines(invoice, trips), matcherCosts(trips, costs, invoice.carrierId()), tolerance);
+                matcherLines(invoice, trips), matcherCosts(trips, costs, invoice.carrierId()), tolerance,
+                billedElsewhere(scope, invoice, tripIds));
 
         persistMatch(scope, invoice, result, tolerance, actorId);
 
@@ -231,6 +239,27 @@ public class SettlementService {
                 Map.of("matchStatus", result.status().name(),
                         "discrepancies", String.valueOf(result.discrepancies().size())));
         return toView(scope, invoice);
+    }
+
+    /**
+     * The shipments on this invoice that some other live invoice of this company already bills.
+     *
+     * <p>Answered here rather than in {@link FreightMatcher} because it is the one duplicate
+     * question that needs a database: the matcher can see one invoice, and a shipment paid twice
+     * is usually two. Gathered fresh on every match so a second invoice keyed after the first was
+     * matched is caught when the first is re-matched, which is why {@code MATCHED} is re-matchable
+     * at all.
+     *
+     * <p><b>This is evidence, not a refusal.</b> It becomes an OPEN discrepancy, and
+     * {@code requireNoOpenDiscrepancies} is what stops the approval - so a genuine re-bill after a
+     * credit note is accepted by a person rather than blocked by a rule that cannot know.
+     */
+    private Set<UUID> billedElsewhere(CompanyScope scope, CarrierInvoice invoice, Set<UUID> tripIds) {
+        if (tripIds.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(invoiceRepository.findTripIdsBilledOnOtherInvoices(
+                scope.companyId(), tripIds, invoice.id()));
     }
 
     /**

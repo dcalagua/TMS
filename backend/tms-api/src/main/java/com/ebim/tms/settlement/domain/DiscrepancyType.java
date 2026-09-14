@@ -30,8 +30,14 @@ public enum DiscrepancyType {
      * This carrier has already billed this number.
      *
      * <p>The most common freight-audit fraud and the most common honest mistake.
-     * {@code uq_carrier_invoice_number} refuses it outright at insert, so this type exists for the
-     * case the database cannot see: the same shipment billed twice under two different numbers.
+     * {@code uq_carrier_invoice_number} refuses the same <em>number</em> outright at insert, so
+     * this type is for the case the database cannot see: the same <b>shipment</b> billed twice -
+     * under two different numbers, or twice on one document.
+     *
+     * <p>{@link FreightMatcher} raises it both ways, and the duplicate line is kept out of the
+     * expected total so the invoice comes up over rather than matching itself. It is a discrepancy
+     * and not a refusal because re-billing after a credit note is legal; what it does is make an
+     * approval impossible until somebody has said which it is.
      */
     DUPLICATE_INVOICE,
 

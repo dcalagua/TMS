@@ -71,8 +71,19 @@ class SettlementApiIntegrationTest {
     private static String jdbcUrl;
     private static String carrierA;
     private static String carrierB;
-    private static String tripA;
     private static String tripB;
+
+    /**
+     * This test's own shipment, created fresh in {@link #mintTokens()}.
+     *
+     * <p><b>Not static, and that is now load-bearing.</b> It used to be one shipment shared by
+     * every test in the class, which was invisible until settlement learned to notice a shipment
+     * billed on two invoices: the first test to leave a live invoice against it made every later
+     * test's invoice a {@code DUPLICATE_INVOICE}, and which tests those were depended on JUnit's
+     * ordering. The shared fixture was always making a claim these tests did not intend - that
+     * nothing else bills this shipment - and one shipment per test is what makes the claim true.
+     */
+    private String tripA;
 
     @Autowired
     private MockMvc mockMvc;
@@ -119,7 +130,6 @@ class SettlementApiIntegrationTest {
 
         carrierA = carrier(COMPANY_A, "CARR-A");
         carrierB = carrier(COMPANY_B, "CARR-B");
-        tripA = trip(COMPANY_A, "ORIGIN-A", carrierA, "1450.00");
         tripB = trip(COMPANY_B, "ORIGIN-B", carrierB, "999.00");
     }
 
@@ -178,6 +188,10 @@ class SettlementApiIntegrationTest {
         plannerToken = TestJwts.validFor(PLANNER_AUTH);
         viewerToken = TestJwts.validFor(VIEWER_AUTH);
         checkerToken = TestJwts.validFor(CHECKER_AUTH);
+        // Priced at 1450.00, like the shared one it replaces, so every existing expectation in this
+        // class still reads against the same figure. The code stays short because
+        // ck_vehicle_license_plate_shape caps the derived plate at 12 characters.
+        tripA = trip(COMPANY_A, "A" + SEQUENCE.incrementAndGet(), carrierA, "1450.00");
     }
 
     // --- helpers -------------------------------------------------------------------
@@ -297,6 +311,63 @@ class SettlementApiIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(invoiceBody(carrierA, number, "100.00", tripA, "100.00")))
                     .andExpect(status().isConflict());
+        }
+
+        /**
+         * The duplicate {@code uq_carrier_invoice_number} cannot see.
+         *
+         * <p>Two documents, two numbers, one shipment. Nothing in the database refuses this - and
+         * nothing should, because a carrier re-billing after a credit note is legal - so the
+         * second one has to come out of matching as a difference a person must deal with rather
+         * than as a clean match somebody can approve straight through.
+         */
+        @Test
+        @DisplayName("a shipment already billed on another invoice is a duplicate, not a clean match")
+        void sameShipmentOnTwoInvoicesIsFlagged() throws Exception {
+            tolerance(COMPANY_A, "3");
+            String first = receive(invoiceBody(carrierA, nextNumber("TWICE"), "1480.00", tripA, "1480.00"),
+                    COMPANY_A);
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + first + "/match"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("MATCHED"));
+
+            // A different number for the same shipment. The insert is allowed; the match is not clean.
+            String second = receive(invoiceBody(carrierA, nextNumber("TWICE"), "1480.00", tripA, "1480.00"),
+                    COMPANY_A);
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + second + "/match"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("DISCREPANCY"))
+                    .andExpect(jsonPath("$.discrepancies[?(@.type == 'DUPLICATE_INVOICE')]").isNotEmpty());
+
+            // And it cannot be approved past, which is the whole point.
+            mockMvc.perform(asChecker(post(INVOICES + "/" + second + "/approve"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(status().isConflict());
+        }
+
+        /**
+         * A refused invoice bills nothing.
+         *
+         * <p>Without this exclusion the rule would eat itself: every legitimate re-bill after a
+         * rejection would be reported as a duplicate of the document it replaces, and the queue
+         * would fill with differences nobody can resolve.
+         */
+        @Test
+        @DisplayName("a rejected invoice does not make the replacement a duplicate")
+        void rejectedInvoiceDoesNotBlockItsReplacement() throws Exception {
+            tolerance(COMPANY_A, "3");
+            String refused = receive(invoiceBody(carrierA, nextNumber("CN"), "1480.00", tripA, "1480.00"),
+                    COMPANY_A);
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + refused + "/reject"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"comment\":\"Wrong tariff; credit note requested.\"}"))
+                    .andExpect(status().isOk());
+
+            String replacement = receive(invoiceBody(carrierA, nextNumber("CN"), "1480.00", tripA, "1480.00"),
+                    COMPANY_A);
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + replacement + "/match"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("MATCHED"));
         }
 
         @Test

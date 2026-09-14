@@ -7,6 +7,7 @@ import com.ebim.tms.settlement.domain.FreightMatcher.TripCostSnapshot;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -257,6 +258,136 @@ class FreightMatcherTest {
                     List.of(line(TRIP, "1450.00")), priced(TRIP, "1450.000"), Tolerance.NONE);
 
             assertThat(plain.status()).isEqualTo(scaled.status()).isEqualTo(MatchStatus.MATCHED);
+        }
+    }
+
+    /**
+     * A shipment is billed once.
+     *
+     * <p>The expensive failure, and the one the database cannot see.
+     * {@code uq_carrier_invoice_number} stops the same document arriving twice and says nothing
+     * about the same shipment appearing twice - on one invoice, or on two with different numbers.
+     *
+     * <p>{@link #twoLinesForOneShipmentUsedToMatchCleanly} is the regression that motivated all of
+     * this: before the duplicate rule, an invoice billing one shipment twice at its correct price
+     * came out {@code MATCHED} with an empty discrepancy list, because the expected total was
+     * accumulated per line and so grew to meet the inflated invoice exactly.
+     */
+    @Nested
+    @DisplayName("a shipment is billed once")
+    class BilledOnce {
+
+        @Test
+        @DisplayName("two lines for one shipment: the duplicate is reported, not silently matched")
+        void twoLinesForOneShipmentUsedToMatchCleanly() {
+            // One shipment priced at 1450, billed twice at 1450. The header agrees with itself.
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("2900"),
+                    List.of(line(TRIP, "1450"), line(TRIP, "1450")), priced(TRIP, "1450"),
+                    THREE_PERCENT);
+
+            assertThat(result.status()).isEqualTo(MatchStatus.DISCREPANCY);
+            assertThat(result.discrepancies()).extracting(FreightMatchResult.Discrepancy::type)
+                    .contains(DiscrepancyType.DUPLICATE_INVOICE);
+            // The shipment counted once, so the header is over by exactly the duplicated amount.
+            assertThat(result.expectedAmount()).isEqualByComparingTo("1450");
+            assertThat(result.differenceAmount()).isEqualByComparingTo("1450");
+            assertThat(result.matchedTripCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("and the total difference is raised beside it, so the money is visible")
+        void theHeaderIsOverByTheDuplicatedAmount() {
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("2900"),
+                    List.of(line(TRIP, "1450"), line(TRIP, "1450")), priced(TRIP, "1450"),
+                    THREE_PERCENT);
+
+            assertThat(result.discrepancies()).extracting(FreightMatchResult.Discrepancy::type)
+                    .containsExactlyInAnyOrder(DiscrepancyType.DUPLICATE_INVOICE,
+                            DiscrepancyType.TOTAL_AMOUNT);
+        }
+
+        /**
+         * A re-bill of a single shipment leaves nothing comparable, so the verdict is
+         * {@link MatchStatus#UNMATCHABLE} rather than {@code DISCREPANCY} - the same answer this
+         * matcher gives for any invoice whose lines all failed to reach a priced shipment. It is
+         * not a weaker outcome: {@code SettlementService} routes everything that is not
+         * {@code MATCHED} to {@code InvoiceStatus.DISCREPANCY}, and the discrepancy row is what
+         * blocks the approval.
+         */
+        @Test
+        @DisplayName("a shipment another invoice already bills is a duplicate too")
+        void billedOnAnotherInvoice() {
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("1450"),
+                    List.of(line(TRIP, "1450")), priced(TRIP, "1450"), THREE_PERCENT,
+                    Set.of(TRIP));
+
+            assertThat(result.status()).isNotEqualTo(MatchStatus.MATCHED);
+            assertThat(result.discrepancies()).extracting(FreightMatchResult.Discrepancy::type)
+                    .contains(DiscrepancyType.DUPLICATE_INVOICE);
+            // Nothing left to compare the header against: the only line was refused.
+            assertThat(result.expectedAmount()).isNull();
+        }
+
+        /** Beside a clean line, the re-bill shows up as the money it is. */
+        @Test
+        @DisplayName("a re-billed shipment beside a good one leaves the header over by its amount")
+        void billedOnAnotherInvoiceBesideACleanLine() {
+            Map<UUID, TripCostSnapshot> costs = Map.of(
+                    TRIP, new TripCostSnapshot(TRIP, new BigDecimal("1450"), null, "PEN"),
+                    OTHER_TRIP, new TripCostSnapshot(OTHER_TRIP, new BigDecimal("550"), null, "PEN"));
+
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("2000"),
+                    List.of(line(TRIP, "1450"), line(OTHER_TRIP, "550")), costs, THREE_PERCENT,
+                    Set.of(TRIP));
+
+            assertThat(result.status()).isEqualTo(MatchStatus.DISCREPANCY);
+            assertThat(result.discrepancies()).extracting(FreightMatchResult.Discrepancy::type)
+                    .containsExactlyInAnyOrder(DiscrepancyType.DUPLICATE_INVOICE,
+                            DiscrepancyType.TOTAL_AMOUNT);
+            assertThat(result.expectedAmount()).isEqualByComparingTo("550");
+            assertThat(result.differenceAmount()).isEqualByComparingTo("1450");
+        }
+
+        /** What a shipment cost is a fact about the shipment, not about how often it was billed. */
+        @Test
+        @DisplayName("the actual cost is counted once as well")
+        void actualIsNotDoubleCounted() {
+            Map<UUID, TripCostSnapshot> costs = Map.of(TRIP,
+                    new TripCostSnapshot(TRIP, new BigDecimal("1450"), new BigDecimal("1400"), "PEN"));
+
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("2900"),
+                    List.of(line(TRIP, "1450"), line(TRIP, "1450")), costs, THREE_PERCENT);
+
+            assertThat(result.actualAmount()).isEqualByComparingTo("1400");
+        }
+
+        /** The ordinary case must not have moved. Two shipments are two shipments. */
+        @Test
+        @DisplayName("two lines for two shipments still add up")
+        void distinctShipmentsStillSum() {
+            Map<UUID, TripCostSnapshot> costs = Map.of(
+                    TRIP, new TripCostSnapshot(TRIP, new BigDecimal("1450"), null, "PEN"),
+                    OTHER_TRIP, new TripCostSnapshot(OTHER_TRIP, new BigDecimal("550"), null, "PEN"));
+
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("2000"),
+                    List.of(line(TRIP, "1450"), line(OTHER_TRIP, "550")), costs, THREE_PERCENT);
+
+            assertThat(result.status()).isEqualTo(MatchStatus.MATCHED);
+            assertThat(result.expectedAmount()).isEqualByComparingTo("2000");
+            assertThat(result.matchedTripCount()).isEqualTo(2);
+        }
+
+        /** Accessorials name no shipment. Several of them are not duplicates of each other. */
+        @Test
+        @DisplayName("lines naming no shipment are never duplicates of one another")
+        void linesWithoutATripAreNotDuplicates() {
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("1550"),
+                    List.of(line(TRIP, "1450"), line(null, "50"), line(null, "50")),
+                    priced(TRIP, "1450"), THREE_PERCENT);
+
+            assertThat(result.discrepancies()).extracting(FreightMatchResult.Discrepancy::type)
+                    .doesNotContain(DiscrepancyType.DUPLICATE_INVOICE);
+            assertThat(result.unmatchedLineCount()).isEqualTo(2);
         }
     }
 }
