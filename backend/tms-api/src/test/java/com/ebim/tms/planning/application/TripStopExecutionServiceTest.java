@@ -16,6 +16,7 @@ import com.ebim.tms.planning.domain.StopExecutionStatus;
 import com.ebim.tms.planning.domain.TransportEventType;
 import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.planning.domain.TripException;
+import com.ebim.tms.planning.domain.TripExceptionStatus;
 import com.ebim.tms.planning.domain.TripExceptionType;
 import com.ebim.tms.planning.domain.TripStatus;
 import com.ebim.tms.planning.domain.TripStop;
@@ -223,6 +224,34 @@ class TripStopExecutionServiceTest {
             assertThat(captor.getValue().isOpen()).isTrue();
             assertThat(captor.getValue().notes()).isEqualTo("refused at the dock");
 
+            verify(transportEvents).record(eq(SCOPE), eq(TRIP_ID), eq(STOP_ID),
+                    eq(TransportEventType.STOP_FAILED), any(), eq("refused at the dock"), anyMap());
+        }
+
+        /**
+         * The two doors into {@code trip_exception} - a dispatcher writing a problem up by hand and
+         * a stop being failed - must not produce two rows for one fact. A stop failed with the same
+         * reason and the same sentence somebody already reported reuses that row: the failed stop
+         * needs a reason on file, not a second copy of it, and two open rows would have the control
+         * tower counting two problems where there is one.
+         */
+        @Test
+        @DisplayName("reuses the open exception a dispatcher already wrote up for the same stop and reason")
+        void failingAStopReusesAnIdenticalOpenException() {
+            TripException alreadyReported = new TripException(COMPANY, TRIP_ID, STOP_ID,
+                    TripExceptionType.DELIVERY_REJECTED, DEPARTED_AT, ACTOR, "refused at the dock");
+            when(exceptionRepository.findByCompanyIdAndTripIdAndExceptionTypeAndStatus(
+                    COMPANY, TRIP_ID, TripExceptionType.DELIVERY_REJECTED, TripExceptionStatus.OPEN))
+                    .thenReturn(List.of(alreadyReported));
+
+            service.fail(SCOPE, TRIP_ID, STOP_ID, new TripStopFailureRequest(null,
+                    TripExceptionType.DELIVERY_REJECTED, "refused at the dock"));
+
+            verify(exceptionRepository, never()).saveAndFlush(any(TripException.class));
+            // The stop still moves and the timeline still names the reason - only the second row is
+            // refused, never the transition it is the reason for.
+            verify(trip).recordStopOutcome(eq(STOP_ID), eq(StopExecutionStatus.FAILED), any(),
+                    eq("refused at the dock"), eq(ACTOR));
             verify(transportEvents).record(eq(SCOPE), eq(TRIP_ID), eq(STOP_ID),
                     eq(TransportEventType.STOP_FAILED), any(), eq("refused at the dock"), anyMap());
         }
