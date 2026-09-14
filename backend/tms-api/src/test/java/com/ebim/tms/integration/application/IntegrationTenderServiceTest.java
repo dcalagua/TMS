@@ -81,6 +81,9 @@ class IntegrationTenderServiceTest {
                 new TenderResponseEnvelope(SHIPMENT, new TenderResponseV1("REJECTED", "As before", 1))))
                 .doesNotThrowAnyException();
         assertThat(port.responded).containsExactly("REJECTED");
+        // The attempt reaches planning, which is what makes the replay land on the tender the
+        // sender meant instead of on whichever offer happens to be newest.
+        assertThat(port.attempts).containsExactly(1);
     }
 
     /**
@@ -97,6 +100,9 @@ class IntegrationTenderServiceTest {
 
         assertThat(port.openOffersCalls).isZero();
         assertThat(port.responded).containsExactly("ACCEPTED");
+        // Null travels as null rather than being filled in here: planning keeps the V31 meaning of
+        // "the latest offer", and this class does not invent an identity the sender never gave.
+        assertThat(port.attempts).containsExactly((Integer) null);
     }
 
     @Test
@@ -136,6 +142,8 @@ class IntegrationTenderServiceTest {
 
         private final List<CarrierTenderOffer> open;
         private final List<String> responded = new ArrayList<>();
+        /** What reached planning as the attempt, null included - the whole point of the seventh argument. */
+        private final List<Integer> attempts = new ArrayList<>();
         private int openOffersCalls;
 
         private StubPort(List<CarrierTenderOffer> open) {
@@ -152,8 +160,9 @@ class IntegrationTenderServiceTest {
 
         @Override
         public CarrierTenderOffer respond(CompanyScope scope, UUID carrierId, String shipmentNumber,
-                boolean accepted, String notes, UUID integrationClientId) {
+                boolean accepted, String notes, UUID integrationClientId, Integer attempt) {
             responded.add(accepted ? "ACCEPTED" : "REJECTED");
+            attempts.add(attempt);
             return offer(open.isEmpty() ? 1 : open.getFirst().attempt());
         }
     }

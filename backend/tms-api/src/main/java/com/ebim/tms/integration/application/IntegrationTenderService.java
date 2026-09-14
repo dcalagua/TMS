@@ -72,7 +72,8 @@ public class IntegrationTenderService {
 
         boolean accepted = "ACCEPTED".equals(request.decision().trim().toUpperCase(Locale.ROOT));
         CarrierTenderOffer answered = carrierTenderPort.respond(principal.companyScope(),
-                carrierId, delivery.shipmentNumber(), accepted, request.reason(), principal.id());
+                carrierId, delivery.shipmentNumber(), accepted, request.reason(), principal.id(),
+                request.attempt());
         return IntegrationOutcome.single(TenderOfferV1.from(answered), 200, null,
                 principal.clientId(), answered.shipmentNumber());
     }

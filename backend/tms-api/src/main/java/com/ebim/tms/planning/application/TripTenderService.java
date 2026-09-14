@@ -448,10 +448,33 @@ public class TripTenderService {
     @Transactional
     public CarrierTenderOffer respondAsCarrier(CompanyScope scope, UUID carrierId, String shipmentNumber,
             boolean accepted, String notes, UUID integrationClientId) {
+        return respondAsCarrier(scope, carrierId, shipmentNumber, accepted, notes, integrationClientId, null);
+    }
+
+    /**
+     * The same answer, naming which offer it answers.
+     *
+     * <p>Selecting by {@code attempt DESC} alone was safe only while a carrier had been offered a
+     * shipment once. After a waterfall re-offer it is not: the carrier refuses attempt 1, the
+     * cascade moves on, a planner comes back to them as attempt 3, and a late redelivery of the
+     * attempt-1 refusal - which an at-least-once sender is entitled to send - selects attempt 3 and
+     * refuses an offer nobody answered. The retry does not duplicate an effect; it destroys one.
+     *
+     * <p>Naming the attempt selects the tender the sender meant, so the redelivery lands on a row
+     * already answered the same way and replays it. That is the promise this endpoint made.
+     *
+     * @param attempt the offer being answered, or null for the V31 behaviour of "the latest one"
+     */
+    @Transactional
+    public CarrierTenderOffer respondAsCarrier(CompanyScope scope, UUID carrierId, String shipmentNumber,
+            boolean accepted, String notes, UUID integrationClientId, Integer attempt) {
         Trip trip = lockedTripByShipmentNumber(scope, shipmentNumber);
         TripTender tender = tenderRepository.findByCompanyIdAndTripIdOrderByAttemptDesc(scope.companyId(), trip.id())
                 .stream()
                 .filter(candidate -> candidate.carrierId().equals(carrierId))
+                // An attempt this carrier was never offered answers with the same sentence an
+                // unknown shipment gets: naming a number must not become a way to probe for offers.
+                .filter(candidate -> attempt == null || candidate.attempt() == attempt)
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("No tender was found for this shipment."));
 

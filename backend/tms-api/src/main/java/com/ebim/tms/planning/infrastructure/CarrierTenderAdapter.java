@@ -35,8 +35,8 @@ public class CarrierTenderAdapter implements CarrierTenderPort {
 
     @Override
     public CarrierTenderOffer respond(CompanyScope scope, UUID carrierId, String shipmentNumber, boolean accepted,
-            String notes, UUID integrationClientId) {
+            String notes, UUID integrationClientId, Integer attempt) {
         return tenderService.respondAsCarrier(scope, carrierId, shipmentNumber, accepted, notes,
-                integrationClientId);
+                integrationClientId, attempt);
     }
 }
