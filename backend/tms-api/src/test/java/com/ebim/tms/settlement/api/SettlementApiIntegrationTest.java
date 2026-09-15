@@ -71,6 +71,8 @@ class SettlementApiIntegrationTest {
     private static String jdbcUrl;
     private static String carrierA;
     private static String carrierB;
+    /** COMPANY_A's one agreement with carrierA; every per-test shipment is estimated from it. */
+    private static String cardA;
     private static String tripB;
 
     /**
@@ -130,7 +132,27 @@ class SettlementApiIntegrationTest {
 
         carrierA = carrier(COMPANY_A, "CARR-A");
         carrierB = carrier(COMPANY_B, "CARR-B");
-        tripB = trip(COMPANY_B, "ORIGIN-B", carrierB, "999.00");
+        cardA = rateCard(COMPANY_A, "RC-A", carrierA, "1450.00");
+        String cardB = rateCard(COMPANY_B, "RC-B", carrierB, "999.00");
+        tripB = trip(COMPANY_B, "ORIGIN-B", carrierB, cardB, "RC-B", "999.00");
+    }
+
+    /**
+     * The one agreement a carrier has with a company, seeded once per class.
+     *
+     * <p>{@code uq_rate_card_active_agreement} (V30) refuses two identical active agreements -
+     * same company, carrier, scope, narrowing and start date - and it is right to. When the
+     * shipment moved to {@code @BeforeEach}, the card that priced it moved with it, and every test
+     * after the first tried to sign the same agreement again: the database is one per class, so
+     * only the first test ever got its fixture. Sharing the card is safe where sharing the shipment
+     * was not, because nothing in settlement reads the card - matching compares against each
+     * shipment's own {@code trip_cost} snapshot, and duplicate detection keys on the shipment.
+     * ck_rate_card_has_a_component (V30/V39): a card that charges nothing is not an agreement.
+     */
+    private static String rateCard(UUID companyId, String code, String carrierId, String baseAmount) {
+        return idOf("INSERT INTO tms.rate_card (company_id, code, name, carrier_id, scope, currency,"
+                + " base_amount, valid_from) VALUES ('" + companyId + "', '" + code + "', 'Card " + code
+                + "', '" + carrierId + "', 'CARRIER', 'PEN', " + baseAmount + ", '2026-01-01') RETURNING id");
     }
 
     private static String carrier(UUID companyId, String code) {
@@ -140,7 +162,8 @@ class SettlementApiIntegrationTest {
     }
 
     /** A shipment with a cost row, which is what makes it comparable at all. */
-    private static String trip(UUID companyId, String originCode, String carrierId, String expected) {
+    private static String trip(UUID companyId, String originCode, String carrierId, String cardId,
+            String cardCode, String expected) {
         String origin = idOf("INSERT INTO tms.location (company_id, code, name) VALUES ('" + companyId
                 + "', '" + originCode + "', 'Origin') RETURNING id");
         String run = idOf("INSERT INTO tms.planning_run (company_id, plan_number, origin_id, planning_date,"
@@ -160,15 +183,11 @@ class SettlementApiIntegrationTest {
         // ck_trip_cost_estimate_complete (V30): an estimate carries the card that produced it, or
         // it is not an estimate. That snapshot is the whole reason a settled figure stays defensible
         // after the tariff moves, so the fixture supplies it rather than working around the rule.
-        // ck_rate_card_has_a_component (V30/V39): a card that charges nothing is not an agreement.
-        String card = idOf("INSERT INTO tms.rate_card (company_id, code, name, carrier_id, scope, currency,"
-                + " base_amount, valid_from) VALUES ('" + companyId + "', 'RC-" + originCode + "', 'Card "
-                + originCode + "', '" + carrierId + "', 'CARRIER', 'PEN', " + expected
-                + ", '2026-01-01') RETURNING id");
+        // The card is the company's one agreement (see rateCard); the estimate is this shipment's own.
         execute("INSERT INTO tms.trip_cost (company_id, trip_id, planning_date, currency, estimated_amount,"
                 + " estimated_at, rate_card_id, rate_card_code, rate_card_scope) VALUES ('" + companyId
-                + "', '" + trip + "', '2026-04-01', 'PEN', " + expected + ", now(), '" + card + "', 'RC-"
-                + originCode + "', 'CARRIER')");
+                + "', '" + trip + "', '2026-04-01', 'PEN', " + expected + ", now(), '" + cardId + "', '"
+                + cardCode + "', 'CARRIER')");
         return trip;
     }
 
@@ -191,7 +210,8 @@ class SettlementApiIntegrationTest {
         // Priced at 1450.00, like the shared one it replaces, so every existing expectation in this
         // class still reads against the same figure. The code stays short because
         // ck_vehicle_license_plate_shape caps the derived plate at 12 characters.
-        tripA = trip(COMPANY_A, "A" + SEQUENCE.incrementAndGet(), carrierA, "1450.00");
+        // A fresh shipment on the shared agreement: the card may be common, a billed shipment may not.
+        tripA = trip(COMPANY_A, "A" + SEQUENCE.incrementAndGet(), carrierA, cardA, "RC-A", "1450.00");
     }
 
     // --- helpers -------------------------------------------------------------------
