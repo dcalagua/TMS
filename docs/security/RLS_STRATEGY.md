@@ -261,21 +261,54 @@ Until now nothing announced it. The role comes from `TMS_DB_USERNAME` and from n
 (`application-prod.yml`), no code asserts anything about it, and both ways of getting it wrong
 are quiet:
 
-- **The runtime role cannot be entered.** `V13` grants `tms_app` to `CURRENT_USER` - *the role
-  that applied the migration*. A deployment whose runtime credential is a different role, or a
-  project restored without that grant, fails every company-scoped request on `SET ROLE` while
-  every migration still applies cleanly and `/actuator/health` still answers `UP`. It does not
-  reproduce locally: a Testcontainers run migrates as a superuser, which may set any role.
+- **The runtime role cannot be entered.** `V13` creates `tms_app` and grants it to `CURRENT_USER`
+  - *the role that applied the migration*. A deployment whose runtime credential is a different
+  role, or a database restored without the role or the grant, fails every company-scoped request
+  on `SET ROLE` while every migration still applies cleanly. A `pg_dump` carries no global roles,
+  and Flyway reports a restored schema as up to date, so `V13` never runs again to recreate it. It
+  does not reproduce locally: a Testcontainers run migrates as a superuser, which may set any role.
 - **The application connected *as* `tms_app`.** Then Flyway is not the owner and `SET ROLE` is a
   no-op, so the downgrade this whole section rests on has silently stopped happening.
 
-`TenantRuntimeRoleCheck` reports both, once, on `ApplicationReadyEvent`: it reads
-`session_user`/`current_user` and then performs a real `SET ROLE tms_app` / `RESET ROLE` rather
-than asking `pg_has_role`, because the member privilege `SET ROLE` needs is spelled differently
-across PostgreSQL versions and the operation itself is free. The expected posture logs at INFO;
-an unreachable runtime role logs at ERROR and names the `GRANT` that fixes it. It never fails
-startup - refusing to boot would turn a defence-in-depth misconfiguration into an outage, and
-ADR-003's application-side scoping is unaffected either way.
+`TenantRuntimeRoleCheck` reads `session_user`/`current_user` and then performs a real
+`SET ROLE tms_app` / `RESET ROLE` rather than asking `pg_has_role`, because the member privilege
+`SET ROLE` needs is spelled differently across PostgreSQL versions and the operation itself is
+cheap. The expected posture logs at INFO; an unreachable runtime role logs at ERROR and names the
+`GRANT` that fixes it; connecting as `tms_app` logs at WARN.
+
+**The verdict also drives readiness**, through the health contributor `tenantRuntimeRole`
+(`TenantRuntimeRoleHealthIndicator`), once it is listed in
+`management.endpoint.health.group.readiness.include`:
+
+| Verdict | Readiness contribution | Why |
+|---|---|---|
+| `tms_app` can be entered | `UP` | the expected posture |
+| `tms_app` cannot be entered (`42501` not granted, `22023` does not exist) | `DOWN` | every company-scoped request fails; the instance must not receive traffic |
+| connected *as* `tms_app` | `UP` | requests succeed and every query already runs as a non-owner; a configuration defect, reported in the log |
+| database could not be asked (pool timeout, connection or server failure) | last conclusive verdict, `UNKNOWN` before any | a database outage is the database indicator's to report, not a role problem |
+
+The response carries no details - no role name, no SQL, no exception - whatever `show-details` a
+profile sets; the names and the fix go to the log.
+
+This revises a decision. The first version only logged, arguing that refusing to boot would turn a
+defence-in-depth misconfiguration into an outage while ADR-003's scoping carries on regardless. The
+certification restore of 2026-09-15 disproved the premise: a `pg_dump` restored onto a cluster
+without `tms_app` logged the ERROR and `GET /actuator/health/readiness` still answered
+`200 {"status":"UP"}`. An unenterable runtime role is not "RLS off" but every company-scoped request
+answering 500 - the outage already exists, and a green readiness probe told the load balancer to
+route traffic to it instead of keeping the previous instance. What stays from the original decision:
+**startup is never failed** (the process stays up for diagnosis) and **liveness is untouched**
+(restarting cannot create a role or a grant).
+
+**When it is evaluated.** Synchronously on `ApplicationReadyEvent`, before readiness accepts
+traffic; afterwards lazily, when a health request finds the verdict at least 30 seconds old. The
+re-evaluation runs on its own virtual thread, at most one at a time, and the request is answered
+with the verdict already held, so a health request never waits on the pool - against a stopped
+database the probe sits out Hikari's 30-second connection timeout, and a probe request held that
+long would fail at the balancer for exactly the reason this contributor must not report. A `GRANT`
+fixed in place brings the instance back within about 30 seconds, without a restart; the probe costs
+at most two connection borrows a minute per instance, whatever the polling rate. The log follows
+transitions, not evaluations, so a broken deployment writes one ERROR and a recovery one INFO.
 
 > **`docs/operations/DEPLOYMENT.md` contradicts this section and is wrong.** It instructs
 > operators to make "the application connect as `tms_app`, not as the schema owner", and lists
