@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Savepoint;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
@@ -66,8 +67,7 @@ class ShipmentOutboxTenancyIsolationIntegrationTest {
                     """.formatted(COMPANY_A, ORGANIZATION, COMPANY_B, ORGANIZATION));
 
             seedShipment(statement, COMPANY_A, TRIP_A, "A");
-            seedShipment(statement, COMPANY_B, TRIP_B, "B");
-        }
+            seedShipment(statement, COMPANY_B, TRIP_B, "B");        }
     }
 
     /**
@@ -198,29 +198,26 @@ class ShipmentOutboxTenancyIsolationIntegrationTest {
      * the row was another tenant's, and it does not depend on the session variable being set.
      * {@code MigrationConventionTest.everyNarrowedGrantIsBackedByARevoke()} keeps the grant from
      * quietly widening again.
+     *
+     * <p>Each statement runs behind its own savepoint. The connection is not in autocommit, and a
+     * refused statement aborts the whole transaction: without the rollback to the savepoint the
+     * {@code DELETE} would be answered with 25P02 ("current transaction is aborted") before its
+     * privilege was ever checked, so the {@code REVOKE DELETE} would go untested.
      */
     @Test
     @DisplayName("no event can be rewritten or deleted: the runtime role holds neither privilege")
     void eventsOfAnotherCompanyCannotBeWritten() throws SQLException {
         actAs(COMPANY_A);
 
-        SQLException updateRefused = catchThrowableOfType(SQLException.class, () -> {
-            try (Statement statement = connection.createStatement()) {
-                statement.executeUpdate("UPDATE tms.shipment_outbox_event"
-                        + " SET event_type = 'SHIPMENT_CANCELLED' WHERE shipment_number = 'SH-B'");
-            }
-        });
+        SQLException updateRefused = refusalOf("UPDATE tms.shipment_outbox_event"
+                + " SET event_type = 'SHIPMENT_CANCELLED' WHERE shipment_number = 'SH-B'");
         assertThat((Throwable) updateRefused)
                 .as("V20 says an outbox row is never edited; after V50 the grant says it too")
                 .isNotNull();
         assertThat(updateRefused.getSQLState()).isEqualTo(INSUFFICIENT_PRIVILEGE);
 
-        SQLException deleteRefused = catchThrowableOfType(SQLException.class, () -> {
-            try (Statement statement = connection.createStatement()) {
-                statement.executeUpdate("DELETE FROM tms.shipment_outbox_event"
-                        + " WHERE shipment_number = 'SH-B'");
-            }
-        });
+        SQLException deleteRefused = refusalOf("DELETE FROM tms.shipment_outbox_event"
+                + " WHERE shipment_number = 'SH-B'");
         assertThat((Throwable) deleteRefused)
                 .as("replaying a partner's feed by deleting a watermark must not be reachable")
                 .isNotNull();
@@ -295,6 +292,25 @@ class ShipmentOutboxTenancyIsolationIntegrationTest {
         try (Statement statement = connection.createStatement()) {
             statement.execute("RESET ROLE");
         }
+    }
+
+    /**
+     * Runs one write and returns the exception it raised, or {@code null} if it succeeded.
+     *
+     * <p>The statement runs behind a savepoint that is rolled back afterwards either way, so a
+     * refusal does not leave the transaction aborted for the next statement to trip over: that
+     * statement then gets its own answer from the database instead of 25P02. The role and the
+     * tenant set before the savepoint survive the rollback.
+     */
+    private SQLException refusalOf(String sql) throws SQLException {
+        Savepoint beforeWrite = connection.setSavepoint();
+        SQLException refusal = catchThrowableOfType(SQLException.class, () -> {
+            try (Statement statement = connection.createStatement()) {
+                statement.executeUpdate(sql);
+            }
+        });
+        connection.rollback(beforeWrite);
+        return refusal;
     }
 
     private List<String> query(String sql) throws SQLException {
