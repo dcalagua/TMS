@@ -247,6 +247,7 @@ not already public.**
 | Symptom from `verify-deployment.sh` | Most likely cause | Next step |
 |---|---|---|
 | readiness not UP | migration failed, or the database is unreachable | Render deploy log for the Flyway error. **Never** `flyway repair`, and never edit an applied migration — `docs/operations/QAS_DEPLOYMENT_AND_RECOVERY.md` §3 |
+| readiness not UP, Flyway **clean** | the connection cannot enter `tms_app` — the log line starting `Database roles:` says `CANNOT enter` | run the `GRANT` that line names. After a restore into a fresh cluster the role itself is missing: `docs/operations/BACKUP_AND_RESTORE.md` §6. See `DEPLOYMENT.md` §4 |
 | `system/info` unreachable but readiness UP | wrong host or a path prefix in front of the service | check `TMS_CORS_ALLOWED_ORIGINS` and the service URL; the endpoint needs no token |
 | profile is not `prod` | `SPRING_PROFILES_ACTIVE` not set on the service | Render env vars. Under any other profile the strict JWT rules and the closed documentation are not in force |
 | **commit mismatch** | the deploy did not pick up this revision: queued build, failed build with the old instance still serving, or a push to a branch the console does not watch | Render/Amplify build history; §1 |
