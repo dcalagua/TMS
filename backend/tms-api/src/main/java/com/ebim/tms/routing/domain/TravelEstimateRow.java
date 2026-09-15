@@ -13,6 +13,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -34,6 +35,19 @@ import org.hibernate.annotations.UuidGenerator;
 @Entity
 @Table(name = "travel_estimate")
 public class TravelEstimateRow {
+
+    /**
+     * The precision {@code calculated_at} and {@code expires_at} survive storage with.
+     *
+     * <p>Both are {@code timestamptz}, which keeps microseconds. The JVM clock does not stop there:
+     * on Windows it ticks in 100 ns, on Linux with JDK 21 in nanoseconds. An instant stamped at full
+     * clock precision was therefore returned to the caller on a cache miss and came back
+     * <em>truncated</em> on the next hit, so the same figure reported two different
+     * {@code calculatedAt} values depending on which path served it. Every instant routing stamps
+     * is cut to this unit before it is returned or stored, which is what makes "what a miss returns
+     * is what a hit returns" true rather than true most of the time.
+     */
+    public static final ChronoUnit STORED_PRECISION = ChronoUnit.MICROS;
 
     @Id
     @GeneratedValue

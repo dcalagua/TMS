@@ -223,6 +223,66 @@ class RoutingServiceTest {
         }
     }
 
+    // --- timestamp precision ---------------------------------------------------------
+
+    /**
+     * What a miss returns must be what the following hit returns. {@code tms.travel_estimate} keeps
+     * microseconds and the JVM clock does not, so an instant stamped at full clock precision came back
+     * truncated from the cache. {@code RoutingServiceIntegrationTest.cacheRoundTrip} caught it against
+     * real PostgreSQL, but only whenever the real clock happened to tick below a microsecond; a clock
+     * pinned to nanoseconds makes the case deterministic.
+     */
+    @Nested
+    @DisplayName("timestamp precision")
+    class TimestampPrecision {
+
+        private final Instant withNanos = NOW.plusNanos(123_456_789);
+
+        private RoutingService serviceAt(Instant instant, RoutingProviderAdapter... providers) {
+            clock = Clock.fixed(instant, ZoneOffset.UTC);
+            local = new LocalGeodesicRoutingProvider(properties, clock);
+            return serviceWith(providers);
+        }
+
+        private TravelEstimateRow stored() {
+            ArgumentCaptor<TravelEstimateRow> saved = ArgumentCaptor.forClass(TravelEstimateRow.class);
+            verify(cache).saveAndFlush(saved.capture());
+            return saved.getValue();
+        }
+
+        @Test
+        @DisplayName("a local estimate returns exactly the instants it stores, at microsecond precision")
+        void localEstimateMatchesStoredRow() {
+            RoutingService service = serviceAt(withNanos);
+
+            TravelEstimate miss = service.estimate(COMPANY, LIMA, AREQUIPA).orElseThrow();
+
+            OffsetDateTime expected = OffsetDateTime.ofInstant(Instant.parse("2026-08-28T12:00:00.123456Z"),
+                    ZoneOffset.UTC);
+            assertThat(miss.calculatedAt()).isEqualTo(expected);
+            TravelEstimateRow row = stored();
+            assertThat(row.toEstimate().calculatedAt()).isEqualTo(miss.calculatedAt());
+            assertThat(row.expiresAt().getNano() % 1_000).isZero();
+        }
+
+        @Test
+        @DisplayName("a provider stamping nanoseconds is cut to the stored precision before it is served")
+        void providerNanosecondsAreCut() {
+            OffsetDateTime vendorStamp = OffsetDateTime.ofInstant(withNanos, ZoneOffset.UTC);
+            RoutingProviderAdapter vendor = adapter("VENDOR_X", true,
+                    Optional.of(TravelEstimate.computed(new BigDecimal("42.500"), Duration.ofMinutes(55),
+                            "VENDOR_X", RoutingSource.PROVIDER, vendorStamp)));
+            RoutingService service = serviceAt(NOW, vendor);
+
+            TravelEstimate miss = service.estimate(COMPANY, LIMA, CALLAO).orElseThrow();
+
+            assertThat(miss.calculatedAt()).isEqualTo(vendorStamp.truncatedTo(TravelEstimateRow.STORED_PRECISION));
+            assertThat(miss.source()).isEqualTo(RoutingSource.PROVIDER);
+            assertThat(miss.servedFromCache()).isFalse();
+            assertThat(stored().toEstimate().calculatedAt()).isEqualTo(miss.calculatedAt());
+        }
+    }
+
     // --- providers -------------------------------------------------------------------
 
     @Nested

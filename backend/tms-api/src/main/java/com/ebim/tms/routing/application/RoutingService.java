@@ -103,7 +103,7 @@ public class RoutingService implements RoutingPort {
             // row per stop-against-itself would be the largest and least useful part of the table.
             count(LOOKUP_METRIC, "same-point");
             return Optional.of(TravelEstimate.computed(BigDecimal.ZERO.setScale(3), Duration.ZERO,
-                    fallback.name(), RoutingSource.FALLBACK, OffsetDateTime.now(clock)));
+                    fallback.name(), RoutingSource.FALLBACK, now()));
         }
         return Optional.of(resolve(companyId, origin, destination));
     }
@@ -190,7 +190,7 @@ public class RoutingService implements RoutingPort {
         Optional<TravelEstimateRow> cached =
                 cache.findLeg(companyId, providerName, origin.latitude(), origin.longitude(),
                         destination.latitude(), destination.longitude());
-        OffsetDateTime now = OffsetDateTime.now(clock);
+        OffsetDateTime now = now();
 
         if (cached.isPresent() && cached.get().isFreshAt(now)) {
             count(LOOKUP_METRIC, "hit");
@@ -198,7 +198,7 @@ public class RoutingService implements RoutingPort {
         }
         count(LOOKUP_METRIC, cached.isPresent() ? "expired" : "miss");
 
-        TravelEstimate computed = compute(provider, origin, destination);
+        TravelEstimate computed = atStoredPrecision(compute(provider, origin, destination));
         store(companyId, origin, destination, computed, cached.orElse(null), now);
         return computed;
     }
@@ -236,6 +236,36 @@ public class RoutingService implements RoutingPort {
                     .register(meterRegistry));
         }
         return localEstimate(origin, destination);
+    }
+
+    /**
+     * The clock's now, at the precision {@code tms.travel_estimate} keeps.
+     *
+     * <p>Every instant this class stamps - a same-point answer, the freshness check, the
+     * {@code expires_at} it stores, the eviction cut-off - goes through here, so none of them can
+     * carry digits a round trip through {@code timestamptz} would drop. See
+     * {@link TravelEstimateRow#STORED_PRECISION}.
+     */
+    private OffsetDateTime now() {
+        return OffsetDateTime.now(clock).truncatedTo(TravelEstimateRow.STORED_PRECISION);
+    }
+
+    /**
+     * The answer as it will read back from the cache, so a miss and the hit after it agree.
+     *
+     * <p>{@link LocalGeodesicRoutingProvider} already stamps at stored precision; this is the net
+     * for an adapter that does not. A vendor adapter is the part of routing most likely to be
+     * written elsewhere, and its {@code calculatedAt} arriving in nanoseconds must not reintroduce a
+     * {@code calculatedAt} that changes between the first read and the second. Returns the same
+     * instance when there is nothing to cut.
+     */
+    private static TravelEstimate atStoredPrecision(TravelEstimate estimate) {
+        OffsetDateTime stamped = estimate.calculatedAt().truncatedTo(TravelEstimateRow.STORED_PRECISION);
+        if (stamped.equals(estimate.calculatedAt())) {
+            return estimate;
+        }
+        return new TravelEstimate(estimate.distanceKm(), estimate.travelDuration(), estimate.provider(),
+                estimate.source(), estimate.servedFromCache(), stamped);
     }
 
     private TravelEstimate localEstimate(GeoPoint origin, GeoPoint destination) {
@@ -333,7 +363,7 @@ public class RoutingService implements RoutingPort {
      */
     @Transactional
     public int evictExpired() {
-        int removed = cache.deleteExpired(OffsetDateTime.now(clock));
+        int removed = cache.deleteExpired(now());
         if (removed > 0) {
             log.info("Evicted {} expired routing estimates.", removed);
         }
