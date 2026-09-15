@@ -120,6 +120,12 @@ public class AutoPlanningService {
     /**
      * Proposes without writing anything. Same snapshot, same engine, same result as {@link #apply}
      * would produce - a preview a planner can look at before committing to it.
+     *
+     * <p>"Without writing anything" includes the routing cache. {@link #resolveTravel} calls
+     * {@link RoutingPort#matrix}, which joins this read-only transaction; routing detects that and
+     * computes the legs it has not cached without storing them, instead of inserting into a
+     * {@code READ ONLY} connection and aborting the preview on the first cold leg (see
+     * {@code RoutingService.store}). A preview therefore never warms the cache - {@link #apply} does.
      */
     @Transactional(readOnly = true)
     public AutoPlanView preview(CompanyScope scope, UUID runId, String engineName) {

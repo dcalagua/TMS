@@ -71,6 +71,21 @@ on values the application rounds. Two application instances cannot round differe
 copy of the same leg, and a lookup cannot disagree with an insert about what "the same point" means -
 a defect that would look like a working cache that silently never hits.
 
+### A read-only transaction reads the cache and never writes it
+
+*Added 2026-09-15 (RC-1).* `RoutingPort.estimate` and `matrix` are `REQUIRED` and join the caller's
+transaction. Where that transaction is read-only - `AutoPlanningService.preview`, `TripService.get`
+and the other `readOnly = true` readers that measure a trip - the connection is `BEGIN READ ONLY`,
+and storing a missed leg made PostgreSQL refuse with `25006` and abort the caller's transaction.
+The auto-plan preview failed on any cold leg, which broke "routing never fails a decision".
+
+Routing now checks `TransactionSynchronizationManager.isCurrentTransactionReadOnly()` before storing:
+the leg is computed and served exactly as before, and simply not remembered. An expired row is not
+refreshed either, not even in memory. Rejected: catching the error (the transaction is already
+aborted by then), and a `REQUIRES_NEW` cache write (a second pool connection per request while the
+first is held, which under concurrent planners is a pool deadlock). The cost is that a read-only
+reader never warms the cache; read-write paths still do, and the skipped writes are counted.
+
 ## A defect this ADR exists partly to record
 
 The first version of `RoutingSource` had three values: `PROVIDER`, `FALLBACK`, `CACHE`. Serving a
@@ -87,7 +102,8 @@ from a straight line for as long as it exists.
 
 - Every estimate carries `provider`, `source` and `servedFromCache`, and all three travel into
   whatever consumed them. "How much of tonight's plan rests on straight lines" is countable.
-- Metrics: `tms.routing.lookups` (hit / miss / expired / fallback / unknown / same-point / raced),
+- Metrics: `tms.routing.lookups` (hit / miss / expired / fallback / unknown / same-point / raced /
+  not-stored-read-only),
   `tms.routing.provider.calls` (ok / empty / error, tagged by provider), plus timers for provider
   calls and whole matrices.
 - `TripRoutingService` is the first consumer: a trip's planned distance and drive time, on the trip

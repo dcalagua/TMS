@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * The routing chain: cache, then provider, then a local estimate (migration V38).
@@ -47,6 +48,9 @@ import org.springframework.transaction.annotation.Transactional;
  * carries its own {@code source} so a later reader can still tell an estimate from a measurement.
  * When a real provider is configured, the estimates expire and are replaced by real ones without
  * anything having to purge them.
+ *
+ * <p><b>Except inside a read-only transaction, which reads the cache and never writes it.</b> See
+ * {@link #store} for why, and for the two alternatives that were rejected.
  *
  * <p><b>Two instances racing to cache the same leg is not an error.</b> Both computed the same
  * number; the loser's insert hits {@code uq_travel_estimate_leg} and is answered from the winner's
@@ -246,9 +250,58 @@ public class RoutingService implements RoutingPort {
      * <p>A losing race is caught and ignored: the winner stored the same number, and the caller
      * already has its answer in hand. Turning that into an error would make a cache the one part of
      * the product that fails under load.
+     *
+     * <p><b>Inside a read-only transaction nothing is written, and the answer is served anyway.</b>
+     * {@code estimate} and {@code matrix} are {@code REQUIRED}, so they join whatever transaction
+     * the caller holds - and several callers hold a read-only one: {@code AutoPlanningService.preview},
+     * which the auto-plan drawer calls every time a planner opens it, and {@code TripService.get},
+     * whose detail view measures the trip. With the defaults this project runs on, Spring's
+     * {@code HibernateJpaDialect} marks that connection read-only and pgjdbc opens it as
+     * {@code BEGIN READ ONLY}. The first cache miss then inserted into it, PostgreSQL refused with
+     * {@code 25006}, and the transaction was left aborted ({@code 25P02}) for everything after it:
+     * the whole preview failed - on a cold cache only, so it looked intermittent, because any
+     * earlier read-write call had already warmed the legs. That is a routing lookup failing a
+     * decision, which ADR-010 rules out.
+     *
+     * <p>Three ways out were weighed:
+     *
+     * <ol>
+     *   <li><b>Catch the error</b> - not a fix. By the time {@code 25006} arrives the transaction is
+     *       already aborted, and every statement the preview runs after it fails with
+     *       {@code 25P02}.</li>
+     *   <li><b>Write the cache in its own {@code REQUIRES_NEW} transaction</b> - rejected. It would
+     *       have to live in a separate bean (self-invocation bypasses the proxy), and it asks the pool
+     *       for a <em>second</em> connection while the request still holds its first, once per missed
+     *       leg of an N x N matrix. Under concurrent planners that is the textbook pool deadlock:
+     *       with the production default of twenty connections, twenty previews hold all of them and
+     *       each waits for a twenty-first until the pool's timeout fails every one. It also commits
+     *       once per leg, and leaves cache rows behind a preview that promises to write nothing.</li>
+     *   <li><b>Skip the write when the transaction is read-only</b> - chosen. The number is computed
+     *       exactly as before and served; it is simply not remembered. No second connection, no new
+     *       failure mode. The cost is that a read-only caller never warms the cache, so a cold leg
+     *       is recomputed on every such read until a read-write path (auto-plan apply, a trip
+     *       change, an ETA recompute) stores it. With the local estimator that is arithmetic; with a
+     *       paid vendor it is a provider call per cold leg per read, which is counted below so it
+     *       can be seen rather than guessed.</li>
+     * </ol>
+     *
+     * <p><b>The expired row is left untouched too, not merely unsaved.</b> A row read inside a
+     * read-only session is loaded read-only: Hibernate keeps no snapshot of it, so refreshing it and
+     * flushing would have been ignored silently rather than refused. Worse, the refreshed instance
+     * would have stayed in the persistence context, and a second lookup of the same leg in that
+     * transaction would have been handed it as a fresh cache hit - a figure reported as stored that
+     * was never stored. Returning before {@link TravelEstimateRow#refresh} is what prevents both.
+     *
+     * <p>{@link TransactionSynchronizationManager#isCurrentTransactionReadOnly()} describes the
+     * physical transaction: a {@code REQUIRED} method joining a read-only one does not clear it, and
+     * a call with no transaction at all starts this class's own read-write one, where it is false.
      */
     private void store(UUID companyId, GeoPoint origin, GeoPoint destination, TravelEstimate estimate,
             TravelEstimateRow expired, OffsetDateTime now) {
+        if (TransactionSynchronizationManager.isCurrentTransactionReadOnly()) {
+            count(LOOKUP_METRIC, "not-stored-read-only");
+            return;
+        }
         OffsetDateTime expiresAt = now.plus(properties.cacheTtl());
         try {
             if (expired != null) {
