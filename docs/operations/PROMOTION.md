@@ -183,7 +183,10 @@ Three things about that list are load-bearing:
 
 - **`json` must stay in it.** `release.json` is how §3.6 reads which commit is live. Rewritten to
   `index.html` it would return HTML with a 200 and the smoke would report a missing manifest.
-- **`map` must stay in it** while `vite.config.ts` has `sourcemap: true`.
+- **`map` can stay in it.** `vite.config.ts` no longer emits source maps (`sourcemap: false`, since
+  2026-09-15), so a request for `<chunk>.js.map` finds no file - and with `map` in this list it gets
+  an honest 404 rather than `index.html` with a 200. It was needed while maps were published, and
+  removing it now would buy nothing.
 - **`svg` must stay in it** — `public/favicon.svg` is the only asset served from the root.
 
 Do **not** use the simpler `/<*>` → `/index.html` 200 rewrite. It also rewrites genuinely missing

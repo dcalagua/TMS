@@ -65,8 +65,17 @@ Defence in depth means three things must have failed together:
 Point 3 is the one worth checking first, and the check is a log line, not a connection setting.
 **The application connects as the schema owner and enters `tms_app` per company-scoped request**
 (`TenantScopedDataSource`): `tms_app` is `NOLOGIN` and passwordless (V13), so it is not a login
-role and an earlier version of this runbook asked for something impossible. The owner has
-`BYPASSRLS`, so a request that did not enter the role is filtered by layers 1 and 2 alone.
+role and an earlier version of this runbook asked for something impossible. A request that did
+not enter the role is filtered by layers 1 and 2 alone, because **row level security does not apply
+to a table's owner** unless the table has `FORCE ROW LEVEL SECURITY` - and no TMS table does, on
+purpose (`MigrationConventionTest.rowLevelSecurityIsNeverForcedOnTheOwner`).
+
+An earlier version of this paragraph said the owner is exempt because it has `BYPASSRLS`. That is
+the wrong mechanism, and it matters: revoking `BYPASSRLS` would change nothing. Verified on
+2026-09-15 against a local PostgreSQL 17 cluster with an owner that has **neither** SUPERUSER nor
+BYPASSRLS: as `tms_app` a query saw only its own company, and the same query as the owner saw every
+company. Whether the QAS connection role also carries `BYPASSRLS` is not verified here; either way
+the owner is not filtered.
 
 Find `TenantRuntimeRoleCheck`'s line in the startup log — prefix `Database roles:` — and read the
 level:
