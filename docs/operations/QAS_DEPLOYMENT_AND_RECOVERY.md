@@ -58,6 +58,14 @@ know about, which is fine, but they also add **constraints an older service laye
 A build from before V44 does not write to those tables at all, so in practice a rollback to the
 pre-promotion image is expected to work. **Expected, not verified** — nobody has run it.
 
+**Re-examined 2026-09-15 for V49 and V50: the statement still holds, and is still not verified.**
+V49 only adds sequence grants, and V50 replaces `tms.set_updated_at()` with the same body. V50's
+REVOKEs are the only way an older build could now be refused, and no build before V49 issues any
+revoked verb: the Java code under `backend/tms-api/src/main` is unchanged between the last pre-V49
+commit and V50's audit except for a startup role check that issues no DML. The reasoning, the table
+list and its limits are in [`BACKUP_AND_RESTORE.md` §9](BACKUP_AND_RESTORE.md#9-code-rollback-on-a-v49v50-schema).
+**Reasoned, not verified** — no older build was started against a V50 schema.
+
 ## 3. Database rollback
 
 **There is none, and none should be attempted.**
@@ -89,17 +97,37 @@ environment is that *the backend* starts, not that the statements are accepted.
 `tms_app`, the `postgis` extension and the `auth.users` accounts survive a `DROP SCHEMA tms` because
 they live outside that schema, and the three migrations that create them are idempotent.
 
+Rebuilding recovers the **schema** and the seed. It does not recover data, which is acceptable only
+because QAS data is disposable (§5).
+
+### Logical backup and restore
+
+**Documented and verified on a local cluster; not verified on QAS.** A `pg_dump -Fc` /
+`pg_restore` of a V50 database was executed on PostgreSQL 17.10 + PostGIS 3.6.2 on 2026-09-15, and
+the procedure, its expected errors and its post-restore checks are in
+[`BACKUP_AND_RESTORE.md`](BACKUP_AND_RESTORE.md).
+
+> **⚠ The dump does not contain `tms_app`.** Roles are cluster-global. Restored into a cluster
+> where `tms_app` does not already exist, the database loses every policy and every grant, while
+> Flyway validates clean and readiness answers UP. After any restore, run
+> [`BACKUP_AND_RESTORE.md` §8](BACKUP_AND_RESTORE.md#8-post-restore-checklist) — or
+> `scripts/ops/verify-restore.sh` — before trusting it. The repair is §6 of that page.
+
+Note that step 1 of the rebuild above is not affected: `DROP SCHEMA tms` keeps `tms_app` because it
+never leaves the cluster.
+
 ### Point-in-time restore
 
 **Not confirmed.** Whether this Supabase project has PITR or retained backups was not verified, and
-no restore has been performed. It is recorded as unknown rather than assumed.
+no restore has been performed. It is recorded as unknown rather than assumed. Whether a Supabase
+platform restore would bring back cluster-global roles such as `tms_app` is **also not confirmed**.
 
 ## 5. Risk position
 
 | Environment | Position |
 |---|---|
 | **QAS** | **Acceptable.** The data is disposable and prefixed `QAS-`, the environment is recreatable by a procedure that has been executed, and no production data may exist here |
-| **PRD** | **Blocker, unchanged.** A forward-only schema with no tested restore is not an acceptable position for production, and PRD does not exist yet — when it does it will be a *different* Supabase project |
+| **PRD** | **Blocker, unchanged.** A forward-only schema with no restore tested *on the production platform* is not an acceptable position for production — the logical restore in `BACKUP_AND_RESTORE.md` was verified on a local cluster only, and platform backups/PITR are unconfirmed. PRD does not exist yet — when it does it will be a *different* Supabase project |
 
 ## 6. If the promotion has to be abandoned
 

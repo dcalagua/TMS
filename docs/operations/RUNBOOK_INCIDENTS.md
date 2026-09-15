@@ -150,11 +150,39 @@ under a minute by two unauthenticated requests. Run the smoke first and it names
 The last row is the one that has actually happened, twice. **A merged promotion is not a
 deployment**, and the only thing that ever noticed the difference was that history table.
 
-## 9. What this runbook cannot tell you
+## 9. "We restored the database, health is green, and nothing company-scoped works"
+
+**Most likely: the restore did not bring `tms_app` back.** `pg_dump` dumps one database; roles
+are cluster-global. Restored into a cluster that never had `tms_app`, every `CREATE POLICY … TO
+tms_app` and every `GRANT … TO tms_app` fails, `pg_restore` exits `1` — exactly as a good restore
+with PostGIS does — Flyway validates clean because history says V13 already ran, and readiness
+answers UP. Verified on a local PostgreSQL 17.10 cluster on 2026-09-15.
+
+The signature:
+
+- In the startup log, `TenantRuntimeRoleCheck` at **`ERROR`** — `CANNOT enter 'tms_app'` (§3).
+- `SELECT count(*) FROM pg_roles WHERE rolname = 'tms_app';` → `0`
+- `SELECT count(*) FROM pg_policies WHERE schemaname = 'tms';` → `0`
+- Or run `scripts/ops/verify-restore.sh -- <psql connection arguments>` (read-only).
+
+**Fix: [`BACKUP_AND_RESTORE.md` §6](BACKUP_AND_RESTORE.md#6-recovery--the-database-was-already-restored-without-tms_app).**
+The `GRANT` that the `ERROR` line suggests is **not enough on its own** here: the role itself is
+missing, and once it exists the 74 policies and the grants are still missing. Recreate the role,
+then replay the `POLICY` / `ACL` / `DEFAULT ACL` entries from the same dump.
+
+**Do not** re-run Flyway, `flyway repair`, or re-apply V13 by hand to recreate the policies: history
+already records V13, and a schema whose policies came from a SQL client is not the product of
+`V1..Vn` (§7).
+
+## 10. What this runbook cannot tell you
 
 - **No deployment has been verified.** See `DEPLOYMENT.md` — the procedures there are read from
   configuration, not from a performed deploy.
 - **There are no alerts**, so every incident here starts with a human noticing.
 - **There is no performance baseline**, so "it feels slow" cannot currently be answered with a
   number (JOB 25).
-- **There is no rollback procedure that anybody has executed.**
+- **No restore has been executed on QAS or on any Supabase project.** A logical `pg_dump` /
+  `pg_restore` has been executed on a local cluster (`BACKUP_AND_RESTORE.md`); Supabase platform
+  backups and PITR are unconfirmed.
+- **No code rollback has been executed.** Its expected safety, including on V49/V50, is reasoned in
+  `QAS_DEPLOYMENT_AND_RECOVERY.md` §2 and `BACKUP_AND_RESTORE.md` §9.
