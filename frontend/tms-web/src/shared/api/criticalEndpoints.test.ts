@@ -5,6 +5,7 @@ import { downloadKpiCsv, fetchKpiReport } from "./reportingApi";
 import { fetchLocation, fetchLocations } from "./locationsApi";
 import { fetchDestinations } from "./destinationsApi";
 import { fetchOrigins } from "./originsApi";
+import type { AppEnv } from "../config/env";
 
 /**
  * Los endpoints de los tres módulos que el gate de runtime vigila — Torre de control, Reportes y
@@ -15,7 +16,23 @@ import { fetchOrigins } from "./originsApi";
  * perfectamente y se manifiesta como una pantalla vacía o como la lista equivocada.
  */
 
-const BASE = "http://localhost:8080/api/v1";
+/*
+ * La base del API se fija aquí y no se hereda del entorno. `appEnv` se calcula una vez al cargar
+ * `config/env`, y Vite vuelca en `import.meta.env` toda variable de proceso `VITE_*`: sin este
+ * mock, una shell con `VITE_API_BASE_URL` exportada (Amplify, o un `.env.local`) cambia lo que
+ * este test afirma. El valor es a propósito distinto del `DEFAULT_API_BASE_URL` de producción,
+ * para que un cliente que ignorase la configuración y usara localhost fallara aquí.
+ */
+const { BASE } = vi.hoisted(() => ({ BASE: "https://tms-api.test.invalid/api/v1" }));
+
+vi.mock("../config/env", () => ({
+  appEnv: {
+    apiBaseUrl: BASE,
+    supabaseUrl: "http://localhost:54321",
+    supabaseAnonKey: "test-anon-key-placeholder",
+    googleMapsApiKey: null,
+  } satisfies AppEnv,
+}));
 const COMPANY = "11111111-1111-4111-8111-111111111111";
 
 let fetchMock: ReturnType<typeof vi.fn>;
