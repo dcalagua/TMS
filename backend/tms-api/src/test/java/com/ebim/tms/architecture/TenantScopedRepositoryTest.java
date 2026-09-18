@@ -80,7 +80,15 @@ class TenantScopedRepositoryTest {
      * by its own id, which had no callers at all. A loaded gun with nobody holding it is still a
      * loaded gun.
      */
-    private static final Set<String> DELIBERATELY_UNSCOPED_FINDERS = Set.of();
+    /**
+     * {@code PlatformProvisioningRepository#findByIdempotencyKey} (V51) is not a tenant read and
+     * cannot be one. An idempotency key belongs to the control plane, not to a company, and the row
+     * it finds is what decides whether a tenant gets <em>created</em> - so there is no company to
+     * name yet. The table is unreachable from a company-scoped request by construction: V51 revokes
+     * every privilege on it from {@code tms_app}, and provisioning runs on the owner connection.
+     */
+    private static final Set<String> DELIBERATELY_UNSCOPED_FINDERS =
+            Set.of("PlatformProvisioningRepository#findByIdempotencyKey");
 
     @ArchTest
     void no_service_reads_a_row_by_bare_id(JavaClasses classes) {

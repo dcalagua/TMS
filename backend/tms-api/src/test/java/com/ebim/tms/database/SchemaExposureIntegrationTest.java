@@ -76,7 +76,11 @@ class SchemaExposureIntegrationTest {
             "freight_discrepancy", "settlement_approval", "payable_export",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
-            "work_assignment", "work_assignment_trip");
+            "work_assignment", "work_assignment_trip",
+            // V51: control-plane provisioning. RLS enabled and p_backend_managed, like the identity
+            // tables - and, unlike them, no privilege at all for tms_app: a table that lists every
+            // tenant must not be reachable by the role every tenant's requests run as.
+            "platform_tenant", "platform_provisioning");
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the
@@ -124,8 +128,17 @@ class SchemaExposureIntegrationTest {
      * may select - before any company scope exists. A tenant policy on it would make
      * authentication impossible, so it carries {@code p_backend_managed} like the rest of the
      * identity tables (V13 section 5).
+     *
+     * <p>{@code platform_tenant} and {@code platform_provisioning} (V51) are control-plane tables:
+     * they map an EBIM MasterAdmin tenant to a TMS organization and company, so by their nature they
+     * list every tenant, and a per-tenant policy would make the mapping unreadable by the only
+     * caller that needs it. What keeps them safe is not a policy but the grant: V51 revokes
+     * <em>all</em> privileges on both from {@code tms_app}, so the role every company-scoped request
+     * runs as cannot read them at all. Provisioning writes on the owner connection because it runs
+     * before any company exists.
      */
-    private static final List<String> COMPANY_COLUMN_WITHOUT_TENANT_POLICY = List.of("membership");
+    private static final List<String> COMPANY_COLUMN_WITHOUT_TENANT_POLICY =
+            List.of("membership", "platform_tenant", "platform_provisioning");
 
     private static String jdbcUrl;
 

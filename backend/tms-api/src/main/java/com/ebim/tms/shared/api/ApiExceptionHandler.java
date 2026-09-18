@@ -147,6 +147,16 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
+     * A failure that carries its own problem type. Used by the control-plane provisioning API,
+     * where several distinct outcomes share one HTTP status and the caller is a machine that has to
+     * tell them apart without reading the sentence.
+     */
+    @ExceptionHandler(ProblemTypedException.class)
+    public ResponseEntity<ProblemDetail> handleTyped(ProblemTypedException failure, WebRequest request) {
+        return respond(ApiProblems.of(failure.type(), failure.getMessage()), request);
+    }
+
+    /**
      * Declared after {@link #handleConflict} but matched before it: Spring picks the most
      * specific handler for the thrown type, so an {@link IdempotencyConflictException} - which is
      * a {@link ConflictException} - still gets its own machine code.

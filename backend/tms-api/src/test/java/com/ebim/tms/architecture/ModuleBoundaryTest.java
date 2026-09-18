@@ -36,6 +36,12 @@ class ModuleBoundaryTest {
                     // any other: it asks planning about shipments and masterdata about places
                     // through ports, and reads neither's tables.
                     "appointments",
+                    // Owns tms.platform_tenant and tms.platform_provisioning (V51): the control-plane
+                    // API EBIM MasterAdmin calls. Listed the day it was created, for the reason
+                    // costing was - a module missing from here is a module this rule silently skips.
+                    // It creates identity rows through TenantOnboardingPort rather than reaching into
+                    // iam, which is precisely what these rules are here to keep true.
+                    "platform",
                     // Owns tms.notification (V32). Listed here, and not left as an unconstrained
                     // package, precisely because it is the module every other one has a reason to
                     // call: an alert is a by-product of half the writes in the product. The rule

@@ -86,6 +86,52 @@ public enum ProblemType {
      */
     FEATURE_NOT_CONFIGURED("feature-not-configured", "Feature is not configured", HttpStatus.SERVICE_UNAVAILABLE),
 
+    // -----------------------------------------------------------------------------------------
+    // Control-plane provisioning (/internal/platform/**). These are a distinct surface with a
+    // distinct audience: EBIM MasterAdmin reads them from a machine, so each failure it can
+    // reasonably react to differently gets its own code instead of sharing `conflict` and leaving
+    // the control plane to parse prose. See docs/platform-provisioning/API_CONTRACT.md.
+    // -----------------------------------------------------------------------------------------
+
+    /** The M2M token is missing, malformed, expired, unsigned, or signed with the wrong algorithm. */
+    INVALID_M2M_TOKEN("invalid-m2m-token", "Invalid machine token", HttpStatus.UNAUTHORIZED),
+
+    /** The token verified, but it was not issued by the configured control plane. */
+    INVALID_ISSUER("invalid-issuer", "Invalid token issuer", HttpStatus.UNAUTHORIZED),
+
+    /** The token verified, but it was not minted for this product. */
+    INVALID_AUDIENCE("invalid-audience", "Invalid token audience", HttpStatus.UNAUTHORIZED),
+
+    /** Authenticated, but the token carries no scope granting this operation. */
+    MISSING_SCOPE("missing-scope", "Required scope is missing", HttpStatus.FORBIDDEN),
+
+    /** The write carried no {@code Idempotency-Key}, which this API requires rather than invents. */
+    IDEMPOTENCY_KEY_REQUIRED("idempotency-key-required", "Idempotency-Key is required", HttpStatus.BAD_REQUEST),
+
+    /**
+     * The same idempotency key arrived with a different payload. The platform twin of
+     * {@link #IDEMPOTENCY_KEY_REUSED}, kept separate so the control plane's error table and the
+     * partner API's stay independent of one another.
+     */
+    IDEMPOTENCY_CONFLICT("idempotency-conflict", "Idempotency key reused with a different payload",
+            HttpStatus.CONFLICT),
+
+    /** This control-plane tenant already has a TMS organization and company. */
+    TENANT_ALREADY_PROVISIONED("tenant-already-provisioned", "Tenant is already provisioned", HttpStatus.CONFLICT),
+
+    /** An identifier or code the request asked for is already in use by something else. */
+    TENANT_CONFLICT("tenant-conflict", "Tenant identifiers conflict", HttpStatus.CONFLICT),
+
+    /** The administrator email already belongs to a user of another tenant. */
+    ADMIN_EMAIL_CONFLICT("admin-email-conflict", "Administrator email already in use", HttpStatus.CONFLICT),
+
+    /**
+     * Provisioning ran and could not finish. Nothing was left behind - the transaction rolled
+     * back - and the failure is recorded against the idempotency key so the same key can be
+     * retried once the cause is fixed.
+     */
+    PROVISIONING_FAILED("provisioning-failed", "Provisioning failed", HttpStatus.INTERNAL_SERVER_ERROR),
+
     /** Anything unexpected. The detail is deliberately generic; the cause is only in the server log. */
     INTERNAL_ERROR("internal-error", "Internal server error", HttpStatus.INTERNAL_SERVER_ERROR);
 
