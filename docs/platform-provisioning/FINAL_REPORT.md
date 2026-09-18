@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | HEAD inicial | `07a26dcbc51a0799eebd673dd1e1a1d991f82bcf` |
-| HEAD final | *(el commit de este trabajo; ver §Commits)* |
+| HEAD final | `f5138089e2f741436c2a828c4871f348ff88bb8c` |
 | Rama | `dev` — **sin push** |
 | Fecha | 2026-09-18 |
 
