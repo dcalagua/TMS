@@ -392,6 +392,33 @@ class TripTenderServiceTest {
 
             verify(events, never()).publish(any(), any(), any(), any(), anyMap());
         }
+
+        @Test
+        @DisplayName("ends the waterfall rather than letting it route around a withdrawal")
+        void withdrawingByHandStopsTheWaterfall() {
+            Trip trip = locked(TripStatus.CONFIRMED);
+            TripTender tender = sentTender(null);
+            when(tenderRepository.findByIdAndCompanyId(TENDER_ID, COMPANY)).thenReturn(Optional.of(tender));
+
+            service.withdraw(SCOPE, TRIP_ID, TENDER_ID, new TenderWithdrawRequest("Replanned"));
+
+            // CARRIER_SELECTION_AND_WATERFALL_V1 section 7: withdrawing is a decision to stop, not a
+            // refusal to route around. Until this call existed the CANCELLED branch of
+            // tenderAnswered was unreachable and the next advance re-offered the shipment.
+            verify(waterfall).tenderAnswered(SCOPE, trip, tender, TenderStatus.CANCELLED);
+        }
+
+        @Test
+        @DisplayName("ends the waterfall of a shipment that has stopped being offerable at all")
+        void aCancelledShipmentHasNoWaterfall() {
+            Trip trip = locked(TripStatus.CANCELLED);
+
+            // No live tender on purpose: a waterfall caught between two offers has none, and it is
+            // exactly that case the tender-shaped notification could never reach.
+            service.withdrawOpen(SCOPE, trip, "Shipment cancelled");
+
+            verify(waterfall).shipmentNoLongerOfferable(SCOPE, trip, "Shipment cancelled");
+        }
     }
 
     @Nested
@@ -491,6 +518,66 @@ class TripTenderServiceTest {
                     .thenReturn(List.of(sentTender(OffsetDateTime.now().minusMinutes(1))));
 
             assertThat(service.openOffers(SCOPE, CARRIER, null)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("tells the waterfall the carrier accepted, exactly as the operator path does")
+        void anIntegrationAcceptanceReachesTheWaterfall() {
+            Trip trip = lockedByNumber(TripStatus.CONFIRMED);
+            TripTender tender = sentTender(null);
+            when(tenderRepository.findByCompanyIdAndTripIdOrderByAttemptDesc(COMPANY, TRIP_ID))
+                    .thenReturn(List.of(tender));
+
+            service.respondAsCarrier(SCOPE, CARRIER, SHIPMENT, true, "Sending the 12t", CLIENT);
+
+            // Without this the waterfall went on reading ACTIVE over a shipment already placed, and
+            // the next advance offered it to a second carrier - refused by requireNotPlaced, but
+            // only after the waterfall had been walked one rank further.
+            verify(waterfall).tenderAnswered(SCOPE, trip, tender, TenderStatus.ACCEPTED);
+        }
+
+        @Test
+        @DisplayName("tells the waterfall the carrier refused, so the candidate stops reading OFFERED")
+        void anIntegrationRefusalReachesTheWaterfall() {
+            Trip trip = lockedByNumber(TripStatus.CONFIRMED);
+            TripTender tender = sentTender(null);
+            when(tenderRepository.findByCompanyIdAndTripIdOrderByAttemptDesc(COMPANY, TRIP_ID))
+                    .thenReturn(List.of(tender));
+
+            service.respondAsCarrier(SCOPE, CARRIER, SHIPMENT, false, "No 12t on the 24th", CLIENT);
+
+            verify(waterfall).tenderAnswered(SCOPE, trip, tender, TenderStatus.REJECTED);
+        }
+
+        @Test
+        @DisplayName("tells it nothing when the answer is refused")
+        void arefusedAnswerAdvancesNothing() {
+            lockedByNumber(TripStatus.CONFIRMED);
+            TripTender tender = sentTender(null);
+            tender.accept(OffsetDateTime.now(), TenderResponseSource.INTEGRATION, null, CLIENT, null);
+            when(tenderRepository.findByCompanyIdAndTripIdOrderByAttemptDesc(COMPANY, TRIP_ID))
+                    .thenReturn(List.of(tender));
+
+            assertThatExceptionOfType(ConflictException.class)
+                    .isThrownBy(() -> service.respondAsCarrier(SCOPE, CARRIER, SHIPMENT, false, "changed", CLIENT));
+
+            verify(waterfall, never()).tenderAnswered(any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("replaying the same decision advances nothing a second time")
+        void aReplayDoesNotAdvanceTheWaterfallAgain() {
+            lockedByNumber(TripStatus.CONFIRMED);
+            TripTender tender = sentTender(null);
+            tender.accept(OffsetDateTime.now(), TenderResponseSource.INTEGRATION, null, CLIENT, null);
+            when(tenderRepository.findByCompanyIdAndTripIdOrderByAttemptDesc(COMPANY, TRIP_ID))
+                    .thenReturn(List.of(tender));
+
+            service.respondAsCarrier(SCOPE, CARRIER, SHIPMENT, true, null, CLIENT);
+
+            // The early return that makes a repeated webhook idempotent has to be idempotent for
+            // the waterfall too: a second ACCEPTED would try to decide a candidate already decided.
+            verify(waterfall, never()).tenderAnswered(any(), any(), any(), any());
         }
     }
 

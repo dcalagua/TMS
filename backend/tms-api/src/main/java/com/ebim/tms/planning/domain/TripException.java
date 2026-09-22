@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
+import java.util.Objects;
 import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -106,6 +107,36 @@ public class TripException {
         this.reportedAt = reportedAt;
         this.reportedBy = reportedBy;
         this.notes = notes;
+    }
+
+    /**
+     * Whether an incoming report says the same thing this row already says, and is therefore the
+     * same problem rather than a second one.
+     *
+     * <p>The whole duplicate rule, in one place, because it is read from two doors: a dispatcher
+     * writing a problem up by hand ({@code TripExceptionService.report}) and a stop being skipped
+     * or failed ({@code TripStopExecutionService}), which opens one automatically. Two identical
+     * statements about the same unresolved problem - a double click, a retried request, the same
+     * fact entered through both doors - are one problem, and a second row for it would make the
+     * control tower count two and bury the one that is real.
+     *
+     * <p><b>Same stop, same type, same sentence.</b> The stop and the type are what the problem is
+     * about; the sentence is what it says. A report carrying <em>different</em> notes is new
+     * information and is deliberately <b>not</b> matched here: {@code notes} is immutable on this
+     * row, so folding it in would be losing what it said, which is worse than a second row.
+     *
+     * <p><b>The time is not part of the key</b>, and cannot be: a second click is a second reading
+     * of the clock. The first report's {@code reportedAt} is the one kept, which is both the
+     * earlier and the truer one - the same rule {@code resolve} follows for the resolution time.
+     *
+     * <p>Only meaningful while this row is OPEN - a resolved problem that happens again is a new
+     * problem, and callers filter on status before asking.
+     */
+    public boolean restates(UUID otherTripStopId, TripExceptionType otherType, String otherNotes) {
+        return status == TripExceptionStatus.OPEN
+                && exceptionType == otherType
+                && Objects.equals(tripStopId, otherTripStopId)
+                && Objects.equals(notes, otherNotes);
     }
 
     /**

@@ -238,9 +238,15 @@ public class TenderWaterfallService {
     /**
      * Records what a carrier answered and moves the waterfall on.
      *
-     * <p>Called by {@code TripTenderService} after every response so that the two records - the
-     * tender's own status and the candidate's - cannot disagree. A shipment with no waterfall is
-     * simply not affected, which is what keeps hand-made tenders working exactly as they did.
+     * <p>Called by {@code TripTenderService} after every response - the one a colleague types in,
+     * the one the carrier's own system sends, and the withdrawal a planner makes by hand - so that
+     * the two records, the tender's own status and the candidate's, cannot disagree. A shipment
+     * with no waterfall is simply not affected, which is what keeps hand-made tenders working
+     * exactly as they did.
+     *
+     * <p><b>Recording the answer and sending the next offer are two different rights.</b> Anyone
+     * who may answer may have their answer recorded; only a person may commit the company to
+     * another offer - see {@link #offerNextIfAttributable}.
      */
     @Transactional
     public void tenderAnswered(CompanyScope scope, Trip trip, TripTender tender, TenderStatus outcome) {
@@ -274,13 +280,13 @@ public class TenderWaterfallService {
                 candidate.get().decided(WaterfallCandidateStatus.REJECTED, now);
                 count(ADVANCE_METRIC, "rejected");
                 waterfallRepository.saveAndFlush(waterfall);
-                offerNext(scope, trip, waterfall, now);
+                offerNextIfAttributable(scope, trip, waterfall, candidate.get(), now);
             }
             case EXPIRED -> {
                 candidate.get().decided(WaterfallCandidateStatus.EXPIRED, now);
                 count(ADVANCE_METRIC, "expired");
                 waterfallRepository.saveAndFlush(waterfall);
-                offerNext(scope, trip, waterfall, now);
+                offerNextIfAttributable(scope, trip, waterfall, candidate.get(), now);
             }
             case CANCELLED -> {
                 // Somebody withdrew the offer by hand. That is a decision to stop, not a refusal to
@@ -297,6 +303,36 @@ public class TenderWaterfallService {
         }
     }
 
+    /**
+     * Offers to the next carrier when there is a person to attribute that offer to, and stops at
+     * the candidate's record when there is not.
+     *
+     * <p>{@code TripTenderService.createFor} goes through
+     * {@code AuditActorProvider.requireAppUserId}, which refuses a machine by design - "this
+     * operation is restricted to an interactive user". That rule predates the waterfall and it is
+     * right: an offer to a carrier is a commercial commitment and the trail has to name whoever
+     * made it. So when the rejection arrives over the integration API, the candidate is recorded as
+     * {@code REJECTED} - which is the fact, and the whole reason this method's caller exists - and
+     * the waterfall waits at that rank for a dispatcher to {@link #advance}, exactly as it already
+     * waits after a lapse. The alternative, letting {@code requireAppUserId} throw from inside the
+     * carrier's own request, would roll back the carrier's answer over a rule that has nothing to
+     * do with it.
+     *
+     * <p>The day a first-class system actor exists (section 8 of
+     * {@code docs/domain/CARRIER_SELECTION_AND_WATERFALL_V1.md}), this guard is where it plugs in.
+     */
+    private void offerNextIfAttributable(CompanyScope scope, Trip trip, TenderWaterfall waterfall,
+            TenderWaterfallCandidate answered, OffsetDateTime now) {
+        if (auditActorProvider.current().filter(actor -> !actor.isMachine()).isEmpty()) {
+            log.info("Shipment {} was answered by the carrier's own system; the waterfall stays at rank {} "
+                            + "for a dispatcher to advance, because a machine has no app_user to attribute "
+                            + "the next offer to.",
+                    trip.shipmentNumber(), answered.rank());
+            return;
+        }
+        offerNext(scope, trip, waterfall, now);
+    }
+
     // --- ending -----------------------------------------------------------------------
 
     /** The manual override: a person stops the waterfall. */
@@ -309,17 +345,51 @@ public class TenderWaterfallService {
                         "Shipment " + trip.shipmentNumber() + " has no tender waterfall running."));
 
         OffsetDateTime now = OffsetDateTime.now(clock);
+        boolean anOfferIsOut = waterfall.offered().isPresent();
+        waterfall.offered().ifPresent(candidate -> candidate.decided(WaterfallCandidateStatus.EXPIRED, now));
+        // Ended before the tender is withdrawn, and that order is load-bearing now that a
+        // withdrawal reports itself here: a withdrawal arriving while this waterfall was still
+        // ACTIVE would end it a second time under "the offer to rank N was withdrawn by hand" and
+        // lose the reason the planner actually gave. finish() is idempotent, so the notification
+        // that follows finds a finished waterfall and does nothing.
+        end(scope, trip, waterfall, WaterfallStatus.CANCELLED, blankToNull(reason), now);
         // The offer that is out is withdrawn too: leaving it live would let a carrier accept a
         // shipment whose waterfall a planner has just stopped.
-        waterfall.offered().ifPresent(candidate -> {
-            candidate.decided(WaterfallCandidateStatus.EXPIRED, now);
+        if (anOfferIsOut) {
             tenderRepository.findLive(scope.companyId(), tripId).ifPresent(live ->
                     tenderService.withdraw(scope, tripId, live.id(),
                             new TenderWithdrawRequest("The tender waterfall was stopped.")));
-        });
-        end(scope, trip, waterfall, WaterfallStatus.CANCELLED, blankToNull(reason), now);
+        }
         count(WATERFALL_METRIC, "stopped");
         return view(scope, waterfall);
+    }
+
+    /**
+     * Ends a waterfall whose shipment has stopped being offerable at all - it was cancelled, or it
+     * departed.
+     *
+     * <p>Called from {@code TripTenderService.withdrawOpen}, which the trip's own lifecycle calls,
+     * and separate from {@link #tenderAnswered} because there need not be a tender to answer: a
+     * waterfall caught between two offers has no live tender, and leaving it {@code ACTIVE} would
+     * put a running waterfall on the card of a shipment that has left - where every
+     * {@link #advance} would refuse with "is CANCELLED and cannot be offered to a carrier" until
+     * somebody stopped it by hand.
+     *
+     * <p>Idempotent through {@code TenderWaterfall.finish}, and a no-op on the great majority of
+     * shipments, which are on no waterfall.
+     */
+    void shipmentNoLongerOfferable(CompanyScope scope, Trip trip, String reason) {
+        waterfallRepository
+                .findByCompanyIdAndTripIdAndStatus(scope.companyId(), trip.id(), WaterfallStatus.ACTIVE)
+                .ifPresent(waterfall -> {
+                    OffsetDateTime now = OffsetDateTime.now(clock);
+                    // EXPIRED and not a status of its own: the candidate vocabulary has no word for
+                    // "the shipment went away", and inventing one is a migration rather than a fix.
+                    // It is the same reading stop() has always written for a withdrawn offer.
+                    waterfall.offered()
+                            .ifPresent(candidate -> candidate.decided(WaterfallCandidateStatus.EXPIRED, now));
+                    end(scope, trip, waterfall, WaterfallStatus.CANCELLED, blankToNull(reason), now);
+                });
     }
 
     private void end(CompanyScope scope, Trip trip, TenderWaterfall waterfall, WaterfallStatus outcome,
@@ -403,8 +473,10 @@ public class TenderWaterfallService {
             if (live != null) {
                 // Materialises the lapse on the tender too, so the two records agree. V31's
                 // resolveLapse does this on the next write that touches the trip's tenders; this is
-                // that write.
-                tenderService.list(scope, tripId);
+                // that write. It used to be a call to tenderService.list, which reads and writes
+                // nothing - so the row stayed SENT and, when this advance exhausted the list and
+                // never reached createFor, TENDER_EXPIRED was never published at all.
+                tenderService.resolveLiveLapse(scope, trip);
             }
             waterfallRepository.saveAndFlush(waterfall);
             count(ADVANCE_METRIC, "expired");

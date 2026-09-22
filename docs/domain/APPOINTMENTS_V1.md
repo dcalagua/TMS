@@ -29,6 +29,19 @@ into a sentence about the dock board rather than a 500.
 `AppointmentServiceIntegrationTest.twoSimultaneousBookingsOneWins` runs exactly that race against
 real PostgreSQL and asserts one winner.
 
+**Only that constraint gets that sentence.** The translating branch recognises
+`ex_appointment_no_double_booking` - by SQLSTATE `23P01` (`exclusion_violation`, which is what
+`EXCLUDE USING gist` raises and the only `EXCLUDE` on `tms.appointment`), falling back to the
+constraint's own name, which PostgreSQL quotes in the message and no `lc_messages` setting
+translates. Every other integrity violation is rethrown so `ApiExceptionHandler` logs it against the
+correlation id and answers a 409 that claims nothing about the door.
+
+It used to answer "somebody booked that dock a moment ago" to *every* integrity violation, which is
+a claim it had never checked: a foreign key that failed because the shipment was deleted in another
+tab sent a dispatcher to reload a board that was never the problem, and the real cause went into a
+message instead of a log. `AppointmentOverlapBackstopTest` asserts the discrimination with no
+database, which is the half of this rule that does not need one.
+
 ### Why a door takes one vehicle and not N
 
 A site with six doors has **six rows**. That is not a simplification to relax later: PostgreSQL can

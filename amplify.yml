@@ -9,6 +9,11 @@
 #
 # VITE_* values are compiled into the bundle at build time, not read at runtime, so changing one
 # in the console requires a new build ("Redeploy this version" is enough), never just a restart.
+#
+# This file cannot express a rewrite rule, and the frontend needs one: the SPA catch-all that makes
+# a deep link like /masters/locations serve index.html is a console setting (App settings ->
+# Rewrites and redirects). docs/operations/PROMOTION.md carries the exact rule. Without it,
+# reloading any route other than / returns the host's 404, and 21 e2e assertions fail.
 version: 1
 applications:
   - appRoot: frontend/tms-web
@@ -17,15 +22,38 @@ applications:
         preBuild:
           commands:
             # Vite 8 and TypeScript 6 need a modern Node; the default Amplify image may still be
-            # on 18/20. nvm ships in the Amazon Linux 2023 build image.
-            - nvm install 22
-            - nvm use 22
+            # on 18/20. nvm ships in the Amazon Linux 2023 build image, and the floor it should
+            # read is declared once in frontend/tms-web - `engines` in package.json, pinned in
+            # .nvmrc - rather than repeated as "22" here. Bumping .nvmrc bumps the build image
+            # with it, and `npm ci` fails loudly with EBADENGINE if the two ever disagree.
+            - nvm install
+            - nvm use
             - node -v
             - npm ci
+            # Refuse the build instead of baking a broken bundle. VITE_API_BASE_URL missing from
+            # the console makes env.ts default to http://localhost:8080/api/v1 - compiled in,
+            # pointing at the visitor's own machine, and unannounced. Paths are relative to
+            # appRoot, hence ../../.
+            - bash ../../scripts/ci/check-frontend-env.sh
         build:
           commands:
+            # Lint and unit tests run both here and in .github/workflows/ci.yml, and the overlap
+            # is deliberate while `qas` has no branch protection: a push to the deploy branch
+            # starts this build at the same moment it starts CI, so CI cannot gate it. Until the
+            # `CI` check is required on a PR into `qas`, this build is the last gate the frontend
+            # passes before it is published - and a gate that is last has to be whole. Drop these
+            # two lines once that check is enforced.
+            - npm run lint
+            - npx vitest run
             # `npm run build` is `tsc -b && vite build`: the type check gates the bundle.
             - npm run build
+            # Stamp the artefact with the revision it came from, so "which build is live" has an
+            # answer. AWS_COMMIT_ID is injected by Amplify; the script fails rather than writing
+            # "unknown". `files: '**/*'` below already publishes the manifest.
+            - bash ../../scripts/ci/write-release-manifest.sh dist
+            # Check the bytes, not just the environment: a variable can be set and still never
+            # reach the compiler - wrong name, or scoped to another branch.
+            - bash ../../scripts/ci/assert-frontend-bundle.sh dist
       artifacts:
         baseDirectory: dist
         files:

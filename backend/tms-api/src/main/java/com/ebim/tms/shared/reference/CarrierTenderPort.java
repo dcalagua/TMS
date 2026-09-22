@@ -46,12 +46,18 @@ public interface CarrierTenderPort {
      *     with no reason is the answer that helps the planner least
      * @param integrationClientId the credential that answered, recorded on the tender so an audit
      *     reader can follow one acceptance back to the key that signed it
+     * @param attempt which offer is being answered, or null when the sender did not say. A shipment
+     *     may be offered to the same carrier more than once - they refuse, the waterfall moves on,
+     *     and a planner comes back later with a higher attempt - and without this term a redelivery
+     *     of the older answer selects the newest offer instead and refuses one nobody had answered.
+     *     That is a retry which does not duplicate an effect but destroys one. Null keeps the V31
+     *     behaviour for senders that have not been updated
      * @throws com.ebim.tms.shared.api.ResourceNotFoundException when this carrier has no tender on
-     *     that shipment number in this company - the same answer a shipment that does not exist
-     *     gets, so a carrier cannot probe for the shipper's other shipments
+     *     that shipment number in this company, or none at the attempt named - the same answer a
+     *     shipment that does not exist gets, so a carrier cannot probe for the shipper's business
      * @throws com.ebim.tms.shared.api.ConflictException when the offer is no longer answerable:
      *     lapsed, withdrawn, or already answered the other way
      */
     CarrierTenderOffer respond(CompanyScope scope, UUID carrierId, String shipmentNumber, boolean accepted,
-            String notes, UUID integrationClientId);
+            String notes, UUID integrationClientId, Integer attempt);
 }

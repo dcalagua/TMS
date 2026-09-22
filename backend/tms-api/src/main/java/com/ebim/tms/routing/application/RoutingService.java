@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * The routing chain: cache, then provider, then a local estimate (migration V38).
@@ -47,6 +48,9 @@ import org.springframework.transaction.annotation.Transactional;
  * carries its own {@code source} so a later reader can still tell an estimate from a measurement.
  * When a real provider is configured, the estimates expire and are replaced by real ones without
  * anything having to purge them.
+ *
+ * <p><b>Except inside a read-only transaction, which reads the cache and never writes it.</b> See
+ * {@link #store} for why, and for the two alternatives that were rejected.
  *
  * <p><b>Two instances racing to cache the same leg is not an error.</b> Both computed the same
  * number; the loser's insert hits {@code uq_travel_estimate_leg} and is answered from the winner's
@@ -99,24 +103,51 @@ public class RoutingService implements RoutingPort {
             // row per stop-against-itself would be the largest and least useful part of the table.
             count(LOOKUP_METRIC, "same-point");
             return Optional.of(TravelEstimate.computed(BigDecimal.ZERO.setScale(3), Duration.ZERO,
-                    fallback.name(), RoutingSource.FALLBACK, OffsetDateTime.now(clock)));
+                    fallback.name(), RoutingSource.FALLBACK, now()));
         }
         return Optional.of(resolve(companyId, origin, destination));
     }
 
+    /**
+     * Every distinct off-diagonal pair, up to what one call is allowed to cost.
+     *
+     * <p><b>A request larger than the budget is answered in part, never refused.</b> This method
+     * used to throw {@link IllegalArgumentException} above {@code matrixLimit}, which contradicted
+     * the one rule {@link RoutingPort} states in its own contract - "never throws for a road it
+     * cannot measure" - and ADR-010's "routing never fails a decision". The cost was not
+     * theoretical: {@code AutoPlanningService} asks for N x N over a run's origin and destinations,
+     * so a planning run touching fifty geocoded destinations asked for 2550 legs against a default
+     * budget of 2500 and died. The API can only render that as an opaque 500, and no planner can
+     * act on it - the plan simply became impossible, for a reason nothing on the board named.
+     *
+     * <p>An unanswered leg, by contrast, is a state every caller already models: {@code
+     * TravelMatrix} reports it unknown, {@code StopScheduleEngine} rule 1 stops estimating from
+     * there, and both planning engines degrade to their pre-V38 behaviour. The budget stays a real
+     * guard on how much work one call may do; it stops being a licence to refuse the call.
+     *
+     * <p>Which legs survive is the caller's own order ({@link #distinctLegs} keeps it), so the
+     * truncation is reproducible rather than whatever a hash iteration happened to yield - and for
+     * an N x N the surviving prefix is the origin's whole row first, which is the half a caller
+     * sequencing from an origin needs most.
+     */
     @Override
     @Transactional
     public Map<Leg, TravelEstimate> matrix(UUID companyId, List<GeoPoint> origins, List<GeoPoint> destinations) {
         Timer.Sample sample = Timer.start(meterRegistry);
         try {
             Set<Leg> wanted = distinctLegs(origins, destinations);
-            if (wanted.size() > properties.matrixLimit()) {
-                throw new IllegalArgumentException("a routing matrix of " + wanted.size()
-                        + " legs exceeds the configured limit of " + properties.matrixLimit());
+            int budget = properties.matrixLimit();
+            List<Leg> asked = List.copyOf(wanted);
+            if (asked.size() > budget) {
+                count(LOOKUP_METRIC, "over-budget");
+                log.warn("Routing was asked for {} legs, over the configured budget of {}; answering the"
+                        + " first {} in the caller's order and leaving the rest unknown.",
+                        asked.size(), budget, budget);
+                asked = asked.subList(0, budget);
             }
 
             Map<Leg, TravelEstimate> answers = new LinkedHashMap<>();
-            for (Leg leg : wanted) {
+            for (Leg leg : asked) {
                 estimate(companyId, leg.origin(), leg.destination())
                         .ifPresent(estimate -> answers.put(leg, estimate));
             }
@@ -159,7 +190,7 @@ public class RoutingService implements RoutingPort {
         Optional<TravelEstimateRow> cached =
                 cache.findLeg(companyId, providerName, origin.latitude(), origin.longitude(),
                         destination.latitude(), destination.longitude());
-        OffsetDateTime now = OffsetDateTime.now(clock);
+        OffsetDateTime now = now();
 
         if (cached.isPresent() && cached.get().isFreshAt(now)) {
             count(LOOKUP_METRIC, "hit");
@@ -167,7 +198,7 @@ public class RoutingService implements RoutingPort {
         }
         count(LOOKUP_METRIC, cached.isPresent() ? "expired" : "miss");
 
-        TravelEstimate computed = compute(provider, origin, destination);
+        TravelEstimate computed = atStoredPrecision(compute(provider, origin, destination));
         store(companyId, origin, destination, computed, cached.orElse(null), now);
         return computed;
     }
@@ -207,6 +238,36 @@ public class RoutingService implements RoutingPort {
         return localEstimate(origin, destination);
     }
 
+    /**
+     * The clock's now, at the precision {@code tms.travel_estimate} keeps.
+     *
+     * <p>Every instant this class stamps - a same-point answer, the freshness check, the
+     * {@code expires_at} it stores, the eviction cut-off - goes through here, so none of them can
+     * carry digits a round trip through {@code timestamptz} would drop. See
+     * {@link TravelEstimateRow#STORED_PRECISION}.
+     */
+    private OffsetDateTime now() {
+        return OffsetDateTime.now(clock).truncatedTo(TravelEstimateRow.STORED_PRECISION);
+    }
+
+    /**
+     * The answer as it will read back from the cache, so a miss and the hit after it agree.
+     *
+     * <p>{@link LocalGeodesicRoutingProvider} already stamps at stored precision; this is the net
+     * for an adapter that does not. A vendor adapter is the part of routing most likely to be
+     * written elsewhere, and its {@code calculatedAt} arriving in nanoseconds must not reintroduce a
+     * {@code calculatedAt} that changes between the first read and the second. Returns the same
+     * instance when there is nothing to cut.
+     */
+    private static TravelEstimate atStoredPrecision(TravelEstimate estimate) {
+        OffsetDateTime stamped = estimate.calculatedAt().truncatedTo(TravelEstimateRow.STORED_PRECISION);
+        if (stamped.equals(estimate.calculatedAt())) {
+            return estimate;
+        }
+        return new TravelEstimate(estimate.distanceKm(), estimate.travelDuration(), estimate.provider(),
+                estimate.source(), estimate.servedFromCache(), stamped);
+    }
+
     private TravelEstimate localEstimate(GeoPoint origin, GeoPoint destination) {
         count(LOOKUP_METRIC, "fallback");
         return fallback.estimate(origin, destination).orElseThrow(() -> new IllegalStateException(
@@ -219,9 +280,58 @@ public class RoutingService implements RoutingPort {
      * <p>A losing race is caught and ignored: the winner stored the same number, and the caller
      * already has its answer in hand. Turning that into an error would make a cache the one part of
      * the product that fails under load.
+     *
+     * <p><b>Inside a read-only transaction nothing is written, and the answer is served anyway.</b>
+     * {@code estimate} and {@code matrix} are {@code REQUIRED}, so they join whatever transaction
+     * the caller holds - and several callers hold a read-only one: {@code AutoPlanningService.preview},
+     * which the auto-plan drawer calls every time a planner opens it, and {@code TripService.get},
+     * whose detail view measures the trip. With the defaults this project runs on, Spring's
+     * {@code HibernateJpaDialect} marks that connection read-only and pgjdbc opens it as
+     * {@code BEGIN READ ONLY}. The first cache miss then inserted into it, PostgreSQL refused with
+     * {@code 25006}, and the transaction was left aborted ({@code 25P02}) for everything after it:
+     * the whole preview failed - on a cold cache only, so it looked intermittent, because any
+     * earlier read-write call had already warmed the legs. That is a routing lookup failing a
+     * decision, which ADR-010 rules out.
+     *
+     * <p>Three ways out were weighed:
+     *
+     * <ol>
+     *   <li><b>Catch the error</b> - not a fix. By the time {@code 25006} arrives the transaction is
+     *       already aborted, and every statement the preview runs after it fails with
+     *       {@code 25P02}.</li>
+     *   <li><b>Write the cache in its own {@code REQUIRES_NEW} transaction</b> - rejected. It would
+     *       have to live in a separate bean (self-invocation bypasses the proxy), and it asks the pool
+     *       for a <em>second</em> connection while the request still holds its first, once per missed
+     *       leg of an N x N matrix. Under concurrent planners that is the textbook pool deadlock:
+     *       with the production default of twenty connections, twenty previews hold all of them and
+     *       each waits for a twenty-first until the pool's timeout fails every one. It also commits
+     *       once per leg, and leaves cache rows behind a preview that promises to write nothing.</li>
+     *   <li><b>Skip the write when the transaction is read-only</b> - chosen. The number is computed
+     *       exactly as before and served; it is simply not remembered. No second connection, no new
+     *       failure mode. The cost is that a read-only caller never warms the cache, so a cold leg
+     *       is recomputed on every such read until a read-write path (auto-plan apply, a trip
+     *       change, an ETA recompute) stores it. With the local estimator that is arithmetic; with a
+     *       paid vendor it is a provider call per cold leg per read, which is counted below so it
+     *       can be seen rather than guessed.</li>
+     * </ol>
+     *
+     * <p><b>The expired row is left untouched too, not merely unsaved.</b> A row read inside a
+     * read-only session is loaded read-only: Hibernate keeps no snapshot of it, so refreshing it and
+     * flushing would have been ignored silently rather than refused. Worse, the refreshed instance
+     * would have stayed in the persistence context, and a second lookup of the same leg in that
+     * transaction would have been handed it as a fresh cache hit - a figure reported as stored that
+     * was never stored. Returning before {@link TravelEstimateRow#refresh} is what prevents both.
+     *
+     * <p>{@link TransactionSynchronizationManager#isCurrentTransactionReadOnly()} describes the
+     * physical transaction: a {@code REQUIRED} method joining a read-only one does not clear it, and
+     * a call with no transaction at all starts this class's own read-write one, where it is false.
      */
     private void store(UUID companyId, GeoPoint origin, GeoPoint destination, TravelEstimate estimate,
             TravelEstimateRow expired, OffsetDateTime now) {
+        if (TransactionSynchronizationManager.isCurrentTransactionReadOnly()) {
+            count(LOOKUP_METRIC, "not-stored-read-only");
+            return;
+        }
         OffsetDateTime expiresAt = now.plus(properties.cacheTtl());
         try {
             if (expired != null) {
@@ -253,7 +363,7 @@ public class RoutingService implements RoutingPort {
      */
     @Transactional
     public int evictExpired() {
-        int removed = cache.deleteExpired(OffsetDateTime.now(clock));
+        int removed = cache.deleteExpired(now());
         if (removed > 0) {
             log.info("Evicted {} expired routing estimates.", removed);
         }

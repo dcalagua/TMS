@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -84,6 +85,31 @@ public final class TestJwts {
     public static String wrongAudienceFor(UUID authUserId) {
         return sign(KEY_PAIR, claims(authUserId.toString(), ISSUER, "some-other-service",
                 Instant.now().minusSeconds(60), Instant.now().plusSeconds(600)));
+    }
+
+    /**
+     * A genuinely valid token for a real user, carrying every claim an attacker would reach for if
+     * claims were authorization: an elevated {@code role}, a {@code company_id} naming somebody
+     * else's tenant, and a hand-written permission list.
+     *
+     * <p>Supabase custom claims are writable through the auth admin API and through a database
+     * trigger on {@code auth.users}, so they sit outside this application's control. The token is
+     * signed by the trusted key on purpose - the point is not that the forgery is detected, but
+     * that a perfectly authentic token is read for its {@code sub} and nothing else.
+     */
+    public static String withHostileClaims(UUID authUserId, UUID claimedCompanyId) {
+        JWTClaimsSet honest = claims(authUserId.toString(), ISSUER, AUDIENCE,
+                Instant.now().minusSeconds(60), Instant.now().plusSeconds(600));
+        return sign(KEY_PAIR, new JWTClaimsSet.Builder(honest)
+                .claim("role", "service_role")
+                .claim("company_id", claimedCompanyId.toString())
+                .claim("organization_id", claimedCompanyId.toString())
+                .claim("permissions", List.of("orders.order:manage", "iam.company:manage"))
+                .claim("app_metadata", Map.of(
+                        "role", "SUPER_ADMIN",
+                        "company_id", claimedCompanyId.toString(),
+                        "permissions", List.of("orders.order:manage")))
+                .build());
     }
 
     /** A subject that is not a Supabase user id, so it cannot map to {@code auth_user_id}. */

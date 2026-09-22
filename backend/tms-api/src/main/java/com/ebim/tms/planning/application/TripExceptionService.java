@@ -4,6 +4,7 @@ import com.ebim.tms.planning.domain.TransportEvent;
 import com.ebim.tms.planning.domain.TransportEventType;
 import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.planning.domain.TripException;
+import com.ebim.tms.planning.domain.TripExceptionStatus;
 import com.ebim.tms.planning.domain.TripExceptionType;
 import com.ebim.tms.planning.domain.TripStop;
 import com.ebim.tms.planning.infrastructure.TransportEventRepository;
@@ -18,6 +19,7 @@ import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +34,13 @@ import org.springframework.transaction.annotation.Transactional;
  * reverse path exists too and lives in {@code TripStopExecutionService}: a skipped or failed stop
  * opens its exception automatically, because a delivery that did not happen must have a reason on
  * file.
+ *
+ * <p><b>One open problem per statement.</b> A report that restates a problem already open on this
+ * trip - same stop, same type, same sentence - is answered with the trip and writes nothing: a
+ * double click, a retried request and the same fact entered through both doors are one problem, and
+ * a second row for it would make the control tower count two and bury the one that is real. The
+ * rule itself is {@link TripException#restates}, so the automatic door in
+ * {@code TripStopExecutionService} applies exactly the same one.
  *
  * <p><b>Reachable from any state after confirmation, including COMPLETED and CANCELLED.</b> The
  * problems this table records are often written up after the day ends - that is when somebody has
@@ -99,6 +108,18 @@ public class TripExceptionService {
         }
 
         OffsetDateTime occurredAt = resolveOccurredAt(request.occurredAt());
+
+        // A repeat of a problem that is still open is the same problem. Answered with the trip -
+        // which carries the open exception the caller is looking at - rather than with an error,
+        // exactly as every other retry in this module is: the intent was reached, and reaching it
+        // twice is not a different outcome. No second row, no second timeline entry, no second
+        // bell. See TripException.restates for what counts as a repeat and why the notes are part
+        // of it. The trip's row lock, taken above, is what makes the check-then-insert safe against
+        // a concurrent report or stop failure rather than merely likely to win.
+        if (findOpenRestatementOf(scope, trip, stop, type, notes).isPresent()) {
+            return assembler.toDetail(trip, scope.companyId());
+        }
+
         UUID actorId = auditActorProvider.requireAppUserId();
         TripException reported = exceptionRepository.saveAndFlush(new TripException(scope.companyId(), trip.id(),
                 stop == null ? null : stop.id(), type, occurredAt, actorId, notes));
@@ -151,6 +172,24 @@ public class TripExceptionService {
         // retry never gets here, which is what keeps the first resolution time the recorded one.
         alerts.exceptionResolved(scope, exception, occurredAt);
         return assembler.toDetail(trip, scope.companyId());
+    }
+
+    /**
+     * The open problem this report would restate, if there is one.
+     *
+     * <p>The lookup is narrowed in SQL to this trip, this type and the open rows only, and the stop
+     * and the sentence are matched in memory - see
+     * {@code TripExceptionRepository.findByCompanyIdAndTripIdAndExceptionTypeAndStatus} for why the
+     * stop cannot be part of the query.
+     */
+    private Optional<TripException> findOpenRestatementOf(CompanyScope scope, Trip trip, TripStop stop,
+            TripExceptionType type, String notes) {
+        return exceptionRepository
+                .findByCompanyIdAndTripIdAndExceptionTypeAndStatus(scope.companyId(), trip.id(), type,
+                        TripExceptionStatus.OPEN)
+                .stream()
+                .filter(candidate -> candidate.restates(stop == null ? null : stop.id(), type, notes))
+                .findFirst();
     }
 
     /**

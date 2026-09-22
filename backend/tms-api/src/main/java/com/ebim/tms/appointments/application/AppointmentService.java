@@ -23,6 +23,7 @@ import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.security.CompanyScope;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -66,6 +67,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class AppointmentService {
 
     private static final String BOOKING_METRIC = "tms.appointments.bookings";
+
+    /** PostgreSQL {@code exclusion_violation} - what {@code EXCLUDE USING gist} raises. */
+    private static final String EXCLUSION_VIOLATION = "23P01";
+
+    private static final String NO_DOUBLE_BOOKING_CONSTRAINT = "ex_appointment_no_double_booking";
 
     private final AppointmentRepository appointmentRepository;
     private final LocationResourceRepository resourceRepository;
@@ -387,19 +393,55 @@ public class AppointmentService {
     // --- plumbing ---------------------------------------------------------------------
 
     /**
-     * Saves, translating the exclusion constraint into the sentence a dispatcher needs.
+     * Saves, translating <b>the exclusion constraint and only that one</b> into the sentence a
+     * dispatcher needs.
      *
-     * <p>This is the branch that catches the two-dispatchers race. Without it the loser gets a 500
-     * about a constraint name, which is the moment a user stops believing the dock board.
+     * <p>This is the branch that catches the two-dispatchers race. Without it the loser gets a
+     * generic refusal about a record that conflicts, which is the moment a user stops believing the
+     * dock board.
+     *
+     * <p>It used to answer that sentence for <em>every</em> integrity violation, which is a claim it
+     * had not checked: a foreign key that failed because somebody deleted the shipment in another
+     * tab would have told a dispatcher the door was taken, sending them to reload a board that was
+     * never the problem - and swallowed the real cause, which was then in no log. Anything that is
+     * not {@code ex_appointment_no_double_booking} is now rethrown, so
+     * {@code ApiExceptionHandler.handleDataIntegrityViolation} records it against the correlation id
+     * and answers a 409 that claims nothing about the dock. Same discrimination
+     * {@code ResourceAvailabilityService} and {@code WorkAssignmentService} already make.
      */
     private Appointment saveWithOverlapBackstop(Appointment appointment, LocationResource resource) {
         try {
             return appointmentRepository.saveAndFlush(appointment);
-        } catch (DataIntegrityViolationException raced) {
+        } catch (DataIntegrityViolationException violation) {
+            if (!isDoubleBooking(violation)) {
+                throw violation;
+            }
             count("raced");
             throw new ConflictException("Dock " + resource.code() + " was booked for that time by "
                     + "somebody else a moment ago. Reload the dock board and pick another slot.");
         }
+    }
+
+    /**
+     * Whether the database refused this write because two bookings overlap on one door.
+     *
+     * <p>The SQLSTATE first: {@code 23P01} is {@code exclusion_violation}, and
+     * {@code ex_appointment_no_double_booking} is the only {@code EXCLUDE} on {@code tms.appointment}
+     * (V41), so on this table the code alone identifies it. The constraint name is checked as well
+     * because the driver or a pooling layer may hand back a cause that is not a
+     * {@link SQLException}; PostgreSQL quotes the constraint's own name in the message, which is the
+     * one part of it no {@code lc_messages} setting translates.
+     *
+     * <p>Note that {@code 23505} - a unique violation - deliberately does <b>not</b> land here. A
+     * dock booking has no unique key to break, and answering "the door was taken" to one would be
+     * the same unchecked claim this method exists to stop making.
+     */
+    private static boolean isDoubleBooking(DataIntegrityViolationException violation) {
+        Throwable cause = violation.getMostSpecificCause();
+        if (cause instanceof SQLException failure && EXCLUSION_VIOLATION.equals(failure.getSQLState())) {
+            return true;
+        }
+        return String.valueOf(cause.getMessage()).contains(NO_DOUBLE_BOOKING_CONSTRAINT);
     }
 
     /**

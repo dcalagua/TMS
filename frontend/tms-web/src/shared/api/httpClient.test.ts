@@ -8,6 +8,7 @@ import {
   setAuthRefreshHandler,
   setAuthTokenProvider,
 } from "./httpClient";
+import type { AppEnv } from "../config/env";
 
 /**
  * El cliente HTTP: cómo construye una petición y cómo traduce una respuesta de error.
@@ -18,7 +19,23 @@ import {
  * un servidor, para que lo que se afirme sea exactamente la petición que sale.
  */
 
-const BASE = "http://localhost:8080/api/v1";
+/*
+ * La base del API se fija aquí y no se hereda del entorno. `appEnv` se calcula una vez al cargar
+ * `config/env`, y Vite vuelca en `import.meta.env` toda variable de proceso `VITE_*`: sin este
+ * mock, una shell con `VITE_API_BASE_URL` exportada (Amplify, o un `.env.local`) cambia lo que
+ * este test afirma. El valor es a propósito distinto del `DEFAULT_API_BASE_URL` de producción,
+ * para que un cliente que ignorase la configuración y usara localhost fallara aquí.
+ */
+const { BASE } = vi.hoisted(() => ({ BASE: "https://tms-api.test.invalid/api/v1" }));
+
+vi.mock("../config/env", () => ({
+  appEnv: {
+    apiBaseUrl: BASE,
+    supabaseUrl: "http://localhost:54321",
+    supabaseAnonKey: "test-anon-key-placeholder",
+    googleMapsApiKey: null,
+  } satisfies AppEnv,
+}));
 
 function jsonResponse(body: unknown, init: { status?: number; headers?: Record<string, string> } = {}): Response {
   return new Response(JSON.stringify(body), {

@@ -120,6 +120,12 @@ public class AutoPlanningService {
     /**
      * Proposes without writing anything. Same snapshot, same engine, same result as {@link #apply}
      * would produce - a preview a planner can look at before committing to it.
+     *
+     * <p>"Without writing anything" includes the routing cache. {@link #resolveTravel} calls
+     * {@link RoutingPort#matrix}, which joins this read-only transaction; routing detects that and
+     * computes the legs it has not cached without storing them, instead of inserting into a
+     * {@code READ ONLY} connection and aborting the preview on the first cold leg (see
+     * {@code RoutingService.store}). A preview therefore never warms the cache - {@link #apply} does.
      */
     @Transactional(readOnly = true)
     public AutoPlanView preview(CompanyScope scope, UUID runId, String engineName) {
@@ -277,6 +283,16 @@ public class AutoPlanningService {
      * call into routing instead of two hundred and forty. Places with no coordinates are simply
      * absent - the matrix reports them unknown and every distance-aware decision degrades to the
      * behaviour it had before V38.
+     *
+     * <p><b>A partial answer is discarded, and that is not fastidiousness.</b> Routing bounds what
+     * one call may cost and answers a large request in part rather than refusing it (ADR-010:
+     * routing never fails a decision). Handing the engines half a matrix would be worse than
+     * handing them none: {@code TravelMatrix} reads an absent leg as zero kilometres, so
+     * {@code PlanningEngineV2.nearest} would rank every unmeasured destination as the closest one
+     * and sequence the day towards exactly the stops nobody could measure, while
+     * {@code PlanningShift} passed trips whose driving time had been silently undercounted. Zero
+     * legs is a supported, tested state - both engines then behave as they did before V38 - and a
+     * measurable half is not. The day is either measured or it is not, and the log says which.
      */
     private TravelMatrix resolveTravel(CompanyScope scope, PlanningRun run, List<PlannableOrder> plannable,
             Map<UUID, MasterReference> places) {
@@ -297,8 +313,18 @@ public class AutoPlanningService {
             return TravelMatrix.EMPTY;
         }
 
+        // Every ordered pair except the diagonal - what a complete answer for these points is.
+        int wanted = points.size() * (points.size() - 1);
+        var answered = routingPort.matrix(scope.companyId(), points, points);
+        if (answered.size() < wanted) {
+            log.warn("auto-plan: routing measured {} of the {} legs between this run's {} located places;"
+                    + " planning this run without distances rather than on a partial matrix.",
+                    answered.size(), wanted, points.size());
+            return TravelMatrix.EMPTY;
+        }
+
         TravelMatrix.Builder builder = new TravelMatrix.Builder();
-        routingPort.matrix(scope.companyId(), points, points).forEach((leg, estimate) ->
+        answered.forEach((leg, estimate) ->
                 builder.add(idByPoint.get(leg.origin()), idByPoint.get(leg.destination()), estimate));
         return builder.build();
     }

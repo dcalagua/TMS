@@ -332,6 +332,12 @@ public class TripTenderService {
         }
         requireTransition(trip, tender, TenderStatus.CANCELLED);
         cancelAndPublish(scope, trip, tender, request.reason().trim(), actorId, now);
+        // Withdrawing by hand ends the waterfall rather than advancing it: it is a decision to
+        // stop, not a refusal to route around, and continuing down the list would re-offer a
+        // shipment somebody has just pulled back
+        // (docs/domain/CARRIER_SELECTION_AND_WATERFALL_V1.md section 7). A no-op on the ordinary
+        // hand-made tender, which is on no waterfall.
+        waterfall().tenderAnswered(scope, trip, tender, TenderStatus.CANCELLED);
         return toViews(scope, trip, now);
     }
 
@@ -371,6 +377,12 @@ public class TripTenderService {
                 cancelAndPublish(scope, trip, tender, reason, actorId, now);
             }
         });
+        // And the waterfall, if one was walking this shipment. Outside the block above on purpose:
+        // a waterfall between two offers has no live tender to find, and leaving it ACTIVE on a
+        // shipment that has been cancelled or has departed would show a running waterfall on the
+        // trip card while every advance refused with "is CANCELLED and cannot be offered to a
+        // carrier" until somebody stopped it by hand.
+        waterfall().shipmentNoLongerOfferable(scope, trip, reason);
     }
 
     // -----------------------------------------------------------------------------------------
@@ -436,10 +448,33 @@ public class TripTenderService {
     @Transactional
     public CarrierTenderOffer respondAsCarrier(CompanyScope scope, UUID carrierId, String shipmentNumber,
             boolean accepted, String notes, UUID integrationClientId) {
+        return respondAsCarrier(scope, carrierId, shipmentNumber, accepted, notes, integrationClientId, null);
+    }
+
+    /**
+     * The same answer, naming which offer it answers.
+     *
+     * <p>Selecting by {@code attempt DESC} alone was safe only while a carrier had been offered a
+     * shipment once. After a waterfall re-offer it is not: the carrier refuses attempt 1, the
+     * cascade moves on, a planner comes back to them as attempt 3, and a late redelivery of the
+     * attempt-1 refusal - which an at-least-once sender is entitled to send - selects attempt 3 and
+     * refuses an offer nobody answered. The retry does not duplicate an effect; it destroys one.
+     *
+     * <p>Naming the attempt selects the tender the sender meant, so the redelivery lands on a row
+     * already answered the same way and replays it. That is the promise this endpoint made.
+     *
+     * @param attempt the offer being answered, or null for the V31 behaviour of "the latest one"
+     */
+    @Transactional
+    public CarrierTenderOffer respondAsCarrier(CompanyScope scope, UUID carrierId, String shipmentNumber,
+            boolean accepted, String notes, UUID integrationClientId, Integer attempt) {
         Trip trip = lockedTripByShipmentNumber(scope, shipmentNumber);
         TripTender tender = tenderRepository.findByCompanyIdAndTripIdOrderByAttemptDesc(scope.companyId(), trip.id())
                 .stream()
                 .filter(candidate -> candidate.carrierId().equals(carrierId))
+                // An attempt this carrier was never offered answers with the same sentence an
+                // unknown shipment gets: naming a number must not become a way to probe for offers.
+                .filter(candidate -> attempt == null || candidate.attempt() == attempt)
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("No tender was found for this shipment."));
 
@@ -481,6 +516,17 @@ public class TripTenderService {
             tenderRepository.saveAndFlush(tender);
             publish(scope, trip, tender, ShipmentEventType.TENDER_REJECTED, now);
         }
+        // The waterfall hears this answer exactly as it hears the one a colleague types in. Until
+        // now the M2M path wrote the tender and told nobody, so an integrated carrier's acceptance
+        // left the waterfall RUNNING on a shipment already placed and its rejection left the
+        // candidate reading OFFERED for good - the divergence between the two paths that
+        // CARRIER_TENDERING_V1 section 10 says sharing one service exists to prevent.
+        //
+        // What it cannot do from here is send the next offer: see
+        // TenderWaterfallService.tenderAnswered. A machine has no app_user, an offer to a carrier
+        // is a commercial commitment, and the trail has to name whoever made it.
+        waterfall().tenderAnswered(scope, trip, tender,
+                accepted ? TenderStatus.ACCEPTED : TenderStatus.REJECTED);
         return offerOf(tender, trip, origins, now);
     }
 
@@ -509,6 +555,24 @@ public class TripTenderService {
         // it would, and a timeline that put it where somebody happened to click would be reporting
         // our own scheduling gap as a business fact.
         publish(scope, trip, tender, ShipmentEventType.TENDER_EXPIRED, lapsedAt);
+    }
+
+    /**
+     * Writes down the lapse of whatever offer is live on this shipment, for a caller inside the
+     * module that is already in a write transaction and holds the trip's lock.
+     *
+     * <p>{@code TenderWaterfallService.advance} is the one caller: it decides a candidate
+     * {@code EXPIRED} and has to leave the tender row saying the same thing. It used to ask
+     * {@link #list} for this, which reads {@code effectiveStatus} and writes nothing - so the row
+     * stayed {@code SENT} and the {@code TENDER_EXPIRED} event was never published on the one path
+     * where nothing later would publish it either: a waterfall exhausting on its last candidate
+     * never reaches {@link #createFor}, the write that normally resolves the lapse on its way past.
+     *
+     * <p>A no-op on a shipment with no live offer, and on one whose deadline has not passed.
+     */
+    void resolveLiveLapse(CompanyScope scope, Trip trip) {
+        tenderRepository.findLive(scope.companyId(), trip.id()).ifPresent(tender ->
+                resolveLapse(scope, trip, tender, OffsetDateTime.now(), auditActorProvider.writerAppUserId()));
     }
 
     private void cancelAndPublish(CompanyScope scope, Trip trip, TripTender tender, String reason, UUID actorId,

@@ -2,6 +2,7 @@ package com.ebim.tms.planning.infrastructure;
 
 import com.ebim.tms.planning.domain.TripException;
 import com.ebim.tms.planning.domain.TripExceptionStatus;
+import com.ebim.tms.planning.domain.TripExceptionType;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -26,6 +27,23 @@ public interface TripExceptionRepository extends JpaRepository<TripException, UU
     List<TripException> findByCompanyIdAndTripIdOrderByReportedAtDesc(UUID companyId, UUID tripId);
 
     Optional<TripException> findByIdAndCompanyId(UUID id, UUID companyId);
+
+    /**
+     * The problems of one type still open on one trip - the set an incoming report is checked
+     * against before it is allowed to become a row of its own.
+     *
+     * <p><b>Narrowed by type and not by stop, on purpose.</b> {@code trip_stop_id} is nullable, and
+     * a derived query taking it as a parameter would compile to {@code trip_stop_id = null} for a
+     * trip-level problem - which matches nothing in SQL, and would therefore switch the duplicate
+     * check off for exactly the reports most likely to arrive twice. The stop is compared in memory
+     * instead, by {@link TripException#restates}, over a result set that is one trip, one type and
+     * still open: a handful of rows at the very worst.
+     *
+     * <p>Rides {@code ix_trip_exception_company_open} (migration V27), which is partial on OPEN so
+     * this stays a small index scan as resolved history accumulates.
+     */
+    List<TripException> findByCompanyIdAndTripIdAndExceptionTypeAndStatus(UUID companyId, UUID tripId,
+            TripExceptionType exceptionType, TripExceptionStatus status);
 
     // --- control tower ---------------------------------------------------------------------
     //

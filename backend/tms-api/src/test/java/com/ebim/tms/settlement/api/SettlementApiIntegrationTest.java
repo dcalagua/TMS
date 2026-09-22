@@ -71,8 +71,21 @@ class SettlementApiIntegrationTest {
     private static String jdbcUrl;
     private static String carrierA;
     private static String carrierB;
-    private static String tripA;
+    /** COMPANY_A's one agreement with carrierA; every per-test shipment is estimated from it. */
+    private static String cardA;
     private static String tripB;
+
+    /**
+     * This test's own shipment, created fresh in {@link #mintTokens()}.
+     *
+     * <p><b>Not static, and that is now load-bearing.</b> It used to be one shipment shared by
+     * every test in the class, which was invisible until settlement learned to notice a shipment
+     * billed on two invoices: the first test to leave a live invoice against it made every later
+     * test's invoice a {@code DUPLICATE_INVOICE}, and which tests those were depended on JUnit's
+     * ordering. The shared fixture was always making a claim these tests did not intend - that
+     * nothing else bills this shipment - and one shipment per test is what makes the claim true.
+     */
+    private String tripA;
 
     @Autowired
     private MockMvc mockMvc;
@@ -119,8 +132,27 @@ class SettlementApiIntegrationTest {
 
         carrierA = carrier(COMPANY_A, "CARR-A");
         carrierB = carrier(COMPANY_B, "CARR-B");
-        tripA = trip(COMPANY_A, "ORIGIN-A", carrierA, "1450.00");
-        tripB = trip(COMPANY_B, "ORIGIN-B", carrierB, "999.00");
+        cardA = rateCard(COMPANY_A, "RC-A", carrierA, "1450.00");
+        String cardB = rateCard(COMPANY_B, "RC-B", carrierB, "999.00");
+        tripB = trip(COMPANY_B, "ORIGIN-B", carrierB, cardB, "RC-B", "999.00");
+    }
+
+    /**
+     * The one agreement a carrier has with a company, seeded once per class.
+     *
+     * <p>{@code uq_rate_card_active_agreement} (V30) refuses two identical active agreements -
+     * same company, carrier, scope, narrowing and start date - and it is right to. When the
+     * shipment moved to {@code @BeforeEach}, the card that priced it moved with it, and every test
+     * after the first tried to sign the same agreement again: the database is one per class, so
+     * only the first test ever got its fixture. Sharing the card is safe where sharing the shipment
+     * was not, because nothing in settlement reads the card - matching compares against each
+     * shipment's own {@code trip_cost} snapshot, and duplicate detection keys on the shipment.
+     * ck_rate_card_has_a_component (V30/V39): a card that charges nothing is not an agreement.
+     */
+    private static String rateCard(UUID companyId, String code, String carrierId, String baseAmount) {
+        return idOf("INSERT INTO tms.rate_card (company_id, code, name, carrier_id, scope, currency,"
+                + " base_amount, valid_from) VALUES ('" + companyId + "', '" + code + "', 'Card " + code
+                + "', '" + carrierId + "', 'CARRIER', 'PEN', " + baseAmount + ", '2026-01-01') RETURNING id");
     }
 
     private static String carrier(UUID companyId, String code) {
@@ -130,7 +162,8 @@ class SettlementApiIntegrationTest {
     }
 
     /** A shipment with a cost row, which is what makes it comparable at all. */
-    private static String trip(UUID companyId, String originCode, String carrierId, String expected) {
+    private static String trip(UUID companyId, String originCode, String carrierId, String cardId,
+            String cardCode, String expected) {
         String origin = idOf("INSERT INTO tms.location (company_id, code, name) VALUES ('" + companyId
                 + "', '" + originCode + "', 'Origin') RETURNING id");
         String run = idOf("INSERT INTO tms.planning_run (company_id, plan_number, origin_id, planning_date,"
@@ -150,15 +183,11 @@ class SettlementApiIntegrationTest {
         // ck_trip_cost_estimate_complete (V30): an estimate carries the card that produced it, or
         // it is not an estimate. That snapshot is the whole reason a settled figure stays defensible
         // after the tariff moves, so the fixture supplies it rather than working around the rule.
-        // ck_rate_card_has_a_component (V30/V39): a card that charges nothing is not an agreement.
-        String card = idOf("INSERT INTO tms.rate_card (company_id, code, name, carrier_id, scope, currency,"
-                + " base_amount, valid_from) VALUES ('" + companyId + "', 'RC-" + originCode + "', 'Card "
-                + originCode + "', '" + carrierId + "', 'CARRIER', 'PEN', " + expected
-                + ", '2026-01-01') RETURNING id");
+        // The card is the company's one agreement (see rateCard); the estimate is this shipment's own.
         execute("INSERT INTO tms.trip_cost (company_id, trip_id, planning_date, currency, estimated_amount,"
                 + " estimated_at, rate_card_id, rate_card_code, rate_card_scope) VALUES ('" + companyId
-                + "', '" + trip + "', '2026-04-01', 'PEN', " + expected + ", now(), '" + card + "', 'RC-"
-                + originCode + "', 'CARRIER')");
+                + "', '" + trip + "', '2026-04-01', 'PEN', " + expected + ", now(), '" + cardId + "', '"
+                + cardCode + "', 'CARRIER')");
         return trip;
     }
 
@@ -178,6 +207,11 @@ class SettlementApiIntegrationTest {
         plannerToken = TestJwts.validFor(PLANNER_AUTH);
         viewerToken = TestJwts.validFor(VIEWER_AUTH);
         checkerToken = TestJwts.validFor(CHECKER_AUTH);
+        // Priced at 1450.00, like the shared one it replaces, so every existing expectation in this
+        // class still reads against the same figure. The code stays short because
+        // ck_vehicle_license_plate_shape caps the derived plate at 12 characters.
+        // A fresh shipment on the shared agreement: the card may be common, a billed shipment may not.
+        tripA = trip(COMPANY_A, "A" + SEQUENCE.incrementAndGet(), carrierA, cardA, "RC-A", "1450.00");
     }
 
     // --- helpers -------------------------------------------------------------------
@@ -297,6 +331,63 @@ class SettlementApiIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(invoiceBody(carrierA, number, "100.00", tripA, "100.00")))
                     .andExpect(status().isConflict());
+        }
+
+        /**
+         * The duplicate {@code uq_carrier_invoice_number} cannot see.
+         *
+         * <p>Two documents, two numbers, one shipment. Nothing in the database refuses this - and
+         * nothing should, because a carrier re-billing after a credit note is legal - so the
+         * second one has to come out of matching as a difference a person must deal with rather
+         * than as a clean match somebody can approve straight through.
+         */
+        @Test
+        @DisplayName("a shipment already billed on another invoice is a duplicate, not a clean match")
+        void sameShipmentOnTwoInvoicesIsFlagged() throws Exception {
+            tolerance(COMPANY_A, "3");
+            String first = receive(invoiceBody(carrierA, nextNumber("TWICE"), "1480.00", tripA, "1480.00"),
+                    COMPANY_A);
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + first + "/match"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("MATCHED"));
+
+            // A different number for the same shipment. The insert is allowed; the match is not clean.
+            String second = receive(invoiceBody(carrierA, nextNumber("TWICE"), "1480.00", tripA, "1480.00"),
+                    COMPANY_A);
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + second + "/match"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("DISCREPANCY"))
+                    .andExpect(jsonPath("$.discrepancies[?(@.type == 'DUPLICATE_INVOICE')]").isNotEmpty());
+
+            // And it cannot be approved past, which is the whole point.
+            mockMvc.perform(asChecker(post(INVOICES + "/" + second + "/approve"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(status().isConflict());
+        }
+
+        /**
+         * A refused invoice bills nothing.
+         *
+         * <p>Without this exclusion the rule would eat itself: every legitimate re-bill after a
+         * rejection would be reported as a duplicate of the document it replaces, and the queue
+         * would fill with differences nobody can resolve.
+         */
+        @Test
+        @DisplayName("a rejected invoice does not make the replacement a duplicate")
+        void rejectedInvoiceDoesNotBlockItsReplacement() throws Exception {
+            tolerance(COMPANY_A, "3");
+            String refused = receive(invoiceBody(carrierA, nextNumber("CN"), "1480.00", tripA, "1480.00"),
+                    COMPANY_A);
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + refused + "/reject"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"comment\":\"Wrong tariff; credit note requested.\"}"))
+                    .andExpect(status().isOk());
+
+            String replacement = receive(invoiceBody(carrierA, nextNumber("CN"), "1480.00", tripA, "1480.00"),
+                    COMPANY_A);
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + replacement + "/match"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("MATCHED"));
         }
 
         @Test

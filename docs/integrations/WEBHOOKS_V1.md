@@ -268,9 +268,17 @@ failed.
 
 ### Retrying by hand
 
-`POST /api/v1/webhooks/deliveries/{id}/retry` puts a finished delivery back in the queue - what an
-operator presses once the receiving side is fixed. It refuses a delivery that is still pending, and
-one whose subscription is inactive.
+`POST /api/v1/webhooks/deliveries/{id}/retry` puts a **failed** delivery back in the queue - what an
+operator presses once the receiving side is fixed. It refuses a delivery that is still pending, one
+whose subscription is inactive, and one the endpoint already accepted.
+
+**Why a delivered one is refused.** Re-queueing a delivery the receiver answered `2xx` to POSTs the
+same event to an endpoint that already took it. The contract is at-least-once and receivers are
+asked to deduplicate on `X-TMS-Event-Id`, so the duplicate is within contract - but a receiver that
+does not deduplicate books the shipment twice, and the operator has nothing on the screen telling
+them the first attempt landed. A button whose worst case is a business effect nobody asked for
+should not be one press away from a green row. Re-sending an event the partner lost is replay by
+range (below), not this.
 
 The attempt count is **not** reset. Attempt numbers stay unique and monotonic, so the attempt log
 reads as one history, and a delivery whose schedule was already exhausted buys exactly one more

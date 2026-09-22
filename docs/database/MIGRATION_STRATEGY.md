@@ -21,6 +21,27 @@ Rules, enforced by `MigrationConventionTest` (which needs no database, so it run
 - no migration inserts tenant data (`organization`, `company`, `app_user`, `membership`,
   `membership_role`) or a credential;
 - no migration grants privileges to `anon` or `authenticated`;
+- every table created by a migration enables Row Level Security somewhere in the history;
+- every sequence created by a migration grants `tms_app` **by name**. V13's
+  `GRANT ... ON ALL SEQUENCES` covered only the sequences that existed when it ran, and its
+  `ALTER DEFAULT PRIVILEGES` binds to the role that executed it, so neither survives a
+  rebuild performed under a different administrative role. That is the gap V49 closed for
+  `tms.shipment_number_seq`, and the rule now stops it reopening;
+- **a table whose named grant omits a verb also revokes it.** V13's
+  `ALTER DEFAULT PRIVILEGES ... GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES` fires at
+  `CREATE TABLE` time, so writing `GRANT SELECT, INSERT ON tms.x TO tms_app` narrows nothing -
+  `GRANT` is additive and the four verbs are already attached. Eleven tables between V20 and
+  V46 documented an append-only or no-`DELETE` posture and never had it; V50 issued the
+  revocations and `everyNarrowedGrantIsBackedByARevoke` stops the gap reopening;
+- **every policy that can admit a row declares `WITH CHECK`**, and no `FOR SELECT`/`FOR DELETE`
+  policy does. A `USING`-only policy on a writable command lets the runtime role insert into
+  another company and merely hides the row afterwards;
+- **no migration sets `FORCE ROW LEVEL SECURITY`** without an ADR: Flyway, principal resolution
+  and `WebhookDispatchScheduler` all run as the owner, and forcing turns each of them into a
+  silent zero-row path (ADR-005, `docs/security/RLS_STRATEGY.md` section 2.4);
+- **the final definition of every function pins `SET search_path`**, so a body cannot resolve a
+  name out of the caller's namespace. Only the last definition is checked, because that is the
+  one the database ends up with - V1's unpinned `tms.set_updated_at()` is superseded by V50's;
 - `supabase/migrations` must not exist.
 
 ## 2. Immutability
@@ -152,7 +173,13 @@ This is deliberate: undo scripts are rarely exercised and give false confidence.
 3. `created_at`, `updated_at`, `set_updated_at` trigger, actor columns where an actor exists.
 4. Explicit constraint names (`pk_`, `fk_`, `uq_`, `ck_`, `ix_`), `ON DELETE RESTRICT`
    unless the row is pure configuration.
-5. `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` for every new table, in the same migration.
+5. `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` for every new table, in the same migration,
+   plus its tenant policy and its named `GRANT ... TO tms_app`. A new **sequence** gets an
+   explicit `GRANT USAGE, SELECT ... TO tms_app` too - V13's default privileges are not a
+   substitute, because they bind to a creating role rather than to the schema.
+   If the table is meant to be append-only or otherwise narrower than the four verbs, the
+   `GRANT` is not what makes it so: add the matching `REVOKE ... FROM tms_app` beside it, the
+   way V22 and V28 do. Write the policy's `WITH CHECK` as well as its `USING`.
 6. `COMMENT ON` for anything whose reason is not obvious from its name.
 7. Tests: constraints, tenant isolation, and the migration replay suite stays green.
 8. Never edit an applied file.

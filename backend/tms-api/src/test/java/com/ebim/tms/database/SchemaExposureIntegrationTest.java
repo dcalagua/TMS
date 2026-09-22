@@ -295,6 +295,75 @@ class SchemaExposureIntegrationTest {
                 .isEmpty();
     }
 
+    /**
+     * The verbs the schema says it withholds from the runtime role are actually withheld.
+     *
+     * <p>This class listed every one of these narrowings in a comment for versions on end and
+     * asserted none of them, and the narrowings were not real: V13's
+     * {@code ALTER DEFAULT PRIVILEGES ... GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES} fires
+     * at {@code CREATE TABLE} time, so a later {@code GRANT SELECT, INSERT ON tms.x TO tms_app}
+     * adds nothing and takes nothing away. Only V22, V23, V27, V28 and V29 wrote the
+     * {@code REVOKE} that does the work; eleven other tables stopped at the {@code GRANT}, and
+     * {@code tms.role}/{@code tms.permission}/{@code tms.role_permission} never narrowed at all
+     * despite being read-only reference data whose policy is {@code USING (true)}.
+     *
+     * <p>V50 issued every missing revocation. Asked of {@code has_table_privilege} rather than of
+     * the migration text, this is the assertion that cannot be satisfied by a comment.
+     * {@code MigrationConventionTest.everyNarrowedGrantIsBackedByARevoke()} is the same rule held
+     * textually, for the machines where this class is skipped.
+     */
+    @Test
+    @DisplayName("the runtime role holds only the verbs the schema grants it (V50)")
+    void theRuntimeRoleHoldsOnlyTheVerbsItIsGranted() throws SQLException {
+        // table -> the verbs tms_app must NOT hold. Everything else keeps all four.
+        var withheld = new java.util.LinkedHashMap<String, List<String>>();
+        // Append-only logs and records of a decision (V22, V27, V28, V46, V50).
+        withheld.put("audit_event", List.of("UPDATE", "DELETE"));
+        withheld.put("transport_event", List.of("UPDATE", "DELETE"));
+        withheld.put("delivery_evidence", List.of("UPDATE", "DELETE"));
+        withheld.put("shipment_outbox_event", List.of("UPDATE", "DELETE"));
+        withheld.put("webhook_delivery_attempt", List.of("UPDATE", "DELETE"));
+        withheld.put("settlement_approval", List.of("UPDATE", "DELETE"));
+        withheld.put("payable_export", List.of("UPDATE", "DELETE"));
+        // A measurement is superseded, not corrected; the feed is trimmed, so DELETE stays (V29).
+        withheld.put("tracking_position", List.of("UPDATE"));
+        // Corrected in place, never removed (V28, V32, V34, V35, V40, V41, V45).
+        withheld.put("order_delivery", List.of("DELETE"));
+        withheld.put("order_delivery_line", List.of("DELETE"));
+        withheld.put("notification", List.of("DELETE"));
+        withheld.put("company_settings", List.of("DELETE"));
+        withheld.put("webhook_delivery", List.of("DELETE"));
+        withheld.put("tender_waterfall", List.of("DELETE"));
+        withheld.put("tender_waterfall_candidate", List.of("DELETE"));
+        withheld.put("appointment", List.of("DELETE"));
+        // Canonical location replaced these; they are read-only projections now (V23).
+        withheld.put("origin", List.of("INSERT", "UPDATE", "DELETE"));
+        withheld.put("destination", List.of("INSERT", "UPDATE", "DELETE"));
+        // The authorization catalogue: Flyway reference data, read-only to the application (V50).
+        // Their policy is p_backend_managed USING (true), so the grant is the only control here.
+        withheld.put("role", List.of("INSERT", "UPDATE", "DELETE"));
+        withheld.put("permission", List.of("INSERT", "UPDATE", "DELETE"));
+        withheld.put("role_permission", List.of("INSERT", "UPDATE", "DELETE"));
+
+        for (var entry : withheld.entrySet()) {
+            String table = entry.getKey();
+            assertThat(APPLICATION_TABLES)
+                    .as("tms.%s is expected to be an application table", table)
+                    .contains(table);
+            assertThat(bool("SELECT has_table_privilege('tms_app', 'tms." + table + "', 'SELECT')"))
+                    .as("tms_app must still be able to read tms.%s", table)
+                    .isTrue();
+            for (String verb : entry.getValue()) {
+                assertThat(bool("SELECT has_table_privilege('tms_app', 'tms." + table + "', '" + verb + "')"))
+                        .as("tms_app must not hold %s on tms.%s. A GRANT that omits the verb does "
+                                + "not withhold it - V13's ALTER DEFAULT PRIVILEGES granted all "
+                                + "four at CREATE TABLE time - so the migration needs an explicit "
+                                + "REVOKE %s ON tms.%s FROM tms_app (V50)", verb, table, verb, table)
+                        .isFalse();
+            }
+        }
+    }
+
     @Test
     @DisplayName("PUBLIC holds no privilege on the schema, its tables or its functions")
     void publicHasNothing() throws SQLException {

@@ -1,0 +1,74 @@
+-- ===========================================================================
+-- V49 - The one object created after V13 that never received an explicit grant
+-- ===========================================================================
+--
+-- One statement, and it exists because `tms.shipment_number_seq` is the single
+-- grantable object in the whole history whose only privilege source is an
+-- ALTER DEFAULT PRIVILEGES clause rather than a GRANT written down beside the
+-- object itself.
+--
+-- ---------------------------------------------------------------------------
+-- 1. What the asymmetry is
+-- ---------------------------------------------------------------------------
+-- V13 gave the runtime role two blanket grants and two default-privilege rules:
+--
+--     GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA tms TO tms_app;      (V13:57)
+--     ALTER DEFAULT PRIVILEGES IN SCHEMA tms
+--         GRANT USAGE, SELECT ON SEQUENCES TO tms_app;                    (V13:63-64)
+--
+-- `ON ALL SEQUENCES` is a one-off over the sequences that existed when V13 ran,
+-- so it covered `tms.transport_order_number_seq` (V10) and
+-- `tms.planning_run_number_seq` (V11) and nothing later. Every *table* created
+-- after V13 then received its own named GRANT anyway - V14, V15, V17, V18, V20,
+-- V21, V22, V26..V32, V34, V35, V38, V40..V42, V45..V48 all write one, and three
+-- of them (V14:351, V18:272, V35:308) say in as many words that the default
+-- privileges already cover it and the explicit grant is there so the privilege is
+-- readable beside the object.
+--
+-- `tms.shipment_number_seq` (V19:53) is the one object that did not get that
+-- treatment. Nothing about it is different in kind; it was simply the only
+-- non-table created after V13.
+--
+-- ---------------------------------------------------------------------------
+-- 2. Why that matters rather than being tidiness
+-- ---------------------------------------------------------------------------
+-- ALTER DEFAULT PRIVILEGES with no FOR ROLE clause applies to objects created by
+-- *the role that executed it*. It is a rule about a creator, not about a schema.
+-- So the sequence carries a privilege for `tms_app` only where V13 and V19 were
+-- applied by the same database role. Where they were not - a rebuild or a restore
+-- performed under a different administrative role, which is exactly the shape of
+-- the QAS rebuild of 2026-08-25 - the sequence ends up with no ACL entry for
+-- `tms_app` and nothing anywhere reports it.
+--
+-- The failure that follows is not subtle and is not a leak; it is a hard stop.
+-- TenantScopedDataSource runs every request-scoped transaction as `tms_app`
+-- (ADR-005), and TripRepository.nextShipmentNumber() issues
+-- `SELECT nextval('tms.shipment_number_seq')` inside it. Without USAGE that call
+-- raises `permission denied for sequence shipment_number_seq`, and no shipment
+-- can be created at all. The column DEFAULT added by V19:81 fails the same way for
+-- a raw INSERT.
+--
+-- ---------------------------------------------------------------------------
+-- 3. Why this is a new migration and not an edit to V19
+-- ---------------------------------------------------------------------------
+-- V19 is applied. Editing it would change its checksum and turn
+-- `validate-on-migrate: true` into a failed startup on every environment that
+-- already ran it (docs/database/MIGRATION_STRATEGY.md section 2). A correction to
+-- an applied migration is always a new version, so this is V49.
+--
+-- The statements are named rather than another `ON ALL SEQUENCES`, for the same
+-- reason the tables are: a blanket grant is invisible from the migration that
+-- creates the next object, which is how this gap opened. All three sequences are
+-- listed so the privilege is stated once, in full, for the whole set.
+--
+-- GRANT is idempotent - re-granting a privilege that is already held changes
+-- nothing - so this file is safe on an environment where the default privileges
+-- did apply, which is the normal case and probably DEV.
+--
+-- No RLS, no policy: sequences carry neither, and these three are deliberately
+-- installation-wide rather than company-scoped (see the COMMENT ON SEQUENCE in
+-- V19:55-58). They hand out an opaque counter, never a tenant's data.
+
+GRANT USAGE, SELECT ON tms.transport_order_number_seq TO tms_app;
+GRANT USAGE, SELECT ON tms.planning_run_number_seq    TO tms_app;
+GRANT USAGE, SELECT ON tms.shipment_number_seq        TO tms_app;

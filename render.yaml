@@ -19,6 +19,16 @@ services:
     region: oregon
     dockerfilePath: ./backend/tms-api/Dockerfile
     dockerContext: ./backend/tms-api
+    # OPEN QUESTION, and the first thing to settle before the next promotion: this blueprint
+    # declares no `branch:`, so which branch this service deploys from lives only in the Render
+    # dashboard and nothing in this repository can answer it. Two merges into `qas` have happened
+    # and no backend appears to have booted from them. `main` sits at an old, unrelated commit, so
+    # "this service tracks main" is the leading explanation and is worth checking first.
+    #
+    # A `branch:` line is deliberately NOT added here on a guess. Render honours it only for a
+    # service it manages from this blueprint; for one created by hand in the dashboard the
+    # dashboard remains the truth, and adding the key would read as settled when it is not.
+    # Confirm in the console (tms-api -> Settings -> Branch), then declare it here.
     # Render only routes traffic to an instance once this answers 200. Spring Boot's readiness
     # probe reports UP after Flyway has finished, so a deploy cannot serve requests while the
     # schema is still migrating.
@@ -26,6 +36,10 @@ services:
     envVars:
       - key: SPRING_PROFILES_ACTIVE
         value: prod
+
+      # Release identity needs nothing set here: Render injects RENDER_GIT_COMMIT into every
+      # service and GET /api/v1/system/info reads it, so `commit` answers "which build is live"
+      # without a dashboard. Set TMS_RELEASE_COMMIT by hand only if that field comes back null.
 
       # Supabase PostgreSQL. Use the connection pooler URI (port 6543) rather than the direct
       # one: Render restarts instances freely and the pooler is what keeps that from exhausting

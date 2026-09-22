@@ -2,6 +2,7 @@ package com.ebim.tms.routing.application;
 
 import com.ebim.tms.routing.domain.GeodesicDistance;
 import com.ebim.tms.routing.domain.RoutingProviderAdapter;
+import com.ebim.tms.routing.domain.TravelEstimateRow;
 import com.ebim.tms.shared.reference.GeoPoint;
 import com.ebim.tms.shared.reference.RoutingSource;
 import com.ebim.tms.shared.reference.TravelEstimate;
@@ -62,8 +63,10 @@ public class LocalGeodesicRoutingProvider implements RoutingProviderAdapter {
     @Override
     public Optional<TravelEstimate> estimate(GeoPoint origin, GeoPoint destination) {
         BigDecimal roadKm = GeodesicDistance.estimatedRoadKm(origin, destination);
+        // Stamped at the precision the cache keeps, so this answer and the one later read back from
+        // tms.travel_estimate carry the same instant - see TravelEstimateRow.STORED_PRECISION.
         return Optional.of(TravelEstimate.computed(roadKm, durationFor(roadKm), NAME, RoutingSource.FALLBACK,
-                OffsetDateTime.now(clock)));
+                OffsetDateTime.now(clock).truncatedTo(TravelEstimateRow.STORED_PRECISION)));
     }
 
     /**

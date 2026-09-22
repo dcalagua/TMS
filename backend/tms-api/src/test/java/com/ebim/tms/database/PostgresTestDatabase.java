@@ -21,7 +21,10 @@ import org.testcontainers.utility.DockerImageName;
  * extension, so {@code CREATE EXTENSION} genuinely executes rather than short-circuiting.
  *
  * <p>No test may ever point at a shared or remote database. The connection coordinates come
- * from the container and from nowhere else.
+ * from the container and from nowhere else - with one opt-in exception for machines without a
+ * Docker daemon: when {@code TMS_TEST_DB_URL} is set, a local, disposable PostgreSQL stands in for
+ * the container, with the same fresh database per call and the same posture (see
+ * {@link ExternalTestServer}). Without that variable this class behaves exactly as described above.
  */
 public final class PostgresTestDatabase {
 
@@ -36,7 +39,27 @@ public final class PostgresTestDatabase {
 
     private static volatile PostgreSQLContainer<?> container;
 
+    private static volatile ExternalTestServer externalServer;
+
     private PostgresTestDatabase() {}
+
+    private static boolean usesExternalServer() {
+        return ExternalTestServer.isConfigured();
+    }
+
+    private static ExternalTestServer externalServer() {
+        ExternalTestServer server = externalServer;
+        if (server == null) {
+            synchronized (PostgresTestDatabase.class) {
+                server = externalServer;
+                if (server == null) {
+                    server = ExternalTestServer.start();
+                    externalServer = server;
+                }
+            }
+        }
+        return server;
+    }
 
     public static PostgreSQLContainer<?> container() {
         PostgreSQLContainer<?> running = container;
@@ -60,6 +83,9 @@ public final class PostgresTestDatabase {
 
     /** Creates an empty database inside the container and returns its JDBC URL. */
     public static String createEmptyDatabase(String databaseName) {
+        if (usesExternalServer()) {
+            return externalServer().createEmptyDatabase(databaseName);
+        }
         PostgreSQLContainer<?> postgres = container();
         try (Connection admin = connect(jdbcUrl(ADMIN_DATABASE));
                 Statement statement = admin.createStatement()) {
@@ -72,6 +98,9 @@ public final class PostgresTestDatabase {
     }
 
     public static String jdbcUrl(String databaseName) {
+        if (usesExternalServer()) {
+            return externalServer().jdbcUrl(databaseName);
+        }
         return jdbcUrl(databaseName, container());
     }
 
@@ -81,15 +110,15 @@ public final class PostgresTestDatabase {
     }
 
     public static String username() {
-        return USERNAME;
+        return usesExternalServer() ? externalServer().username() : USERNAME;
     }
 
     public static String password() {
-        return PASSWORD;
+        return usesExternalServer() ? externalServer().password() : PASSWORD;
     }
 
     public static Connection connect(String jdbcUrl) throws SQLException {
-        return DriverManager.getConnection(jdbcUrl, USERNAME, PASSWORD);
+        return DriverManager.getConnection(jdbcUrl, username(), password());
     }
 
     /**
@@ -98,7 +127,7 @@ public final class PostgresTestDatabase {
      */
     public static Flyway flyway(String jdbcUrl) {
         return Flyway.configure()
-                .dataSource(jdbcUrl, USERNAME, PASSWORD)
+                .dataSource(jdbcUrl, username(), password())
                 .locations("classpath:db/migration")
                 .schemas("tms")
                 .defaultSchema("tms")
@@ -117,7 +146,7 @@ public final class PostgresTestDatabase {
      */
     public static Flyway flywayTo(String jdbcUrl, String targetVersion) {
         return Flyway.configure()
-                .dataSource(jdbcUrl, USERNAME, PASSWORD)
+                .dataSource(jdbcUrl, username(), password())
                 .locations("classpath:db/migration")
                 .schemas("tms")
                 .defaultSchema("tms")

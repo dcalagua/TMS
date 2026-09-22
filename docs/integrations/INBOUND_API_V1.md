@@ -1011,7 +1011,8 @@ Content-Type: application/json
 
 {
   "decision": "REJECTED",
-  "reason": "No 12t available on the 24th"
+  "reason": "No 12t available on the 24th",
+  "attempt": 3
 }
 ```
 
@@ -1021,6 +1022,7 @@ Answers `200` with the same offer shape, now carrying `status`, `respondedAt` an
 |---|---|
 | `decision` | required, `ACCEPTED` or `REJECTED` (case-insensitive) |
 | `reason` | required on `REJECTED`, optional on `ACCEPTED`, at most 1000 characters |
+| `attempt` | optional, `>= 1`. Copy it from the `attempt` of the offer you are answering. **Send it** - see [§13.5](#135-idempotency) |
 
 `reason` is required on a refusal because it is what the shipper's planner needs in order to decide
 what to do next; "they declined" with no reason is the answer that helps least.
@@ -1032,6 +1034,7 @@ what to do next; "they declined" with no reason is the answer that helps least.
 | `400` | `decision` missing or not one of the two values; `reason` missing on a rejection |
 | `404` | this carrier has no tender on that shipment number in this company |
 | `409` | the offer is no longer answerable - lapsed, withdrawn, or already answered the other way |
+| `409` | `attempt` was sent and names an offer other than the one outstanding - see [§13.5](#135-idempotency) |
 | `409` | the credential holds the scope but is not bound to a carrier |
 
 **`404` is the same sentence a shipment that does not exist gets.** A carrier must not be able to
@@ -1043,13 +1046,49 @@ the shipment event feed). A `409` here is normal traffic, not a bug in the sende
 
 ### 13.5 Idempotency
 
-Re-sending the **same** decision returns the answer already recorded, so an at-least-once sender is
-safe with no key and no cursor. Sending the **opposite** decision is `409`: reversing a commitment is
-not a retry, and it needs a person on the shipper's side.
+Re-sending the **same** decision for the offer that is still outstanding returns the answer already
+recorded, so an at-least-once sender is safe. Sending the **opposite** decision is `409`: reversing a
+commitment is not a retry, and it needs a person on the shipper's side.
 
 `Idempotency-Key` behaves exactly as in §4.2. The shipment number travels in the path but is folded
 into the fingerprinted payload, so a key reused across two shipments with the same decision is a
 `409` naming the reuse rather than a silently replayed answer for the wrong shipment.
+
+#### Why `attempt` matters, and what happens without it
+
+`(carrier, shipment, decision)` is **not** an identity once the same carrier has been offered the
+same shipment twice - and that happens routinely: a carrier refuses, the waterfall moves down the
+list, and days later a planner comes back to them with a higher `attempt`.
+
+Suppose attempt 1 is offered to you, you refuse it, and attempt 3 is later offered to you and sits
+open. If your middleware now redelivers the attempt-1 `REJECTED` - a queue drained late, a webhook
+replayed, an operator pressing resend - nothing in that request says which offer it was about. TMS
+resolves "this carrier's tender on this shipment" to the newest one, so the redelivery would not
+repeat its old effect: it would **refuse a live offer nobody had answered**.
+
+`attempt` is what closes this. Echo back the `attempt` of the offer you read, and a stale answer is
+refused with `409` instead of applied:
+
+```json
+{
+  "type": "urn:tms:problem:conflict",
+  "status": 409,
+  "detail": "This answer names attempt 1 on shipment SH-00000142, but the offer outstanding for this carrier is attempt 3. Re-read the offer and answer that one; a late redelivery of an older answer must not be applied to a newer offer."
+}
+```
+
+The field is **optional**, so nothing written against V31 stops working - but a sender that omits it
+keeps the exposure above, and TMS can only refuse a stale answer it was given the means to recognise.
+A repeated `Idempotency-Key` protects only a sender that reuses the same key on the redelivery, which
+is not the sender that has the problem.
+
+An answer naming an attempt when **no** offer is outstanding is *not* refused on these grounds: the
+tender has already been answered, and that is the genuine retry this endpoint exists to absorb.
+
+> **Upgrade note.** `attempt` is part of the fingerprint §4.2 hashes. An `Idempotency-Key` first sent
+> before this field existed and retried after it does not hash identically, so it answers `409
+> idempotency-key-reused` rather than replaying. The window is one deployment and one operation; a
+> sender that simply re-sends the answer (with or without a new key) gets the right result.
 
 ### 13.6 Learning that there is something to answer
 

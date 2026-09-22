@@ -24,7 +24,11 @@ import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.audit.AuditAggregateType;
 import com.ebim.tms.shared.audit.AuditRecorder;
+import com.ebim.tms.shared.reference.GeoPoint;
+import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
+import com.ebim.tms.shared.reference.RoutingSource;
+import com.ebim.tms.shared.reference.TravelEstimate;
 import com.ebim.tms.shared.reference.RoutingPort;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.CarrierQuotationPort;
@@ -39,7 +43,9 @@ import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -93,6 +99,10 @@ class AutoPlanningServiceTest {
     private AuditRecorder auditRecorder;
     private TripBoard board;
     private AutoPlanningService service;
+    /** Fields rather than locals, so a test can say what routing and master data answered. */
+    private RoutingPort routingPort;
+    private DestinationLookupPort destinationLookupPort;
+    private OriginLookupPort originLookupPort;
 
     /** Orders the day starts with; the snapshot is built from this list. */
     private final List<PlannableOrder> backlog = new ArrayList<>();
@@ -150,11 +160,11 @@ class AutoPlanningServiceTest {
 
         // The registry, not a single engine: the default is still HEURISTIC_V1, so every
         // assertion in this class goes on describing exactly the behaviour it always described.
-        RoutingPort routingPort = mock(RoutingPort.class);
+        routingPort = mock(RoutingPort.class);
         when(routingPort.matrix(any(), any(), any())).thenReturn(java.util.Map.of());
-        DestinationLookupPort destinationLookupPort = mock(DestinationLookupPort.class);
+        destinationLookupPort = mock(DestinationLookupPort.class);
         when(destinationLookupPort.findAllInCompany(any(), any())).thenReturn(java.util.Map.of());
-        OriginLookupPort originLookupPort = mock(OriginLookupPort.class);
+        originLookupPort = mock(OriginLookupPort.class);
         when(originLookupPort.findAllInCompany(any(), any())).thenReturn(java.util.Map.of());
         CarrierQuotationPort quotationPort = mock(CarrierQuotationPort.class);
         com.ebim.tms.shared.reference.OwnFleetProposalCostingPort ownFleetCostingPort =
@@ -596,6 +606,93 @@ class AutoPlanningServiceTest {
             orders.stream()
                     .filter(order -> refusals.contains(order.id()))
                     .forEach(order -> board.refuse(order.orderNumber(), new ConflictException("Taken.")));
+        }
+    }
+
+    // --- what routing measured, and what it could not -----------------------------------------
+
+    /**
+     * The regression behind these two.
+     *
+     * <p>{@code RoutingService.matrix} used to throw above its configured leg budget, so an
+     * ordinary planning run with fifty geocoded destinations asked for 2550 legs against a default
+     * of 2500 and ended as an opaque 500 - automatic planning was simply unavailable above that
+     * size, for a reason nothing on the board named. Routing now answers such a request in part
+     * (ADR-010: routing never fails a decision), which moves the question here: what does planning
+     * do with half a matrix?
+     *
+     * <p>It throws it away, and that is not fastidiousness. {@code TravelMatrix} reads an absent
+     * leg as zero kilometres, so a half-measured day would make {@code PlanningEngineV2} rank
+     * every unmeasured destination as the nearest one and sequence the run towards exactly the
+     * stops nobody could measure, with a shift check fed by undercounted driving time. No matrix
+     * at all is a supported, tested state; a measurable half is not.
+     */
+    @Nested
+    @DisplayName("what routing measured, and what it could not")
+    class Distances {
+
+        @Test
+        @DisplayName("a fully measured day reaches the engine as distances")
+        void completeMatrixIsUsed() {
+            geocodedDay();
+            answerLegs(2);
+            order("a", 1_000);
+            vehicle("truck", 10_000);
+
+            AutoPlanView view = service.preview(SCOPE, RUN, "PLANNING_V2");
+
+            assertThat(view.kpis().totalDistanceKm()).isGreaterThan(BigDecimal.ZERO);
+        }
+
+        @Test
+        @DisplayName("a routing answer missing legs is discarded rather than half believed")
+        void partialMatrixIsDiscarded() {
+            geocodedDay();
+            answerLegs(1);
+            order("a", 1_000);
+            vehicle("truck", 10_000);
+
+            AutoPlanView view = service.preview(SCOPE, RUN, "PLANNING_V2");
+
+            // Planned, not refused - the missing legs cost the distances and nothing else.
+            assertThat(view.proposed()).hasSize(1);
+            assertThat(view.unplanned()).isEmpty();
+            assertThat(view.kpis().totalDistanceKm()).isEqualByComparingTo(BigDecimal.ZERO);
+        }
+
+        /** An origin and a destination that both have coordinates, so a matrix is worth asking for. */
+        private void geocodedDay() {
+            when(originLookupPort.findAllInCompany(any(), any())).thenReturn(
+                    Map.of(ORIGIN, located(ORIGIN, "ORI", "-12.046374", "-77.042793")));
+            when(destinationLookupPort.findAllInCompany(any(), any())).thenReturn(
+                    Map.of(id("destination"),
+                            located(id("destination"), "DST", "-16.409047", "-71.537451")));
+        }
+
+        /**
+         * Answers the first {@code legs} ordered pairs of whatever points planning asked about.
+         * Two is a complete answer for two points; one is the truncated shape routing now returns
+         * when a request is over budget.
+         */
+        private void answerLegs(int legs) {
+            when(routingPort.matrix(any(), any(), any())).thenAnswer(call -> {
+                List<GeoPoint> points = call.getArgument(1);
+                Map<RoutingPort.Leg, TravelEstimate> answer = new LinkedHashMap<>();
+                answer.put(new RoutingPort.Leg(points.get(0), points.get(1)), leg());
+                if (legs > 1) {
+                    answer.put(new RoutingPort.Leg(points.get(1), points.get(0)), leg());
+                }
+                return answer;
+            });
+        }
+
+        private TravelEstimate leg() {
+            return TravelEstimate.computed(new BigDecimal("760.000"), Duration.ofMinutes(600),
+                    "LOCAL_GEODESIC", RoutingSource.FALLBACK, OffsetDateTime.parse("2026-08-28T12:00:00Z"));
+        }
+
+        private MasterReference located(UUID id, String code, String latitude, String longitude) {
+            return new MasterReference(id, code, code, new BigDecimal(latitude), new BigDecimal(longitude), null);
         }
     }
 

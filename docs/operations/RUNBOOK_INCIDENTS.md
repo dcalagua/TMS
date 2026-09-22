@@ -60,10 +60,39 @@ Defence in depth means three things must have failed together:
 1. A service took a `CompanyScope` and ignored it.
 2. A repository finder was not company-scoped — `TenantScopedRepositoryTest` exists to make this
    impossible to introduce, and caught a real one in JOB 22.
-3. RLS did not filter (ADR-005) — check the connection is running as `tms_app` and not as the owner.
+3. RLS did not filter (ADR-005) — the request ran without ever **entering** `tms_app`.
 
-Point 3 is the one worth checking first: **if the application connects as the schema owner, RLS does
-not apply to it at all** and layers 1 and 2 are the only defence left.
+Point 3 is the one worth checking first, and the check is a log line, not a connection setting.
+**The application connects as the schema owner and enters `tms_app` per company-scoped request**
+(`TenantScopedDataSource`): `tms_app` is `NOLOGIN` and passwordless (V13), so it is not a login
+role and an earlier version of this runbook asked for something impossible. A request that did
+not enter the role is filtered by layers 1 and 2 alone, because **row level security does not apply
+to a table's owner** unless the table has `FORCE ROW LEVEL SECURITY` - and no TMS table does, on
+purpose (`MigrationConventionTest.rowLevelSecurityIsNeverForcedOnTheOwner`).
+
+An earlier version of this paragraph said the owner is exempt because it has `BYPASSRLS`. That is
+the wrong mechanism, and it matters: revoking `BYPASSRLS` would change nothing. Verified on
+2026-09-15 against a local PostgreSQL 17 cluster with an owner that has **neither** SUPERUSER nor
+BYPASSRLS: as `tms_app` a query saw only its own company, and the same query as the owner saw every
+company. Whether the QAS connection role also carries `BYPASSRLS` is not verified here; either way
+the owner is not filtered.
+
+Find `TenantRuntimeRoleCheck`'s line in the startup log — prefix `Database roles:` — and read the
+level:
+
+- **`INFO` … `'tms_app' can be entered`** → RLS was available to every company-scoped request, so
+  this incident is layer 1 or 2. Go back to the service and the repository finder.
+- **`ERROR` … `CANNOT enter 'tms_app'`** → the runtime credential lacks the grant. Every
+  company-scoped request should be failing outright, not leaking; if it is leaking instead, that is
+  a second defect. The message names the fix: `GRANT tms_app TO "<runtime role>" WITH SET TRUE;`
+- **`WARN` … `connected AS the runtime role`** → Flyway is not running as the owner and `SET ROLE`
+  is a no-op.
+
+If you are at a SQL client rather than a log: `SELECT current_user, session_user;` returns
+`current_user = tms_app` **inside a company-scoped transaction**, with `session_user` the owner.
+That is the healthy answer. Expecting the *connection* role to be `tms_app` is the mistake.
+
+See `docs/operations/DEPLOYMENT.md` §3–§4 and `docs/security/RLS_STRATEGY.md` section 4.
 
 ## 4. "Integrations look broken"
 
@@ -113,11 +142,56 @@ migration that had already run.
 - The fix is a **new** migration that reconciles the difference, plus finding out how the old file
   came to be edited.
 
-## 8. What this runbook cannot tell you
+## 8. "It is deployed, but the browser shows nothing"
+
+Four different faults present identically — a screen that never loads — and they are told apart in
+under a minute by two unauthenticated requests. Run the smoke first and it names which one:
+
+    scripts/ops/verify-deployment.sh --api https://<api> --web https://<web> --commit <sha>
+
+| What you see | What it is | Fix |
+|---|---|---|
+| Every screen fails, dev tools show calls to `localhost:8080` | `VITE_API_BASE_URL` was missing from the Amplify panel for this branch, so `env.ts` baked its loopback default. **A restart cannot fix this** — the value is compiled into the bundle | set the variable, **rebuild**. `PROMOTION.md` §4.2 |
+| The home page works; a reload or a pasted link gives a 404 from the host | the SPA rewrite rule is missing. Amplify serves `dist/` statically and `/masters/locations` is a route that exists only in the React router | the console rewrite in `PROMOTION.md` §4.1 |
+| A fix you deployed is not there | the deploy did not pick up the revision, or backend and frontend are on different commits — they deploy through two independent channels and are never atomic | compare `GET /api/v1/system/info` → `commit` with `GET /<web>/release.json` → `commit` |
+| Nothing at all responds, and `tms.flyway_schema_history` has not moved | **no backend booted.** Nothing else writes that table | the console. This is QAS-H1; see `PROMOTION.md` §1 and `QAS_DEPLOYMENT_AND_RECOVERY.md` §1 |
+
+The last row is the one that has actually happened, twice. **A merged promotion is not a
+deployment**, and the only thing that ever noticed the difference was that history table.
+
+## 9. "We restored the database, health is green, and nothing company-scoped works"
+
+**Most likely: the restore did not bring `tms_app` back.** `pg_dump` dumps one database; roles
+are cluster-global. Restored into a cluster that never had `tms_app`, every `CREATE POLICY … TO
+tms_app` and every `GRANT … TO tms_app` fails, `pg_restore` exits `1` — exactly as a good restore
+with PostGIS does — Flyway validates clean because history says V13 already ran, and readiness
+answers UP. Verified on a local PostgreSQL 17.10 cluster on 2026-09-15.
+
+The signature:
+
+- In the startup log, `TenantRuntimeRoleCheck` at **`ERROR`** — `CANNOT enter 'tms_app'` (§3).
+- `SELECT count(*) FROM pg_roles WHERE rolname = 'tms_app';` → `0`
+- `SELECT count(*) FROM pg_policies WHERE schemaname = 'tms';` → `0`
+- Or run `scripts/ops/verify-restore.sh -- <psql connection arguments>` (read-only).
+
+**Fix: [`BACKUP_AND_RESTORE.md` §6](BACKUP_AND_RESTORE.md#6-recovery--the-database-was-already-restored-without-tms_app).**
+The `GRANT` that the `ERROR` line suggests is **not enough on its own** here: the role itself is
+missing, and once it exists the 74 policies and the grants are still missing. Recreate the role,
+then replay the `POLICY` / `ACL` / `DEFAULT ACL` entries from the same dump.
+
+**Do not** re-run Flyway, `flyway repair`, or re-apply V13 by hand to recreate the policies: history
+already records V13, and a schema whose policies came from a SQL client is not the product of
+`V1..Vn` (§7).
+
+## 10. What this runbook cannot tell you
 
 - **No deployment has been verified.** See `DEPLOYMENT.md` — the procedures there are read from
   configuration, not from a performed deploy.
 - **There are no alerts**, so every incident here starts with a human noticing.
 - **There is no performance baseline**, so "it feels slow" cannot currently be answered with a
   number (JOB 25).
-- **There is no rollback procedure that anybody has executed.**
+- **No restore has been executed on QAS or on any Supabase project.** A logical `pg_dump` /
+  `pg_restore` has been executed on a local cluster (`BACKUP_AND_RESTORE.md`); Supabase platform
+  backups and PITR are unconfirmed.
+- **No code rollback has been executed.** Its expected safety, including on V49/V50, is reasoned in
+  `QAS_DEPLOYMENT_AND_RECOVERY.md` §2 and `BACKUP_AND_RESTORE.md` §9.

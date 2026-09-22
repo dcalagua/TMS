@@ -83,10 +83,16 @@ public class WorkAssignmentController {
      * <p>A PUT carrying the entire order rather than a patch: an omitted shipment means it is no
      * longer in the day, which is the only way one can be removed, and the sequence is the list's
      * own order. Every call revalidates all of it.
+     *
+     * <p><b>Changing a confirmed day returns it to {@code PLANNED}</b>, and it must be confirmed
+     * again. {@code /confirm} is the only place feasibility is enforced, so a confirmed day
+     * rewritten afterwards would be a commitment nobody checked. Re-sending what the day already
+     * says changes nothing and leaves the status alone.
      */
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('fleet.work_assignment:manage')")
-    @Operation(summary = "Add, remove or reorder shipments, or swap the driver or vehicle. Revalidates the whole day")
+    @Operation(summary = "Add, remove or reorder shipments, or swap the driver or vehicle. "
+            + "Revalidates the whole day and un-confirms a confirmed one")
     @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
             description = "Id of a company the caller is a member of")
     public WorkAssignmentView update(CompanyScope scope, @PathVariable UUID id,

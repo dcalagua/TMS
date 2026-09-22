@@ -1,7 +1,6 @@
 package com.ebim.tms.routing.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -29,12 +28,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.AbstractPlatformTransactionManager;
+import org.springframework.transaction.support.DefaultTransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * The routing chain: cache, provider, fallback (migration V38).
@@ -219,6 +223,66 @@ class RoutingServiceTest {
         }
     }
 
+    // --- timestamp precision ---------------------------------------------------------
+
+    /**
+     * What a miss returns must be what the following hit returns. {@code tms.travel_estimate} keeps
+     * microseconds and the JVM clock does not, so an instant stamped at full clock precision came back
+     * truncated from the cache. {@code RoutingServiceIntegrationTest.cacheRoundTrip} caught it against
+     * real PostgreSQL, but only whenever the real clock happened to tick below a microsecond; a clock
+     * pinned to nanoseconds makes the case deterministic.
+     */
+    @Nested
+    @DisplayName("timestamp precision")
+    class TimestampPrecision {
+
+        private final Instant withNanos = NOW.plusNanos(123_456_789);
+
+        private RoutingService serviceAt(Instant instant, RoutingProviderAdapter... providers) {
+            clock = Clock.fixed(instant, ZoneOffset.UTC);
+            local = new LocalGeodesicRoutingProvider(properties, clock);
+            return serviceWith(providers);
+        }
+
+        private TravelEstimateRow stored() {
+            ArgumentCaptor<TravelEstimateRow> saved = ArgumentCaptor.forClass(TravelEstimateRow.class);
+            verify(cache).saveAndFlush(saved.capture());
+            return saved.getValue();
+        }
+
+        @Test
+        @DisplayName("a local estimate returns exactly the instants it stores, at microsecond precision")
+        void localEstimateMatchesStoredRow() {
+            RoutingService service = serviceAt(withNanos);
+
+            TravelEstimate miss = service.estimate(COMPANY, LIMA, AREQUIPA).orElseThrow();
+
+            OffsetDateTime expected = OffsetDateTime.ofInstant(Instant.parse("2026-08-28T12:00:00.123456Z"),
+                    ZoneOffset.UTC);
+            assertThat(miss.calculatedAt()).isEqualTo(expected);
+            TravelEstimateRow row = stored();
+            assertThat(row.toEstimate().calculatedAt()).isEqualTo(miss.calculatedAt());
+            assertThat(row.expiresAt().getNano() % 1_000).isZero();
+        }
+
+        @Test
+        @DisplayName("a provider stamping nanoseconds is cut to the stored precision before it is served")
+        void providerNanosecondsAreCut() {
+            OffsetDateTime vendorStamp = OffsetDateTime.ofInstant(withNanos, ZoneOffset.UTC);
+            RoutingProviderAdapter vendor = adapter("VENDOR_X", true,
+                    Optional.of(TravelEstimate.computed(new BigDecimal("42.500"), Duration.ofMinutes(55),
+                            "VENDOR_X", RoutingSource.PROVIDER, vendorStamp)));
+            RoutingService service = serviceAt(NOW, vendor);
+
+            TravelEstimate miss = service.estimate(COMPANY, LIMA, CALLAO).orElseThrow();
+
+            assertThat(miss.calculatedAt()).isEqualTo(vendorStamp.truncatedTo(TravelEstimateRow.STORED_PRECISION));
+            assertThat(miss.source()).isEqualTo(RoutingSource.PROVIDER);
+            assertThat(miss.servedFromCache()).isFalse();
+            assertThat(stored().toEstimate().calculatedAt()).isEqualTo(miss.calculatedAt());
+        }
+    }
+
     // --- providers -------------------------------------------------------------------
 
     @Nested
@@ -393,16 +457,218 @@ class RoutingServiceTest {
             verifyNoInteractions(cache);
         }
 
+        /**
+         * The regression this pair exists for.
+         *
+         * <p>{@code matrix} used to throw {@link IllegalArgumentException} above the budget, which
+         * contradicted {@code RoutingPort}'s own "never throws" contract and ADR-010's "routing
+         * never fails a decision". It was not a corner: {@code AutoPlanningService} asks N x N over
+         * a run's origin and destinations, so fifty geocoded destinations asked for 2550 legs
+         * against the default budget of 2500 and turned an ordinary planning run into an opaque
+         * 500. The budget is a cost guard, not a veto.
+         */
         @Test
-        @DisplayName("a matrix beyond the configured limit is refused rather than attempted")
-        void limitIsEnforced() {
-            RoutingProperties tiny = new RoutingProperties(null, null, null, null, null, 2);
-            RoutingService service = new RoutingService(cache, List.of(local), local, tiny, meterRegistry, clock);
+        @DisplayName("a matrix beyond the budget is answered in part rather than refused")
+        void overBudgetIsAnsweredInPart() {
+            RoutingService service = overBudget();
 
-            assertThatThrownBy(() -> service.matrix(COMPANY, List.of(LIMA, CALLAO, AREQUIPA),
-                    List.of(LIMA, CALLAO, AREQUIPA)))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("exceeds the configured limit");
+            Map<RoutingPort.Leg, TravelEstimate> answers =
+                    service.matrix(COMPANY, List.of(LIMA, CALLAO, AREQUIPA), List.of(LIMA, CALLAO, AREQUIPA));
+
+            // Six off-diagonal pairs wanted, a budget of two: two answered, four left unknown, and
+            // an unknown leg is a state every caller already models.
+            assertThat(answers).hasSize(2);
+            assertThat(counter("tms.routing.lookups", "over-budget")).isEqualTo(1);
+            verify(cache, times(2)).findLeg(any(), any(), any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("the legs that survive the budget are the caller's first ones, the same ones twice")
+        void truncationIsReproducibleAndKeepsTheOriginRow() {
+            List<GeoPoint> points = List.of(LIMA, CALLAO, AREQUIPA);
+
+            Map<RoutingPort.Leg, TravelEstimate> first = overBudget().matrix(COMPANY, points, points);
+            Map<RoutingPort.Leg, TravelEstimate> again = overBudget().matrix(COMPANY, points, points);
+
+            // The caller's own order, so a truncated matrix is reproducible rather than whatever a
+            // hash iteration yielded - and for an N x N that prefix is the first point's whole row,
+            // which is the half a caller sequencing from an origin needs most.
+            assertThat(first).containsOnlyKeys(
+                    new RoutingPort.Leg(LIMA, CALLAO), new RoutingPort.Leg(LIMA, AREQUIPA));
+            assertThat(again.keySet()).isEqualTo(first.keySet());
+        }
+
+        /** A service whose budget two points already exceed. */
+        private RoutingService overBudget() {
+            RoutingProperties tiny = new RoutingProperties(null, null, null, null, null, 2);
+            return new RoutingService(cache, List.of(local), local, tiny, meterRegistry, clock);
+        }
+    }
+
+    // --- read-only transactions --------------------------------------------------------
+
+    /**
+     * RC-1: {@code AutoPlanningService.preview} is {@code @Transactional(readOnly = true)}, routing's
+     * {@code REQUIRED} methods join it, and PostgreSQL refuses an insert into a {@code READ ONLY}
+     * transaction with {@code 25006} - which then aborts the preview. The cache must be read and
+     * never written there, and the answer must not suffer for it.
+     *
+     * <p>The transaction is real Spring transaction machinery - {@link TransactionTemplate} over a
+     * resourceless manager - rather than a flag set by hand, so what is proven is the case that
+     * failed: a read-only outer transaction, joined by a {@code REQUIRED} one that does not itself
+     * say read-only, exactly as {@code RoutingService}'s own annotation joins {@code preview}.
+     */
+    @Nested
+    @DisplayName("inside a read-only transaction")
+    class ReadOnlyTransaction {
+
+        private final ResourcelessTransactionManager transactions = new ResourcelessTransactionManager();
+
+        /** Runs {@code work} the way a proxied {@code @Transactional} routing call runs inside {@code preview}. */
+        private <T> T joiningReadOnly(Supplier<T> work) {
+            TransactionTemplate preview = new TransactionTemplate(transactions);
+            preview.setReadOnly(true);
+            TransactionTemplate routing = new TransactionTemplate(transactions);
+            return preview.execute(outer -> routing.execute(joined -> {
+                assertThat(joined.isNewTransaction()).as("routing joins the caller's transaction").isFalse();
+                return work.get();
+            }));
+        }
+
+        @Test
+        @DisplayName("a miss is computed and served, and nothing is written to the cache")
+        void missIsServedAndNotStored() {
+            RoutingService service = serviceWith();
+            TravelEstimate expected = local.estimate(LIMA, AREQUIPA).orElseThrow();
+
+            TravelEstimate estimate = joiningReadOnly(() -> service.estimate(COMPANY, LIMA, AREQUIPA)).orElseThrow();
+
+            assertThat(estimate.distanceKm()).isEqualByComparingTo(expected.distanceKm());
+            assertThat(estimate.travelDuration()).isEqualTo(expected.travelDuration());
+            assertThat(estimate.source()).isEqualTo(RoutingSource.FALLBACK);
+            assertThat(estimate.servedFromCache()).isFalse();
+            // Still read: a warm cache is still worth using on a read-only path.
+            verify(cache).findLeg(any(), any(), any(), any(), any(), any());
+            verifyNoWrites();
+            assertThat(counter("tms.routing.lookups", "miss")).isEqualTo(1);
+            assertThat(counter("tms.routing.lookups", "not-stored-read-only")).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a whole matrix over cold legs is answered in full with no write")
+        void matrixIsAnsweredWithoutWriting() {
+            RoutingService service = serviceWith();
+            List<GeoPoint> points = List.of(LIMA, CALLAO, AREQUIPA);
+
+            Map<RoutingPort.Leg, TravelEstimate> answers =
+                    joiningReadOnly(() -> service.matrix(COMPANY, points, points));
+
+            // A complete answer - AutoPlanningService discards a partial one, so a matrix that
+            // dropped the legs it could not store would silently plan the day without distances.
+            assertThat(answers).hasSize(6);
+            assertThat(answers.get(new RoutingPort.Leg(LIMA, AREQUIPA)).distanceKm())
+                    .isEqualByComparingTo(local.estimate(LIMA, AREQUIPA).orElseThrow().distanceKm());
+            verifyNoWrites();
+            assertThat(counter("tms.routing.lookups", "not-stored-read-only")).isEqualTo(6);
+        }
+
+        /**
+         * The quieter variant: in a read-only Hibernate session the loaded row carries no snapshot,
+         * so refreshing it and flushing is ignored rather than refused - and the mutated instance
+         * would linger in the persistence context as a "fresh" row that was never stored.
+         */
+        @Test
+        @DisplayName("an expired row is neither refreshed nor saved, and the recomputed figure is served")
+        void expiredRowIsLeftUntouched() {
+            TravelEstimateRow stale = row(LIMA, AREQUIPA, "1000.000", 900, NOW.minusSeconds(1));
+            OffsetDateTime staleExpiry = stale.expiresAt();
+            when(cache.findLeg(any(), any(), any(), any(), any(), any())).thenReturn(Optional.of(stale));
+            RoutingService service = serviceWith();
+
+            TravelEstimate estimate = joiningReadOnly(() -> service.estimate(COMPANY, LIMA, AREQUIPA)).orElseThrow();
+
+            assertThat(estimate.servedFromCache()).isFalse();
+            assertThat(estimate.distanceKm())
+                    .isEqualByComparingTo(local.estimate(LIMA, AREQUIPA).orElseThrow().distanceKm())
+                    .isNotEqualByComparingTo(new BigDecimal("1000.000"));
+            assertThat(stale.expiresAt()).isEqualTo(staleExpiry);
+            assertThat(stale.isFreshAt(OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC))).isFalse();
+            verifyNoWrites();
+            assertThat(counter("tms.routing.lookups", "expired")).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a fresh hit is still served from the cache")
+        void hitIsStillServed() {
+            TravelEstimateRow row = row(LIMA, AREQUIPA, "1000.000", 900, NOW.plusSeconds(3600));
+            when(cache.findLeg(any(), any(), any(), any(), any(), any())).thenReturn(Optional.of(row));
+            RoutingService service = serviceWith();
+
+            TravelEstimate estimate = joiningReadOnly(() -> service.estimate(COMPANY, LIMA, AREQUIPA)).orElseThrow();
+
+            assertThat(estimate.servedFromCache()).isTrue();
+            assertThat(estimate.distanceKm()).isEqualByComparingTo("1000.000");
+            verifyNoWrites();
+        }
+
+        /** The guard must describe the transaction, not stick to the thread once one has been read-only. */
+        @Test
+        @DisplayName("a read-write transaction after a read-only one stores again")
+        void readWriteStillStores() {
+            RoutingService service = serviceWith();
+            joiningReadOnly(() -> service.estimate(COMPANY, LIMA, AREQUIPA));
+
+            TransactionTemplate readWrite = new TransactionTemplate(transactions);
+            readWrite.execute(status -> service.estimate(COMPANY, LIMA, CALLAO));
+
+            verify(cache, times(1)).saveAndFlush(any(TravelEstimateRow.class));
+            assertThat(counter("tms.routing.lookups", "not-stored-read-only")).isEqualTo(1);
+        }
+
+        private void verifyNoWrites() {
+            verify(cache, never()).saveAndFlush(any());
+            verify(cache, never()).save(any());
+            verify(cache, never()).saveAll(any());
+        }
+    }
+
+    /**
+     * Just enough of a transaction manager for Spring's synchronization - and so its read-only
+     * flag - to behave as it does in production: a transaction begun here is visible to a nested
+     * {@code REQUIRED} one, which joins it instead of starting its own.
+     */
+    private static final class ResourcelessTransactionManager extends AbstractPlatformTransactionManager {
+
+        private final ThreadLocal<Boolean> active = ThreadLocal.withInitial(() -> false);
+
+        @Override
+        protected Object doGetTransaction() {
+            return new Object();
+        }
+
+        @Override
+        protected boolean isExistingTransaction(Object transaction) {
+            return active.get();
+        }
+
+        @Override
+        protected void doBegin(Object transaction, TransactionDefinition definition) {
+            active.set(true);
+        }
+
+        @Override
+        protected void doCommit(DefaultTransactionStatus status) {
+            // nothing to commit
+        }
+
+        @Override
+        protected void doRollback(DefaultTransactionStatus status) {
+            // nothing to roll back
+        }
+
+        @Override
+        protected void doCleanupAfterCompletion(Object transaction) {
+            active.set(false);
         }
     }
 

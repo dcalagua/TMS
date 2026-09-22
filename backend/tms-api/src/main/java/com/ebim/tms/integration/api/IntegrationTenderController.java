@@ -86,10 +86,12 @@ public class IntegrationTenderController {
     @PostMapping("/{shipmentNumber:SH-\\d+}/response")
     @PreAuthorize("hasAuthority('integration.tender:respond')")
     @Operation(summary = "Accept or reject the offer on one shipment",
-            description = "reason is required to reject. Re-sending the same decision returns the "
-                    + "answer already recorded, so an at-least-once sender is safe without a key; "
-                    + "sending the opposite decision is refused with 409, because reversing a "
-                    + "commitment is not a retry. Answering after the deadline is 409 as well.")
+            description = "reason is required to reject. Re-sending the same decision for the offer "
+                    + "still outstanding returns the answer already recorded; sending the opposite "
+                    + "decision is refused with 409, because reversing a commitment is not a retry. "
+                    + "Answering after the deadline is 409 as well. Echo back the offer's attempt: a "
+                    + "shipment can be offered to the same carrier twice, and without it a late "
+                    + "redelivery of an older answer lands on the newer offer.")
     @Parameter(name = ApiHeaders.IDEMPOTENCY_KEY, in = ParameterIn.HEADER,
             description = "Optional. Repeating it with the same payload replays the first response; "
                     + "repeating it with a different payload is refused with 409. Not needed for "

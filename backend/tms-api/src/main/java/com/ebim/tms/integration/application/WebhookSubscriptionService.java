@@ -244,12 +244,27 @@ public class WebhookSubscriptionService {
      * <p>Only a finished one: re-queueing a delivery that is already pending would move its due time
      * forward, which is at best a no-op and at worst a way to hammer an endpoint that is already
      * being retried on a schedule designed not to.
+     *
+     * <p>And only a <em>failed</em> one. A delivery the receiver answered {@code 2xx} to is finished
+     * in the other direction, and re-queueing it POSTs the same event to an endpoint that already
+     * accepted it. TMS promises at-least-once and asks receivers to deduplicate on
+     * {@code X-TMS-Event-Id}, so the duplicate is within contract - but a receiver that does not
+     * deduplicate books the shipment twice, and the operator pressing the button has nothing on the
+     * screen telling them the first attempt landed. A button whose worst case is a duplicate
+     * business effect nobody asked for should not be one press away from a green row. Re-sending an
+     * event the partner lost is the deliberately deferred replay-by-range feature
+     * ({@code WEBHOOKS_V1.md}, "Known limits"), not this one.
      */
     @Transactional
     public WebhookDeliveryView retry(CompanyScope scope, UUID id) {
         WebhookDelivery delivery = findDelivery(scope, id);
         if (delivery.isPending()) {
             throw new ConflictException("This delivery is still queued and will be retried automatically.");
+        }
+        if (delivery.status() == WebhookDeliveryStatus.PROCESSED) {
+            throw new ConflictException("This delivery was accepted by the endpoint"
+                    + (delivery.lastStatusCode() == null ? "" : " (HTTP " + delivery.lastStatusCode() + ")")
+                    + " and re-sending it would deliver the same event twice.");
         }
         if (!delivery.subscription().active()) {
             throw new ConflictException(

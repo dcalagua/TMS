@@ -1,5 +1,6 @@
 package com.ebim.tms.shared.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -20,6 +21,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -41,6 +43,11 @@ import org.springframework.test.web.servlet.MockMvc;
 })
 @EnableConfigurationProperties(TmsSecurityProperties.class)
 @ActiveProfiles("test")
+// A deployment stamps this as TMS_RELEASE_COMMIT (or Render supplies RENDER_GIT_COMMIT). Setting
+// it here is what makes "the endpoint publishes the revision it is running" a checked claim
+// rather than a comment. The value is a full-length SHA on purpose: the assertion below is that
+// it comes back shortened.
+@TestPropertySource(properties = "tms.release.commit=0123456789abcdef0123456789abcdef01234567")
 class SystemInfoControllerTest {
 
     @Autowired
@@ -54,6 +61,28 @@ class SystemInfoControllerTest {
                 .andExpect(jsonPath("$.application").value("TMS by EBIM"))
                 .andExpect(jsonPath("$.status").value("UP"))
                 .andExpect(jsonPath("$.timestamp").isNotEmpty());
+    }
+
+    @Test
+    @DisplayName("system info publishes the deployed commit, shortened")
+    void systemInfoPublishesTheDeployedCommit() throws Exception {
+        mockMvc.perform(get("/api/v1/system/info"))
+                .andExpect(status().isOk())
+                // Twelve characters of the configured SHA - enough to `git show`, and the length
+                // scripts/ops/verify-deployment.sh compares against what was promoted.
+                .andExpect(jsonPath("$.commit").value("0123456789ab"));
+    }
+
+    @Test
+    @DisplayName("a build that recorded no commit reports none rather than a plausible substitute")
+    void anAbsentCommitStaysAbsent() {
+        // The whole value of the field is that an operator can tell "this build did not record
+        // its revision" from "this build is the wrong revision". A default of "unknown", or of
+        // the Maven version, would collapse those two into one answer. Asserted on the static
+        // helper because a second Spring context per property combination costs more than the
+        // claim is worth.
+        assertThat(SystemInfoController.shorten(null)).isNull();
+        assertThat(SystemInfoController.shorten("abc")).isEqualTo("abc");
     }
 
     @Test

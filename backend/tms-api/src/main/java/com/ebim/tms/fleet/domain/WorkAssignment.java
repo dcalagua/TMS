@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -108,27 +109,61 @@ public class WorkAssignment {
      * <p>Whole, always - never one element. Moving a shipment breaks the leg into it and the leg out
      * of it, so every operation rebuilds the list and the caller revalidates all of it. A partial
      * update is how a day ends up feasible everywhere except the join nobody re-checked.
+     *
+     * <p><b>A different sequence un-confirms the day</b> - see {@link #unconfirm()}. A replacement
+     * naming the same shipments in the same order changes nothing that was ever checked, so the
+     * status is left alone and a repeated PUT stays idempotent. The rows are rebuilt either way:
+     * the planned times and repositions on them are derived from the shipments and are refreshed on
+     * every call.
      */
     public void replaceTrips(List<WorkAssignmentTrip> replacements, UUID actorId) {
         requireOpen();
+        boolean rearranged = !namesTheSameSequenceAs(replacements);
         trips.clear();
         int sequence = 1;
         for (WorkAssignmentTrip trip : replacements) {
             trip.attachTo(this, sequence++);
             trips.add(trip);
         }
-        this.updatedBy = actorId;
+        if (rearranged) {
+            unconfirm();
+            this.updatedBy = actorId;
+        }
     }
 
     public void assignVehicle(UUID vehicleId, UUID actorId) {
         requireOpen();
+        if (Objects.equals(this.vehicleId, vehicleId)) {
+            return;
+        }
         this.vehicleId = vehicleId;
+        unconfirm();
         this.updatedBy = actorId;
     }
 
     public void assignDriver(UUID driverId, UUID actorId) {
         requireOpen();
+        if (Objects.equals(this.driverId, driverId)) {
+            return;
+        }
         this.driverId = driverId;
+        unconfirm();
+        this.updatedBy = actorId;
+    }
+
+    /**
+     * Changes the commentary on the day.
+     *
+     * <p>Notes never un-confirm it: what somebody wrote beside a day says nothing about whether it
+     * works, and reopening a commitment because a typo was corrected would teach planners to leave
+     * the field alone.
+     */
+    public void annotate(String notes, UUID actorId) {
+        requireOpen();
+        if (Objects.equals(this.notes, notes)) {
+            return;
+        }
+        this.notes = notes;
         this.updatedBy = actorId;
     }
 
@@ -151,6 +186,41 @@ public class WorkAssignment {
         }
         this.status = Status.CANCELLED;
         this.updatedBy = actorId;
+    }
+
+    /**
+     * The day stops being a day that was checked.
+     *
+     * <p>{@link #confirm} is the <em>only</em> place feasibility is enforced - a planner may build
+     * an impossible day and look at it, which is how a problem gets diagnosed, but committing to
+     * one is refused. Leaving the status at {@code CONFIRMED} after the vehicle, the driver or the
+     * sequence has been replaced would walk straight past that gate instead of opening it: the row
+     * would say the day was checked while naming shipments nobody ever checked together. An edit
+     * that changes what was validated therefore returns the day to {@code PLANNED}, and it has to
+     * be confirmed again.
+     *
+     * <p>Reverting rather than refusing, deliberately. A confirmed day can become infeasible from
+     * the outside - a truck booked into the workshop, a shipment re-timed - and refusing every edit
+     * that did not immediately produce a feasible day would trap a planner halfway through
+     * repairing one.
+     */
+    private void unconfirm() {
+        if (status == Status.CONFIRMED) {
+            this.status = Status.PLANNED;
+        }
+    }
+
+    /** Whether a replacement names the same shipments, in the same order, as the day already holds. */
+    private boolean namesTheSameSequenceAs(List<WorkAssignmentTrip> replacements) {
+        if (trips.size() != replacements.size()) {
+            return false;
+        }
+        for (int index = 0; index < trips.size(); index++) {
+            if (!Objects.equals(trips.get(index).tripId(), replacements.get(index).tripId())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void requireOpen() {

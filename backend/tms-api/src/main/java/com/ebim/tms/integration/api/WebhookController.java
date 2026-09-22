@@ -211,9 +211,11 @@ public class WebhookController {
 
     @PostMapping("/deliveries/{id}/retry")
     @PreAuthorize("hasAuthority('integration.webhook:manage')")
-    @Operation(summary = "Queue a finished delivery to be attempted again",
+    @Operation(summary = "Queue a failed delivery to be attempted again",
             description = "For a delivery that was given up on and whose receiver has since been fixed. A "
-                    + "delivery that is still queued is refused - it is already going to be retried.")
+                    + "delivery that is still queued is refused - it is already going to be retried - and so "
+                    + "is one the endpoint already accepted, because re-sending it would deliver the same "
+                    + "event twice to a receiver that may not deduplicate.")
     @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
             description = "Id of a company the caller is a member of")
     public WebhookDeliveryView retry(CompanyScope scope, @PathVariable UUID id) {

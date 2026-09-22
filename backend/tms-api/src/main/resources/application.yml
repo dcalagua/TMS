@@ -77,6 +77,20 @@ management:
       show-details: never
       probes:
         enabled: true
+      group:
+        readiness:
+          # Configuring the group REPLACES its default membership, so readinessState must stay
+          # listed: it is what holds readiness DOWN until Flyway has finished.
+          #
+          # tenantRuntimeRole goes DOWN when the connection cannot enter tms_app. That is not a
+          # degraded instance but a dead one - every company-scoped request fails with
+          # "permission denied to set role" - and until 2026-09-15 it answered UP, which routed
+          # traffic to it after a restore that had lost the role. Never put it in liveness:
+          # restarting creates no role and no GRANT.
+          #
+          # `db` is deliberately NOT here. A database outage would take every instance out of
+          # rotation at the same moment, which turns a partial failure into a total one.
+          include: readinessState,tenantRuntimeRole
   info:
     env:
       # Would publish every `info.*` property, which is exactly how a secret escapes.
@@ -96,6 +110,14 @@ tms:
     application-name: TMS by EBIM
     # OpenAPI/Swagger UI without authentication. Overridden to false in prod.
     public-documentation: true
+  release:
+    # The revision this build is running, published by GET /api/v1/system/info so an operator can
+    # answer "which build is live" without a dashboard. Declared here to be discoverable, not
+    # because anything needs setting: empty falls through to RENDER_GIT_COMMIT, which Render
+    # injects on its own, and then to build-info. Deliberately no literal default - absent must
+    # stay absent, so "did not record its revision" stays distinguishable from "is the wrong
+    # revision".
+    commit: ${TMS_RELEASE_COMMIT:}
   security:
     jwt:
       # Supabase Auth coordinates. No default: a deployment that does not set these fails at

@@ -327,6 +327,37 @@ close the day over it would teach dispatchers to stop reporting them.
 Reporting stays available on any trip past `DRAFT`, cancelled and completed included: these are
 written up when somebody has time, which is rarely while the truck is still out.
 
+### One open problem per statement
+
+A report that **restates a problem already open on the trip** — same stop, same type, same sentence
+— writes nothing and is answered with the trip, the way every other retry in this module is
+answered. `TripException.restates` is the whole rule and both doors into the table apply it: the
+hand-written one (`TripExceptionService.report`) and the automatic one a skipped or failed stop
+opens (`TripStopExecutionService`). The stop still transitions either way — only the second row is
+refused, never the transition the reason belongs to.
+
+The reason is not tidiness. This row is what the control tower counts and what the alert bell is
+keyed on, so a double click, a retried request or the same fact entered through both doors would
+say two things went wrong where one did, and sink the real one in a list ordered by nothing but
+time. The failure is silent by construction: every duplicate is a successful `200` with a valid row
+behind it.
+
+Three things are deliberately **not** part of the key:
+
+- **The time.** A second click is a second reading of the clock. The first report's `reportedAt`
+  is the one kept — the earlier and the truer one, the same rule `resolve` follows for the
+  resolution time.
+- **The sentence, when it differs.** Different notes are new information, and `notes` is immutable
+  on this row, so folding them in would lose what they said. A report that says something else gets
+  its own row.
+- **Resolved history.** A problem that was closed out and happens again is a new problem; the
+  lookup is filtered to `OPEN` in SQL.
+
+Serialised by the trip's row lock, which both writers already take before anything else, so the
+check and the insert cannot interleave with a concurrent report or stop failure. There is **no
+unique index** behind it yet: `trip_stop_id` is nullable and existing rows may already hold
+duplicates, so the index needs a data decision before it can be a migration.
+
 ## 11. The workspace
 
 `/trips/{id}` now shows, beside the header and the lifecycle card:

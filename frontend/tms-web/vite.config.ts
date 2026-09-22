@@ -34,7 +34,18 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    // No source maps in the production build, because nothing consumes them and the artefact is
+    // public. `true` handed the full source of a private product to anyone who opened dev tools.
+    // 'hidden' was the first attempt and was not enough: it only drops the //# sourceMappingURL
+    // comment. The maps are still written next to each chunk in dist/assets, amplify.yml
+    // publishes dist with `files: '**/*'`, and every chunk name is public in index.html - so the
+    // full source stayed one request away at `<chunk>.js.map`. Hiding the pointer is not hiding
+    // the file.
+    //
+    // If an error-tracking service is ever added, generate maps only for that service: build
+    // with maps, upload them from the pipeline, then delete every *.map from dist before the
+    // artefact is published - never ship them inside it. Until then, `false`.
+    sourcemap: false,
   },
   test: {
     environment: 'jsdom',

@@ -20,11 +20,31 @@ matters: *did a deployed backend actually start against this database?*
 `spring.flyway.enabled` is `true` under `prod` with no variable to switch it off, and the readiness
 probe reports UP only after Flyway finishes. So:
 
-> **`tms.flyway_schema_history` advancing from V35 to V48 is direct, non-repudiable evidence that a
-> real backend booted against this database.** Nothing else writes that table.
+> **`tms.flyway_schema_history` advancing is direct, non-repudiable evidence that a real backend
+> booted against this database.** Nothing else writes that table.
 
 It is a better signal than a deploy dashboard, because it proves the application ran rather than
 that a container was built.
+
+> ### ⚠ 2026-09-08: that table did not advance, and this is the open HIGH finding
+>
+> The sentence above was written as the test this promotion would pass. **It failed.** The
+> `dev → qas` promotion merged cleanly (PR #9, `70861e6`) and `tms.flyway_schema_history` did not
+> move — it has read **V35 since 2026-08-25** — and the Supabase logs show no application
+> connection in the window. The Phase 1 promotion carried V43 and this database is still at V35, so
+> it is a pattern, not a slow build.
+>
+> Recorded as **QAS-H1** in `TMS_QAS_RUNTIME_CERTIFICATION.md`: *no deployment channel reaches this
+> database.* Not a code defect — it is resolvable only from the Render and Amplify consoles, and the
+> leading candidate is that the Render service tracks a branch other than `qas` (`main` sits at an
+> old unrelated commit). See `docs/operations/PROMOTION.md` §1.
+>
+> The thirteen pending migrations were deliberately **not** applied by hand, although the access
+> existed: a schema built through a SQL client is not the product of `V1..Vn`, and writing history
+> rows to claim otherwise would have made this page and that table both lie.
+>
+> Everything below therefore describes the recovery properties of an environment whose **database is
+> real and whose deployed application has never been observed.**
 
 ## 2. Code rollback
 
@@ -37,6 +57,14 @@ know about, which is fine, but they also add **constraints an older service laye
 
 A build from before V44 does not write to those tables at all, so in practice a rollback to the
 pre-promotion image is expected to work. **Expected, not verified** — nobody has run it.
+
+**Re-examined 2026-09-15 for V49 and V50: the statement still holds, and is still not verified.**
+V49 only adds sequence grants, and V50 replaces `tms.set_updated_at()` with the same body. V50's
+REVOKEs are the only way an older build could now be refused, and no build before V49 issues any
+revoked verb: the Java code under `backend/tms-api/src/main` is unchanged between the last pre-V49
+commit and V50's audit except for a startup role check that issues no DML. The reasoning, the table
+list and its limits are in [`BACKUP_AND_RESTORE.md` §9](BACKUP_AND_RESTORE.md#9-code-rollback-on-a-v49v50-schema).
+**Reasoned, not verified** — no older build was started against a V50 schema.
 
 ## 3. Database rollback
 
@@ -69,17 +97,37 @@ environment is that *the backend* starts, not that the statements are accepted.
 `tms_app`, the `postgis` extension and the `auth.users` accounts survive a `DROP SCHEMA tms` because
 they live outside that schema, and the three migrations that create them are idempotent.
 
+Rebuilding recovers the **schema** and the seed. It does not recover data, which is acceptable only
+because QAS data is disposable (§5).
+
+### Logical backup and restore
+
+**Documented and verified on a local cluster; not verified on QAS.** A `pg_dump -Fc` /
+`pg_restore` of a V50 database was executed on PostgreSQL 17.10 + PostGIS 3.6.2 on 2026-09-15, and
+the procedure, its expected errors and its post-restore checks are in
+[`BACKUP_AND_RESTORE.md`](BACKUP_AND_RESTORE.md).
+
+> **⚠ The dump does not contain `tms_app`.** Roles are cluster-global. Restored into a cluster
+> where `tms_app` does not already exist, the database loses every policy and every grant, while
+> Flyway validates clean and readiness answers UP. After any restore, run
+> [`BACKUP_AND_RESTORE.md` §8](BACKUP_AND_RESTORE.md#8-post-restore-checklist) — or
+> `scripts/ops/verify-restore.sh` — before trusting it. The repair is §6 of that page.
+
+Note that step 1 of the rebuild above is not affected: `DROP SCHEMA tms` keeps `tms_app` because it
+never leaves the cluster.
+
 ### Point-in-time restore
 
 **Not confirmed.** Whether this Supabase project has PITR or retained backups was not verified, and
-no restore has been performed. It is recorded as unknown rather than assumed.
+no restore has been performed. It is recorded as unknown rather than assumed. Whether a Supabase
+platform restore would bring back cluster-global roles such as `tms_app` is **also not confirmed**.
 
 ## 5. Risk position
 
 | Environment | Position |
 |---|---|
 | **QAS** | **Acceptable.** The data is disposable and prefixed `QAS-`, the environment is recreatable by a procedure that has been executed, and no production data may exist here |
-| **PRD** | **Blocker, unchanged.** A forward-only schema with no tested restore is not an acceptable position for production, and PRD does not exist yet — when it does it will be a *different* Supabase project |
+| **PRD** | **Blocker, unchanged.** A forward-only schema with no restore tested *on the production platform* is not an acceptable position for production — the logical restore in `BACKUP_AND_RESTORE.md` was verified on a local cluster only, and platform backups/PITR are unconfirmed. PRD does not exist yet — when it does it will be a *different* Supabase project |
 
 ## 6. If the promotion has to be abandoned
 

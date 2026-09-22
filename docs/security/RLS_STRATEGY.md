@@ -69,6 +69,27 @@ This is not "allow all authenticated" theatre: the policies name a role that onl
 behind an authenticated backend connection, and `SchemaExposureIntegrationTest` fails the
 build if any policy ever names another role.
 
+**The shape of all 54 policies, checked statement by statement.** Existence is not
+correctness, so each was read rather than counted:
+
+- 48 are `FOR ALL` with `USING` and `WITH CHECK` carrying the *same* predicate. A `USING`-only
+  policy on a writable command would let the role insert into another company and merely hide
+  the row afterwards - a write leak that looks like working isolation from every read path.
+- 6 belong to the three append-only tables (`audit_event`, `transport_event`,
+  `delivery_evidence`) and are split `FOR SELECT` + `FOR INSERT`. The pair is correct and the
+  missing `WITH CHECK` on the `SELECT` half is not an omission: PostgreSQL rejects `WITH CHECK`
+  on a command that admits no row.
+- The 6 policies that have **no `company_id` of their own** (`frequency_weekly_rule`,
+  `frequency_exception`, `transport_order_line`, `location_role`, `integration_client_scope`,
+  `webhook_subscription_event`) reach the tenant through `EXISTS` on their parent. The `EXISTS`
+  cannot be satisfied by a parent row of another company: each one filters the parent on
+  `company_id = tms.current_company_id()` inside the subquery, not merely on the foreign key -
+  and the parent's own policy applies to that subquery too, so the filter is applied twice.
+
+`MigrationConventionTest.everyWritePolicyDeclaresWithCheck()` now enforces both halves of the
+rule textually: every `FOR ALL`/`INSERT`/`UPDATE` policy declares `WITH CHECK`, and no
+`FOR SELECT`/`DELETE` policy does.
+
 ### 2.4 RLS is still not FORCEd, and that is still a decision
 
 `FORCE ROW LEVEL SECURITY` is **not** set, and the backend still connects as the owner. What
@@ -87,6 +108,101 @@ and principal-scoped endpoints such as `/api/v1/me` have no company and keep the
 Business tables are reached only through company-scoped request paths, but that is enforced by
 Spring Boot, not by the database. The architecture of record still holds: *"RLS is never the
 only line of defense for a business rule."*
+
+**Re-examined for V50, and the answer did not change - the evidence got harder.** ADR-005
+predicted that forcing would trap future data migrations. It is now countable:
+
+- The migration history performs **19 cross-company data backfills as the owner**, among them
+  V14's `UPDATE tms.origin SET location_id = id;` and V23's rewrite of `origin`, `destination`,
+  `location_role`, `route`, `route_stop`, `transport_order`, `planning_run` and `trip_stop`.
+  Under `FORCE`, each of those matches `company_id = tms.current_company_id()` with no company
+  set, so each touches **zero rows and Flyway reports success**.
+- `WebhookDispatchScheduler`, the product's only scheduled task, runs with no security context
+  and therefore no `CompanyScope`, so its connection is never switched to `tms_app`. V35
+  documents this as the only way one worker can drain every tenant's queue. Under `FORCE` it
+  reads zero rows and **outbound webhooks stop with no error**.
+- Principal resolution survives (`app_user`, `membership` and the rest carry
+  `p_backend_managed USING (true)`), but every principal-scoped endpoint that then reads a
+  company-scoped table as the owner does not.
+
+Every one of those failures is a **silent zero-row result, not SQLSTATE 42501**. Forcing would
+convert a defence-in-depth measure into an availability and data-integrity failure mode that no
+test and no alert would catch, in exchange for a boundary Spring Boot already enforces. The
+hardening that was applied instead - narrowing what `tms_app` may do at all (section 2.5) -
+holds on every path, including the three that `FORCE` would break.
+
+Reversing the decision is allowed and needs an ADR.
+`MigrationConventionTest.rowLevelSecurityIsNeverForcedOnTheOwner()` fails the build on a
+migration that forces RLS without one, and it needs no Docker;
+`SchemaExposureIntegrationTest.rlsIsNotForcedForTheOwner()` asserts the same against a real
+database.
+
+### 2.5 The runtime role holds only the verbs it uses (V50)
+
+RLS decides *which rows*; the grant decides *which verbs*. The second half was claimed for a
+long time and, for eleven tables, was not true.
+
+`V13` gave `tms_app` its privileges twice - `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES`
+for what existed then, and `ALTER DEFAULT PRIVILEGES ... ON TABLES` for everything Flyway
+creates later. The second one **fires at `CREATE TABLE` time**. So a migration that writes
+
+```sql
+GRANT SELECT, INSERT ON tms.settlement_approval TO tms_app;
+```
+
+narrows nothing: `GRANT` is additive, the four verbs were attached the instant the table was
+created, and a shorter grant adds none and removes none. V22 spotted this and wrote the
+`REVOKE` that does the work ("the REVOKE below is what actually withholds the two that
+matter"); V23, V27, V28 and V29 followed. Eleven later tables wrote the intent in a comment and
+stopped at the `GRANT`, so `shipment_outbox_event`, `notification`, `company_settings`,
+`webhook_delivery`, `webhook_delivery_attempt`, `tender_waterfall`,
+`tender_waterfall_candidate`, `appointment`, `order_delivery_line`, `settlement_approval` and
+`payable_export` all carried privileges the schema said they did not have - and this document,
+`docs/database/DATA_MODEL.md` and `SchemaExposureIntegrationTest`'s own comments all repeated
+the claim.
+
+`V50` issued the missing revocations, after checking every affected table against the Java
+side: no repository, `@Modifying` query, JDBC statement, dirty-checked setter or
+`orphanRemoval` collection issues any of the revoked verbs. The one live hazard it closes is
+`tender_waterfall_candidate`, mapped with `cascade = ALL, orphanRemoval = true` on a list that
+nothing currently clears - which is one edit away from silently deleting the record a carrier
+disputing a rate would ask for.
+
+**`V50` also narrowed three tables nobody had claimed.** `tms.role`, `tms.permission` and
+`tms.role_permission` are Flyway-seeded reference data; no JPA entity maps them and the only
+Java that names them (`JdbcIdentityRepository`, `UserAdministrationRepository`) only `JOIN`s.
+Yet `tms_app` held all four verbs from V13's blanket grant, and their policy is
+`p_backend_managed` - `USING (true) WITH CHECK (true)` - so **RLS contributes no filter here at
+all and the grant was the whole control**. Since effective permissions are resolved by joining
+`tms.role_permission`, a single injected `INSERT` under any company-scoped request would have
+granted a permission to a role for every user of every tenant. They are read-only to the
+runtime role now. `tms.membership` and `tms.membership_role` keep their four verbs: the
+user-administration surface writes them.
+
+Two tests keep this from reopening.
+`MigrationConventionTest.everyNarrowedGrantIsBackedByARevoke()` fails the build when a table's
+named grant omits a verb that no migration revokes - textual, so it runs where Docker does not.
+`SchemaExposureIntegrationTest.theRuntimeRoleHoldsOnlyTheVerbsItIsGranted()` asks
+`has_table_privilege` the same question against a real database, which is the form a comment
+cannot satisfy.
+
+### 2.6 Both functions pin their `search_path` (V50)
+
+The schema has exactly two functions and neither is `SECURITY DEFINER`.
+`tms.current_company_id()` has pinned `SET search_path = pg_catalog, pg_temp` since V13.
+`tms.set_updated_at()`, written in V1 and attached to 34 triggers, inherited the caller's - V50
+replaced it in place (`CREATE OR REPLACE`, so the triggers' OID reference and V4's
+`REVOKE ... FROM PUBLIC` both survive) with the same pin.
+
+It was not exploitable: the body resolves only `now()`, `pg_catalog` is searched first whether
+or not it is named, and PostgreSQL 15+ no longer lets `PUBLIC` create objects in `public`. It
+is pinned because the property that made it harmless is *"the body happens to reference nothing
+schema-qualified"*, which is one line of a future edit away from being false in a function that
+fires on every update in the schema - and because Supabase's own linter reports the unpinned
+case as `function_search_path_mutable`, so leaving it open means re-explaining a finding every
+time somebody runs the check.
+`MigrationConventionTest.everyFunctionPinsItsSearchPath()` holds the *last* definition of every
+function to the rule, which is the one the database ends up with.
 
 ## 3. Exposure decision per table
 
@@ -111,7 +227,7 @@ No table is exposed through the Data API, and no policy names `anon`, `authentic
 | Role | Who | Privileges |
 |---|---|---|
 | Owner of schema `tms` | the backend connection and Flyway | owns the objects, exempt from unforced RLS |
-| `tms_app` | the same backend connection, after `SET ROLE`, for a company-scoped request | DML on `tms`, fully subject to the tenant policies. `NOLOGIN` and passwordless: it cannot be connected to |
+| `tms_app` | the same backend connection, after `SET ROLE`, for a company-scoped request | DML on `tms` **minus the verbs V50 revoked** (section 2.5), fully subject to the tenant policies. `NOLOGIN` and passwordless: it cannot be connected to |
 | `anon` | unauthenticated Supabase Data API callers | nothing |
 | `authenticated` | signed-in Supabase Data API callers | nothing |
 | `service_role` | Supabase administrative key | nothing on `tms`; the backend never uses this key |
@@ -138,6 +254,70 @@ repository. The backend keeps its existing connection and reaches the role throu
 Role creation is therefore back inside a migration, and `MigrationConventionTest` was narrowed
 to match the real rule: a migration may create a role, but never one carrying a password and
 never one that can log in.
+
+### Which role a deployment actually connected as, and how it says so
+
+Until now nothing announced it. The role comes from `TMS_DB_USERNAME` and from nowhere else
+(`application-prod.yml`), no code asserts anything about it, and both ways of getting it wrong
+are quiet:
+
+- **The runtime role cannot be entered.** `V13` creates `tms_app` and grants it to `CURRENT_USER`
+  - *the role that applied the migration*. A deployment whose runtime credential is a different
+  role, or a database restored without the role or the grant, fails every company-scoped request
+  on `SET ROLE` while every migration still applies cleanly. A `pg_dump` carries no global roles,
+  and Flyway reports a restored schema as up to date, so `V13` never runs again to recreate it. It
+  does not reproduce locally: a Testcontainers run migrates as a superuser, which may set any role.
+- **The application connected *as* `tms_app`.** Then Flyway is not the owner and `SET ROLE` is a
+  no-op, so the downgrade this whole section rests on has silently stopped happening.
+
+`TenantRuntimeRoleCheck` reads `session_user`/`current_user` and then performs a real
+`SET ROLE tms_app` / `RESET ROLE` rather than asking `pg_has_role`, because the member privilege
+`SET ROLE` needs is spelled differently across PostgreSQL versions and the operation itself is
+cheap. The expected posture logs at INFO; an unreachable runtime role logs at ERROR and names the
+`GRANT` that fixes it; connecting as `tms_app` logs at WARN.
+
+**The verdict also drives readiness**, through the health contributor `tenantRuntimeRole`
+(`TenantRuntimeRoleHealthIndicator`), once it is listed in
+`management.endpoint.health.group.readiness.include`:
+
+| Verdict | Readiness contribution | Why |
+|---|---|---|
+| `tms_app` can be entered | `UP` | the expected posture |
+| `tms_app` cannot be entered (`42501` not granted, `22023` does not exist) | `DOWN` | every company-scoped request fails; the instance must not receive traffic |
+| connected *as* `tms_app` | `UP` | requests succeed and every query already runs as a non-owner; a configuration defect, reported in the log |
+| database could not be asked (pool timeout, connection or server failure) | last conclusive verdict, `UNKNOWN` before any | a database outage is the database indicator's to report, not a role problem |
+
+The response carries no details - no role name, no SQL, no exception - whatever `show-details` a
+profile sets; the names and the fix go to the log.
+
+This revises a decision. The first version only logged, arguing that refusing to boot would turn a
+defence-in-depth misconfiguration into an outage while ADR-003's scoping carries on regardless. The
+certification restore of 2026-09-15 disproved the premise: a `pg_dump` restored onto a cluster
+without `tms_app` logged the ERROR and `GET /actuator/health/readiness` still answered
+`200 {"status":"UP"}`. An unenterable runtime role is not "RLS off" but every company-scoped request
+answering 500 - the outage already exists, and a green readiness probe told the load balancer to
+route traffic to it instead of keeping the previous instance. What stays from the original decision:
+**startup is never failed** (the process stays up for diagnosis) and **liveness is untouched**
+(restarting cannot create a role or a grant).
+
+**When it is evaluated.** Synchronously on `ApplicationReadyEvent`, before readiness accepts
+traffic; afterwards lazily, when a health request finds the verdict at least 30 seconds old. The
+re-evaluation runs on its own virtual thread, at most one at a time, and the request is answered
+with the verdict already held, so a health request never waits on the pool - against a stopped
+database the probe sits out Hikari's 30-second connection timeout, and a probe request held that
+long would fail at the balancer for exactly the reason this contributor must not report. A `GRANT`
+fixed in place brings the instance back within about 30 seconds, without a restart; the probe costs
+at most two connection borrows a minute per instance, whatever the polling rate. The log follows
+transitions, not evaluations, so a broken deployment writes one ERROR and a recovery one INFO.
+
+> **`docs/operations/DEPLOYMENT.md` contradicts this section and is wrong.** It instructs
+> operators to make "the application connect as `tms_app`, not as the schema owner", and lists
+> "confirm the application connects as `tms_app`" as a pre-deployment step;
+> `docs/operations/RUNBOOK_INCIDENTS.md` repeats it. That configuration cannot exist: `tms_app`
+> is `NOLOGIN` and passwordless by design, so a deployment that follows the instruction cannot
+> start. The correct statement is the one above - connect as the owner, and confirm that
+> `tms_app` **can be entered**. Those documents are owned elsewhere and have not been changed
+> here.
 
 ## 5. If the Data API is ever opened (design sketch, not applied)
 
@@ -214,6 +394,11 @@ the backend never wrote:
   `tms_app` and break the feature on exactly the deployments where the runtime role is entered;
 - no policy names any role other than `tms_app`, so the Data API stays closed;
 - no table is `FORCE`d, so the owning application role keeps working by design;
+- **`tms_app` holds only the verbs the schema grants it**, asked of `has_table_privilege` per
+  table and per verb rather than of a comment (section 2.5): no `UPDATE`/`DELETE` on the seven
+  append-only tables, no `DELETE` on the eight corrected-in-place ones, no `UPDATE` on
+  `tracking_position`, and nothing but `SELECT` on `origin`, `destination` and the three
+  authorization-catalogue tables;
 - `PUBLIC` has no `USAGE` on the schema, no `SELECT` on any table, no `EXECUTE` on
   `tms.set_updated_at()`;
 - after creating `anon` and `authenticated` roles (as Supabase would), neither has schema or

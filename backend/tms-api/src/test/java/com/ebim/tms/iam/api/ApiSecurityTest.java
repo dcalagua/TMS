@@ -1,6 +1,7 @@
 package com.ebim.tms.iam.api;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -265,6 +266,63 @@ class ApiSecurityTest {
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.detail").value(
                             org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("iam.company"))));
+        }
+    }
+
+    /**
+     * The browser half of the contract, which only shows up in a deployment where the React
+     * application and the API are on different origins - which QAS is (Amplify to Render) and a
+     * developer's machine, proxied through Vite, is not.
+     *
+     * <p>{@code httpClient.ts} sends {@code X-Company-Id} and {@code X-Correlation-Id}. Neither is
+     * a CORS-simple header, so every cross-origin call is preceded by a preflight, and a
+     * {@code SecurityConfig} that did not name them would fail every request in QAS while passing
+     * every test here. The exposed-headers rule is the quieter of the two: without it the browser
+     * still completes the call and simply hides the response header, so the correlation id an
+     * operator reads back off the screen becomes {@code null} and stops matching the server's logs.
+     */
+    @Nested
+    @DisplayName("cross-origin contract")
+    class CrossOrigin {
+
+        private static final String ALLOWED_ORIGIN = "http://localhost:5173";
+
+        @Test
+        @DisplayName("the preflight accepts the two custom headers the frontend actually sends")
+        void preflightAllowsTheCustomHeaders() throws Exception {
+            mockMvc.perform(options(CURRENT_COMPANY)
+                            .header(HttpHeaders.ORIGIN, ALLOWED_ORIGIN)
+                            .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
+                            .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
+                                    HttpHeaders.AUTHORIZATION + "," + ApiHeaders.COMPANY_ID
+                                            + "," + ApiHeaders.CORRELATION_ID))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ALLOWED_ORIGIN))
+                    .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
+                            org.hamcrest.Matchers.allOf(
+                                    org.hamcrest.Matchers.containsStringIgnoringCase(ApiHeaders.COMPANY_ID),
+                                    org.hamcrest.Matchers.containsStringIgnoringCase(ApiHeaders.CORRELATION_ID))));
+        }
+
+        @Test
+        @DisplayName("the correlation id is exposed, so the browser can read the id the server assigned")
+        void correlationIdIsReadableCrossOrigin() throws Exception {
+            mockMvc.perform(bearer(CURRENT_COMPANY, TestJwts.validFor(TestPrincipals.PLANNER_AUTH_USER))
+                            .header(ApiHeaders.COMPANY_ID, TestPrincipals.NORTH_LIMA.toString())
+                            .header(HttpHeaders.ORIGIN, ALLOWED_ORIGIN))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
+                            org.hamcrest.Matchers.containsStringIgnoringCase(ApiHeaders.CORRELATION_ID)));
+        }
+
+        @Test
+        @DisplayName("an origin that is not on the allow-list is refused, wildcards never being an option")
+        void unknownOriginIsRefused() throws Exception {
+            mockMvc.perform(options(CURRENT_COMPANY)
+                            .header(HttpHeaders.ORIGIN, "https://not-our-frontend.invalid")
+                            .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET"))
+                    .andExpect(status().isForbidden())
+                    .andExpect(header().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
         }
     }
 

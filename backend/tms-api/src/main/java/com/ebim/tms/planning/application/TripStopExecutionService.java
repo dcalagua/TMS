@@ -4,6 +4,7 @@ import com.ebim.tms.planning.domain.StopExecutionStatus;
 import com.ebim.tms.planning.domain.TransportEventType;
 import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.planning.domain.TripException;
+import com.ebim.tms.planning.domain.TripExceptionStatus;
 import com.ebim.tms.planning.domain.TripExceptionType;
 import com.ebim.tms.planning.domain.TripStatus;
 import com.ebim.tms.planning.domain.TripStop;
@@ -149,8 +150,20 @@ public class TripStopExecutionService {
         if (exceptionType != null) {
             // The reason is a typed row of its own, and the timeline entry names it so the log
             // reads on its own without a join: one user action produces one event, not two.
-            opened = exceptionRepository.saveAndFlush(new TripException(scope.companyId(), trip.id(), stop.id(),
-                    exceptionType, occurredAt, actorId, blankToNull(notes)));
+            //
+            // Reused rather than inserted when the dispatcher already wrote this exact problem up
+            // by hand against this stop (TripException.restates). The reason on file is what a
+            // failed stop needs, not a second copy of it, and two rows saying the same thing would
+            // make the control tower count two problems where there is one. The trip's row lock,
+            // taken at the top of this method, serialises this against the hand-written door.
+            opened = exceptionRepository
+                    .findByCompanyIdAndTripIdAndExceptionTypeAndStatus(scope.companyId(), trip.id(), exceptionType,
+                            TripExceptionStatus.OPEN)
+                    .stream()
+                    .filter(candidate -> candidate.restates(stop.id(), exceptionType, blankToNull(notes)))
+                    .findFirst()
+                    .orElseGet(() -> exceptionRepository.saveAndFlush(new TripException(scope.companyId(), trip.id(),
+                            stop.id(), exceptionType, occurredAt, actorId, blankToNull(notes))));
             detail.put("exceptionType", exceptionType.name());
         }
 
