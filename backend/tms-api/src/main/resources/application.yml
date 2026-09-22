@@ -201,6 +201,23 @@ tms:
       # other type is somebody using the store for something else. Never read as "allow
       # everything" when empty - see EvidenceStorageProperties.
       allowed-content-types: image/jpeg,image/png,image/webp,application/pdf
+  platform-provisioning:
+    # EBIM MasterAdmin -> TMS tenant provisioning (GENERIC contract v1, migration V51,
+    # docs/platform-provisioning/MASTERADMIN_GENERIC_CONTRACT.md). OFF by default: an endpoint that
+    # creates tenants is switched on deliberately, never by deploying. When on, the public key is
+    # mandatory and a missing or malformed one stops the application at start-up.
+    enabled: ${TMS_PLATFORM_M2M_ENABLED:false}
+    # MasterAdmin's ES256 PUBLIC key, PEM (-----BEGIN PUBLIC KEY-----), from the secret store. Never
+    # a private key (refused at start-up) and never committed.
+    public-key: ${TMS_PLATFORM_M2M_PUBLIC_KEY:}
+    # Suite-wide token claims. Not secrets; overridable only so a key rotation or an issuer rename
+    # needs no build.
+    issuer: ${TMS_PLATFORM_M2M_ISSUER:masteradmin.ebim}
+    audience: ${TMS_PLATFORM_M2M_AUDIENCE:tms.ebim}
+    subject: ${TMS_PLATFORM_M2M_SUBJECT:masteradmin-provisioning}
+    # exp - iat may not exceed this; 300s is also the hard ceiling the code enforces.
+    max-token-lifetime: ${TMS_PLATFORM_M2M_MAX_TOKEN_LIFETIME:300s}
+    clock-skew: ${TMS_PLATFORM_M2M_CLOCK_SKEW:30s}
   tracking:
     # Vehicle positions (migration V29, docs/domain/TRACKING_V1.md). There is deliberately no
     # `enabled` flag: intake is gated by the integration.tracking:write scope, which an

@@ -76,7 +76,10 @@ class SchemaExposureIntegrationTest {
             "freight_discrepancy", "settlement_approval", "payable_export",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
-            "work_assignment", "work_assignment_trip");
+            "work_assignment", "work_assignment_trip",
+            // V51: MasterAdmin provisioning. Owner connection only - tms_app holds no grant and a
+            // deny-all policy - and write-once by trigger.
+            "platform_provisioning_request", "platform_provisioning_audit");
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the
@@ -125,7 +128,11 @@ class SchemaExposureIntegrationTest {
      * authentication impossible, so it carries {@code p_backend_managed} like the rest of the
      * identity tables (V13 section 5).
      */
-    private static final List<String> COMPANY_COLUMN_WITHOUT_TENANT_POLICY = List.of("membership");
+    private static final List<String> COMPANY_COLUMN_WITHOUT_TENANT_POLICY = List.of("membership",
+            // V51: records which company a MasterAdmin provisioning created. Written before any company
+            // scope exists and never reachable by tms_app (no grant, deny-all policy) - the tenant
+            // policy would have nothing to protect and would make the row unwritable.
+            "platform_provisioning_request");
 
     private static String jdbcUrl;
 
