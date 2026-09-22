@@ -112,6 +112,10 @@ Authoritative documents live under `docs/architecture/`:
   `OrderFulfillmentStatus`, which is unchanged. Its status is recomputed from the delivery rows in
   the same transaction as every change to them, so the two cannot drift; a failed delivery becomes
   reopenable for a second attempt.
+- `ADR-012-masteradmin-platform-provisioning.md` - EBIM MasterAdmin creates tenants through
+  `/internal/platform-provisioning` (GENERIC contract v1): its own security chain, ES256 public key,
+  off by default, one transaction, administrator PREPROVISIONED (no Auth account is created).
+  Contract: `docs/platform-provisioning/MASTERADMIN_GENERIC_CONTRACT.md`.
 
 Database and security detail lives in `docs/database/DATA_MODEL.md`,
 `docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.

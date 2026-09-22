@@ -2,6 +2,7 @@ package com.ebim.tms.architecture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.ebim.tms.iam.provisioning.security.PlatformCaller;
 import com.ebim.tms.integration.application.IntegrationPrincipal;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.tngtech.archunit.core.domain.JavaClass;
@@ -83,6 +84,9 @@ class EndpointContractTest {
      *   <li>{@code IntegrationIdentityController#ping} - "does my key work?", answered with facts
      *       the holder of the credential already knows. Requiring a scope for it would mean a
      *       partner debugging authentication by posting real orders.</li>
+     *   <li>{@code PlatformProvisioningController#health} - MasterAdmin's CHECK_HEALTH probe, anonymous
+     *       by contract on its own security chain. A fixed {@code {"status":"ok"}} or
+     *       {@code {"status":"unavailable"}}, with no tenant, configuration or version in it.</li>
      * </ul>
      */
     private static final Set<String> UNGUARDED_BY_DESIGN = Set.of(
@@ -91,7 +95,8 @@ class EndpointContractTest {
             "NotificationController#feed",
             "NotificationController#markRead",
             "NotificationController#markAllRead",
-            "IntegrationIdentityController#ping");
+            "IntegrationIdentityController#ping",
+            "PlatformProvisioningController#health");
 
     /**
      * Every permission-guarded user-facing handler declares the scope its permission is evaluated
@@ -102,12 +107,17 @@ class EndpointContractTest {
      * calls that "the strongest form of the rule ADR-003 states, because the client is never
      * asked". They are recognised by taking an {@link IntegrationPrincipal}, not by their package:
      * {@code WebhookController} lives in {@code integration.api} and is a browser endpoint.
+     *
+     * <p>The MasterAdmin provisioning handlers are excluded for the same reason, one level up: they
+     * create the company, so there is no company to scope them to. They are recognised by taking a
+     * {@link PlatformCaller}, which only the MasterAdmin chain produces, and are guarded by scope.
      */
     @ArchTest
     void permission_guarded_endpoints_declare_the_company_they_are_scoped_to(JavaClasses classes) {
         List<String> offenders = new ArrayList<>();
         for (Method handler : handlersIn(classes)) {
-            if (!handler.isAnnotationPresent(PreAuthorize.class) || takes(handler, IntegrationPrincipal.class)) {
+            if (!handler.isAnnotationPresent(PreAuthorize.class) || takes(handler, IntegrationPrincipal.class)
+                    || takes(handler, PlatformCaller.class)) {
                 continue;
             }
             if (!takes(handler, CompanyScope.class)) {
