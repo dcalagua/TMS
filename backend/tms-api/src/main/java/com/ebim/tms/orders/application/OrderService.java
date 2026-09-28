@@ -323,9 +323,23 @@ public class OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
     }
 
+    /**
+     * The status half and the ledger half of "may this order's content still change".
+     *
+     * <p>The ledger half is rule R3 of {@code docs/domain/SPLIT_ORDER_EXECUTION.md}: a part-planned
+     * order is {@code READY_FOR_PLANNING}, which the status alone reads as editable, but a share of
+     * it is on a trip - possibly already on the road - and an edit would reset it to
+     * {@code NOT_READY} under that trip and change the demand the share was cut from. The
+     * integration upsert reaches this through {@link #update} only when the payload really changes
+     * something, so an unchanged redelivery is still answered {@code UNCHANGED}.
+     */
     private static void requireEditable(TransportOrder order) {
         if (order.status() != OrderStatus.NOT_READY && order.status() != OrderStatus.READY_FOR_PLANNING) {
             throw new ConflictException("This order can no longer be edited (status: " + order.status() + ").");
+        }
+        if (!order.allocated().isZero()) {
+            throw new ConflictException("Order " + order.orderNumber() + " has part of it on a trip and cannot be "
+                    + "edited while it is; unassign it from its trip, or cancel the trip, first.");
         }
     }
 

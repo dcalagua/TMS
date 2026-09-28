@@ -32,6 +32,34 @@ public interface TripOrderAssignmentRepository extends JpaRepository<TripOrderAs
      */
     Optional<TripOrderAssignment> findByOrderIdAndStatusAndWholeOrderTrue(UUID orderId, AssignmentStatus status);
 
+    /**
+     * Which of {@code orderIds} still have an open carrier other than {@code excludedTripId}: an
+     * ACTIVE assignment on a trip that has not finished ({@code DRAFT} to {@code IN_TRANSIT}). A
+     * split order closes out only with its last carrier (docs/domain/SPLIT_ORDER_EXECUTION.md, R2),
+     * and this is how the carrier that is closing learns it is not the last. Company-scoped in the
+     * query, like every other read here.
+     */
+    @Query("SELECT DISTINCT a.orderId FROM TripOrderAssignment a JOIN Trip t ON t.id = a.tripId "
+            + "WHERE a.orderId IN :orderIds AND a.companyId = :companyId AND a.status = :status "
+            + "AND a.tripId <> :excludedTripId AND t.status IN :openStatuses")
+    List<UUID> findOrdersWithOtherOpenCarrier(@Param("orderIds") Collection<UUID> orderIds,
+            @Param("companyId") UUID companyId, @Param("excludedTripId") UUID excludedTripId,
+            @Param("status") AssignmentStatus status,
+            @Param("openStatuses") Collection<com.ebim.tms.planning.domain.TripStatus> openStatuses);
+
+    /**
+     * Whether the order has an ACTIVE whole-order row on a trip that has already finished. That row
+     * is history of a delivery attempt, not a plan: a failed or short order that was reopened
+     * (ADR-009) is planned again from nothing, and this is how planning tells the two apart. The
+     * finished row still holds V11's unique slot, so the re-attempt is stored as a share
+     * ({@code whole_order = false}); the V37 ledger, not the index, is what serialises planners
+     * racing for it.
+     */
+    @Query("SELECT COUNT(a) > 0 FROM TripOrderAssignment a JOIN Trip t ON t.id = a.tripId "
+            + "WHERE a.orderId = :orderId AND a.status = com.ebim.tms.planning.domain.AssignmentStatus.ACTIVE "
+            + "AND a.wholeOrder = true AND t.status = com.ebim.tms.planning.domain.TripStatus.COMPLETED")
+    boolean existsWholeOnFinishedTrip(@Param("orderId") UUID orderId);
+
     /** The full history of one order, newest first - the audit answer to "where has this been planned?". */
     List<TripOrderAssignment> findByOrderIdOrderByAssignedAtDesc(UUID orderId);
 

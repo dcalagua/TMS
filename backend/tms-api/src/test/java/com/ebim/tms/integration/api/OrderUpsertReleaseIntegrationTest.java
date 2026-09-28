@@ -132,6 +132,49 @@ class OrderUpsertReleaseIntegrationTest {
         assertThat(orderStatus(reference)).isEqualTo("NOT_READY");
     }
 
+    @Test
+    @DisplayName("R3: an order with part of it on a trip answers an unchanged redelivery UNCHANGED, untouched")
+    void unchangedRedeliveryOfAPartlyAllocatedOrderIsStillIdempotent() throws Exception {
+        String reference = "PED-" + UUID.randomUUID();
+        upsert(body(reference, "NORMAL", true)).andExpect(status().isCreated());
+        allocatePallets(reference, "2");
+        long versionBefore = version(reference);
+
+        upsert(body(reference, "NORMAL", true))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outcome").value("UNCHANGED"))
+                .andExpect(jsonPath("$.status").value("READY_FOR_PLANNING"));
+
+        assertThat(orderStatus(reference)).isEqualTo("READY_FOR_PLANNING");
+        assertThat(version(reference)).isEqualTo(versionBefore);
+    }
+
+    @Test
+    @DisplayName("R3: a structural change from the ERP to an order with part of it on a trip is refused, 409")
+    void aChangeToAPartlyAllocatedOrderIsRefused() throws Exception {
+        String reference = "PED-" + UUID.randomUUID();
+        upsert(body(reference, "NORMAL", true)).andExpect(status().isCreated());
+        allocatePallets(reference, "2");
+        long versionBefore = version(reference);
+
+        upsert(body(reference, "URGENT", false))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("part of it on a trip")));
+
+        assertThat(orderStatus(reference)).isEqualTo("READY_FOR_PLANNING");
+        assertThat(version(reference)).isEqualTo(versionBefore);
+    }
+
+    /**
+     * Books part of the order onto a trip at the ledger's running total, which is what R3 reads.
+     * The trip itself is irrelevant to the guard and is exercised end to end in
+     * {@code SplitOrderExecutionTest}.
+     */
+    private static void allocatePallets(String reference, String pallets) {
+        execute("UPDATE tms.transport_order SET allocated_pallets = " + pallets + " WHERE company_id = '" + COMPANY
+                + "' AND external_source = 'SAPB1_PE' AND external_reference = '" + reference + "'");
+    }
+
     private ResultActions upsert(String body) throws Exception {
         return mockMvc.perform(post(ORDERS)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + bearerToken)

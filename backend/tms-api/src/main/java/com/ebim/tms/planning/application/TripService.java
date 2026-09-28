@@ -612,6 +612,8 @@ public class TripService {
      */
     private void requireNotAlreadyAssignedWhole(PlannableOrder order) {
         assignmentRepository.findByOrderIdAndStatusAndWholeOrderTrue(order.id(), AssignmentStatus.ACTIVE)
+                // A whole row on a finished trip is a past attempt of a reopened order, not a plan.
+                .filter(existing -> !assignmentRepository.existsWholeOnFinishedTrip(order.id()))
                 .ifPresent(existing -> {
                     throw new ConflictException("Order " + order.orderNumber()
                             + " is already assigned to a trip. Move it instead of assigning it again.");

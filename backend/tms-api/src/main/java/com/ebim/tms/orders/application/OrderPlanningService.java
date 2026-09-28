@@ -18,6 +18,7 @@ import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.PlannableOrderQuery;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
@@ -191,6 +192,13 @@ public class OrderPlanningService implements OrderPlanningPort {
     @Transactional
     public void markInExecution(UUID orderId, UUID companyId) {
         TransportOrder order = requireForUpdate(orderId, companyId);
+        if (order.status() == OrderStatus.READY_FOR_PLANNING && !order.allocated().isZero()) {
+            // R1 (docs/domain/SPLIT_ORDER_EXECUTION.md): the departing trip carries a share of an
+            // order that still has something to place. The share leaves; the order stays in the
+            // pool so the remainder can still be planned. It enters IN_EXECUTION only from
+            // PLANNED, i.e. when the departure of any of its trips finds nothing left to place.
+            return;
+        }
         if (order.status() == OrderStatus.NOT_READY || order.status() == OrderStatus.READY_FOR_PLANNING
                 || order.status() == OrderStatus.CANCELLED) {
             throw new ConflictException("Order " + order.orderNumber() + " is " + order.status()
@@ -199,6 +207,21 @@ public class OrderPlanningService implements OrderPlanningPort {
         if (order.markInExecution(auditActorProvider.requireAppUserId())) {
             save(order);
         }
+    }
+
+    /**
+     * Takes the row locks of {@code orderIds} in id order, so that two trips of the same split
+     * order closing out at the same moment serialise instead of each seeing the other still on the
+     * road and both leaving the order open (R2). Id order, not assignment order, so two callers
+     * locking overlapping sets can never deadlock on each other.
+     */
+    @Override
+    @Transactional
+    public void lockForExecution(Collection<UUID> orderIds, UUID companyId) {
+        if (orderIds.isEmpty()) {
+            return;
+        }
+        transportOrderRepository.lockAndRefresh(orderIds, companyId);
     }
 
     /**

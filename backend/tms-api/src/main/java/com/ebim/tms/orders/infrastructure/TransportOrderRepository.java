@@ -18,7 +18,8 @@ import org.springframework.data.repository.query.Param;
  * Company-scoped persistence for {@link TransportOrder}. See {@code LocationRepository} for the
  * isolation rule every finder here follows.
  */
-public interface TransportOrderRepository extends JpaRepository<TransportOrder, UUID>, JpaSpecificationExecutor<TransportOrder> {
+public interface TransportOrderRepository
+        extends JpaRepository<TransportOrder, UUID>, JpaSpecificationExecutor<TransportOrder>, TransportOrderLocking {
 
     Optional<TransportOrder> findByIdAndCompanyId(UUID id, UUID companyId);
 

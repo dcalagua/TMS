@@ -1,156 +1,123 @@
-# TMS by EBIM - split orders meet execution (analysis and proposed behaviour)
+# TMS by EBIM - split orders meet execution
 
-**Status:** Proposed - awaiting approval. **No production code implements this yet.**
-**Evidence:** `SplitOrderExecutionCharacterizationTest` (7 scenarios, all pinning current behaviour)
+**Status:** Approved 2026-09-27 (R1, R2, R3) and **implemented**.
+**Specification:** `SplitOrderExecutionTest` (13 scenarios, two of them repeated races).
 **Builds on:** `SHIP_UNITS_AND_ALLOCATION_V1.md` (V37), ADR-009 (V36), `TRIP_EXECUTION_V1.md` (V25)
+**Schema change:** none. One change of *definition* for `allocated_*` (below).
 
-## 1. The approved rule
+## 1. The rule
 
 > Dispatching a partial allocation must never stop the rest of the order from staying plannable.
 
-The brief fixes two constraints on the answer: no new `OrderStatus`, and no naive fix of
-`markInExecution`. This document records what the product does today, why a one-line fix would be
-wrong, and the exact behaviour proposed instead.
+No new `OrderStatus`, no new `TripStatus`, and no `READY_FOR_PLANNING -> IN_EXECUTION` shortcut.
+That shortcut would make a part-planned order `IN_EXECUTION`, and since `allocate` and the
+eligible-orders search both require `READY_FOR_PLANNING`, its remainder would become unplannable.
 
-## 2. What the product does today
+## 2. The three rules
 
-Each row is asserted by a test in `SplitOrderExecutionCharacterizationTest`.
-
-| # | Scenario | Today | Verdict |
-|---|---|---|---|
-| 1 | 100 pallets, trip A carries 60, 40 unplanned, A dispatches | **409**: `markInExecution` refuses `READY_FOR_PLANNING` and rolls back the whole departure. The trip stays `READY_FOR_DISPATCH` | DEFECT |
-| 2 | 60 on A + 40 on B (order `PLANNED`), A dispatches and closes out | A leaves and the order goes `IN_EXECUTION`. Closing A out makes the order **`DELIVERED`** from A's row alone, and **zeroes `allocated_*`** while B, which has not left, still carries 40. B then leaves and the order stays `DELIVERED` | DEFECT |
-| 3 | One trip delivered while the rest is unplanned | **Unreachable**: scenario 1 keeps the trip at the dock | Hidden by 1 |
-| 4 | Cancel an order with 60 of 100 on a draft trip | Was **allowed**: the order became `CANCELLED` with its `ACTIVE` assignment and `allocated = 60` still in place, and a later dispatch of that trip failed on the cancelled order. Now **409** | DEFECT, **fixed by Phase 0 B** |
-| 4b | Edit that same order | **Allowed**. The edit resets it to `NOT_READY` (`TransportOrder.applyChanges`) with the assignment still under it | DEFECT (same root as 4) |
-| 5a | Remove a partial allocation from a draft trip | Exactly its share returns; ledger and running total agree | Correct |
-| 5b | Cancel a confirmed trip carrying a partial allocation | Only that trip's share returns, and the order is plannable again | Correct |
-
-### Root causes
-
-1. **Execution is keyed on the order's status, but a split order has no single execution
-   moment.** `OrderExecutionPropagator.dispatched` calls `markInExecution` for every order on the
-   departing trip, and the status of a part-planned order is, by V37's design, `READY_FOR_PLANNING`.
-2. **Close-out is order-wide, but a split order has several carriers.** `closedOut(trip)` closes
-   every order the trip carried, as if that trip were the order's only one:
-   - It maps that trip's fulfilment to the order's final outcome.
-   - It calls `applyAllocated(NONE)`, which discards the allocation held by trips that have not
-     even left.
-3. **The status guards test the status, not the ledger.** `cancel` and `update` accept
-   `READY_FOR_PLANNING` without looking at `allocated_*`, which V37 made non-zero for exactly that
-   status.
-
-A naive fix, where `markInExecution` accepts `READY_FOR_PLANNING`, would move a part-planned order
-to `IN_EXECUTION`. `allocate` and the eligible-orders search both require `READY_FOR_PLANNING`, so
-the remaining 40 would become **unplannable**. That breaks the approved rule outright. It would
-also make scenario 3 reachable, where root cause 2 then closes the order out after its first
-delivery.
-
-## 3. Can the current `OrderStatus` represent this?
-
-**Yes, without a new status and without a schema change.** It needs the three rules below and one
-change of *definition* (not of column) for `allocated_*`. The price is one explicit limitation,
-L1.
-
-### Rule R1 - status follows the plan while anything is still to be placed
+### R1 - the status follows the plan while anything is still to be placed
 
 - An order enters `IN_EXECUTION` **only from `PLANNED`**, i.e. when nothing of it is left to place.
-- A trip that departs with part of a `READY_FOR_PLANNING` order leaves that order **exactly where
-  it is**: its remainder stays in the pool and its departed share stays allocated.
-- `markInExecution` therefore becomes a no-op, not a refusal, for a `READY_FOR_PLANNING` order that
-  holds an allocation.
-- It keeps refusing `NOT_READY` and `CANCELLED`. After rule R3 neither can hold an allocation.
+- A trip that departs with part of a `READY_FOR_PLANNING` order departs normally. That share is on
+  the road; the order stays `READY_FOR_PLANNING`, its departed share stays allocated, and its
+  remainder stays visible and plannable. (`OrderPlanningService.markInExecution` is a no-op for a
+  `READY_FOR_PLANNING` order holding an allocation; it still refuses `NOT_READY`, `CANCELLED`, and
+  a `READY_FOR_PLANNING` order with nothing allocated.)
+- When the remainder is planned in full, `allocate` makes the order `PLANNED`, and the next
+  departure of any of its trips moves it to `IN_EXECUTION`.
+- **The mirror image:** a share that has *not* departed and comes off its trip (removed from a draft
+  trip, or its trip cancelled) returns to the pool even when the order is already `IN_EXECUTION`
+  because another share left. The order goes back to `READY_FOR_PLANNING`
+  (`IN_EXECUTION -> READY_FOR_PLANNING`, taken only by `TransportOrder.releaseAllocation`), the
+  departed share stays allocated, and the released share is pending again. Without this, cancelling
+  trip B after trip A left would make B's 40 disappear.
 
-When the remainder is later planned in full, the order becomes `PLANNED` through the existing
-`allocate`. The next departure of any trip carrying it then moves it to `IN_EXECUTION`, which is
-what `markInExecution` does today.
+### R2 - an order closes out with its last carrier, not its first
 
-### Rule R2 - an order closes out with its last carrier, not its first
-
-`closedOut(trip)` and `deliveryRecorded(trip, order)` close an order out **only when both hold**:
+`OrderExecutionPropagator.closedOut(trip)` and `deliveryRecorded(trip, order)` close an order out
+only when:
 
 - no *other* trip in `DRAFT`, `CONFIRMED`, `READY_FOR_DISPATCH` or `IN_TRANSIT` holds an `ACTIVE`
   assignment of it (an **open carrier**); and
-- nothing of it is pending, i.e. it is not `READY_FOR_PLANNING`.
+- nothing of it is pending. A `READY_FOR_PLANNING` order cannot reach an outcome in the transition
+  table, so the orders module leaves it alone.
 
-Otherwise the call is a no-op. The last carrier's close-out reads the fulfilment of **every**
-attempt, which `OrderFulfillmentAdapter` already sums when quantities are recorded (V45). It maps
-that fulfilment through `OrderPlanningService.closureFor` as today, and only then consumes the
-allocation (`applyAllocated(NONE)`).
+Otherwise the call changes nothing. The last carrier's close-out reads the fulfilment of **every**
+attempt (`OrderFulfillmentAdapter` sums recorded quantities across trips, V45), maps it through
+`OrderPlanningService.closureFor`, and only then consumes the allocation.
 
-With R2, scenario 2 becomes:
-- A closes out and the order stays `IN_EXECUTION` with 100 allocated.
-- B leaves and nothing changes.
-- B closes out and the order closes with the combined outcome.
+**Concurrency.** The orders are locked *before* their other carriers are read
+(`OrderPlanningPort.lockForExecution`, in id order). Two trips of one order completing at the same
+instant therefore serialise: the second waits for the first to commit and then sees it finished.
+Without the lock each would see the other still on the road and neither would close the order.
+The lock also *refreshes* an order the transaction had already loaded
+(`TransportOrderLocking.lockAndRefresh`); before that, 10 races in 12 between "dispatch trip A" and
+"plan the remainder on trip B" lost the departure with a spurious 409.
 
-### Rule R3 - an allocation pins the order's content
+### R3 - an allocation pins the order's content
 
-- `OrderService.cancel` and `OrderService.update` refuse an order in `READY_FOR_PLANNING` whose
-  `allocated_*` is non-zero, and name the trips holding it.
-- The integration upsert already refuses anything that is not `NOT_READY` or `READY_FOR_PLANNING`,
-  and gains the same refusal.
-- The way out is the one scenario 5 shows works: remove the assignment, or cancel the trip.
-- Phase 0 B implements the cancel half of R3. The update half (4b) is proposed here and not yet
-  implemented.
+While any allocation is held (`allocated_*` non-zero):
 
-### The definition that changes
+- **cancel** is refused (409, "unassign it from its trip first");
+- **edit** is refused (409, "has part of it on a trip"). An edit would reset the order to
+  `NOT_READY` and change the demand the share was cut from;
+- the **integration upsert** is refused when the payload changes anything (it goes through
+  `OrderService.update`). A payload that is **really unchanged** is still answered `UNCHANGED`, with
+  the version, status and release untouched.
 
-`transport_order.allocated_*` is documented today as *"the part on trips that have not closed
-out"*. Under R2 it means **"the part committed to trips since the order last entered the pool"**:
-open trips plus closed trips whose order has not yet closed out.
+The way out is to remove the assignment or cancel the trip. A share already on the road can be
+neither: that order is simply not cancellable, which is what `IN_EXECUTION` already meant.
 
-- `pending = ordered − allocated` then keeps meaning "what a planner may still place", and never
-  offers again something that is on the road or already delivered.
-- The column, the `CHECK` and the row lock are unchanged.
-- The comment in V37 and `SHIP_UNITS_AND_ALLOCATION_V1.md` §2 and §5 change.
+## 3. The definition that changed
 
-### Limitation L1 (accepted, not an inconsistency)
+`transport_order.allocated_*` meant *"the part on trips that have not closed out"*. It now means
+**"the part committed to trips since the order last entered the pool"**: open trips, plus finished
+trips whose order has not closed out yet.
 
-A share that **fails** on a closed carrier is not re-plannable on its own. It returns to the pool
-only when the order's last carrier closes out:
-- the order closes as `PARTIALLY_DELIVERED` / `DELIVERY_FAILED`;
-- the existing reopen puts it back in the pool;
-- the reopened order is replanned **in full**, which is the sharp edge already recorded in
-  `SHIP_UNITS_AND_ALLOCATION_V1.md` §9.
+- `pending = ordered − allocated` keeps meaning "what a planner may still place", and never offers
+  again something that is on the road or already delivered.
+- The column, its `CHECK`s and the row lock are unchanged.
 
-Re-planning only the failed share needs a consumed-quantity ledger, i.e. a `delivered_*` running
-total or a per-assignment close. That **is** a schema change, and it is deliberately not proposed
-now.
+## 4. The ten approved scenarios
 
-### Limitation L2 (display only)
+| # | Scenario | Behaviour | Test |
+|---|---|---|---|
+| 1 | 100 total, A = 60, 40 unplanned, A departs | A `IN_TRANSIT`; order `READY_FOR_PLANNING`, allocated 60, pending 40, in the eligible pool, and plannable onto B | `firstTripOfAPartlyPlannedOrderLeaves…` |
+| 2 | 100 total, A = 60, B = 40, A departs | order `IN_EXECUTION`, allocated 100 | `aFullySplitOrderClosesOnlyWithItsLastCarrier` |
+| 3 | A delivered and closed while B has not left | order stays `IN_EXECUTION`, allocated 100 | same |
+| 4 | A delivered with 40 never planned | order `READY_FOR_PLANNING`, pending 40, eligible; B takes the 40 and closes it `DELIVERED` | `deliveringOneTripWhileTheRestIsUnplannedKeepsTheRest` |
+| 5 | cancel with a partial allocation | 409, before and after the share departs | `aPartlyPlannedOrderCannotBeCancelled…`, `aPartlyDepartedOrderCannotBeCancelled` |
+| 6 | edit with a partial allocation | 409; allowed once unassigned. Integration: changed 409, unchanged `UNCHANGED` | `aPartlyPlannedOrderCannotBeEdited…`, `OrderUpsertReleaseIntegrationTest` |
+| 7 | remove / cancel a trip with a partial allocation | exactly that share returns, including after the other share has departed (`IN_EXECUTION -> READY_FOR_PLANNING`) | 7a, 7b, 7c |
+| 8 | last trip closes | outcome from both trips' deliveries (60 + 40 = `DELIVERED`) | scenario 2 |
+| 9 | refusal on one of two trips | `PARTIALLY_DELIVERED`, reopenable; per-trip and order-wide delivery ceilings | 9, 9b |
+| 10 | concurrency | both carriers completing at once close the order once; dispatch racing the remainder's planning both succeed with an exact ledger | 10a (×3), 10b (×5) |
 
-While R1 holds, an order with a share on the road still reads `READY_FOR_PLANNING` in the orders
-list. That is true, because part of it is waiting for a truck, but it is incomplete. The detail view
-should show an execution summary derived from its assignments ("60 in transit on SH-…, 40 to
-plan"). This is a read-model addition and needs no new state.
+## 5. Defects found and fixed while certifying this
 
-### Known imprecision, unchanged by this proposal
+1. **The delivery ceiling counted other trips' deliveries.** `TripDeliveryService.requireWithinAllocation`
+   summed every trip's delivered quantities against *this* trip's share, so the second half of a split
+   order recording quantities was refused (409). It now applies two ceilings: this trip's share
+   against this trip's deliveries, and the order's demand against all deliveries (so 70 on Monday
+   plus 40 on Tuesday of a 100 order is still refused).
+2. **A reopened order could not be planned whole again.** Its finished trip's `ACTIVE` whole-order
+   row kept `uq_trip_order_assignment_open_whole_order`'s slot, so ADR-009's second attempt was
+   refused ("already assigned to a trip"). A whole row on a `COMPLETED` trip is now recognised as a
+   past attempt: it no longer blocks, and the new attempt is stored as a share
+   (`whole_order = false`). The V37 ledger (row lock + over-allocation check) still serialises
+   planners racing for it.
+3. **Dispatch lost to a concurrent planner** (R2, concurrency, above).
 
-When deliveries are recorded **without quantities**, `OrderFulfillmentAdapter` uses the latest
-outcome row. For an order carried by two trips, "A delivered, B rejected" therefore closes as
-`DELIVERY_FAILED`, not `PARTIALLY_DELIVERED`. This is the recoverable direction ADR-009 chose,
-since a failed order is reopenable. Recording quantities (V45) makes the outcome exact.
+## 6. Limitations (accepted)
 
-## 4. Behaviour of the five scenarios under R1-R3
-
-| # | Scenario | Proposed behaviour |
-|---|---|---|
-| 1 | A (60) departs with 40 unplanned | A departs. The order stays `READY_FOR_PLANNING` with `allocated = 60` and `pending = 40` |
-| 2 | 60 on A + 40 on B, A departs and closes | A departs and the order goes `IN_EXECUTION`. A's close-out is a no-op because B is an open carrier. B departs with no change. B's close-out closes the order from both trips' deliveries |
-| 3 | A delivered while 40 unplanned | A's close-out is a no-op because 40 are pending. The order stays `READY_FOR_PLANNING` with `pending = 40`. When the 40 are planned and their trip closes, the order closes |
-| 4 | Cancel with 60 allocated | **409**, naming the trip. The planner removes the assignment or cancels the trip first |
-| 4b | Edit with 60 allocated | **409**, same message |
-| 5a/5b | Remove or cancel a trip with a partial | Unchanged, already correct |
-
-## 5. Where the change lands (for the implementation after approval)
-
-| Change | File |
-|---|---|
-| R1: no-op for `READY_FOR_PLANNING` holding an allocation | `orders/application/OrderPlanningService.markInExecution` |
-| R2: `OrderPlanningPort.closeOut` receives whether the order still has an open carrier; the orders module refuses to close while pending > 0 | `planning/application/OrderExecutionPropagator.closedOut` / `deliveryRecorded`, `orders/application/OrderPlanningService.closeOut`, a new repository query "open carriers of these orders" in `TripOrderAssignmentRepository` |
-| R3 (cancel), Phase 0 B | `orders/application/OrderService.cancel` |
-| R3 (edit, integration upsert) | `orders/application/OrderService.update`, `orders/application/OrderIntakeService.requireRewritable` |
-| Definition of `allocated_*` | this document, `SHIP_UNITS_AND_ALLOCATION_V1.md`, a `COMMENT ON COLUMN` in the next migration that touches the table (applied migrations are immutable) |
-
-The characterisation test changes in the same commit. Its assertions marked `DEFECT` become the
-proposed behaviour above, and 5a/5b stay as they are.
+- **L1.** A share that fails on a closed carrier is not re-plannable on its own. It returns to the
+  pool only when the order's last carrier closes out, through the existing reopen, and the reopened
+  order is replanned **in full** (`SHIP_UNITS_AND_ALLOCATION_V1.md` §9). Re-planning only the failed
+  share needs a consumed-quantity ledger, which is a schema change and is not made now.
+- **L2 (display).** While R1 holds, an order with a share on the road reads `READY_FOR_PLANNING` in
+  the orders list. That is true but incomplete; the detail view should show an execution summary
+  derived from its assignments. Read-model work, no new state.
+- **Outcome-only recording.** When deliveries are recorded without quantities,
+  `OrderFulfillmentAdapter` uses the latest outcome row, so "A delivered, B rejected" closes as
+  `DELIVERY_FAILED`, not `PARTIALLY_DELIVERED`. That is the recoverable direction (ADR-009). Recording
+  quantities makes it exact.

@@ -65,10 +65,13 @@ class OrderStatusTest {
     class ExecutionHalf {
 
         @Test
-        @DisplayName("an order on a departed vehicle can only reach one of the three outcomes")
+        @DisplayName("an order on a departed vehicle reaches one of the three outcomes, or the pool if a share had not left")
         void inExecution() {
+            // READY_FOR_PLANNING: a split order whose undeparted share came off its trip has
+            // something to place again (docs/domain/SPLIT_ORDER_EXECUTION.md, R1).
             assertThat(OrderStatus.IN_EXECUTION.allowedTransitions()).containsExactlyInAnyOrder(
-                    OrderStatus.DELIVERED, OrderStatus.PARTIALLY_DELIVERED, OrderStatus.DELIVERY_FAILED);
+                    OrderStatus.DELIVERED, OrderStatus.PARTIALLY_DELIVERED, OrderStatus.DELIVERY_FAILED,
+                    OrderStatus.READY_FOR_PLANNING);
         }
 
         @Test
@@ -78,10 +81,10 @@ class OrderStatusTest {
         }
 
         @Test
-        @DisplayName("an order on a departed vehicle cannot be taken back into planning")
+        @DisplayName("an order on a departed vehicle is never re-planned wholesale: only a released share returns it to the pool")
         void inExecutionCannotBeReplanned() {
-            assertThat(OrderStatus.IN_EXECUTION.canTransitionTo(OrderStatus.READY_FOR_PLANNING)).isFalse();
             assertThat(OrderStatus.IN_EXECUTION.canTransitionTo(OrderStatus.PLANNED)).isFalse();
+            assertThat(OrderStatus.IN_EXECUTION.canTransitionTo(OrderStatus.NOT_READY)).isFalse();
         }
 
         /**
