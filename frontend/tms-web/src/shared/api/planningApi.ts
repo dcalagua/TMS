@@ -910,6 +910,12 @@ export function fetchTrips(params: TripListParams): Promise<PageResponse<TripVie
 export interface TripExecutionRequest {
   version: number
   occurredAt?: string | null
+  /**
+   * ADR-013 §4: only read by `dispatch`, and only when the company requires the warehouse to
+   * confirm the departure (`EXTERNAL_REQUIRED`). 1-500 characters, and the caller must hold
+   * `planning.trip:dispatch-override` or the answer is 403. Ignored in `MANUAL` and `HYBRID`.
+   */
+  overrideReason?: string | null
 }
 
 export function markTripReady(

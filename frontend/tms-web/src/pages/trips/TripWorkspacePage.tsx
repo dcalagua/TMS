@@ -9,6 +9,7 @@ import {
   ArrowBackRounded, MapRounded, FlagRounded, PlayArrowRounded, DoneAllRounded, CancelRounded,
   PlaceRounded, BuildRounded, CheckRounded, SkipNextRounded, ReportProblemRounded,
   InventoryRounded, AttachFileRounded, DownloadRounded, BadgeRounded, EditRounded,
+  HourglassTopRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
@@ -19,6 +20,11 @@ import {
   type TripStopView,
 } from "../../shared/api/planningApi";
 import { fetchTripTracking } from "../../shared/api/trackingApi";
+import { fetchTripWarehouse } from "../../shared/api/warehouseApi";
+import {
+  DISPATCH_OVERRIDE_PERMISSION, OVERRIDE_REASON_MAX_LENGTH, describeDispatchError, dispatchActionFor,
+  isExternalConfirmationRequired, normalizeOverrideReason,
+} from "../../shared/api/dispatchOverride";
 import { describeApiError, describePlanningError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
@@ -97,6 +103,8 @@ export function TripWorkspacePage() {
    * transportista y armar el plan son trabajos distintos. */
   const canReadTenders = hasPermission("planning.tender:read");
   const canManageTenders = hasPermission("planning.tender:manage");
+  /** ADR-013 §4: despachar por encima de la confirmación del almacén es su propia autoridad. */
+  const canOverrideDispatch = hasPermission(DISPATCH_OVERRIDE_PERMISSION);
   const queryClient = useQueryClient();
 
   const queryKey = ["trip", companyId, tripId];
@@ -118,6 +126,17 @@ export function TripWorkspacePage() {
     queryFn: ({ signal }) => fetchTripTracking(companyId, tripId as string, signal),
     enabled: companyId !== "" && tripId !== undefined && canMonitor,
     // Un despliegue sin feed no debería gastar tres viajes por visita en volver a descubrirlo.
+    retry: false,
+  });
+
+  /** Cómo salió el envío y qué dijo el almacén (ADR-013). También trae el modo de despacho de la
+   * empresa, que es lo que decide si "Despachar" es un despacho normal o un override. Un fallo
+   * aquí no rompe la pantalla: sin modo conocido se despacha normal y el servidor decide. */
+  const warehouseQueryKey = ["trip-warehouse", companyId, tripId];
+  const warehouseQuery = useQuery({
+    queryKey: warehouseQueryKey,
+    queryFn: ({ signal }) => fetchTripWarehouse(companyId, tripId as string, signal),
+    enabled: companyId !== "" && tripId !== undefined,
     retry: false,
   });
 
@@ -184,6 +203,8 @@ export function TripWorkspacePage() {
     // lo hace— sino porque despachar y completar cambian si el envío está en la carretera, y la
     // tarjeta dice algo distinto en cada caso.
     void queryClient.invalidateQueries({ queryKey: ["trip-tracking", companyId, tripId] });
+    // Despachar cambia la fuente de salida y la verificación que enseña la tarjeta del almacén.
+    void queryClient.invalidateQueries({ queryKey: warehouseQueryKey });
     // La lista de detrás enseña el mismo estado: dejarla obsoleta significa que quien vuelva
     // atrás vea como "listo" un viaje que acaba de despachar.
     void queryClient.invalidateQueries({ queryKey: ["trips", companyId] });
@@ -222,15 +243,80 @@ export function TripWorkspacePage() {
     await run((version, at) => markTripReady(companyId, detail.trip.id, { version, occurredAt: at }), t("Envío listo"));
   }
 
+  const dispatchAction = dispatchActionFor(warehouseQuery.data?.dispatchConfirmationMode, canOverrideDispatch);
+
+  /**
+   * El despacho normal. Si la empresa exige la confirmación del almacén y la pantalla no lo sabía
+   * (la tarjeta del almacén no cargó, o el modo cambió mientras tanto), el servidor responde 409
+   * con `dispatch-requires-external-confirmation` y aquí se ofrece el override, solo a quien
+   * tiene el permiso.
+   */
   async function dispatch() {
-    if (!detail) return;
+    if (!detail || busy) return;
+    if (dispatchAction === "OVERRIDE") {
+      await dispatchWithOverride();
+      return;
+    }
     const confirmed = await confirmDialog({
       title: t("¿Despachar el envío?"),
       text: t("{{number}} sale a ruta.", { number: detail.trip.shipmentNumber }),
       confirmLabel: t("Despachar"),
     });
     if (!confirmed) return;
-    await run((version, at) => dispatchTrip(companyId, detail.trip.id, { version, occurredAt: at }), t("Envío despachado"));
+
+    setBusy(true);
+    let offerOverride = false;
+    try {
+      await dispatchTrip(companyId, detail.trip.id, { version: detail.trip.version, occurredAt: toInstant(occurredAt) });
+      setOccurredAt("");
+      notifySuccess(t("Envío despachado"), detail.trip.shipmentNumber);
+      refresh();
+    } catch (error) {
+      if (isExternalConfirmationRequired(error)) {
+        // El modo de la empresa no era el que enseñaba la pantalla: se refresca la tarjeta.
+        void queryClient.invalidateQueries({ queryKey: warehouseQueryKey });
+        offerOverride = canOverrideDispatch;
+      }
+      if (!offerOverride) {
+        notifyError(t("No se pudo despachar"), describeDispatchError(error as ApiError, false));
+      }
+    } finally {
+      setBusy(false);
+    }
+    if (offerOverride) await dispatchWithOverride();
+  }
+
+  /**
+   * ADR-013 §4: despachar a mano en una empresa `EXTERNAL_REQUIRED`. El motivo se pide dentro de
+   * la confirmación —es la confirmación— y queda como `OPERATOR_OVERRIDE` en el envío. Un 403
+   * aquí significa que falta `planning.trip:dispatch-override`, y el mensaje lo nombra.
+   */
+  async function dispatchWithOverride() {
+    if (!detail) return;
+    const reason = normalizeOverrideReason(await promptDialog({
+      title: t("¿Despachar sin la confirmación del almacén?"),
+      text: t("En esta empresa la salida de {{number}} la confirma el almacén (WMS). Si despachas ahora queda registrado como override, con tu usuario y este motivo.", { number: detail.trip.shipmentNumber }),
+      inputLabel: t("Motivo del override"),
+      required: true,
+      maxLength: OVERRIDE_REASON_MAX_LENGTH,
+      confirmLabel: t("Despachar con override"),
+      dangerous: true,
+    }));
+    if (reason === null) return;
+
+    setBusy(true);
+    try {
+      await dispatchTrip(companyId, detail.trip.id, {
+        version: detail.trip.version, occurredAt: toInstant(occurredAt), overrideReason: reason,
+      });
+      setOccurredAt("");
+      notifySuccess(t("Envío despachado con override"), detail.trip.shipmentNumber);
+      refresh();
+    } catch (error) {
+      notifyError(t("No se pudo despachar"), describeDispatchError(error as ApiError, true));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function complete() {
@@ -479,10 +565,28 @@ export function TripWorkspacePage() {
                     {t("Marcar listo")}
                   </Button>
                 )}
-                {can("IN_TRANSIT") && (
+                {can("IN_TRANSIT") && dispatchAction === "DIRECT" && (
                   <Button variant="contained" startIcon={<PlayArrowRounded />} disabled={busy} onClick={() => void dispatch()}>
                     {t("Despachar")}
                   </Button>
+                )}
+                {/* EXTERNAL_REQUIRED: la salida la confirma el almacén. El override solo se ofrece
+                    a quien tiene el permiso; el resto ve que el envío espera al WMS. */}
+                {can("IN_TRANSIT") && dispatchAction === "OVERRIDE" && (
+                  <Tooltip title={t("La salida la confirma el almacén (WMS). Despachar ahora exige un motivo.")}>
+                    <span>
+                      <Button variant="contained" color="warning" startIcon={<PlayArrowRounded />} disabled={busy} onClick={() => void dispatch()}>
+                        {t("Despachar con override")}
+                      </Button>
+                    </span>
+                  </Tooltip>
+                )}
+                {can("IN_TRANSIT") && dispatchAction === "WAIT_FOR_WAREHOUSE" && (
+                  <Chip
+                    icon={<HourglassTopRounded />}
+                    color="info" variant="outlined"
+                    label={t("Esperando confirmación del almacén")}
+                  />
                 )}
                 {can("COMPLETED") && (
                   <Button variant="contained" color="success" startIcon={<DoneAllRounded />} disabled={busy} onClick={() => void complete()}>
