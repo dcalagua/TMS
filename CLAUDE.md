@@ -116,6 +116,17 @@ Authoritative documents live under `docs/architecture/`:
   `/internal/platform-provisioning` (GENERIC contract v1): its own security chain, ES256 public key,
   off by default, one transaction, administrator PREPROVISIONED (no Auth account is created).
   Contract: `docs/platform-provisioning/MASTERADMIN_GENERIC_CONTRACT.md`.
+- `ADR-013-dispatch-source-and-external-dispatch-confirmation.md` - per-company dispatch mode
+  (`MANUAL` default, `EXTERNAL_REQUIRED`, `HYBRID`); a warehouse system's dispatch (SLS) is stored
+  whole, reconciled against the plan without overwriting it, and dispatches the trip only as the
+  mode allows, attributed to its credential; override is `planning.trip:dispatch-override`. No
+  warehouse state enters `TripStatus`. Design only, V52/V53 not started.
+  Contract: `docs/integrations/WAREHOUSE_EXECUTION_V1.md`.
+- `ADR-014-scheduling-and-release-for-planning.md` - `READY_FOR_PLANNING` is "released";
+  `service_date` is the scheduled dispatch date; eligibility (`ELIGIBLE`/`WARNING`/`BLOCKED`) is
+  derived from route resolution, destination and route frequencies, lead time and cutoff, and holds
+  (a separate table). No new order state, no scheduler, no PlanningBatch. Design only, V54 not
+  started.
 
 Database and security detail lives in `docs/database/DATA_MODEL.md`,
 `docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.
