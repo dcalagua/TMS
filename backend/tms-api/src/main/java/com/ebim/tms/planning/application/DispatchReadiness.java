@@ -4,16 +4,20 @@ import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.shared.reference.DriverLicenseStatus;
 import com.ebim.tms.shared.reference.DriverLookupPort;
 import com.ebim.tms.shared.reference.DriverReference;
+import com.ebim.tms.shared.reference.OrderHoldPort;
 import com.ebim.tms.shared.reference.ResourceAvailabilityPort;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
 /**
@@ -47,7 +51,9 @@ public class DispatchReadiness {
         VEHICLE_OPERABLE,
         DRIVER_OPERABLE,
         CARRIER_OWNS_VEHICLE,
-        RESOURCES_AVAILABLE
+        RESOURCES_AVAILABLE,
+        /** No order on the trip has an active blocking hold (ADR-014 section 7). */
+        ORDERS_NOT_HELD
     }
 
     /** Why a trip cannot leave, stable enough for a client to switch on. */
@@ -58,7 +64,8 @@ public class DispatchReadiness {
         DRIVER_LICENCE_EXPIRED,
         AWAITING_CARRIER_VEHICLE,
         VEHICLE_UNAVAILABLE,
-        DRIVER_UNAVAILABLE
+        DRIVER_UNAVAILABLE,
+        ORDER_HOLD_ON_COMMITTED_TRIP
     }
 
     /**
@@ -75,12 +82,14 @@ public class DispatchReadiness {
     private final VehicleLookupPort vehicleLookupPort;
     private final DriverLookupPort driverLookupPort;
     private final ResourceAvailabilityPort resourceAvailabilityPort;
+    private final CommittedOrderHolds committedOrderHolds;
 
     public DispatchReadiness(VehicleLookupPort vehicleLookupPort, DriverLookupPort driverLookupPort,
-            ResourceAvailabilityPort resourceAvailabilityPort) {
+            ResourceAvailabilityPort resourceAvailabilityPort, CommittedOrderHolds committedOrderHolds) {
         this.vehicleLookupPort = vehicleLookupPort;
         this.driverLookupPort = driverLookupPort;
         this.resourceAvailabilityPort = resourceAvailabilityPort;
+        this.committedOrderHolds = committedOrderHolds;
     }
 
     /** Every blocker for a departure at {@code at}, in the order the gate tries them. */
@@ -102,6 +111,9 @@ public class DispatchReadiness {
         }
         if (checks.contains(Check.RESOURCES_AVAILABLE) && at != null) {
             resources(scope, trip, at).ifPresent(blockers::add);
+        }
+        if (checks.contains(Check.ORDERS_NOT_HELD)) {
+            heldOrders(scope, trip).ifPresent(blockers::add);
         }
         return List.copyOf(blockers);
     }
@@ -158,6 +170,40 @@ public class DispatchReadiness {
                 "Trip " + trip.tripNumber() + " was accepted by a carrier that does not"
                         + " own the vehicle assigned to it. Assign one of that carrier's vehicles before dispatching.",
                 "Accepted by a carrier that does not own the vehicle assigned to it."));
+    }
+
+    /**
+     * No order on the trip may carry an active blocking hold (ADR-014 section 7). A hold placed after
+     * planning unplans nothing; it stops the truck instead, until somebody lifts it or cancels and
+     * replans the trip. Names every held order, so the dispatcher knows whom to call.
+     */
+    Optional<Blocker> heldOrders(CompanyScope scope, Trip trip) {
+        if (trip.id() == null) {
+            // Never persisted, so nothing can be assigned to it yet.
+            return Optional.empty();
+        }
+        List<OrderHoldPort.HeldOrder> held = committedOrderHolds.onTrips(scope.companyId(), List.of(trip.id()))
+                .getOrDefault(trip.id(), List.of());
+        if (held.isEmpty()) {
+            return Optional.empty();
+        }
+        String orders = held.stream()
+                .map(order -> order.orderNumber() + " (" + String.join(", ", order.holdTypes()) + ")")
+                .collect(Collectors.joining(", "));
+        boolean one = held.size() == 1;
+        return Optional.of(new Blocker(BlockerCode.ORDER_HOLD_ON_COMMITTED_TRIP,
+                "Trip " + trip.tripNumber() + " cannot depart: order" + (one ? " " : "s ") + orders
+                        + (one ? " has" : " have") + " an active blocking hold. Release the hold, or cancel the "
+                        + "trip and replan.",
+                "Held order" + (one ? ": " : "s: ") + orders + "."));
+    }
+
+    /**
+     * The orders on each of {@code tripIds} with an active blocking hold, batched - the Control Tower's
+     * advisory reads this rather than evaluating every trip one by one.
+     */
+    public Map<UUID, List<OrderHoldPort.HeldOrder>> heldOrdersOn(CompanyScope scope, Collection<UUID> tripIds) {
+        return committedOrderHolds.onTrips(scope.companyId(), tripIds);
     }
 
     /** Neither the vehicle nor the driver may be blocked at {@code at} (V42). */

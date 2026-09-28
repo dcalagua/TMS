@@ -103,7 +103,8 @@ class ControlTowerBlockersTest {
                 exceptionRepository, mock(DestinationLookupPort.class), mock(VehicleLookupPort.class),
                 orderPlanningPort,
                 new DispatchReadiness(mock(VehicleLookupPort.class), mock(com.ebim.tms.shared.reference.DriverLookupPort.class),
-                        availabilityPort), settlementAdvisoryPort, mock(WarehouseDispatchAdvisories.class));
+                        availabilityPort, mock(CommittedOrderHolds.class)), settlementAdvisoryPort,
+                mock(WarehouseDispatchAdvisories.class));
     }
 
     private static CompanyScope scope() {

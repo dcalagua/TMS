@@ -133,6 +133,10 @@ public class ControlTowerService {
      * raising on a shipment that has already run - the invoice arrives afterwards - and a cancelled
      * one is worth raising nothing about at all.
      */
+    /** Shipments a hold can still matter to: planned and not yet over (ADR-014 section 7). */
+    private static final Set<TripStatus> HOLD_ADVISORY_TRIP_STATES = Set.copyOf(EnumSet.of(TripStatus.DRAFT,
+            TripStatus.CONFIRMED, TripStatus.READY_FOR_DISPATCH, TripStatus.IN_TRANSIT));
+
     private static final Set<TripStatus> ADVISORY_TRIP_STATES = Stream.of(TripStatus.values())
             .filter(status -> status != TripStatus.CANCELLED)
             .collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -562,8 +566,37 @@ public class ControlTowerService {
         List<ControlTowerAdvisoryView> advisories = new java.util.ArrayList<>();
         advisories.addAll(settlementAdvisories(scope, date));
         advisories.addAll(etaAdvisories(scope, date));
+        advisories.addAll(holdAdvisories(scope, date));
         advisories.addAll(warehouseAdvisories.advisories(scope, date, now, PANEL_SIZE));
         return List.copyOf(advisories);
+    }
+
+    /**
+     * Orders put on a blocking hold after they were planned (ADR-014 section 7): one row per held
+     * order, on the day's shipments that have neither finished nor been cancelled. Read through the
+     * dispatch-readiness evaluator, which reads the hold through {@code OrderHoldPort} - the tower
+     * owns none of it.
+     */
+    private List<ControlTowerAdvisoryView> holdAdvisories(CompanyScope scope, LocalDate date) {
+        Map<UUID, Trip> trips = tripRepository.findByCompanyIdAndPlanningDateAndStatusIn(scope.companyId(), date,
+                        HOLD_ADVISORY_TRIP_STATES, PageRequest.of(0, WORKLOAD_SCAN_LIMIT))
+                .stream().collect(Collectors.toMap(Trip::id, Function.identity(), (first, second) -> first));
+        if (trips.isEmpty()) {
+            return List.of();
+        }
+        List<ControlTowerAdvisoryView> advisories = new ArrayList<>();
+        readiness.heldOrdersOn(scope, trips.keySet()).forEach((tripId, held) -> held.forEach(order ->
+                advisories.add(new ControlTowerAdvisoryView(
+                        ControlTowerAdvisoryView.AdvisoryType.ORDER_HOLD_ON_COMMITTED_TRIP,
+                        tripId,
+                        trips.get(tripId).shipmentNumber(),
+                        order.orderId(),
+                        null,
+                        null,
+                        "Order " + order.orderNumber() + " is on hold (" + String.join(", ", order.holdTypes())
+                                + ") after it was planned. The hold does not unplan it; release the hold, or"
+                                + " cancel and replan the shipment."))));
+        return advisories.size() <= PANEL_SIZE ? advisories : advisories.subList(0, PANEL_SIZE);
     }
 
     /**

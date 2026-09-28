@@ -49,7 +49,7 @@ class DispatchReadinessTest {
         vehicles = mock(VehicleLookupPort.class);
         drivers = mock(DriverLookupPort.class);
         availability = mock(ResourceAvailabilityPort.class);
-        readiness = new DispatchReadiness(vehicles, drivers, availability);
+        readiness = new DispatchReadiness(vehicles, drivers, availability, mock(CommittedOrderHolds.class));
         trip = mock(Trip.class);
         when(trip.tripNumber()).thenReturn(7);
         when(trip.vehicleId()).thenReturn(VEHICLE);
@@ -91,6 +91,27 @@ class DispatchReadinessTest {
                 .extracting(DispatchReadiness.Blocker::code)
                 .containsExactly(BlockerCode.AWAITING_CARRIER_VEHICLE);
         verifyNoInteractions(vehicles, drivers, availability);
+    }
+
+    @Test
+    @DisplayName("ADR-014: an order on hold blocks the departure, and the sentence names it and how to get out")
+    void heldOrderBlocksDispatch() {
+        UUID tripId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        CommittedOrderHolds holds = mock(CommittedOrderHolds.class);
+        when(trip.id()).thenReturn(tripId);
+        when(holds.onTrips(COMPANY, java.util.List.of(tripId))).thenReturn(java.util.Map.of(tripId,
+                java.util.List.of(new com.ebim.tms.shared.reference.OrderHoldPort.HeldOrder(
+                        orderId, "ORD-000042", java.util.List.of("COMMERCIAL")))));
+        DispatchReadiness withHolds = new DispatchReadiness(vehicles, drivers, availability, holds);
+
+        assertThat(withHolds.evaluate(SCOPE, trip, AT, EnumSet.of(Check.ORDERS_NOT_HELD)))
+                .singleElement()
+                .satisfies(blocker -> {
+                    assertThat(blocker.code()).isEqualTo(BlockerCode.ORDER_HOLD_ON_COMMITTED_TRIP);
+                    assertThat(blocker.message()).contains("ORD-000042", "COMMERCIAL", "Release the hold");
+                });
+        assertThat(DispatchReadiness.ALL).contains(Check.ORDERS_NOT_HELD);
     }
 
     @Test

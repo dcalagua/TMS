@@ -75,6 +75,17 @@ public record ControlTowerAdvisoryView(
         AWAITING_WAREHOUSE_DISPATCH,
 
         /** A warehouse dispatch document names a shipment this company does not have (V53). */
-        EXTERNAL_DISPATCH_UNMATCHED
+        EXTERNAL_DISPATCH_UNMATCHED,
+
+        /**
+         * An order on this shipment was put on a blocking hold after it was planned (ADR-014 section
+         * 7, migration V54). {@code sourceId} is the order.
+         *
+         * <p>The hold unplans nothing - that would be a silent change to a shipment somebody may
+         * already be loading. Until the trip leaves it is also a dispatch blocker
+         * ({@code DispatchReadiness.BlockerCode.ORDER_HOLD_ON_COMMITTED_TRIP}); the way out is to lift
+         * the hold, or to cancel and replan the trip.
+         */
+        ORDER_HOLD_ON_COMMITTED_TRIP
     }
 }

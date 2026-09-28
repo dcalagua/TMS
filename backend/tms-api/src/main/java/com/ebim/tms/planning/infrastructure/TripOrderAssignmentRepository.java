@@ -23,6 +23,13 @@ public interface TripOrderAssignmentRepository extends JpaRepository<TripOrderAs
 
     List<TripOrderAssignment> findByTripIdAndStatusOrderByAssignedAtAsc(UUID tripId, AssignmentStatus status);
 
+    /**
+     * The open assignments of several trips in one query, company-scoped - what the hold check of
+     * dispatch readiness and the Control Tower's hold advisory read (ADR-014 section 7).
+     */
+    List<TripOrderAssignment> findByCompanyIdAndTripIdInAndStatus(UUID companyId, Collection<UUID> tripIds,
+            AssignmentStatus status);
+
     Optional<TripOrderAssignment> findByTripIdAndOrderIdAndStatus(UUID tripId, UUID orderId, AssignmentStatus status);
 
     /**

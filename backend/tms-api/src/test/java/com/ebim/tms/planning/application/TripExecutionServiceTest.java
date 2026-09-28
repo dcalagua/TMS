@@ -112,7 +112,8 @@ class TripExecutionServiceTest {
         availabilityPort = mock(ResourceAvailabilityPort.class);
         when(availabilityPort.findBlock(any(), any(), any(), any())).thenReturn(Optional.empty());
         service = new TripExecutionService(tripRepository,
-                new DispatchReadiness(vehicleLookupPort, driverLookupPort, availabilityPort), companySettings,
+                new DispatchReadiness(vehicleLookupPort, driverLookupPort, availabilityPort,
+                        mock(CommittedOrderHolds.class)), companySettings,
                 auditRecorder, events,
                 mock(TripTenderService.class), alerts, assembler, orderExecution, actors);
         when(tripRepository.saveAndFlush(any(Trip.class))).thenAnswer(call -> call.getArgument(0));
