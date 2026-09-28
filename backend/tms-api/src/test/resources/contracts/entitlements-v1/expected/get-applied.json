@@ -1,0 +1,169 @@
+{
+  "description": "GET /tenants/{id}/entitlements tras ejecutar todos los pasos del fixture. Es la única prueba válida de sincronización (spec §8.3).",
+  "responses": {
+    "01-baseline-only": {
+      "status": 200,
+      "body": {
+        "controlPlaneTenantId": "00000000-0000-4ccc-8000-000000000001",
+        "productCode": "fixture",
+        "appliedVersion": 1,
+        "appliedChecksum": "sha256:3748296d0b4542a63cfc4bf0955f7e2449f5522d8b6d70fac3640f8ffafc534b",
+        "appliedAt": "$iso8601",
+        "status": "APPLIED",
+        "unknownCapabilities": [],
+        "enforcementMode": "SHADOW"
+      }
+    },
+    "02-plan-grants": {
+      "status": 200,
+      "body": {
+        "controlPlaneTenantId": "00000000-0000-4ccc-8000-000000000002",
+        "productCode": "fixture",
+        "appliedVersion": 1,
+        "appliedChecksum": "sha256:efb6f6da10a7840a27b3ccac9b9b3024d111669b3e3bcf286d263d882054001c",
+        "appliedAt": "$iso8601",
+        "status": "APPLIED",
+        "unknownCapabilities": [],
+        "enforcementMode": "SHADOW"
+      }
+    },
+    "03-plan-plus-addon": {
+      "status": 200,
+      "body": {
+        "controlPlaneTenantId": "00000000-0000-4ccc-8000-000000000003",
+        "productCode": "fixture",
+        "appliedVersion": 1,
+        "appliedChecksum": "sha256:f6d60051140269bd0f27157943fa94e2b3a333f3ad54593357000091c92d7600",
+        "appliedAt": "$iso8601",
+        "status": "APPLIED",
+        "unknownCapabilities": [],
+        "enforcementMode": "SHADOW"
+      }
+    },
+    "04-addon-removed": {
+      "status": 200,
+      "body": {
+        "controlPlaneTenantId": "00000000-0000-4ccc-8000-000000000004",
+        "productCode": "fixture",
+        "appliedVersion": 2,
+        "appliedChecksum": "sha256:78ff2ed30f2de09afdc677d33eff99c8974b6005b6790dc6ab88179d4cb065ba",
+        "appliedAt": "$iso8601",
+        "status": "APPLIED",
+        "unknownCapabilities": [],
+        "enforcementMode": "SHADOW"
+      }
+    },
+    "05-limit-update": {
+      "status": 200,
+      "body": {
+        "controlPlaneTenantId": "00000000-0000-4ccc-8000-000000000005",
+        "productCode": "fixture",
+        "appliedVersion": 2,
+        "appliedChecksum": "sha256:2d57c8a1cc6b47efb6dfbfd60a553ee3c720bb621d87fdd21ada894ce1937614",
+        "appliedAt": "$iso8601",
+        "status": "APPLIED",
+        "unknownCapabilities": [],
+        "enforcementMode": "SHADOW"
+      }
+    },
+    "06-app-inactive": {
+      "status": 200,
+      "body": {
+        "controlPlaneTenantId": "00000000-0000-4ccc-8000-000000000006",
+        "productCode": "fixture",
+        "appliedVersion": 1,
+        "appliedChecksum": "sha256:834b120a4bf504cf3fb19413004f4b24fb91373ea732892996e9db4c2fc5d4f6",
+        "appliedAt": "$iso8601",
+        "status": "APPLIED",
+        "unknownCapabilities": [],
+        "enforcementMode": "SHADOW"
+      }
+    },
+    "07-unknown-capability": {
+      "status": 200,
+      "body": {
+        "controlPlaneTenantId": "00000000-0000-4ccc-8000-000000000007",
+        "productCode": "fixture",
+        "appliedVersion": 1,
+        "appliedChecksum": "sha256:ea7cfc8b2d862678bfce5b209f9ccaddfe954de933dc3b20136a558838097116",
+        "appliedAt": "$iso8601",
+        "status": "APPLIED_WITH_WARNINGS",
+        "unknownCapabilities": [
+          "fixture.ghost"
+        ],
+        "enforcementMode": "SHADOW"
+      }
+    },
+    "08-stale": {
+      "status": 200,
+      "body": {
+        "controlPlaneTenantId": "00000000-0000-4ccc-8000-000000000008",
+        "productCode": "fixture",
+        "appliedVersion": 3,
+        "appliedChecksum": "sha256:02cfcaae0aaf631c8181b9dbfd8bd0061920d6e0f93cfa1b28e52de58583bde8",
+        "appliedAt": "$iso8601",
+        "status": "APPLIED",
+        "unknownCapabilities": [],
+        "enforcementMode": "SHADOW"
+      }
+    },
+    "09-conflict": {
+      "status": 200,
+      "body": {
+        "controlPlaneTenantId": "00000000-0000-4ccc-8000-000000000009",
+        "productCode": "fixture",
+        "appliedVersion": 1,
+        "appliedChecksum": "sha256:c3a5c21969e55205489d09be360f7d6ff95a08dcb5b256b46dfe2bd82d5c3453",
+        "appliedAt": "$iso8601",
+        "status": "APPLIED",
+        "unknownCapabilities": [],
+        "enforcementMode": "SHADOW"
+      }
+    },
+    "10-bad-checksum": {
+      "status": 200,
+      "body": {
+        "controlPlaneTenantId": "00000000-0000-4ccc-8000-00000000000a",
+        "productCode": "fixture",
+        "appliedVersion": null,
+        "appliedChecksum": null,
+        "appliedAt": null,
+        "status": "NONE",
+        "unknownCapabilities": [],
+        "enforcementMode": "SHADOW"
+      }
+    },
+    "11-wrong-environment": {
+      "status": 200,
+      "body": {
+        "controlPlaneTenantId": "00000000-0000-4ccc-8000-00000000000b",
+        "productCode": "fixture",
+        "appliedVersion": null,
+        "appliedChecksum": null,
+        "appliedAt": null,
+        "status": "NONE",
+        "unknownCapabilities": [],
+        "enforcementMode": "SHADOW"
+      }
+    },
+    "12-forbidden-keys": {
+      "status": 200,
+      "body": {
+        "controlPlaneTenantId": "00000000-0000-4ccc-8000-00000000000c",
+        "productCode": "fixture",
+        "appliedVersion": null,
+        "appliedChecksum": null,
+        "appliedAt": null,
+        "status": "NONE",
+        "unknownCapabilities": [],
+        "enforcementMode": "SHADOW"
+      }
+    },
+    "13-tenant-not-provisioned": {
+      "status": 404,
+      "body": {
+        "error": "TENANT_NOT_PROVISIONED"
+      }
+    }
+  }
+}
