@@ -1,3 +1,4 @@
+import { isPartlyPlanned } from "../../shared/api/ordersApi";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
@@ -328,6 +329,9 @@ function OrderForm({
           <Box sx={{ display: "flex", gap: 1, mb: 3, flexWrap: "wrap" }}>
             <StatusChip label={enumLabel("orderStatus", order.status)} tone="open" variant="solid" />
             <StatusChip label={enumLabel("orderFulfillmentStatus", order.fulfillmentStatus)} tone="neutral" />
+            {isPartlyPlanned(order) && (
+              <StatusChip label={`${t("Parcialmente planificado")} · ${t("pendiente")} ${order.pendingPallets ?? 0} pallets`} tone="neutral" />
+            )}
             {!isEditable && <StatusChip label={t("Solo lectura")} tone="cancelled" />}
           </Box>
         )}

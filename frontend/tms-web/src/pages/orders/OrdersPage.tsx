@@ -27,6 +27,7 @@ import type { StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
 import { fmtDate, fmtDecimal, fmtQuantity, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
 import { OrderFormDrawer } from "./OrderFormDrawer";
+import { isPartlyPlanned } from "../../shared/api/ordersApi";
 import { OrderImportDrawer } from "./OrderImportDrawer";
 import { releaseWithOverride } from "../scheduling/releaseFlow";
 
@@ -258,7 +259,16 @@ export function OrdersPage() {
     {
       key: "status",
       header: t("Estado"),
-      render: (order) => <StatusChip label={enumLabel("orderStatus", order.status)} tone={STATUS_TONE[order.status]} />,
+      render: (order) => (
+        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+          <StatusChip label={enumLabel("orderStatus", order.status)} tone={STATUS_TONE[order.status]} />
+          {isPartlyPlanned(order) && (
+            <Tooltip title={t("Parte del pedido ya está en un viaje; el resto sigue planificable")}>
+              <span><StatusChip label={t("Parcialmente planificado")} tone="neutral" /></span>
+            </Tooltip>
+          )}
+        </Box>
+      ),
     },
     {
       // Columna propia, al lado del estado de planificación y no en su lugar. Un pedido que
