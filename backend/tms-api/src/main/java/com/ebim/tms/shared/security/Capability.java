@@ -49,7 +49,7 @@ public enum Capability {
             Permission.FLEET_DRIVER_MANAGE),
 
     ORDERS_VIEW(Permission.ORDERS_ORDER_READ),
-    ORDERS_MANAGE(Permission.ORDERS_ORDER_MANAGE),
+    ORDERS_MANAGE(Permission.ORDERS_ORDER_MANAGE, Permission.ORDERS_HOLD_MANAGE),
 
     PLANNING_VIEW(Permission.PLANNING_PLAN_READ),
     PLANNING_MANAGE(Permission.PLANNING_PLAN_MANAGE),

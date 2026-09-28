@@ -64,4 +64,11 @@ public interface OriginLookupPort {
     default Map<UUID, String> externalReferencesInCompany(Set<UUID> ids, UUID companyId) {
         return Map.of();
     }
+
+    /**
+     * Of {@code ids}, the ones that are still active in this company and hold the role - the batched
+     * form of {@link #findActiveInCompany}, for a release board judging a page of orders at once
+     * (ADR-014, {@code MISSING_ORIGIN}).
+     */
+    Set<UUID> findActiveIdsInCompany(Set<UUID> ids, UUID companyId);
 }

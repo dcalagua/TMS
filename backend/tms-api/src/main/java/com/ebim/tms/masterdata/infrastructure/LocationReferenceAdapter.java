@@ -78,6 +78,16 @@ class LocationReferenceAdapter {
         return byId;
     }
 
+    /** {@link #usableAs} for many ids at once: which of them are still active holders of {@code role}. */
+    Set<UUID> usableIds(Set<UUID> ids, UUID companyId, LocationRole role) {
+        if (ids.isEmpty()) {
+            return Set.of();
+        }
+        return locationRepository.findUsableAsByIds(ids, companyId, role).stream()
+                .map(Location::id)
+                .collect(Collectors.toSet());
+    }
+
     /** {@link #usableAs} for a caller that has codes rather than ids - the bulk order import. */
     Map<String, MasterReference> usableAsByCodes(Collection<String> codes, UUID companyId, LocationRole role) {
         Map<String, MasterReference> byCode = new HashMap<>();

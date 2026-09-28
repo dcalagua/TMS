@@ -59,6 +59,11 @@ public enum Permission {
 
     ORDERS_ORDER_READ("orders.order:read"),
     ORDERS_ORDER_MANAGE("orders.order:manage"),
+    /**
+     * Place and lift holds on an order (migration V54, ADR-014). Its own authority: stopping an
+     * order for credit or stock is a commercial decision that the person keying orders may not hold.
+     */
+    ORDERS_HOLD_MANAGE("orders.hold:manage"),
 
     PLANNING_PLAN_READ("planning.plan:read"),
     PLANNING_PLAN_MANAGE("planning.plan:manage"),
