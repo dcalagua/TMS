@@ -7,8 +7,8 @@ import java.util.stream.Stream;
 import org.springframework.security.oauth2.jwt.Jwt;
 
 /**
- * The two operations MasterAdmin may perform on TMS, as {@code scope} values and as the Spring
- * authorities they become.
+ * The operations MasterAdmin may perform on TMS, as {@code scope} values and as the Spring
+ * authorities they become: tenant creation and status, and commercial entitlements.
  *
  * <p>Named {@code <product>:<resource>:<verb>} like every other product of the suite
  * ({@code ewm:tenant:create}, {@code esupplier:tenant:create}); {@code tms} is the product code
@@ -18,10 +18,15 @@ public final class PlatformScopes {
 
     public static final String TENANT_CREATE = "tms:tenant:create";
     public static final String TENANT_READ = "tms:tenant:read";
+    /** Commercial entitlements (V52). Separate from tenant creation: neither implies the other. */
+    public static final String ENTITLEMENTS_WRITE = "tms:entitlements:write";
+    public static final String ENTITLEMENTS_READ = "tms:entitlements:read";
 
     public static final String AUTHORITY_PREFIX = "SCOPE_";
     public static final String AUTHORITY_TENANT_CREATE = AUTHORITY_PREFIX + TENANT_CREATE;
     public static final String AUTHORITY_TENANT_READ = AUTHORITY_PREFIX + TENANT_READ;
+    public static final String AUTHORITY_ENTITLEMENTS_WRITE = AUTHORITY_PREFIX + ENTITLEMENTS_WRITE;
+    public static final String AUTHORITY_ENTITLEMENTS_READ = AUTHORITY_PREFIX + ENTITLEMENTS_READ;
 
     private PlatformScopes() {}
 

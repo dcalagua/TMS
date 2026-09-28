@@ -1,0 +1,12 @@
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.257 s -- in com.ebim.tms.iam.entitlements.EntitlementsManifestTest
+[ERROR] Tests run: 9, Failures: 8, Errors: 0, Skipped: 0, Time elapsed: 2.886 s <<< FAILURE! -- in com.ebim.tms.iam.entitlements.PlatformEntitlementsApiTest
+[ERROR]   PlatformEntitlementsApiTest.jtiReplay:215 Status expected:<200> but was:<403>
+[ERROR]   PlatformEntitlementsApiTest.manifest:252 Status expected:<200> but was:<403>
+[ERROR]   PlatformEntitlementsApiTest.provisioningScopeIsNotEnough:172 JSON path "$.error" expected:<INSUFFICIENT_SCOPE> but was:<null>
+[ERROR]   PlatformEntitlementsApiTest.putThenGet:153 Status expected:<200> but was:<403>
+[ERROR]   PlatformEntitlementsApiTest.scopesAreSeparate:181 JSON path "$.error" expected:<INSUFFICIENT_SCOPE> but was:<null>
+[ERROR]   PlatformEntitlementsApiTest.unauthenticated:205 JSON path "$.error" expected:<UNAUTHENTICATED> but was:<null>
+[ERROR]   PlatformEntitlementsApiTest.unprovisioned:242 Status expected:<404> but was:<403>
+[ERROR]   PlatformEntitlementsApiTest.unsupportedMediaType:227 Status expected:<415> but was:<403>
+[ERROR] Tests run: 13, Failures: 8, Errors: 0, Skipped: 0
+[INFO] BUILD FAILURE

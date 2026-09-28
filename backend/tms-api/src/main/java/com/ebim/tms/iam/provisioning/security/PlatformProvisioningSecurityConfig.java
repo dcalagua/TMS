@@ -61,6 +61,9 @@ import tools.jackson.databind.ObjectMapper;
  *
  * <h2>What is authorized where</h2>
  *
+ * <p>The commercial entitlements routes (V52) share this chain, key and switch, with scopes of their
+ * own and the contract's {@code {error, message}} error body.
+ *
  * <p>One scope per operation, declared here where it is structural: a method added under the prefix
  * without its line is caught by {@code anyRequest().denyAll()}, not left open to any MasterAdmin
  * token. {@code actor_role} never becomes an authority. No CORS: the caller is a server.
@@ -115,6 +118,12 @@ public class PlatformProvisioningSecurityConfig {
                                 .hasAuthority(PlatformScopes.AUTHORITY_TENANT_CREATE)
                         .requestMatchers(HttpMethod.GET, PlatformProvisioningPaths.TENANT)
                                 .hasAuthority(PlatformScopes.AUTHORITY_TENANT_READ)
+                        .requestMatchers(HttpMethod.PUT, PlatformProvisioningPaths.TENANT_ENTITLEMENTS)
+                                .hasAuthority(PlatformScopes.AUTHORITY_ENTITLEMENTS_WRITE)
+                        .requestMatchers(HttpMethod.GET, PlatformProvisioningPaths.TENANT_ENTITLEMENTS)
+                                .hasAuthority(PlatformScopes.AUTHORITY_ENTITLEMENTS_READ)
+                        .requestMatchers(HttpMethod.GET, PlatformProvisioningPaths.ENTITLEMENTS_MANIFEST)
+                                .hasAuthority(PlatformScopes.AUTHORITY_ENTITLEMENTS_READ)
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .bearerTokenResolver(ignoringHealth())
@@ -159,6 +168,14 @@ public class PlatformProvisioningSecurityConfig {
         @Override
         public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException failure)
                 throws IOException {
+            if (PlatformProvisioningPaths.isEntitlements(request.getRequestURI())) {
+                if (enabled) {
+                    response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+                }
+                writeEntitlements(response, enabled ? 401 : 503, enabled ? "UNAUTHENTICATED" : "M2M_NOT_CONFIGURED",
+                        enabled ? "A valid MasterAdmin token is required" : "Platform provisioning is not enabled");
+                return;
+            }
             if (!enabled) {
                 write(response, ProvisioningErrorCode.M2M_NOT_CONFIGURED);
                 return;
@@ -171,6 +188,12 @@ public class PlatformProvisioningSecurityConfig {
         @Override
         public void handle(HttpServletRequest request, HttpServletResponse response,
                 org.springframework.security.access.AccessDeniedException failure) throws IOException {
+            if (PlatformProvisioningPaths.isEntitlements(request.getRequestURI())) {
+                writeEntitlements(response, enabled ? 403 : 503, enabled ? "INSUFFICIENT_SCOPE" : "M2M_NOT_CONFIGURED",
+                        enabled ? "The token lacks the entitlements scope this operation needs"
+                                : "Platform provisioning is not enabled");
+                return;
+            }
             if (!enabled) {
                 write(response, ProvisioningErrorCode.M2M_NOT_CONFIGURED);
                 return;
@@ -180,6 +203,19 @@ public class PlatformProvisioningSecurityConfig {
             write(response, authentication instanceof PlatformProvisioningAuthentication && tenantOperation
                     ? ProvisioningErrorCode.MISSING_SCOPE
                     : ProvisioningErrorCode.ACCESS_DENIED);
+        }
+
+        /**
+         * The entitlements contract's error body, {@code {error, message}} - the shape MasterAdmin's sync
+         * client classifies by ({@code contracts/entitlements/v1/README.md} section 3). It says what was
+         * refused, never why a token failed.
+         */
+        private void writeEntitlements(HttpServletResponse response, int status, String error, String message)
+                throws IOException {
+            response.setStatus(status);
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
+            objectMapper.writeValue(response.getOutputStream(), java.util.Map.of("error", error, "message", message));
         }
 
         private void write(HttpServletResponse response, ProvisioningErrorCode code) throws IOException {
