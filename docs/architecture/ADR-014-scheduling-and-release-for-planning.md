@@ -1,8 +1,9 @@
 # ADR-014 - Scheduling and release for planning
 
-**Status:** Accepted - design only. **Nothing here is implemented yet.**
+**Status:** Accepted, open questions closed by the product owner on 2026-09-27 (section 10).
+Implementation: see `docs/implementation/TMS_EWM_IMPLEMENTATION_REPORT.md`.
 **Date:** 2026-09-27
-**Migrations:** planned **V54** (`order_hold`, release audit actions). **Not started.**
+**Migrations:** **V54** (`order_hold`, release and hold audit actions).
 **Constrained by:** ADR-003 (company scope), ADR-009 (order execution lifecycle),
 `docs/domain/FREQUENCIES.md`, `docs/domain/ROUTES.md`, `docs/domain/SHIP_UNITS_AND_ALLOCATION_V1.md`
 **Evidence:** cross-audit TMS <-> EWM of 2026-09-27; `OrderUpsertReleaseIntegrationTest`
@@ -105,14 +106,27 @@ them.
 | BLOCKED | `ACTIVE_BLOCKING_HOLD` | At least one active hold with `blocking = true` (section 7) |
 | WARNING | `CUTOFF_MISSED` | `now > releaseDeadline` |
 | WARNING | `FREQUENCY_OVERRIDE` | An applicable frequency does not serve `service_date`. Releasing anyway overrides the calendar |
+| WARNING (informative) | `ROUTE_NOT_CONFIGURED` | The company has **no active route at all for the order's origin** (section 6). Shown, never blocking, and it **does not require an override reason** |
+
+A reason carries `requiresOverride`. `CUTOFF_MISSED` and `FREQUENCY_OVERRIDE` require one;
+`ROUTE_NOT_CONFIGURED` does not. The eligibility is still `WARNING` so a planner sees it, but a
+release of an order whose only warning is `ROUTE_NOT_CONFIGURED` needs no reason, which is what
+keeps a company that has never modelled routes working exactly as before.
+
+`MISSING_CAPACITY` keeps the existing `mark-ready` rule exactly: blocked only when weight, volume
+and pallets are **all** unknown.
 
 The result is `BLOCKED` if any reason is blocking, `WARNING` if any reason is a warning, and
 `ELIGIBLE` otherwise.
 
-**Consequence of `FREQUENCY_OVERRIDE` that the user must see.** Automatic planning keeps excluding
-non-serviceable destinations (`NOT_SERVICEABLE_ON_DATE`), so an order released over the calendar is
-placed **by hand**. The release confirmation says so. Making automatic planning honour an explicit
-override is not in this ADR.
+**Consequence of `FREQUENCY_OVERRIDE` that the user must see (approved).** An order released over
+the calendar is `READY_FOR_PLANNING` by a human decision and may be assigned **by hand**, but
+**automatic planning never selects it for that date**: it keeps excluding non-serviceable
+destinations (`NOT_SERVICEABLE_ON_DATE`) and now also routes whose frequency does not run that day.
+The release confirmation says so. No lifecycle is added for it.
+
+**`CUTOFF_MISSED` controls release, not serviceability (approved).** Once a person has released an
+order late, with a reason, automatic planning may use it.
 
 ### 5. Frequencies compose, and neither one outranks the other
 
@@ -132,11 +146,12 @@ The two associations mean different things, and **both must permit `service_date
 The route frequency is only consulted when route resolution returns `RESOLVED`. A blocked order has
 no route to consult.
 
-`ServiceCalendarPort` gains no new meaning for automatic planning in this ADR. Its current
-destination-only filter keeps working. Whether automatic planning should also honour the route's
-frequency is a decision for the planning engines, recorded here as open.
+**Automatic planning honours both (approved 2026-09-27).** Its destination filter keeps working
+through `ServiceCalendarPort`, and an order whose resolved route has a frequency that does not run on
+the date is excluded as well (`NOT_SERVICEABLE_ON_DATE`). Manual assignment asks neither: the release
+was the human decision.
 
-### 6. Route resolution: `RESOLVED`, `NOT_FOUND`, `AMBIGUOUS`
+### 6. Route resolution: `RESOLVED`, `NOT_FOUND`, `AMBIGUOUS`, `NOT_CONFIGURED`
 
 A new `RouteResolutionPort` in `shared.reference` resolves one order at a time, and in batch for a
 board:
@@ -144,6 +159,10 @@ board:
 - **Candidates** are the company's **active** routes whose origin is the order's origin, that have at
   least one stop, and that contain the order's destination as a stop. These are the same inputs
   `Corridors.of` uses today, read through the same `RouteTemplate`.
+- **`NOT_CONFIGURED`** when the company has **no active route with a stop from the order's origin
+  at all** (approved 2026-09-27). The company does not use the route master for that origin, so
+  nothing is blocked: `routeCode` is null and the order carries the informative
+  `ROUTE_NOT_CONFIGURED`.
 - **`RESOLVED`** when there is exactly one candidate. It returns the route id, code and the
   destination's position on it.
 - **`NOT_FOUND`** when there are none.
@@ -158,11 +177,9 @@ grouping identically. Changing that is a planning decision, not a release decisi
 released before this ADR. The extraction moves the candidate query behind the port and leaves the
 engine's grouping rule where it is.
 
-**Rollout consequence.** `ROUTE_NOT_FOUND` is blocking by decision. A company that has not modelled
-routes today releases orders without them, and after this ADR it **cannot release anything** until
-its routes exist. Before enabling release eligibility, a read-only readiness report must list, per
-company, the orders that would be `BLOCKED` and why. The default for a company with no active route
-at all is an open question, and it is recorded in section 10.
+**Rollout consequence.** `ROUTE_NOT_FOUND` and `ROUTE_AMBIGUOUS` are blocking, but **only where the
+origin has routes**. A company, or an origin, with no active route answers `NOT_CONFIGURED` and
+keeps releasing as before (section 10, question 1).
 
 ### 7. Holds are separate from the status
 
@@ -204,15 +221,19 @@ hold, or to cancel and replan the trip.
 
 - **Paths.** `POST /orders/{id}/mark-ready` stays the release. It evaluates §4 first:
   - `BLOCKED` is refused with 409, and the response carries the reasons;
-  - `WARNING` requires a `reason` (1-500 characters) in the request, and is refused without one;
+  - `WARNING` requires an `overrideReason` (1-500 characters) in the request **when any of its
+    warnings requires an override**, and is refused without one;
   - `ELIGIBLE` releases as today.
 - **Audit.** Every release is audited as `ORDER_RELEASED` (new action, V54), with metadata: the
   eligibility, the warning codes and the reason when one was given. The release is not audited today.
-- **Integration.** The upsert's `markReadyForPlanning` flag keeps working for `ELIGIBLE` orders only.
-  A machine cannot give a reason, so a `WARNING` or `BLOCKED` order stays `NOT_READY`, and the upsert
-  result names the reasons.
-- **Bulk release** (`POST /orders/release`, per-item results in the 207 style of the Integration
-  API) is **a later phase**, and it calls the same single-order rule for each item.
+- **Integration.** The upsert's `markReadyForPlanning` flag keeps working for `ELIGIBLE` orders, and
+  for `WARNING` orders none of whose warnings requires an override (in practice
+  `ROUTE_NOT_CONFIGURED`). A machine cannot give a reason, so any other `WARNING` or `BLOCKED` order
+  stays `NOT_READY`, and the upsert result names the reasons.
+- **Bulk release** (`POST /orders/release`) is **in scope** (approved 2026-09-27). It answers `200`
+  when every item was released and `207` when any was refused, with one result per item, and it
+  calls the same single-order rule for each item. One `overrideReason` may accompany the batch and
+  applies to every item that needs one.
 - **The screen.** *Scheduling and Release* groups and filters by origin, derived route, dispatch
   date, frequency, customer, priority, eligibility and holds. It opens or creates the existing
   **Planning Run** for an origin and date. It is a screen over these endpoints, not a new engine.
@@ -245,10 +266,20 @@ hold, or to cancel and replan the trip.
 - **Picking the first route when several match.** It is silently wrong for exactly the orders a
   planner most needs to look at.
 
-## 10. Open questions (to close before implementation)
+## 10. Questions closed by the product owner (2026-09-27)
 
-1. What should release do in a company with **no active route at all**: block everything
-   (the decision as written), or treat route resolution as not applicable (compatible)?
-2. Should automatic planning also honour the **route's** frequency (§5)?
-3. **`FREQUENCY_OVERRIDE` is read here as "the calendar does not serve that date".** It is not read
-   as "served only through a `frequency_exception`". Confirm.
+1. **A company or origin with no active route at all** is not blocked. Route resolution answers
+   `NOT_CONFIGURED`, `routeCode` is null, the order shows the informative `ROUTE_NOT_CONFIGURED`,
+   and no override reason is required for it. Where the origin has active routes: 0 compatible is
+   `ROUTE_NOT_FOUND`, 1 is `RESOLVED`, more than 1 is `ROUTE_AMBIGUOUS`, and none is ever picked
+   silently. `route_id` is not persisted on `transport_order`.
+2. **Automatic planning honours the route's frequency** where a route resolves, in addition to the
+   destination's. With only one of the two, that one decides; with neither, the order stays
+   serviceable (compatibility).
+3. **`FREQUENCY_OVERRIDE` means "the destination's and/or the route's calendar does not normally
+   serve the requested `service_date`"**. It is a warning; a person may release with a reason and it
+   is audited; manual assignment may use it; automatic planning does not select it for that date.
+4. **Cutoff.** `service_date` is the scheduled dispatch date; `releaseDeadline = (service_date −
+   leadTimeDays calendar days) at cutoffTime` in the company's zone, never from `created_at` or the
+   ERP's `updated_at`. `now > releaseDeadline` is the warning `CUTOFF_MISSED`; a person may release
+   with a reason, and automatic planning may then use the order.

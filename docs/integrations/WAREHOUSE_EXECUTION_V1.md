@@ -6,7 +6,7 @@ WMS. It covers the transport plan going to the warehouse, and what physically le
 | Direction | Status |
 |---|---|
 | **TMS → WMS** (transport plan) | **Available today.** Aliases of existing mechanisms: `OUTBOUND_SHIPMENT_V1.md`, `WEBHOOKS_V1.md`. Three additive fields are planned (§3.3) |
-| **WMS → TMS** (dispatch, milestones) | **Contract only. Not implemented.** The endpoints arrive with migration V53 (ADR-013) |
+| **WMS → TMS** (dispatch, milestones) | **Implemented** with migrations V52/V53 (ADR-013) |
 
 Decisions: **ADR-013** (dispatch source and external dispatch) and **ADR-014** (scheduling and
 release). Nothing here asks either product to read the other's tables. No primary key crosses the
@@ -183,9 +183,6 @@ The WMS maps the plan like this:
 
 ## 4. WMS → TMS: what physically happened (contract only)
 
-> **Not implemented.** Endpoints, scopes and storage land with V53 (ADR-013). Until then, a TMS
-> returns 404 for these paths.
-
 **Authentication:** an integration credential of the TMS company, sent as
 `Authorization: Bearer tmsc_<id>.tmss_<secret>`, holding only the scopes below. There is **one
 credential per WMS company**. The company is the credential's, and never a header's.
@@ -208,7 +205,7 @@ it does (ADR-013 §3).
 
 ```json
 {
-  "sourceSystem": "EWM_CD01",
+  "sourceSystem": "EWM_EBIM",
   "dispatchReference": "SLS-000001",
   "revision": 1,
   "transportReference": "SH-00000845",
@@ -242,10 +239,10 @@ it does (ADR-013 §3).
 
 | Field | Rule |
 |---|---|
-| `sourceSystem` | The **dispatching system's** namespace, e.g. `EWM_CD01`. It is not an order namespace |
+| `sourceSystem` | The **producer** of the dispatch, e.g. `EWM_EBIM` for EWM by EBIM. It is **not** an order namespace, and it is part of the business key |
 | `dispatchReference` + `revision` | Business identity. A correction resends the same reference with `revision + 1` |
 | `transportReference` | Echoed from the plan, opaque (§2.1) |
-| `orders[].externalSource/externalReference` | The ERP order key (§2.2) |
+| `orders[].externalSource/externalReference` | The ERP order key (§2.2). `externalSource` is the **ERP namespace** (`SAPB1_PE`, …), equal byte for byte to TMS `transport_order.external_source` and EWM `out_order.source_system`. Never the producer's code |
 | `orders[].lines[]` | **Optional.** Per-line quantities where the WMS line number is the ERP line number |
 | `document` | **Optional.** The native document, stored as received |
 | `status` of an order | The WMS's own reading (`SHIPPED` / `PARTIALLY_SHIPPED`), stored for reference |
@@ -285,7 +282,8 @@ RFC 9457 documents, as in `INBOUND_API_V1.md` §7.
 Discrepancy codes: `UNKNOWN_TRANSPORT_REFERENCE`, `TRIP_CANCELLED`, `TRIP_NOT_COMMITTED`,
 `MISSING_ORDER`, `EXTRA_ORDER`, `QUANTITY_VARIANCE`, `QUANTITY_UNCOMPARABLE`, `CARRIER_MISMATCH`,
 `VEHICLE_MISMATCH`, `DRIVER_MISMATCH` (warning), `WAREHOUSE_MISMATCH`, `DISPATCH_TIME` (more than
-15 minutes' difference). Definitions: ADR-013 §5.
+15 minutes' difference, informative), `UNKNOWN_LOAD`. Definitions: ADR-013 §5 and §13. Plates are
+compared upper case without spaces or hyphens. An `EXTRA_ORDER` never creates an assignment.
 
 ### 4.2 `WAREHOUSE_MILESTONE` - `POST /integration/v1/warehouse-milestones`
 
@@ -293,7 +291,7 @@ Informative. **A milestone never moves a TMS lifecycle.**
 
 ```json
 {
-  "sourceSystem": "EWM_CD01",
+  "sourceSystem": "EWM_EBIM",
   "milestones": [
     { "eventId": "8c1f2d3e-…", "type": "LOADING_STARTED", "transportReference": "SH-00000845",
       "loadReference": "CRG-000001", "warehouseCode": "CD01", "occurredAt": "2026-09-28T07:20:00-05:00" }
@@ -301,7 +299,10 @@ Informative. **A milestone never moves a TMS lifecycle.**
 }
 ```
 
-- `type` is one of `LOADING_STARTED`, `LOAD_READY` or `LOAD_CANCELLED`.
+- `type` is one of `LOADING_STARTED`, `LOAD_READY` or `LOAD_CANCELLED`. TMS stores them as
+  `transport_event` types `WAREHOUSE_LOADING_STARTED`, `WAREHOUSE_LOAD_READY` and
+  `WAREHOUSE_LOAD_CANCELLED` with `source = INTEGRATION`. EWM translates its internal
+  `SHIPMENT_LOAD_LOADING_STARTED`, `SHIPMENT_LOAD_READY`, `SHIPMENT_LOAD_CANCELLED`.
 - It is a batch of up to 200. The response is `200`, or `207` when any item was refused, with one
   result per item: `RECORDED`, `DUPLICATE` (the same `eventId`), `UNKNOWN_SHIPMENT` or `INVALID`.
 - Milestones may arrive in any order and after the dispatch; each keeps its own `occurredAt`.

@@ -1,10 +1,10 @@
 # ADR-013 - Dispatch source, and dispatch confirmed by a warehouse system
 
-**Status:** Accepted - design only. **Nothing here is implemented yet.**
+**Status:** Accepted; decisions confirmed by the product owner on 2026-09-27 (section 13).
+Implementation: see `docs/implementation/TMS_EWM_IMPLEMENTATION_REPORT.md`.
 **Date:** 2026-09-27
-**Migrations:** planned **V52** (dispatch mode, machine-attributable dispatch) and **V53** (external
-dispatch document, scopes, event types). Neither exists yet, and neither may start before this ADR's
-prerequisites (section 12) are closed.
+**Migrations:** **V52** (dispatch mode, machine-attributable dispatch, override permission) and **V53**
+(external dispatch document, scopes, warehouse event types). Section 12's prerequisites are closed.
 **Contract:** `docs/integrations/WAREHOUSE_EXECUTION_V1.md`
 **Constrained by:** ADR-001 (React -> Spring Boot -> PostgreSQL), ADR-003 (company scope), ADR-005
 (tenant RLS), ADR-007 (a feed informs and never moves a lifecycle, except as decided here),
@@ -149,8 +149,9 @@ override:
 - requires the new permission **`planning.trip:dispatch-override`**. By default it is granted to
   `COMPANY_ADMIN` and **not** to `PLANNER` (or `VIEWER`). Roles receive permissions explicitly
   (`role_permission`; V25 granted `planning.trip:execute` to each role by name), so
-  `ORGANIZATION_ADMIN` gets it only if listed in the V52 grant. Proposed: yes, as the role above
-  `COMPANY_ADMIN`;
+  `ORGANIZATION_ADMIN` gets it only if listed in the V52 grant. **Decided: yes.** A platform super
+  administrator reaches it through the existing global semantics, if any apply. The service checks
+  the permission, never a role name;
 - is **never** grantable to an integration credential, whose authorities are scopes and carry no
   permission (`IntegrationAuthenticationToken`);
 - records `dispatch_source = OPERATOR_OVERRIDE`, an `AuditAction.DISPATCH_OVERRIDDEN` with the
@@ -183,6 +184,7 @@ as a Control Tower advisory:
 | `DRIVER_MISMATCH` | Warning only, because the WMS holds the driver as free text |
 | `WAREHOUSE_MISMATCH` | `warehouseCode` differs from the trip origin's `external_reference` |
 | `DISPATCH_TIME` | The SLS time and the recorded departure differ by more than **15 minutes**. This is a fixed tolerance, deliberately not a setting yet |
+| `UNKNOWN_LOAD` | The `loadReference` differs from the one an earlier document for the same trip carried |
 
 Planned quantities come from what TMS already stores: `trip_order_assignment.assigned_*` and
 `transport_order_line`. Dispatched quantities come from the document. **Variance is derived and never
@@ -280,6 +282,41 @@ this ADR.
 2. **The shared dispatch-readiness evaluator is extracted.** Today `ControlTowerService.blockers`
    re-implements two of `dispatch()`'s five checks. The external path must evaluate the *same* list,
    to record discrepancies instead of refusing.
+
+### 13. Decisions confirmed on 2026-09-27
+
+1. **Prerequisites closed.** R1-R3 of `SPLIT_ORDER_EXECUTION.md` are implemented, and
+   `DispatchReadiness` is the single evaluator used by `dispatch()`, the Control Tower and the
+   external path.
+2. **`transportReference` = `trip.shipment_number`**, opaque and company-scoped; EWM stores it in
+   `out_shipment_load.external_load_number`. No migration for it on either side.
+3. **Cardinality V1 is 1 trip = 1 active EWM load = 1 SLS**, while `external_dispatch` allows N
+   documents per trip. EWM's unique index is not relaxed and 1:N is not announced.
+4. **Two different "source systems".** The top-level `sourceSystem` of a `DISPATCH_CONFIRMED` is the
+   *producer* of the dispatch (EWM by EBIM publishes `EWM_EBIM`); `orders[].externalSource` is the
+   *ERP namespace* of each order (`SAPB1_PE`, `SAPS4_PE`, `JDE_ECUACORRIENTE`, …) and must equal
+   `transport_order.external_source` and EWM's `out_order.source_system` **byte for byte**. TMS never
+   normalises one into the other.
+5. **Time tolerance** is a fixed 15 minutes, not a setting. `DISPATCH_TIME` is informative and never
+   rejects the document.
+6. **`UNKNOWN_LOAD`** joins the discrepancy codes: the document names a `loadReference` different from
+   the one an earlier document for the same trip used.
+7. **External dispatch and blockers.** A valid external document is always recorded; TMS tries to
+   apply it; operational blockers from `DispatchReadiness` become discrepancies; only a database
+   invariant that genuinely cannot hold (e.g. V42's carrier-vehicle constraint) leaves it `UNAPPLIED`
+   with an advisory. Data is never falsified to fit.
+8. **Manual dispatch in `EXTERNAL_REQUIRED`** without override is `409` with problem code
+   `dispatch-requires-external-confirmation`; with the permission and a non-blank `overrideReason` it
+   dispatches as `OPERATOR_OVERRIDE`.
+9. **HYBRID concurrency** takes the trip's pessimistic row lock on both paths, so exactly one
+   dispatch happens; the second arrival reconciles.
+10. **Warehouse milestones** arrive with public types `LOADING_STARTED`, `LOAD_READY`, `LOAD_CANCELLED`
+    and are stored as `transport_event` types `WAREHOUSE_LOADING_STARTED`, `WAREHOUSE_LOAD_READY`,
+    `WAREHOUSE_LOAD_CANCELLED`; an applied or reconciled dispatch document also appends
+    `WAREHOUSE_DISPATCH_CONFIRMED`. All with `source = INTEGRATION`; none moves a lifecycle.
+11. **Control Tower advisories** added: `DISPATCH_MISMATCH`, `AWAITING_WAREHOUSE_DISPATCH`,
+    `EXTERNAL_DISPATCH_UNMATCHED`, `ORDER_HOLD_ON_COMMITTED_TRIP`. Machine facts do not use
+    `trip_exception`.
 
 ## Consequences
 
