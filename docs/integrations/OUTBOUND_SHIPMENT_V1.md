@@ -163,6 +163,13 @@ Scope: `integration.shipment:read`. One shipment with its ordered stops and the 
 it. `shipmentNumber` is the external identity (`SH-00000042`, migration V19) - a partner never
 learns the internal trip id from anywhere but this response's own `shipment.id`.
 
+**`shipmentNumber` is an opaque reference.** Its prefix is configurable per company (migration V34,
+`company_settings.shipment_number_prefix`), so a partner stores and echoes it verbatim and never
+parses or validates its shape. The route accepts any value and resolves it inside the credential's
+company only; a value unknown there is `404`. The same holds for
+`POST /integration/v1/tenders/{shipmentNumber}/response`. It is the `transportReference` of
+`docs/integrations/WAREHOUSE_EXECUTION_V1.md`.
+
 **A `DRAFT` shipment answers `404`, exactly as one that does not exist at all.** There is
 deliberately no way to distinguish "no such shipment" from "not published yet" - a plan that might
 still change is never exposed, and telling a partner it exists but is not ready yet would leak the
