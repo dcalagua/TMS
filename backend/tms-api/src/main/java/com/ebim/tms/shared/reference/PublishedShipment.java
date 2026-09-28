@@ -68,5 +68,29 @@ public record PublishedShipment(
         long orderCount,
         long version,
         OffsetDateTime createdAt,
-        OffsetDateTime updatedAt) {
+        OffsetDateTime updatedAt,
+        // Additive (WAREHOUSE_EXECUTION_V1 §3.3): what a warehouse system maps the plan with.
+        String originExternalReference,
+        String routeCode,
+        String driverCode,
+        String driverName,
+        String driverDocumentNumber) {
+
+    /** The shape before the warehouse fields, for callers that predate them. */
+    public PublishedShipment(UUID id, UUID companyId, String shipmentNumber, String planNumber, LocalDate planningDate,
+            String status, String originCode, String originName, BigDecimal originLatitude, BigDecimal originLongitude,
+            OffsetDateTime plannedDepartureAt, OffsetDateTime readyAt, OffsetDateTime actualDepartureAt,
+            OffsetDateTime actualCompletionAt, String carrierCode, String carrierName, String vehicleCode,
+            String vehicleLicensePlate, String vehicleTypeCode, String capacitySource, BigDecimal maxWeightKg,
+            BigDecimal maxVolumeM3, BigDecimal maxPallets, BigDecimal usedWeightKg, BigDecimal usedVolumeM3,
+            BigDecimal usedPallets, BigDecimal weightUtilizationPct, BigDecimal volumeUtilizationPct,
+            BigDecimal palletsUtilizationPct, int stopCount, long orderCount, long version, OffsetDateTime createdAt,
+            OffsetDateTime updatedAt) {
+        this(id, companyId, shipmentNumber, planNumber, planningDate, status, originCode, originName, originLatitude,
+                originLongitude, plannedDepartureAt, readyAt, actualDepartureAt, actualCompletionAt, carrierCode,
+                carrierName, vehicleCode, vehicleLicensePlate, vehicleTypeCode, capacitySource, maxWeightKg,
+                maxVolumeM3, maxPallets, usedWeightKg, usedVolumeM3, usedPallets, weightUtilizationPct,
+                volumeUtilizationPct, palletsUtilizationPct, stopCount, orderCount, version, createdAt, updatedAt,
+                null, null, null, null, null);
+    }
 }

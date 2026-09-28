@@ -14,7 +14,10 @@ import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.reference.CarrierLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
+import com.ebim.tms.shared.reference.DriverLookupPort;
+import com.ebim.tms.shared.reference.DriverReference;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
+import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.PublishedShipment;
 import com.ebim.tms.shared.reference.PublishedShipmentDetail;
@@ -60,9 +63,14 @@ public class ShipmentPublicationAdapter implements ShipmentPublicationPort {
     private final TripViewAssembler assembler;
     private final CarrierLookupPort carrierLookupPort;
     private final OrderPlanningPort orderPlanningPort;
+    private final OriginLookupPort originLookupPort;
+    private final DriverLookupPort driverLookupPort;
 
     public ShipmentPublicationAdapter(TripRepository tripRepository, ShipmentOutboxEventRepository outboxRepository,
-            TripViewAssembler assembler, CarrierLookupPort carrierLookupPort, OrderPlanningPort orderPlanningPort) {
+            TripViewAssembler assembler, CarrierLookupPort carrierLookupPort, OrderPlanningPort orderPlanningPort,
+            OriginLookupPort originLookupPort, DriverLookupPort driverLookupPort) {
+        this.originLookupPort = originLookupPort;
+        this.driverLookupPort = driverLookupPort;
         this.tripRepository = tripRepository;
         this.outboxRepository = outboxRepository;
         this.assembler = assembler;
@@ -82,8 +90,9 @@ public class ShipmentPublicationAdapter implements ShipmentPublicationPort {
         Map<UUID, MasterReference> carriers = carrierLookupPort.findAllInCompany(
                 trips.stream().map(Trip::carrierId).filter(Objects::nonNull).collect(Collectors.toSet()),
                 query.companyId());
+        WarehouseFields warehouse = warehouseFieldsOf(views, query.companyId());
         List<PublishedShipment> content =
-                views.stream().map(view -> toPublished(view, carrierOf(view, carriers))).toList();
+                views.stream().map(view -> toPublished(view, carrierOf(view, carriers), warehouse)).toList();
         return new PageResponse<>(content, pageQuery.pageNumber(), pageQuery.pageSize(), page.getTotalElements());
     }
 
@@ -111,7 +120,8 @@ public class ShipmentPublicationAdapter implements ShipmentPublicationPort {
         TripDetailView detail = assembler.toDetail(trip, companyId);
         MasterReference carrier = carrierOf(detail.trip(), carrierLookupPort.findAllInCompany(
                 trip.carrierId() == null ? Set.of() : Set.of(trip.carrierId()), companyId));
-        PublishedShipment header = toPublished(detail.trip(), carrier);
+        PublishedShipment header = toPublished(detail.trip(), carrier,
+                warehouseFieldsOf(List.of(detail.trip()), companyId));
 
         Set<UUID> orderIds = detail.assignments().stream().map(TripAssignmentView::orderId).collect(Collectors.toSet());
         Map<UUID, PlannableOrder> orders = orderPlanningPort.findAllInCompany(orderIds, companyId);
@@ -122,9 +132,11 @@ public class ShipmentPublicationAdapter implements ShipmentPublicationPort {
         Map<UUID, OrderDeliveryView> deliveries = detail.deliveries().stream()
                 .collect(Collectors.toMap(OrderDeliveryView::orderId, delivery -> delivery, (first, second) -> first));
 
+        Map<UUID, Integer> sequenceByDestination = detail.stops().stream()
+                .collect(Collectors.toMap(TripStopView::destinationId, TripStopView::sequence, (first, second) -> first));
         List<PublishedShipmentOrder> publishedOrders = detail.assignments().stream()
                 .map(assignment -> toPublishedOrder(assignment, orders.get(assignment.orderId()),
-                        deliveries.get(assignment.orderId())))
+                        deliveries.get(assignment.orderId()), sequenceByDestination.get(assignment.destinationId())))
                 .toList();
         List<PublishedShipmentStop> stops = detail.stops().stream().map(ShipmentPublicationAdapter::toPublishedStop).toList();
 
@@ -135,7 +147,19 @@ public class ShipmentPublicationAdapter implements ShipmentPublicationPort {
         return view.carrierId() == null ? null : carriers.get(view.carrierId());
     }
 
-    private static PublishedShipment toPublished(TripView view, MasterReference carrier) {
+    /** The warehouse-facing fields of a page of trips, resolved in two batched lookups. */
+    private record WarehouseFields(Map<UUID, String> originExternalReferences, Map<UUID, DriverReference> drivers) {
+    }
+
+    private WarehouseFields warehouseFieldsOf(List<TripView> views, UUID companyId) {
+        Set<UUID> origins = views.stream().map(TripView::originId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<UUID> driverIds = views.stream().map(TripView::driverId).filter(Objects::nonNull).collect(Collectors.toSet());
+        return new WarehouseFields(originLookupPort.externalReferencesInCompany(origins, companyId),
+                driverIds.isEmpty() ? Map.of() : driverLookupPort.findAllInCompany(driverIds, companyId));
+    }
+
+    private static PublishedShipment toPublished(TripView view, MasterReference carrier, WarehouseFields warehouse) {
+        DriverReference driver = view.driverId() == null ? null : warehouse.drivers().get(view.driverId());
         TripCapacityView capacity = view.capacity();
         return new PublishedShipment(
                 view.id(), view.companyId(), view.shipmentNumber(), view.planNumber(), view.planningDate(),
@@ -147,7 +171,10 @@ public class ShipmentPublicationAdapter implements ShipmentPublicationPort {
                 capacity.pallets().limit(), capacity.weight().used(), capacity.volume().used(),
                 capacity.pallets().used(), capacity.weight().percentUsed(), capacity.volume().percentUsed(),
                 capacity.pallets().percentUsed(), view.stopCount(), view.orderCount(), view.version(),
-                view.createdAt(), view.updatedAt());
+                view.createdAt(), view.updatedAt(),
+                view.originId() == null ? null : warehouse.originExternalReferences().get(view.originId()),
+                view.routeCode(), view.driverCode(), view.driverName(),
+                driver == null ? null : driver.documentNumber());
     }
 
     /**
@@ -155,7 +182,7 @@ public class ShipmentPublicationAdapter implements ShipmentPublicationPort {
      *     identity document is deliberately not published - see {@link PublishedShipmentOrder}
      */
     private static PublishedShipmentOrder toPublishedOrder(TripAssignmentView assignment, PlannableOrder order,
-            OrderDeliveryView delivery) {
+            OrderDeliveryView delivery, Integer stopSequence) {
         return new PublishedShipmentOrder(assignment.orderId(), assignment.orderNumber(),
                 order == null ? null : order.externalSource(), order == null ? null : order.externalReference(),
                 assignment.destinationCode(), assignment.assignedWeightKg(), assignment.assignedVolumeM3(),
@@ -164,7 +191,8 @@ public class ShipmentPublicationAdapter implements ShipmentPublicationPort {
                 delivery == null ? null : delivery.deliveredAt(),
                 delivery == null ? null : delivery.receiverName(),
                 delivery == null ? null : delivery.notes(),
-                delivery == null ? 0 : delivery.evidence().size());
+                delivery == null ? 0 : delivery.evidence().size(),
+                stopSequence);
     }
 
     private static PublishedShipmentStop toPublishedStop(TripStopView stop) {

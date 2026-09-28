@@ -40,4 +40,9 @@ class OriginLookupAdapter implements OriginLookupPort {
     public Map<String, MasterReference> findActiveByCodesInCompany(Collection<String> codes, UUID companyId) {
         return locations.usableAsByCodes(codes, companyId, LocationRole.ORIGIN);
     }
+
+    @Override
+    public Map<UUID, String> externalReferencesInCompany(Set<UUID> ids, UUID companyId) {
+        return locations.externalReferencesOf(ids, companyId);
+    }
 }

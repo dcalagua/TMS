@@ -68,5 +68,10 @@ public record ShipmentPlanHeaderV1(
         long orderCount,
         long version,
         OffsetDateTime createdAt,
-        OffsetDateTime updatedAt) {
+        OffsetDateTime updatedAt,
+        // Additive in v1 (WAREHOUSE_EXECUTION_V1 §3.3): the warehouse code of the origin, the
+        // route, and the driver. Null when not set; a consumer ignores fields it does not know.
+        String originExternalReference,
+        String routeCode,
+        ShipmentPlanDriverV1 driver) {
 }

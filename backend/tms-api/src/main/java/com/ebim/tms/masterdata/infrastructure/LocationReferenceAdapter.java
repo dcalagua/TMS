@@ -64,6 +64,20 @@ class LocationReferenceAdapter {
         return byId;
     }
 
+    /** The external references of these locations, for the ones that have one. */
+    Map<UUID, String> externalReferencesOf(Set<UUID> ids, UUID companyId) {
+        Map<UUID, String> byId = new HashMap<>();
+        if (ids.isEmpty()) {
+            return byId;
+        }
+        for (Location location : locationRepository.findByIdInAndCompanyId(ids, companyId)) {
+            if (location.externalReference() != null && !location.externalReference().isBlank()) {
+                byId.put(location.id(), location.externalReference());
+            }
+        }
+        return byId;
+    }
+
     /** {@link #usableAs} for a caller that has codes rather than ids - the bulk order import. */
     Map<String, MasterReference> usableAsByCodes(Collection<String> codes, UUID companyId, LocationRole role) {
         Map<String, MasterReference> byCode = new HashMap<>();
