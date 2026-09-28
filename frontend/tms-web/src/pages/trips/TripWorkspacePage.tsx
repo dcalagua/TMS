@@ -47,6 +47,7 @@ import { TripProblemDrawer, type TripProblemMode, type TripProblemValues } from 
 import { TripTenderCard } from "./TripTenderCard";
 import { TripTimeline } from "./TripTimeline";
 import { TripTrackingCard } from "./TripTrackingCard";
+import { TripWarehouseCard } from "./TripWarehouseCard";
 import { TripRouteCard } from "./TripRouteCard";
 import { TenderWaterfallCard } from "./TenderWaterfallCard";
 
@@ -524,6 +525,7 @@ export function TripWorkspacePage() {
   /** Las entregas de una parada, indexadas por pedido: la respuesta viene plana a propósito
    * porque una pantalla la agrupa por parada y otra por pedido, y las dos claves están ahí. */
   const deliveriesByStop = (stopId: string) => deliveries.filter((entry) => entry.tripStopId === stopId);
+  const orderNumbers = new Map(assignments.map((assignment) => [assignment.orderId, assignment.orderNumber]));
 
   return (
     <>
@@ -872,6 +874,17 @@ export function TripWorkspacePage() {
               failed={trackingQuery.isError}
             />
           )}
+
+          {/* Cómo salió y qué dijo el almacén (ADR-013). Lo lee `planning.trip:read`, el mismo
+              permiso que abre esta pantalla, así que no lleva guarda propia. */}
+          <TripWarehouseCard
+            companyId={companyId}
+            trip={trip}
+            warehouse={warehouseQuery.data}
+            loading={warehouseQuery.isPending}
+            failed={warehouseQuery.isError}
+            orderNumbers={orderNumbers}
+          />
 
           {canReadCost && <TripCostCard companyId={companyId} tripId={trip.id} canManage={canManageCost} />}
 

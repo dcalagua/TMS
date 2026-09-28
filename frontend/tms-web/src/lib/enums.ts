@@ -151,6 +151,62 @@ export const ENUM_LABELS = {
     HYBRID: "Híbrido: el primero que confirme",
     MANUAL: "Despacho manual (TMS)",
   },
+  /** ADR-013 §2: quién movió el envío a "en ruta". */
+  dispatchSource: {
+    INTEGRATION: "Confirmación del almacén (WMS)",
+    OPERATOR: "Despacho manual (TMS)",
+    OPERATOR_OVERRIDE: "Override manual con motivo",
+  },
+  /** ADR-013 §5: cómo compara lo que salió con el plan. */
+  dispatchVerificationStatus: {
+    MATCHED: "Coincide con el plan",
+    MISMATCH: "Con diferencias",
+    OVERRIDDEN: "Despachado con override",
+    UNVERIFIED: "Sin verificar",
+  },
+  /** WAREHOUSE_EXECUTION_V1 §4.1: qué hizo TMS con un documento de despacho. */
+  dispatchDocumentOutcome: {
+    APPLIED: "Despachó el envío",
+    RECONCILED: "Conciliado con el plan",
+    RECORDED_UNMATCHED: "Sin envío asociado",
+    UNAPPLIED: "No aplicado",
+  },
+  /** ADR-013 §5 y §13: cada diferencia entre el plan y lo despachado. */
+  dispatchDiscrepancyCode: {
+    CARRIER_MISMATCH: "Transportista distinto",
+    DISPATCH_BLOCKER: "Bloqueo de despacho",
+    DISPATCH_TIME: "Hora de despacho distinta",
+    DRIVER_MISMATCH: "Conductor distinto",
+    EXTRA_ORDER: "Pedido no planificado",
+    MISSING_ORDER: "Pedido no despachado",
+    NOT_APPLIED: "No se pudo aplicar",
+    QUANTITY_UNCOMPARABLE: "Cantidad no comparable",
+    QUANTITY_VARIANCE: "Diferencia de cantidad",
+    TRIP_CANCELLED: "Envío cancelado",
+    TRIP_NOT_COMMITTED: "Envío no confirmado",
+    UNKNOWN_LOAD: "Carga distinta",
+    UNKNOWN_TRANSPORT_REFERENCE: "Envío desconocido",
+    VEHICLE_MISMATCH: "Placa distinta",
+    WAREHOUSE_MISMATCH: "Almacén distinto",
+  },
+  discrepancySeverity: {
+    ERROR: "Error",
+    INFO: "Informativa",
+    WARNING: "Advertencia",
+  },
+  dispatchOrderMatch: {
+    EXTRA: "No planificado",
+    MATCHED: "Coincide",
+    UNCOMPARABLE: "No comparable",
+    UNKNOWN: "Desconocido",
+    VARIANCE: "Con diferencia",
+  },
+  /** ADR-013 §13.10: hitos del almacén. Informan; nunca mueven el ciclo de vida. */
+  warehouseMilestoneType: {
+    LOAD_CANCELLED: "Carga cancelada",
+    LOAD_READY: "Carga lista",
+    LOADING_STARTED: "Carga iniciada",
+  },
   blockerReason: {
     AWAITING_CARRIER_VEHICLE: "Falta vehículo del transportista",
     DRIVER_UNAVAILABLE: "Conductor no disponible",
