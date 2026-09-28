@@ -143,7 +143,10 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ProblemDetail> handleConflict(ConflictException failure, WebRequest request) {
-        return respond(ApiProblems.of(ProblemType.CONFLICT, failure.getMessage()), request);
+        ProblemDetail problem = ApiProblems.of(ProblemType.CONFLICT, failure.getMessage());
+        // Machine-readable detail a caller can act on - the release gate's reasons (ADR-014).
+        failure.properties().forEach(problem::setProperty);
+        return respond(problem, request);
     }
 
     /**
