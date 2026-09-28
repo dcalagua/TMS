@@ -79,7 +79,11 @@ class SchemaExposureIntegrationTest {
             "work_assignment", "work_assignment_trip",
             // V51: MasterAdmin provisioning. Owner connection only - tms_app holds no grant and a
             // deny-all policy - and write-once by trigger.
-            "platform_provisioning_request", "platform_provisioning_audit");
+            "platform_provisioning_request", "platform_provisioning_audit",
+            // V52: MasterAdmin commercial entitlements. Same posture as V51 - owner only, tms_app holds
+            // no grant and a deny-all policy; the scoped read goes through a SECURITY DEFINER function.
+            "platform_entitlement_applied", "platform_entitlement_audit", "platform_entitlement_jti",
+            "platform_entitlement_mode", "platform_entitlement_mode_event", "platform_entitlement_shadow_diff");
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the
