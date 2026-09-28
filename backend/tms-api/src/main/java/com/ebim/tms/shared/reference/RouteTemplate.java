@@ -28,4 +28,14 @@ public record RouteTemplate(
     public RouteTemplate {
         destinationIds = List.copyOf(destinationIds);
     }
+
+    /**
+     * Whether this route counts as a corridor at all: active, with at least one stop. The one
+     * candidate rule shared by {@code Corridors} (the planning engines' grouping) and
+     * {@link RouteResolution} (release eligibility, ADR-014) - a deactivated corridor is not a
+     * corridor, and an empty one serves nobody.
+     */
+    public boolean servesAsCorridor() {
+        return active && !destinationIds.isEmpty();
+    }
 }
