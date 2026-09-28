@@ -2,6 +2,8 @@ package com.ebim.tms.orders.application;
 
 import com.ebim.tms.orders.domain.OrderStatus;
 import com.ebim.tms.orders.domain.TransportOrder;
+import com.ebim.tms.orders.infrastructure.OrderHoldRepository;
+import com.ebim.tms.orders.infrastructure.OrderSchedulingSpecifications;
 import com.ebim.tms.orders.infrastructure.TransportOrderRepository;
 import com.ebim.tms.orders.infrastructure.TransportOrderSpecifications;
 import com.ebim.tms.shared.api.ConflictException;
@@ -63,11 +65,13 @@ public class OrderPlanningService implements OrderPlanningPort {
 
     private final TransportOrderRepository transportOrderRepository;
     private final AuditActorProvider auditActorProvider;
+    private final OrderHoldRepository holdRepository;
 
-    public OrderPlanningService(
-            TransportOrderRepository transportOrderRepository, AuditActorProvider auditActorProvider) {
+    public OrderPlanningService(TransportOrderRepository transportOrderRepository,
+            AuditActorProvider auditActorProvider, OrderHoldRepository holdRepository) {
         this.transportOrderRepository = transportOrderRepository;
         this.auditActorProvider = auditActorProvider;
+        this.holdRepository = holdRepository;
     }
 
     @Override
@@ -75,7 +79,10 @@ public class OrderPlanningService implements OrderPlanningPort {
     public PageResponse<PlannableOrder> searchAssignable(PlannableOrderQuery query, PageQuery pageQuery) {
         var specification = TransportOrderSpecifications.matching(query.companyId(), query.orderNumber(),
                 query.originId(), query.destinationId(), query.serviceDate(), query.serviceDate(),
-                OrderStatus.READY_FOR_PLANNING, null);
+                OrderStatus.READY_FOR_PLANNING, null)
+                // ADR-014 section 7: a candidate is READY_FOR_PLANNING *and* has no active blocking
+                // hold - in the same statement, so the count and the page agree.
+                .and(OrderSchedulingSpecifications.noActiveBlockingHold(query.companyId()));
         Page<TransportOrder> page = transportOrderRepository.findAll(specification, toPageable(pageQuery));
         List<PlannableOrder> content = page.getContent().stream().map(OrderPlanningService::toPlannable).toList();
         return new PageResponse<>(content, pageQuery.pageNumber(), pageQuery.pageSize(), page.getTotalElements());
@@ -121,6 +128,12 @@ public class OrderPlanningService implements OrderPlanningPort {
         if (order.status() != OrderStatus.READY_FOR_PLANNING) {
             throw new ConflictException("Order " + order.orderNumber() + " is not ready for planning (status: "
                     + order.status() + ").");
+        }
+        // ADR-014 section 7, checked under the row lock OrderHoldService.place also takes: a hold and
+        // an assignment racing on one order serialise, and whichever lands second sees the other.
+        if (holdRepository.existsActiveBlocking(orderId, companyId)) {
+            throw new ConflictException("Order " + order.orderNumber() + " has an active blocking hold and cannot "
+                    + "be put on a trip. Release the hold first.");
         }
         OrderAmounts pending = order.allocation().pending();
         if (amounts.exceeds(pending)) {
