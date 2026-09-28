@@ -165,6 +165,40 @@ public class TripExecutionService {
     }
 
     /**
+     * A warehouse system's dispatch document moves a committed trip to {@code IN_TRANSIT}
+     * (ADR-013 section 3), attributed to its credential. Runs inside the caller's transaction, on a
+     * trip the caller has already locked; the caller has decided the mode allows it and that no
+     * database invariant would refuse it.
+     *
+     * <p>From {@code CONFIRMED} it takes two legal steps in one transaction - ready, then dispatch -
+     * and publishes both of the existing events; {@code CONFIRMED -> IN_TRANSIT} stays illegal. Both
+     * are stamped with the document's {@code actualDispatchAt}. The dispatch checks of
+     * {@link DispatchReadiness} are <em>not</em> applied here: the truck has already left, and
+     * the caller records each failed check on the document instead of refusing the fact.
+     *
+     * <p>A tender still live on the trip is left alone: withdrawing one writes a person into
+     * {@code cancelled_by}, and a credential is not a person. The caller reports it.
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public void applyWarehouseDispatch(CompanyScope scope, Trip trip, OffsetDateTime actualDispatchAt,
+            UUID integrationClientId) {
+        Map<String, Object> metadata = new java.util.LinkedHashMap<>();
+        metadata.put("tripNumber", trip.tripNumber());
+        metadata.put("planningDate", trip.planningDate().toString());
+        metadata.put("dispatchSource", DispatchSource.INTEGRATION.name());
+        if (trip.status() == TripStatus.CONFIRMED) {
+            trip.markReadyForDispatchByIntegration(actualDispatchAt, integrationClientId);
+            Trip ready = save(trip);
+            events.publish(scope, ready, ShipmentEventType.SHIPMENT_READY, actualDispatchAt, metadata);
+        }
+        trip.dispatchByIntegration(actualDispatchAt, integrationClientId);
+        Trip dispatched = save(trip);
+        events.publish(scope, dispatched, ShipmentEventType.SHIPMENT_DISPATCHED, actualDispatchAt, metadata);
+        announce(scope, dispatched, ShipmentEventType.SHIPMENT_DISPATCHED, actualDispatchAt);
+        orderExecution.dispatched(scope, dispatched);
+    }
+
+    /**
      * {@code IN_TRANSIT → COMPLETED}: the trip is over and the vehicle is released.
      *
      * <p>Every stop must have been resolved first (migration V27): completed, skipped or failed. A

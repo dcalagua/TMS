@@ -307,6 +307,38 @@ Informative. **A milestone never moves a TMS lifecycle.**
   result per item: `RECORDED`, `DUPLICATE` (the same `eventId`), `UNKNOWN_SHIPMENT` or `INVALID`.
 - Milestones may arrive in any order and after the dispatch; each keeps its own `occurredAt`.
 
+### 4.3 How TMS answers (implementation, V53)
+
+- **Status codes.** `201` on first receipt; `200` for `UNCHANGED` (same `dispatchReference`,
+  `revision` and content - content is compared on the parsed document, so whitespace does not
+  matter) and for `STALE` (a revision older than the current one, whatever its content). `409` only
+  when the same revision arrives with different content, or when an `Idempotency-Key` is reused with
+  another body. `400` for a malformed document, `401`/`403` for authentication and scope, `413` over
+  2 MB.
+- **Every discrepancy carries a `severity`.** `ERROR` makes the document `MISMATCH`; `WARNING` and
+  `INFO` are shown without changing the verification.
+
+  | Severity | Codes |
+  |---|---|
+  | ERROR | `UNKNOWN_TRANSPORT_REFERENCE`, `TRIP_CANCELLED`, `TRIP_NOT_COMMITTED`, `MISSING_ORDER`, `EXTRA_ORDER`, `QUANTITY_VARIANCE`, `CARRIER_MISMATCH`, `VEHICLE_MISMATCH`, `WAREHOUSE_MISMATCH`, `UNKNOWN_LOAD`, `NOT_APPLIED` |
+  | WARNING | `QUANTITY_UNCOMPARABLE`, `DRIVER_MISMATCH`, `DISPATCH_BLOCKER` |
+  | INFO | `DISPATCH_TIME` |
+
+  `DISPATCH_BLOCKER` is a check a person dispatching would have been refused by (vehicle, driver,
+  carrier, calendar, an open tender offer): the truck already left, so it is recorded, not refused.
+  `NOT_APPLIED` is why an `UNAPPLIED` document could not move the trip: a database invariant (V42's
+  carrier-owns-vehicle) or a dispatch time before the trip was confirmed or made ready. TMS never
+  invents a time or a person to make a fact fit.
+- **Quantities.** Per line (lines summed across handling units) when the whole order is on the trip
+  and both sides name the line and the same unit; per order by weight with a 1% tolerance
+  otherwise (a share of a split order is never compared line by line); `QUANTITY_UNCOMPARABLE` when
+  neither is possible.
+- **Warehouse code** matches the origin's external reference, or its code when it has none.
+- **Reading it back.** `GET /api/v1/planning/trips/{tripId}/warehouse` (permission
+  `planning.trip:read`) returns the mode, how the trip departed, the derived verification, every
+  document with its discrepancies and orders, and the milestones;
+  `GET …/warehouse/documents/{id}/raw` returns a document exactly as received.
+
 **There is no `DISPATCH_CANCELLED`.** A WMS dispatch cannot be undone. Goods that come back are a
 return, and TMS records them as a delivery outcome and reopen (ADR-009), not as a cancelled dispatch.
 

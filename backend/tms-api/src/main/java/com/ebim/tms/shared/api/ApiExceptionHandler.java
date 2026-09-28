@@ -151,6 +151,11 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
      * specific handler for the thrown type, so an {@link IdempotencyConflictException} - which is
      * a {@link ConflictException} - still gets its own machine code.
      */
+    @ExceptionHandler(PayloadTooLargeException.class)
+    public ResponseEntity<ProblemDetail> handlePayloadTooLarge(PayloadTooLargeException failure, WebRequest request) {
+        return respond(ApiProblems.of(ProblemType.PAYLOAD_TOO_LARGE, failure.getMessage()), request);
+    }
+
     @ExceptionHandler(DispatchRequiresExternalConfirmationException.class)
     public ResponseEntity<ProblemDetail> handleDispatchRequiresExternalConfirmation(
             DispatchRequiresExternalConfirmationException failure, WebRequest request) {

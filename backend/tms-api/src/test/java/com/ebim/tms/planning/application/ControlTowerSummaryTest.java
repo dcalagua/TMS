@@ -98,7 +98,7 @@ class ControlTowerSummaryTest {
                 mock(VehicleLookupPort.class), orderPlanningPort,
                 new DispatchReadiness(mock(VehicleLookupPort.class), mock(com.ebim.tms.shared.reference.DriverLookupPort.class),
                         availabilityPort),
-                settlementAdvisoryPort);
+                settlementAdvisoryPort, mock(WarehouseDispatchAdvisories.class));
     }
 
     private static CompanyScope scopeWith(Set<Permission> permissions) {

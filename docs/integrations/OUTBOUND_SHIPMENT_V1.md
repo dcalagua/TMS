@@ -264,6 +264,17 @@ inventing a position. `orders[].externalSource`/`externalReference` echo back th
 sending system used in the inbound API (`docs/integrations/INBOUND_API_V1.md` section 6), when the
 order arrived that way; both are `null` for an order created by hand in TMS.
 
+### Warehouse fields (additive in v1, ADR-013)
+
+| Field | Meaning |
+|---|---|
+| `shipment.originExternalReference` | The origin location's external reference: the code a warehouse system knows the site by (`warehouseCode` in `WAREHOUSE_EXECUTION_V1.md`). Null when the origin has none |
+| `shipment.routeCode` | The route the shipment runs, when planned on one |
+| `shipment.driver` | `{code, name, documentNumber}` of the assigned driver, or null. The licence is not published |
+| `orders[].stopSequence` | The sequence of the stop that delivers the order |
+
+Added as trailing fields; no existing field changed. A consumer ignores fields it does not know.
+
 ### The five delivery fields (migration V28)
 
 Additive: a partner that integrated before them keeps seeing exactly what it saw.
@@ -347,10 +358,10 @@ poll `.../events?since=<watermark>`, and for every row returned fetch
 source of truth for its own fields, and an event payload that duplicated them would be a second
 copy that could drift from it.
 
-### Six event types have a source; one still does not
+### Every event type has a source
 
-`ck_shipment_outbox_event_type` (V20, widened by V25 and V28) accepts seven values. Six are
-written:
+`ck_shipment_outbox_event_type` (V20, widened by V25 and V28) accepts seven values, and since
+ADR-013 all seven are written:
 
 | `eventType` | Written by |
 |---|---|
@@ -360,7 +371,7 @@ written:
 | `SHIPMENT_COMPLETED` | `TripExecutionService.complete` |
 | `SHIPMENT_CANCELLED` | `TripService.cancel`, for a trip that had already been confirmed |
 | `DELIVERY_RESULT_RECORDED` | `TripDeliveryService.record` (V28) |
-| `SHIPMENT_CHANGED` | *nothing* |
+| `SHIPMENT_CHANGED` | `TripService.updateDriver`, when the driver of a `CONFIRMED` or `READY_FOR_DISPATCH` shipment really changes (ADR-013 §9; contract name `TRANSPORT_PLAN_UPDATED`) |
 
 `DELIVERY_RESULT_RECORDED` is the first value that is **not** a trip-state change, and it is the
 reason this column was built as an event type rather than a status: a partner told a shipment is
@@ -382,8 +393,9 @@ trip became legal in V25, so a partner that was handed a shipment now learns whe
 `ShipmentEventPublisher` is the single place that pairs an outbox row with its audit event, so the
 feed and the audit trail cannot tell different stories.
 
-`SHIPMENT_CHANGED` still has no source: the committed states remain locked against edits to what a
-shipment *carries*, so TMS cannot yet produce a change to publish.
+`SHIPMENT_CHANGED` has one source: the driver, the one thing about a committed plan that may still
+change. What a shipment *carries* - its orders and its vehicle - stays locked; a different plan is a
+cancellation and a new shipment number.
 
 A client must therefore already tolerate event types it has not seen before - a new one is added
 by an application change, not by a version bump of this contract.

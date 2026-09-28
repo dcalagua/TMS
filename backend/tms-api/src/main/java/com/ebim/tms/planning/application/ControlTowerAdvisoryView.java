@@ -66,6 +66,15 @@ public record ControlTowerAdvisoryView(
          * can still act on and the other is history. Keeping them apart is the difference between
          * "leave earlier" and "call the customer".
          */
-        STOP_ETA_MISSES_WINDOW
+        STOP_ETA_MISSES_WINDOW,
+
+        /** The current warehouse dispatch document of a shipment disagrees with the plan, or was not applied (V53). */
+        DISPATCH_MISMATCH,
+
+        /** EXTERNAL_REQUIRED: past its planned departure, and no warehouse dispatch has arrived (V53). */
+        AWAITING_WAREHOUSE_DISPATCH,
+
+        /** A warehouse dispatch document names a shipment this company does not have (V53). */
+        EXTERNAL_DISPATCH_UNMATCHED
     }
 }

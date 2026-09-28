@@ -62,7 +62,17 @@ public enum IntegrationScope {
      * <p>Deliberately not {@link #SHIPMENT_READ}, which exposes every confirmed shipment of the
      * company. A carrier learns about the shipments it was offered and about no others.
      */
-    TENDER_RESPOND("integration.tender:respond");
+    TENDER_RESPOND("integration.tender:respond"),
+
+    /**
+     * Report what a warehouse physically dispatched (migration V53, ADR-013): the dispatch document
+     * of a WMS. Write-only: it reads nothing, and a credential holding it should also hold
+     * {@link #SHIPMENT_READ} to fetch the plan it dispatches against.
+     */
+    DISPATCH_WRITE("integration.dispatch:write"),
+
+    /** Report warehouse milestones - loading started, load ready, load cancelled (migration V53). */
+    WAREHOUSE_MILESTONE_WRITE("integration.warehouse-milestone:write");
 
     private static final Map<String, IntegrationScope> BY_CODE = Arrays.stream(values())
             .collect(Collectors.toUnmodifiableMap(IntegrationScope::code, Function.identity()));

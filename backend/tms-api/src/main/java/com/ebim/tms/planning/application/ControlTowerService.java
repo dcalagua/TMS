@@ -153,6 +153,7 @@ public class ControlTowerService {
     private final VehicleLookupPort vehicleLookupPort;
     private final OrderPlanningPort orderPlanningPort;
     private final DispatchReadiness readiness;
+    private final WarehouseDispatchAdvisories warehouseAdvisories;
 
     /**
      * Read-only, and the tower holds nothing it reads through this. A discrepancy is resolved on
@@ -164,7 +165,9 @@ public class ControlTowerService {
             TripStopRepository tripStopRepository, TripExceptionRepository tripExceptionRepository,
             DestinationLookupPort destinationLookupPort, VehicleLookupPort vehicleLookupPort,
             OrderPlanningPort orderPlanningPort, DispatchReadiness readiness,
-            com.ebim.tms.shared.reference.SettlementAdvisoryPort settlementAdvisoryPort) {
+            com.ebim.tms.shared.reference.SettlementAdvisoryPort settlementAdvisoryPort,
+            WarehouseDispatchAdvisories warehouseAdvisories) {
+        this.warehouseAdvisories = warehouseAdvisories;
         this.readiness = readiness;
         this.settlementAdvisoryPort = settlementAdvisoryPort;
         this.tripService = tripService;
@@ -198,7 +201,7 @@ public class ControlTowerService {
         // Built beside the blockers and never merged into them (JOB 23). A blocker stops a truck;
         // an advisory is worth knowing and may reasonably wait. One list of both is how a panel
         // stops being read.
-        List<ControlTowerAdvisoryView> advisories = advisories(scope, date);
+        List<ControlTowerAdvisoryView> advisories = advisories(scope, date, now);
 
         return new ControlTowerView(date, now, summary(scope, date, zone, now, blockers.size(), advisories.size()),
                 workload(scope, date), exceptions, stops, blockers, advisories);
@@ -555,10 +558,11 @@ public class ControlTowerService {
      *
      * <p>Capped like every other panel, with the true total on the summary.
      */
-    private List<ControlTowerAdvisoryView> advisories(CompanyScope scope, LocalDate date) {
+    private List<ControlTowerAdvisoryView> advisories(CompanyScope scope, LocalDate date, OffsetDateTime now) {
         List<ControlTowerAdvisoryView> advisories = new java.util.ArrayList<>();
         advisories.addAll(settlementAdvisories(scope, date));
         advisories.addAll(etaAdvisories(scope, date));
+        advisories.addAll(warehouseAdvisories.advisories(scope, date, now, PANEL_SIZE));
         return List.copyOf(advisories);
     }
 

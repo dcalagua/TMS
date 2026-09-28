@@ -204,7 +204,9 @@ public class OrderPlanningService implements OrderPlanningPort {
             throw new ConflictException("Order " + order.orderNumber() + " is " + order.status()
                     + " and cannot be dispatched.");
         }
-        if (order.markInExecution(auditActorProvider.requireAppUserId())) {
+        // writerAppUserId: a warehouse system's dispatch (ADR-013) moves orders too, and a credential
+        // has no app_user - updated_by is left null rather than inventing a person.
+        if (order.markInExecution(auditActorProvider.writerAppUserId())) {
             save(order);
         }
     }

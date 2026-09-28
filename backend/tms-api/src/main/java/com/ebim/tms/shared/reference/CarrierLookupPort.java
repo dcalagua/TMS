@@ -45,4 +45,12 @@ public interface CarrierLookupPort {
      * has a procurement problem this port is not the place to solve.
      */
     List<MasterReference> findAllActiveInCompany(UUID companyId);
+
+    /**
+     * The external reference of each carrier in {@code ids} that has one - how a warehouse system
+     * may know the carrier (ADR-013 section 5, {@code CARRIER_MISMATCH}). Batched, company-scoped.
+     */
+    default Map<UUID, String> externalReferencesInCompany(Set<UUID> ids, UUID companyId) {
+        return Map.of();
+    }
 }

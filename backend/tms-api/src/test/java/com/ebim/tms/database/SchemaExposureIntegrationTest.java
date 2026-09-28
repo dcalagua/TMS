@@ -77,6 +77,8 @@ class SchemaExposureIntegrationTest {
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
             "work_assignment", "work_assignment_trip",
+            // V53: what a warehouse system reported (ADR-013).
+            "external_dispatch", "external_dispatch_order", "warehouse_milestone",
             // V51: MasterAdmin provisioning. Owner connection only - tms_app holds no grant and a
             // deny-all policy - and write-once by trigger.
             "platform_provisioning_request", "platform_provisioning_audit");
@@ -117,7 +119,9 @@ class SchemaExposureIntegrationTest {
             "freight_discrepancy", "settlement_approval", "payable_export",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
-            "work_assignment", "work_assignment_trip");
+            "work_assignment", "work_assignment_trip",
+            // V53: what a warehouse system reported (ADR-013).
+            "external_dispatch", "external_dispatch_order", "warehouse_milestone");
 
     /**
      * The only tables allowed to carry a {@code company_id} and <em>not</em> the tenant policy.
@@ -343,6 +347,10 @@ class SchemaExposureIntegrationTest {
         withheld.put("tender_waterfall", List.of("DELETE"));
         withheld.put("tender_waterfall_candidate", List.of("DELETE"));
         withheld.put("appointment", List.of("DELETE"));
+        // V53: a received document is a record of a fact; UPDATE only to supersede it.
+        withheld.put("external_dispatch", List.of("DELETE"));
+        withheld.put("external_dispatch_order", List.of("UPDATE", "DELETE"));
+        withheld.put("warehouse_milestone", List.of("UPDATE", "DELETE"));
         // Canonical location replaced these; they are read-only projections now (V23).
         withheld.put("origin", List.of("INSERT", "UPDATE", "DELETE"));
         withheld.put("destination", List.of("INSERT", "UPDATE", "DELETE"));

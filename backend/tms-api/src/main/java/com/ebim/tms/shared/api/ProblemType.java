@@ -95,6 +95,12 @@ public enum ProblemType {
      */
     FEATURE_NOT_CONFIGURED("feature-not-configured", "Feature is not configured", HttpStatus.SERVICE_UNAVAILABLE),
 
+    /**
+     * A request body over an endpoint's documented limit - today the 2 MB of a warehouse dispatch
+     * document (WAREHOUSE_EXECUTION_V1 §4.1). Distinct because the only fix is a smaller body.
+     */
+    PAYLOAD_TOO_LARGE("payload-too-large", "Payload too large", HttpStatus.PAYLOAD_TOO_LARGE),
+
     /** Anything unexpected. The detail is deliberately generic; the cause is only in the server log. */
     INTERNAL_ERROR("internal-error", "Internal server error", HttpStatus.INTERNAL_SERVER_ERROR);
 

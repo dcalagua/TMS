@@ -45,6 +45,9 @@ public interface TransportOrderRepository
      */
     List<TransportOrder> findByIdInAndCompanyId(Collection<UUID> ids, UUID companyId);
 
+    /** Candidates for an exact (external_source, external_reference) match, company-scoped. */
+    List<TransportOrder> findByCompanyIdAndExternalReferenceIn(UUID companyId, Collection<String> externalReferences);
+
     boolean existsByCompanyIdAndExternalSourceAndExternalReference(UUID companyId, String externalSource, String externalReference);
 
     /**
