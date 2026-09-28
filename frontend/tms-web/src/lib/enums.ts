@@ -145,6 +145,12 @@ export const ENUM_LABELS = {
     SETTLEMENT_DISCREPANCY_OPEN: "Diferencia en factura sin resolver",
     STOP_ETA_MISSES_WINDOW: "La llegada estimada se sale de la ventana",
   },
+  /** ADR-013 §1: quién despacha un envío en esta empresa. */
+  dispatchConfirmationMode: {
+    EXTERNAL_REQUIRED: "Requiere confirmación del almacén (WMS)",
+    HYBRID: "Híbrido: el primero que confirme",
+    MANUAL: "Despacho manual (TMS)",
+  },
   blockerReason: {
     AWAITING_CARRIER_VEHICLE: "Falta vehículo del transportista",
     DRIVER_UNAVAILABLE: "Conductor no disponible",
