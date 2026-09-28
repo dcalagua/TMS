@@ -18,7 +18,6 @@ import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.PlannableOrderQuery;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
-import com.ebim.tms.shared.reference.ResourceAvailabilityPort;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.security.Permission;
@@ -153,7 +152,7 @@ public class ControlTowerService {
     private final DestinationLookupPort destinationLookupPort;
     private final VehicleLookupPort vehicleLookupPort;
     private final OrderPlanningPort orderPlanningPort;
-    private final ResourceAvailabilityPort resourceAvailabilityPort;
+    private final DispatchReadiness readiness;
 
     /**
      * Read-only, and the tower holds nothing it reads through this. A discrepancy is resolved on
@@ -164,9 +163,9 @@ public class ControlTowerService {
     public ControlTowerService(TripService tripService, TripViewAssembler assembler, TripRepository tripRepository,
             TripStopRepository tripStopRepository, TripExceptionRepository tripExceptionRepository,
             DestinationLookupPort destinationLookupPort, VehicleLookupPort vehicleLookupPort,
-            OrderPlanningPort orderPlanningPort, ResourceAvailabilityPort resourceAvailabilityPort,
+            OrderPlanningPort orderPlanningPort, DispatchReadiness readiness,
             com.ebim.tms.shared.reference.SettlementAdvisoryPort settlementAdvisoryPort) {
-        this.resourceAvailabilityPort = resourceAvailabilityPort;
+        this.readiness = readiness;
         this.settlementAdvisoryPort = settlementAdvisoryPort;
         this.tripService = tripService;
         this.assembler = assembler;
@@ -256,14 +255,27 @@ public class ControlTowerService {
      * <p>Only shipments that have not left. One already in transit either resolved its blocker or
      * never had one, and a cancelled shipment is not going anywhere regardless.
      */
+    private static ControlTowerBlockerView toBlockerView(Trip trip, DispatchReadiness.Blocker blocker) {
+        ControlTowerBlockerView.BlockerReason reason = switch (blocker.code()) {
+            case AWAITING_CARRIER_VEHICLE -> ControlTowerBlockerView.BlockerReason.AWAITING_CARRIER_VEHICLE;
+            case VEHICLE_UNAVAILABLE -> ControlTowerBlockerView.BlockerReason.VEHICLE_UNAVAILABLE;
+            case DRIVER_UNAVAILABLE -> ControlTowerBlockerView.BlockerReason.DRIVER_UNAVAILABLE;
+            default -> throw new IllegalStateException("The Control Tower does not ask for " + blocker.code());
+        };
+        return new ControlTowerBlockerView(trip.id(), trip.tripNumber(), trip.shipmentNumber(), reason,
+                blocker.detail());
+    }
+
     private List<ControlTowerBlockerView> blockers(CompanyScope scope, LocalDate date) {
         List<ControlTowerBlockerView> blockers = new ArrayList<>();
 
+        // The same evaluator the gate refuses with (ADR-013 section 12), asked only the two
+        // questions this panel has always answered, each over its own day query so a board of
+        // 300 trips reads two filtered lists and not 300 full evaluations.
         for (Trip trip : tripRepository.findAwaitingCarrierVehicleForDay(
                 scope.companyId(), date, BLOCKABLE_STATES)) {
-            blockers.add(new ControlTowerBlockerView(trip.id(), trip.tripNumber(), trip.shipmentNumber(),
-                    ControlTowerBlockerView.BlockerReason.AWAITING_CARRIER_VEHICLE,
-                    "Accepted by a carrier that does not own the vehicle assigned to it."));
+            readiness.evaluate(scope, trip, null, EnumSet.of(DispatchReadiness.Check.CARRIER_OWNS_VEHICLE))
+                    .forEach(blocker -> blockers.add(toBlockerView(trip, blocker)));
         }
 
         // Availability lives in the fleet module, so it is asked through the port rather than
@@ -275,14 +287,9 @@ public class ControlTowerService {
             if (trip.plannedDepartureAt() == null) {
                 continue;
             }
-            resourceAvailabilityPort
-                    .findBlock(scope.companyId(), trip.vehicleId(), trip.driverId(), trip.plannedDepartureAt())
-                    .ifPresent(block -> blockers.add(new ControlTowerBlockerView(
-                            trip.id(), trip.tripNumber(), trip.shipmentNumber(),
-                            "vehicle".equals(block.resource())
-                                    ? ControlTowerBlockerView.BlockerReason.VEHICLE_UNAVAILABLE
-                                    : ControlTowerBlockerView.BlockerReason.DRIVER_UNAVAILABLE,
-                            "Unavailable (" + block.reason() + ") until " + block.endsAt() + ".")));
+            readiness.evaluate(scope, trip, trip.plannedDepartureAt(),
+                            EnumSet.of(DispatchReadiness.Check.RESOURCES_AVAILABLE))
+                    .forEach(blocker -> blockers.add(toBlockerView(trip, blocker)));
         }
 
         // Capped like every other panel, with the true total travelling in the summary - so a

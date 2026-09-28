@@ -24,6 +24,7 @@ import com.ebim.tms.shared.reference.DriverLookupPort;
 import com.ebim.tms.shared.reference.DriverReference;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.ResourceAvailabilityPort;
+import com.ebim.tms.shared.reference.ResourceBlock;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.math.BigDecimal;
@@ -102,8 +103,9 @@ class TripExecutionServiceTest {
         orderExecution = mock(OrderExecutionPropagator.class);
         availabilityPort = mock(ResourceAvailabilityPort.class);
         when(availabilityPort.findBlock(any(), any(), any(), any())).thenReturn(Optional.empty());
-        service = new TripExecutionService(tripRepository, vehicleLookupPort, driverLookupPort, availabilityPort,
-                events, mock(TripTenderService.class), alerts, assembler, orderExecution, actors);
+        service = new TripExecutionService(tripRepository,
+                new DispatchReadiness(vehicleLookupPort, driverLookupPort, availabilityPort), events,
+                mock(TripTenderService.class), alerts, assembler, orderExecution, actors);
         when(tripRepository.saveAndFlush(any(Trip.class))).thenAnswer(call -> call.getArgument(0));
         when(assembler.toDetail(any(Trip.class), eq(COMPANY)))
                 .thenAnswer(call -> new TripDetailView(null, List.of(), List.of(), List.of(), List.of(), TripRouteMetrics.NONE));
@@ -441,6 +443,66 @@ class TripExecutionServiceTest {
         /** The day the service judges a licence by: today in the company's zone, not the server's. */
         private LocalDate companyToday() {
             return SCOPE.today();
+        }
+    }
+
+    /**
+     * Characterisation of the five dispatch checks before they moved into {@code DispatchReadiness}
+     * (ADR-013 section 12): each refusal, word for word, and the order they are tried in. The
+     * refactor must leave every one of these exactly as it is.
+     */
+    @Nested
+    @DisplayName("the dispatch checks, as the gate words them")
+    class DispatchChecks {
+
+        @Test
+        @DisplayName("a vehicle that is no longer assignable is refused with its trip number")
+        void inoperableVehicle() {
+            Trip trip = lockedTrip(TripStatus.READY_FOR_DISPATCH);
+            when(vehicleLookupPort.findAssignable(VEHICLE, COMPANY)).thenReturn(Optional.empty());
+
+            assertThatExceptionOfType(ConflictException.class)
+                    .isThrownBy(() -> service.dispatch(scope, TRIP_ID, current(trip, null)))
+                    .withMessage("Trip 1 is assigned a vehicle that is no longer active and available.");
+            assertThat(trip.status()).isEqualTo(TripStatus.READY_FOR_DISPATCH);
+        }
+
+        @Test
+        @DisplayName("a deactivated driver is refused at the gate, not only when made ready")
+        void inactiveDriver() {
+            Trip trip = lockedTripWithDriver(TripStatus.READY_FOR_DISPATCH);
+            when(driverLookupPort.findAssignable(DRIVER, COMPANY)).thenReturn(Optional.empty());
+
+            assertThatExceptionOfType(ConflictException.class)
+                    .isThrownBy(() -> service.dispatch(scope, TRIP_ID, current(trip, null)))
+                    .withMessage("Trip 1 is assigned a driver who is no longer active.");
+        }
+
+        @Test
+        @DisplayName("a vehicle blocked at the moment of departure is refused, naming why and until when")
+        void blockedResource() {
+            Trip trip = lockedTrip(TripStatus.READY_FOR_DISPATCH);
+            OffsetDateTime until = OffsetDateTime.parse("2030-01-01T10:00:00Z");
+            when(availabilityPort.findBlock(eq(COMPANY), eq(VEHICLE), any(), any()))
+                    .thenReturn(Optional.of(new ResourceBlock("vehicle", "MAINTENANCE", until)));
+
+            assertThatExceptionOfType(ConflictException.class)
+                    .isThrownBy(() -> service.dispatch(scope, TRIP_ID, current(trip, null)))
+                    .withMessage("Trip 1 cannot depart: its vehicle is unavailable (MAINTENANCE) until " + until + ".");
+            assertThat(trip.status()).isEqualTo(TripStatus.READY_FOR_DISPATCH);
+        }
+
+        @Test
+        @DisplayName("the vehicle is tried before the resource block: the first failing check is the one reported")
+        void vehicleIsCheckedFirst() {
+            Trip trip = lockedTrip(TripStatus.READY_FOR_DISPATCH);
+            when(vehicleLookupPort.findAssignable(VEHICLE, COMPANY)).thenReturn(Optional.empty());
+            when(availabilityPort.findBlock(any(), any(), any(), any())).thenReturn(Optional.of(
+                    new ResourceBlock("vehicle", "MAINTENANCE", OffsetDateTime.parse("2030-01-01T10:00:00Z"))));
+
+            assertThatExceptionOfType(ConflictException.class)
+                    .isThrownBy(() -> service.dispatch(scope, TRIP_ID, current(trip, null)))
+                    .withMessageContaining("no longer active and available");
         }
     }
 

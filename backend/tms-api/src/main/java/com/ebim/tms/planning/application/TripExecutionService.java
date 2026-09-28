@@ -9,16 +9,13 @@ import com.ebim.tms.shared.api.ConflictException;
 import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.audit.AuditActorProvider;
-import com.ebim.tms.shared.reference.DriverLicenseStatus;
-import com.ebim.tms.shared.reference.DriverLookupPort;
-import com.ebim.tms.shared.reference.DriverReference;
-import com.ebim.tms.shared.reference.ResourceAvailabilityPort;
-import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
@@ -62,9 +59,11 @@ public class TripExecutionService {
     private static final Duration CLOCK_SKEW_TOLERANCE = Duration.ofMinutes(5);
 
     private final TripRepository tripRepository;
-    private final VehicleLookupPort vehicleLookupPort;
-    private final DriverLookupPort driverLookupPort;
-    private final ResourceAvailabilityPort resourceAvailabilityPort;
+    /** Being made ready re-checks the vehicle and the driver; the carrier and the calendar wait for the gate. */
+    private static final Set<DispatchReadiness.Check> READY_CHECKS =
+            EnumSet.of(DispatchReadiness.Check.VEHICLE_OPERABLE, DispatchReadiness.Check.DRIVER_OPERABLE);
+
+    private final DispatchReadiness readiness;
     private final ShipmentEventPublisher events;
     private final TripTenderService tenders;
     private final TripAlertPublisher alerts;
@@ -72,15 +71,12 @@ public class TripExecutionService {
     private final OrderExecutionPropagator orderExecution;
     private final AuditActorProvider auditActorProvider;
 
-    public TripExecutionService(TripRepository tripRepository, VehicleLookupPort vehicleLookupPort,
-            DriverLookupPort driverLookupPort, ResourceAvailabilityPort resourceAvailabilityPort,
+    public TripExecutionService(TripRepository tripRepository, DispatchReadiness readiness,
             ShipmentEventPublisher events, TripTenderService tenders,
             TripAlertPublisher alerts, TripViewAssembler assembler, OrderExecutionPropagator orderExecution,
             AuditActorProvider auditActorProvider) {
         this.tripRepository = tripRepository;
-        this.resourceAvailabilityPort = resourceAvailabilityPort;
-        this.vehicleLookupPort = vehicleLookupPort;
-        this.driverLookupPort = driverLookupPort;
+        this.readiness = readiness;
         this.events = events;
         this.tenders = tenders;
         this.alerts = alerts;
@@ -102,8 +98,7 @@ public class TripExecutionService {
     public TripDetailView markReadyForDispatch(CompanyScope scope, UUID tripId, TripExecutionRequest request) {
         return transition(scope, tripId, TripStatus.READY_FOR_DISPATCH, request, ShipmentEventType.SHIPMENT_READY,
                 (trip, occurredAt) -> {
-                    requireOperableVehicle(scope, trip);
-                    requireOperableDriver(scope, trip);
+                    requireReady(scope, trip, occurredAt, READY_CHECKS);
                     requireNotBefore(occurredAt, trip.confirmedAt(), "before the trip was confirmed");
                     trip.markReadyForDispatch(occurredAt, auditActorProvider.requireAppUserId());
                 });
@@ -125,10 +120,7 @@ public class TripExecutionService {
         TripDetailView dispatched = transition(scope, tripId, TripStatus.IN_TRANSIT, request,
                 ShipmentEventType.SHIPMENT_DISPATCHED,
                 (trip, occurredAt) -> {
-                    requireOperableVehicle(scope, trip);
-                    requireOperableDriver(scope, trip);
-                    requireCarrierOwnsTheVehicle(trip);
-                    requireResourcesAvailable(scope, trip, occurredAt);
+                    requireReady(scope, trip, occurredAt, DispatchReadiness.ALL);
                     requireNotBefore(occurredAt, trip.readyAt(), "before the trip was made ready");
                     trip.dispatch(occurredAt, auditActorProvider.requireAppUserId());
                 });
@@ -257,87 +249,6 @@ public class TripExecutionService {
     }
 
     /**
-     * The vehicle must still be one this company may send out. Not applied to
-     * {@link #complete}: a trip that is already on the road has to be closeable even if the truck
-     * broke down and was marked out of service while it was gone - refusing to complete it would
-     * leave a shipment permanently {@code IN_TRANSIT}, which is worse than the fleet edit it is
-     * reacting to.
-     */
-    /**
-     * A shipment accepted by one carrier may not depart on another carrier's vehicle (V42, debt D2).
-     *
-     * <p>The sentence a dispatcher reads. {@code Trip.dispatch} refuses again in the aggregate and
-     * {@code ck_trip_departed_carrier_matches_vehicle} refuses in the database - the three-layer
-     * shape every invariant in this codebase has. Only the first of the three says what to do
-     * about it.
-     */
-    private void requireCarrierOwnsTheVehicle(Trip trip) {
-        if (trip.awaitsCarrierVehicle()) {
-            throw new ConflictException("Trip " + trip.tripNumber() + " was accepted by a carrier that does not"
-                    + " own the vehicle assigned to it. Assign one of that carrier's vehicles before dispatching.");
-        }
-    }
-
-    /**
-     * Neither the vehicle nor the driver may be blocked at the moment of departure (V42).
-     *
-     * <p>Checked at the gate rather than only when the shipment was planned, for the reason the
-     * licence check is: a truck booked into the workshop this morning was assignable last night,
-     * and the record of why it did not run is worth more than the shipment that pretended it did.
-     */
-    private void requireResourcesAvailable(CompanyScope scope, Trip trip, OffsetDateTime at) {
-        resourceAvailabilityPort.findBlock(scope.companyId(), trip.vehicleId(), trip.driverId(), at)
-                .ifPresent(block -> {
-                    throw new ConflictException("Trip " + trip.tripNumber() + " cannot depart: its "
-                            + block.resource() + " is unavailable (" + block.reason() + ") until "
-                            + block.endsAt() + ".");
-                });
-    }
-
-    private void requireOperableVehicle(CompanyScope scope, Trip trip) {
-        UUID vehicleId = trip.vehicleId();
-        if (vehicleId == null) {
-            // Unreachable through the API: ck_trip_confirmed_is_complete (V25) makes a committed
-            // trip without a vehicle impossible. Checked anyway so the failure, if a raw data fix
-            // ever produced one, is this sentence and not a NullPointerException.
-            throw new ConflictException("Trip " + trip.tripNumber() + " has no vehicle assigned.");
-        }
-        vehicleLookupPort.findAssignable(vehicleId, scope.companyId())
-                .orElseThrow(() -> new ConflictException("Trip " + trip.tripNumber()
-                        + " is assigned a vehicle that is no longer active and available."));
-    }
-
-    /**
-     * If a driver is named, they must still be someone this company may send out - active, with a
-     * licence that has not run out. Re-checked here and not only when they were assigned, for the
-     * same reason the vehicle is: the assignment may have been days ago, and a licence that lapsed
-     * in between must stop the truck at the gate rather than on the road.
-     *
-     * <p>Judged against <em>today</em> in the company's own zone, not against the trip's planning
-     * date. A shipment being dispatched a day late is dispatched with today's licences, and the
-     * planning date is what the assignment rule uses precisely because at that point the day in
-     * question is still in the future ({@code TripService.requireValidLicenceOn}).
-     *
-     * <p>A trip with no driver passes: naming one is not required by any state (migration V26), so
-     * this must not become a back-door mandate. Not applied to {@link #complete}, exactly as the
-     * vehicle check is not - a trip already on the road has to be closeable whatever has since
-     * happened to the fleet or the personnel file.
-     */
-    private void requireOperableDriver(CompanyScope scope, Trip trip) {
-        UUID driverId = trip.driverId();
-        if (driverId == null) {
-            return;
-        }
-        DriverReference driver = driverLookupPort.findAssignable(driverId, scope.companyId())
-                .orElseThrow(() -> new ConflictException("Trip " + trip.tripNumber()
-                        + " is assigned a driver who is no longer active."));
-        if (driver.licenseStatusOn(scope.today()) == DriverLicenseStatus.EXPIRED) {
-            throw new ConflictException("Driver " + driver.code() + " has a licence that expired on "
-                    + driver.licenseExpiresOn() + " and cannot run trip " + trip.tripNumber() + ".");
-        }
-    }
-
-    /**
      * Defaults an omitted time to now and refuses one in the future. A shipment cannot have
      * departed at a time that has not happened yet, and accepting one would put a report's
      * "average delay" permanently out of reach of correction.
@@ -351,6 +262,17 @@ public class TripExecutionService {
             throw new InvalidRequestException("occurredAt cannot be in the future.");
         }
         return requested;
+    }
+
+    /**
+     * Refuses with the first blocker {@link DispatchReadiness} finds among {@code checks}: the
+     * sentence the gate has always shown, now written in one place (ADR-013 section 12).
+     */
+    private void requireReady(CompanyScope scope, Trip trip, OffsetDateTime at, Set<DispatchReadiness.Check> checks) {
+        List<DispatchReadiness.Blocker> blockers = readiness.evaluate(scope, trip, at, checks);
+        if (!blockers.isEmpty()) {
+            throw new ConflictException(blockers.get(0).message());
+        }
     }
 
     /**

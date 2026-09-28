@@ -84,7 +84,9 @@ class ControlTowerAdvisoriesTest {
 
         service = new ControlTowerService(mock(TripService.class), mock(TripViewAssembler.class),
                 tripRepository, stopRepository, exceptionRepository, mock(DestinationLookupPort.class),
-                mock(VehicleLookupPort.class), orderPlanningPort, availabilityPort, settlementAdvisoryPort);
+                mock(VehicleLookupPort.class), orderPlanningPort,
+                new DispatchReadiness(mock(VehicleLookupPort.class), mock(com.ebim.tms.shared.reference.DriverLookupPort.class),
+                        availabilityPort), settlementAdvisoryPort);
     }
 
     private static CompanyScope scope() {
