@@ -13,14 +13,13 @@ import {
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
-  arriveAtStop, cancelTrip, completeStop, completeTrip, dispatchTrip, failStop, fetchTrip,
+  arriveAtStop, cancelTrip, completeStop, completeTrip, dispatchTrip, failStop,
   fetchTripEvents, markTripReady, recordDelivery, reportTripException, resolveTripException,
   skipStop, startStopService, uploadDeliveryEvidence, downloadDeliveryEvidence,
   type DeliveryEvidenceView, type OrderDeliveryView, type TripDetailView, type TripExceptionView,
   type TripStopView,
 } from "../../shared/api/planningApi";
-import { fetchTripTracking } from "../../shared/api/trackingApi";
-import { fetchTripWarehouse } from "../../shared/api/warehouseApi";
+import { tripQueryKeys, useTripDetail, useTripTracking, useTripWarehouse } from "./tripQueries";
 import {
   DISPATCH_OVERRIDE_PERMISSION, OVERRIDE_REASON_MAX_LENGTH, describeDispatchError, dispatchActionFor,
   isExternalConfirmationRequired, normalizeOverrideReason,
@@ -112,12 +111,8 @@ export function TripWorkspacePage() {
   const canReadOrders = hasPermission("orders.order:read");
   const queryClient = useQueryClient();
 
-  const queryKey = ["trip", companyId, tripId];
-  const tripQuery = useQuery({
-    queryKey,
-    queryFn: ({ signal }) => fetchTrip(companyId, tripId as string, signal),
-    enabled: companyId !== "" && tripId !== undefined,
-  });
+  const queryKey = tripQueryKeys.detail(companyId, tripId);
+  const tripQuery = useTripDetail(companyId, tripId);
 
   const eventsQueryKey = ["trip-events", companyId, tripId];
   const eventsQuery = useQuery({
@@ -126,24 +121,15 @@ export function TripWorkspacePage() {
     enabled: companyId !== "" && tripId !== undefined,
   });
 
-  const trackingQuery = useQuery({
-    queryKey: ["trip-tracking", companyId, tripId],
-    queryFn: ({ signal }) => fetchTripTracking(companyId, tripId as string, signal),
-    enabled: companyId !== "" && tripId !== undefined && canMonitor,
-    // Un despliegue sin feed no debería gastar tres viajes por visita en volver a descubrirlo.
-    retry: false,
-  });
+  // Un despliegue sin feed no debería gastar tres viajes por visita en volver a descubrirlo: el
+  // hook no reintenta.
+  const trackingQuery = useTripTracking(companyId, tripId, canMonitor);
 
   /** Cómo salió el envío y qué dijo el almacén (ADR-013). También trae el modo de despacho de la
    * empresa, que es lo que decide si "Despachar" es un despacho normal o un override. Un fallo
    * aquí no rompe la pantalla: sin modo conocido se despacha normal y el servidor decide. */
-  const warehouseQueryKey = ["trip-warehouse", companyId, tripId];
-  const warehouseQuery = useQuery({
-    queryKey: warehouseQueryKey,
-    queryFn: ({ signal }) => fetchTripWarehouse(companyId, tripId as string, signal),
-    enabled: companyId !== "" && tripId !== undefined,
-    retry: false,
-  });
+  const warehouseQueryKey = tripQueryKeys.warehouse(companyId, tripId);
+  const warehouseQuery = useTripWarehouse(companyId, tripId);
 
   /** La hora real que aporta el operador, vacía por defecto: vacío significa "ahora". */
   const [occurredAt, setOccurredAt] = useState("");
@@ -207,7 +193,7 @@ export function TripWorkspacePage() {
     // El rastreo se refresca también, no porque una escritura produzca posiciones —nada en eTMS
     // lo hace— sino porque despachar y completar cambian si el envío está en la carretera, y la
     // tarjeta dice algo distinto en cada caso.
-    void queryClient.invalidateQueries({ queryKey: ["trip-tracking", companyId, tripId] });
+    void queryClient.invalidateQueries({ queryKey: tripQueryKeys.tracking(companyId, tripId) });
     // Despachar cambia la fuente de salida y la verificación que enseña la tarjeta del almacén.
     void queryClient.invalidateQueries({ queryKey: warehouseQueryKey });
     // La lista de detrás enseña el mismo estado: dejarla obsoleta significa que quien vuelva

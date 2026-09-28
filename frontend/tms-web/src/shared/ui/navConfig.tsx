@@ -9,6 +9,7 @@ import {
   EventAvailableRounded,
   ReceiptLongRounded,
   EventNoteRounded,
+  TravelExploreRounded,
 } from "@mui/icons-material";
 
 /** Una hoja del menú: una pantalla concreta. */
@@ -48,6 +49,7 @@ export const ICON_TINTS: Record<string, string> = {
   "/orders": "#29B6F6",
   "/planning": "#B085F5",
   "/trips": "#66BB6A",
+  "/delivery-tracking": "#FF7043",
   "/appointments": "#FFA726",
   "/settlement": "#8D6E63",
   "/work-assignments": "#7E57C2",
@@ -103,6 +105,10 @@ export const NAV_SECTIONS: NavSection[] = [
       { to: "/orders", label: "Pedidos", icon: <AssignmentTurnedInRounded />, capability: "ORDERS_VIEW" },
       { to: "/planning", label: "Planificación", icon: <ViewKanbanRounded />, capability: "PLANNING_VIEW" },
       { to: "/trips", label: "Viajes", icon: <MapRounded />, capability: "TRIPS_VIEW" },
+      // Justo detrás de Viajes: es el mismo día mirado mientras ocurre. Lee el tablero de la torre
+      // de control, así que comparte su capability y no la de Viajes.
+      { to: "/delivery-tracking", label: "Seguimiento de reparto", icon: <TravelExploreRounded />,
+        capability: "TRANSPORT_MONITOR_VIEW" },
       // Después de Viajes: una cita existe por un viaje, y la garita la lee justo antes de que
       // llegue. Su propia entrada y no una pestaña del workspace porque quien la mira - patio,
       // garita, almacén - no planifica envíos.
