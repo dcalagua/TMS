@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.ebim.tms.planning.domain.Trip;
@@ -73,6 +74,7 @@ class TripDriverAssignmentTest {
     private DriverLookupPort driverLookupPort;
     private AuditRecorder auditRecorder;
     private TripService service;
+    private ShipmentEventPublisher events;
 
     @BeforeEach
     void setUp() {
@@ -85,11 +87,12 @@ class TripDriverAssignmentTest {
         CompanySettingsPort settings = mock(CompanySettingsPort.class);
         when(settings.settingsOf(any())).thenReturn(CompanySettings.defaults());
 
+        events = mock(ShipmentEventPublisher.class);
         service = new TripService(tripRepository, mock(PlanningRunRepository.class),
                 mock(TripOrderAssignmentRepository.class), mock(TripAssignmentService.class),
                 mock(OrderPlanningPort.class), mock(VehicleLookupPort.class), driverLookupPort,
                 mock(RouteTemplateLookupPort.class), mock(PlanningCapacityService.class), assembler,
-                mock(ShipmentEventPublisher.class), mock(TripTenderService.class),
+                events, mock(TripTenderService.class),
                 // The settings port only decides the shipment-number prefix (migration V34); it is
                 // stubbed with the product defaults rather than left unstubbed so that a later test
                 // in this file which creates a trip fails on its own rule, not on a null prefix.
@@ -150,6 +153,30 @@ class TripDriverAssignmentTest {
             service.updateDriver(SCOPE, TRIP_ID, request(trip, DRIVER));
 
             assertThat(trip.driverId()).isEqualTo(DRIVER);
+        }
+
+        @Test
+        @DisplayName("ADR-013: a new driver on a committed shipment publishes SHIPMENT_CHANGED (TRANSPORT_PLAN_UPDATED)")
+        void aCommittedDriverChangeIsPublished() {
+            Trip trip = lockedTrip(TripStatus.CONFIRMED);
+
+            service.updateDriver(SCOPE, TRIP_ID, request(trip, DRIVER));
+
+            verify(events).publish(eq(SCOPE), eq(trip), eq(com.ebim.tms.planning.domain.ShipmentEventType.SHIPMENT_CHANGED),
+                    any(), eq(java.util.Map.of("change", "DRIVER", "driverId", DRIVER.toString())));
+        }
+
+        @Test
+        @DisplayName("ADR-013: nobody outside has seen a draft, and re-saving the same driver is not news")
+        void draftsAndNonChangesAreNotPublished() {
+            Trip draft = lockedTrip(TripStatus.DRAFT);
+            service.updateDriver(SCOPE, TRIP_ID, request(draft, DRIVER));
+
+            Trip confirmed = lockedTrip(TripStatus.CONFIRMED);
+            confirmed.assignDriver(DRIVER, ACTOR);
+            service.updateDriver(SCOPE, TRIP_ID, request(confirmed, DRIVER));
+
+            verifyNoInteractions(events);
         }
 
         @Test

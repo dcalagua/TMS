@@ -40,6 +40,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -232,11 +233,13 @@ public class TripService {
         requireCurrentVersion("trip", trip.version(), request.version());
 
         UUID actorId = auditActorProvider.requireAppUserId();
+        UUID previousDriver = trip.driverId();
         if (request.driverId() == null) {
             trip.assignDriver(null, actorId);
             Trip cleared = save(trip);
             auditRecorder.record(scope, AuditAggregateType.TRIP, cleared.id(), AuditAction.DRIVER_CHANGE,
                     Map.of("shipmentNumber", cleared.shipmentNumber(), "driverId", "none"));
+            announcePlanChange(scope, cleared, previousDriver);
             return assembler.toDetail(cleared, scope.companyId());
         }
 
@@ -256,7 +259,29 @@ public class TripService {
         // and keyed on the driver and their expiry date, so planning the same person all week is
         // one warning - see TripAlertPublisher.driverAssigned.
         alerts.driverAssigned(scope, saved, driver, OffsetDateTime.now());
+        announcePlanChange(scope, saved, previousDriver);
         return assembler.toDetail(saved, scope.companyId());
+    }
+
+    /**
+     * The driver is the one thing about a committed plan that may still change (ADR-013 section 9),
+     * and a warehouse loading the truck needs to know who will collect it. This is the first
+     * producer of {@code SHIPMENT_CHANGED}, reserved since V20: published only when the plan is
+     * binding (CONFIRMED or READY_FOR_DISPATCH, never DRAFT, which nobody outside has seen) and only
+     * when the driver really changed, so re-saving the same person is not news. The contract calls
+     * it {@code TRANSPORT_PLAN_UPDATED}.
+     */
+    private void announcePlanChange(CompanyScope scope, Trip trip, UUID previousDriver) {
+        if (trip.status() != TripStatus.CONFIRMED && trip.status() != TripStatus.READY_FOR_DISPATCH) {
+            return;
+        }
+        if (Objects.equals(previousDriver, trip.driverId())) {
+            return;
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("change", "DRIVER");
+        metadata.put("driverId", trip.driverId() == null ? "none" : trip.driverId().toString());
+        events.publish(scope, trip, ShipmentEventType.SHIPMENT_CHANGED, OffsetDateTime.now(), metadata);
     }
 
     @Transactional
