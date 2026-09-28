@@ -12,10 +12,19 @@ TMS has no safe identity narrower than a company, and inventing one is a securit
 must not take alone - ADR-016 proposes it. Nothing was pushed to `dev`/`main`, merged, or run against
 a shared database.
 
-**Push:** `feature/tms-ewm-integration-v1` was pushed, because every TMS gate is green: backend
-2162/0/0/0, frontend and E2E. `feature/tms-connector-v1` was **not** pushed. Its definitive
-full-suite gate is still open: one timing test is blocked by a saturated machine (section 11). The
-original plan allows a push only when all of a branch's suites are green.
+**Three levels, kept apart on purpose:**
+1. **Functional implementation - complete** for the approved integration scope (Phases 0-10).
+   Phase 11 is blocked by a security decision (ADR-016), and document tracking is deferred by
+   decision (ADR-015 section 5).
+2. **Local technical certification - PASS.** Every gate below passed:
+   - TMS backend: 2162/2162.
+   - TMS frontend: 189/189.
+   - EWM full `clean verify`: unit 1425/1425, integration 1577/1577, BUILD SUCCESS in 6 min 04 s.
+   - E2E: 9/9 on the final heads.
+3. **Human review and QAS - still pending.** Neither branch is ready to merge into `dev` until
+   they are done.
+
+**Push:** both feature branches are pushed. Nothing was merged or pushed to `dev`/`main`.
 
 Along the way the certification found and fixed **9 real defects** that the existing suites did not
 catch (section 15).
@@ -31,7 +40,8 @@ duplication. Work from two parallel worktrees (`wip/adr014-scheduling-release`,
 ## 3. EWM branch
 
 `feature/tms-connector-v1` in worktree `../IACLAUDE/WMS-by-EBIM-tms-connector`, from `dev` @ `7c086e8`
-(= `origin/dev`). The main EWM checkout was left on `dev` with its untracked `docs/quality/` untouched.
+(= `origin/dev`). The test-infrastructure fix `9f85546` (from `fix/ewm-test-infra`) was cherry-picked
+as `9fff5e3`. It touches three test files only. The main EWM checkout was left on `dev` with its untracked `docs/quality/` untouched.
 
 ## 4. Commits
 
@@ -72,6 +82,8 @@ duplication. Work from two parallel worktrees (`wip/adr014-scheduling-release`,
 | 51a7c30 | feat(web): show when a released order is already partly planned |
 | 08ac13d | fix(warehouse): an UNAPPLIED dispatch with NOT_APPLIED is a MISMATCH and reaches the Control Tower |
 | a7e7384 | test(e2e): local TMS <-> EWM end-to-end harness for Warehouse Execution v1 |
+| df60341 | docs(implementation): TMS <-> EWM integration v1 report |
+| (final) | docs(implementation): final certification results (this revision of the report) |
 
 ### EWM (oldest first)
 | Commit | Subject |
@@ -87,6 +99,7 @@ duplication. Work from two parallel worktrees (`wip/adr014-scheduling-release`,
 | 2777929 | docs(integration): el conector TMS v1 — configuración, mapeo, reglas y reintentos |
 | 4676087 | fix(integration): el plan de un viaje ya despachado por el TMS igual crea la carga |
 | 1e56ff0 | fix(integration): las horas hacia el TMS viajan sin recortar a segundos |
+| 9fff5e3 | fix(test): isolate scheduled workers and container lifecycle (cherry-pick of `9f85546`: `application-test.yml`, `NeoRetailSeedSmokeIT`, new `ScheduledWorkersOffInTestProfileTest`) |
 
 ## 5. Migrations created
 
@@ -180,20 +193,33 @@ No applied migration was edited. `transportReference` needed no migration on eit
   - Its full suite: surefire **1425 run / 0 fail / 0 err / 0 skip**; failsafe **1577 run / 1 fail /
     0 err / 0 skip**. The single failure is again `BulkImportLargeFileIT.cincoMilFilas` (276 s > 180 s);
     run time 3 h 49 min.
-- **Why the definitive EWM gate is BLOCKED (environment, not code):**
-  - The bulk import failed on every run: 317 s and 254 s of import time, with all 5000/5000 rows
-    correct every time.
-  - An A/B run of the older code `ddef16a`, which measured 23 s before, took 260 s in the same
-    environment. That rules out a regression from this work; the connector branch touches nothing
-    in bulk import.
-  - The machine is saturated: the Docker VM has 7.7 GiB, about 78 containers run (most belong to
-    other projects), memory sits near 81%, and a Postgres takes 57 s to 3 min to start.
-  - Per instructions the 180 s threshold stays unchanged and containers this run does not own are
-    not stopped. The handoff reported `FULL_EWM_SUITE` as a build failure, so the fix was **not**
-    cherry-picked and the definitive gate was **not** run: repeating 3 h 49 min on the same machine
-    can only reproduce the timeout.
-  - To close it, re-run `./mvnw clean verify` on this branch plus `9f85546` on an unloaded machine
-    (or CI).
+- **Environment sanitised before the definitive gate.** 15 Testcontainers Postgres/PostGIS containers
+  were orphans: 7-13 h old, no Ryuk reaper, no live client connection, and no test JVM running. Only
+  those were removed, together with their anonymous test volumes. Nothing was touched in other
+  projects' stacks, there was no `docker system prune`, and Docker was not restarted.
+
+  | Measure | Before | After |
+  |---|---|---|
+  | Running containers | 77 | 62 |
+  | Container CPU (sum) | ~325% | ~161% |
+  | Container memory | ~6.3 GiB of the 7.7 GiB VM | ~5.6 GiB |
+  | Fresh Postgres ready | 36 s | 0-1 s |
+
+  Unrelated Supabase `realtime` services of other projects kept restart-looping and were left alone.
+- **Isolated BulkImport gate** (5000 rows, 180 s limit and assertion unchanged): run 1 **29.9 s**,
+  run 2 **23.9 s**, both PASS.
+  - The earlier 254-389 s runs were environmental degradation. The A/B had already ruled out code:
+    `ddef16a`, historically about 23 s, took about 260 s on the saturated machine.
+- **Definitive EWM gate** (`./mvnw clean verify`, run alone on head `9fff5e3`): **BUILD SUCCESS**.
+  - surefire **1425 run / 0 failures / 0 errors / 0 skipped**;
+  - failsafe **1577 run / 0 failures / 0 errors / 0 skipped**;
+  - total **6 min 04 s**, compared with 3 h 49 min on the saturated machine;
+  - `BulkImportLargeFileIT` inside the suite: **9.96 s**.
+- **Log checks on the definitive run:**
+  - 0 "Connection refused" (so none against the destroyed NeoRetail container);
+  - 0 `TransferDispatchWorker` lines, so no worker after teardown and no zombie NeoRetail context;
+  - 0 Hikari "Failed to validate connection" warnings. The 1177 seen under saturation were pool
+    churn of a live container, not the corrected bug, and made no test fail.
 
 ## 12. Frontend build and typecheck
 
@@ -208,11 +234,13 @@ TMS `frontend/tms-web`: `npm run lint` exit 0; `npm run typecheck` clean; `npm t
 `aud=authenticated`), TMS on :8080 and EWM on :8081, runs nine scenarios and tears everything down.
 Secrets are generated per run into `/tmp/tms-ewm-e2e`, never committed. About 12 minutes.
 
-## 14. E2E results (final clean run on the current heads: TMS `a7e7384`, EWM `1e56ff0`)
+## 14. E2E results (final certification, 2026-09-28)
 
-This E2E run was not repeated after the handoff. The sequence required a green EWM gate first, and
-that gate is blocked by the environment (section 11). The results below were produced on exactly
-the commits now at the head of both branches.
+Run with `BUILD=1 scripts/e2e/tms-ewm/run.sh` after the green EWM gate. Both jars were rebuilt from
+the final heads: TMS `df60341` (code identical to `a7e7384`) and EWM `9fff5e3`.
+- **Result:** **9/9 PASS** in 6 min 36 s.
+- **Cleanup:** both E2E containers were torn down afterwards.
+- **Consistency:** the values below match the earlier certification run on `a7e7384`/`1e56ff0`.
 
 | # | Scenario | Result | Evidence |
 |---|---|---|---|
@@ -313,24 +341,33 @@ company profile accepts `dispatchConfirmationMode`.
 
 ## 25. Recommended next step
 
-0. Close the EWM gate: cherry-pick `9f85546` (test-infrastructure fix) onto `feature/tms-connector-v1`,
-   run `./mvnw clean verify` on an unloaded machine or CI, and push the branch once it is green.
 1. Human review of both branches (start with V52-V55, the permission shape change, and the ADR-014 integration release gating), then a QAS rollout in `HYBRID` for one company with the E2E harness as acceptance test.
 2. Decide ADR-016 (portal identity) and ADR-015 section 5 (document tracking).
 3. Add the EWM reconciliation pull and the delivery-tracking board aggregates.
 
 ```
-TMS_EWM_INTEGRATION_STATUS=PARTIAL
+IMPLEMENTATION_COMPLETE=true
+LOCAL_TECHNICAL_CERTIFICATION=PASS
+E2E=9/9_PASS
+READY_FOR_QAS=true
+SAFE_TO_MERGE_DEV=false
+
+TMS_EWM_INTEGRATION_STATUS=COMPLETE
 SAFE_TO_REVIEW=true
 SAFE_TO_MERGE_TMS=false
 SAFE_TO_MERGE_EWM=false
 ```
 
-Additional blocker for EWM: its definitive full-suite gate is still open (section 11). One
-environment-bound timing test fails on a saturated machine; the code under test is unchanged.
+- **Why `COMPLETE`:** it describes the TMS <-> EWM integration v1 scope. Everything in that scope is
+  implemented and certified locally.
+- **Explicitly outside it** (see section 9):
+  - the carrier/driver portal, blocked by a security decision (ADR-016);
+  - document delivery tracking, deferred for legal and fiscal decisions (ADR-015 section 5).
+- **Why the merge flags stay `false`:** not because of a red test. Both branches change the security
+  model and the release semantics of integrated orders:
+  - new permissions and a widened permission shape;
+  - machine actors on trips;
+  - a signature-authenticated EWM endpoint;
+  - eligibility-gated ERP release.
 
-`PARTIAL` because Phase 11 is documented but not implemented and Phase 10 document tracking is
-deferred by decision; everything else is implemented and verified. The merge flags are `false` not
-because a suite is red but because both branches change the security model (new permissions, a
-widened permission shape, machine actors on trips, a new webhook-authenticated EWM endpoint) and the
-release semantics of integrated orders - that deserves human review and a QAS pass before `dev`.
+  That needs human review and a QAS pass before `dev`.
