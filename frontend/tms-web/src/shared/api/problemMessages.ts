@@ -16,6 +16,8 @@ const CODE_COPY: Record<ProblemCode, string> = {
   "company-scope-required": "No hay una compañía seleccionada. Elige una compañía e inténtalo de nuevo.",
   "company-scope-invalid": "La compañía seleccionada no es válida. Elige una compañía e inténtalo de nuevo.",
   "company-scope-forbidden": "Ya no tienes acceso a esa compañía. Elige otra.",
+  "commercial-access-suspended":
+    "La suscripción de TMS de tu organización no está activa. Tus datos se conservan; contacta a tu ejecutivo de EBIM.",
   "access-denied": "No tienes permiso para realizar esta acción.",
   "validation-failed": "Hay campos que debes corregir.",
   "malformed-request": "No se pudo procesar la solicitud.",

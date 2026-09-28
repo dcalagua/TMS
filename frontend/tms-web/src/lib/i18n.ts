@@ -1365,6 +1365,7 @@ const EN_DATA: Record<string, string> = {
   "Tres letras, ISO 4217 (PEN, USD, EUR).": "Three letters, ISO 4217 (PEN, USD, EUR).",
   "tú": "you",
   "Tu cuenta aún no está dada de alta en TMS. Contacta a un administrador para solicitar acceso.": "Your account is not set up in TMS yet. Contact an administrator to request access.",
+  "La suscripción de TMS de tu organización no está activa. Tus datos se conservan; contacta a tu ejecutivo de EBIM.": "Your organization's TMS subscription is not active. Your data is kept; contact your EBIM account manager.",
   "Tu cuenta aún no tiene módulos habilitados en esta compañía.": "Your account has no modules enabled in this company yet.",
   "Tu cuenta no tiene una membresía activa en ninguna compañía. Contacta a un administrador.": "Your account has no active company membership. Contact an administrator.",
   "Tu selección ya no es válida. Elige una compañía nuevamente.": "Your selection is no longer valid. Choose a company again.",

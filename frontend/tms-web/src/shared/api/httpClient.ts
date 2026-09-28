@@ -13,6 +13,8 @@ export type ProblemCode =
   | "company-scope-required"
   | "company-scope-invalid"
   | "company-scope-forbidden"
+  /** El contrato comercial de la organización (EBIM MasterAdmin) no permite operar ahora. No es un permiso. */
+  | "commercial-access-suspended"
   | "access-denied"
   | "validation-failed"
   | "malformed-request"

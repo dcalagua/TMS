@@ -60,6 +60,19 @@ public class CommercialEntitlementService {
     }
 
     /**
+     * {@link #access} for the company the current request is scoped to, read through V52's SECURITY
+     * DEFINER function so that it works on the runtime role and reveals nothing about another
+     * organization. No row (not scoped, or unknown company) is "not under the control plane".
+     */
+    @Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
+    public CommercialAccess accessForCurrentCompany() {
+        return store.currentCompanyAccess()
+                .map(facts -> CommercialAccess.decide(facts.underControlPlane(), facts.mode(),
+                        facts.mode().snapshotDecides() ? facts.appActive() : null))
+                .orElseGet(() -> CommercialAccess.decide(false, EnforcementMode.LEGACY, null));
+    }
+
+    /**
      * Is this sellable capability granted to the organization, when the snapshot is what decides?
      *
      * <p>{@code false} for a code the receiver does not know, for a grant scoped to explicit

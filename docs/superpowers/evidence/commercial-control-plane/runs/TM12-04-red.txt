@@ -1,0 +1,12 @@
+   8 [ERROR]   symbol:   class CommercialAccessFilter
+   8   symbol:   class CommercialAccessFilter
+   3 [ERROR]   symbol:   method accessForCurrentCompany()
+   3   symbol:   method accessForCurrentCompany()
+   2 [ERROR] /Users/edudavidmorenoccama/Documents/Documentos-Edus-MacBook-Pro-2/EBIM/TMS/.worktrees/ebim-commercial-control-plane-v1/backend/tms-api/src/test/java/com/ebim/tms/shared/security/CommercialAccessFilterTest.java:[97,9] cannot find symbol
+   2 [ERROR] /Users/edudavidmorenoccama/Documents/Documentos-Edus-MacBook-Pro-2/EBIM/TMS/.worktrees/ebim-commercial-control-plane-v1/backend/tms-api/src/test/java/com/ebim/tms/shared/security/CommercialAccessFilterTest.java:[97,45] cannot find symbol
+   2 [ERROR] /Users/edudavidmorenoccama/Documents/Documentos-Edus-MacBook-Pro-2/EBIM/TMS/.worktrees/ebim-commercial-control-plane-v1/backend/tms-api/src/test/java/com/ebim/tms/shared/security/CommercialAccessFilterTest.java:[84,9] cannot find symbol
+   2 [ERROR] /Users/edudavidmorenoccama/Documents/Documentos-Edus-MacBook-Pro-2/EBIM/TMS/.worktrees/ebim-commercial-control-plane-v1/backend/tms-api/src/test/java/com/ebim/tms/shared/security/CommercialAccessFilterTest.java:[84,45] cannot find symbol
+   2 [ERROR] /Users/edudavidmorenoccama/Documents/Documentos-Edus-MacBook-Pro-2/EBIM/TMS/.worktrees/ebim-commercial-control-plane-v1/backend/tms-api/src/test/java/com/ebim/tms/shared/security/CommercialAccessFilterTest.java:[78,60] cannot find symbol
+   2 [ERROR] /Users/edudavidmorenoccama/Documents/Documentos-Edus-MacBook-Pro-2/EBIM/TMS/.worktrees/ebim-commercial-control-plane-v1/backend/tms-api/src/test/java/com/ebim/tms/shared/security/CommercialAccessFilterTest.java:[67,9] cannot find symbol
+   2 [ERROR] /Users/edudavidmorenoccama/Documents/Documentos-Edus-MacBook-Pro-2/EBIM/TMS/.worktrees/ebim-commercial-control-plane-v1/backend/tms-api/src/test/java/com/ebim/tms/shared/security/CommercialAccessFilterTest.java:[67,45] cannot find symbol
+   2 [ERROR] /Users/edudavidmorenoccama/Documents/Documentos-Edus-MacBook-Pro-2/EBIM/TMS/.worktrees/ebim-commercial-control-plane-v1/backend/tms-api/src/test/java/com/ebim/tms/shared/security/CommercialAccessFilterTest.java:[111,9] cannot find symbol

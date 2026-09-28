@@ -46,6 +46,13 @@ describe("describeApiError", () => {
     }
   });
 
+  it("explica la suspensión comercial sin confundirla con un permiso", () => {
+    const message = describeApiError(problem(403, "commercial-access-suspended"));
+
+    expect(message).toContain("suscripción");
+    expect(message).not.toBe(describeApiError(problem(403, "access-denied")));
+  });
+
   it("no filtra el detail del backend en la copy genérica", () => {
     const detail = "constraint uq_location_code violated on tms.location";
 

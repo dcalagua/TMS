@@ -31,6 +31,7 @@ import com.ebim.tms.shared.reference.LocationIntakeResult;
 import com.ebim.tms.shared.reference.OrderIntakeCommand;
 import com.ebim.tms.shared.reference.OrderIntakePort;
 import com.ebim.tms.shared.reference.OrderIntakeResult;
+import com.ebim.tms.shared.security.CommercialAccessGate;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.security.CompanyScopeLoader;
 import com.ebim.tms.shared.security.TmsAccessDeniedHandler;
@@ -162,6 +163,9 @@ class IntegrationApiTenancyTest {
     @Autowired
     private RecordingOrderIntake orderIntake;
 
+    @Autowired
+    private SwitchableCommercialAccess commercialAccess;
+
     /** A credential of company A holding both write scopes; the default caller of most tests. */
     private Credential partnerOfA;
 
@@ -170,6 +174,7 @@ class IntegrationApiTenancyTest {
         clients.reset();
         locationIntake.reset();
         orderIntake.reset();
+        commercialAccess.suspended.clear();
         partnerOfA = clients.issue(COMPANY_A, IntegrationScope.LOCATION_WRITE, IntegrationScope.ORDER_WRITE);
     }
 
@@ -555,6 +560,35 @@ class IntegrationApiTenancyTest {
     }
 
     // ---------------------------------------------------------------------
+    // Commercial access (ADR-017)
+    // ---------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("commercial access")
+    class CommercialAccess {
+
+        @Test
+        @DisplayName("a partner of a suspended organization is refused before any intake, whatever its scopes")
+        void suspendedOrganizationIsRefused() throws Exception {
+            commercialAccess.suspended.add(ORGANIZATION);
+
+            mockMvc.perform(authenticated(post(ORDERS), partnerOfA).content(ORDER_BODY))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("commercial-access-suspended"));
+
+            assertThat(orderIntake.scopes()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("the gate is asked with the credential's company, never one the caller names")
+        void gateSeesTheCredentialsCompany() throws Exception {
+            mockMvc.perform(authenticated(get(PING), partnerOfA)).andExpect(status().isOk());
+
+            assertThat(commercialAccess.askedFor).last().isEqualTo(COMPANY_A);
+        }
+    }
+
+    // ---------------------------------------------------------------------
     // Fixtures
     // ---------------------------------------------------------------------
 
@@ -635,6 +669,24 @@ class IntegrationApiTenancyTest {
         @Bean
         MeterRegistry meterRegistry() {
             return new SimpleMeterRegistry();
+        }
+
+        /** Allows everyone unless a test suspends an organization, so every test above runs through it. */
+        @Bean
+        SwitchableCommercialAccess commercialAccessGate() {
+            return new SwitchableCommercialAccess();
+        }
+    }
+
+    static final class SwitchableCommercialAccess implements CommercialAccessGate {
+
+        final java.util.Set<UUID> suspended = ConcurrentHashMap.newKeySet();
+        final List<UUID> askedFor = java.util.Collections.synchronizedList(new ArrayList<>());
+
+        @Override
+        public Verdict check(CompanyScope scope) {
+            askedFor.add(scope.companyId());
+            return suspended.contains(scope.organizationId()) ? Verdict.suspended("TEST") : Verdict.ALLOWED;
         }
     }
 
