@@ -47,6 +47,8 @@ export const DriversPage = lazy(() =>
 
 export const OrdersPage = lazy(() =>
   import("../pages/orders/OrdersPage").then((m) => ({ default: m.OrdersPage })));
+export const SchedulingReleasePage = lazy(() =>
+  import("../pages/scheduling/SchedulingReleasePage").then((m) => ({ default: m.SchedulingReleasePage })));
 
 export const PlanningRunsPage = lazy(() =>
   import("../pages/planning/PlanningRunsPage").then((m) => ({ default: m.PlanningRunsPage })));
@@ -70,6 +72,8 @@ export const OwnFleetCostProfilesPage = lazy(() =>
     .then((m) => ({ default: m.OwnFleetCostProfilesPage })));
 export const TripWorkspacePage = lazy(() =>
   import("../pages/trips/TripWorkspacePage").then((m) => ({ default: m.TripWorkspacePage })));
+export const DeliveryTrackingPage = lazy(() =>
+  import("../pages/delivery-tracking/DeliveryTrackingPage").then((m) => ({ default: m.DeliveryTrackingPage })));
 
 export const CompanySettingsPage = lazy(() =>
   import("../pages/settings/CompanySettingsPage").then((m) => ({ default: m.CompanySettingsPage })));

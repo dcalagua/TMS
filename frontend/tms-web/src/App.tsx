@@ -19,8 +19,9 @@ import {
   SettlementPage,
   OwnFleetCostProfilesPage,
   WorkAssignmentsPage,
-  PlanningRunsPage, RateCardsPage, ReportsPage, RoutesPage, TripWorkspacePage, TripsPage,
+  PlanningRunsPage, RateCardsPage, ReportsPage, RoutesPage, SchedulingReleasePage, TripWorkspacePage, TripsPage,
   UsersPage, VehicleTypesPage, VehiclesPage, ZonesPage,
+  DeliveryTrackingPage,
 } from "./app/lazyRoutes";
 
 /**
@@ -72,6 +73,7 @@ export default function App() {
                   <Route path="fleet/drivers" element={<DriversPage />} />
 
                   <Route path="orders" element={<OrdersPage />} />
+                  <Route path="scheduling" element={<SchedulingReleasePage />} />
 
                   <Route path="planning" element={<PlanningRunsPage />} />
                   <Route path="planning/:runId" element={<PlanningBoardPage />} />
@@ -82,6 +84,7 @@ export default function App() {
                   <Route path="costing/own-fleet" element={<OwnFleetCostProfilesPage />} />
 
                   <Route path="trips" element={<TripsPage />} />
+                  <Route path="delivery-tracking" element={<DeliveryTrackingPage />} />
                   <Route path="appointments" element={<AppointmentsPage />} />
                   <Route path="settlement" element={<SettlementPage />} />
                   <Route path="work-assignments" element={<WorkAssignmentsPage />} />

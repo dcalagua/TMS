@@ -233,11 +233,16 @@ public class AutoPlanningService {
                 eligible.stream().map(PlannableOrder::destinationId).collect(Collectors.toSet());
         Set<UUID> serviceable =
                 serviceCalendarPort.serviceableOn(destinations, run.planningDate(), scope.companyId());
+        // ADR-014 section 5 (approved 2026-09-27): the route's own frequency must also run that day,
+        // where exactly one route resolves. Released over the calendar (FREQUENCY_OVERRIDE) is a
+        // human decision for manual assignment, never a choice automatic planning makes.
+        Set<UUID> idleByRoute = serviceCalendarPort.idleByRouteOn(
+                run.originId(), destinations, run.planningDate(), scope.companyId());
 
         List<PlannableOrder> plannable = new ArrayList<>();
         List<UnplannedOrder> excluded = new ArrayList<>();
         for (PlannableOrder order : eligible) {
-            if (serviceable.contains(order.destinationId())) {
+            if (serviceable.contains(order.destinationId()) && !idleByRoute.contains(order.destinationId())) {
                 plannable.add(order);
             } else {
                 excluded.add(new UnplannedOrder(order.id(), order.orderNumber(),

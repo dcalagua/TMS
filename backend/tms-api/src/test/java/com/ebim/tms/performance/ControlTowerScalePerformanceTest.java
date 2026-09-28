@@ -214,12 +214,13 @@ class ControlTowerScalePerformanceTest {
                     + " trip_number, vehicle_id, status, planned_departure_at, confirmed_at,"
                     + " actual_departure_at, snapshot_max_weight_kg, snapshot_max_volume_m3,"
                     + " snapshot_max_pallets, capacity_snapshot_at, confirmed_by, dispatched_by,"
-                    + " ready_at, ready_by)"
+                    + " ready_at, ready_by, dispatch_source)"
                     + " VALUES ('" + COMPANY + "', '"
                     + run + "', '" + date + "', " + number + ", '" + vehicle + "', 'IN_TRANSIT',"
                     + " '" + date + "T08:00:00Z', '" + date + "T07:00:00Z', '" + date + "T08:05:00Z',"
                     + " 20000, 60, 30, '" + date + "T07:00:00Z', '" + actor + "', '" + actor + "',"
-                    + " '" + date + "T07:30:00Z', '" + actor + "') RETURNING id");
+                    // V52: a departure names how it happened, and this one was a person.
+                    + " '" + date + "T07:30:00Z', '" + actor + "', 'OPERATOR') RETURNING id");
 
             for (int stop = 1; stop <= STOPS_PER_TRIP; stop++) {
                 // tms.location, not tms.destination: a later migration repointed

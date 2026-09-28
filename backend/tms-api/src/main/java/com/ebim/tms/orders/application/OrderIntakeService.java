@@ -2,6 +2,7 @@ package com.ebim.tms.orders.application;
 
 import com.ebim.tms.orders.domain.OrderPriority;
 import com.ebim.tms.orders.domain.OrderStatus;
+import com.ebim.tms.orders.domain.SchedulingReason;
 import com.ebim.tms.orders.domain.TransportOrder;
 import com.ebim.tms.orders.infrastructure.TransportOrderRepository;
 import com.ebim.tms.shared.api.ConflictException;
@@ -19,6 +20,7 @@ import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
 import java.math.BigDecimal;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
@@ -101,11 +103,18 @@ public class OrderIntakeService implements OrderIntakePort {
      */
     private OrderIntakeResult finish(CompanyScope scope, OrderDetailView order, IntakeOutcome outcome,
             boolean markReadyForPlanning) {
-        OrderDetailView finalState = order;
-        if (markReadyForPlanning && finalState.status() == OrderStatus.NOT_READY) {
-            finalState = orderService.markReadyForPlanning(scope, finalState.id());
+        if (!markReadyForPlanning || order.status() != OrderStatus.NOT_READY) {
+            return new OrderIntakeResult(order.id(), order.orderNumber(), order.status().name(), outcome);
         }
-        return new OrderIntakeResult(finalState.id(), finalState.orderNumber(), finalState.status().name(), outcome);
+        // ADR-014 section 8: a machine cannot give an override reason, so it releases only an order
+        // that needs none. Anything else stays NOT_READY, and the result names why - the sender learns
+        // it from the answer instead of from a planner's phone call.
+        List<SchedulingReason> refusedBy = orderService.releaseIfReleasableWithoutReason(scope, order.id());
+        if (!refusedBy.isEmpty()) {
+            return new OrderIntakeResult(order.id(), order.orderNumber(), OrderStatus.NOT_READY.name(), outcome,
+                    refusedBy.stream().map(reason -> reason.code().name()).toList());
+        }
+        return new OrderIntakeResult(order.id(), order.orderNumber(), OrderStatus.READY_FOR_PLANNING.name(), outcome);
     }
 
     /**

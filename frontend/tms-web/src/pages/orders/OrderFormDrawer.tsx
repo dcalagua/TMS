@@ -1,3 +1,4 @@
+import { isPartlyPlanned } from "../../shared/api/ordersApi";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
@@ -22,6 +23,7 @@ import {
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDecimal, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
+import { OrderDocumentsSection } from "./OrderDocumentsSection";
 
 const FORM_ID = "order-form";
 
@@ -327,6 +329,9 @@ function OrderForm({
           <Box sx={{ display: "flex", gap: 1, mb: 3, flexWrap: "wrap" }}>
             <StatusChip label={enumLabel("orderStatus", order.status)} tone="open" variant="solid" />
             <StatusChip label={enumLabel("orderFulfillmentStatus", order.fulfillmentStatus)} tone="neutral" />
+            {isPartlyPlanned(order) && (
+              <StatusChip label={`${t("Parcialmente planificado")} · ${t("pendiente")} ${order.pendingPallets ?? 0} pallets`} tone="neutral" />
+            )}
             {!isEditable && <StatusChip label={t("Solo lectura")} tone="cancelled" />}
           </Box>
         )}
@@ -564,6 +569,9 @@ function OrderForm({
             {t("Previsualización. Los totales definitivos los calcula el backend al guardar.")}
           </Typography>
         </Paper>
+
+        {/* ADR-015: los documentos del ERP, de solo lectura, solo para un pedido que ya existe. */}
+        {isEdit && <OrderDocumentsSection companyId={companyId} orderId={order.id} />}
       </Box>
     </FormDrawer>
   );

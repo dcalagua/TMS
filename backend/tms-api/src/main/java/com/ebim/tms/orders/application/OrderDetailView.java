@@ -54,7 +54,16 @@ public record OrderDetailView(
         List<OrderLineView> lines,
         long version,
         OffsetDateTime createdAt,
-        OffsetDateTime updatedAt) {
+        OffsetDateTime updatedAt,
+        // Additive (docs/domain/SPLIT_ORDER_EXECUTION.md, L2): how much of the order is committed to
+        // trips and how much is still to place. A READY_FOR_PLANNING order with allocated pallets is
+        // partly planned - possibly partly on the road already.
+        BigDecimal allocatedWeightKg,
+        BigDecimal allocatedVolumeM3,
+        BigDecimal allocatedPallets,
+        BigDecimal pendingWeightKg,
+        BigDecimal pendingVolumeM3,
+        BigDecimal pendingPallets) {
 
     /**
      * There is deliberately no overload that defaults {@code fulfillmentStatus}. Every caller has
@@ -73,7 +82,10 @@ public record OrderDetailView(
                 order.status(), fulfillmentStatus, order.cancelReason(), order.totalWeightKg(), order.totalVolumeM3(),
                 order.totalPallets(), order.declaredWeightKg(), order.declaredVolumeM3(), order.declaredPallets(),
                 order.totalsSource(),
-                lines, order.version(), order.createdAt(), order.updatedAt());
+                lines, order.version(), order.createdAt(), order.updatedAt(),
+                order.allocated().weightKg(), order.allocated().volumeM3(), order.allocated().pallets(),
+                order.allocation().pending().weightKg(), order.allocation().pending().volumeM3(),
+                order.allocation().pending().pallets());
     }
 
     public record OrderLineView(

@@ -2,6 +2,8 @@ package com.ebim.tms.orders.application;
 
 import com.ebim.tms.orders.domain.OrderStatus;
 import com.ebim.tms.orders.domain.TransportOrder;
+import com.ebim.tms.orders.infrastructure.OrderHoldRepository;
+import com.ebim.tms.orders.infrastructure.OrderSchedulingSpecifications;
 import com.ebim.tms.orders.infrastructure.TransportOrderRepository;
 import com.ebim.tms.orders.infrastructure.TransportOrderSpecifications;
 import com.ebim.tms.shared.api.ConflictException;
@@ -18,6 +20,7 @@ import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.PlannableOrderQuery;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
@@ -62,11 +65,13 @@ public class OrderPlanningService implements OrderPlanningPort {
 
     private final TransportOrderRepository transportOrderRepository;
     private final AuditActorProvider auditActorProvider;
+    private final OrderHoldRepository holdRepository;
 
-    public OrderPlanningService(
-            TransportOrderRepository transportOrderRepository, AuditActorProvider auditActorProvider) {
+    public OrderPlanningService(TransportOrderRepository transportOrderRepository,
+            AuditActorProvider auditActorProvider, OrderHoldRepository holdRepository) {
         this.transportOrderRepository = transportOrderRepository;
         this.auditActorProvider = auditActorProvider;
+        this.holdRepository = holdRepository;
     }
 
     @Override
@@ -74,7 +79,10 @@ public class OrderPlanningService implements OrderPlanningPort {
     public PageResponse<PlannableOrder> searchAssignable(PlannableOrderQuery query, PageQuery pageQuery) {
         var specification = TransportOrderSpecifications.matching(query.companyId(), query.orderNumber(),
                 query.originId(), query.destinationId(), query.serviceDate(), query.serviceDate(),
-                OrderStatus.READY_FOR_PLANNING, null);
+                OrderStatus.READY_FOR_PLANNING, null)
+                // ADR-014 section 7: a candidate is READY_FOR_PLANNING *and* has no active blocking
+                // hold - in the same statement, so the count and the page agree.
+                .and(OrderSchedulingSpecifications.noActiveBlockingHold(query.companyId()));
         Page<TransportOrder> page = transportOrderRepository.findAll(specification, toPageable(pageQuery));
         List<PlannableOrder> content = page.getContent().stream().map(OrderPlanningService::toPlannable).toList();
         return new PageResponse<>(content, pageQuery.pageNumber(), pageQuery.pageSize(), page.getTotalElements());
@@ -120,6 +128,12 @@ public class OrderPlanningService implements OrderPlanningPort {
         if (order.status() != OrderStatus.READY_FOR_PLANNING) {
             throw new ConflictException("Order " + order.orderNumber() + " is not ready for planning (status: "
                     + order.status() + ").");
+        }
+        // ADR-014 section 7, checked under the row lock OrderHoldService.place also takes: a hold and
+        // an assignment racing on one order serialise, and whichever lands second sees the other.
+        if (holdRepository.existsActiveBlocking(orderId, companyId)) {
+            throw new ConflictException("Order " + order.orderNumber() + " has an active blocking hold and cannot "
+                    + "be put on a trip. Release the hold first.");
         }
         OrderAmounts pending = order.allocation().pending();
         if (amounts.exceeds(pending)) {
@@ -191,14 +205,38 @@ public class OrderPlanningService implements OrderPlanningPort {
     @Transactional
     public void markInExecution(UUID orderId, UUID companyId) {
         TransportOrder order = requireForUpdate(orderId, companyId);
+        if (order.status() == OrderStatus.READY_FOR_PLANNING && !order.allocated().isZero()) {
+            // R1 (docs/domain/SPLIT_ORDER_EXECUTION.md): the departing trip carries a share of an
+            // order that still has something to place. The share leaves; the order stays in the
+            // pool so the remainder can still be planned. It enters IN_EXECUTION only from
+            // PLANNED, i.e. when the departure of any of its trips finds nothing left to place.
+            return;
+        }
         if (order.status() == OrderStatus.NOT_READY || order.status() == OrderStatus.READY_FOR_PLANNING
                 || order.status() == OrderStatus.CANCELLED) {
             throw new ConflictException("Order " + order.orderNumber() + " is " + order.status()
                     + " and cannot be dispatched.");
         }
-        if (order.markInExecution(auditActorProvider.requireAppUserId())) {
+        // writerAppUserId: a warehouse system's dispatch (ADR-013) moves orders too, and a credential
+        // has no app_user - updated_by is left null rather than inventing a person.
+        if (order.markInExecution(auditActorProvider.writerAppUserId())) {
             save(order);
         }
+    }
+
+    /**
+     * Takes the row locks of {@code orderIds} in id order, so that two trips of the same split
+     * order closing out at the same moment serialise instead of each seeing the other still on the
+     * road and both leaving the order open (R2). Id order, not assignment order, so two callers
+     * locking overlapping sets can never deadlock on each other.
+     */
+    @Override
+    @Transactional
+    public void lockForExecution(Collection<UUID> orderIds, UUID companyId) {
+        if (orderIds.isEmpty()) {
+            return;
+        }
+        transportOrderRepository.lockAndRefresh(orderIds, companyId);
     }
 
     /**

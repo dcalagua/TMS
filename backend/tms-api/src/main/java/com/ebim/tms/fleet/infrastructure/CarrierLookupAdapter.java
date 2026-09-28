@@ -55,4 +55,18 @@ class CarrierLookupAdapter implements CarrierLookupPort {
         }
         return byId;
     }
+
+    @Override
+    public Map<UUID, String> externalReferencesInCompany(Set<UUID> ids, UUID companyId) {
+        Map<UUID, String> byId = new HashMap<>();
+        if (ids.isEmpty()) {
+            return byId;
+        }
+        for (Carrier carrier : carrierRepository.findByIdInAndCompanyId(ids, companyId)) {
+            if (carrier.externalReference() != null && !carrier.externalReference().isBlank()) {
+                byId.put(carrier.id(), carrier.externalReference());
+            }
+        }
+        return byId;
+    }
 }

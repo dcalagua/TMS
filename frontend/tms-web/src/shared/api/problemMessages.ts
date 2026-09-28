@@ -24,6 +24,8 @@ const CODE_COPY: Record<ProblemCode, string> = {
   "feature-not-configured":
     "Esta funcionalidad no está configurada en esta instalación. Un administrador debe habilitarla antes de poder usarla.",
   "internal-error": "Ocurrió un error de nuestro lado. Vuelve a intentarlo.",
+  "dispatch-requires-external-confirmation":
+    "En esta empresa el despacho lo confirma el almacén (WMS). Espera su confirmación o despacha con override indicando un motivo.",
 };
 
 const FALLBACK = "Algo salió mal. Vuelve a intentarlo.";

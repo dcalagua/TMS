@@ -66,6 +66,12 @@ export type TransportEventType =
   | 'TENDER_CANCELLED'
   | 'EXCEPTION_REPORTED'
   | 'EXCEPTION_RESOLVED'
+  /** ADR-013 §13.10: warehouse milestones and dispatch, `source = INTEGRATION`. None moves a lifecycle
+   * except the dispatch itself, which is recorded separately as `TRIP_DISPATCHED` when it applies. */
+  | 'WAREHOUSE_LOADING_STARTED'
+  | 'WAREHOUSE_LOAD_READY'
+  | 'WAREHOUSE_LOAD_CANCELLED'
+  | 'WAREHOUSE_DISPATCH_CONFIRMED'
 
 /** Every value the timeline can carry, so `enums.test.ts` can prove each one has a label. */
 export const TRANSPORT_EVENT_TYPES: TransportEventType[] = [
@@ -74,6 +80,7 @@ export const TRANSPORT_EVENT_TYPES: TransportEventType[] = [
   'DELIVERY_RECORDED',
   'TENDER_SENT', 'TENDER_ACCEPTED', 'TENDER_REJECTED', 'TENDER_EXPIRED', 'TENDER_CANCELLED',
   'EXCEPTION_REPORTED', 'EXCEPTION_RESOLVED',
+  'WAREHOUSE_LOADING_STARTED', 'WAREHOUSE_LOAD_READY', 'WAREHOUSE_LOAD_CANCELLED', 'WAREHOUSE_DISPATCH_CONFIRMED',
 ]
 
 /** Mirrors the backend's `DeliveryResult` enum (`planning/domain/DeliveryResult.java`).
@@ -910,6 +917,12 @@ export function fetchTrips(params: TripListParams): Promise<PageResponse<TripVie
 export interface TripExecutionRequest {
   version: number
   occurredAt?: string | null
+  /**
+   * ADR-013 §4: only read by `dispatch`, and only when the company requires the warehouse to
+   * confirm the departure (`EXTERNAL_REQUIRED`). 1-500 characters, and the caller must hold
+   * `planning.trip:dispatch-override` or the answer is 403. Ignored in `MANUAL` and `HYBRID`.
+   */
+  overrideReason?: string | null
 }
 
 export function markTripReady(

@@ -26,9 +26,10 @@ package com.ebim.tms.planning.domain;
  * carrier had to poll blind. The other three close the loop for the shipper's ERP, which has to
  * know whether the load is placed before it prints a manifest.
  *
- * <p>{@link #SHIPMENT_CHANGED} is still reserved and still has no source: the committed states
- * remain locked against edits to what a shipment carries, so TMS cannot yet produce a change to
- * publish. V20's reasoning for keeping the schema open to it is unchanged.
+ * <p>{@link #SHIPMENT_CHANGED} has one source since ADR-013: a change of driver on a CONFIRMED or
+ * READY_FOR_DISPATCH shipment, the one thing about a committed plan that may still change
+ * ({@code TripService.updateDriver}). What a shipment carries stays locked. The warehouse contract
+ * calls it {@code TRANSPORT_PLAN_UPDATED}.
  */
 public enum ShipmentEventType {
     SHIPMENT_CONFIRMED,

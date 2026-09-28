@@ -2189,7 +2189,44 @@ const EN_APP: Record<string, string> = {
   "Áreas operativas con nombre usadas para agrupar orígenes, destinos y rutas.": "Named operational areas used to group origins, destinations and routes.",
 };
 
-const EN: Record<string, string> = { ...EN_CHROME, ...EN_DATA, ...EN_APP };
+// ── Programación y Liberación (ADR-014) ──
+// Su propio mapa para que se lea y se mantenga junto: etiquetas de enum, pantalla y paneles.
+const EN_SCHEDULING: Record<string, string> = {
+  "Programación y Liberación": "Scheduling & Release",
+  "Qué pedidos pueden pasar a planificación, cuáles no y por qué. La elegibilidad se calcula al leer: no se guarda en el pedido.":
+    "Which orders can move to planning, which cannot, and why. Eligibility is computed on read and never stored on the order.",
+  "Elegible": "Eligible", "Con aviso": "Warning", "Bloqueado": "Blocked",
+  "Elegibles": "Eligible", "Bloqueados": "Blocked", "Con retención": "On hold", "Sin retención": "Not on hold",
+  "Retenidos": "On hold", "Liberados": "Released", "Elegibilidad": "Eligibility", "Retención": "Hold",
+  "Retención activa": "Active hold", "Corte vencido": "Cutoff missed", "Fuera de frecuencia": "Off frequency",
+  "Sin peso, volumen ni pallets": "No weight, volume or pallets", "Destino no válido": "Invalid destination",
+  "Origen no válido": "Invalid origin", "Ruta ambigua": "Ambiguous route", "Origen sin rutas": "Origin without routes",
+  "Sin ruta al destino": "No route to destination",
+  "Ambigua": "Ambiguous", "Sin rutas en el origen": "No routes at origin", "No encontrada": "Not found",
+  "Comercial": "Commercial", "Inventario": "Inventory", "Integración": "Integration", "Transporte": "Transport",
+  "Pedido retenido en un viaje planificado": "Order on hold on a planned trip",
+  "Pedido liberado": "Order released", "Retención aplicada": "Hold placed", "Retención levantada": "Hold lifted",
+  "Liberar": "Release", "Retener": "Hold", "Ver razones": "See reasons", "Ir al pedido": "Go to order",
+  "Abrir planificación": "Open planning", "Liberar seleccionados": "Release selected",
+  "Seleccionar liberables de la página": "Select releasable on this page", "Limpiar selección": "Clear selection",
+  "Liberar con motivo": "Release with a reason", "Motivo de la liberación": "Release reason",
+  "Pedido liberado para planificar": "Order released for planning",
+  "No se puede liberar el pedido": "The order cannot be released",
+  "No se pudo liberar el pedido": "The order could not be released",
+  "Retener pedido": "Hold order", "Aplicar retención": "Place hold", "Bloqueante": "Blocking",
+  "Levantar retención": "Lift hold", "¿Levantar la retención?": "Lift the hold?",
+  "Razones de elegibilidad": "Eligibility reasons", "Motivos": "Reasons", "Retenciones": "Holds",
+  "Corte": "Cutoff", "Corte de liberación": "Release cutoff", "Sin calendario": "No calendar",
+  "Fecha despacho": "Dispatch date", "Fecha de despacho": "Dispatch date",
+  "Despacho desde": "Dispatch from", "Despacho hasta": "Dispatch to",
+  "Frecuencia del destino": "Destination frequency", "Frecuencia de la ruta": "Route frequency",
+  "Sin ruta única": "No single route", "Resumen por origen, ruta y fecha": "Summary by origin, route and date",
+  "Requiere motivo para liberar": "Needs a reason to release",
+  "Resultado de la liberación": "Release result", "Liberado": "Released", "No liberado": "Not released",
+  "Pendientes y liberados": "Pending and released",
+};
+
+const EN: Record<string, string> = { ...EN_CHROME, ...EN_DATA, ...EN_APP, ...EN_SCHEDULING };
 
 export type Lang = "es" | "en";
 

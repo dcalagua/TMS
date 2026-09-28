@@ -18,7 +18,6 @@ import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.PlannableOrderQuery;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
-import com.ebim.tms.shared.reference.ResourceAvailabilityPort;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.security.Permission;
@@ -134,6 +133,10 @@ public class ControlTowerService {
      * raising on a shipment that has already run - the invoice arrives afterwards - and a cancelled
      * one is worth raising nothing about at all.
      */
+    /** Shipments a hold can still matter to: planned and not yet over (ADR-014 section 7). */
+    private static final Set<TripStatus> HOLD_ADVISORY_TRIP_STATES = Set.copyOf(EnumSet.of(TripStatus.DRAFT,
+            TripStatus.CONFIRMED, TripStatus.READY_FOR_DISPATCH, TripStatus.IN_TRANSIT));
+
     private static final Set<TripStatus> ADVISORY_TRIP_STATES = Stream.of(TripStatus.values())
             .filter(status -> status != TripStatus.CANCELLED)
             .collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -153,7 +156,8 @@ public class ControlTowerService {
     private final DestinationLookupPort destinationLookupPort;
     private final VehicleLookupPort vehicleLookupPort;
     private final OrderPlanningPort orderPlanningPort;
-    private final ResourceAvailabilityPort resourceAvailabilityPort;
+    private final DispatchReadiness readiness;
+    private final WarehouseDispatchAdvisories warehouseAdvisories;
 
     /**
      * Read-only, and the tower holds nothing it reads through this. A discrepancy is resolved on
@@ -164,9 +168,11 @@ public class ControlTowerService {
     public ControlTowerService(TripService tripService, TripViewAssembler assembler, TripRepository tripRepository,
             TripStopRepository tripStopRepository, TripExceptionRepository tripExceptionRepository,
             DestinationLookupPort destinationLookupPort, VehicleLookupPort vehicleLookupPort,
-            OrderPlanningPort orderPlanningPort, ResourceAvailabilityPort resourceAvailabilityPort,
-            com.ebim.tms.shared.reference.SettlementAdvisoryPort settlementAdvisoryPort) {
-        this.resourceAvailabilityPort = resourceAvailabilityPort;
+            OrderPlanningPort orderPlanningPort, DispatchReadiness readiness,
+            com.ebim.tms.shared.reference.SettlementAdvisoryPort settlementAdvisoryPort,
+            WarehouseDispatchAdvisories warehouseAdvisories) {
+        this.warehouseAdvisories = warehouseAdvisories;
+        this.readiness = readiness;
         this.settlementAdvisoryPort = settlementAdvisoryPort;
         this.tripService = tripService;
         this.assembler = assembler;
@@ -199,7 +205,7 @@ public class ControlTowerService {
         // Built beside the blockers and never merged into them (JOB 23). A blocker stops a truck;
         // an advisory is worth knowing and may reasonably wait. One list of both is how a panel
         // stops being read.
-        List<ControlTowerAdvisoryView> advisories = advisories(scope, date);
+        List<ControlTowerAdvisoryView> advisories = advisories(scope, date, now);
 
         return new ControlTowerView(date, now, summary(scope, date, zone, now, blockers.size(), advisories.size()),
                 workload(scope, date), exceptions, stops, blockers, advisories);
@@ -256,14 +262,27 @@ public class ControlTowerService {
      * <p>Only shipments that have not left. One already in transit either resolved its blocker or
      * never had one, and a cancelled shipment is not going anywhere regardless.
      */
+    private static ControlTowerBlockerView toBlockerView(Trip trip, DispatchReadiness.Blocker blocker) {
+        ControlTowerBlockerView.BlockerReason reason = switch (blocker.code()) {
+            case AWAITING_CARRIER_VEHICLE -> ControlTowerBlockerView.BlockerReason.AWAITING_CARRIER_VEHICLE;
+            case VEHICLE_UNAVAILABLE -> ControlTowerBlockerView.BlockerReason.VEHICLE_UNAVAILABLE;
+            case DRIVER_UNAVAILABLE -> ControlTowerBlockerView.BlockerReason.DRIVER_UNAVAILABLE;
+            default -> throw new IllegalStateException("The Control Tower does not ask for " + blocker.code());
+        };
+        return new ControlTowerBlockerView(trip.id(), trip.tripNumber(), trip.shipmentNumber(), reason,
+                blocker.detail());
+    }
+
     private List<ControlTowerBlockerView> blockers(CompanyScope scope, LocalDate date) {
         List<ControlTowerBlockerView> blockers = new ArrayList<>();
 
+        // The same evaluator the gate refuses with (ADR-013 section 12), asked only the two
+        // questions this panel has always answered, each over its own day query so a board of
+        // 300 trips reads two filtered lists and not 300 full evaluations.
         for (Trip trip : tripRepository.findAwaitingCarrierVehicleForDay(
                 scope.companyId(), date, BLOCKABLE_STATES)) {
-            blockers.add(new ControlTowerBlockerView(trip.id(), trip.tripNumber(), trip.shipmentNumber(),
-                    ControlTowerBlockerView.BlockerReason.AWAITING_CARRIER_VEHICLE,
-                    "Accepted by a carrier that does not own the vehicle assigned to it."));
+            readiness.evaluate(scope, trip, null, EnumSet.of(DispatchReadiness.Check.CARRIER_OWNS_VEHICLE))
+                    .forEach(blocker -> blockers.add(toBlockerView(trip, blocker)));
         }
 
         // Availability lives in the fleet module, so it is asked through the port rather than
@@ -275,14 +294,9 @@ public class ControlTowerService {
             if (trip.plannedDepartureAt() == null) {
                 continue;
             }
-            resourceAvailabilityPort
-                    .findBlock(scope.companyId(), trip.vehicleId(), trip.driverId(), trip.plannedDepartureAt())
-                    .ifPresent(block -> blockers.add(new ControlTowerBlockerView(
-                            trip.id(), trip.tripNumber(), trip.shipmentNumber(),
-                            "vehicle".equals(block.resource())
-                                    ? ControlTowerBlockerView.BlockerReason.VEHICLE_UNAVAILABLE
-                                    : ControlTowerBlockerView.BlockerReason.DRIVER_UNAVAILABLE,
-                            "Unavailable (" + block.reason() + ") until " + block.endsAt() + ".")));
+            readiness.evaluate(scope, trip, trip.plannedDepartureAt(),
+                            EnumSet.of(DispatchReadiness.Check.RESOURCES_AVAILABLE))
+                    .forEach(blocker -> blockers.add(toBlockerView(trip, blocker)));
         }
 
         // Capped like every other panel, with the true total travelling in the summary - so a
@@ -548,11 +562,41 @@ public class ControlTowerService {
      *
      * <p>Capped like every other panel, with the true total on the summary.
      */
-    private List<ControlTowerAdvisoryView> advisories(CompanyScope scope, LocalDate date) {
+    private List<ControlTowerAdvisoryView> advisories(CompanyScope scope, LocalDate date, OffsetDateTime now) {
         List<ControlTowerAdvisoryView> advisories = new java.util.ArrayList<>();
         advisories.addAll(settlementAdvisories(scope, date));
         advisories.addAll(etaAdvisories(scope, date));
+        advisories.addAll(holdAdvisories(scope, date));
+        advisories.addAll(warehouseAdvisories.advisories(scope, date, now, PANEL_SIZE));
         return List.copyOf(advisories);
+    }
+
+    /**
+     * Orders put on a blocking hold after they were planned (ADR-014 section 7): one row per held
+     * order, on the day's shipments that have neither finished nor been cancelled. Read through the
+     * dispatch-readiness evaluator, which reads the hold through {@code OrderHoldPort} - the tower
+     * owns none of it.
+     */
+    private List<ControlTowerAdvisoryView> holdAdvisories(CompanyScope scope, LocalDate date) {
+        Map<UUID, Trip> trips = tripRepository.findByCompanyIdAndPlanningDateAndStatusIn(scope.companyId(), date,
+                        HOLD_ADVISORY_TRIP_STATES, PageRequest.of(0, WORKLOAD_SCAN_LIMIT))
+                .stream().collect(Collectors.toMap(Trip::id, Function.identity(), (first, second) -> first));
+        if (trips.isEmpty()) {
+            return List.of();
+        }
+        List<ControlTowerAdvisoryView> advisories = new ArrayList<>();
+        readiness.heldOrdersOn(scope, trips.keySet()).forEach((tripId, held) -> held.forEach(order ->
+                advisories.add(new ControlTowerAdvisoryView(
+                        ControlTowerAdvisoryView.AdvisoryType.ORDER_HOLD_ON_COMMITTED_TRIP,
+                        tripId,
+                        trips.get(tripId).shipmentNumber(),
+                        order.orderId(),
+                        null,
+                        null,
+                        "Order " + order.orderNumber() + " is on hold (" + String.join(", ", order.holdTypes())
+                                + ") after it was planned. The hold does not unplan it; release the hold, or"
+                                + " cancel and replan the shipment."))));
+        return advisories.size() <= PANEL_SIZE ? advisories : advisories.subList(0, PANEL_SIZE);
     }
 
     /**

@@ -18,6 +18,7 @@ shared database.
 | `dev-backend.sh` | Run the API on the `local` profile at http://localhost:8080 |
 | `dev-frontend.sh` | Run the Vite dev server at http://localhost:5173 |
 | `lib.sh` | Shared helpers; sourced by the others, not executed |
+| `e2e/tms-ewm/run.sh` | Local end-to-end run against EWM by EBIM (Warehouse Execution v1): disposable databases, local JWKS, both backends, nine scenarios. See `e2e/tms-ewm/README.md` |
 
 ## Release gates — `ci/`
 
