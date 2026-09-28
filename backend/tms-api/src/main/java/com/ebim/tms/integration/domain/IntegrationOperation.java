@@ -36,7 +36,9 @@ public enum IntegrationOperation {
     TENDER_RESPONSE("tender.response", IntegrationScope.TENDER_RESPOND),
 
     DISPATCH_CONFIRMATION("dispatch.confirmation", IntegrationScope.DISPATCH_WRITE),
-    WAREHOUSE_MILESTONE_BATCH("warehouse-milestone.batch", IntegrationScope.WAREHOUSE_MILESTONE_WRITE);
+    WAREHOUSE_MILESTONE_BATCH("warehouse-milestone.batch", IntegrationScope.WAREHOUSE_MILESTONE_WRITE),
+
+    LOGISTICS_DOCUMENT_UPSERT("logistics-document.upsert", IntegrationScope.DOCUMENT_WRITE);
 
     private final String code;
     private final IntegrationScope requiredScope;

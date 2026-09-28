@@ -72,7 +72,10 @@ public enum IntegrationScope {
     DISPATCH_WRITE("integration.dispatch:write"),
 
     /** Report warehouse milestones - loading started, load ready, load cancelled (migration V53). */
-    WAREHOUSE_MILESTONE_WRITE("integration.warehouse-milestone:write");
+    WAREHOUSE_MILESTONE_WRITE("integration.warehouse-milestone:write"),
+
+    /** Record the documents an ERP issued for orders - invoice, delivery note, GRE (V55, ADR-015). */
+    DOCUMENT_WRITE("integration.document:write");
 
     private static final Map<String, IntegrationScope> BY_CODE = Arrays.stream(values())
             .collect(Collectors.toUnmodifiableMap(IntegrationScope::code, Function.identity()));

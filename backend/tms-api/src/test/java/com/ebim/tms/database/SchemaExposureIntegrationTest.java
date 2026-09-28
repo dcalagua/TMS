@@ -83,7 +83,9 @@ class SchemaExposureIntegrationTest {
             // deny-all policy - and write-once by trigger.
             "platform_provisioning_request", "platform_provisioning_audit",
             // V54: holds on an order (ADR-014). Lifted, never deleted - no DELETE grant.
-            "order_hold");
+            "order_hold",
+            // V55: the documents that travel with orders (ADR-015).
+            "logistics_document", "logistics_document_order");
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the
@@ -125,7 +127,9 @@ class SchemaExposureIntegrationTest {
             // V53: what a warehouse system reported (ADR-013).
             "external_dispatch", "external_dispatch_order", "warehouse_milestone",
             // V54: holds on an order (ADR-014).
-            "order_hold");
+            "order_hold",
+            // V55: the documents that travel with orders (ADR-015).
+            "logistics_document", "logistics_document_order");
 
     /**
      * The only tables allowed to carry a {@code company_id} and <em>not</em> the tenant policy.
@@ -357,6 +361,9 @@ class SchemaExposureIntegrationTest {
         withheld.put("warehouse_milestone", List.of("UPDATE", "DELETE"));
         // A hold is lifted with a reason, never erased (V54).
         withheld.put("order_hold", List.of("DELETE"));
+        // V55: a document is replaced, never deleted; its order links are rewritten whole.
+        withheld.put("logistics_document", List.of("DELETE"));
+        withheld.put("logistics_document_order", List.of("UPDATE"));
         // Canonical location replaced these; they are read-only projections now (V23).
         withheld.put("origin", List.of("INSERT", "UPDATE", "DELETE"));
         withheld.put("destination", List.of("INSERT", "UPDATE", "DELETE"));
