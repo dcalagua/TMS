@@ -235,8 +235,8 @@ class SplitOrderExecutionCharacterizationTest {
     // --- 4. cancel after partial allocation --------------------------------------------
 
     @Test
-    @DisplayName("4. an order with 60 of 100 on a draft trip can be cancelled, leaving its allocation live (DEFECT)")
-    void aPartlyPlannedOrderCanBeCancelledUnderItsTrip() throws Exception {
+    @DisplayName("4. an order with 60 of 100 on a draft trip cannot be cancelled until that share is unassigned")
+    void aPartlyPlannedOrderCannotBeCancelledUnderItsTrip() throws Exception {
         LocalDate date = nextDate();
         String run = newRun(date);
         String tripA = newTrip(run, date);
@@ -244,14 +244,23 @@ class SplitOrderExecutionCharacterizationTest {
 
         assignPart(tripA, order, "600", "6", "60").andExpect(status().isOk());
 
-        // DEFECT: OrderService.cancel checks the status only, and a part-allocated order is
-        // READY_FOR_PLANNING - so it is cancelled with an ACTIVE assignment still under it.
+        // Fixed in Phase 0 B (rule R3, cancel half): a part-allocated order is READY_FOR_PLANNING,
+        // and the status alone used to let it be cancelled with an ACTIVE assignment under it.
         mockMvc.perform(asAdmin(post(ORDERS + "/" + order + "/cancel")).param("reason", "customer withdrew"))
-                .andExpect(status().isOk());
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("unassign")));
 
-        assertThat(orderStatus(order)).isEqualTo("CANCELLED");
+        assertThat(orderStatus(order)).isEqualTo("READY_FOR_PLANNING");
         assertAllocatedMatchesLedger(order, "60");
         assertThat(activeAssignmentRows(order)).isEqualTo(1);
+
+        // The way out is the one scenario 5a proves: take the share off its trip, then cancel.
+        mockMvc.perform(asAdmin(delete(TRIPS + "/" + tripA + "/assignments/" + order)))
+                .andExpect(status().isOk());
+        mockMvc.perform(asAdmin(post(ORDERS + "/" + order + "/cancel")).param("reason", "customer withdrew"))
+                .andExpect(status().isOk());
+        assertThat(orderStatus(order)).isEqualTo("CANCELLED");
+        assertAllocatedMatchesLedger(order, "0");
     }
 
     @Test

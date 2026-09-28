@@ -219,6 +219,12 @@ public class OrderService {
      * it already happened. A shortfall - {@code PARTIALLY_DELIVERED} or {@code DELIVERY_FAILED} -
      * <em>may</em> be cancelled: giving up on a redelivery is a real business decision and this is
      * where it is recorded.
+     *
+     * <p>And one refusal the status cannot express on its own: an order with part of it on a trip.
+     * A split order (V37) stays {@code READY_FOR_PLANNING} while any of it is unplanned, so the
+     * status check above lets it through - and cancelling it would leave an ACTIVE assignment under
+     * a cancelled order, which the trip's dispatch then trips over. The ledger is what knows, so the
+     * ledger is what is asked. See {@code docs/domain/SPLIT_ORDER_EXECUTION.md}, rule R3.
      */
     @Transactional
     public OrderDetailView cancel(CompanyScope scope, UUID id, String reason) {
@@ -235,6 +241,10 @@ public class OrderService {
         }
         if (order.status() == OrderStatus.DELIVERED) {
             throw new ConflictException("Order " + order.orderNumber() + " has been delivered and cannot be cancelled.");
+        }
+        if (!order.allocated().isZero()) {
+            throw new ConflictException("Order " + order.orderNumber() + " has part of it on a trip and cannot be "
+                    + "cancelled directly; unassign it from its trip first.");
         }
 
         order.cancel(blankToNull(reason), auditActorProvider.writerAppUserId());

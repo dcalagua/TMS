@@ -21,7 +21,7 @@ Each row is asserted by a test in `SplitOrderExecutionCharacterizationTest`.
 | 1 | 100 pallets, trip A carries 60, 40 unplanned, A dispatches | **409**: `markInExecution` refuses `READY_FOR_PLANNING` and rolls back the whole departure. The trip stays `READY_FOR_DISPATCH` | DEFECT |
 | 2 | 60 on A + 40 on B (order `PLANNED`), A dispatches and closes out | A leaves and the order goes `IN_EXECUTION`. Closing A out makes the order **`DELIVERED`** from A's row alone, and **zeroes `allocated_*`** while B, which has not left, still carries 40. B then leaves and the order stays `DELIVERED` | DEFECT |
 | 3 | One trip delivered while the rest is unplanned | **Unreachable**: scenario 1 keeps the trip at the dock | Hidden by 1 |
-| 4 | Cancel an order with 60 of 100 on a draft trip | **Allowed**. The order is `CANCELLED` with its `ACTIVE` assignment and `allocated = 60` still in place. A later dispatch of that trip then fails on the cancelled order | DEFECT |
+| 4 | Cancel an order with 60 of 100 on a draft trip | Was **allowed**: the order became `CANCELLED` with its `ACTIVE` assignment and `allocated = 60` still in place, and a later dispatch of that trip failed on the cancelled order. Now **409** | DEFECT, **fixed by Phase 0 B** |
 | 4b | Edit that same order | **Allowed**. The edit resets it to `NOT_READY` (`TransportOrder.applyChanges`) with the assignment still under it | DEFECT (same root as 4) |
 | 5a | Remove a partial allocation from a draft trip | Exactly its share returns; ledger and running total agree | Correct |
 | 5b | Cancel a confirmed trip carrying a partial allocation | Only that trip's share returns, and the order is plannable again | Correct |
