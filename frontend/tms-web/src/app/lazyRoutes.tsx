@@ -47,6 +47,8 @@ export const DriversPage = lazy(() =>
 
 export const OrdersPage = lazy(() =>
   import("../pages/orders/OrdersPage").then((m) => ({ default: m.OrdersPage })));
+export const SchedulingReleasePage = lazy(() =>
+  import("../pages/scheduling/SchedulingReleasePage").then((m) => ({ default: m.SchedulingReleasePage })));
 
 export const PlanningRunsPage = lazy(() =>
   import("../pages/planning/PlanningRunsPage").then((m) => ({ default: m.PlanningRunsPage })));

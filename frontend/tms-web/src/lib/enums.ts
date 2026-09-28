@@ -29,6 +29,9 @@ export const ENUM_LABELS = {
     DRIVER_CHANGE: "Cambio de conductor",
     IMPORT_EXECUTED: "Importación ejecutada",
     MOVE_ORDER: "Pedido movido",
+    ORDER_HOLD_PLACED: "Retención aplicada",
+    ORDER_HOLD_RELEASED: "Retención levantada",
+    ORDER_RELEASED: "Pedido liberado",
     REMOVE_ORDER: "Pedido retirado",
     SHIPMENT_CANCELLED: "Envío cancelado",
     SHIPMENT_COMPLETED: "Envío completado",
@@ -218,6 +221,44 @@ export const ENUM_LABELS = {
     GRE_TRANSPORTISTA: "Guía de remisión transportista",
     INVOICE: "Factura",
     OTHER: "Otro documento",
+  },
+  /**
+   * ADR-014: si un pedido puede liberarse ahora. No es un estado del pedido; se deriva al leer.
+   */
+  eligibility: {
+    BLOCKED: "Bloqueado",
+    ELIGIBLE: "Elegible",
+    WARNING: "Con aviso",
+  },
+  /** ADR-014: por qué un pedido no es simplemente elegible. */
+  schedulingReason: {
+    ACTIVE_BLOCKING_HOLD: "Retención activa",
+    CUTOFF_MISSED: "Corte vencido",
+    FREQUENCY_OVERRIDE: "Fuera de frecuencia",
+    MISSING_CAPACITY: "Sin peso, volumen ni pallets",
+    MISSING_DESTINATION: "Destino no válido",
+    MISSING_ORIGIN: "Origen no válido",
+    ROUTE_AMBIGUOUS: "Ruta ambigua",
+    ROUTE_NOT_CONFIGURED: "Origen sin rutas",
+    ROUTE_NOT_FOUND: "Sin ruta al destino",
+  },
+  /** ADR-014: cómo se resolvió la ruta del pedido. */
+  routeResolution: {
+    AMBIGUOUS: "Ambigua",
+    NOT_CONFIGURED: "Sin rutas en el origen",
+    NOT_FOUND: "No encontrada",
+    RESOLVED: "Resuelta",
+  },
+  /** V54: quién tiene que actuar para levantar una retención. */
+  holdType: {
+    ADDRESS: "Dirección",
+    COMMERCIAL: "Comercial",
+    CUSTOMER: "Cliente",
+    INTEGRATION: "Integración",
+    INVENTORY: "Inventario",
+    MANUAL: "Manual",
+    OTHER: "Otro",
+    TRANSPORT: "Transporte",
   },
   blockerReason: {
     AWAITING_CARRIER_VEHICLE: "Falta vehículo del transportista",
