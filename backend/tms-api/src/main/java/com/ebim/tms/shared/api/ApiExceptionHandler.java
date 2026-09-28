@@ -143,7 +143,10 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ProblemDetail> handleConflict(ConflictException failure, WebRequest request) {
-        return respond(ApiProblems.of(ProblemType.CONFLICT, failure.getMessage()), request);
+        ProblemDetail problem = ApiProblems.of(ProblemType.CONFLICT, failure.getMessage());
+        // Machine-readable detail a caller can act on - the release gate's reasons (ADR-014).
+        failure.properties().forEach(problem::setProperty);
+        return respond(problem, request);
     }
 
     /**
@@ -151,6 +154,18 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
      * specific handler for the thrown type, so an {@link IdempotencyConflictException} - which is
      * a {@link ConflictException} - still gets its own machine code.
      */
+    @ExceptionHandler(PayloadTooLargeException.class)
+    public ResponseEntity<ProblemDetail> handlePayloadTooLarge(PayloadTooLargeException failure, WebRequest request) {
+        return respond(ApiProblems.of(ProblemType.PAYLOAD_TOO_LARGE, failure.getMessage()), request);
+    }
+
+    @ExceptionHandler(DispatchRequiresExternalConfirmationException.class)
+    public ResponseEntity<ProblemDetail> handleDispatchRequiresExternalConfirmation(
+            DispatchRequiresExternalConfirmationException failure, WebRequest request) {
+        return respond(ApiProblems.of(ProblemType.DISPATCH_REQUIRES_EXTERNAL_CONFIRMATION, failure.getMessage()),
+                request);
+    }
+
     @ExceptionHandler(IdempotencyConflictException.class)
     public ResponseEntity<ProblemDetail> handleIdempotencyConflict(
             IdempotencyConflictException failure, WebRequest request) {

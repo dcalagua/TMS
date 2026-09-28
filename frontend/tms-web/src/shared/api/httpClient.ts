@@ -20,6 +20,8 @@ export type ProblemCode =
   | "conflict"
   /** Una capacidad opcional para la que este despliegue no está configurado — hoy, los webhooks salientes. */
   | "feature-not-configured"
+  /** ADR-013 §13.8: la empresa exige la confirmación del almacén y el despacho manual no trae override. */
+  | "dispatch-requires-external-confirmation"
   | "internal-error";
 
 export interface ProblemFieldError {
@@ -168,6 +170,13 @@ export interface RequestOptions {
   /** `blob` para una descarga; el camino de error sigue siendo JSON en cualquier caso, porque
    * una descarga fallida responde igualmente con un documento RFC 9457. */
   responseType?: "json" | "blob";
+  /**
+   * Cabecera `Accept` de la petición. Por defecto `application/json`; un endpoint que declara
+   * otro tipo de éxito (el documento original de un despacho es `text/plain`) la necesita
+   * distinta o el servidor responde 406. Conviene seguir aceptando `application/problem+json`
+   * para que un fallo llegue igualmente como Problem Details.
+   */
+  accept?: string;
 }
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
@@ -234,13 +243,13 @@ interface Attempt {
 }
 
 async function sendRequest(path: string, options: RequestOptions, token: string | null): Promise<Attempt> {
-  const { method = "GET", body, formData, signal, query, companyId, responseType = "json" } = options;
+  const { method = "GET", body, formData, signal, query, companyId, responseType = "json", accept } = options;
   const correlationId = generateCorrelationId();
 
   const headers: Record<string, string> = {
     // Sigue siendo `application/json` para una descarga: lo que se negocia aquí es la forma
     // del *error*, y los endpoints que devuelven un fichero ignoran Accept en su caso de éxito.
-    Accept: "application/json",
+    Accept: accept ?? "application/json",
     [CORRELATION_ID_HEADER]: correlationId,
   };
   if (body !== undefined) {

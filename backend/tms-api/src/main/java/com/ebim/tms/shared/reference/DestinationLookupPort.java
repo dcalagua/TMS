@@ -23,4 +23,7 @@ public interface DestinationLookupPort {
 
     /** See {@link OriginLookupPort#findActiveByCodesInCompany(Collection, UUID)}. */
     Map<String, MasterReference> findActiveByCodesInCompany(Collection<String> codes, UUID companyId);
+
+    /** See {@link OriginLookupPort#findActiveIdsInCompany(Set, UUID)}. */
+    Set<UUID> findActiveIdsInCompany(Set<UUID> ids, UUID companyId);
 }

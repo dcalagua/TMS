@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { AdvisoriesPanel } from "./ControlTowerPanels";
-import type { ControlTowerAdvisoryView } from "../../shared/api/controlTowerApi";
+import { ADVISORY_TYPES, type ControlTowerAdvisoryView } from "../../shared/api/controlTowerApi";
+import { advisoryLabel, advisoryLink, isKnownAdvisory } from "./advisories";
 
 /**
  * El panel de avisos, y la línea que no puede cruzar (JOB 23).
@@ -76,9 +77,65 @@ describe("el panel de avisos", () => {
     expect(screen.getByText("La llegada estimada se sale de la ventana")).toBeInTheDocument();
   });
 
+  it("etiqueta en español los avisos del despacho de almacén y enlaza al envío", () => {
+    renderPanel([advisory({
+      type: "DISPATCH_MISMATCH", sourceId: "doc-1", amount: null, currency: null,
+      detail: "SLS-000001 no coincide con el plan.",
+    })]);
+
+    expect(screen.getByText("El despacho del almacén no coincide con el plan")).toBeInTheDocument();
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/trips/t-1");
+  });
+
+  it("un aviso sin sourceId sigue enlazando a su envío", () => {
+    renderPanel([advisory({
+      type: "AWAITING_WAREHOUSE_DISPATCH", sourceId: null, amount: null, currency: null,
+      detail: "Pasó la salida planificada y el almacén no ha confirmado.",
+    })]);
+
+    expect(screen.getByText("Esperando el despacho del almacén")).toBeInTheDocument();
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/trips/t-1");
+  });
+
+  it("un despacho sin envío asociado se lee pero no enlaza a ningún envío", () => {
+    renderPanel([advisory({
+      type: "EXTERNAL_DISPATCH_UNMATCHED", tripId: null, shipmentNumber: "SH-99999999", sourceId: "doc-9",
+      amount: null, currency: null, detail: "El almacén despachó un envío que no existe.",
+    })]);
+
+    expect(screen.getByText("Despacho del almacén sin envío asociado")).toBeInTheDocument();
+    expect(screen.getByText("SH-99999999")).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("pinta un tipo que esta versión no conoce con una etiqueta genérica y su detalle", () => {
+    renderPanel([advisory({
+      type: "SOMETHING_NEW", sourceId: "x-1", amount: null, currency: null, detail: "Algo nuevo que mirar.",
+    })]);
+
+    expect(screen.getByText("Aviso de la operación")).toBeInTheDocument();
+    expect(screen.getByText("SOMETHING_NEW")).toBeInTheDocument();
+    expect(screen.getByText("Algo nuevo que mirar.")).toBeInTheDocument();
+  });
+
   it("dice de cuántos son los que enseña", () => {
     renderPanel([advisory()], 12);
 
     expect(screen.getByText("Conviene saber")).toBeInTheDocument();
+  });
+});
+
+describe("las reglas de los avisos", () => {
+  it("cada tipo conocido tiene etiqueta propia", () => {
+    for (const type of ADVISORY_TYPES) {
+      expect(isKnownAdvisory(type)).toBe(true);
+      expect(advisoryLabel(type)).not.toBe("Aviso de la operación");
+    }
+  });
+
+  it("decide el destino sin inventar un enlace", () => {
+    expect(advisoryLink({ type: "SETTLEMENT_DISCREPANCY_OPEN", tripId: "t-1", sourceId: "d-1" })).toBe("/settlement?discrepancy=d-1");
+    expect(advisoryLink({ type: "ORDER_HOLD_ON_COMMITTED_TRIP", tripId: "t-2", sourceId: "o-1" })).toBe("/trips/t-2");
+    expect(advisoryLink({ type: "EXTERNAL_DISPATCH_UNMATCHED", tripId: null, sourceId: "doc-1" })).toBeNull();
   });
 });

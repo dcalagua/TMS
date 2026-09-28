@@ -60,7 +60,16 @@ public enum TransportEventType {
     TENDER_EXPIRED,
     TENDER_CANCELLED,
     EXCEPTION_REPORTED,
-    EXCEPTION_RESOLVED;
+    EXCEPTION_RESOLVED,
+    /**
+     * What a warehouse system reported about the shipment (V53, ADR-013 section 6): loading started,
+     * the load is ready, the load was cancelled, and the dispatch document it issued. Informative -
+     * none of them moves a trip or an order - and always {@code INTEGRATION}.
+     */
+    WAREHOUSE_LOADING_STARTED,
+    WAREHOUSE_LOAD_READY,
+    WAREHOUSE_LOAD_CANCELLED,
+    WAREHOUSE_DISPATCH_CONFIRMED;
 
     private static final Set<TransportEventType> STOP_SCOPED = EnumSet.of(
             ARRIVED_AT_STOP, SERVICE_STARTED, STOP_COMPLETED, STOP_SKIPPED, STOP_FAILED,
@@ -68,7 +77,8 @@ public enum TransportEventType {
 
     private static final Set<TransportEventType> TRIP_SCOPED = EnumSet.of(
             TRIP_CONFIRMED, TRIP_READY, TRIP_DISPATCHED, TRIP_COMPLETED, TRIP_CANCELLED,
-            TENDER_SENT, TENDER_ACCEPTED, TENDER_REJECTED, TENDER_EXPIRED, TENDER_CANCELLED);
+            TENDER_SENT, TENDER_ACCEPTED, TENDER_REJECTED, TENDER_EXPIRED, TENDER_CANCELLED,
+            WAREHOUSE_LOADING_STARTED, WAREHOUSE_LOAD_READY, WAREHOUSE_LOAD_CANCELLED, WAREHOUSE_DISPATCH_CONFIRMED);
 
     /** Whether this event is meaningless without the stop it happened at. */
     public boolean requiresStop() {

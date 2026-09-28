@@ -2,6 +2,7 @@ package com.ebim.tms.masterdata.infrastructure;
 
 import com.ebim.tms.masterdata.domain.FrequencyException;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -24,4 +25,7 @@ public interface FrequencyExceptionRepository extends JpaRepository<FrequencyExc
 
     /** The single override, if any, {@code LocationEligibilityService} must check before the weekly rule. */
     Optional<FrequencyException> findByFrequencyIdAndExceptionDate(UUID frequencyId, LocalDate exceptionDate);
+
+    /** One date's exceptions for several frequencies at once, each already resolved in the company. */
+    List<FrequencyException> findByFrequencyIdInAndExceptionDate(Collection<UUID> frequencyIds, LocalDate exceptionDate);
 }

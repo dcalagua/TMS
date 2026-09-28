@@ -502,8 +502,12 @@ public class TransportOrder {
                     "Order " + orderNumber + " cannot release more than is allocated to it.");
         }
         applyAllocated(after);
-        if (status == OrderStatus.PLANNED && !after.covers(ordered())) {
-            this.status = OrderStatus.READY_FOR_PLANNING;
+        // IN_EXECUTION as well as PLANNED: a split order whose first share has left and whose
+        // second share comes off a trip that has not left has something to place again, and the
+        // only status in which a planner can place it is READY_FOR_PLANNING (R1 of
+        // docs/domain/SPLIT_ORDER_EXECUTION.md). The departed share stays allocated.
+        if ((status == OrderStatus.PLANNED || status == OrderStatus.IN_EXECUTION) && !after.covers(ordered())) {
+            transitionTo(OrderStatus.READY_FOR_PLANNING);
         }
         this.updatedBy = actorId;
     }

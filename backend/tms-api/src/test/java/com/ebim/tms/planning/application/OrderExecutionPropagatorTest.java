@@ -143,6 +143,38 @@ class OrderExecutionPropagatorTest {
             verify(orderPlanningPort).closeOut(ORDER_B, COMPANY, OrderFulfillmentStatus.REJECTED);
         }
 
+        @Test
+        @DisplayName("R2: an order another open trip still carries is not closed by this one")
+        void anOrderWithAnotherOpenCarrierStaysOpen() {
+            carrying(ORDER_A, ORDER_B);
+            when(assignments.findOrdersWithOtherOpenCarrier(anyCollection(), eq(COMPANY), eq(TRIP),
+                    eq(AssignmentStatus.ACTIVE), anyCollection())).thenReturn(List.of(ORDER_A));
+            when(orderFulfillmentPort.fulfillmentOf(anyCollection(), eq(COMPANY)))
+                    .thenReturn(Map.of(ORDER_B, OrderFulfillmentStatus.DELIVERED));
+
+            propagator.closedOut(scope, trip);
+
+            verify(orderPlanningPort, never()).closeOut(eq(ORDER_A), any(), any());
+            verify(orderPlanningPort).closeOut(ORDER_B, COMPANY, OrderFulfillmentStatus.DELIVERED);
+            verify(orderFulfillmentPort).fulfillmentOf(Set.of(ORDER_B), COMPANY);
+        }
+
+        @Test
+        @DisplayName("R2: the orders are locked before their other carriers are read")
+        void locksBeforeReadingOtherCarriers() {
+            carrying(ORDER_A);
+            when(orderFulfillmentPort.fulfillmentOf(anyCollection(), eq(COMPANY)))
+                    .thenReturn(Map.of(ORDER_A, OrderFulfillmentStatus.DELIVERED));
+
+            propagator.closedOut(scope, trip);
+
+            var inOrder = org.mockito.Mockito.inOrder(orderPlanningPort, assignments);
+            inOrder.verify(orderPlanningPort).lockForExecution(Set.of(ORDER_A), COMPANY);
+            inOrder.verify(assignments).findOrdersWithOtherOpenCarrier(anyCollection(), eq(COMPANY), eq(TRIP),
+                    eq(AssignmentStatus.ACTIVE), anyCollection());
+            inOrder.verify(orderPlanningPort).closeOut(ORDER_A, COMPANY, OrderFulfillmentStatus.DELIVERED);
+        }
+
         /**
          * The N+1 the batch port exists to prevent. Two orders, one lookup.
          */
@@ -227,7 +259,9 @@ class OrderExecutionPropagatorTest {
             propagator.deliveryRecorded(scope, trip, ORDER_A);
 
             verify(orderPlanningPort, never()).closeOut(eq(ORDER_B), any(), any());
-            verifyNoInteractions(assignments);
+            // The only question asked of the ledger is about ORDER_A's other carriers (R2); the
+            // trip's own list of orders is never read.
+            verify(assignments, never()).findByTripIdAndStatusOrderByAssignedAtAsc(any(), any());
         }
     }
 }

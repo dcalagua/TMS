@@ -5,6 +5,7 @@ import com.ebim.tms.orders.application.OrderFilter;
 import com.ebim.tms.orders.application.OrderRequest;
 import com.ebim.tms.orders.application.OrderService;
 import com.ebim.tms.orders.application.OrderView;
+import com.ebim.tms.orders.application.ReleaseRequest;
 import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.security.CompanyScope;
@@ -93,11 +94,15 @@ public class OrderController {
 
     @PostMapping("/{id}/mark-ready")
     @PreAuthorize("hasAuthority('orders.order:manage')")
-    @Operation(summary = "Mark a not-ready order as ready for planning, after a completeness check")
+    @Operation(summary = "Release a not-ready order for planning, judged against its eligibility (ADR-014)",
+            description = "BLOCKED is refused with 409 and the reasons in the problem detail. A WARNING that "
+                    + "requires an override (CUTOFF_MISSED, FREQUENCY_OVERRIDE) needs overrideReason, else 409 with "
+                    + "overrideRequired=true. The body is optional; ELIGIBLE orders release without one.")
     @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
             description = "Id of a company the caller is a member of")
-    public OrderDetailView markReadyForPlanning(CompanyScope scope, @PathVariable UUID id) {
-        return orderService.markReadyForPlanning(scope, id);
+    public OrderDetailView markReadyForPlanning(CompanyScope scope, @PathVariable UUID id,
+            @Valid @RequestBody(required = false) ReleaseRequest request) {
+        return orderService.markReadyForPlanning(scope, id, request == null ? null : request.overrideReason());
     }
 
     @PostMapping("/{id}/cancel")

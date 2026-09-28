@@ -62,6 +62,15 @@ public enum ProblemType {
     IDEMPOTENCY_KEY_REUSED("idempotency-key-reused", "Idempotency key reused", HttpStatus.CONFLICT),
 
     /**
+     * A person tried to dispatch a trip in a company whose dispatch mode is
+     * {@code EXTERNAL_REQUIRED} (ADR-013 section 4) without an override. Distinct from
+     * {@link #CONFLICT} because the reaction is specific: wait for the warehouse's dispatch, or ask
+     * someone holding {@code planning.trip:dispatch-override} to dispatch with a reason.
+     */
+    DISPATCH_REQUIRES_EXTERNAL_CONFIRMATION("dispatch-requires-external-confirmation",
+            "Dispatch requires the warehouse's confirmation", HttpStatus.CONFLICT),
+
+    /**
      * A capability this deployment has not been configured for was asked of it - today, only
      * proof-of-delivery evidence storage ({@code tms.storage.evidence.mode}).
      *
@@ -85,6 +94,12 @@ public enum ProblemType {
      * feature until an administrator configures it.
      */
     FEATURE_NOT_CONFIGURED("feature-not-configured", "Feature is not configured", HttpStatus.SERVICE_UNAVAILABLE),
+
+    /**
+     * A request body over an endpoint's documented limit - today the 2 MB of a warehouse dispatch
+     * document (WAREHOUSE_EXECUTION_V1 §4.1). Distinct because the only fix is a smaller body.
+     */
+    PAYLOAD_TOO_LARGE("payload-too-large", "Payload too large", HttpStatus.PAYLOAD_TOO_LARGE),
 
     /** Anything unexpected. The detail is deliberately generic; the cause is only in the server log. */
     INTERNAL_ERROR("internal-error", "Internal server error", HttpStatus.INTERNAL_SERVER_ERROR);

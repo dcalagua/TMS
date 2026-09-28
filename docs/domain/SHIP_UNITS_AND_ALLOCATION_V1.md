@@ -30,7 +30,7 @@ duplicated.
 | Figure | Where it lives | Meaning |
 |---|---|---|
 | **Ordered** | `transport_order.total_*` | everything the customer asked for |
-| **Allocated** | `transport_order.allocated_*` | the part on trips that have not closed out |
+| **Allocated** | `transport_order.allocated_*` | the part committed to trips since the order last entered the pool: open trips, plus finished trips whose order has not closed out yet (`SPLIT_ORDER_EXECUTION.md`, R2) |
 | **Pending** | derived: ordered − allocated | what a planner may still place |
 | **Delivered** | `tms.order_delivery` (V28) | what happened at the dock, per order per stop |
 
@@ -88,9 +88,10 @@ nothing, so assigning it still makes it `PLANNED`. V1's behaviour, unchanged.
 |---|---|---|
 | assign, no amounts given | allocate **everything still pending** | `PLANNED` if that finishes it |
 | assign with amounts | allocate that slice | unchanged if anything is left |
-| remove from a trip | release **that row's amounts**, not the whole order | back to `READY_FOR_PLANNING` if it was full |
+| remove from a trip / cancel a trip | release **that row's amounts**, not the whole order | back to `READY_FOR_PLANNING` if it was full - from `PLANNED`, or from `IN_EXECUTION` when another share has already left (`SPLIT_ORDER_EXECUTION.md`, R1) |
 | move between trips | **unchanged** - the same amount, a different truck | unchanged; must not flicker |
-| trip closed out | allocation returns to zero | `DELIVERED` / `PARTIALLY_DELIVERED` / `DELIVERY_FAILED` |
+| trip departs | unchanged | `IN_EXECUTION` only from `PLANNED`; a part-planned order stays `READY_FOR_PLANNING` (R1) |
+| **last open carrier** closed out | allocation returns to zero | `DELIVERED` / `PARTIALLY_DELIVERED` / `DELIVERY_FAILED`, from every trip's deliveries (R2). A carrier that is not the last changes nothing |
 
 The move row is worth reading twice. Releasing and re-allocating would take the order through
 `READY_FOR_PLANNING` and back, which is visible to anything watching the status and is not what

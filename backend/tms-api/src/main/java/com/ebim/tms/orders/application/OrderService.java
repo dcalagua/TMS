@@ -1,10 +1,13 @@
 package com.ebim.tms.orders.application;
 
 import com.ebim.tms.orders.domain.DeclaredTotals;
+import com.ebim.tms.orders.domain.Eligibility;
 import com.ebim.tms.orders.domain.OrderLineInput;
 import com.ebim.tms.orders.domain.OrderNumbers;
 import com.ebim.tms.orders.domain.OrderStatus;
 import com.ebim.tms.orders.domain.OrderTotals;
+import com.ebim.tms.orders.domain.SchedulingAssessment;
+import com.ebim.tms.orders.domain.SchedulingReason;
 import com.ebim.tms.orders.domain.TransportOrder;
 import com.ebim.tms.orders.infrastructure.TransportOrderLineRepository;
 import com.ebim.tms.orders.infrastructure.TransportOrderRepository;
@@ -66,12 +69,14 @@ public class OrderService {
     private final CompanySettingsPort companySettingsPort;
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
+    private final OrderSchedulingService orderSchedulingService;
 
     public OrderService(TransportOrderRepository transportOrderRepository,
             TransportOrderLineRepository transportOrderLineRepository, OriginLookupPort originLookupPort,
             DestinationLookupPort destinationLookupPort, OrderFulfillmentPort orderFulfillmentPort,
             CompanySettingsPort companySettingsPort, AuditActorProvider auditActorProvider,
-            AuditRecorder auditRecorder) {
+            AuditRecorder auditRecorder, OrderSchedulingService orderSchedulingService) {
+        this.orderSchedulingService = orderSchedulingService;
         this.transportOrderRepository = transportOrderRepository;
         this.transportOrderLineRepository = transportOrderLineRepository;
         this.originLookupPort = originLookupPort;
@@ -192,18 +197,93 @@ public class OrderService {
      */
     @Transactional
     public OrderDetailView markReadyForPlanning(CompanyScope scope, UUID id) {
-        TransportOrder order = find(scope, id);
+        return markReadyForPlanning(scope, id, null);
+    }
+
+    /**
+     * Releases an order for planning (ADR-014 section 8): {@code NOT_READY -> READY_FOR_PLANNING},
+     * judged against its eligibility first.
+     *
+     * <ul>
+     *   <li>{@code BLOCKED} is refused with a 409 whose problem detail carries the reasons;</li>
+     *   <li>a {@code WARNING} with any warning that requires an override (cutoff missed, frequency
+     *       override) needs a non-blank {@code overrideReason}, and is refused with a 409 without one;</li>
+     *   <li>{@code ELIGIBLE}, or a {@code WARNING} whose only warning is informative
+     *       ({@code ROUTE_NOT_CONFIGURED}), releases as before.</li>
+     * </ul>
+     *
+     * <p>The capacity check this method has always made is now {@code MISSING_CAPACITY}, with the
+     * same rule. Takes the order's row lock, so a release and a hold placed at the same instant
+     * serialise ({@code OrderHoldService.place} takes the same lock). Audited as
+     * {@code ORDER_RELEASED} with the eligibility, the warning codes and the reason.
+     */
+    @Transactional
+    public OrderDetailView markReadyForPlanning(CompanyScope scope, UUID id, String overrideReason) {
+        TransportOrder order = findForRelease(scope, id);
+        String reason = blankToNull(overrideReason);
+        if (reason != null && reason.length() > 500) {
+            throw new InvalidRequestException("overrideReason must be at most 500 characters.");
+        }
+        SchedulingAssessment assessment = orderSchedulingService.assess(scope, order);
+        if (assessment.eligibility() == Eligibility.BLOCKED) {
+            throw ReleaseRefusal.blocked(order, assessment);
+        }
+        if (assessment.requiresOverride() && reason == null) {
+            throw ReleaseRefusal.overrideRequired(order, assessment);
+        }
+        return toDetailView(scope, release(scope, order, assessment, reason));
+    }
+
+    /**
+     * The integration upsert's release (ADR-014 section 8): a machine cannot give a reason, so it
+     * releases only an order that needs none - {@code ELIGIBLE}, or a {@code WARNING} none of whose
+     * warnings requires an override. Anything else stays {@code NOT_READY} and the reasons are
+     * returned for the upsert result to name. Never throws for eligibility.
+     *
+     * @return the reasons the order was not released, empty when it was
+     */
+    @Transactional
+    public List<SchedulingReason> releaseIfReleasableWithoutReason(CompanyScope scope, UUID id) {
+        TransportOrder order = findForRelease(scope, id);
+        SchedulingAssessment assessment = orderSchedulingService.assess(scope, order);
+        if (!assessment.releasableWithoutReason()) {
+            return assessment.reasons().stream()
+                    .filter(candidate -> candidate.severity() == Eligibility.BLOCKED || candidate.requiresOverride())
+                    .toList();
+        }
+        release(scope, order, assessment, null);
+        return List.of();
+    }
+
+    private TransportOrder findForRelease(CompanyScope scope, UUID id) {
+        TransportOrder order = transportOrderRepository.findByIdAndCompanyIdForUpdate(id, scope.companyId())
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
         if (order.status() != OrderStatus.NOT_READY) {
             throw new ConflictException(
                     "Only a not-ready order can be marked ready for planning (current status: " + order.status() + ").");
         }
-        if (order.totalWeightKg().signum() == 0 && order.totalVolumeM3().signum() == 0 && order.totalPallets().signum() == 0) {
-            throw new ConflictException("An order needs at least one of weight, volume or pallets - from its lines or "
-                    + "declared on the header - before it can be marked ready for planning.");
-        }
+        return order;
+    }
 
+    private TransportOrder release(CompanyScope scope, TransportOrder order, SchedulingAssessment assessment,
+            String reason) {
         order.markReadyForPlanning(auditActorProvider.writerAppUserId());
-        return toDetailView(scope, saveOrConflict(order));
+        TransportOrder saved = saveOrConflict(order);
+
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("orderNumber", saved.orderNumber());
+        detail.put("eligibility", assessment.eligibility().name());
+        String warnings = assessment.reasons().stream()
+                .map(candidate -> candidate.code().name())
+                .collect(Collectors.joining(","));
+        if (!warnings.isEmpty()) {
+            detail.put("warnings", warnings);
+        }
+        if (reason != null) {
+            detail.put("overrideReason", reason);
+        }
+        auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.ORDER_RELEASED, detail);
+        return saved;
     }
 
     /**
@@ -219,6 +299,12 @@ public class OrderService {
      * it already happened. A shortfall - {@code PARTIALLY_DELIVERED} or {@code DELIVERY_FAILED} -
      * <em>may</em> be cancelled: giving up on a redelivery is a real business decision and this is
      * where it is recorded.
+     *
+     * <p>And one refusal the status cannot express on its own: an order with part of it on a trip.
+     * A split order (V37) stays {@code READY_FOR_PLANNING} while any of it is unplanned, so the
+     * status check above lets it through - and cancelling it would leave an ACTIVE assignment under
+     * a cancelled order, which the trip's dispatch then trips over. The ledger is what knows, so the
+     * ledger is what is asked. See {@code docs/domain/SPLIT_ORDER_EXECUTION.md}, rule R3.
      */
     @Transactional
     public OrderDetailView cancel(CompanyScope scope, UUID id, String reason) {
@@ -235,6 +321,10 @@ public class OrderService {
         }
         if (order.status() == OrderStatus.DELIVERED) {
             throw new ConflictException("Order " + order.orderNumber() + " has been delivered and cannot be cancelled.");
+        }
+        if (!order.allocated().isZero()) {
+            throw new ConflictException("Order " + order.orderNumber() + " has part of it on a trip and cannot be "
+                    + "cancelled directly; unassign it from its trip first.");
         }
 
         order.cancel(blankToNull(reason), auditActorProvider.writerAppUserId());
@@ -313,9 +403,23 @@ public class OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
     }
 
+    /**
+     * The status half and the ledger half of "may this order's content still change".
+     *
+     * <p>The ledger half is rule R3 of {@code docs/domain/SPLIT_ORDER_EXECUTION.md}: a part-planned
+     * order is {@code READY_FOR_PLANNING}, which the status alone reads as editable, but a share of
+     * it is on a trip - possibly already on the road - and an edit would reset it to
+     * {@code NOT_READY} under that trip and change the demand the share was cut from. The
+     * integration upsert reaches this through {@link #update} only when the payload really changes
+     * something, so an unchanged redelivery is still answered {@code UNCHANGED}.
+     */
     private static void requireEditable(TransportOrder order) {
         if (order.status() != OrderStatus.NOT_READY && order.status() != OrderStatus.READY_FOR_PLANNING) {
             throw new ConflictException("This order can no longer be edited (status: " + order.status() + ").");
+        }
+        if (!order.allocated().isZero()) {
+            throw new ConflictException("Order " + order.orderNumber() + " has part of it on a trip and cannot be "
+                    + "edited while it is; unassign it from its trip, or cancel the trip, first.");
         }
     }
 

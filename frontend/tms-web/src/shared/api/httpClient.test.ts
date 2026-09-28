@@ -131,6 +131,20 @@ describe("apiRequest", () => {
       expect(init.body).toBe(JSON.stringify({ code: "NORTE" }));
     });
 
+    it("pide JSON por defecto y deja que un endpoint de texto negocie su propio Accept", async () => {
+      fetchMock.mockResolvedValue(jsonResponse({}));
+      await apiRequest("/orders");
+      expect(lastCall(fetchMock).headers.Accept).toBe("application/json");
+
+      // El documento original de un despacho es text/plain: con Accept JSON el servidor responde 406.
+      fetchMock.mockResolvedValue(new Response("SLS-000001|R1", { status: 200, headers: { "content-type": "text/plain" } }));
+      const raw = await apiRequest<string>("/planning/trips/t-1/warehouse/documents/d-1/raw", {
+        accept: "text/plain, application/problem+json;q=0.9",
+      });
+      expect(lastCall(fetchMock).headers.Accept).toBe("text/plain, application/problem+json;q=0.9");
+      expect(raw).toBe("SLS-000001|R1");
+    });
+
     it("una petición GET no declara Content-Type porque no lleva cuerpo", async () => {
       fetchMock.mockResolvedValue(jsonResponse({}));
 

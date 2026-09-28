@@ -24,7 +24,7 @@ import org.springframework.stereotype.Repository;
 public class JdbcCompanySettingsAdapter implements CompanySettingsPort {
 
     private static final String SETTINGS_SQL = """
-            SELECT default_country, order_number_prefix, shipment_number_prefix
+            SELECT default_country, order_number_prefix, shipment_number_prefix, dispatch_confirmation_mode
             FROM tms.company_settings
             WHERE company_id = :companyId
             """;
@@ -48,7 +48,8 @@ public class JdbcCompanySettingsAdapter implements CompanySettingsPort {
                 .query((rs, rowNum) -> new CompanySettings(
                         rs.getString("default_country"),
                         rs.getString("order_number_prefix"),
-                        rs.getString("shipment_number_prefix")))
+                        rs.getString("shipment_number_prefix"),
+                        CompanySettings.modeOf(rs.getString("dispatch_confirmation_mode"))))
                 .optional()
                 .orElseGet(CompanySettings::defaults);
     }

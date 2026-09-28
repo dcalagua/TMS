@@ -108,7 +108,9 @@ public class IntegrationShipmentService {
                 shipment.maxWeightKg(), shipment.maxVolumeM3(), shipment.maxPallets(), shipment.usedWeightKg(),
                 shipment.usedVolumeM3(), shipment.usedPallets(), shipment.weightUtilizationPct(),
                 shipment.volumeUtilizationPct(), shipment.palletsUtilizationPct(), shipment.stopCount(),
-                shipment.orderCount(), shipment.version(), shipment.createdAt(), shipment.updatedAt());
+                shipment.orderCount(), shipment.version(), shipment.createdAt(), shipment.updatedAt(),
+                shipment.originExternalReference(), shipment.routeCode(),
+                ShipmentPlanDriverV1.of(shipment.driverCode(), shipment.driverName(), shipment.driverDocumentNumber()));
     }
 
     private static ShipmentPlanStopV1 toStop(PublishedShipmentStop stop) {
@@ -120,6 +122,6 @@ public class IntegrationShipmentService {
         return new ShipmentPlanOrderV1(order.orderId(), order.orderNumber(), order.externalSource(),
                 order.externalReference(), order.destinationCode(), order.weightKg(), order.volumeM3(),
                 order.pallets(), order.deliveryResult(), order.deliveredAt(), order.deliveryReceiverName(),
-                order.deliveryNotes(), order.evidenceCount());
+                order.deliveryNotes(), order.evidenceCount(), order.stopSequence());
     }
 }
