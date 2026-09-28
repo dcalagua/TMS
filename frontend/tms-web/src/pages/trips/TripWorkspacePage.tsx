@@ -48,6 +48,7 @@ import { TripTenderCard } from "./TripTenderCard";
 import { TripTimeline } from "./TripTimeline";
 import { TripTrackingCard } from "./TripTrackingCard";
 import { TripWarehouseCard } from "./TripWarehouseCard";
+import { TripDocumentsCard } from "./TripDocumentsCard";
 import { TripRouteCard } from "./TripRouteCard";
 import { TenderWaterfallCard } from "./TenderWaterfallCard";
 
@@ -106,6 +107,9 @@ export function TripWorkspacePage() {
   const canManageTenders = hasPermission("planning.tender:manage");
   /** ADR-013 §4: despachar por encima de la confirmación del almacén es su propia autoridad. */
   const canOverrideDispatch = hasPermission(DISPATCH_OVERRIDE_PERMISSION);
+  /** Los documentos de un envío son los de sus pedidos (ADR-015): el endpoint pide además
+   * `orders.order:read`, así que sin él la tarjeta no se pide. */
+  const canReadOrders = hasPermission("orders.order:read");
   const queryClient = useQueryClient();
 
   const queryKey = ["trip", companyId, tripId];
@@ -885,6 +889,8 @@ export function TripWorkspacePage() {
             failed={warehouseQuery.isError}
             orderNumbers={orderNumbers}
           />
+
+          {canReadOrders && <TripDocumentsCard companyId={companyId} tripId={trip.id} orderNumbers={orderNumbers} />}
 
           {canReadCost && <TripCostCard companyId={companyId} tripId={trip.id} canManage={canManageCost} />}
 

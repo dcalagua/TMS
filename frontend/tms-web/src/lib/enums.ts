@@ -211,6 +211,14 @@ export const ENUM_LABELS = {
     LOAD_READY: "Carga lista",
     LOADING_STARTED: "Carga iniciada",
   },
+  /** ADR-015: los documentos que viajan con un pedido. */
+  logisticsDocumentType: {
+    DELIVERY_NOTE: "Nota de entrega",
+    GRE_REMITENTE: "Guía de remisión remitente",
+    GRE_TRANSPORTISTA: "Guía de remisión transportista",
+    INVOICE: "Factura",
+    OTHER: "Otro documento",
+  },
   blockerReason: {
     AWAITING_CARRIER_VEHICLE: "Falta vehículo del transportista",
     DRIVER_UNAVAILABLE: "Conductor no disponible",

@@ -22,6 +22,7 @@ import {
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDecimal, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
+import { OrderDocumentsSection } from "./OrderDocumentsSection";
 
 const FORM_ID = "order-form";
 
@@ -564,6 +565,9 @@ function OrderForm({
             {t("Previsualización. Los totales definitivos los calcula el backend al guardar.")}
           </Typography>
         </Paper>
+
+        {/* ADR-015: los documentos del ERP, de solo lectura, solo para un pedido que ya existe. */}
+        {isEdit && <OrderDocumentsSection companyId={companyId} orderId={order.id} />}
       </Box>
     </FormDrawer>
   );
