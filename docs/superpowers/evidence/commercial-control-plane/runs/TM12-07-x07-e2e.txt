@@ -1,0 +1,21 @@
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS · 0. puente TMS arriba (cadena MasterAdmin real + receptor real)
+PASS · 1. MasterAdmin lee el manifiesto de TMS: sólo el baseline tms.core, ninguna vendible · 2026-09-28.1 tms.core
+PASS · 2. SHADOW (sembrado): APPLIED, el snapshot no decide · APPLIED NOT_ENFORCED
+PASS ·    el snapshot no lleva capacidades, límites ni asignaciones (registro vacío)
+PASS ·    cohorte del tenant: SHADOW → DUAL_READ → PRIMARY
+PASS · 3. GET: misma versión y checksum, PRIMARY · 1 PRIMARY
+PASS · 4. acceso comercial de la organización: permitido (APP_ACTIVE) · APP_ACTIVE
+PASS · 5. replay idempotente → REPLAYED · REPLAYED
+PASS · 6. v2 appActive=false → APPLIED y acceso suspendido (APP_INACTIVE) · APPLIED APP_INACTIVE
+PASS · 7. v1 tras v2 → STALE (409) · STALE STALE_SNAPSHOT
+PASS · 8. misma versión, otro contenido → CONFLICT (409) · CONFLICT VERSION_CONFLICT
+PASS · 9. credencial con scope de provisioning → 403 INSUFFICIENT_SCOPE (REJECTED) · 403 INSUFFICIENT_SCOPE
+PASS · 10. TMS no disponible → RETRYABLE, nada aplicado · RETRYABLE 503
+PASS · 11. reconciliación: el GET delata deriva (aplicado v2 ≠ deseado v3)
+PASS ·     mientras tanto decide el last-good v2 (sigue suspendido, sin llamar a MasterAdmin)
+PASS · 12. push de v3 → GET en sincronía y acceso restablecido · APPLIED v3 APP_ACTIVE
+PASS · 13. un jti distinto por petición M2M · 11 peticiones
+PASS · 14. puente TMS terminó limpio · exit=0
+
+18/18 PASS

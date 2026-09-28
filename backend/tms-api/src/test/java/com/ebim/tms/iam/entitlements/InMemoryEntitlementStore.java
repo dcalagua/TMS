@@ -37,7 +37,11 @@ public final class InMemoryEntitlementStore implements EntitlementStore {
 
     /** A tenant MasterAdmin provisioned here, with its TMS organization. */
     public ProvisionedTenant provision(UUID controlPlaneTenantId) {
-        ProvisionedTenant tenant = new ProvisionedTenant(controlPlaneTenantId, UUID.randomUUID());
+        return provision(controlPlaneTenantId, UUID.randomUUID());
+    }
+
+    public ProvisionedTenant provision(UUID controlPlaneTenantId, UUID organizationId) {
+        ProvisionedTenant tenant = new ProvisionedTenant(controlPlaneTenantId, organizationId);
         provisioned.put(controlPlaneTenantId, tenant);
         return tenant;
     }

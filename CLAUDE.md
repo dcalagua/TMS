@@ -116,6 +116,12 @@ Authoritative documents live under `docs/architecture/`:
   `/internal/platform-provisioning` (GENERIC contract v1): its own security chain, ES256 public key,
   off by default, one transaction, administrator PREPROVISIONED (no Auth account is created).
   Contract: `docs/platform-provisioning/MASTERADMIN_GENERIC_CONTRACT.md`.
+- `ADR-017-commercial-entitlements.md` - MasterAdmin pushes a versioned `ebim.entitlements/v1`
+  snapshot to `/internal/platform-provisioning/tenants/{id}/entitlements` (scopes
+  `tms:entitlements:write|read`); TMS stores it durably (V52) and enforces only `appActive`, from
+  the local copy, through a `CommercialAccessGate` separate from RBAC. No permission is a paid
+  capability; the sellable registry is empty. Mode seeded SHADOW. Numbered 017 because 013-016 are
+  taken on unmerged branches. Contract: `docs/platform-provisioning/ENTITLEMENTS.md`.
 
 Database and security detail lives in `docs/database/DATA_MODEL.md`,
 `docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.
