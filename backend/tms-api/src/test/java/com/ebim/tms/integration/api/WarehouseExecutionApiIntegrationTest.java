@@ -391,10 +391,18 @@ class WarehouseExecutionApiIntegrationTest {
                 "CD01", "100"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.outcome").value("UNAPPLIED"))
-                .andExpect(jsonPath("$.discrepancies[?(@.code == 'NOT_APPLIED')]").exists());
+                .andExpect(jsonPath("$.discrepancies[?(@.code == 'NOT_APPLIED')]").exists())
+                // NOT_APPLIED is an ERROR (contract §4.3): the document is a MISMATCH, and a person is
+                // asked to resolve it from the Control Tower (ADR-013 section 3).
+                .andExpect(jsonPath("$.verificationStatus").value("MISMATCH"));
         assertThat(value("SELECT status FROM tms.trip WHERE id = '" + shipment.tripId + "'")).isEqualTo("READY_FOR_DISPATCH");
         assertThat(value("SELECT count(*) FROM tms.transport_event WHERE trip_id = '" + shipment.tripId
                 + "' AND event_type = 'WAREHOUSE_DISPATCH_CONFIRMED'")).isEqualTo("1");
+        String planningDate = value("SELECT planning_date::text FROM tms.trip WHERE id = '" + shipment.tripId + "'");
+        mockMvc.perform(asAdmin(get("/api/v1/monitoring/control-tower")).param("date", planningDate))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.advisories[?(@.type == 'DISPATCH_MISMATCH' && @.tripId == '"
+                        + shipment.tripId + "')]").exists());
     }
 
     @Test

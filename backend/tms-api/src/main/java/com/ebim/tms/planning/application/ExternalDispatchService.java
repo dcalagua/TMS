@@ -176,8 +176,15 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
 
         List<Discrepancy> discrepancies = new ArrayList<>(reconciled.discrepancies());
         discrepancies.addAll(decisionNotes);
+        // Severity decides the verification for the decision's notes too: a NOT_APPLIED (ERROR) is a
+        // disagreement between the warehouse and TMS, so the document is a MISMATCH and the Control
+        // Tower asks a person to resolve it (ADR-013 section 3; contract section 4.3).
+        DispatchVerificationStatus verification = decisionNotes.stream()
+                .anyMatch(note -> note.severity() == DispatchReconciler.Severity.ERROR)
+                        ? DispatchVerificationStatus.MISMATCH
+                        : reconciled.verification();
 
-        ExternalDispatch stored = store(scope, command, trip.orElse(null), outcome, reconciled.verification(),
+        ExternalDispatch stored = store(scope, command, trip.orElse(null), outcome, verification,
                 discrepancies, reconciled.orders(), current.orElse(null));
         trip.ifPresent(value -> recordOnTimeline(scope, value, stored, discrepancies.size()));
         return resultOf(stored, outcome.name(), true);
