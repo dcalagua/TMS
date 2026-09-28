@@ -1,6 +1,15 @@
 package com.ebim.tms.planning.application;
 
 import com.ebim.tms.planning.domain.ShipmentEventType;
+import com.ebim.tms.planning.domain.DispatchSource;
+import com.ebim.tms.shared.api.DispatchRequiresExternalConfirmationException;
+import com.ebim.tms.shared.audit.AuditAction;
+import com.ebim.tms.shared.audit.AuditAggregateType;
+import com.ebim.tms.shared.audit.AuditRecorder;
+import com.ebim.tms.shared.security.Permission;
+import com.ebim.tms.shared.settings.CompanySettingsPort;
+import com.ebim.tms.shared.settings.DispatchConfirmationMode;
+import org.springframework.security.access.AccessDeniedException;
 import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.planning.domain.TripStatus;
 import com.ebim.tms.planning.domain.TripStop;
@@ -64,6 +73,8 @@ public class TripExecutionService {
             EnumSet.of(DispatchReadiness.Check.VEHICLE_OPERABLE, DispatchReadiness.Check.DRIVER_OPERABLE);
 
     private final DispatchReadiness readiness;
+    private final CompanySettingsPort companySettings;
+    private final AuditRecorder auditRecorder;
     private final ShipmentEventPublisher events;
     private final TripTenderService tenders;
     private final TripAlertPublisher alerts;
@@ -72,11 +83,13 @@ public class TripExecutionService {
     private final AuditActorProvider auditActorProvider;
 
     public TripExecutionService(TripRepository tripRepository, DispatchReadiness readiness,
-            ShipmentEventPublisher events, TripTenderService tenders,
+            CompanySettingsPort companySettings, AuditRecorder auditRecorder, ShipmentEventPublisher events, TripTenderService tenders,
             TripAlertPublisher alerts, TripViewAssembler assembler, OrderExecutionPropagator orderExecution,
             AuditActorProvider auditActorProvider) {
         this.tripRepository = tripRepository;
         this.readiness = readiness;
+        this.companySettings = companySettings;
+        this.auditRecorder = auditRecorder;
         this.events = events;
         this.tenders = tenders;
         this.alerts = alerts;
@@ -117,13 +130,32 @@ public class TripExecutionService {
      */
     @Transactional
     public TripDetailView dispatch(CompanyScope scope, UUID tripId, TripExecutionRequest request) {
+        DispatchConfirmationMode mode = companySettings.settingsOf(scope.companyId()).dispatchConfirmationMode();
+        String overrideReason = blankToNull(request.overrideReason());
+        DispatchSource source = mode.manualMayDispatch() ? DispatchSource.OPERATOR : DispatchSource.OPERATOR_OVERRIDE;
         TripDetailView dispatched = transition(scope, tripId, TripStatus.IN_TRANSIT, request,
                 ShipmentEventType.SHIPMENT_DISPATCHED,
                 (trip, occurredAt) -> {
+                    // After the idempotent early return in transition(): a trip the warehouse
+                    // already dispatched answers a late click with its state, not with a refusal.
+                    if (source == DispatchSource.OPERATOR_OVERRIDE) {
+                        requireOverride(scope, trip, overrideReason);
+                    }
                     requireReady(scope, trip, occurredAt, DispatchReadiness.ALL);
                     requireNotBefore(occurredAt, trip.readyAt(), "before the trip was made ready");
-                    trip.dispatch(occurredAt, auditActorProvider.requireAppUserId());
-                });
+                    trip.dispatch(occurredAt, auditActorProvider.requireAppUserId(), source);
+                    if (source == DispatchSource.OPERATOR_OVERRIDE) {
+                        auditRecorder.record(scope, AuditAggregateType.SHIPMENT, tripId,
+                                AuditAction.DISPATCH_OVERRIDDEN,
+                                Map.of("reason", overrideReason, "dispatchConfirmationMode", mode.name()));
+                    }
+                },
+                source == DispatchSource.OPERATOR_OVERRIDE && overrideReason != null
+                        ? Map.of("dispatchSource", source.name(), "overrideReason", overrideReason)
+                        : Map.of("dispatchSource", source.name()),
+                source == DispatchSource.OPERATOR_OVERRIDE && overrideReason != null
+                        ? "Dispatch override: " + overrideReason
+                        : null);
         tripRepository.findByIdAndCompanyId(tripId, scope.companyId()).ifPresent(trip -> {
             tenders.withdrawOpen(scope, trip, "Shipment " + trip.shipmentNumber()
                     + " departed before the carrier answered.");
@@ -190,6 +222,12 @@ public class TripExecutionService {
      */
     private TripDetailView transition(CompanyScope scope, UUID tripId, TripStatus target,
             TripExecutionRequest request, ShipmentEventType eventType, BiConsumer<Trip, OffsetDateTime> apply) {
+        return transition(scope, tripId, target, request, eventType, apply, Map.of(), null);
+    }
+
+    private TripDetailView transition(CompanyScope scope, UUID tripId, TripStatus target,
+            TripExecutionRequest request, ShipmentEventType eventType, BiConsumer<Trip, OffsetDateTime> apply,
+            Map<String, Object> extraMetadata, String timelineNotes) {
         Trip trip = tripRepository.findByIdAndCompanyIdForUpdate(tripId, scope.companyId())
                 .orElseThrow(() -> new ResourceNotFoundException("Trip not found."));
 
@@ -204,8 +242,15 @@ public class TripExecutionService {
         apply.accept(trip, occurredAt);
 
         Trip saved = save(trip);
-        events.publish(scope, saved, eventType, occurredAt,
-                Map.of("tripNumber", saved.tripNumber(), "planningDate", saved.planningDate().toString()));
+        Map<String, Object> metadata = new java.util.LinkedHashMap<>();
+        metadata.put("tripNumber", saved.tripNumber());
+        metadata.put("planningDate", saved.planningDate().toString());
+        metadata.putAll(extraMetadata);
+        if (timelineNotes == null) {
+            events.publish(scope, saved, eventType, occurredAt, metadata);
+        } else {
+            events.publish(scope, saved, null, eventType, occurredAt, metadata, timelineNotes);
+        }
         announce(scope, saved, eventType, occurredAt);
         return assembler.toDetail(saved, scope.companyId());
     }
@@ -262,6 +307,29 @@ public class TripExecutionService {
             throw new InvalidRequestException("occurredAt cannot be in the future.");
         }
         return requested;
+    }
+
+    /**
+     * The override of ADR-013 section 4: a company in {@code EXTERNAL_REQUIRED} dispatches by hand
+     * only with a reason and the permission. Without a reason the answer is the specific 409 a
+     * client can act on; with a reason but without the permission it is 403. The service checks
+     * the permission, never a role name.
+     */
+    private static void requireOverride(CompanyScope scope, Trip trip, String overrideReason) {
+        if (overrideReason == null) {
+            throw new DispatchRequiresExternalConfirmationException("Trip " + trip.tripNumber() + " ("
+                    + trip.shipmentNumber() + ") is dispatched by the warehouse's confirmation in this company. "
+                    + "Wait for it, or dispatch with an override reason if you hold "
+                    + Permission.PLANNING_TRIP_DISPATCH_OVERRIDE.code() + ".");
+        }
+        if (!scope.has(Permission.PLANNING_TRIP_DISPATCH_OVERRIDE)) {
+            throw new AccessDeniedException("Dispatching past the warehouse's confirmation needs "
+                    + Permission.PLANNING_TRIP_DISPATCH_OVERRIDE.code() + ".");
+        }
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     /**

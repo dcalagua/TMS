@@ -1,5 +1,6 @@
 package com.ebim.tms.iam.application;
 
+import com.ebim.tms.shared.settings.DispatchConfirmationMode;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -57,5 +58,15 @@ public record CompanyProfileRequest(
         @NotBlank(message = "is required")
         @Pattern(regexp = "^[A-Za-z][A-Za-z0-9]{0,5}-$",
                 message = "must be one to six letters or digits followed by a hyphen, for example SH-")
-        String shipmentNumberPrefix) {
+        String shipmentNumberPrefix,
+
+        // Optional (V52): a client that predates the setting sends nothing, and nothing then keeps
+        // whatever the company already has rather than resetting it to MANUAL behind its back.
+        DispatchConfirmationMode dispatchConfirmationMode) {
+
+    /** The V34 shape, for callers that predate the dispatch mode. */
+    public CompanyProfileRequest(String name, String taxIdentifier, String timeZone, String defaultCountry,
+            String orderNumberPrefix, String shipmentNumberPrefix) {
+        this(name, taxIdentifier, timeZone, defaultCountry, orderNumberPrefix, shipmentNumberPrefix, null);
+    }
 }

@@ -18,7 +18,8 @@ package com.ebim.tms.shared.settings;
 public record CompanySettings(
         String defaultCountry,
         String orderNumberPrefix,
-        String shipmentNumberPrefix) {
+        String shipmentNumberPrefix,
+        DispatchConfirmationMode dispatchConfirmationMode) {
 
     /** ISO 3166-1 alpha-2 of the launch market, and the default of {@code tms.location.country}. */
     public static final String DEFAULT_COUNTRY = "PE";
@@ -28,7 +29,8 @@ public record CompanySettings(
     public static final String DEFAULT_SHIPMENT_NUMBER_PREFIX = "SH-";
 
     private static final CompanySettings DEFAULTS = new CompanySettings(
-            DEFAULT_COUNTRY, DEFAULT_ORDER_NUMBER_PREFIX, DEFAULT_SHIPMENT_NUMBER_PREFIX);
+            DEFAULT_COUNTRY, DEFAULT_ORDER_NUMBER_PREFIX, DEFAULT_SHIPMENT_NUMBER_PREFIX,
+            DispatchConfirmationMode.MANUAL);
 
     /**
      * Blank-tolerant on purpose. The columns behind this are all {@code NOT NULL} with defaults, so
@@ -39,6 +41,31 @@ public record CompanySettings(
         defaultCountry = orDefault(defaultCountry, DEFAULT_COUNTRY);
         orderNumberPrefix = orDefault(orderNumberPrefix, DEFAULT_ORDER_NUMBER_PREFIX);
         shipmentNumberPrefix = orDefault(shipmentNumberPrefix, DEFAULT_SHIPMENT_NUMBER_PREFIX);
+        dispatchConfirmationMode = dispatchConfirmationMode == null
+                ? DispatchConfirmationMode.MANUAL
+                : dispatchConfirmationMode;
+    }
+
+    /** The V34 shape, for callers that predate the dispatch mode (V52): the mode reads MANUAL. */
+    public CompanySettings(String defaultCountry, String orderNumberPrefix, String shipmentNumberPrefix) {
+        this(defaultCountry, orderNumberPrefix, shipmentNumberPrefix, DispatchConfirmationMode.MANUAL);
+    }
+
+    /** A copy with another dispatch mode. */
+    public CompanySettings withDispatchConfirmationMode(DispatchConfirmationMode mode) {
+        return new CompanySettings(defaultCountry, orderNumberPrefix, shipmentNumberPrefix, mode);
+    }
+
+    /** Reads a stored value, tolerating an unknown one as the safe default rather than failing a write. */
+    public static DispatchConfirmationMode modeOf(String stored) {
+        if (stored == null || stored.isBlank()) {
+            return DispatchConfirmationMode.MANUAL;
+        }
+        try {
+            return DispatchConfirmationMode.valueOf(stored.trim());
+        } catch (IllegalArgumentException unknown) {
+            return DispatchConfirmationMode.MANUAL;
+        }
     }
 
     /** What a company that has never edited its settings gets, and what a missing row resolves to. */

@@ -151,6 +151,13 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
      * specific handler for the thrown type, so an {@link IdempotencyConflictException} - which is
      * a {@link ConflictException} - still gets its own machine code.
      */
+    @ExceptionHandler(DispatchRequiresExternalConfirmationException.class)
+    public ResponseEntity<ProblemDetail> handleDispatchRequiresExternalConfirmation(
+            DispatchRequiresExternalConfirmationException failure, WebRequest request) {
+        return respond(ApiProblems.of(ProblemType.DISPATCH_REQUIRES_EXTERNAL_CONFIRMATION, failure.getMessage()),
+                request);
+    }
+
     @ExceptionHandler(IdempotencyConflictException.class)
     public ResponseEntity<ProblemDetail> handleIdempotencyConflict(
             IdempotencyConflictException failure, WebRequest request) {

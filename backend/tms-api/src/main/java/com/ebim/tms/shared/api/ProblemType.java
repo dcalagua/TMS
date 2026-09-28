@@ -62,6 +62,15 @@ public enum ProblemType {
     IDEMPOTENCY_KEY_REUSED("idempotency-key-reused", "Idempotency key reused", HttpStatus.CONFLICT),
 
     /**
+     * A person tried to dispatch a trip in a company whose dispatch mode is
+     * {@code EXTERNAL_REQUIRED} (ADR-013 section 4) without an override. Distinct from
+     * {@link #CONFLICT} because the reaction is specific: wait for the warehouse's dispatch, or ask
+     * someone holding {@code planning.trip:dispatch-override} to dispatch with a reason.
+     */
+    DISPATCH_REQUIRES_EXTERNAL_CONFIRMATION("dispatch-requires-external-confirmation",
+            "Dispatch requires the warehouse's confirmation", HttpStatus.CONFLICT),
+
+    /**
      * A capability this deployment has not been configured for was asked of it - today, only
      * proof-of-delivery evidence storage ({@code tms.storage.evidence.mode}).
      *

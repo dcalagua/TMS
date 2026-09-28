@@ -104,6 +104,12 @@ public enum AuditAction {
      * timeline of the trip that failed.
      */
     ORDER_REOPENED,
+    /**
+     * A person dispatched a trip past a company that requires the warehouse to confirm it, with a
+     * reason (ADR-013 section 4, V52). Its own action because it is exactly what an auditor looks
+     * for by name.
+     */
+    DISPATCH_OVERRIDDEN,
 
     /**
      * A tender waterfall was started, and the moment it ended (migration V40).
