@@ -283,3 +283,75 @@ hold, or to cancel and replan the trip.
    leadTimeDays calendar days) at cutoffTime` in the company's zone, never from `created_at` or the
    ERP's `updated_at`. `now > releaseDeadline` is the warning `CUTOFF_MISSED`; a person may release
    with a reason, and automatic planning may then use the order.
+
+## 11. Implementation notes (branch `wip/adr014-scheduling-release`)
+
+Where the implementation is more specific than the decision above. Nothing here changes a decision.
+
+### V54 - `V54__order_hold_and_release_audit.sql`
+
+- `tms.order_hold`: `company_id`, `order_id` (composite FK to `transport_order (id, company_id)`),
+  `hold_type` (`ck_order_hold_type`), optional `reason_code` (`^[A-Z0-9][A-Z0-9_.-]{0,63}$`),
+  `reason` (1-500), `source` `OPERATOR | INTEGRATION`, `blocking` (default `true`), actor XOR
+  `created_by` / `created_by_client` (`ck_order_hold_actor`, the V31 rule; client FK composite with
+  the company), `released_at` + exactly one of `released_by` / `released_by_client` +
+  `release_reason` all-or-nothing (`ck_order_hold_release_actor`), `version` (optimistic lock),
+  `updated_at` trigger. Indexes: `(order_id, created_at DESC)` and a partial
+  `(company_id, order_id) WHERE released_at IS NULL AND blocking`.
+- RLS enabled, `p_tenant_company_scope` for `tms_app`; `GRANT SELECT, INSERT, UPDATE` and
+  `REVOKE DELETE` (a hold is lifted, never deleted).
+- Permission `orders.hold:manage` for `ORGANIZATION_ADMIN`, `COMPANY_ADMIN`, `PLANNER`. Reading holds
+  and the board needs `orders.order:read`; releasing keeps `orders.order:manage` (what mark-ready has
+  always required).
+- Audit actions `ORDER_RELEASED`, `ORDER_HOLD_PLACED`, `ORDER_HOLD_RELEASED` (aggregate
+  `TRANSPORT_ORDER`). `ORDER_RELEASED` metadata: `orderNumber`, `eligibility`, `warnings` (comma
+  separated reason codes, informative ones included), `overrideReason` when given.
+
+### Endpoints
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/api/v1/orders/{id}/mark-ready` | `orders.order:manage` | Optional body `{overrideReason}` (<= 500). 409 problem detail adds `eligibility`, `overrideRequired`, `reasons[{code,severity,requiresOverride,detail}]` |
+| POST | `/api/v1/orders/release` | `orders.order:manage` | `{orderIds[1..200], overrideReason?}` -> `{submitted, released, refused, results[{index, orderId, orderNumber, released, status, eligibility, overrideRequired, reasons, message}]}`; 200 all released, 207 otherwise; each item its own transaction |
+| GET | `/api/v1/orders/scheduling` | `orders.order:read` | Paged board rows (`SchedulingRowView`). Filters `originId, routeCode (NONE = no single route), serviceDateFrom, serviceDateTo, customer, priority, eligibility, hasHold, status, frequency, orderNumber`; default statuses `NOT_READY` + `READY_FOR_PLANNING`. Derived filters evaluate at most 5000 matching orders (400 above) |
+| GET | `/api/v1/orders/scheduling/summary` | `orders.order:read` | `{totals, groups[]}` by dispatch date, origin and resolved route |
+| GET | `/api/v1/orders/{id}/scheduling` | `orders.order:read` | One row, for the reasons panel |
+| GET | `/api/v1/orders/{orderId}/holds` | `orders.order:read` | Newest first, active and lifted |
+| POST | `/api/v1/orders/{orderId}/holds` | `orders.hold:manage` | `{holdType, reasonCode?, reason, blocking?}` -> 201. Refused on `CANCELLED`/`DELIVERED` |
+| POST | `/api/v1/orders/{orderId}/holds/{holdId}/release` | `orders.hold:manage` | `{releaseReason, version?}`; 409 when already lifted or stale |
+
+The integration upsert result gains `releaseRefusedBy` (reason codes; empty when nothing was
+refused). A zero-capacity order sent with `markReadyForPlanning` now answers `NOT_READY` +
+`MISSING_CAPACITY` instead of failing the delivery with a 409.
+
+### Where each rule lives
+
+- Route resolution: `shared.reference.RouteResolution.resolve` (pure) behind `RouteResolutionPort`
+  (`masterdata.infrastructure.RouteResolutionAdapter`, one fetch-join query per call).
+  `RouteTemplate.servesAsCorridor()` is the candidate predicate shared with `Corridors`, whose
+  first-by-code tie-break is unchanged.
+- Calendars: `ServiceCalendarPort.locationCalendarsOn`, `frequencyCalendarsOn` (batched, one date per
+  call) and `idleByRouteOn` (automatic planning), implemented in `LocationEligibilityService` on top
+  of `LocationEligibilityEvaluator` / `FrequencyCalendar`.
+- Eligibility: `orders.domain.SchedulingAssessment` (pure) + `ReleaseDeadline`;
+  `orders.application.OrderSchedulingService` loads the facts per page (origins, destinations, holds,
+  routes, calendars per distinct date) and never per row.
+- Planning candidates: `OrderPlanningService.searchAssignable` adds `NOT EXISTS` active blocking hold
+  (this also narrows the Control Tower's unplanned-orders count); `OrderPlanningService.allocate`
+  refuses a held order (409) under the order row lock, which covers `TripService.assignOrder`,
+  `moveOrder` and automatic-planning writes; `OrderHoldService.place` takes the same lock.
+- Committed trips: `planning.application.CommittedOrderHolds` (open assignments + `OrderHoldPort`),
+  read by `DispatchReadiness` (`Check.ORDERS_NOT_HELD`, `BlockerCode.ORDER_HOLD_ON_COMMITTED_TRIP`, part
+  of `ALL`, so dispatch refuses naming the orders) and by `ControlTowerService` (advisory
+  `ORDER_HOLD_ON_COMMITTED_TRIP`, trips `DRAFT` to `IN_TRANSIT` of the day). The dispatch override is
+  ADR-013's (`planning.trip:dispatch-override`, V52) and is not added here.
+- The source of an integration-placed hold (`INTEGRATION`, `created_by_client`) is modelled in the
+  schema; no M2M endpoint places holds yet.
+
+### Integration with V52/V53
+
+V54 redefines `ck_audit_event_action` with the full V46 list plus its three actions. When V52/V53
+also redefine it, the V54 list must be the union (`AuditVocabularyMigrationTest` reads the highest
+version). `TenancyConstraintIntegrationTest`'s permission counts assume V54 alone (61 permissions,
+171 grants) and must add V52's `planning.trip:dispatch-override`. The branch carries a temporary
+tolerance of the V52-V53 gap in `MigrationConventionTest` that is dropped on integration.
