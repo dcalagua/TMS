@@ -144,6 +144,10 @@ export const ENUM_LABELS = {
   advisoryType: {
     SETTLEMENT_DISCREPANCY_OPEN: "Diferencia en factura sin resolver",
     STOP_ETA_MISSES_WINDOW: "La llegada estimada se sale de la ventana",
+    DISPATCH_MISMATCH: "El despacho del almacén no coincide con el plan",
+    AWAITING_WAREHOUSE_DISPATCH: "Esperando el despacho del almacén",
+    EXTERNAL_DISPATCH_UNMATCHED: "Despacho del almacén sin envío asociado",
+    ORDER_HOLD_ON_COMMITTED_TRIP: "Pedido retenido en un envío comprometido",
   },
   /** ADR-013 §1: quién despacha un envío en esta empresa. */
   dispatchConfirmationMode: {
@@ -374,6 +378,10 @@ export const ENUM_LABELS = {
     TRIP_CONFIRMED: "Viaje confirmado",
     TRIP_DISPATCHED: "Salida",
     TRIP_READY: "Listo para salir",
+    WAREHOUSE_DISPATCH_CONFIRMED: "Despacho confirmado por el almacén",
+    WAREHOUSE_LOAD_CANCELLED: "Carga cancelada en el almacén",
+    WAREHOUSE_LOAD_READY: "Carga lista en el almacén",
+    WAREHOUSE_LOADING_STARTED: "Carga iniciada en el almacén",
   },
   tripExceptionStatus: {
     OPEN: "Abierta",

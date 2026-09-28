@@ -1,8 +1,9 @@
-import { Box, Typography } from "@mui/material";
+import { Box, Chip, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import {
   PlayArrowRounded, FlagRounded, PlaceRounded, BuildRounded, DoneRounded,
   SkipNextRounded, ErrorOutlineRounded, EditRounded, CircleRounded, LocalOfferRounded,
+  InventoryRounded, TaskAltRounded, CancelRounded, WarehouseRounded,
 } from "@mui/icons-material";
 import type { TransportEventType, TransportEventView } from "../../shared/api/planningApi";
 import { EmptyState, LoadingState } from "../../shared/ui/components";
@@ -64,6 +65,13 @@ export function TripTimeline({ events, loading }: TripTimelineProps) {
 
             <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.35 }}>
               {enumLabel("transportEventType", event.eventType)}
+              {/* Un hito que escribió una máquina (el almacén) se distingue de uno tecleado. */}
+              {event.source === "INTEGRATION" && (
+                <Chip
+                  component="span" size="small" variant="outlined" label={t("Integración")}
+                  sx={{ ml: 0.75, height: 18, fontSize: 10, verticalAlign: "middle" }}
+                />
+              )}
               {event.stopSequence !== null && (
                 <Box component="span" sx={{ color: "text.secondary", fontWeight: 500 }}>
                   {" · "}
@@ -109,6 +117,10 @@ const EVENT_ICON: Partial<Record<TransportEventType, typeof CircleRounded>> = {
   TENDER_CANCELLED: SkipNextRounded,
   EXCEPTION_REPORTED: ErrorOutlineRounded,
   EXCEPTION_RESOLVED: DoneRounded,
+  WAREHOUSE_LOADING_STARTED: InventoryRounded,
+  WAREHOUSE_LOAD_READY: TaskAltRounded,
+  WAREHOUSE_LOAD_CANCELLED: CancelRounded,
+  WAREHOUSE_DISPATCH_CONFIRMED: WarehouseRounded,
 };
 
 const EVENT_COLOR: Partial<Record<TransportEventType, string>> = {
@@ -130,4 +142,8 @@ const EVENT_COLOR: Partial<Record<TransportEventType, string>> = {
   TENDER_CANCELLED: "text.disabled",
   EXCEPTION_REPORTED: "error.main",
   EXCEPTION_RESOLVED: "success.main",
+  WAREHOUSE_LOADING_STARTED: "info.main",
+  WAREHOUSE_LOAD_READY: "success.main",
+  WAREHOUSE_LOAD_CANCELLED: "error.main",
+  WAREHOUSE_DISPATCH_CONFIRMED: "warning.main",
 };

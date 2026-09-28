@@ -175,7 +175,23 @@ export interface ControlTowerView {
 }
 
 /** Mirrors `ControlTowerAdvisoryView.AdvisoryType`. */
-export type AdvisoryType = 'SETTLEMENT_DISCREPANCY_OPEN' | 'STOP_ETA_MISSES_WINDOW'
+export type AdvisoryType =
+  | 'SETTLEMENT_DISCREPANCY_OPEN'
+  | 'STOP_ETA_MISSES_WINDOW'
+  /** ADR-013 (V53): the current warehouse dispatch document disagrees with the plan, or was not applied. */
+  | 'DISPATCH_MISMATCH'
+  /** ADR-013 (V53): EXTERNAL_REQUIRED, past the planned departure, and no warehouse dispatch yet. */
+  | 'AWAITING_WAREHOUSE_DISPATCH'
+  /** ADR-013 (V53): a warehouse dispatch document names a shipment this company does not have. */
+  | 'EXTERNAL_DISPATCH_UNMATCHED'
+  /** ADR-014: a held order sits on a committed shipment. */
+  | 'ORDER_HOLD_ON_COMMITTED_TRIP'
+
+/** Every type this version knows, so a test can prove each one has a label. */
+export const ADVISORY_TYPES: AdvisoryType[] = [
+  'SETTLEMENT_DISCREPANCY_OPEN', 'STOP_ETA_MISSES_WINDOW', 'DISPATCH_MISMATCH', 'AWAITING_WAREHOUSE_DISPATCH',
+  'EXTERNAL_DISPATCH_UNMATCHED', 'ORDER_HOLD_ON_COMMITTED_TRIP',
+]
 
 /**
  * Mirrors `ControlTowerAdvisoryView` (JOB 23).
@@ -185,11 +201,15 @@ export type AdvisoryType = 'SETTLEMENT_DISCREPANCY_OPEN' | 'STOP_ETA_MISSES_WIND
  * misma disputa se separarían la primera vez que alguien resolviera el que no era.
  */
 export interface ControlTowerAdvisoryView {
-  type: AdvisoryType
-  tripId: string
+  /** Un string además de los conocidos: el catálogo crece en el servidor y un tipo nuevo tiene que
+   * pintarse igualmente, con una etiqueta genérica, en lugar de romper el panel. */
+  type: AdvisoryType | (string & {})
+  /** Null en `EXTERNAL_DISPATCH_UNMATCHED`: el documento nombra un envío que la empresa no tiene. */
+  tripId: string | null
   shipmentNumber: string | null
-  /** El id del registro en su propio módulo, para enlazar allí. */
-  sourceId: string
+  /** El id del registro en su propio módulo, para enlazar allí. Null en
+   * `AWAITING_WAREHOUSE_DISPATCH`, que no tiene más registro que el propio envío. */
+  sourceId: string | null
   /** **Null cuando los dos lados no se pudieron comparar** — nunca un cero que se leería como
    * "la factura coincide", que es justo lo contrario (V46). */
   amount: number | null

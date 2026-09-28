@@ -66,6 +66,12 @@ export type TransportEventType =
   | 'TENDER_CANCELLED'
   | 'EXCEPTION_REPORTED'
   | 'EXCEPTION_RESOLVED'
+  /** ADR-013 §13.10: warehouse milestones and dispatch, `source = INTEGRATION`. None moves a lifecycle
+   * except the dispatch itself, which is recorded separately as `TRIP_DISPATCHED` when it applies. */
+  | 'WAREHOUSE_LOADING_STARTED'
+  | 'WAREHOUSE_LOAD_READY'
+  | 'WAREHOUSE_LOAD_CANCELLED'
+  | 'WAREHOUSE_DISPATCH_CONFIRMED'
 
 /** Every value the timeline can carry, so `enums.test.ts` can prove each one has a label. */
 export const TRANSPORT_EVENT_TYPES: TransportEventType[] = [
@@ -74,6 +80,7 @@ export const TRANSPORT_EVENT_TYPES: TransportEventType[] = [
   'DELIVERY_RECORDED',
   'TENDER_SENT', 'TENDER_ACCEPTED', 'TENDER_REJECTED', 'TENDER_EXPIRED', 'TENDER_CANCELLED',
   'EXCEPTION_REPORTED', 'EXCEPTION_RESOLVED',
+  'WAREHOUSE_LOADING_STARTED', 'WAREHOUSE_LOAD_READY', 'WAREHOUSE_LOAD_CANCELLED', 'WAREHOUSE_DISPATCH_CONFIRMED',
 ]
 
 /** Mirrors the backend's `DeliveryResult` enum (`planning/domain/DeliveryResult.java`).
