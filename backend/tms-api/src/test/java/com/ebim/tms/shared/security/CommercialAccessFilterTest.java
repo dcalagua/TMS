@@ -19,7 +19,11 @@ import org.springframework.web.servlet.ModelAndView;
 
 /**
  * The commercial access filter on its own: it consults the gate only for a company-scoped caller -
- * a person or a partner machine alike - and answers the refusal through the shared error responder.
+ * a person or a partner machine alike - and answers a refusal through the shared error responder.
+ *
+ * <p>Since D-14 ruling 1 (2026-09-29) the production gate never refuses on commercial grounds
+ * ({@code CommercialAccessGateAdapterTest}): the refusal path below is the mechanism a separate,
+ * future operational-shutdown policy would use, exercised with a fake gate.
  */
 class CommercialAccessFilterTest {
 
@@ -61,12 +65,12 @@ class CommercialAccessFilterTest {
     }
 
     @Test
-    @DisplayName("a scoped caller whose organization is suspended is refused before the chain continues")
-    void refusesSuspended() throws Exception {
+    @DisplayName("a scoped caller the gate refuses is refused before the chain continues")
+    void refusesWhenTheGateRefuses() throws Exception {
         List<UUID> asked = new ArrayList<>();
         CommercialAccessFilter filter = new CommercialAccessFilter(s -> {
             asked.add(s.organizationId());
-            return CommercialAccessGate.Verdict.suspended("APP_INACTIVE");
+            return CommercialAccessGate.Verdict.suspended("OPERATIONAL_SHUTDOWN_POLICY");
         }, responder);
         SecurityContextHolder.getContext().setAuthentication(new Scoped(scope()));
         MockFilterChain chain = new MockFilterChain();

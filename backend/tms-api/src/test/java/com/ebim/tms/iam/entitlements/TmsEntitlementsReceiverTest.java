@@ -94,7 +94,7 @@ class TmsEntitlementsReceiverTest {
             assertThat(diff.legacyDecision()).isTrue();
             assertThat(diff.snapshotDecision()).isFalse();
         });
-        assertThat(receiver.commercial.access(tenant.organizationId()).allowed()).isTrue();
+        assertThat(receiver.commercial.access(tenant.organizationId()).commercialActive()).isTrue();
     }
 
     @Test

@@ -31,7 +31,8 @@ UNSUPPORTED_MEDIA_TYPE`, `422 SNAPSHOT_INVALID` / `ENVIRONMENT_MISMATCH` / `CHEC
 
 - `controlPlaneTenantId` -> `tms.platform_provisioning_request` (V51) -> TMS **organization** (the
   tenant, ADR-003). A tenant without that row is `404`.
-- `appActive` -> commercial access of every company of the organization (see below).
+- `appActive` -> the commercial SaaS surface of the organization (see below). It never withholds
+  operation (D-14 ruling 1, 2026-09-29).
 - `capabilities[]`, `limits[]`, `allowances[]`: TMS registers **none** (manifest: `tms.core`
   baseline only). Any code received is stored, listed in `unknownCapabilities`, status
   `APPLIED_WITH_WARNINGS`, and never granted.
@@ -41,17 +42,28 @@ UNSUPPORTED_MEDIA_TYPE`, `422 SNAPSHOT_INVALID` / `ENVIRONMENT_MISMATCH` / `CHEC
 
 `tms.platform_entitlement_mode` (product row `PRODUCT`, optional row per `controlPlaneTenantId`).
 
-| Mode | Company-scoped request of an organization provisioned by MasterAdmin |
-| --- | --- |
-| `LEGACY` | allowed (snapshot ignored) |
-| `SHADOW` (seeded by V52) | allowed; `appActive=false` recorded in `platform_entitlement_shadow_diff` |
-| `DUAL_READ` | snapshot decides; no snapshot yet -> allowed, warning logged |
-| `PRIMARY` | snapshot decides; no snapshot -> refused |
+| Mode | Commercial surface of an organization provisioned by MasterAdmin | Operation |
+| --- | --- | --- |
+| `LEGACY` | legacy (snapshot ignored) | allowed |
+| `SHADOW` (seeded by V52) | legacy; `appActive=false` recorded in `platform_entitlement_shadow_diff` | allowed |
+| `DUAL_READ` | snapshot decides; no snapshot yet -> legacy, warning logged | allowed |
+| `PRIMARY` | snapshot decides; no snapshot -> nothing commercial granted | allowed |
 
-Refusal: `403` problem `commercial-access-suspended`, for people (after `CompanyScopeFilter`) and
-partner credentials (after `IntegrationAuthenticationFilter`). `/api/v1/me` and the MasterAdmin
-routes are not gated. MasterAdmin is never called: if it is down, the last applied snapshot keeps
-deciding, without expiry.
+**D-14 ruling 1 (2026-09-29): `appActive=false` withdraws the commercial SaaS capabilities, not the
+application.** When the deciding snapshot says `false` (reason `APP_INACTIVE`),
+`CommercialEntitlementService.capabilityEnabled` is `false` and `limit` is empty for every sellable
+code. Company-scoped requests keep working. The baseline `tms.core` is not commercial, and nothing
+operational is gated on it. A full operational shutdown is a separate, explicit policy that does
+not exist yet:
+- `CommercialAccessFilter` (after `CompanyScopeFilter` and `IntegrationAuthenticationFilter`) is the
+  hook it would use; today the production gate never refuses.
+- The `403 commercial-access-suspended` problem type and its web copy remain for that policy.
+- The checksum-pinned FIX-ENT-v1 README still says "bloquea el acceso operativo"; ADR-017's
+  amendment records the TMS reading.
+
+Organizations MasterAdmin never provisioned resolve `NOT_UNDER_CONTROL_PLANE` in every mode, so a
+product-wide `PRIMARY` does not change them. MasterAdmin is never called: if it is down, the last
+applied snapshot keeps deciding, without expiry.
 
 ## Operator (not executed by the program)
 
@@ -64,7 +76,8 @@ Before GATE C nothing is configured anywhere. After it, per environment:
    `entitlements_manifest_path=/entitlements/manifest`, scopes `tms:entitlements:write` /
    `tms:entitlements:read`.
 4. Apply V52 through Flyway (the backend at start-up) - never by hand.
-5. Mode changes, only after the cut-over review (D-14), one step at a time:
+5. Mode changes, only after the cut-over review (D-14; ruling 2, 2026-09-29, allows `PRIMARY` in DEV
+   once parity and security are green), one step at a time:
 
 ```sql
 -- product-wide

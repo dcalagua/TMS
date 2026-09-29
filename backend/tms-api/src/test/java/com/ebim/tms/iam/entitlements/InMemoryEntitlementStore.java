@@ -50,6 +50,11 @@ public final class InMemoryEntitlementStore implements EntitlementStore {
         modes.put(scopeKey, mode);
     }
 
+    /** The mode row stored for {@code scopeKey} ({@code PRODUCT} or a tenant id), if there is one. */
+    public Optional<EnforcementMode> modeAt(String scopeKey) {
+        return Optional.ofNullable(modes.get(scopeKey));
+    }
+
     @Override
     public Optional<ProvisionedTenant> provisioned(UUID controlPlaneTenantId) {
         return Optional.ofNullable(provisioned.get(controlPlaneTenantId));

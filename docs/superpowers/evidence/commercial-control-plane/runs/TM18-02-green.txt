@@ -1,0 +1,137 @@
+Picked up JAVA_TOOL_OPTIONS: -Djava.net.preferIPv4Stack=true
+/var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/jansi-2.4.3-d55bf06def656320-libjansi.jnilib.lck (Operation not permitted)
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------------------< com.ebim.tms:tms-api >------------------------
+[INFO] Building tms-api 0.1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- spring-boot:4.0.7:build-info (default) @ tms-api ---
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ tms-api ---
+[INFO] Copying 3 resources from src/main/resources to target/classes
+[INFO] Copying 54 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.14.1:compile (default-compile) @ tms-api ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 846 source files with javac [debug parameters release 21] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ tms-api ---
+[INFO] Copying 22 resources from src/test/resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.14.1:testCompile (default-testCompile) @ tms-api ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 205 source files with javac [debug parameters release 21] to target/test-classes
+[INFO] /Users/edudavidmorenoccama/Documents/Documentos-Edus-MacBook-Pro-2/EBIM/TMS/.worktrees/ebim-commercial-control-plane-v1/backend/tms-api/src/test/java/com/ebim/tms/audit/application/AuditQueryServiceTest.java: Some input files use unchecked or unsafe operations.
+[INFO] /Users/edudavidmorenoccama/Documents/Documentos-Edus-MacBook-Pro-2/EBIM/TMS/.worktrees/ebim-commercial-control-plane-v1/backend/tms-api/src/test/java/com/ebim/tms/audit/application/AuditQueryServiceTest.java: Recompile with -Xlint:unchecked for details.
+[INFO] 
+[INFO] --- surefire:3.5.6:test (default-test) @ tms-api ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+Picked up JAVA_TOOL_OPTIONS: -Djava.net.preferIPv4Stack=true
+[INFO] Running com.ebim.tms.integration.api.IntegrationApiTenancyTest
+[INFO] Running idempotency
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.401 s -- in idempotency
+[INFO] Running scopes
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.036 s -- in scopes
+[INFO] Running commercial access
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.015 s -- in commercial access
+[INFO] Running inbox
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.053 s -- in inbox
+[INFO] Running tenancy
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.034 s -- in tenancy
+[INFO] Running authentication
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.022 s -- in authentication
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.722 s -- in com.ebim.tms.integration.api.IntegrationApiTenancyTest
+[INFO] Running com.ebim.tms.shared.security.CommercialAccessFilterTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.ebim.tms.shared.security.CommercialAccessFilterTest
+[INFO] Running com.ebim.tms.iam.entitlements.CommercialEntitlementServiceTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.036 s -- in com.ebim.tms.iam.entitlements.CommercialEntitlementServiceTest
+[INFO] Running com.ebim.tms.iam.entitlements.CommercialAccessTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in com.ebim.tms.iam.entitlements.CommercialAccessTest
+[INFO] Running com.ebim.tms.iam.entitlements.TmsEntitlementsReceiverTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in com.ebim.tms.iam.entitlements.TmsEntitlementsReceiverTest
+[INFO] Running com.ebim.tms.iam.entitlements.CommercialAccessGateAdapterTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in com.ebim.tms.iam.entitlements.CommercialAccessGateAdapterTest
+[INFO] Running com.ebim.tms.iam.entitlements.PlatformEntitlementsApiTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.678 s -- in com.ebim.tms.iam.entitlements.PlatformEntitlementsApiTest
+[INFO] Running com.ebim.tms.iam.entitlements.PlatformEntitlementsIntegrationTest
+[WARNING] Tests run: 6, Failures: 0, Errors: 0, Skipped: 6, Time elapsed: 0 s -- in com.ebim.tms.iam.entitlements.PlatformEntitlementsIntegrationTest
+[INFO] Running com.ebim.tms.iam.entitlements.EntitlementsFixturesPinTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.ebim.tms.iam.entitlements.EntitlementsFixturesPinTest
+[INFO] Running com.ebim.tms.iam.entitlements.PlatformEntitlementsContractFixturesTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.022 s -- in com.ebim.tms.iam.entitlements.PlatformEntitlementsContractFixturesTest
+[INFO] Running com.ebim.tms.iam.api.CommercialAccessSecurityTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.237 s -- in com.ebim.tms.iam.api.CommercialAccessSecurityTest
+[INFO] Running com.ebim.tms.architecture.LayeringTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.283 s -- in com.ebim.tms.architecture.LayeringTest
+[INFO] Running com.ebim.tms.architecture.ModuleBoundaryTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.195 s -- in com.ebim.tms.architecture.ModuleBoundaryTest
+[WARNING] ForkStarter IOException: java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama. See the dump file /Users/edudavidmorenoccama/Documents/Documentos-Edus-MacBook-Pro-2/EBIM/TMS/.worktrees/ebim-commercial-control-plane-v1/backend/tms-api/target/surefire-reports/2026-09-29T03-44-43_390-jvmRun1.dumpstream
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 113, Failures: 0, Errors: 0, Skipped: 6
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  9.653 s
+[INFO] Finished at: 2026-09-29T03:44:48-05:00
+[INFO] ------------------------------------------------------------------------

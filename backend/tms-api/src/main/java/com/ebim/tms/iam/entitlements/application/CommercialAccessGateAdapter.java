@@ -13,7 +13,12 @@ import org.springframework.stereotype.Component;
  * <p>The facts are read for the company the connection is scoped to (V52's
  * {@code tms.commercial_access_current_company()}), which is {@code scope}'s by construction: the
  * filter runs after the scope is bound, on the same request. {@code scope} is used only for the
- * warning when DUAL_READ has to fall back to legacy.
+ * warnings.
+ *
+ * <p>D-14 ruling 1 (2026-09-29): a commercial fact never refuses a request. {@code appActive=false} or
+ * PRIMARY without a snapshot withdraw the commercial surface ({@link CommercialEntitlementService}'s
+ * {@code capabilityEnabled}/{@code limit}); the verdict follows {@link CommercialAccess#operationAllowed()},
+ * which is the single place a future operational-shutdown policy would change.
  */
 @Component
 public class CommercialAccessGateAdapter implements CommercialAccessGate {
@@ -33,6 +38,10 @@ public class CommercialAccessGateAdapter implements CommercialAccessGate {
             log.warn("Entitlements DUAL_READ with no applied snapshot for organization {}: legacy decides",
                     scope.organizationId());
         }
-        return access.allowed() ? Verdict.ALLOWED : Verdict.suspended(access.reason().name());
+        if (!access.commercialActive()) {
+            log.debug("Commercial surface withdrawn ({}, {}) for organization {}; operation continues",
+                    access.reason(), access.mode(), scope.organizationId());
+        }
+        return access.operationAllowed() ? Verdict.ALLOWED : Verdict.suspended(access.reason().name());
     }
 }

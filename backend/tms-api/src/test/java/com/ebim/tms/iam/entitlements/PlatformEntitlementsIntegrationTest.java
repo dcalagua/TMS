@@ -200,7 +200,7 @@ class PlatformEntitlementsIntegrationTest {
     }
 
     @Test
-    @DisplayName("the runtime role reads none of the receiver's tables")
+    @DisplayName("the runtime role reads and writes none of the receiver's tables: no legacy path moves a mode or a snapshot")
     void runtimeRoleIsLockedOut() throws SQLException {
         try (Connection connection = asRuntimeRole(a.companyId());
                 Statement statement = connection.createStatement()) {
@@ -209,6 +209,18 @@ class PlatformEntitlementsIntegrationTest {
                     "platform_entitlement_shadow_diff"}) {
                 assertThatThrownBy(() -> statement.executeQuery("SELECT 1 FROM tms." + table).close())
                         .as(table).isInstanceOf(SQLException.class)
+                        .extracting(e -> ((SQLException) e).getSQLState()).isEqualTo("42501");
+            }
+            // D-14: TMS has no legacy entitlement write path. The runtime role cannot move a mode nor
+            // replace or erase the applied snapshot; only the MasterAdmin receiver (owner) and the operator do.
+            for (String write : new String[] {
+                "UPDATE tms.platform_entitlement_mode SET mode = 'LEGACY', reason = 'app', updated_by = 'app'",
+                "INSERT INTO tms.platform_entitlement_mode (scope_key, mode, reason, updated_by) "
+                        + "VALUES ('" + TENANT_B + "', 'SHADOW', 'app', 'app')",
+                "UPDATE tms.platform_entitlement_applied SET app_active = true",
+                "DELETE FROM tms.platform_entitlement_applied"}) {
+                assertThatThrownBy(() -> statement.executeUpdate(write))
+                        .as(write).isInstanceOf(SQLException.class)
                         .extracting(e -> ((SQLException) e).getSQLState()).isEqualTo("42501");
             }
         }

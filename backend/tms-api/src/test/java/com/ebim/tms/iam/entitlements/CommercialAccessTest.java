@@ -8,10 +8,16 @@ import com.ebim.tms.iam.entitlements.domain.EnforcementMode;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
-/** The whole decision table of commercial access, as a pure function of three local facts. */
+/**
+ * The whole decision table of commercial access, as a pure function of three local facts.
+ *
+ * <p>D-14 ruling 1 (2026-09-29): {@code appActive=false} - or no snapshot yet in PRIMARY - withdraws
+ * the commercial SaaS surface; it never withholds operation. A full operational shutdown is a separate
+ * policy that does not exist yet, so {@code operationAllowed} is {@code true} on every row.
+ */
 class CommercialAccessTest {
 
-    @ParameterizedTest(name = "under CP={0}, {1}, appActive={2} -> allowed={3} ({4})")
+    @ParameterizedTest(name = "under CP={0}, {1}, appActive={2} -> commercial={3} ({4}), operation allowed")
     @CsvSource(nullValues = "none", value = {
         // Organizations MasterAdmin never provisioned are outside its authority, whatever the mode.
         "false, PRIMARY,   none,  true,  NOT_UNDER_CONTROL_PLANE",
@@ -24,16 +30,19 @@ class CommercialAccessTest {
         "true,  DUAL_READ, true,  true,  APP_ACTIVE",
         "true,  DUAL_READ, false, false, APP_INACTIVE",
         "true,  DUAL_READ, none,  true,  NO_SNAPSHOT_LEGACY_FALLBACK",
-        // PRIMARY: only the snapshot; without one nothing is granted.
+        // PRIMARY: only the snapshot; without one nothing commercial is granted.
         "true,  PRIMARY,   true,  true,  APP_ACTIVE",
         "true,  PRIMARY,   false, false, APP_INACTIVE",
         "true,  PRIMARY,   none,  false, NO_SNAPSHOT",
     })
-    void decisionTable(boolean underControlPlane, EnforcementMode mode, Boolean appActive, boolean allowed,
+    void decisionTable(boolean underControlPlane, EnforcementMode mode, Boolean appActive, boolean commercialActive,
             Reason reason) {
         CommercialAccess access = CommercialAccess.decide(underControlPlane, mode, appActive);
 
-        assertThat(access.allowed()).isEqualTo(allowed);
+        assertThat(access.commercialActive()).isEqualTo(commercialActive);
         assertThat(access.reason()).isEqualTo(reason);
+        assertThat(access.operationAllowed())
+                .as("D-14 ruling 1: no commercial fact withholds operation")
+                .isTrue();
     }
 }

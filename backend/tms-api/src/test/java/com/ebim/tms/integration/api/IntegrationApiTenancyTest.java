@@ -568,7 +568,8 @@ class IntegrationApiTenancyTest {
     class CommercialAccess {
 
         @Test
-        @DisplayName("a partner of a suspended organization is refused before any intake, whatever its scopes")
+        @DisplayName("a partner the gate refuses is refused before any intake, whatever its scopes (the hook a "
+                + "separate operational-shutdown policy would use; no commercial fact refuses since D-14 ruling 1)")
         void suspendedOrganizationIsRefused() throws Exception {
             commercialAccess.suspended.add(ORGANIZATION);
 

@@ -65,7 +65,9 @@ import tools.jackson.databind.node.ObjectNode;
  * <p>Each {@code *.req.json} in the mailbox runs through TMS's REAL MasterAdmin chain (ES256 decoder
  * with the public key the script left there), the real controller and the real services over an
  * in-memory store; the answer is written to {@code *.res.json}. It also answers the commercial access
- * decision and mode changes, so the scenario can check the TMS side.
+ * decision (commercial and operational, D-14 ruling 1) and mode changes - tenant or {@code PRODUCT}
+ * scope, one step at a time and with a reason, as V52's trigger requires (CCP phase 18, D14) - so the
+ * scenario can check the TMS side.
  */
 @EnabledIfEnvironmentVariable(named = "CCP_X07_MAILBOX", matches = ".+")
 @WebMvcTest(controllers = {PlatformEntitlementsController.class, PlatformProvisioningController.class})
@@ -182,19 +184,51 @@ class MasterAdminMailboxBridgeTest {
                 answer.put("body", response.getContentAsString(StandardCharsets.UTF_8));
             }
             case "access" -> {
+                // D-14 ruling 1: appActive=false withdraws the commercial surface; operation continues.
                 CommercialAccess access = commercial.access(UUID.fromString(request.get("organizationId").stringValue()));
-                answer.put("allowed", access.allowed());
+                answer.put("operational", access.operationAllowed());
+                answer.put("commercial", access.commercialActive());
                 answer.put("reason", access.reason().name());
+                answer.put("mode", access.mode().name());
             }
-            case "mode" -> {
-                // Operator step, as the documented UPDATE/INSERT would do (one step at a time is the
-                // database trigger's rule, proven by PlatformEntitlementsIntegrationTest).
-                store.setMode(request.get("scope").stringValue(),
-                        EnforcementMode.valueOf(request.get("mode").stringValue()));
-                answer.put("value", store.mode(UUID.fromString(request.get("tenant").stringValue())).name());
+            case "mode" -> mode(request, answer);
+            case "modes" -> {
+                // Read only: the product's mode and the effective mode of the given tenant.
+                answer.put("productMode", store.mode(null).name());
+                answer.put("tenantMode", store.mode(UUID.fromString(request.get("tenant").stringValue())).name());
             }
             default -> answer.put("error", "unknown kind");
         }
         return answer;
+    }
+
+    /**
+     * Operator step, as the documented UPDATE/INSERT would do, under the same rules V52's trigger
+     * imposes on it (proven on PostgreSQL by {@code PlatformEntitlementsIntegrationTest.modesMoveOneStep}):
+     * one step at a time - a tenant override starts from the product's mode - and never without a reason.
+     * {@code scope} is a control-plane tenant id or {@code PRODUCT}.
+     */
+    private void mode(JsonNode request, ObjectNode answer) {
+        String scope = request.get("scope").stringValue();
+        EnforcementMode to = EnforcementMode.valueOf(request.get("mode").stringValue());
+        String reason = request.hasNonNull("reason") ? request.get("reason").stringValue().strip() : "";
+        EnforcementMode productMode = store.mode(null);
+        EnforcementMode from = store.modeAt(scope).orElse(productMode);
+        if (reason.isEmpty()) {
+            answer.put("error", "a mode change needs a reason");
+            return;
+        }
+        if (to != from && Math.abs(to.ordinal() - from.ordinal()) != 1) {
+            answer.put("error", "entitlement mode moves one step at a time: " + from + " -> " + to);
+            return;
+        }
+        store.setMode(scope, to);
+        answer.put("from", from.name());
+        answer.put("to", to.name());
+        answer.put("reason", reason);
+        answer.put("productMode", store.mode(null).name());
+        if (request.hasNonNull("tenant")) {
+            answer.put("value", store.mode(UUID.fromString(request.get("tenant").stringValue())).name());
+        }
     }
 }

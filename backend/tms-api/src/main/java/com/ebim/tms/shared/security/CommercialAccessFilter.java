@@ -14,7 +14,12 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * Refuses a company-scoped request when its organization may not operate commercially.
+ * Refuses a company-scoped request when the {@link CommercialAccessGate} says its organization may not
+ * operate.
+ *
+ * <p>Since D-14 ruling 1 (2026-09-29) no commercial fact makes the production gate refuse:
+ * {@code appActive=false} withdraws the commercial SaaS surface, not operation. The filter stays as the
+ * hook a separate, explicit operational-shutdown policy would use, and it still fails closed.
  *
  * <p>Runs right after the company scope is bound - {@link CompanyScopeFilter} for people,
  * {@code IntegrationAuthenticationFilter} for partner machines - so it sees the scope that method
