@@ -1,0 +1,198 @@
+{
+  "id": "08-stale",
+  "description": "Aplicada v3, llega v2: 409 STALE_SNAPSHOT con appliedVersion=3 (un snapshot atrasado nunca revoca lo posterior).",
+  "receiver": {
+    "environment": "DEV",
+    "productCode": "fixture",
+    "knownCapabilities": [
+      "fixture.ai.insights",
+      "fixture.docs.monthly",
+      "fixture.promotions",
+      "fixture.reports",
+      "fixture.users.max"
+    ],
+    "baselineCapabilities": [
+      "fixture.core"
+    ],
+    "provisionedTenants": [
+      "00000000-0000-4ccc-8000-000000000008"
+    ],
+    "enforcementMode": "SHADOW",
+    "writeScope": "fixture:entitlements:write",
+    "readScope": "fixture:entitlements:read"
+  },
+  "steps": [
+    {
+      "step": 1,
+      "tenantPath": "00000000-0000-4ccc-8000-000000000008",
+      "snapshot": {
+        "schema": "ebim.entitlements/v1",
+        "environment": "DEV",
+        "controlPlaneTenantId": "00000000-0000-4ccc-8000-000000000008",
+        "productCode": "fixture",
+        "external": {
+          "tenantId": "fixture-ext-08",
+          "organizationId": "fixture-org-08",
+          "companyIds": []
+        },
+        "snapshotVersion": 3,
+        "previousVersion": 2,
+        "effectiveAt": "2026-10-01T00:00:03Z",
+        "issuedAt": "2026-10-01T00:00:13Z",
+        "appActive": true,
+        "planCode": "fixture-standard",
+        "capabilities": [
+          {
+            "code": "fixture.ai.insights",
+            "enabled": false,
+            "scope": {
+              "level": "TENANT"
+            },
+            "sources": []
+          },
+          {
+            "code": "fixture.promotions",
+            "enabled": false,
+            "scope": {
+              "level": "COMPANY"
+            },
+            "sources": []
+          },
+          {
+            "code": "fixture.reports",
+            "enabled": true,
+            "scope": {
+              "level": "TENANT"
+            },
+            "sources": [
+              "PLAN"
+            ]
+          }
+        ],
+        "limits": [
+          {
+            "code": "fixture.users.max",
+            "value": 25,
+            "unit": "user",
+            "enforcement": "HARD",
+            "scope": {
+              "level": "TENANT"
+            },
+            "sources": [
+              "PLAN"
+            ]
+          }
+        ],
+        "allowances": [
+          {
+            "code": "fixture.docs.monthly",
+            "meterCode": "docs",
+            "included": 100,
+            "unit": "document",
+            "period": {
+              "start": "2026-10-01",
+              "end": "2026-10-31"
+            },
+            "overageMode": "BLOCK",
+            "sources": [
+              "PLAN"
+            ]
+          }
+        ],
+        "aiCredits": {
+          "weights": [],
+          "weightsVersion": 0
+        },
+        "correlationId": "00000000-0000-4ccc-8000-0000000c0083",
+        "idempotencyKey": "ma-ent-v1-c2fb34cc2afe349676c28388d4e138aec0f5214cef3d36031a92579de570a6c2",
+        "checksum": "sha256:02cfcaae0aaf631c8181b9dbfd8bd0061920d6e0f93cfa1b28e52de58583bde8"
+      }
+    },
+    {
+      "step": 2,
+      "tenantPath": "00000000-0000-4ccc-8000-000000000008",
+      "snapshot": {
+        "schema": "ebim.entitlements/v1",
+        "environment": "DEV",
+        "controlPlaneTenantId": "00000000-0000-4ccc-8000-000000000008",
+        "productCode": "fixture",
+        "external": {
+          "tenantId": "fixture-ext-08",
+          "organizationId": "fixture-org-08",
+          "companyIds": []
+        },
+        "snapshotVersion": 2,
+        "previousVersion": 1,
+        "effectiveAt": "2026-10-01T00:00:02Z",
+        "issuedAt": "2026-10-01T00:00:12Z",
+        "appActive": true,
+        "planCode": "fixture-standard",
+        "capabilities": [
+          {
+            "code": "fixture.ai.insights",
+            "enabled": false,
+            "scope": {
+              "level": "TENANT"
+            },
+            "sources": []
+          },
+          {
+            "code": "fixture.promotions",
+            "enabled": false,
+            "scope": {
+              "level": "COMPANY"
+            },
+            "sources": []
+          },
+          {
+            "code": "fixture.reports",
+            "enabled": true,
+            "scope": {
+              "level": "TENANT"
+            },
+            "sources": [
+              "PLAN"
+            ]
+          }
+        ],
+        "limits": [
+          {
+            "code": "fixture.users.max",
+            "value": 25,
+            "unit": "user",
+            "enforcement": "HARD",
+            "scope": {
+              "level": "TENANT"
+            },
+            "sources": [
+              "PLAN"
+            ]
+          }
+        ],
+        "allowances": [
+          {
+            "code": "fixture.docs.monthly",
+            "meterCode": "docs",
+            "included": 100,
+            "unit": "document",
+            "period": {
+              "start": "2026-10-01",
+              "end": "2026-10-31"
+            },
+            "overageMode": "BLOCK",
+            "sources": [
+              "PLAN"
+            ]
+          }
+        ],
+        "aiCredits": {
+          "weights": [],
+          "weightsVersion": 0
+        },
+        "correlationId": "00000000-0000-4ccc-8000-0000000c0082",
+        "idempotencyKey": "ma-ent-v1-ba07082e724722e7395c58683b4008ad690d1e99e0e1cd5ef100b7fb6534a104",
+        "checksum": "sha256:4a286c799b48015b3e64d1c5f8886a57291ca2b451f99b04e329e195fb51ec18"
+      }
+    }
+  ]
+}

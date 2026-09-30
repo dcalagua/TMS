@@ -3,8 +3,11 @@ package com.ebim.tms.integration.security;
 import com.ebim.tms.integration.application.IntegrationAuthenticationService;
 import com.ebim.tms.integration.application.IntegrationProperties;
 import com.ebim.tms.shared.api.ApiExceptionResponder;
+import com.ebim.tms.shared.security.CommercialAccessFilter;
+import com.ebim.tms.shared.security.CommercialAccessGate;
 import com.ebim.tms.shared.security.TmsAccessDeniedHandler;
 import com.ebim.tms.shared.security.TmsAuthenticationEntryPoint;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -56,7 +59,8 @@ public class IntegrationSecurityConfig {
             IntegrationAuthenticationService authenticationService,
             ApiExceptionResponder apiExceptionResponder,
             TmsAuthenticationEntryPoint authenticationEntryPoint,
-            TmsAccessDeniedHandler accessDeniedHandler) throws Exception {
+            TmsAccessDeniedHandler accessDeniedHandler,
+            ObjectProvider<CommercialAccessGate> commercialAccessGate) throws Exception {
 
         http
                 .securityMatcher(INTEGRATION_PATH)
@@ -79,6 +83,11 @@ public class IntegrationSecurityConfig {
                         .contentTypeOptions(Customizer.withDefaults())
                         .referrerPolicy(referrer -> referrer.policy(ReferrerPolicy.NO_REFERRER))
                         .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true)));
+
+        // A partner credential operates on behalf of its company's organization, so the same commercial
+        // access rule as for people applies (ADR-017), right after the credential binds the company.
+        commercialAccessGate.ifAvailable(gate -> http.addFilterAfter(
+                new CommercialAccessFilter(gate, apiExceptionResponder), IntegrationAuthenticationFilter.class));
 
         return http.build();
     }

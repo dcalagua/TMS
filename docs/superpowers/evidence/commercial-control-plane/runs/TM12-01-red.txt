@@ -1,0 +1,12 @@
+[ERROR] Tests run: 3, Failures: 0, Errors: 3, Skipped: 0, Time elapsed: 0.199 s <<< FAILURE! -- in com.ebim.tms.iam.entitlements.JcsTest
+[ERROR] com.ebim.tms.iam.entitlements.JcsTest.numbers -- Time elapsed: 0.159 s <<< ERROR!
+[ERROR] com.ebim.tms.iam.entitlements.JcsTest.vectors -- Time elapsed: 0.026 s <<< ERROR!
+[ERROR] com.ebim.tms.iam.entitlements.JcsTest.fixtureChecksums -- Time elapsed: 0.002 s <<< ERROR!
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.029 s -- in com.ebim.tms.iam.entitlements.EntitlementsFixturesPinTest
+[ERROR] Errors: 
+[ERROR]   JcsTest.fixtureChecksums:37->lambda$fixtureChecksums$0:40 » UnsupportedOperation
+[ERROR]   JcsTest.numbers:51 » UnsupportedOperation
+[ERROR]   JcsTest.vectors:25 » UnsupportedOperation
+[ERROR] Tests run: 5, Failures: 0, Errors: 3, Skipped: 0
+[INFO] BUILD FAILURE
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.6:test (default-test) on project tms-api: 

@@ -1,0 +1,373 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ebim.pe/contracts/entitlements/v1/schema.json",
+  "title": "ebim.entitlements/v1 — snapshot de entitlements",
+  "description": "Ver README.md §2. Los valores numéricos son cantidades técnicas, nunca precios.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "environment",
+    "controlPlaneTenantId",
+    "productCode",
+    "external",
+    "snapshotVersion",
+    "previousVersion",
+    "effectiveAt",
+    "issuedAt",
+    "appActive",
+    "planCode",
+    "capabilities",
+    "limits",
+    "allowances",
+    "aiCredits",
+    "correlationId",
+    "idempotencyKey",
+    "checksum"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ebim.entitlements/v1"
+    },
+    "environment": {
+      "enum": [
+        "DEV",
+        "QAS",
+        "DEMO",
+        "PRD"
+      ]
+    },
+    "controlPlaneTenantId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "productCode": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+$"
+    },
+    "external": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenantId",
+        "organizationId",
+        "companyIds"
+      ],
+      "properties": {
+        "tenantId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "organizationId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "companyIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "snapshotVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "previousVersion": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "effectiveAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "issuedAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "appActive": {
+      "type": "boolean"
+    },
+    "planCode": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "enabled",
+          "scope",
+          "sources"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(\\.[a-z0-9_]+)+$"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "scope": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "level"
+            ],
+            "properties": {
+              "level": {
+                "enum": [
+                  "TENANT",
+                  "COMPANY"
+                ]
+              },
+              "companyIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "if": {
+              "properties": {
+                "level": {
+                  "const": "TENANT"
+                }
+              }
+            },
+            "then": {
+              "not": {
+                "required": [
+                  "companyIds"
+                ]
+              }
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "BASELINE",
+                "PLAN",
+                "ADDON",
+                "OVERRIDE"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "limits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "value",
+          "unit",
+          "enforcement",
+          "scope",
+          "sources"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(\\.[a-z0-9_]+)+$"
+          },
+          "value": {
+            "type": "number",
+            "minimum": 0
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enforcement": {
+            "enum": [
+              "HARD",
+              "SOFT"
+            ]
+          },
+          "scope": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "level"
+            ],
+            "properties": {
+              "level": {
+                "enum": [
+                  "TENANT",
+                  "COMPANY"
+                ]
+              },
+              "companyIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "if": {
+              "properties": {
+                "level": {
+                  "const": "TENANT"
+                }
+              }
+            },
+            "then": {
+              "not": {
+                "required": [
+                  "companyIds"
+                ]
+              }
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "BASELINE",
+                "PLAN",
+                "ADDON",
+                "OVERRIDE"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "allowances": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "meterCode",
+          "included",
+          "unit",
+          "period",
+          "overageMode",
+          "sources"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(\\.[a-z0-9_]+)+$"
+          },
+          "meterCode": {
+            "type": "string"
+          },
+          "included": {
+            "type": "number",
+            "minimum": 0
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "period": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "start",
+              "end"
+            ],
+            "properties": {
+              "start": {
+                "type": "string",
+                "format": "date"
+              },
+              "end": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          },
+          "overageMode": {
+            "const": "BLOCK"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "BASELINE",
+                "PLAN",
+                "ADDON",
+                "OVERRIDE"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "aiCredits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "weights",
+        "weightsVersion"
+      ],
+      "properties": {
+        "weights": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "capabilityCode",
+              "creditsPerUnit",
+              "unit"
+            ],
+            "properties": {
+              "capabilityCode": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(\\.[a-z0-9_]+)+$"
+              },
+              "creditsPerUnit": {
+                "type": "number",
+                "minimum": 0
+              },
+              "unit": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "weightsVersion": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "correlationId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "pattern": "^ma-ent-v1-[0-9a-f]{64}$"
+    },
+    "checksum": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

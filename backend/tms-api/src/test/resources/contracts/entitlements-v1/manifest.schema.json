@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ebim.pe/contracts/entitlements/v1/manifest.schema.json",
+  "title": "ebim.capabilities/v1 — manifiesto de capacidades de un SaaS",
+  "description": "Respuesta de GET /entitlements/manifest y archivo docs/platform-provisioning/ENTITLEMENTS_MANIFEST.json de cada SaaS (idénticos byte a byte). Lo importa platform.import_capability_manifest; registry-verify compara sus códigos ACTIVE con el registro.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "productCode",
+    "manifestVersion",
+    "capabilities"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ebim.capabilities/v1"
+    },
+    "productCode": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+$"
+    },
+    "manifestVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "name",
+          "kind"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(\\.[a-z0-9_]+)+$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "FEATURE",
+              "LIMIT",
+              "ALLOWANCE",
+              "AI_FEATURE"
+            ]
+          },
+          "isBaseline": {
+            "type": "boolean"
+          },
+          "unit": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$"
+          },
+          "combineRule": {
+            "enum": [
+              "MAX",
+              "SUM"
+            ]
+          },
+          "scopeLevel": {
+            "enum": [
+              "TENANT",
+              "COMPANY"
+            ]
+          },
+          "meterCode": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "DRAFT",
+              "ACTIVE",
+              "DEPRECATED"
+            ]
+          },
+          "introducedInContract": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
