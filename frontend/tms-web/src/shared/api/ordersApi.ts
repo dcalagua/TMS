@@ -95,6 +95,16 @@ export interface OrderView {
   version: number
   createdAt: string
   updatedAt: string
+  /**
+   * SPLIT_ORDER_EXECUTION.md L2: lo comprometido en viajes y lo que falta planificar. Opcionales
+   * para tolerar un backend anterior.
+   */
+  allocatedWeightKg?: number | null
+  allocatedVolumeM3?: number | null
+  allocatedPallets?: number | null
+  pendingWeightKg?: number | null
+  pendingVolumeM3?: number | null
+  pendingPallets?: number | null
 }
 
 /** Mirrors the backend's `OrderDetailView.OrderLineView` record. */
@@ -307,4 +317,13 @@ export function applyOrderImport(
   return apiUpload<OrderImportReport>('/orders/import', {
     companyId, formData: importForm(externalSource, file),
   })
+}
+
+/**
+ * Un pedido "Listo para planificar" con parte ya en un viaje (quizá ya en ruta): el remanente sigue
+ * planificable, pero el pedido no está "sin planificar" (docs/domain/SPLIT_ORDER_EXECUTION.md, R1).
+ */
+export function isPartlyPlanned(order: Pick<OrderView, 'status' | 'allocatedWeightKg' | 'allocatedVolumeM3' | 'allocatedPallets'>): boolean {
+  if (order.status !== 'READY_FOR_PLANNING') return false
+  return [order.allocatedWeightKg, order.allocatedVolumeM3, order.allocatedPallets].some((value) => Number(value ?? 0) > 0)
 }

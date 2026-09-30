@@ -34,7 +34,7 @@ record Corridors(List<UUID> routeIdsInOrder, Map<UUID, UUID> routeByDestination,
         Map<UUID, Map<UUID, Integer>> positions = new HashMap<>();
 
         for (RouteTemplate route : routes) {
-            if (!route.active() || route.destinationIds().isEmpty()) {
+            if (!route.servesAsCorridor()) {
                 continue;
             }
             ids.add(route.id());

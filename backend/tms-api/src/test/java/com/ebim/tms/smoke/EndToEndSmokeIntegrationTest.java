@@ -338,7 +338,13 @@ class EndToEndSmokeIntegrationTest {
                 .andExpect(jsonPath("$.lines[0].lineWeightKg").value(5000.000))
                 .andExpect(jsonPath("$.lines[0].lineVolumeM3").value(18.0000));
 
-        mockMvc.perform(asPlannerA(post(ORDERS + "/" + orderId + "/mark-ready"), COMPANY_A))
+        // SERVICE_DATE is tomorrow and SMK-ROUTE runs on a weekday calendar with a 16:00 cutoff and a
+        // 1-day lead time, so depending on the hour and the weekday this run happens at, ADR-014 judges
+        // the release CUTOFF_MISSED or FREQUENCY_OVERRIDE. A reason covers both and is harmless when
+        // the order is simply ELIGIBLE; the gate itself is proven in SchedulingReleaseIntegrationTest.
+        mockMvc.perform(asPlannerA(post(ORDERS + "/" + orderId + "/mark-ready"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"overrideReason\":\"smoke run: released whatever the hour\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("READY_FOR_PLANNING"));
 

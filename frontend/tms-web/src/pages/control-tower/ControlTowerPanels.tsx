@@ -1,6 +1,9 @@
 import { Box, Chip, Paper, Typography } from "@mui/material";
 import { Link } from "react-router-dom";
-import { ReportProblemRounded, ScheduleRounded, LocalShippingRounded, BlockRounded, InfoOutlined } from "@mui/icons-material";
+import {
+  ReportProblemRounded, ScheduleRounded, LocalShippingRounded, BlockRounded, InfoOutlined,
+  ReceiptLongRounded, WarehouseRounded, HourglassTopRounded, LinkOffRounded, PauseCircleOutlineRounded,
+} from "@mui/icons-material";
 import type {
   ControlTowerAdvisoryView,
   ControlTowerBlockerView, ControlTowerExceptionView, ControlTowerStopView, ControlTowerWorkloadView,
@@ -10,6 +13,17 @@ import { STOP_EXECUTION_TONE, TRIP_STATUS_TONE } from "../../shared/ui/statusTon
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDateTime, fmtMinutes, fmtPercent, fmtTime } from "../../lib/locale";
+import { advisoryKey, advisoryLabel, advisoryLink, isKnownAdvisory } from "./advisories";
+
+/** Un icono por tipo de aviso; un tipo nuevo del servidor cae al icono de información. */
+const ADVISORY_ICON: Record<string, typeof InfoOutlined> = {
+  SETTLEMENT_DISCREPANCY_OPEN: ReceiptLongRounded,
+  STOP_ETA_MISSES_WINDOW: ScheduleRounded,
+  DISPATCH_MISMATCH: WarehouseRounded,
+  AWAITING_WAREHOUSE_DISPATCH: HourglassTopRounded,
+  EXTERNAL_DISPATCH_UNMATCHED: LinkOffRounded,
+  ORDER_HOLD_ON_COMMITTED_TRIP: PauseCircleOutlineRounded,
+};
 
 /** Un panel de la torre siempre dice de cuántos son los que enseña: "los peores veinte de
  * cuarenta y siete" es una frase distinta de "hay veinte". */
@@ -250,13 +264,15 @@ export function AdvisoriesPanel({ items, total }: { items: ControlTowerAdvisoryV
         <Typography variant="body2" color="text.secondary">{t("Nada pendiente de mirar hoy.")}</Typography>
       ) : (
         <Box sx={{ display: "grid", gap: 1 }}>
-          {items.map((advisory) => (
+          {items.map((advisory, index) => {
+            const link = advisoryLink(advisory);
+            const Icon = ADVISORY_ICON[advisory.type] ?? InfoOutlined;
+            // Un despacho sin envío asociado no tiene adónde ir: la fila se lee, no se pulsa.
+            const linkProps = link === null ? { component: "div" as const } : { component: Link, to: link };
+            return (
             <Paper
-              key={`${advisory.type}-${advisory.sourceId}`}
-              component={Link}
-              to={advisory.type === "SETTLEMENT_DISCREPANCY_OPEN"
-                ? `/settlement?discrepancy=${advisory.sourceId}`
-                : `/trips/${advisory.tripId}`}
+              key={advisoryKey(advisory, index)}
+              {...linkProps}
               variant="outlined"
               sx={{
                 p: 1.25, textDecoration: "none", color: "text.primary", display: "block",
@@ -266,9 +282,13 @@ export function AdvisoriesPanel({ items, total }: { items: ControlTowerAdvisoryV
               }}
             >
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                <Icon sx={{ fontSize: 17, color: "info.main" }} />
                 <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                  {enumLabel("advisoryType", advisory.type)}
+                  {advisoryLabel(advisory.type)}
                 </Typography>
+                {!isKnownAdvisory(advisory.type) && (
+                  <Typography variant="caption" color="text.disabled">{advisory.type}</Typography>
+                )}
                 {advisory.shipmentNumber && (
                   <Typography variant="caption" color="text.secondary">{advisory.shipmentNumber}</Typography>
                 )}
@@ -284,7 +304,8 @@ export function AdvisoriesPanel({ items, total }: { items: ControlTowerAdvisoryV
                 {advisory.detail}
               </Typography>
             </Paper>
-          ))}
+            );
+          })}
         </Box>
       )}
     </AppCard>

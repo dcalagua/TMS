@@ -24,6 +24,10 @@ import com.ebim.tms.shared.reference.DriverLookupPort;
 import com.ebim.tms.shared.reference.DriverReference;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.ResourceAvailabilityPort;
+import com.ebim.tms.shared.reference.ResourceBlock;
+import com.ebim.tms.shared.audit.AuditRecorder;
+import com.ebim.tms.shared.settings.CompanySettings;
+import com.ebim.tms.shared.settings.CompanySettingsPort;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.math.BigDecimal;
@@ -86,6 +90,8 @@ class TripExecutionServiceTest {
     private TripAlertPublisher alerts;
     private OrderExecutionPropagator orderExecution;
     private ResourceAvailabilityPort availabilityPort;
+    private CompanySettingsPort companySettings;
+    private AuditRecorder auditRecorder;
     private TripExecutionService service;
 
     @BeforeEach
@@ -100,10 +106,16 @@ class TripExecutionServiceTest {
         when(actors.requireAppUserId()).thenReturn(ACTOR);
 
         orderExecution = mock(OrderExecutionPropagator.class);
+        companySettings = mock(CompanySettingsPort.class);
+        when(companySettings.settingsOf(COMPANY)).thenReturn(CompanySettings.defaults());
+        auditRecorder = mock(AuditRecorder.class);
         availabilityPort = mock(ResourceAvailabilityPort.class);
         when(availabilityPort.findBlock(any(), any(), any(), any())).thenReturn(Optional.empty());
-        service = new TripExecutionService(tripRepository, vehicleLookupPort, driverLookupPort, availabilityPort,
-                events, mock(TripTenderService.class), alerts, assembler, orderExecution, actors);
+        service = new TripExecutionService(tripRepository,
+                new DispatchReadiness(vehicleLookupPort, driverLookupPort, availabilityPort,
+                        mock(CommittedOrderHolds.class)), companySettings,
+                auditRecorder, events,
+                mock(TripTenderService.class), alerts, assembler, orderExecution, actors);
         when(tripRepository.saveAndFlush(any(Trip.class))).thenAnswer(call -> call.getArgument(0));
         when(assembler.toDetail(any(Trip.class), eq(COMPANY)))
                 .thenAnswer(call -> new TripDetailView(null, List.of(), List.of(), List.of(), List.of(), TripRouteMetrics.NONE));
@@ -441,6 +453,160 @@ class TripExecutionServiceTest {
         /** The day the service judges a licence by: today in the company's zone, not the server's. */
         private LocalDate companyToday() {
             return SCOPE.today();
+        }
+    }
+
+    /** ADR-013 sections 1 and 4: who may dispatch by hand, per company mode. */
+    @Nested
+    @DisplayName("the dispatch mode")
+    class DispatchMode {
+
+        private final CompanyScope overrider = new CompanyScope(COMPANY, "CO-A", "Company A", "America/Lima",
+                SCOPE.organizationId(), "ORG", "Organization",
+                Set.of(com.ebim.tms.shared.security.Permission.PLANNING_TRIP_DISPATCH_OVERRIDE));
+
+        private void mode(com.ebim.tms.shared.settings.DispatchConfirmationMode mode) {
+            when(companySettings.settingsOf(COMPANY)).thenReturn(CompanySettings.defaults().withDispatchConfirmationMode(mode));
+        }
+
+        @Test
+        @DisplayName("MANUAL, the default: a person dispatches as OPERATOR and a stray override reason is ignored")
+        void manualIsUnchanged() {
+            Trip trip = lockedTrip(TripStatus.READY_FOR_DISPATCH);
+
+            service.dispatch(scope, TRIP_ID, new TripExecutionRequest(trip.version(), null, "ignored"));
+
+            assertThat(trip.status()).isEqualTo(TripStatus.IN_TRANSIT);
+            assertThat(trip.dispatchSource()).isEqualTo(com.ebim.tms.planning.domain.DispatchSource.OPERATOR);
+            assertThat(trip.dispatchedBy()).isEqualTo(ACTOR);
+            verifyNoInteractions(auditRecorder);
+        }
+
+        @Test
+        @DisplayName("EXTERNAL_REQUIRED without a reason: the specific 409, and the trip does not move")
+        void externalRequiredRefusesAPlainDispatch() {
+            mode(com.ebim.tms.shared.settings.DispatchConfirmationMode.EXTERNAL_REQUIRED);
+            Trip trip = lockedTrip(TripStatus.READY_FOR_DISPATCH);
+
+            assertThatExceptionOfType(com.ebim.tms.shared.api.DispatchRequiresExternalConfirmationException.class)
+                    .isThrownBy(() -> service.dispatch(overrider, TRIP_ID, current(trip, null)))
+                    .withMessageContaining("warehouse's confirmation");
+            assertThat(trip.status()).isEqualTo(TripStatus.READY_FOR_DISPATCH);
+            verifyNoInteractions(events);
+        }
+
+        @Test
+        @DisplayName("EXTERNAL_REQUIRED with a reason but without the permission: 403, never a role check")
+        void externalRequiredNeedsThePermission() {
+            mode(com.ebim.tms.shared.settings.DispatchConfirmationMode.EXTERNAL_REQUIRED);
+            Trip trip = lockedTrip(TripStatus.READY_FOR_DISPATCH);
+
+            assertThatExceptionOfType(org.springframework.security.access.AccessDeniedException.class)
+                    .isThrownBy(() -> service.dispatch(scope, TRIP_ID,
+                            new TripExecutionRequest(trip.version(), null, "WMS down since 06:00")));
+            assertThat(trip.status()).isEqualTo(TripStatus.READY_FOR_DISPATCH);
+        }
+
+        @Test
+        @DisplayName("EXTERNAL_REQUIRED with the permission and a reason: OPERATOR_OVERRIDE, audited, reason on the timeline")
+        void overrideDispatches() {
+            mode(com.ebim.tms.shared.settings.DispatchConfirmationMode.EXTERNAL_REQUIRED);
+            Trip trip = lockedTrip(TripStatus.READY_FOR_DISPATCH);
+
+            service.dispatch(overrider, TRIP_ID, new TripExecutionRequest(trip.version(), null, "  WMS down since 06:00 "));
+
+            assertThat(trip.status()).isEqualTo(TripStatus.IN_TRANSIT);
+            assertThat(trip.dispatchSource()).isEqualTo(com.ebim.tms.planning.domain.DispatchSource.OPERATOR_OVERRIDE);
+            assertThat(trip.dispatchedBy()).isEqualTo(ACTOR);
+            verify(auditRecorder).record(eq(overrider), eq(com.ebim.tms.shared.audit.AuditAggregateType.SHIPMENT),
+                    eq(TRIP_ID), eq(com.ebim.tms.shared.audit.AuditAction.DISPATCH_OVERRIDDEN),
+                    eq(java.util.Map.of("reason", "WMS down since 06:00", "dispatchConfirmationMode", "EXTERNAL_REQUIRED")));
+            verify(events).publish(eq(overrider), eq(trip), eq(null), eq(ShipmentEventType.SHIPMENT_DISPATCHED), any(),
+                    anyMap(), eq("Dispatch override: WMS down since 06:00"));
+        }
+
+        @Test
+        @DisplayName("HYBRID: a person dispatches without any override, as OPERATOR")
+        void hybridLetsAPersonDispatch() {
+            mode(com.ebim.tms.shared.settings.DispatchConfirmationMode.HYBRID);
+            Trip trip = lockedTrip(TripStatus.READY_FOR_DISPATCH);
+
+            service.dispatch(scope, TRIP_ID, current(trip, null));
+
+            assertThat(trip.dispatchSource()).isEqualTo(com.ebim.tms.planning.domain.DispatchSource.OPERATOR);
+        }
+
+        @Test
+        @DisplayName("EXTERNAL_REQUIRED, trip already dispatched by the warehouse: a late click answers its state")
+        void aLateClickOnAnExternallyDispatchedTripIsAnswered() {
+            mode(com.ebim.tms.shared.settings.DispatchConfirmationMode.EXTERNAL_REQUIRED);
+            Trip trip = lockedTrip(TripStatus.READY_FOR_DISPATCH);
+            trip.dispatchByIntegration(trip.readyAt(), UUID.randomUUID());
+
+            service.dispatch(scope, TRIP_ID, current(trip, null));
+
+            assertThat(trip.dispatchSource()).isEqualTo(com.ebim.tms.planning.domain.DispatchSource.INTEGRATION);
+            verifyNoInteractions(events);
+        }
+    }
+
+    /**
+     * Characterisation of the five dispatch checks before they moved into {@code DispatchReadiness}
+     * (ADR-013 section 12): each refusal, word for word, and the order they are tried in. The
+     * refactor must leave every one of these exactly as it is.
+     */
+    @Nested
+    @DisplayName("the dispatch checks, as the gate words them")
+    class DispatchChecks {
+
+        @Test
+        @DisplayName("a vehicle that is no longer assignable is refused with its trip number")
+        void inoperableVehicle() {
+            Trip trip = lockedTrip(TripStatus.READY_FOR_DISPATCH);
+            when(vehicleLookupPort.findAssignable(VEHICLE, COMPANY)).thenReturn(Optional.empty());
+
+            assertThatExceptionOfType(ConflictException.class)
+                    .isThrownBy(() -> service.dispatch(scope, TRIP_ID, current(trip, null)))
+                    .withMessage("Trip 1 is assigned a vehicle that is no longer active and available.");
+            assertThat(trip.status()).isEqualTo(TripStatus.READY_FOR_DISPATCH);
+        }
+
+        @Test
+        @DisplayName("a deactivated driver is refused at the gate, not only when made ready")
+        void inactiveDriver() {
+            Trip trip = lockedTripWithDriver(TripStatus.READY_FOR_DISPATCH);
+            when(driverLookupPort.findAssignable(DRIVER, COMPANY)).thenReturn(Optional.empty());
+
+            assertThatExceptionOfType(ConflictException.class)
+                    .isThrownBy(() -> service.dispatch(scope, TRIP_ID, current(trip, null)))
+                    .withMessage("Trip 1 is assigned a driver who is no longer active.");
+        }
+
+        @Test
+        @DisplayName("a vehicle blocked at the moment of departure is refused, naming why and until when")
+        void blockedResource() {
+            Trip trip = lockedTrip(TripStatus.READY_FOR_DISPATCH);
+            OffsetDateTime until = OffsetDateTime.parse("2030-01-01T10:00:00Z");
+            when(availabilityPort.findBlock(eq(COMPANY), eq(VEHICLE), any(), any()))
+                    .thenReturn(Optional.of(new ResourceBlock("vehicle", "MAINTENANCE", until)));
+
+            assertThatExceptionOfType(ConflictException.class)
+                    .isThrownBy(() -> service.dispatch(scope, TRIP_ID, current(trip, null)))
+                    .withMessage("Trip 1 cannot depart: its vehicle is unavailable (MAINTENANCE) until " + until + ".");
+            assertThat(trip.status()).isEqualTo(TripStatus.READY_FOR_DISPATCH);
+        }
+
+        @Test
+        @DisplayName("the vehicle is tried before the resource block: the first failing check is the one reported")
+        void vehicleIsCheckedFirst() {
+            Trip trip = lockedTrip(TripStatus.READY_FOR_DISPATCH);
+            when(vehicleLookupPort.findAssignable(VEHICLE, COMPANY)).thenReturn(Optional.empty());
+            when(availabilityPort.findBlock(any(), any(), any(), any())).thenReturn(Optional.of(
+                    new ResourceBlock("vehicle", "MAINTENANCE", OffsetDateTime.parse("2030-01-01T10:00:00Z"))));
+
+            assertThatExceptionOfType(ConflictException.class)
+                    .isThrownBy(() -> service.dispatch(scope, TRIP_ID, current(trip, null)))
+                    .withMessageContaining("no longer active and available");
         }
     }
 

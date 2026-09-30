@@ -173,6 +173,19 @@ public class Trip {
     @Column(name = "dispatched_by")
     private UUID dispatchedBy;
 
+    /** OPERATOR, OPERATOR_OVERRIDE or INTEGRATION once departed (V52); null before. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dispatch_source")
+    private DispatchSource dispatchSource;
+
+    /** The credential that dispatched, when {@link #dispatchSource} is INTEGRATION (V52). */
+    @Column(name = "dispatched_by_client")
+    private UUID dispatchedByClient;
+
+    /** The credential that took the ready step on the way to an external dispatch (V52). */
+    @Column(name = "ready_by_client")
+    private UUID readyByClient;
+
     @Column(name = "actual_completion_at")
     private OffsetDateTime actualCompletionAt;
 
@@ -345,6 +358,18 @@ public class Trip {
         return dispatchedBy;
     }
 
+    public DispatchSource dispatchSource() {
+        return dispatchSource;
+    }
+
+    public UUID dispatchedByClient() {
+        return dispatchedByClient;
+    }
+
+    public UUID readyByClient() {
+        return readyByClient;
+    }
+
     public OffsetDateTime actualCompletionAt() {
         return actualCompletionAt;
     }
@@ -475,6 +500,53 @@ public class Trip {
      * dispatch that overwrote the plan would erase the only evidence there was one.
      */
     public void dispatch(OffsetDateTime actualDepartureAt, UUID actorId) {
+        dispatch(actualDepartureAt, actorId, DispatchSource.OPERATOR);
+    }
+
+    /**
+     * A person dispatches, as {@link DispatchSource#OPERATOR} or, past a company that requires the
+     * warehouse to confirm it, as {@link DispatchSource#OPERATOR_OVERRIDE} (ADR-013 section 4).
+     */
+    public void dispatch(OffsetDateTime actualDepartureAt, UUID actorId, DispatchSource source) {
+        if (source == DispatchSource.INTEGRATION) {
+            throw new IllegalArgumentException("an integration dispatch names a credential, not a person");
+        }
+        if (actorId == null) {
+            throw new IllegalArgumentException("a person's dispatch names the person");
+        }
+        depart(actualDepartureAt);
+        this.dispatchSource = source;
+        this.dispatchedBy = actorId;
+        this.updatedBy = actorId;
+    }
+
+    /**
+     * A warehouse system's dispatch document dispatched the trip (ADR-013 section 3). No person is
+     * invented for it: the credential is the actor, as V31 does for a carrier's answer.
+     */
+    public void dispatchByIntegration(OffsetDateTime actualDepartureAt, UUID integrationClientId) {
+        if (integrationClientId == null) {
+            throw new IllegalArgumentException("an integration dispatch names its credential");
+        }
+        depart(actualDepartureAt);
+        this.dispatchSource = DispatchSource.INTEGRATION;
+        this.dispatchedByClient = integrationClientId;
+        this.updatedBy = null;
+    }
+
+    /** The ready step an external dispatch takes for a CONFIRMED trip, attributed to its credential. */
+    public void markReadyForDispatchByIntegration(OffsetDateTime readyAt, UUID integrationClientId) {
+        if (integrationClientId == null) {
+            throw new IllegalArgumentException("an integration ready step names its credential");
+        }
+        requireTransitionTo(TripStatus.READY_FOR_DISPATCH);
+        this.status = TripStatus.READY_FOR_DISPATCH;
+        this.readyAt = readyAt;
+        this.readyByClient = integrationClientId;
+        this.updatedBy = null;
+    }
+
+    private void depart(OffsetDateTime actualDepartureAt) {
         requireTransitionTo(TripStatus.IN_TRANSIT);
         if (awaitsCarrierVehicle()) {
             throw new IllegalStateException("trip " + shipmentNumber + " was accepted by a carrier that does not"
@@ -483,8 +555,6 @@ public class Trip {
         }
         this.status = TripStatus.IN_TRANSIT;
         this.actualDepartureAt = actualDepartureAt;
-        this.dispatchedBy = actorId;
-        this.updatedBy = actorId;
     }
 
     /**

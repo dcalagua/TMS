@@ -70,7 +70,10 @@ public class TripAssignmentService {
         // The whole order, or a slice of it (migration V37). A row that covers everything the
         // customer ordered is flagged whole, which is what puts it under V11's installation-wide
         // unique index; a slice is flagged false and is deliberately outside it.
-        boolean wholeOrder = amounts.covers(OrderAmounts.wholeOf(order));
+        // A reopened order (ADR-009) still has its finished attempt's whole row ACTIVE as history,
+        // holding the index's slot; its second attempt is stored as a share so the two coexist.
+        boolean wholeOrder = amounts.covers(OrderAmounts.wholeOf(order))
+                && !assignmentRepository.existsWholeOnFinishedTrip(order.id());
         TripOrderAssignment assignment =
                 new TripOrderAssignment(trip.companyId(), trip.id(), order.id(), amounts, wholeOrder, actorId);
         try {

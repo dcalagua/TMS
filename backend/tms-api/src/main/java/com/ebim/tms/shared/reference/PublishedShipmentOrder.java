@@ -45,5 +45,15 @@ public record PublishedShipmentOrder(
         OffsetDateTime deliveredAt,
         String deliveryReceiverName,
         String deliveryNotes,
-        int evidenceCount) {
+        int evidenceCount,
+        // Additive (WAREHOUSE_EXECUTION_V1 §3.3): the sequence of the stop that delivers it.
+        Integer stopSequence) {
+
+    /** The shape before {@code stopSequence}, for callers that predate it. */
+    public PublishedShipmentOrder(UUID orderId, String orderNumber, String externalSource, String externalReference,
+            String destinationCode, BigDecimal weightKg, BigDecimal volumeM3, BigDecimal pallets, String deliveryResult,
+            OffsetDateTime deliveredAt, String deliveryReceiverName, String deliveryNotes, int evidenceCount) {
+        this(orderId, orderNumber, externalSource, externalReference, destinationCode, weightKg, volumeM3, pallets,
+                deliveryResult, deliveredAt, deliveryReceiverName, deliveryNotes, evidenceCount, null);
+    }
 }

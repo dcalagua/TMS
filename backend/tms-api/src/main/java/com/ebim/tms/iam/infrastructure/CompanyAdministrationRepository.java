@@ -39,7 +39,8 @@ public class CompanyAdministrationRepository {
                    o.active                 AS organization_active,
                    s.default_country        AS default_country,
                    s.order_number_prefix    AS order_number_prefix,
-                   s.shipment_number_prefix AS shipment_number_prefix
+                   s.shipment_number_prefix AS shipment_number_prefix,
+                   s.dispatch_confirmation_mode AS dispatch_confirmation_mode
             FROM tms.company c
             JOIN tms.organization o ON o.id = c.organization_id
             LEFT JOIN tms.company_settings s ON s.company_id = c.id
@@ -63,13 +64,14 @@ public class CompanyAdministrationRepository {
     private static final String UPSERT_SETTINGS_SQL = """
             INSERT INTO tms.company_settings (
                 company_id, default_country,
-                order_number_prefix, shipment_number_prefix, created_by, updated_by)
+                order_number_prefix, shipment_number_prefix, dispatch_confirmation_mode, created_by, updated_by)
             VALUES (:companyId, :defaultCountry,
-                :orderNumberPrefix, :shipmentNumberPrefix, :actorId, :actorId)
+                :orderNumberPrefix, :shipmentNumberPrefix, :dispatchConfirmationMode, :actorId, :actorId)
             ON CONFLICT (company_id) DO UPDATE
                SET default_country = EXCLUDED.default_country,
                    order_number_prefix = EXCLUDED.order_number_prefix,
                    shipment_number_prefix = EXCLUDED.shipment_number_prefix,
+                   dispatch_confirmation_mode = EXCLUDED.dispatch_confirmation_mode,
                    updated_by = EXCLUDED.updated_by
             """;
 
@@ -139,7 +141,8 @@ public class CompanyAdministrationRepository {
                         new CompanySettings(
                                 rs.getString("default_country"),
                                 rs.getString("order_number_prefix"),
-                                rs.getString("shipment_number_prefix"))))
+                                rs.getString("shipment_number_prefix"),
+                                CompanySettings.modeOf(rs.getString("dispatch_confirmation_mode")))))
                 .optional();
     }
 
@@ -159,6 +162,7 @@ public class CompanyAdministrationRepository {
                 .param("defaultCountry", settings.defaultCountry())
                 .param("orderNumberPrefix", settings.orderNumberPrefix())
                 .param("shipmentNumberPrefix", settings.shipmentNumberPrefix())
+                .param("dispatchConfirmationMode", settings.dispatchConfirmationMode().name())
                 .param("actorId", actorId)
                 .update();
     }

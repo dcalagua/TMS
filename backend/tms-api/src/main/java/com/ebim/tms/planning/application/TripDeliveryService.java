@@ -27,6 +27,7 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -202,22 +203,25 @@ public class TripDeliveryService {
      * purpose - see the class comment on the recording window.
      */
     /**
-     * Nothing may be delivered beyond what was allocated to this shipment (V45, debt D3).
+     * Nothing may be delivered beyond what was allocated to this shipment, nor beyond what the
+     * order asked for in all (V45, debt D3).
      *
-     * <p><b>The cross-attempt ceiling</b>, and the reason it cannot be a database CHECK: it spans
-     * rows. An order allocated 100 that received 70 on Monday cannot receive 40 on Tuesday, and no
-     * single row knows that - the sum does. So this is a service refusal with a sentence a
-     * dispatcher can act on, backed by the row-level {@code ck_order_delivery_not_over_delivered}
-     * for what one row can express, and by the pessimistic trip lock this method already runs under
-     * for the race.
+     * <p><b>Two ceilings, and the reason neither can be a database CHECK: they span rows.</b>
+     * <ul>
+     *   <li><b>This shipment's share.</b> An order split across two trips has each trip's share as
+     *       its own ceiling, so only the deliveries recorded <em>on this trip</em> count against
+     *       it. Counting the other trip's deliveries here refused the second half of every split
+     *       order that recorded quantities (docs/domain/SPLIT_ORDER_EXECUTION.md, scenario 2).</li>
+     *   <li><b>The order's demand.</b> An order of 100 that received 70 on Monday cannot receive 40
+     *       on Tuesday, whichever trips carried them - a reopened order is replanned in full, so
+     *       its second trip's share alone would not stop it.</li>
+     * </ul>
+     * Backed by the row-level {@code ck_order_delivery_not_over_delivered} for what one row can
+     * express, and by the pessimistic trip lock this method already runs under for the race.
      *
-     * <p>The delivery being corrected is <b>excluded</b> from the running total. Correcting
+     * <p>The delivery being corrected is <b>excluded</b> from both running totals. Correcting
      * Monday's 70 down to 60 must not read as delivering another 70 on top of it - that would make
      * a correction impossible, which is precisely the double-count the brief forbids.
-     *
-     * <p>Measured against the <em>allocation</em> rather than the order's whole demand: an order
-     * split across two trips has each trip's share as its own ceiling, and charging the whole order
-     * against one of them would refuse a legitimate delivery.
      */
     private void requireWithinAllocation(CompanyScope scope, Trip trip, UUID orderId, OrderDelivery current,
             DeliveryQuantities quantities) {
@@ -231,19 +235,30 @@ public class TripDeliveryService {
             return;
         }
 
-        OrderAmounts alreadyDelivered = deliveryRepository
+        List<OrderDelivery> others = deliveryRepository
                 .findByCompanyIdAndOrderIdIn(scope.companyId(), Set.of(orderId)).stream()
                 .filter(other -> current.id() == null || !current.id().equals(other.id()))
-                .map(OrderDelivery::quantities)
-                .filter(DeliveryQuantities::isRecorded)
-                .map(DeliveryQuantities::delivered)
+                .filter(other -> other.quantities().isRecorded())
+                .toList();
+        OrderAmounts deliveredOnThisTrip = others.stream()
+                .filter(other -> trip.id().equals(other.tripId()))
+                .map(other -> other.quantities().delivered())
+                .reduce(OrderAmounts.NONE, OrderAmounts::plus);
+        OrderAmounts deliveredInAll = others.stream()
+                .map(other -> other.quantities().delivered())
                 .reduce(OrderAmounts.NONE, OrderAmounts::plus);
 
-        if (alreadyDelivered.plus(quantities.delivered()).exceeds(allocated)) {
+        if (deliveredOnThisTrip.plus(quantities.delivered()).exceeds(allocated)) {
             throw new ConflictException("This order is allocated " + describe(allocated)
-                    + " on this shipment and " + describe(alreadyDelivered) + " has already been delivered."
+                    + " on this shipment and " + describe(deliveredOnThisTrip) + " has already been delivered."
                     + " Delivering " + describe(quantities.delivered())
                     + " more would exceed that allocation.");
+        }
+        PlannableOrder demand = orderPlanningPort.findAllInCompany(Set.of(orderId), scope.companyId()).get(orderId);
+        if (demand != null && deliveredInAll.plus(quantities.delivered()).exceeds(OrderAmounts.wholeOf(demand))) {
+            throw new ConflictException("This order asks for " + describe(OrderAmounts.wholeOf(demand)) + " in all and "
+                    + describe(deliveredInAll) + " has already been delivered on its trips. Delivering "
+                    + describe(quantities.delivered()) + " more would exceed what was ordered.");
         }
     }
 

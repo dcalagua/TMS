@@ -360,6 +360,11 @@ public class TripTenderService {
      *
      * @param reason why the offer is off - recorded on the tender and published to the carrier
      */
+    /** Whether a tender offer is still live on the trip - what an integration dispatch cannot withdraw. */
+    boolean hasLiveOffer(CompanyScope scope, Trip trip) {
+        return tenderRepository.findLive(scope.companyId(), trip.id()).isPresent();
+    }
+
     void withdrawOpen(CompanyScope scope, Trip trip, String reason) {
         tenderRepository.findLive(scope.companyId(), trip.id()).ifPresent(tender -> {
             // requireAppUserId and not writerAppUserId, even though this is a lifecycle path: a

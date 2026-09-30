@@ -131,6 +131,9 @@ class CrossTenantAttackTest {
     private AuditActorProvider auditActorProvider;
     @MockitoBean
     private AuditRecorder auditRecorder;
+    // ADR-014: the release gate's read model, behind OrderService like the rest.
+    @MockitoBean
+    private com.ebim.tms.orders.application.OrderSchedulingService orderSchedulingService;
 
     // A second module, to show the property is the chain's and not one service's habit.
     @MockitoBean

@@ -1,6 +1,7 @@
 package com.ebim.tms.planning.application;
 
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.time.OffsetDateTime;
 
 /**
@@ -20,5 +21,12 @@ import java.time.OffsetDateTime;
  */
 public record TripExecutionRequest(
         @NotNull(message = "is required") Long version,
-        OffsetDateTime occurredAt) {
+        OffsetDateTime occurredAt,
+        // ADR-013 section 4: only read by dispatch, and only when the company requires the
+        // warehouse to confirm the departure. Ignored in MANUAL and HYBRID.
+        @Size(max = 500, message = "must be at most 500 characters") String overrideReason) {
+
+    public TripExecutionRequest(Long version, OffsetDateTime occurredAt) {
+        this(version, occurredAt, null);
+    }
 }

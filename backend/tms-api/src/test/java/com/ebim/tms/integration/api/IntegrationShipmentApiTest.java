@@ -215,6 +215,41 @@ class IntegrationShipmentApiTest {
                     .andExpect(jsonPath("$.orders[0].externalReference").value("SO-1"));
         }
 
+        /**
+         * The shipment number is an opaque, company-scoped reference. Its prefix is configurable
+         * per company (V34, {@code company_settings.shipment_number_prefix}), so a route that only
+         * matched {@code SH-\d+} answered 404 for a real shipment of any company that changed it.
+         */
+        @Test
+        @DisplayName("a shipment numbered with a company's own prefix is served like any other")
+        void shipmentNumberIsAnOpaqueReference() throws Exception {
+            publication.seedDetail(COMPANY_A, "EBX-00000042");
+
+            mockMvc.perform(authenticated(get(SHIPMENTS + "/EBX-00000042"), readerOfA))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.shipment.shipmentNumber").value("EBX-00000042"));
+        }
+
+        @Test
+        @DisplayName("an opaque reference is still resolved inside the credential's company only")
+        void opaqueReferenceNeverCrossesCompanies() throws Exception {
+            publication.seedDetail(COMPANY_B, "EBX-00000099");
+
+            mockMvc.perform(authenticated(get(SHIPMENTS + "/EBX-00000099"), readerOfA))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("resource-not-found"));
+        }
+
+        @Test
+        @DisplayName("the change feed keeps its own route now that the detail route takes any reference")
+        void eventsIsNotReadAsAShipmentNumber() throws Exception {
+            publication.seedEvent(COMPANY_A, "EBX-00000042");
+
+            mockMvc.perform(authenticated(get(SHIPMENTS + "/events"), readerOfA))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content[0].shipmentNumber").value("EBX-00000042"));
+        }
+
         @Test
         @DisplayName("an unknown shipment number is 404, indistinguishable from a draft trip")
         void unknownShipmentIs404() throws Exception {

@@ -1,6 +1,7 @@
 package com.ebim.tms.shared.reference;
 
 import java.time.LocalDate;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -31,4 +32,29 @@ public interface ServiceCalendarPort {
      * on. A location that has a calendar and is not covered by it is excluded.
      */
     Set<UUID> serviceableOn(Set<UUID> locationIds, LocalDate date, UUID companyId);
+
+    /**
+     * The detail behind {@link #serviceableOn}, for the release read model (ADR-014): for each
+     * location, whether its calendar is configured, whether it serves {@code date}, and the cutoff
+     * and lead time of the frequency that does. A location with no calendar answers
+     * {@link CalendarVerdict#NOT_CONFIGURED}; an inactive one does not run. Every id asked about is
+     * answered.
+     */
+    Map<UUID, CalendarVerdict> locationCalendarsOn(Set<UUID> locationIds, LocalDate date, UUID companyId);
+
+    /**
+     * The same question for bare frequencies - a route's own operating calendar
+     * ({@code route.frequency_id}, V8). A frequency that does not resolve in this company answers
+     * {@link CalendarVerdict#NOT_CONFIGURED}.
+     */
+    Map<UUID, CalendarVerdict> frequencyCalendarsOn(Set<UUID> frequencyIds, LocalDate date, UUID companyId);
+
+    /**
+     * Of {@code destinationIds}, the ones whose route from {@code originId} resolves
+     * ({@code RouteResolution.Status.RESOLVED}) to a route with a frequency that does <b>not</b> run
+     * on {@code date} - what automatic planning excludes beside {@link #serviceableOn} (ADR-014
+     * section 5, approved 2026-09-27). Empty when nothing is excluded: a destination with no route,
+     * an ambiguous one, or a route without a frequency is never excluded here.
+     */
+    Set<UUID> idleByRouteOn(UUID originId, Set<UUID> destinationIds, LocalDate date, UUID companyId);
 }

@@ -38,4 +38,9 @@ class DestinationLookupAdapter implements DestinationLookupPort {
     public Map<String, MasterReference> findActiveByCodesInCompany(Collection<String> codes, UUID companyId) {
         return locations.usableAsByCodes(codes, companyId, LocationRole.DESTINATION);
     }
+
+    @Override
+    public Set<UUID> findActiveIdsInCompany(Set<UUID> ids, UUID companyId) {
+        return locations.usableIds(ids, companyId, LocationRole.DESTINATION);
+    }
 }

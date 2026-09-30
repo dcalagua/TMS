@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Box, Button, MenuItem, TextField, Tooltip, Typography } from "@mui/material";
 import {
   AddRounded, UploadRounded, AssignmentTurnedInRounded, EditRounded, VisibilityRounded,
@@ -9,7 +10,7 @@ import { fetchDestinations } from "../../shared/api/destinationsApi";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
   ORDER_PRIORITIES, ORDER_STATUSES, REOPENABLE_ORDER_STATUSES, cancelOrder, fetchOrders,
-  markOrderReadyForPlanning, reopenOrderForPlanning,
+  reopenOrderForPlanning,
   type OrderFulfillmentStatus, type OrderPriority, type OrderStatus, type OrderView,
 } from "../../shared/api/ordersApi";
 import { fetchOrigins } from "../../shared/api/originsApi";
@@ -26,7 +27,9 @@ import type { StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
 import { fmtDate, fmtDecimal, fmtQuantity, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
 import { OrderFormDrawer } from "./OrderFormDrawer";
+import { isPartlyPlanned } from "../../shared/api/ordersApi";
 import { OrderImportDrawer } from "./OrderImportDrawer";
+import { releaseWithOverride } from "../scheduling/releaseFlow";
 
 const PAGE_SIZE = 25;
 
@@ -107,9 +110,12 @@ export function OrdersPage() {
   const canManage = hasPermission("orders.order:manage");
   const queryClient = useQueryClient();
 
+  const [searchParams] = useSearchParams();
   const [page, setPage] = useState(0);
-  const [draft, setDraft] = useState<AppliedFilters>(DEFAULT_FILTERS);
-  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  // `?orderNumber=` abre la lista ya filtrada: es el "Ir al pedido" de Programación y Liberación.
+  const [draft, setDraft] = useState<AppliedFilters>(
+    () => ({ ...DEFAULT_FILTERS, orderNumber: searchParams.get("orderNumber") ?? "" }));
+  const [filters, setFilters] = useState<AppliedFilters>(draft);
   const [modal, setModal] = useState<ModalState>(null);
 
   const ordersQuery = useQuery({
@@ -160,12 +166,10 @@ export function OrdersPage() {
     });
     if (!confirmed) return;
 
-    try {
-      await markOrderReadyForPlanning(companyId, order.id);
-      notifySuccess(t("Pedido marcado como listo"), order.orderNumber);
+    // ADR-014: la liberación se juzga contra la elegibilidad. Si hace falta un motivo (corte
+    // vencido, fuera de frecuencia) se pide y se reintenta; un bloqueo se informa con sus motivos.
+    if (await releaseWithOverride(companyId, order.id, order.orderNumber)) {
       refresh();
-    } catch (error) {
-      notifyError(t("No se pudo marcar el pedido como listo"), describeApiError(error as ApiError));
     }
   }
 
@@ -255,7 +259,16 @@ export function OrdersPage() {
     {
       key: "status",
       header: t("Estado"),
-      render: (order) => <StatusChip label={enumLabel("orderStatus", order.status)} tone={STATUS_TONE[order.status]} />,
+      render: (order) => (
+        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+          <StatusChip label={enumLabel("orderStatus", order.status)} tone={STATUS_TONE[order.status]} />
+          {isPartlyPlanned(order) && (
+            <Tooltip title={t("Parte del pedido ya está en un viaje; el resto sigue planificable")}>
+              <span><StatusChip label={t("Parcialmente planificado")} tone="neutral" /></span>
+            </Tooltip>
+          )}
+        </Box>
+      ),
     },
     {
       // Columna propia, al lado del estado de planificación y no en su lugar. Un pedido que

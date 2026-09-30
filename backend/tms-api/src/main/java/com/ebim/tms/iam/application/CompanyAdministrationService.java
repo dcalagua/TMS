@@ -71,7 +71,10 @@ public class CompanyAdministrationService {
         CompanySettings settings = new CompanySettings(
                 upper(request.defaultCountry()),
                 upper(request.orderNumberPrefix()),
-                upper(request.shipmentNumberPrefix()));
+                upper(request.shipmentNumberPrefix()),
+                request.dispatchConfirmationMode() == null
+                        ? before.settings().dispatchConfirmationMode()
+                        : request.dispatchConfirmationMode());
 
         if (repository.updateCompany(scope.companyId(), name, taxIdentifier, timeZone, actorId) == 0) {
             // The row was there a statement ago, so this is a company deactivated or removed
@@ -189,6 +192,11 @@ public class CompanyAdministrationService {
         }
         if (!before.settings().shipmentNumberPrefix().equals(after.shipmentNumberPrefix())) {
             changes.put("shipmentNumberPrefix", after.shipmentNumberPrefix());
+        }
+        if (before.settings().dispatchConfirmationMode() != after.dispatchConfirmationMode()) {
+            // Who may dispatch is the most consequential line on this screen: audited with both ends.
+            changes.put("dispatchConfirmationModeFrom", before.settings().dispatchConfirmationMode().name());
+            changes.put("dispatchConfirmationMode", after.dispatchConfirmationMode().name());
         }
         return changes;
     }

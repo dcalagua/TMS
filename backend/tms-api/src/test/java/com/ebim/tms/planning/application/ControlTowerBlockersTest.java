@@ -101,7 +101,10 @@ class ControlTowerBlockersTest {
 
         service = new ControlTowerService(tripService, assembler, tripRepository, stopRepository,
                 exceptionRepository, mock(DestinationLookupPort.class), mock(VehicleLookupPort.class),
-                orderPlanningPort, availabilityPort, settlementAdvisoryPort);
+                orderPlanningPort,
+                new DispatchReadiness(mock(VehicleLookupPort.class), mock(com.ebim.tms.shared.reference.DriverLookupPort.class),
+                        availabilityPort, mock(CommittedOrderHolds.class)), settlementAdvisoryPort,
+                mock(WarehouseDispatchAdvisories.class));
     }
 
     private static CompanyScope scope() {

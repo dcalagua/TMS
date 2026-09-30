@@ -1,6 +1,7 @@
 package com.ebim.tms.masterdata.infrastructure;
 
 import com.ebim.tms.masterdata.domain.LocationFrequency;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -14,6 +15,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface LocationFrequencyRepository extends JpaRepository<LocationFrequency, UUID> {
 
     List<LocationFrequency> findByLocationIdAndCompanyIdOrderByEffectiveFromAsc(UUID locationId, UUID companyId);
+
+    /** The batched form, for a release board resolving every destination of a page at once (ADR-014). */
+    List<LocationFrequency> findByLocationIdInAndCompanyIdOrderByEffectiveFromAsc(
+            Collection<UUID> locationIds, UUID companyId);
 
     Optional<LocationFrequency> findByIdAndLocationIdAndCompanyId(UUID id, UUID locationId, UUID companyId);
 

@@ -1,12 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
-import { Alert, Autocomplete, Box, Button, TextField, Typography } from "@mui/material";
+import { Controller, useForm } from "react-hook-form";
+import { Alert, Autocomplete, Box, Button, MenuItem, TextField, Typography } from "@mui/material";
 import { ApartmentRounded, AddBusinessRounded, SaveRounded } from "@mui/icons-material";
 import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
-  fetchCompanyProfile, updateCompanyProfile, type CompanyProfileRequest,
+  DISPATCH_CONFIRMATION_MODES, fetchCompanyProfile, updateCompanyProfile, type CompanyProfileRequest,
+  type DispatchConfirmationMode,
 } from "../../shared/api/administrationApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
@@ -14,7 +15,8 @@ import {
   AppCard, DetailGrid, DetailItem, ErrorState, LoadingState, PageHeader, SectionHeader, StatusChip,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
-import { notifySuccess } from "../../lib/ui";
+import { confirmDialog, notifySuccess } from "../../lib/ui";
+import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { CompanyCreateDrawer } from "./CompanyCreateDrawer";
 
@@ -38,11 +40,20 @@ interface CompanyFormValues {
   defaultCountry: string;
   orderNumberPrefix: string;
   shipmentNumberPrefix: string;
+  dispatchConfirmationMode: DispatchConfirmationMode;
 }
 
 const KNOWN_FIELDS = new Set<keyof CompanyFormValues>([
   "name", "taxIdentifier", "timeZone", "defaultCountry", "orderNumberPrefix", "shipmentNumberPrefix",
+  "dispatchConfirmationMode",
 ]);
+
+/** Qué significa cada modo para quien opera, en una frase (ADR-013 §1). */
+const DISPATCH_MODE_HELP: Record<DispatchConfirmationMode, string> = {
+  MANUAL: "Un despachador marca la salida en TMS. Si el almacén envía su confirmación, solo se compara con el plan.",
+  EXTERNAL_REQUIRED: "La salida la confirma el almacén (WMS). Despachar a mano exige el permiso de override y un motivo.",
+  HYBRID: "Despacha quien confirme primero, TMS o el almacén; lo que llegue después solo se concilia.",
+};
 
 /**
  * Qué *es* esta empresa: su nombre, su documento, su zona horaria y los prefijos con los que
@@ -69,11 +80,12 @@ export function CompanySettingsPage() {
   });
 
   const {
-    register, handleSubmit, setError, reset, setValue, watch,
+    register, handleSubmit, setError, reset, setValue, watch, control,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<CompanyFormValues>({
     defaultValues: {
       name: "", taxIdentifier: "", timeZone: "", defaultCountry: "", orderNumberPrefix: "", shipmentNumberPrefix: "",
+      dispatchConfirmationMode: "MANUAL",
     },
   });
 
@@ -89,11 +101,23 @@ export function CompanySettingsPage() {
       defaultCountry: profile.settings.defaultCountry,
       orderNumberPrefix: profile.settings.orderNumberPrefix,
       shipmentNumberPrefix: profile.settings.shipmentNumberPrefix,
+      // Un backend anterior a V52 no lo manda: es MANUAL, el valor por defecto del servidor.
+      dispatchConfirmationMode: profile.settings.dispatchConfirmationMode ?? "MANUAL",
     });
   }, [profile, reset]);
 
   async function onSubmit(values: CompanyFormValues) {
     setFormError(null);
+    const currentMode = profile?.settings.dispatchConfirmationMode ?? "MANUAL";
+    // Pasar a EXTERNAL_REQUIRED cambia quién puede despachar desde el día siguiente: se confirma.
+    if (values.dispatchConfirmationMode === "EXTERNAL_REQUIRED" && currentMode !== "EXTERNAL_REQUIRED") {
+      const confirmed = await confirmDialog({
+        title: t("¿Exigir la confirmación del almacén?"),
+        text: t("Los envíos saldrán cuando el almacén (WMS) confirme el despacho. Despachar a mano desde TMS exigirá el permiso de override y un motivo, que queda registrado."),
+        confirmLabel: t("Exigir confirmación"),
+      });
+      if (!confirmed) return;
+    }
     const request: CompanyProfileRequest = {
       name: values.name.trim(),
       taxIdentifier: values.taxIdentifier.trim() || null,
@@ -101,6 +125,7 @@ export function CompanySettingsPage() {
       defaultCountry: values.defaultCountry.trim().toUpperCase(),
       orderNumberPrefix: values.orderNumberPrefix.trim(),
       shipmentNumberPrefix: values.shipmentNumberPrefix.trim(),
+      dispatchConfirmationMode: values.dispatchConfirmationMode,
     };
 
     try {
@@ -240,6 +265,28 @@ export function CompanySettingsPage() {
                 })}
               />
             </Box>
+          </AppCard>
+
+          <AppCard title={t("Despacho")}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {t("Quién da por salido un envío: el despachador en TMS, el almacén (WMS) con su confirmación de despacho, o el primero de los dos. La confirmación del almacén se guarda y se compara con el plan en todos los modos.")}
+            </Typography>
+            <Controller
+              name="dispatchConfirmationMode"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  select size="small" fullWidth label={t("Modo de confirmación de despacho")}
+                  value={field.value} onChange={field.onChange} onBlur={field.onBlur}
+                  error={Boolean(errors.dispatchConfirmationMode)}
+                  helperText={errors.dispatchConfirmationMode?.message ?? t(DISPATCH_MODE_HELP[field.value])}
+                >
+                  {DISPATCH_CONFIRMATION_MODES.map((mode) => (
+                    <MenuItem key={mode} value={mode}>{enumLabel("dispatchConfirmationMode", mode)}</MenuItem>
+                  ))}
+                </TextField>
+              )}
+            />
           </AppCard>
         </Box>
       </Box>

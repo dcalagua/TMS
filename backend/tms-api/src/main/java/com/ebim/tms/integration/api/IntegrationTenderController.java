@@ -83,7 +83,7 @@ public class IntegrationTenderController {
         return tenderService.openOffers(principal, shipmentNumber);
     }
 
-    @PostMapping("/{shipmentNumber:SH-\\d+}/response")
+    @PostMapping("/{shipmentNumber}/response")
     @PreAuthorize("hasAuthority('integration.tender:respond')")
     @Operation(summary = "Accept or reject the offer on one shipment",
             description = "reason is required to reject. Re-sending the same decision for the offer "

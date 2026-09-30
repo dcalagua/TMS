@@ -7,6 +7,8 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /**
  * Company-scoped persistence for {@link Route}. See {@code LocationRepository} for the isolation
@@ -31,6 +33,19 @@ public interface RouteRepository extends JpaRepository<Route, UUID>, JpaSpecific
      * would make the same input plan differently on two runs.
      */
     List<Route> findByCompanyIdAndOriginIdAndActiveTrueOrderByCodeAsc(UUID companyId, UUID originId);
+
+    /**
+     * Every active route leaving any of {@code originIds}, with its stops, in code order - one query
+     * for a whole board's route resolution (ADR-014). The stops are fetched with the routes so that
+     * resolving two hundred orders never costs one stop query per route.
+     */
+    @Query("""
+            select distinct r from Route r left join fetch r.stops
+             where r.companyId = :companyId and r.originId in :originIds and r.active = true
+             order by r.code
+            """)
+    List<Route> findActiveWithStopsByOrigins(@Param("companyId") UUID companyId,
+            @Param("originIds") Collection<UUID> originIds);
 
     boolean existsByCompanyIdAndCode(UUID companyId, String code);
 

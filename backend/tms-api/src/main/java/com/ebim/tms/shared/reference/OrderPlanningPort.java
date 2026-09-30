@@ -3,6 +3,7 @@ package com.ebim.tms.shared.reference;
 import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -92,6 +93,14 @@ public interface OrderPlanningPort {
      * not simply write a status: which state a departure puts an order into is an order rule.
      */
     void markInExecution(UUID orderId, UUID companyId);
+
+    /**
+     * Takes the row locks of these orders, in a fixed order, for the rest of the caller's
+     * transaction. Planning calls it before reading anything about the <em>other</em> trips of an
+     * order it is about to move - a split order has several - so that what it reads cannot change
+     * under it (docs/domain/SPLIT_ORDER_EXECUTION.md, R2).
+     */
+    void lockForExecution(Collection<UUID> orderIds, UUID companyId);
 
     /**
      * The trip carrying this order has been closed out, and this is how the order ended.

@@ -13,10 +13,11 @@ import com.ebim.tms.shared.settings.CompanySettings;
 public record CompanySettingsView(
         String defaultCountry,
         String orderNumberPrefix,
-        String shipmentNumberPrefix) {
+        String shipmentNumberPrefix,
+        String dispatchConfirmationMode) {
 
     public static CompanySettingsView from(CompanySettings settings) {
-        return new CompanySettingsView(
-                settings.defaultCountry(), settings.orderNumberPrefix(), settings.shipmentNumberPrefix());
+        return new CompanySettingsView(settings.defaultCountry(), settings.orderNumberPrefix(),
+                settings.shipmentNumberPrefix(), settings.dispatchConfirmationMode().name());
     }
 }

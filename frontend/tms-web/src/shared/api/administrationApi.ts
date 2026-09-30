@@ -9,7 +9,25 @@ export interface CompanySettingsView {
   /** Goes in front of the order sequence: `TO-` + eight digits. */
   orderNumberPrefix: string
   shipmentNumberPrefix: string
+  /**
+   * Quién despacha un envío en esta empresa (ADR-013 §1, migración V52). Opcional en el tipo
+   * porque un backend anterior a V52 no lo envía; la pantalla lo trata entonces como `MANUAL`,
+   * que es el valor por defecto del servidor.
+   */
+  dispatchConfirmationMode?: DispatchConfirmationMode
 }
+
+/**
+ * Mirrors the backend's `DispatchConfirmationMode` enum (`shared/settings`).
+ *
+ * - `MANUAL`: despacha una persona desde TMS; lo que diga el almacén solo se concilia.
+ * - `EXTERNAL_REQUIRED`: despacha la confirmación del almacén (WMS). Una persona necesita
+ *   `planning.trip:dispatch-override` y un motivo.
+ * - `HYBRID`: el primero que confirme despacha; el segundo solo concilia.
+ */
+export type DispatchConfirmationMode = 'MANUAL' | 'EXTERNAL_REQUIRED' | 'HYBRID'
+
+export const DISPATCH_CONFIRMATION_MODES: DispatchConfirmationMode[] = ['MANUAL', 'EXTERNAL_REQUIRED', 'HYBRID']
 
 /**
  * Mirrors the backend's `CompanyProfileView`.
@@ -45,6 +63,8 @@ export interface CompanyProfileRequest {
   defaultCountry: string
   orderNumberPrefix: string
   shipmentNumberPrefix: string
+  /** Opcional: omitirlo conserva el modo actual en lugar de devolverlo a `MANUAL`. */
+  dispatchConfirmationMode?: DispatchConfirmationMode
 }
 
 /** Mirrors the backend's `CompanyCreateRequest`. There is no `organizationId`: the caller's own is used. */

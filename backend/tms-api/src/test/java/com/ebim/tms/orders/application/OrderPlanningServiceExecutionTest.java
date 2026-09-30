@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.ebim.tms.orders.domain.OrderPriority;
 import com.ebim.tms.orders.domain.OrderStatus;
 import com.ebim.tms.orders.domain.TransportOrder;
+import com.ebim.tms.orders.infrastructure.OrderHoldRepository;
 import com.ebim.tms.orders.infrastructure.TransportOrderRepository;
 import com.ebim.tms.shared.api.ConflictException;
 import com.ebim.tms.shared.audit.AuditActorProvider;
@@ -47,7 +48,7 @@ class OrderPlanningServiceExecutionTest {
         repository = mock(TransportOrderRepository.class);
         AuditActorProvider actors = mock(AuditActorProvider.class);
         when(actors.requireAppUserId()).thenReturn(ACTOR);
-        service = new OrderPlanningService(repository, actors);
+        service = new OrderPlanningService(repository, actors, mock(OrderHoldRepository.class));
         when(repository.saveAndFlush(any(TransportOrder.class))).thenAnswer(call -> call.getArgument(0));
     }
 

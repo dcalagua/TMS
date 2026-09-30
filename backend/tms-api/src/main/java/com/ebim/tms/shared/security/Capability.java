@@ -49,7 +49,7 @@ public enum Capability {
             Permission.FLEET_DRIVER_MANAGE),
 
     ORDERS_VIEW(Permission.ORDERS_ORDER_READ),
-    ORDERS_MANAGE(Permission.ORDERS_ORDER_MANAGE),
+    ORDERS_MANAGE(Permission.ORDERS_ORDER_MANAGE, Permission.ORDERS_HOLD_MANAGE),
 
     PLANNING_VIEW(Permission.PLANNING_PLAN_READ),
     PLANNING_MANAGE(Permission.PLANNING_PLAN_MANAGE),
@@ -68,6 +68,8 @@ public enum Capability {
             // screen: all three open the trip workspace, and a capability answers "should this menu
             // entry be visible", never "may this caller do it".
             Permission.PLANNING_TRIP_EXECUTE,
+            // V52: dispatching past the warehouse is done from the same trip workspace.
+            Permission.PLANNING_TRIP_DISPATCH_OVERRIDE,
             Permission.PLANNING_TENDER_MANAGE),
 
     TRANSPORT_MONITOR_VIEW(Permission.MONITORING_TRANSPORT_READ),

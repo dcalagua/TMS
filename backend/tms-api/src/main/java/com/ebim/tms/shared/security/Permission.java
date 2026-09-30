@@ -59,6 +59,11 @@ public enum Permission {
 
     ORDERS_ORDER_READ("orders.order:read"),
     ORDERS_ORDER_MANAGE("orders.order:manage"),
+    /**
+     * Place and lift holds on an order (migration V54, ADR-014). Its own authority: stopping an
+     * order for credit or stock is a commercial decision that the person keying orders may not hold.
+     */
+    ORDERS_HOLD_MANAGE("orders.hold:manage"),
 
     PLANNING_PLAN_READ("planning.plan:read"),
     PLANNING_PLAN_MANAGE("planning.plan:manage"),
@@ -70,6 +75,12 @@ public enum Permission {
      * jobs, and a role may hold either without the other.
      */
     PLANNING_TRIP_EXECUTE("planning.trip:execute"),
+    /**
+     * Dispatching a trip by hand, with a reason, in a company whose dispatch mode requires the
+     * warehouse to confirm it (ADR-013 section 4, migration V52). Granted to the two administrator
+     * roles and deliberately not to PLANNER; an integration credential never holds a permission.
+     */
+    PLANNING_TRIP_DISPATCH_OVERRIDE("planning.trip:dispatch-override"),
     /**
      * Placing a shipment with its carrier (migration V31). A resource of its own for the reason
      * {@link #PLANNING_TRIP_EXECUTE} is one: offering a load at a price is a commercial act,

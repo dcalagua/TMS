@@ -64,7 +64,7 @@ public class IntegrationShipmentController {
         return service.search(principal, status, updatedSince, pageQuery);
     }
 
-    @GetMapping("/{shipmentNumber:SH-\\d+}")
+    @GetMapping("/{shipmentNumber}")
     @PreAuthorize("hasAuthority('integration.shipment:read')")
     @Operation(summary = "One shipment with its ordered stops and assigned orders",
             description = "404 for a draft trip exactly as for one that does not exist at all - "

@@ -89,6 +89,17 @@ public interface TripRepository extends JpaRepository<Trip, UUID>, JpaSpecificat
     Optional<Trip> findByShipmentNumberAndCompanyId(String shipmentNumber, UUID companyId);
 
     /**
+     * {@link #findByShipmentNumberAndCompanyId} under the row lock, in one statement. Resolving by
+     * number and then locking by id would hand back the entity read before the lock - stale if a
+     * person dispatched the trip in between - and the external dispatch would act on a status that
+     * is no longer true (ADR-013 section 3: exactly one dispatch).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select t from Trip t where t.shipmentNumber = :shipmentNumber and t.companyId = :companyId")
+    Optional<Trip> findByShipmentNumberAndCompanyIdForUpdate(@Param("shipmentNumber") String shipmentNumber,
+            @Param("companyId") UUID companyId);
+
+    /**
      * The same external lookup for a whole run of shipment numbers at once - what
      * {@code TripTrackingLookupAdapter} answers a batch of reported positions with. A run of
      * positions is routinely one shipment repeated two hundred times, so the distinct set is

@@ -55,4 +55,20 @@ public interface OriginLookupPort {
      * location are simply absent, which is how the caller detects them.
      */
     Map<String, MasterReference> findActiveByCodesInCompany(Collection<String> codes, UUID companyId);
+
+    /**
+     * The external reference of each origin in {@code ids} that has one - the code a warehouse
+     * system knows the site by (WAREHOUSE_EXECUTION_V1 §2: {@code warehouseCode}). Batched and
+     * company-scoped; an origin with no external reference is absent from the map.
+     */
+    default Map<UUID, String> externalReferencesInCompany(Set<UUID> ids, UUID companyId) {
+        return Map.of();
+    }
+
+    /**
+     * Of {@code ids}, the ones that are still active in this company and hold the role - the batched
+     * form of {@link #findActiveInCompany}, for a release board judging a page of orders at once
+     * (ADR-014, {@code MISSING_ORIGIN}).
+     */
+    Set<UUID> findActiveIdsInCompany(Set<UUID> ids, UUID companyId);
 }

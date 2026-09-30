@@ -88,6 +88,15 @@ public class ShipmentEventPublisher {
      */
     public void publish(CompanyScope scope, Trip trip, UUID tripStopId, ShipmentEventType eventType,
             OffsetDateTime occurredAt, Map<String, Object> metadata) {
+        publish(scope, trip, tripStopId, eventType, occurredAt, metadata, null);
+    }
+
+    /**
+     * {@link #publish} with a sentence for the timeline entry's notes - the reason a person gave
+     * for dispatching past the warehouse (ADR-013 section 4) is read there, beside the departure.
+     */
+    public void publish(CompanyScope scope, Trip trip, UUID tripStopId, ShipmentEventType eventType,
+            OffsetDateTime occurredAt, Map<String, Object> metadata, String timelineNotes) {
         ShipmentOutboxEvent published = outboxRepository.saveAndFlush(new ShipmentOutboxEvent(
                 scope.companyId(), trip.id(), trip.shipmentNumber(), eventType, occurredAt));
 
@@ -123,7 +132,7 @@ public class ShipmentEventPublisher {
         // exists to prevent.
         TransportEventType timelineType = transportEventFor(eventType);
         if (timelineType != null) {
-            transportEvents.record(scope, trip.id(), tripStopId, timelineType, occurredAt, null, detail);
+            transportEvents.record(scope, trip.id(), tripStopId, timelineType, occurredAt, timelineNotes, detail);
         }
     }
 

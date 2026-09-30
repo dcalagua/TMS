@@ -33,7 +33,12 @@ public enum IntegrationOperation {
      * {@code IntegrationShipmentController} gives: it has no payload to fingerprint and no
      * idempotency key to honour, so there is nothing to record beyond the access log.
      */
-    TENDER_RESPONSE("tender.response", IntegrationScope.TENDER_RESPOND);
+    TENDER_RESPONSE("tender.response", IntegrationScope.TENDER_RESPOND),
+
+    DISPATCH_CONFIRMATION("dispatch.confirmation", IntegrationScope.DISPATCH_WRITE),
+    WAREHOUSE_MILESTONE_BATCH("warehouse-milestone.batch", IntegrationScope.WAREHOUSE_MILESTONE_WRITE),
+
+    LOGISTICS_DOCUMENT_UPSERT("logistics-document.upsert", IntegrationScope.DOCUMENT_WRITE);
 
     private final String code;
     private final IntegrationScope requiredScope;

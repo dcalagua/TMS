@@ -43,5 +43,7 @@ public record ShipmentPlanOrderV1(
         OffsetDateTime deliveredAt,
         String deliveryReceiverName,
         String deliveryNotes,
-        int evidenceCount) {
+        int evidenceCount,
+        // Additive in v1 (WAREHOUSE_EXECUTION_V1 §3.3); a consumer ignores fields it does not know.
+        Integer stopSequence) {
 }

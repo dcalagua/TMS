@@ -55,7 +55,7 @@ class CapabilityTest {
         // asserts is that none of them leaks into PLANNING_MANAGE, which is the split that matters.
         assertThat(Capability.TRIPS_MANAGE.permissions()).containsExactlyInAnyOrder(
                 Permission.PLANNING_TRIP_MANAGE,
-                Permission.PLANNING_TRIP_EXECUTE,
+                Permission.PLANNING_TRIP_EXECUTE, Permission.PLANNING_TRIP_DISPATCH_OVERRIDE,
                 Permission.PLANNING_TENDER_MANAGE);
         assertThat(Capability.TRIPS_MANAGE.permissions())
                 .doesNotContain(Permission.PLANNING_PLAN_MANAGE, Permission.PLANNING_PLAN_READ);
@@ -85,7 +85,8 @@ class CapabilityTest {
     @DisplayName("permission codes are resource:action and resolve back to their constant")
     void permissionCodesRoundTrip() {
         assertThat(Permission.values()).allSatisfy(permission -> {
-            assertThat(permission.code()).matches("[a-z][a-z0-9_.]*:[a-z_]+");
+            // A hyphen only between words since V52 (planning.trip:dispatch-override).
+            assertThat(permission.code()).matches("[a-z][a-z0-9_.]*:[a-z_]+(-[a-z_]+)*");
             assertThat(Permission.fromCode(permission.code())).contains(permission);
         });
         assertThat(Permission.fromCode("orders.order:destroy")).isEmpty();

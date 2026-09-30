@@ -99,7 +99,10 @@ public enum OrderStatus {
             // No CANCELLED: the goods are on a moving vehicle, so "this order did not happen" is
             // not a true statement any more. The same reasoning that denies TripStatus.IN_TRANSIT
             // a move to CANCELLED.
-            IN_EXECUTION, EnumSet.of(DELIVERED, PARTIALLY_DELIVERED, DELIVERY_FAILED),
+            // READY_FOR_PLANNING: a share that had not left yet was taken off its trip, so part of
+            // the order is waiting for a truck again (docs/domain/SPLIT_ORDER_EXECUTION.md, R1).
+            // Only TransportOrder.releaseAllocation takes it, and only for a split order.
+            IN_EXECUTION, EnumSet.of(DELIVERED, PARTIALLY_DELIVERED, DELIVERY_FAILED, READY_FOR_PLANNING),
             // The three outcomes are mutually reachable because a delivery record is corrected in
             // place after completion - see the class comment. DELIVERED is not reopenable: there
             // is nothing left to deliver, and not cancellable: it already happened.

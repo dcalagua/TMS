@@ -91,3 +91,6 @@ tmp/
 # remembered - `git add -A` should never sweep them in.
 tms-overnight-sellable-v4/
 TMS-by-EBIM-Overnight-Sellable-v4*.zip
+
+# ------------------------------------------------------------------ Python helpers
+__pycache__/

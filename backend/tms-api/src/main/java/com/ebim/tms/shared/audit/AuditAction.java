@@ -104,6 +104,23 @@ public enum AuditAction {
      * timeline of the trip that failed.
      */
     ORDER_REOPENED,
+    /**
+     * A person dispatched a trip past a company that requires the warehouse to confirm it, with a
+     * reason (ADR-013 section 4, V52). Its own action because it is exactly what an auditor looks
+     * for by name.
+     */
+    DISPATCH_OVERRIDDEN,
+
+    /**
+     * An order was released for planning: {@code NOT_READY -> READY_FOR_PLANNING} (migration V54,
+     * ADR-014). The metadata carries the eligibility it was released under, the warning codes and
+     * the override reason when one was needed - the release was not audited before.
+     */
+    ORDER_RELEASED,
+
+    /** A hold was placed on an order, and lifted (migration V54, ADR-014 section 7). */
+    ORDER_HOLD_PLACED,
+    ORDER_HOLD_RELEASED,
 
     /**
      * A tender waterfall was started, and the moment it ended (migration V40).
