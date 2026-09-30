@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { Alert, Box, Button, InputAdornment, TextField, Typography } from "@mui/material";
+import {
+  Alert, Box, Button, InputAdornment, List, ListItemButton, ListItemText, Paper, TextField, Typography,
+} from "@mui/material";
 import { SearchRounded } from "@mui/icons-material";
-import { isGoogleMapsConfigured, loadGeocodingLibrary, loadMapsLibrary, loadMarkerLibrary } from "./googleMapsLoader";
+import { useTheme } from "@mui/material/styles";
+import {
+  DARK_TILE_FILTER, DEFAULT_CENTER, L, needsDarkTileFilter, pinIcon, tileLayer, ZOOM_ADDRESS, ZOOM_COUNTRY,
+} from "./leafletMap";
+import { geocodeAddress, GeocoderUnavailableError, type GeocodeResult } from "./geocoding";
 import type { MapLoadStatus } from "./types";
 import { t } from "../../lib/i18n";
 
@@ -16,89 +22,91 @@ export interface LocationPickerMapProps {
   height?: number;
 }
 
-// Lima, el mercado actual del producto, para que un operador todavía sin coordenadas abra un
-// mapa centrado en el país donde opera el negocio.
-const DEFAULT_CENTER: google.maps.LatLngLiteral = { lat: -12.046374, lng: -77.042793 };
-const ZOOM_NO_MARKER = 5;
-const ZOOM_WITH_MARKER = 15;
-
 /**
  * Búsqueda de dirección + clic para colocar + marcador arrastrable, cableado a `latitude` y
  * `longitude` como números planos para que encaje en los campos de coordenadas que ya tenga
  * cualquier formulario.
  *
- * Degrada a un aviso no bloqueante, y deja intacta la entrada manual, cuando no hay clave de
- * API configurada o el script falla al cargar: nunca lanza y nunca bloquea el formulario que lo
- * rodea.
+ * Va sobre Leaflet y teselas de OpenStreetMap, así que **no necesita clave de API**: antes el
+ * mapa entero desaparecía sin `VITE_GOOGLE_MAPS_API_KEY` y la persona quedaba tecleando
+ * coordenadas a mano. El aviso de degradación se conserva para el caso en que la biblioteca no
+ * llegue a inicializar, porque el formulario que lo rodea nunca debe romperse por el mapa.
+ *
+ * Los dos campos de latitud y longitud siguen siendo la fuente de verdad: este componente
+ * escribe en ellos y los lee, y nunca guarda estado de coordenadas propio.
  */
 export function LocationPickerMap({
   latitude, longitude, onChange, initialSearchValue, height = 260,
 }: LocationPickerMapProps) {
+  const theme = useTheme();
+  const pinColor = theme.palette.primary.main;
+
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const markerRef = useRef<google.maps.Marker | null>(null);
-  const geocoderRef = useRef<google.maps.Geocoder | null>(null);
-  const dragListenerRef = useRef<google.maps.MapsEventListener | null>(null);
-  const clickListenerRef = useRef<google.maps.MapsEventListener | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
-  const [status, setStatus] = useState<MapLoadStatus>(() => (isGoogleMapsConfigured() ? "loading" : "unavailable"));
+  const [status, setStatus] = useState<MapLoadStatus>("loading");
   const [searchValue, setSearchValue] = useState(initialSearchValue ?? "");
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [results, setResults] = useState<GeocodeResult[]>([]);
 
   useEffect(() => {
-    if (!isGoogleMapsConfigured()) return;
-    let cancelled = false;
+    const container = containerRef.current;
+    if (!container) return;
 
-    void Promise.all([loadMapsLibrary(), loadMarkerLibrary(), loadGeocodingLibrary()])
-      .then(([{ Map }, { Marker }, { Geocoder }]) => {
-        if (cancelled || !containerRef.current) return;
-        const hasCoordinates = latitude !== null && longitude !== null;
-        const center = hasCoordinates ? { lat: latitude, lng: longitude } : DEFAULT_CENTER;
+    let map: L.Map;
+    try {
+      const hasCoordinates = latitude !== null && longitude !== null;
+      const center = hasCoordinates ? { lat: latitude, lng: longitude } : DEFAULT_CENTER;
 
-        const map = new Map(containerRef.current, {
-          center,
-          zoom: hasCoordinates ? ZOOM_WITH_MARKER : ZOOM_NO_MARKER,
-          streetViewControl: false,
-          mapTypeControl: false,
-          fullscreenControl: false,
-        });
-        const marker = new Marker({ map, position: center, draggable: true, visible: hasCoordinates });
+      map = L.map(container, {
+        center,
+        zoom: hasCoordinates ? ZOOM_ADDRESS : ZOOM_COUNTRY,
+        // La rueda se deja fuera a propósito. Este mapa vive dentro de un drawer que se
+        // desplaza, y un mapa que captura la rueda deja atrapado a quien sólo quería bajar al
+        // siguiente campo. Se amplía con los botones, con doble clic o pellizcando en táctil.
+        scrollWheelZoom: false,
+      });
+      tileLayer().addTo(map);
 
-        dragListenerRef.current = marker.addListener("dragend", () => {
-          const position = marker.getPosition();
-          if (position) onChangeRef.current(position.lat(), position.lng());
-        });
-        clickListenerRef.current = map.addListener("click", (event: google.maps.MapMouseEvent) => {
-          if (!event.latLng) return;
-          marker.setPosition(event.latLng);
-          marker.setVisible(true);
-          onChangeRef.current(event.latLng.lat(), event.latLng.lng());
-        });
+      const marker = L.marker(center, { draggable: true, icon: pinIcon(pinColor), keyboard: true });
+      if (hasCoordinates) marker.addTo(map);
 
-        mapRef.current = map;
-        markerRef.current = marker;
-        geocoderRef.current = new Geocoder();
-        setStatus("ready");
-      })
-      .catch(() => {
-        if (!cancelled) setStatus("unavailable");
+      marker.on("dragend", () => {
+        const position = marker.getLatLng();
+        onChangeRef.current(position.lat, position.lng);
+      });
+      map.on("click", (event: L.LeafletMouseEvent) => {
+        marker.setLatLng(event.latlng);
+        if (!map.hasLayer(marker)) marker.addTo(map);
+        onChangeRef.current(event.latlng.lat, event.latlng.lng);
       });
 
+      mapRef.current = map;
+      markerRef.current = marker;
+      setStatus("ready");
+    } catch {
+      setStatus("unavailable");
+      return;
+    }
+
+    // Leaflet mide el contenedor al crearse, y dentro de un drawer que todavía se está abriendo
+    // esa medida es la de un panel a medio camino: el mapa queda con teselas grises hasta que
+    // algo lo toca. Observar el tamaño lo corrige sin depender de la duración de la animación.
+    const observer = new ResizeObserver(() => map.invalidateSize());
+    observer.observe(container);
+
     return () => {
-      cancelled = true;
-      dragListenerRef.current?.remove();
-      clickListenerRef.current?.remove();
-      dragListenerRef.current = null;
-      clickListenerRef.current = null;
+      observer.disconnect();
+      map.remove();
       mapRef.current = null;
       markerRef.current = null;
-      geocoderRef.current = null;
     };
-    // El mapa se crea una vez; las actualizaciones de coordenadas posteriores las sincroniza el
-    // efecto de abajo en lugar de recrearlo, para no perder el paneo y el zoom que ya hizo el
-    // operador.
+    // El mapa se crea una vez; las coordenadas que lleguen después las sincroniza el efecto de
+    // abajo en lugar de recrearlo, para no perder el paneo y el zoom que ya hizo el operador.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -107,38 +115,57 @@ export function LocationPickerMap({
     const map = mapRef.current;
     if (!marker || !map) return;
     if (latitude === null || longitude === null) {
-      marker.setVisible(false);
+      marker.remove();
       return;
     }
-    const position = { lat: latitude, lng: longitude };
-    marker.setPosition(position);
-    marker.setVisible(true);
+    const position = L.latLng(latitude, longitude);
+    marker.setLatLng(position);
+    if (!map.hasLayer(marker)) marker.addTo(map);
     map.panTo(position);
   }, [latitude, longitude]);
 
+  // El color del pin sale de la paleta, así que cambia con el tema.
+  useEffect(() => {
+    markerRef.current?.setIcon(pinIcon(pinColor));
+  }, [pinColor]);
+
+  function applyResult(result: GeocodeResult) {
+    setResults([]);
+    setSearchValue(result.label);
+    onChangeRef.current(result.lat, result.lng);
+    mapRef.current?.setView([result.lat, result.lng], ZOOM_ADDRESS);
+  }
+
   async function handleSearch() {
-    const geocoder = geocoderRef.current;
     const map = mapRef.current;
-    if (!geocoder || !map || searchValue.trim() === "") return;
+    const query = searchValue.trim();
+    if (!map || query === "") return;
     setSearchError(null);
+    setResults([]);
+    setSearching(true);
     try {
-      const { results } = await geocoder.geocode({ address: searchValue });
-      const first = results[0];
-      if (!first) {
+      const bounds = map.getBounds();
+      const found = await geocodeAddress(query, {
+        viewBox: [bounds.getWest(), bounds.getNorth(), bounds.getEast(), bounds.getSouth()],
+      });
+      if (found.length === 0) {
         setSearchError(t("No se encontraron resultados para esa dirección."));
         return;
       }
-      const location = first.geometry.location;
-      onChangeRef.current(location.lat(), location.lng());
-      map.panTo(location);
-      map.setZoom(ZOOM_WITH_MARKER);
+      // Un único candidato no merece una lista que obligue a confirmar lo obvio.
+      if (found.length === 1) {
+        applyResult(found[0]);
+        return;
+      }
+      setResults(found);
     } catch (error) {
-      // Una dirección sin coincidencias rechaza la promesa con estado `ZERO_RESULTS` en vez de
-      // resolver con un array vacío — para el operador las dos cosas son "no se encontró nada".
-      const code = error && typeof error === "object" && "code" in error ? (error as { code: unknown }).code : null;
-      setSearchError(code === "ZERO_RESULTS"
-        ? t("No se encontraron resultados para esa dirección.")
+      // Cancelar no es fallar: no hay nada que contarle a nadie.
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setSearchError(error instanceof GeocoderUnavailableError
+        ? t("El servicio de búsqueda de direcciones no respondió. Puedes ubicar el punto en el mapa.")
         : t("No se pudo buscar la dirección. Inténtalo de nuevo."));
+    } finally {
+      setSearching(false);
     }
   }
 
@@ -157,13 +184,11 @@ export function LocationPickerMap({
           size="small"
           fullWidth
           placeholder={t("Buscar una dirección")}
-          aria-label={t("Buscar una dirección")}
           value={searchValue}
           onChange={(event) => setSearchValue(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") { event.preventDefault(); void handleSearch(); }
           }}
-          disabled={status !== "ready"}
           error={searchError !== null}
           helperText={searchError ?? undefined}
           slotProps={{
@@ -174,30 +199,58 @@ export function LocationPickerMap({
                 </InputAdornment>
               ),
             },
+            // El nombre accesible va en `htmlInput`, no suelto en el TextField: MUI pasa las
+            // props sueltas al FormControl que envuelve, así que un `aria-label` ahí arriba
+            // etiqueta un `<div>` y deja el `<input>` anónimo. El campo llevaba ese defecto
+            // desde la versión anterior del componente, y un lector de pantalla sólo anunciaba
+            // "cuadro de edición".
+            htmlInput: { "aria-label": t("Buscar una dirección") },
           }}
         />
         <Button
           variant="outlined" size="small"
           onClick={() => void handleSearch()}
-          disabled={status !== "ready" || searchValue.trim() === ""}
+          disabled={searching || searchValue.trim() === ""}
           sx={{ flexShrink: 0, alignSelf: "flex-start" }}
         >
-          {t("Buscar")}
+          {searching ? t("Buscando...") : t("Buscar")}
         </Button>
       </Box>
+
+      {results.length > 0 && (
+        <Paper variant="outlined" sx={{ mb: 1.5, maxHeight: 176, overflowY: "auto" }}>
+          <List dense disablePadding aria-label={t("Resultados de la búsqueda")}>
+            {results.map((result) => (
+              <ListItemButton key={`${result.lat},${result.lng}`} onClick={() => applyResult(result)}>
+                <ListItemText
+                  primary={result.label}
+                  slotProps={{ primary: { variant: "body2", sx: { lineHeight: 1.35 } } }}
+                />
+              </ListItemButton>
+            ))}
+          </List>
+        </Paper>
+      )}
 
       <Box
         ref={containerRef}
         role="application"
         aria-label={t("Mapa para seleccionar la ubicación")}
-        sx={{ height, borderRadius: "10px", border: "1px solid", borderColor: "divider", overflow: "hidden" }}
+        sx={{
+          height,
+          borderRadius: "10px",
+          border: "1px solid",
+          borderColor: "divider",
+          overflow: "hidden",
+          // Leaflet se dibuja en capas posicionadas; sin esto se monta sobre el drawer.
+          "& .leaflet-pane": { zIndex: 0 },
+          "& .leaflet-top, & .leaflet-bottom": { zIndex: 1 },
+          ...(theme.palette.mode === "dark" && needsDarkTileFilter()
+            ? { "& .leaflet-tile": { filter: DARK_TILE_FILTER } }
+            : {}),
+        }}
       />
 
-      {status === "loading" && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
-          {t("Cargando el mapa...")}
-        </Typography>
-      )}
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
         {t("Haz clic en el mapa o arrastra el marcador para ajustar la ubicación.")}
       </Typography>

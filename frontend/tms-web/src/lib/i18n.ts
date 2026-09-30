@@ -279,6 +279,10 @@ const EN_DATA: Record<string, string> = {
   "Buscar": "Search",
   "Buscar transportistas": "Search carriers",
   "Buscar una dirección": "Search an address",
+  "Buscando...": "Searching...",
+  "Resultados de la búsqueda": "Search results",
+  "El servicio de búsqueda de direcciones no respondió. Puedes ubicar el punto en el mapa.":
+    "The address search service did not answer. You can place the point on the map.",
   "Buscar una pantalla": "Search for a screen",
   "Cabecera de firma": "Signature header",
   "Cabecera y líneas del pedido de transporte.": "Header and lines of the transport order.",

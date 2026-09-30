@@ -20,3 +20,19 @@ import { afterEach } from "vitest";
 afterEach(() => {
   cleanup();
 });
+
+/**
+ * `ResizeObserver` es API estándar del navegador y jsdom no la implementa. Cualquier componente
+ * que reaccione a su propio tamaño - `LocationPickerMap` reajusta el mapa cuando el drawer
+ * termina de abrirse - reventaría al montarse, y eso mediría una carencia del entorno de
+ * pruebas, no un defecto del código. El doble no observa nada porque en jsdom nada cambia de
+ * tamaño: lo que hace falta es que exista y no lance.
+ */
+if (!("ResizeObserver" in globalThis)) {
+  class ResizeObserverStub {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverStub, writable: true });
+}
