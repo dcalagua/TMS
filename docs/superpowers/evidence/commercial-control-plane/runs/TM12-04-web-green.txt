@@ -1,0 +1,6 @@
+typecheck EXIT=0
+ Test Files  22 passed (22)
+      Tests  137 passed (137)
+   Start at  05:47:29
+   Duration  8.87s (transform 5.18s, setup 5.83s, import 60.56s, tests 3.68s, environment 22.10s)
+

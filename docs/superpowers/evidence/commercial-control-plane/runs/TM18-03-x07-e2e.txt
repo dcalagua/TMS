@@ -1,0 +1,30 @@
+(node:72231) ExperimentalWarning: Transform Types is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS · 0. puente TMS arriba (cadena MasterAdmin real + receptor real)
+PASS · 1. MasterAdmin lee el manifiesto de TMS: sólo el baseline tms.core, ninguna vendible · 2026-09-28.1 tms.core
+PASS · 2. SHADOW (sembrado): APPLIED, el snapshot no decide · APPLIED NOT_ENFORCED
+PASS ·    el snapshot no lleva capacidades, límites ni asignaciones (registro vacío)
+PASS ·    cohorte del tenant: SHADOW → DUAL_READ → PRIMARY
+PASS · 3. GET: misma versión y checksum, PRIMARY · 1 PRIMARY
+PASS · 4. superficie comercial activa y operación permitida (APP_ACTIVE) · APP_ACTIVE
+PASS · 5. replay idempotente → REPLAYED · REPLAYED
+PASS · 6. v2 appActive=false → APPLIED, lo comercial retirado (APP_INACTIVE) y la operación continúa (D-14 regla 1) · APPLIED APP_INACTIVE operational=true
+PASS · 7. v1 tras v2 → STALE (409) · STALE STALE_SNAPSHOT
+PASS · 8. misma versión, otro contenido → CONFLICT (409) · CONFLICT VERSION_CONFLICT
+PASS · 9. credencial con scope de provisioning → 403 INSUFFICIENT_SCOPE (REJECTED) · 403 INSUFFICIENT_SCOPE
+PASS · 10. TMS no disponible → RETRYABLE, nada aplicado · RETRYABLE 503
+PASS · 11. reconciliación: el GET delata deriva (aplicado v2 ≠ deseado v3)
+PASS ·     mientras tanto decide el last-good v2 (lo comercial sigue retirado, la operación sigue; sin llamar a MasterAdmin)
+PASS · 12. push de v3 → GET en sincronía y superficie comercial restablecida · APPLIED v3 APP_ACTIVE
+PASS · 13. un jti distinto por petición M2M · 11 peticiones
+PASS · D14.1 el cambio de modo exige motivo y un paso por vez (SHADOW → PRIMARY rechazado) · a mode change needs a reason | entitlement mode moves one step at a time: SHADOW -> PRIMARY
+PASS · D14.2 PRODUCT → DUAL_READ con motivo D-14 · SHADOW→DUAL_READ
+PASS · D14.2 PRODUCT → PRIMARY con motivo D-14 · DUAL_READ→PRIMARY
+PASS · D14.3 GET: PRIMARY con la versión y el checksum del último deseado (v3, appActive=true) · PRIMARY v3
+PASS · D14.4 organización mapeada en PRIMARY: superficie comercial activa, operación permitida · PRIMARY APP_ACTIVE
+PASS · D14.5 organización no mapeada: NOT_UNDER_CONTROL_PLANE, comportamiento legacy intacto con PRODUCT=PRIMARY · NOT_UNDER_CONTROL_PLANE
+PASS · D14.6 estado final sin rollback: PRODUCT=PRIMARY y el tenant mapeado en PRIMARY · PRODUCT=PRIMARY tenant=PRIMARY
+PASS · 14. puente TMS terminó limpio · exit=0
+evidencia D14: /tmp/claude-501/tm18-d14/d14-tms.json
+
+25/25 PASS

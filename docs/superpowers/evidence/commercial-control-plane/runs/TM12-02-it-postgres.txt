@@ -1,0 +1,4 @@
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 132.8 s -- in com.ebim.tms.database.SchemaExposureIntegrationTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 163.9 s -- in com.ebim.tms.iam.entitlements.PlatformEntitlementsIntegrationTest
+[INFO] Tests run: 17, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS

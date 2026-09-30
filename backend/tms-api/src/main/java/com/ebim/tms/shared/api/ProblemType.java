@@ -37,6 +37,13 @@ public enum ProblemType {
     /** The requested company exists as far as the client knows, but the caller holds no active membership in it. */
     COMPANY_SCOPE_FORBIDDEN("company-scope-forbidden", "Company scope is not allowed", HttpStatus.FORBIDDEN),
 
+    /**
+     * The organization's commercial contract does not allow it to operate right now (EBIM MasterAdmin
+     * snapshot, {@code appActive=false}). Not a permission problem: no role can lift it, and no data is
+     * lost - operation resumes when the contract does.
+     */
+    COMMERCIAL_ACCESS_SUSPENDED("commercial-access-suspended", "Commercial access is suspended", HttpStatus.FORBIDDEN),
+
     /** Authenticated and scoped, but the caller lacks the permission the operation requires. */
     ACCESS_DENIED("access-denied", "Access denied", HttpStatus.FORBIDDEN),
 
