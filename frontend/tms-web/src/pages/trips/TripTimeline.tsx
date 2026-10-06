@@ -39,7 +39,7 @@ export function TripTimeline({ events, loading }: TripTimelineProps) {
       {/* La línea vertical que une los hitos. Decorativa: lo que se lee son las filas. */}
       <Box aria-hidden sx={{
         position: "absolute", left: 13, top: 8, bottom: 8, width: "2px",
-        bgcolor: "divider", borderRadius: 1,
+        bgcolor: "divider", borderRadius: "4px",
       }} />
 
       {events.map((event) => {

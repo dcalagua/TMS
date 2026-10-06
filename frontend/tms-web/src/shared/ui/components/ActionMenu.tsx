@@ -63,10 +63,10 @@ export function ActionMenu({ items, label }: ActionMenuProps) {
         slotProps={{
           paper: {
             sx: {
-              mt: 0.5, borderRadius: 2.5, minWidth: 208, overflow: "hidden",
+              mt: 0.5, borderRadius: "10px", minWidth: 208, overflow: "hidden",
               boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
               "& .MuiList-root": { py: 0.75 },
-              "& .MuiMenuItem-root": { mx: 0.75, px: 1.25, py: 0.85, borderRadius: 1.5, fontSize: 13.5, fontWeight: 600 },
+              "& .MuiMenuItem-root": { mx: 0.75, px: 1.25, py: 0.85, borderRadius: "6px", fontSize: 13.5, fontWeight: 600 },
             },
           },
         }}

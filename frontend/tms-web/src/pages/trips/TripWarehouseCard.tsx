@@ -224,7 +224,7 @@ function DocumentSection({
 
       {/* Plan contra realidad. La marca de diferencia la pone el código de discrepancia del
           servidor, nunca una comparación hecha aquí. */}
-      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
+      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: "4px" }}>
         <Table size="small" aria-label={t("Plan contra despachado")}>
           <TableHead>
             <TableRow>
@@ -262,7 +262,7 @@ function DocumentSection({
         {document.discrepancies.length === 0 ? (
           <Typography variant="body2" color="text.secondary">{t("Sin diferencias con el plan.")}</Typography>
         ) : (
-          <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, maxHeight: 280 }}>
+          <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: "4px", maxHeight: 280 }}>
             <Table size="small" stickyHeader aria-label={t("Diferencias con el plan")}>
               <TableHead>
                 <TableRow>
@@ -397,7 +397,7 @@ function RawDocumentDrawer({
           <Box
             component="pre"
             sx={{
-              m: 0, p: 1.5, pr: 5, borderRadius: 1, bgcolor: "action.hover", overflow: "auto", maxHeight: "70vh",
+              m: 0, p: 1.5, pr: 5, borderRadius: "4px", bgcolor: "action.hover", overflow: "auto", maxHeight: "70vh",
               fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize: 12, lineHeight: 1.5,
               whiteSpace: "pre-wrap", wordBreak: "break-all",
             }}

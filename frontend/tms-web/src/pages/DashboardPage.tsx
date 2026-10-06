@@ -178,7 +178,7 @@ export function DashboardPage() {
                           sx={{
                             textDecoration: "none", color: "text.primary",
                             display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
-                            p: 1.5, borderRadius: 2.5, border: "1px solid", borderColor: "divider",
+                            p: 1.5, borderRadius: "10px", border: "1px solid", borderColor: "divider",
                             transition: "transform .15s, border-color .15s, box-shadow .15s",
                             "&:hover": {
                               transform: "translateY(-2px)",
@@ -190,7 +190,7 @@ export function DashboardPage() {
                           {/* La baldosa lleva el acento del propio módulo, así que el ojo
                               encuentra "Vehículos" por su color antes de haber leído la palabra. */}
                           <Box aria-hidden sx={{
-                            width: 38, height: 38, borderRadius: 2, display: "grid", placeItems: "center",
+                            width: 38, height: 38, borderRadius: "8px", display: "grid", placeItems: "center",
                             bgcolor: alpha(tint, 0.18), color: tint, "& svg": { fontSize: 21 },
                           }}>
                             {item.icon}

@@ -86,7 +86,7 @@ export function KpiCard({ title, value, icon, color = "primary.main", sub, loadi
         {typeof progress === "number" && !loading && (
           <LinearProgress
             variant="determinate" value={Math.max(0, Math.min(100, progress))}
-            sx={{ mt: 2, height: 7, borderRadius: 3, bgcolor: alpha(main, 0.16), "& .MuiLinearProgress-bar": { borderRadius: 3, bgcolor: main } }}
+            sx={{ mt: 2, height: 7, borderRadius: "12px", bgcolor: alpha(main, 0.16), "& .MuiLinearProgress-bar": { borderRadius: "12px", bgcolor: main } }}
           />
         )}
         {footer && <Box sx={{ mt: 1 }}>{footer}</Box>}

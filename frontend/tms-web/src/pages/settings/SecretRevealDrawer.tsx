@@ -84,7 +84,7 @@ export function SecretRevealDrawer({ title, notice, fields, previousValidUntil, 
               component="code"
               sx={{
                 display: "block", wordBreak: "break-all", fontFamily: "monospace", fontSize: 13,
-                bgcolor: "action.hover", px: 1, py: 0.75, borderRadius: 1,
+                bgcolor: "action.hover", px: 1, py: 0.75, borderRadius: "4px",
               }}
             >
               {field.value}

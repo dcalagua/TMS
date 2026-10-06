@@ -150,7 +150,7 @@ export function DeliveryTrackingPage() {
             <LinearProgress
               variant="determinate" value={progress ?? 0}
               color={row.stopsPastWindow > 0 ? "warning" : "primary"}
-              sx={{ height: 5, borderRadius: 3, mt: 0.5 }}
+              sx={{ height: 5, borderRadius: "12px", mt: 0.5 }}
               aria-label={t("Progreso de paradas")}
             />
           </Box>

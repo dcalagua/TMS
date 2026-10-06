@@ -109,7 +109,7 @@ export function FormDrawer({
       }}>
         {icon && (
           <Box sx={{
-            width: 36, height: 36, borderRadius: 2, flexShrink: 0, display: "grid", placeItems: "center",
+            width: 36, height: 36, borderRadius: "8px", flexShrink: 0, display: "grid", placeItems: "center",
             bgcolor: "action.hover", color: "primary.main", "& svg": { fontSize: 20 },
           }}>{icon}</Box>
         )}

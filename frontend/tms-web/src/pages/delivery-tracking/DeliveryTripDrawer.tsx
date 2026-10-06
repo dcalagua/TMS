@@ -105,7 +105,7 @@ export function DeliveryTripDrawer({ row, onClose }: { row: ControlTowerTripView
           {detail.stops.length === 0 ? (
             <Typography variant="body2" color="text.secondary">{t("Este viaje todavía no tiene paradas.")}</Typography>
           ) : (
-            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: "4px" }}>
               {detail.stops.map((stop, index) => {
                 const stopOrders = detail.assignments.filter((a) => a.destinationId === stop.destinationId);
                 return (

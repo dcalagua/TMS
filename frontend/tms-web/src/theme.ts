@@ -74,6 +74,10 @@ export const shadow = (isDark: boolean, key: keyof typeof SH): string => SH[key]
 export const NEUTRAL_SOFT = { light: "#EEF1F1", dark: "#222D28" } as const;
 export const neutralSoft = (isDark: boolean): string => NEUTRAL_SOFT[isDark ? "dark" : "light"];
 
+/** `surface.raised` del theme v2 de la suite: un plano apenas separado del papel, sin caja. */
+export const SURFACE_RAISED = { light: "#F7F9F9", dark: "#1C2A26" } as const;
+export const surfaceRaised = (isDark: boolean): string => SURFACE_RAISED[isDark ? "dark" : "light"];
+
 /**
  * REGLA AA DEL ACENTO.
  *

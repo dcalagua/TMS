@@ -95,7 +95,7 @@ export function AppLayout() {
   /** Los iconos de la barra superior, ahora sobre papel: neutros en reposo y con el realce
    *  de acción del tema al pasar por encima. */
   const topIconSx = {
-    color: "text.secondary", borderRadius: `${R.md}px`, width: 36, height: 36,
+    color: "text.secondary", borderRadius: `${R.sm}px`, width: 36, height: 36,
     transition: "background-color .15s ease, color .15s ease, transform .12s ease",
     "&:hover": { bgcolor: "action.hover", color: "text.primary" },
     "&:active": { transform: "scale(0.92)" },
@@ -152,7 +152,7 @@ export function AppLayout() {
 
   const sectionLabel = (text: string): ReactNode =>
     isCollapsed
-      ? <Box key={text} sx={{ my: 1.25, mx: "auto", width: 22, height: "2px", borderRadius: 1, bgcolor: "rgba(255,255,255,0.16)" }} />
+      ? <Box key={text} sx={{ my: 1.25, mx: "auto", width: 22, height: "2px", borderRadius: "4px", bgcolor: "rgba(255,255,255,0.16)" }} />
       : (
         <Typography
           key={text}
@@ -278,7 +278,7 @@ export function AppLayout() {
             aria-label={t("Ubicación")}
             sx={{
               display: "flex", alignItems: "center", gap: "6px", minWidth: 0,
-              fontSize: T.body, color: "text.secondary", mr: 1,
+              fontSize: T.body, color: "text.secondary", mr: 1.5,
             }}
           >
             {currentSection && !isMobile && (
@@ -288,12 +288,16 @@ export function AppLayout() {
               </>
             )}
             <Box component="span" aria-current="page" sx={{
-              color: "text.primary", fontWeight: 700, whiteSpace: "nowrap",
+              color: "text.primary", fontWeight: 700, fontSize: 16, letterSpacing: "-0.01em", whiteSpace: "nowrap",
               overflow: "hidden", textOverflow: "ellipsis",
             }}>
               {currentTitle}
             </Box>
           </Box>
+
+          {/* El ámbito va junto al título, como en el resto de la suite: dice sobre qué
+              empresa trabaja la pantalla que se está leyendo. */}
+          {!isMobile && <CompanySelector />}
 
           {/* Centro: buscador de pantallas */}
           <Box sx={{ flex: 1, display: "flex", justifyContent: "center", minWidth: 0 }}>
@@ -302,8 +306,6 @@ export function AppLayout() {
 
           {/* Derecha: contexto y controles */}
           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 0.4, flexShrink: 0 }}>
-            {!isMobile && <CompanySelector />}
-
             <Tooltip title={mode === "dark" ? t("Modo claro") : t("Modo oscuro")}>
               <IconButton onClick={toggleMode} sx={topIconSx} aria-label={t("Apariencia")}>
                 {mode === "dark" ? <LightModeRounded /> : <DarkModeRounded />}
@@ -312,8 +314,7 @@ export function AppLayout() {
 
             <NotificationsMenu iconSx={topIconSx} />
 
-            <Divider orientation="vertical" flexItem sx={{ mx: 1, my: 1.5 }} />
-
+            <Box sx={{ width: 8 }} />
             <AccountMenu />
           </Box>
         </Toolbar>

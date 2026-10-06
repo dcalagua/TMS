@@ -54,7 +54,7 @@ export function PageHeader({
               const palette = th.palette as unknown as Record<string, Record<string, string>>;
               const main = tint.startsWith("#") ? tint : (palette[k]?.[sub] ?? th.palette.primary.main);
               return {
-                width: 44, height: 44, flexShrink: 0, borderRadius: 2.5,
+                width: 44, height: 44, flexShrink: 0, borderRadius: "10px",
                 display: "grid", placeItems: "center",
                 background: `linear-gradient(135deg, ${main} 0%, ${alpha(main, 0.72)} 100%)`,
                 color: "#fff", boxShadow: `0 5px 14px ${alpha(main, 0.38)}`,
