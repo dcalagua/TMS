@@ -3,7 +3,7 @@ import { useState } from "react";
 import {
   Box, Button, Divider, IconButton, MenuItem, Paper, TextField, Tooltip, Typography,
 } from "@mui/material";
-import { SearchRounded, CloseRounded, AddTaskRounded, CallSplitRounded } from "@mui/icons-material";
+import { FilterAltRounded, FilterAltOffOutlined, CallSplitRounded } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import type { OrderPriority } from "../../shared/api/ordersApi";
 import { fetchDestinations } from "../../shared/api/destinationsApi";
@@ -15,7 +15,7 @@ import { describePlanningError } from "../../shared/api/problemMessages";
 import { EmptyState, ErrorState, LoadingState, Pagination, StatusChip } from "../../shared/ui/components";
 import { notifyError, notifySuccess } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
-import type { StatusTone } from "../../theme";
+import { R, type StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
 import { SplitAssignDrawer } from "./SplitAssignDrawer";
 import { fmtDecimal, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
@@ -35,6 +35,8 @@ interface EligibleOrdersPanelProps {
   trips: TripView[];
   canManage: boolean;
   onAssigned: (detail: TripDetailView) => void;
+  /** Rótulo en versalitas de la cabecera del panel; el tablero lo omite cuando ya hay pestañas. */
+  title?: string;
 }
 
 /**
@@ -51,7 +53,7 @@ interface EligibleOrdersPanelProps {
  * pedido y su destino—. Cada fila sigue llevando todo: número, destino, prioridad, peso, volumen
  * y pallets, en dos líneas densas.
  */
-export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssigned }: EligibleOrdersPanelProps) {
+export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssigned, title }: EligibleOrdersPanelProps) {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(0);
   const [draft, setDraft] = useState({ destinationId: "", orderNumber: "" });
@@ -148,11 +150,23 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
   const rows = pageData?.content ?? [];
 
   return (
-    <Paper variant="outlined" sx={{ borderRadius: "10px", overflow: "hidden" }}>
+    <Paper variant="outlined" sx={{ borderRadius: `${R.lg}px`, overflow: "hidden" }}>
+      {title && (
+        <Typography
+          component="h2" variant="overline" color="text.secondary"
+          sx={{ display: "block", px: 1.75, pt: 1.5, lineHeight: 1.6, letterSpacing: ".1em" }}
+        >
+          {title}
+        </Typography>
+      )}
       <Box
         component="form"
         onSubmit={(e) => { e.preventDefault(); applyFilters(); }}
-        sx={{ p: 1.5, display: "grid", gap: 1.25 }}
+        sx={{
+          px: 1.75, pt: title ? 1 : 1.75, pb: 1.5,
+          display: "grid", gap: 1, alignItems: "center",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) auto auto",
+        }}
       >
         <TextField
           size="small" label={t("Pedido")} value={draft.orderNumber}
@@ -167,14 +181,22 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
             <MenuItem key={destination.id} value={destination.id}>{destination.name}</MenuItem>
           ))}
         </TextField>
-        <Box sx={{ display: "flex", gap: 1 }}>
-          <Button size="small" type="submit" variant="contained" startIcon={<SearchRounded />} sx={{ flex: 1 }}>
-            {t("Aplicar filtros")}
-          </Button>
-          <Tooltip title={t("Limpiar")}>
-            <IconButton size="small" onClick={resetFilters}><CloseRounded fontSize="small" /></IconButton>
-          </Tooltip>
-        </Box>
+        <Tooltip title={t("Aplicar filtros")}>
+          <IconButton
+            type="submit" size="small" aria-label={t("Aplicar filtros")}
+            sx={{
+              bgcolor: "primary.main", color: "primary.contrastText", borderRadius: `${R.sm}px`,
+              width: 34, height: 34, "&:hover": { bgcolor: "primary.dark" },
+            }}
+          >
+            <FilterAltRounded fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={t("Limpiar")}>
+          <IconButton size="small" onClick={resetFilters} aria-label={t("Limpiar")} sx={{ borderRadius: `${R.sm}px` }}>
+            <FilterAltOffOutlined fontSize="small" />
+          </IconButton>
+        </Tooltip>
       </Box>
       <Divider />
 
@@ -191,29 +213,29 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
           message={t("No hay pedidos liberados para este origen y esta fecha.")}
         />
       ) : (
-        <Box>
+        <Box sx={{ p: 1.25, display: "grid", gap: 1.25 }}>
           {rows.map((order) => {
             const target = assignTargets[order.id] ?? draftTrips[0]?.id ?? "";
             return (
               <Box
                 key={order.id}
                 sx={{
-                  px: 1.5, py: 1.25, borderBottom: "1px solid", borderColor: "divider",
-                  "&:last-of-type": { borderBottom: 0 },
+                  px: 1.5, py: 1.25, border: "1px solid", borderColor: "divider", borderRadius: `${R.md}px`,
+                  minWidth: 0,
                 }}
               >
                 <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 800 }}>{order.orderNumber}</Typography>
+                  <Typography variant="body2" noWrap sx={{ minWidth: 0, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{order.orderNumber}</Typography>
                   <StatusChip
                     label={enumLabel("orderPriority", order.priority)}
                     tone={PRIORITY_TONE[order.priority as OrderPriority] ?? "neutral"}
                   />
                 </Box>
-                <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
+                <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block", mt: 0.5 }}>
                   {order.destinationName ?? order.destinationCode ?? "-"}
                   {order.customerName && ` · ${order.customerName}`}
                 </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontVariantNumeric: "tabular-nums" }}>
+                <Typography variant="caption" sx={{ display: "block", mt: 0.25, fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
                   {fmtWeightKg(order.pendingWeightKg)} · {fmtVolumeM3(order.pendingVolumeM3)} · {fmtDecimal(order.pendingPallets)} {t("pallets")}
                 </Typography>
                 {order.partiallyAllocated && (
@@ -222,8 +244,12 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
                   // cargaría de nuevo lo que ya está cargado.
                   <Typography
                     variant="caption"
-                    sx={{ display: "block", color: "warning.main", fontVariantNumeric: "tabular-nums" }}
+                    sx={{
+                      display: "flex", alignItems: "center", gap: 0.5, mt: 0.25,
+                      color: "warning.main", fontWeight: 700, fontVariantNumeric: "tabular-nums",
+                    }}
                   >
+                    <CallSplitRounded aria-hidden sx={{ fontSize: 14 }} />
                     {t("Repartido · pendiente de {{total}} pallets", {
                       total: fmtDecimal(order.totalPallets),
                     })}
@@ -231,12 +257,16 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
                 )}
 
                 {canManage && draftTrips.length > 0 && (
-                  <Box sx={{ display: "flex", gap: 0.75, mt: 1 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 1.25 }}>
                     <TextField
                       select size="small" value={target}
                       onChange={(e) => setAssignTargets({ ...assignTargets, [order.id]: e.target.value })}
                       aria-label={t("Viaje de destino de {{number}}", { number: order.orderNumber })}
-                      sx={{ flex: 1 }}
+                      sx={{
+                        flex: 1, minWidth: 0,
+                        "& .MuiInputBase-root": { minWidth: 0 },
+                        "& .MuiSelect-select": { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+                      }}
                     >
                       {draftTrips.map((trip) => (
                         <MenuItem key={trip.id} value={trip.id}>
@@ -246,18 +276,20 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
                       ))}
                     </TextField>
                     <Button
-                      size="small" variant="outlined" startIcon={<AddTaskRounded />}
+                      size="small" variant="contained"
                       disabled={assigningOrderId === order.id || target === ""}
                       onClick={() => void assign(order)}
                       aria-label={t("Asignar {{number}}", { number: order.orderNumber })}
+                      sx={{ flexShrink: 0 }}
                     >
                       {t("Asignar")}
                     </Button>
                     <Button
-                      size="small" variant="text" startIcon={<CallSplitRounded />}
+                      size="small" variant="text"
                       disabled={assigningOrderId === order.id}
                       onClick={() => setSplitting(order)}
                       aria-label={t("Repartir {{number}}", { number: order.orderNumber })}
+                      sx={{ flexShrink: 0, minWidth: 0, px: 1 }}
                     >
                       {t("Repartir")}
                     </Button>
@@ -272,7 +304,7 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
       {pageData && pageData.totalElements > 0 && (
         <>
           <Divider />
-          <Box sx={{ px: 1.5, py: 1 }}>
+          <Box sx={{ px: 1.75, py: 1 }}>
             <Pagination page={pageData} onPageChange={setPage} />
           </Box>
         </>

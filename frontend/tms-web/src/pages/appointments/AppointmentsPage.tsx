@@ -6,7 +6,8 @@ import {
 } from "@mui/material";
 import {
   EventAvailableRounded, CheckCircleRounded, CancelRounded, LocalShippingRounded,
-  DoneAllRounded, PersonOffRounded, ScheduleRounded,
+  DoneAllRounded, PersonOffRounded, ScheduleRounded, Inventory2Outlined, LocalShippingOutlined,
+  MeetingRoomOutlined,
 } from "@mui/icons-material";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
@@ -23,7 +24,7 @@ import {
 import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { confirmDialog, notifyError, notifySuccess, promptDialog } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
-import type { StatusTone } from "../../theme";
+import { R, T, neutralSoft, type StatusTone } from "../../theme";
 import { fmtDateTime } from "../../lib/locale";
 import { t } from "../../lib/i18n";
 import { BookAppointmentDrawer } from "./BookAppointmentDrawer";
@@ -191,9 +192,12 @@ export function AppointmentsPage() {
         )}
       />
 
-      <Paper variant="outlined" sx={{ p: 2, mb: 2, display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
+      <Paper variant="outlined" sx={{
+        borderRadius: `${R.md}px`, px: 1.75, py: 1.5, mb: 2,
+        display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "center",
+      }}>
         <TextField
-          select size="small" label={t("Sitio")} value={locationId} sx={{ minWidth: 260 }}
+          select size="small" label={t("Sitio")} value={locationId} sx={{ minWidth: 260, width: { md: 320 } }}
           onChange={(e) => setLocationId(e.target.value)}
         >
           <MenuItem value="">{t("Selecciona un sitio")}</MenuItem>
@@ -205,15 +209,15 @@ export function AppointmentsPage() {
           size="small" type="date" label={t("Día")} value={day}
           onChange={(e) => setDay(e.target.value)}
           slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ width: 170 }}
         />
         {locationId !== "" && (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <Typography variant="caption" color="text.secondary">
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+            <Typography variant="body2" sx={{ fontWeight: 700, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>
               {t("{{count}} puerta(s)", { count: docks.length })}
             </Typography>
             {outOfService > 0 && (
-              <Chip size="small" color="warning" variant="outlined"
-                label={t("{{n}} fuera de servicio", { n: outOfService })} />
+              <StatusChip tone="inProgress" label={t("{{n}} fuera de servicio", { n: outOfService })} />
             )}
           </Box>
         )}
@@ -237,12 +241,18 @@ export function AppointmentsPage() {
         <>
           {/* La zona horaria se dice en voz alta: una hora sin decir de dónde es, es cómo un
               camión llega con cinco horas de diferencia. */}
-          <Alert severity="info" variant="outlined" sx={{ mb: 1.5 }}>
+          <Alert
+            severity="info"
+            sx={{
+              mb: 1.5, py: 0.25, borderRadius: `${R.md}px`, border: "none", fontSize: T.body,
+              alignItems: "center", "& .MuiAlert-icon": { fontSize: 18, py: 0.5 },
+            }}
+          >
             {t("Las horas se muestran en la zona de tu navegador ({{zone}}).", {
               zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             })}
           </Alert>
-          <TableContainer component={Paper} variant="outlined">
+          <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: `${R.lg}px` }}>
             <Table size="small" sx={dataTableSx}>
               <TableHead>
                 <TableRow>
@@ -257,20 +267,43 @@ export function AppointmentsPage() {
               <TableBody>
                 {rows.map((appointment) => (
                   <TableRow key={appointment.id}>
-                    <TableCell sx={{ fontWeight: 700 }}>{appointment.resourceCode ?? "-"}</TableCell>
-                    <TableCell sx={{ fontVariantNumeric: "tabular-nums" }}>
-                      {fmtDateTime(appointment.windowStart)} → {fmtDateTime(appointment.windowEnd)}
-                      {appointment.rescheduledFromStart && (
-                        <Tooltip title={t("Movida desde {{when}}", {
-                          when: fmtDateTime(appointment.rescheduledFromStart),
+                    <TableCell>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Box aria-hidden sx={(th) => ({
+                          width: 26, height: 24, flexShrink: 0, borderRadius: "6px", display: "grid", placeItems: "center",
+                          bgcolor: neutralSoft(th.palette.mode === "dark"), color: "text.secondary",
+                          "& svg": { fontSize: 15 },
                         })}>
-                          <Chip size="small" variant="outlined" sx={{ ml: 1 }}
-                            icon={<ScheduleRounded />} label={t("Movida")} />
-                        </Tooltip>
-                      )}
+                          <MeetingRoomOutlined />
+                        </Box>
+                        <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+                          {appointment.resourceCode ?? "-"}
+                        </Typography>
+                      </Box>
                     </TableCell>
-                    <TableCell>{enumLabel("appointmentPurpose", appointment.purpose)}</TableCell>
-                    <TableCell>{appointment.reference ?? "-"}</TableCell>
+                    <TableCell sx={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <span>{fmtDateTime(appointment.windowStart)} → {fmtDateTime(appointment.windowEnd)}</span>
+                        {appointment.rescheduledFromStart && (
+                          <Tooltip title={t("Movida desde {{when}}", {
+                            when: fmtDateTime(appointment.rescheduledFromStart),
+                          })}>
+                            <Chip size="small" variant="outlined"
+                              icon={<ScheduleRounded />} label={t("Movida")}
+                              sx={{ height: 22, fontSize: T.label, fontWeight: 700, color: "text.secondary", "& .MuiChip-icon": { fontSize: 14 } }} />
+                          </Tooltip>
+                        )}
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                        <Box component="span" aria-hidden sx={{ display: "inline-flex", color: "text.secondary", "& svg": { fontSize: 17 } }}>
+                          {appointment.purpose === "PICKUP" ? <Inventory2Outlined /> : <LocalShippingOutlined />}
+                        </Box>
+                        {enumLabel("appointmentPurpose", appointment.purpose)}
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={{ fontVariantNumeric: "tabular-nums" }}>{appointment.reference ?? "-"}</TableCell>
                     <TableCell>
                       <StatusChip
                         label={enumLabel("appointmentStatus", appointment.status)}

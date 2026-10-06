@@ -1,10 +1,13 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Box, Button, MenuItem, TextField, Tooltip, Typography } from "@mui/material";
+import type { ReactNode } from "react";
+import { Box, Button, Card, MenuItem, Skeleton, TextField, Tooltip, Typography } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import {
   AddRounded, UploadRounded, AssignmentTurnedInRounded, EditRounded, VisibilityRounded,
   CheckCircleRounded, CancelRounded, ReplayRounded, ScaleRounded, ViewInArRounded, LayersRounded,
+  InfoOutlined,
 } from "@mui/icons-material";
 import { fetchDestinations } from "../../shared/api/destinationsApi";
 import type { ApiError } from "../../shared/api/httpClient";
@@ -17,13 +20,13 @@ import { fetchOrigins } from "../../shared/api/originsApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  ActionMenu, DataTable, KpiCard, PageHeader, Pagination, StatusChip, Toolbar,
+  ActionMenu, DataTable, PageHeader, Pagination, StatusChip, Toolbar,
   type DataTableColumn,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { confirmDialog, notifyError, notifySuccess, promptDialog } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
-import type { StatusTone } from "../../theme";
+import { R, T, type StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
 import { fmtDate, fmtDecimal, fmtQuantity, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
 import { OrderFormDrawer } from "./OrderFormDrawer";
@@ -101,6 +104,35 @@ function pageTotals(rows: OrderView[]) {
       pallets: running.pallets + order.totalPallets,
     }),
     { weight: 0, volume: 0, pallets: 0 },
+  );
+}
+
+/** Pila monoespaciada para los identificadores de pedido: se leen y se dictan carácter a carácter. */
+const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+
+/** Una métrica de la franja de totales: baldosa suave con el icono, etiqueta y cifra. */
+function TotalMetric({ icon, color, label, value, loading }: {
+  icon: ReactNode; color: "info" | "secondary" | "warning"; label: string; value: string; loading: boolean;
+}) {
+  return (
+    <Box className="total-metric" sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0, px: { xs: 0, sm: 2.5 }, py: { xs: 1, sm: 0 } }}>
+      <Box aria-hidden sx={(th) => ({
+        width: 36, height: 36, flexShrink: 0, borderRadius: `${R.sm}px`, display: "grid", placeItems: "center",
+        bgcolor: alpha(th.palette[color].main, th.palette.mode === "dark" ? 0.2 : 0.12), color: `${color}.main`,
+        "& svg": { fontSize: 19 },
+      })}>{icon}</Box>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography noWrap sx={{ fontSize: T.body - 0.5, fontWeight: 600, color: "text.secondary", lineHeight: 1.3 }}>
+          {label}
+        </Typography>
+        <Typography component="div" sx={{
+          fontSize: T.pageTitle, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.2,
+          fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
+        }}>
+          {loading ? <Skeleton width={72} height={26} /> : value}
+        </Typography>
+      </Box>
+    </Box>
   );
 }
 
@@ -220,14 +252,18 @@ export function OrdersPage() {
     {
       key: "orderNumber",
       header: t("Pedido"),
-      render: (order) => <Typography variant="body2" sx={{ fontWeight: 800 }}>{order.orderNumber}</Typography>,
+      render: (order) => (
+        <Typography variant="body2" noWrap sx={{ fontFamily: MONO, fontWeight: 700, letterSpacing: "-0.01em" }}>
+          {order.orderNumber}
+        </Typography>
+      ),
     },
     {
       key: "origin",
       header: t("Origen"),
       render: (order) => (
         <Tooltip title={order.originName ?? ""}>
-          <Typography variant="body2" noWrap sx={{ maxWidth: "14rem" }}>
+          <Typography variant="body2" noWrap sx={{ maxWidth: "9rem" }}>
             {order.originName ?? order.originCode ?? "-"}
           </Typography>
         </Tooltip>
@@ -238,7 +274,7 @@ export function OrdersPage() {
       header: t("Destino"),
       render: (order) => (
         <Tooltip title={order.destinationName ?? ""}>
-          <Typography variant="body2" noWrap sx={{ maxWidth: "14rem" }}>
+          <Typography variant="body2" noWrap sx={{ maxWidth: "9rem" }}>
             {order.destinationName ?? order.destinationCode ?? "-"}
           </Typography>
         </Tooltip>
@@ -366,18 +402,31 @@ export function OrdersPage() {
       />
 
       {/* Los totales de la página, no de la empresa: el backend pagina y esta suma solo puede
-          hablar de lo que hay en pantalla. Se dice literalmente, debajo. */}
-      <Box sx={{
-        display: "grid", gap: 2, mb: 2,
-        gridTemplateColumns: { xs: "1fr", sm: "repeat(3, minmax(0, 1fr))" },
+          hablar de lo que hay en pantalla. Se dice literalmente, dentro de la franja. */}
+      <Card variant="outlined" sx={{
+        mb: 2, borderRadius: `${R.lg}px`, boxShadow: "none", px: { xs: 2, sm: 0.5 }, py: { xs: 1, sm: 2 },
+        display: "grid", alignItems: "center",
+        gridTemplateColumns: { xs: "1fr", sm: "repeat(3, minmax(0, 1fr))", lg: "repeat(3, minmax(0, 1fr)) minmax(12rem, 0.9fr)" },
+        // Divisores finos entre métricas: verticales en fila, horizontales al apilarse en móvil.
+        "& > .total-metric + .total-metric": {
+          borderStyle: "solid", borderColor: "divider",
+          borderLeftWidth: { xs: 0, sm: "1px" }, borderTopWidth: { xs: "1px", sm: 0 }, borderRightWidth: 0, borderBottomWidth: 0,
+        },
       }}>
-        <KpiCard icon={<ScaleRounded />} color="info.main" title={t("Peso en esta página")} value={fmtWeightKg(totals.weight)} loading={ordersQuery.isPending} />
-        <KpiCard icon={<ViewInArRounded />} color="secondary.main" title={t("Volumen en esta página")} value={fmtVolumeM3(totals.volume)} loading={ordersQuery.isPending} />
-        <KpiCard icon={<LayersRounded />} color="warning.main" title={t("Pallets en esta página")} value={fmtDecimal(totals.pallets)} loading={ordersQuery.isPending} />
-      </Box>
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
-        {t("Los totales corresponden solo a los pedidos de esta página.")}
-      </Typography>
+        <TotalMetric icon={<ScaleRounded />} color="info" label={t("Peso en esta página")} value={fmtWeightKg(totals.weight)} loading={ordersQuery.isPending} />
+        <TotalMetric icon={<ViewInArRounded />} color="secondary" label={t("Volumen en esta página")} value={fmtVolumeM3(totals.volume)} loading={ordersQuery.isPending} />
+        <TotalMetric icon={<LayersRounded />} color="warning" label={t("Pallets en esta página")} value={fmtDecimal(totals.pallets)} loading={ordersQuery.isPending} />
+        <Box sx={{
+          display: "flex", alignItems: "flex-start", gap: 0.75, color: "text.secondary",
+          gridColumn: { sm: "1 / -1", lg: "auto" }, px: { xs: 0, sm: 2.5 }, py: { xs: 1, sm: 0 }, mt: { sm: 1.5, lg: 0 },
+          borderStyle: "solid", borderColor: "divider", borderWidth: 0, borderTopWidth: { xs: "1px", sm: 0 },
+        }}>
+          <InfoOutlined aria-hidden sx={{ fontSize: 15, mt: "1px", flexShrink: 0 }} />
+          <Typography variant="caption" sx={{ lineHeight: 1.4 }}>
+            {t("Los totales corresponden solo a los pedidos de esta página.")}
+          </Typography>
+        </Box>
+      </Card>
 
       <Toolbar
         onApply={applyFilters}

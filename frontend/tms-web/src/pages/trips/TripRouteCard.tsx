@@ -1,6 +1,6 @@
 import { Alert, Box, Chip, Divider, Tooltip, Typography } from "@mui/material";
 import { RouteRounded, InfoOutlined } from "@mui/icons-material";
-import { AppCard } from "../../shared/ui/components";
+import { WorkspaceCard } from "./WorkspaceCard";
 import type { TripRouteMetrics } from "../../shared/api/planningApi";
 import { fmtDecimal } from "../../lib/locale";
 import { t } from "../../lib/i18n";
@@ -22,17 +22,13 @@ export function TripRouteCard({ routing }: { routing: TripRouteMetrics }) {
   const hasLegs = routing.legs.length > 0;
 
   return (
-    <AppCard
-      title={
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <RouteRounded fontSize="small" />
-          <span>{t("Recorrido")}</span>
-        </Box>
-      }
+    <WorkspaceCard
+      icon={<RouteRounded />}
+      title={t("Recorrido")}
       actions={
         routing.estimated ? (
           <Tooltip title={t("Sin proveedor de rutas configurado: las distancias se estiman a partir de las coordenadas.")}>
-            <Chip size="small" color="warning" variant="outlined" label={t("Estimado")} icon={<InfoOutlined />} />
+            <Chip size="small" color="warning" variant="outlined" label={t("Estimado")} icon={<InfoOutlined />} sx={{ fontWeight: 700 }} />
           </Tooltip>
         ) : routing.provider ? (
           <Chip size="small" variant="outlined" label={routing.provider} />
@@ -45,12 +41,12 @@ export function TripRouteCard({ routing }: { routing: TripRouteMetrics }) {
         </Typography>
       ) : (
         <>
-          <Box sx={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
             <Box>
               <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                 {t("Distancia")}
               </Typography>
-              <Typography variant="h6" sx={{ fontVariantNumeric: "tabular-nums", fontWeight: 800 }}>
+              <Typography sx={{ fontSize: 16, fontVariantNumeric: "tabular-nums", fontWeight: 800 }}>
                 {fmtDecimal(routing.totalDistanceKm)} {t("km")}
               </Typography>
             </Box>
@@ -58,7 +54,7 @@ export function TripRouteCard({ routing }: { routing: TripRouteMetrics }) {
               <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                 {t("Tiempo de conducción")}
               </Typography>
-              <Typography variant="h6" sx={{ fontVariantNumeric: "tabular-nums", fontWeight: 800 }}>
+              <Typography sx={{ fontSize: 16, fontVariantNumeric: "tabular-nums", fontWeight: 800 }}>
                 {formatMinutes(routing.totalMinutes)}
               </Typography>
             </Box>
@@ -72,14 +68,17 @@ export function TripRouteCard({ routing }: { routing: TripRouteMetrics }) {
             </Alert>
           )}
 
-          <Divider sx={{ my: 2 }} />
-          <Box sx={{ display: "grid", gap: 0.75 }}>
+          <Divider sx={{ mt: 1.5, mb: 0.5 }} />
+          <Box sx={{ display: "grid" }}>
             {routing.legs.map((leg) => (
               <Box
                 key={`${leg.fromStopSequence ?? "origin"}-${leg.toStopSequence}`}
-                sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 1 }}
+                sx={{
+                  display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 1.5,
+                  py: 0.6, "& + &": { borderTop: "1px solid", borderColor: "divider" },
+                }}
               >
-                <Typography variant="body2" noWrap sx={{ minWidth: 0 }}>
+                <Typography variant="body2" sx={{ minWidth: 0, fontSize: 12.5 }}>
                   {leg.fromLabel} → {leg.toLabel}
                 </Typography>
                 <Typography
@@ -93,12 +92,12 @@ export function TripRouteCard({ routing }: { routing: TripRouteMetrics }) {
             ))}
           </Box>
 
-          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 2 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.25 }}>
             {t("Solo conducción. El tiempo de servicio en cada parada no está incluido.")}
           </Typography>
         </>
       )}
-    </AppCard>
+    </WorkspaceCard>
   );
 }
 

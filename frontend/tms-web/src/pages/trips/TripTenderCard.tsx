@@ -10,7 +10,9 @@ import {
   withdrawTender, type TenderRequest, type TripTenderView,
 } from "../../shared/api/tendersApi";
 import { describeApiError } from "../../shared/api/problemMessages";
-import { AppCard, ErrorState, LoadingState, StatusChip } from "../../shared/ui/components";
+import { ErrorState, LoadingState, StatusChip } from "../../shared/ui/components";
+import { R } from "../../theme";
+import { WorkspaceCard } from "./WorkspaceCard";
 import { TENDER_STATUS_TONE } from "../../shared/ui/statusTones";
 import { confirmDialog, notifyError, notifySuccess, promptDialog } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
@@ -145,15 +147,11 @@ export function TripTenderCard({ companyId, tripId, carrierName, offerable, canM
   const canOffer = canManage && offerable && live === null && accepted === null;
 
   return (
-    <AppCard
-      title={
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <LocalOfferRounded sx={{ fontSize: 19, color: "text.disabled" }} />
-          {t("Ofertas a transportista")}
-        </Box>
-      }
+    <WorkspaceCard
+      icon={<LocalOfferRounded />}
+      title={t("Ofertas a transportista")}
       actions={canOffer && (
-        <Button size="small" startIcon={<LocalOfferRounded />} onClick={() => setCreating(true)}>
+        <Button size="small" variant="outlined" color="inherit" sx={{ borderColor: "divider" }} startIcon={<LocalOfferRounded />} onClick={() => setCreating(true)}>
           {t("Nueva oferta")}
         </Button>
       )}
@@ -169,7 +167,7 @@ export function TripTenderCard({ companyId, tripId, carrierName, offerable, canM
           {tenders.map((tender) => {
             const can = (status: string) => tender.allowedTransitions.includes(status as never);
             return (
-              <Paper key={tender.id} variant="outlined" sx={{ p: 1.5 }}>
+              <Paper key={tender.id} variant="outlined" sx={{ p: 1.5, borderRadius: `${R.md}px` }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
                   <Typography variant="body2" sx={{ fontWeight: 700 }}>
                     {t("Intento {{n}}", { n: tender.attempt })}
@@ -241,6 +239,6 @@ export function TripTenderCard({ companyId, tripId, carrierName, offerable, canM
           onSubmit={saveTerms}
         />
       )}
-    </AppCard>
+    </WorkspaceCard>
   );
 }

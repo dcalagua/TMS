@@ -2,9 +2,11 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Box, Button, Checkbox, MenuItem, TextField, Tooltip, Typography } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 import {
   EventRepeatRounded, CheckCircleRounded, WarningAmberRounded, BlockRounded, PanToolRounded,
   InventoryRounded, FactCheckRounded, OpenInNewRounded, PlaylistAddCheckRounded, ViewKanbanRounded,
+  DoneAllRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
@@ -20,7 +22,7 @@ import {
 } from "../../shared/api/schedulingApi";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  ActionMenu, AppCard, DataTable, KpiCard, PageHeader, Pagination, StatusChip, Toolbar,
+  ActionMenu, AppCard, DataTable, PageHeader, Pagination, StatusChip, Toolbar,
   type DataTableColumn,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
@@ -32,10 +34,14 @@ import { BulkReleaseResultDrawer } from "./BulkReleaseResultDrawer";
 import { HoldDrawer } from "./HoldDrawer";
 import { SchedulingDetailDrawer } from "./SchedulingDetailDrawer";
 import { askOverrideReason, reasonLabels, releaseWithOverride } from "./releaseFlow";
-import { EligibilityChip } from "./schedulingUi";
+import { EligibilityChip, FilterKpiCard } from "./schedulingUi";
+import { R } from "../../theme";
 import { reasonTone } from "./schedulingLabels";
 
 const PAGE_SIZE = 50;
+
+/** Pila monoespaciada para números de pedido y fechas/horas de la tabla. */
+const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 
 /** Filtros tal como los edita la pantalla: cadenas vacías en lugar de `undefined`. */
 interface Filters {
@@ -116,6 +122,7 @@ export function SchedulingReleasePage() {
   const canReadRoutes = hasPermission("masterdata.route:read");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const theme = useTheme();
 
   const [page, setPage] = useState(0);
   const [draft, setDraft] = useState<Filters>(defaultFilters);
@@ -283,9 +290,10 @@ export function SchedulingReleasePage() {
       header: t("Pedido"),
       render: (row) => (
         <Box>
-          <Typography variant="body2" sx={{ fontWeight: 800 }}>{row.orderNumber}</Typography>
+          <Typography variant="body2" noWrap sx={{ fontFamily: MONO, fontWeight: 700, letterSpacing: "-0.01em" }}>{row.orderNumber}</Typography>
           {row.activeHolds > 0 && (
-            <Typography variant="caption" color={row.activeBlockingHolds > 0 ? "error" : "text.secondary"}>
+            <Typography variant="caption" color={row.activeBlockingHolds > 0 ? "error" : "text.secondary"}
+              sx={{ display: "block", fontWeight: 700, lineHeight: 1.3 }}>
               {row.activeBlockingHolds > 0 ? t("Retenido") : t("Con nota de retención")}
             </Typography>
           )}
@@ -317,15 +325,19 @@ export function SchedulingReleasePage() {
       key: "route",
       header: t("Ruta"),
       render: (row) => row.routeCode
-        ? <Typography variant="body2">{row.routeCode}</Typography>
-        : <Typography variant="caption" color="text.secondary">{enumLabel("routeResolution", row.routeResolution)}</Typography>,
+        ? <Typography variant="body2" noWrap>{row.routeCode}</Typography>
+        : <Typography variant="caption" color="warning.dark" sx={{ fontWeight: 700 }}>{enumLabel("routeResolution", row.routeResolution)}</Typography>,
     },
-    { key: "date", header: t("Fecha despacho"), render: (row) => fmtDate(row.scheduledDispatchDate) },
+    {
+      key: "date",
+      header: t("Fecha despacho"),
+      render: (row) => <Typography variant="body2" noWrap sx={{ fontFamily: MONO }}>{fmtDate(row.scheduledDispatchDate)}</Typography>,
+    },
     {
       key: "cutoff",
       header: t("Corte"),
       render: (row) => row.releaseDeadline
-        ? <Typography variant="body2" noWrap>{fmtDateTime(row.releaseDeadline)}</Typography>
+        ? <Typography variant="body2" noWrap sx={{ fontFamily: MONO }}>{fmtDateTime(row.releaseDeadline)}</Typography>
         : <Typography variant="caption" color="text.secondary">{t("Sin calendario")}</Typography>,
     },
     {
@@ -386,7 +398,11 @@ export function SchedulingReleasePage() {
   );
 
   const groupColumns: DataTableColumn<SchedulingGroup>[] = [
-    { key: "date", header: t("Fecha despacho"), render: (group) => fmtDate(group.scheduledDispatchDate) },
+    {
+      key: "date",
+      header: t("Fecha despacho"),
+      render: (group) => <Typography variant="body2" noWrap sx={{ fontFamily: MONO }}>{fmtDate(group.scheduledDispatchDate)}</Typography>,
+    },
     { key: "origin", header: t("Origen"), render: (group) => group.originCode ?? group.originName ?? "-" },
     {
       key: "route",
@@ -394,9 +410,17 @@ export function SchedulingReleasePage() {
       render: (group) => group.routeCode ?? <Typography variant="caption" color="text.secondary">{t("Sin ruta única")}</Typography>,
     },
     { key: "total", header: t("Total"), numeric: true, render: (group) => fmtQuantity(group.counts.total) },
-    { key: "eligible", header: t("Elegibles"), numeric: true, render: (group) => fmtQuantity(group.counts.eligible) },
+    {
+      key: "eligible", header: t("Elegibles"), numeric: true,
+      render: (group) => <Box component="span" sx={{ color: "primary.main", fontWeight: 700 }}>{fmtQuantity(group.counts.eligible)}</Box>,
+    },
     { key: "warning", header: t("Con aviso"), numeric: true, render: (group) => fmtQuantity(group.counts.warning) },
-    { key: "blocked", header: t("Bloqueados"), numeric: true, render: (group) => fmtQuantity(group.counts.blocked) },
+    {
+      key: "blocked", header: t("Bloqueados"), numeric: true,
+      render: (group) => group.counts.blocked > 0
+        ? <Box component="span" sx={{ color: "error.main", fontWeight: 700 }}>{fmtQuantity(group.counts.blocked)}</Box>
+        : fmtQuantity(group.counts.blocked),
+    },
     { key: "holds", header: t("Retenidos"), numeric: true, render: (group) => fmtQuantity(group.counts.withHolds) },
     { key: "released", header: t("Liberados"), numeric: true, render: (group) => fmtQuantity(group.counts.released) },
     {
@@ -404,7 +428,8 @@ export function SchedulingReleasePage() {
       header: t("Acciones"),
       actions: true,
       render: (group) => (
-        <Button size="small" startIcon={<ViewKanbanRounded />}
+        <Button size="small" variant="outlined" color="inherit" startIcon={<ViewKanbanRounded />}
+          sx={{ borderColor: "divider", whiteSpace: "nowrap" }}
           onClick={() => void openPlanningRun(group.originId, group.scheduledDispatchDate)}>
           {t("Planificación")}
         </Button>
@@ -428,18 +453,23 @@ export function SchedulingReleasePage() {
 
       <Box sx={{
         display: "grid", gap: 2, mb: 2,
-        gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(5, minmax(0, 1fr))" },
+        gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", sm: "repeat(3, minmax(0, 1fr))", md: "repeat(5, minmax(0, 1fr))" },
       }}>
-        <KpiCard icon={<InventoryRounded />} color="info.main" title={t("Total")} value={fmtQuantity(totals?.total ?? 0)}
-          loading={summaryQuery.isPending} onClick={() => { setDraft({ ...draft, eligibility: "" }); setFilters({ ...filters, eligibility: "" }); setPage(0); }} />
-        <KpiCard icon={<CheckCircleRounded />} color="success.main" title={t("Elegibles")} value={fmtQuantity(totals?.eligible ?? 0)}
-          loading={summaryQuery.isPending} onClick={() => { setDraft({ ...draft, eligibility: "ELIGIBLE" }); setFilters({ ...filters, eligibility: "ELIGIBLE" }); setPage(0); }} />
-        <KpiCard icon={<WarningAmberRounded />} color="warning.main" title={t("Con aviso")} value={fmtQuantity(totals?.warning ?? 0)}
-          loading={summaryQuery.isPending} onClick={() => { setDraft({ ...draft, eligibility: "WARNING" }); setFilters({ ...filters, eligibility: "WARNING" }); setPage(0); }} />
-        <KpiCard icon={<BlockRounded />} color="error.main" title={t("Bloqueados")} value={fmtQuantity(totals?.blocked ?? 0)}
-          loading={summaryQuery.isPending} onClick={() => { setDraft({ ...draft, eligibility: "BLOCKED" }); setFilters({ ...filters, eligibility: "BLOCKED" }); setPage(0); }} />
-        <KpiCard icon={<PanToolRounded />} color="secondary.main" title={t("Con retención")} value={fmtQuantity(totals?.withHolds ?? 0)}
-          loading={summaryQuery.isPending} onClick={() => { setDraft({ ...draft, hold: "with" }); setFilters({ ...filters, hold: "with" }); setPage(0); }} />
+        <FilterKpiCard icon={<InventoryRounded />} color="info" title={t("Total")} value={fmtQuantity(totals?.total ?? 0)}
+          loading={summaryQuery.isPending} active={filters.eligibility === "" && filters.hold !== "with"}
+          onClick={() => { setDraft({ ...draft, eligibility: "" }); setFilters({ ...filters, eligibility: "" }); setPage(0); }} />
+        <FilterKpiCard icon={<CheckCircleRounded />} color="success" title={t("Elegibles")} value={fmtQuantity(totals?.eligible ?? 0)}
+          loading={summaryQuery.isPending} active={filters.eligibility === "ELIGIBLE"}
+          onClick={() => { setDraft({ ...draft, eligibility: "ELIGIBLE" }); setFilters({ ...filters, eligibility: "ELIGIBLE" }); setPage(0); }} />
+        <FilterKpiCard icon={<WarningAmberRounded />} color="warning" title={t("Con aviso")} value={fmtQuantity(totals?.warning ?? 0)}
+          loading={summaryQuery.isPending} active={filters.eligibility === "WARNING"}
+          onClick={() => { setDraft({ ...draft, eligibility: "WARNING" }); setFilters({ ...filters, eligibility: "WARNING" }); setPage(0); }} />
+        <FilterKpiCard icon={<BlockRounded />} color="error" title={t("Bloqueados")} value={fmtQuantity(totals?.blocked ?? 0)}
+          loading={summaryQuery.isPending} active={filters.eligibility === "BLOCKED"}
+          onClick={() => { setDraft({ ...draft, eligibility: "BLOCKED" }); setFilters({ ...filters, eligibility: "BLOCKED" }); setPage(0); }} />
+        <FilterKpiCard icon={<PanToolRounded />} color="secondary" title={t("Con retención")} value={fmtQuantity(totals?.withHolds ?? 0)}
+          loading={summaryQuery.isPending} active={filters.hold === "with"}
+          onClick={() => { setDraft({ ...draft, hold: "with" }); setFilters({ ...filters, hold: "with" }); setPage(0); }} />
       </Box>
 
       <Toolbar
@@ -503,8 +533,9 @@ export function SchedulingReleasePage() {
         }
       />
 
-      <Box sx={{ mb: 2 }}>
-        <AppCard title={t("Resumen por origen, ruta y fecha")}>
+      {/* La tabla del resumen va a sangre dentro de la tarjeta: sin su propio borde ni radio. */}
+      <Box sx={{ mb: 2, "& .MuiCard-root .MuiPaper-root": { border: 0, borderRadius: 0 } }}>
+        <AppCard title={t("Resumen por origen, ruta y fecha")} flush>
           <DataTable
             columns={groupColumns}
             rows={summaryQuery.data?.groups ?? []}
@@ -519,40 +550,56 @@ export function SchedulingReleasePage() {
         </AppCard>
       </Box>
 
-      {canRelease && (
-        <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap", mb: 1 }}>
-          <Button size="small" onClick={selectReleasablePage} disabled={rows.length === 0}>
-            {t("Seleccionar liberables de la página")}
-          </Button>
-          {selectedIds.size > 0 && (
-            <>
-              <Typography variant="body2" color="text.secondary">
-                {t("{{count}} seleccionados", { count: selectedIds.size })}
-              </Typography>
-              <Button size="small" onClick={() => setSelectedIds(new Set())}>{t("Limpiar selección")}</Button>
-              <Button size="small" variant="contained" startIcon={<PlaylistAddCheckRounded />}
-                disabled={busy || releasableSelected === 0} onClick={() => void releaseSelected()}>
-                {t("Liberar seleccionados")}
-              </Button>
-            </>
-          )}
-        </Box>
-      )}
+      {/* La barra de selección y la tabla forman un solo panel: la franja verde va encima de las
+          filas que selecciona. Se le quita a la tabla su propio borde para no apilar dos. */}
+      <Box sx={canRelease ? {
+        border: "1px solid", borderColor: "divider", borderRadius: `${R.lg}px`, overflow: "hidden", bgcolor: "background.paper",
+        "& > .MuiPaper-root": { border: 0, borderRadius: 0 },
+      } : undefined}>
+        {canRelease && (
+          <Box sx={(th) => ({
+            display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap", px: 2, py: 1.25,
+            bgcolor: alpha(th.palette.primary.main, th.palette.mode === "dark" ? 0.16 : 0.1),
+            borderBottom: "1px solid", borderColor: alpha(th.palette.primary.main, 0.18),
+          })}>
+            <Button size="small" variant="outlined" color="inherit" startIcon={<DoneAllRounded />}
+              onClick={selectReleasablePage} disabled={rows.length === 0}
+              sx={{ bgcolor: "background.paper", borderColor: "divider", whiteSpace: "nowrap" }}>
+              {t("Seleccionar liberables de la página")}
+            </Button>
+            {selectedIds.size > 0 && (
+              <>
+                <Typography variant="body2" sx={{ color: "primary.main", fontWeight: 700 }}>
+                  {t("{{count}} seleccionados", { count: selectedIds.size })}
+                </Typography>
+                <Button size="small" color="inherit" sx={{ color: "text.secondary" }} onClick={() => setSelectedIds(new Set())}>
+                  {t("Limpiar selección")}
+                </Button>
+                <Button size="small" variant="contained" startIcon={<PlaylistAddCheckRounded />}
+                  sx={{ ml: "auto" }}
+                  disabled={busy || releasableSelected === 0} onClick={() => void releaseSelected()}>
+                  {t("Liberar seleccionados")}
+                </Button>
+              </>
+            )}
+          </Box>
+        )}
 
-      <DataTable
-        columns={columns}
-        rows={rows}
-        total={pageData?.totalElements}
-        rowKey={(row) => row.orderId}
-        isLoading={boardQuery.isPending}
-        error={boardQuery.isError ? describeApiError(boardQuery.error as ApiError) : null}
-        onRetry={() => void boardQuery.refetch()}
-        emptyTitle={t("Sin pedidos")}
-        emptyMessage={t("Ningún pedido coincide con los filtros.")}
-        rowAccent={(row) => row.eligibility === "BLOCKED" ? "error.main" : row.eligibility === "WARNING" ? "warning.main" : null}
-        onRowClick={(row) => setPanel({ kind: "detail", orderId: row.orderId })}
-        footer={pageData ? <Pagination page={pageData} onPageChange={(next) => { setPage(next); setSelectedIds(new Set()); }} /> : undefined}
-      />
+        <DataTable
+          columns={columns}
+          rows={rows}
+          total={pageData?.totalElements}
+          rowKey={(row) => row.orderId}
+          isLoading={boardQuery.isPending}
+          error={boardQuery.isError ? describeApiError(boardQuery.error as ApiError) : null}
+          onRetry={() => void boardQuery.refetch()}
+          emptyTitle={t("Sin pedidos")}
+          emptyMessage={t("Ningún pedido coincide con los filtros.")}
+          rowAccent={(row) => row.eligibility === "BLOCKED" ? theme.palette.error.main : row.eligibility === "WARNING" ? theme.palette.warning.main : null}
+          onRowClick={(row) => setPanel({ kind: "detail", orderId: row.orderId })}
+          footer={pageData ? <Pagination page={pageData} onPageChange={(next) => { setPage(next); setSelectedIds(new Set()); }} /> : undefined}
+        />
+      </Box>
 
       {panel?.kind === "detail" && (
         <SchedulingDetailDrawer

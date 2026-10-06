@@ -1,8 +1,10 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, MenuItem, TextField, Typography } from "@mui/material";
-import { AddRounded, ViewKanbanRounded, OpenInNewRounded } from "@mui/icons-material";
+import { Box, Button, MenuItem, TextField, Typography } from "@mui/material";
+import {
+  AddRounded, ViewKanbanRounded, ArrowForwardRounded, BoltRounded, PanToolOutlined,
+} from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchOrigins } from "../../shared/api/originsApi";
 import {
@@ -87,10 +89,25 @@ export function PlanningRunsPage() {
   function resetFilters() { setDraft(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); setPage(0); }
 
   const columns: DataTableColumn<PlanningRunView>[] = [
-    { key: "planNumber", header: t("Plan"), render: (run) => <Typography variant="body2" sx={{ fontWeight: 800 }}>{run.planNumber}</Typography> },
+    { key: "planNumber", header: t("Plan"), render: (run) => (
+        <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: "tabular-nums", letterSpacing: ".01em", whiteSpace: "nowrap" }}>
+          {run.planNumber}
+        </Typography>
+      ) },
     { key: "origin", header: t("Origen"), render: (run) => run.originName ?? run.originCode ?? "-" },
     { key: "planningDate", header: t("Fecha de planificación"), render: (run) => fmtDate(run.planningDate) },
-    { key: "mode", header: t("Modo"), render: (run) => run.mode === "AUTOMATIC" ? t("Automático") : t("Manual") },
+    {
+      key: "mode",
+      header: t("Modo"),
+      render: (run) => (
+        <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.75, whiteSpace: "nowrap" }}>
+          {run.mode === "AUTOMATIC"
+            ? <BoltRounded aria-hidden sx={{ fontSize: 15, color: "text.secondary" }} />
+            : <PanToolOutlined aria-hidden sx={{ fontSize: 14, color: "text.secondary" }} />}
+          {run.mode === "AUTOMATIC" ? t("Automático") : t("Manual")}
+        </Box>
+      ),
+    },
     {
       key: "status",
       header: t("Estado"),
@@ -104,8 +121,9 @@ export function PlanningRunsPage() {
       actions: true,
       render: (run) => (
         <Button
-          size="small" variant="outlined" endIcon={<OpenInNewRounded />}
+          size="small" variant="outlined" color="inherit" endIcon={<ArrowForwardRounded sx={{ fontSize: "15px !important" }} />}
           onClick={(e) => { e.stopPropagation(); navigate(`/planning/${run.id}`); }}
+          sx={{ borderColor: "divider", whiteSpace: "nowrap" }}
         >
           {t("Abrir")}
         </Button>

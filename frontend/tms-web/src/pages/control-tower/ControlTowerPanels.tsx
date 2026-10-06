@@ -1,4 +1,5 @@
-import { Box, Chip, Paper, Typography } from "@mui/material";
+import type { ReactNode } from "react";
+import { Box, Card, Chip, Paper, Typography } from "@mui/material";
 import { Link } from "react-router-dom";
 import {
   ReportProblemRounded, ScheduleRounded, LocalShippingRounded, BlockRounded, InfoOutlined,
@@ -9,6 +10,7 @@ import type {
   ControlTowerBlockerView, ControlTowerExceptionView, ControlTowerStopView, ControlTowerWorkloadView,
 } from "../../shared/api/controlTowerApi";
 import { AppCard, StatusChip } from "../../shared/ui/components";
+import { R, T } from "../../theme";
 import { STOP_EXECUTION_TONE, TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
@@ -25,19 +27,91 @@ const ADVISORY_ICON: Record<string, typeof InfoOutlined> = {
   ORDER_HOLD_ON_COMMITTED_TRIP: PauseCircleOutlineRounded,
 };
 
-/** Un panel de la torre siempre dice de cuántos son los que enseña: "los peores veinte de
- * cuarenta y siete" es una frase distinta de "hay veinte". */
-function PanelTitle({ icon, label, shown, total }: { icon: React.ReactNode; label: string; shown: number; total: number }) {
+/**
+ * Una banda de la franja de KPIs: una tarjeta con borde y un título en versalitas, con sus
+ * métricas una al lado de otra separadas por divisores finos. Agrupa lo que en una fila de
+ * nueve tarjetas iguales costaba leer como dos preguntas distintas.
+ */
+export function KpiBand({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-      {icon}
-      {label}
-      {total > shown && (
-        <Chip size="small" variant="outlined" label={t("{{shown}} de {{total}}", { shown, total })} sx={{ height: 20, fontSize: 10.5 }} />
+    <Card variant="outlined" component="section" aria-label={title} sx={{ borderRadius: `${R.lg}px`, boxShadow: "none", px: 2, pt: 1.5, pb: 1.75 }}>
+      <Typography component="h2" sx={{
+        fontSize: T.micro, fontWeight: 800, letterSpacing: ".12em", textTransform: "uppercase",
+        color: "text.secondary", mb: 1.25, lineHeight: 1.4,
+      }}>
+        {title}
+      </Typography>
+      <Box sx={{
+        display: "grid", rowGap: 1.5,
+        gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))",
+        "& > *": { px: 1.25 },
+        "& > *:first-of-type": { pl: 0 },
+        "& > *:not(:first-of-type)": { borderLeft: "1px solid", borderLeftColor: "divider" },
+      }}>
+        {children}
+      </Box>
+    </Card>
+  );
+}
+
+/** Una métrica dentro de una `KpiBand`: icono y etiqueta pequeños, la cifra grande y, si la
+ * hay, una línea de ayuda. Como en `KpiCard`, sólo el rojo de error colorea la cifra. */
+export function BandMetric({ icon, title, value, sub, color = "primary.main" }: {
+  icon: ReactNode; title: string; value: ReactNode; sub?: string; color?: string;
+}) {
+  return (
+    <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 0.75 }}>
+      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.5, minHeight: 32 }}>
+        <Box aria-hidden sx={{ color, display: "flex", mt: "1px", "& svg": { fontSize: 15 } }}>{icon}</Box>
+        <Typography sx={{
+          minWidth: 0, fontSize: T.label, fontWeight: 600, color: "text.secondary", lineHeight: 1.35,
+          overflowWrap: "anywhere",
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+        }}>
+          {title}
+        </Typography>
+      </Box>
+      <Typography component="div" sx={{
+        fontSize: T.kpiCard, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.03em",
+        fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
+        color: color.startsWith("error") ? "error.main" : "text.primary",
+      }}>
+        {value}
+      </Typography>
+      {sub && (
+        <Typography sx={{ fontSize: T.label, color: "text.secondary", lineHeight: 1.35 }}>{sub}</Typography>
       )}
     </Box>
   );
 }
+
+/** Un panel de la torre siempre dice de cuántos son los que enseña: "los peores veinte de
+ * cuarenta y siete" es una frase distinta de "hay veinte". El contador va a la derecha de la
+ * cabecera, en el hueco de acciones de la tarjeta. */
+function panelHeader({ icon, label, shown, total }: { icon: React.ReactNode; label: string; shown: number; total: number }) {
+  return {
+    title: (
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, fontSize: T.cardTitle, fontWeight: 700 }}>
+        {icon}
+        {label}
+      </Box>
+    ),
+    actions: total > shown
+      ? <Chip size="small" variant="outlined" label={t("{{shown}} de {{total}}", { shown, total })} sx={{ height: 20, fontSize: 10.5, fontWeight: 700 }} />
+      : undefined,
+  };
+}
+
+/** La fila de lista de un panel: tarjeta con borde fino y esquinas de 10px. El borde izquierdo
+ * de color, cuando lo hay, lo pone cada panel: es la mitad del mensaje. */
+const ROW_SX = {
+  px: 1.5, py: 1.25, borderRadius: `${R.md - 2}px`, borderColor: "divider",
+  textDecoration: "none", color: "text.primary", display: "block",
+  transition: "border-color .15s",
+} as const;
+
+/** La lista de filas de un panel. */
+const LIST_SX = { display: "grid", gap: 1 } as const;
 
 /**
  * Los envíos más cargados del día, con el peor de sus tres ejes de capacidad.
@@ -48,11 +122,11 @@ function PanelTitle({ icon, label, shown, total }: { icon: React.ReactNode; labe
  */
 export function WorkloadPanel({ items, total }: { items: ControlTowerWorkloadView[]; total: number }) {
   return (
-    <AppCard title={<PanelTitle icon={<LocalShippingRounded sx={{ fontSize: 19, color: "text.disabled" }} />} label={t("Carga de los envíos")} shown={items.length} total={total} />}>
+    <AppCard {...panelHeader({ icon: <LocalShippingRounded sx={{ fontSize: 19, color: "text.disabled" }} />, label: t("Carga de los envíos"), shown: items.length, total })}>
       {items.length === 0 ? (
         <Typography variant="body2" color="text.secondary">{t("No hay envíos en curso.")}</Typography>
       ) : (
-        <Box sx={{ display: "grid", gap: 1 }}>
+        <Box sx={LIST_SX}>
           {items.map(({ trip, percentUsed }) => (
             <Paper
               key={trip.id}
@@ -60,13 +134,12 @@ export function WorkloadPanel({ items, total }: { items: ControlTowerWorkloadVie
               to={`/trips/${trip.id}`}
               variant="outlined"
               sx={{
-                p: 1.25, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap",
-                textDecoration: "none", color: "text.primary",
+                ...ROW_SX, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap",
                 "&:hover": { borderColor: "primary.main" },
               }}
             >
               <Box sx={{ flex: 1, minWidth: 140 }}>
-                <Typography variant="body2" sx={{ fontWeight: 700 }}>{trip.shipmentNumber}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700, fontSize: T.bodyStrong }}>{trip.shipmentNumber}</Typography>
                 <Typography variant="caption" color="text.secondary" noWrap>
                   {trip.vehicleLicensePlate ?? t("Sin vehículo asignado")}
                   {trip.carrierName && ` · ${trip.carrierName}`}
@@ -98,11 +171,11 @@ export function WorkloadPanel({ items, total }: { items: ControlTowerWorkloadVie
  */
 export function ExceptionsPanel({ items, total }: { items: ControlTowerExceptionView[]; total: number }) {
   return (
-    <AppCard title={<PanelTitle icon={<ReportProblemRounded sx={{ fontSize: 19, color: "error.main" }} />} label={t("Incidencias abiertas")} shown={items.length} total={total} />}>
+    <AppCard {...panelHeader({ icon: <ReportProblemRounded sx={{ fontSize: 19, color: "error.main" }} />, label: t("Incidencias abiertas"), shown: items.length, total })}>
       {items.length === 0 ? (
         <Typography variant="body2" color="text.secondary">{t("Ninguna incidencia abierta hoy.")}</Typography>
       ) : (
-        <Box sx={{ display: "grid", gap: 1 }}>
+        <Box sx={LIST_SX}>
           {items.map((exception) => (
             <Paper
               key={exception.id}
@@ -110,13 +183,13 @@ export function ExceptionsPanel({ items, total }: { items: ControlTowerException
               to={`/trips/${exception.tripId}`}
               variant="outlined"
               sx={{
-                p: 1.25, textDecoration: "none", color: "text.primary", display: "block",
+                ...ROW_SX,
                 borderLeft: "3px solid", borderLeftColor: "error.main",
                 "&:hover": { borderColor: "error.main" },
               }}
             >
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, fontSize: T.bodyStrong }}>
                   {enumLabel("tripExceptionType", exception.exceptionType)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">{exception.shipmentNumber ?? ""}</Typography>
@@ -124,7 +197,7 @@ export function ExceptionsPanel({ items, total }: { items: ControlTowerException
                 <Typography variant="caption" color="text.secondary">{fmtDateTime(exception.reportedAt)}</Typography>
               </Box>
               {exception.notes && (
-                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5, lineHeight: 1.45 }}>
                   {exception.notes}
                 </Typography>
               )}
@@ -145,11 +218,11 @@ export function ExceptionsPanel({ items, total }: { items: ControlTowerException
  */
 export function OutstandingStopsPanel({ items, total }: { items: ControlTowerStopView[]; total: number }) {
   return (
-    <AppCard title={<PanelTitle icon={<ScheduleRounded sx={{ fontSize: 19, color: "text.disabled" }} />} label={t("Paradas pendientes")} shown={items.length} total={total} />}>
+    <AppCard {...panelHeader({ icon: <ScheduleRounded sx={{ fontSize: 19, color: "text.disabled" }} />, label: t("Paradas pendientes"), shown: items.length, total })}>
       {items.length === 0 ? (
         <Typography variant="body2" color="text.secondary">{t("No queda ninguna parada pendiente.")}</Typography>
       ) : (
-        <Box sx={{ display: "grid", gap: 1 }}>
+        <Box sx={LIST_SX}>
           {items.map((stop) => {
             const late = stop.minutesPastWindow !== null && stop.minutesPastWindow > 0;
             return (
@@ -159,13 +232,13 @@ export function OutstandingStopsPanel({ items, total }: { items: ControlTowerSto
                 to={`/trips/${stop.tripId}`}
                 variant="outlined"
                 sx={{
-                  p: 1.25, textDecoration: "none", color: "text.primary", display: "block",
+                  ...ROW_SX,
                   ...(late ? { borderLeft: "3px solid", borderLeftColor: "warning.main" } : {}),
                   "&:hover": { borderColor: "primary.main" },
                 }}
               >
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, fontSize: T.bodyStrong }}>
                     {stop.sequence}. {stop.destinationName ?? stop.destinationCode ?? ""}
                   </Typography>
                   <StatusChip
@@ -179,7 +252,7 @@ export function OutstandingStopsPanel({ items, total }: { items: ControlTowerSto
                     </Typography>
                   )}
                 </Box>
-                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5, lineHeight: 1.45 }}>
                   {stop.shipmentNumber}
                   {stop.vehicleLicensePlate && ` · ${stop.vehicleLicensePlate}`}
                   {stop.windowEndsAt && ` · ${t("Ventana hasta")} ${fmtTime(stop.windowEndsAt)}`}
@@ -206,13 +279,13 @@ export function OutstandingStopsPanel({ items, total }: { items: ControlTowerSto
  */
 export function BlockersPanel({ items, total }: { items: ControlTowerBlockerView[]; total: number }) {
   return (
-    <AppCard title={<PanelTitle icon={<BlockRounded sx={{ fontSize: 19, color: "warning.main" }} />} label={t("No pueden salir")} shown={items.length} total={total} />}>
+    <AppCard {...panelHeader({ icon: <BlockRounded sx={{ fontSize: 19, color: "warning.main" }} />, label: t("No pueden salir"), shown: items.length, total })}>
       {items.length === 0 ? (
         // Se dice en voz alta. "No hay nada atascado" es un dato que un despachador quiere leer,
         // no deducir de un panel vacío.
         <Typography variant="body2" color="text.secondary">{t("Ningún envío bloqueado hoy.")}</Typography>
       ) : (
-        <Box sx={{ display: "grid", gap: 1 }}>
+        <Box sx={LIST_SX}>
           {items.map((blocker) => (
             <Paper
               key={`${blocker.tripId}-${blocker.reason}`}
@@ -220,18 +293,18 @@ export function BlockersPanel({ items, total }: { items: ControlTowerBlockerView
               to={`/trips/${blocker.tripId}`}
               variant="outlined"
               sx={{
-                p: 1.25, textDecoration: "none", color: "text.primary", display: "block",
+                ...ROW_SX,
                 borderLeft: "3px solid", borderLeftColor: "warning.main",
                 "&:hover": { borderColor: "warning.main" },
               }}
             >
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, fontSize: T.bodyStrong }}>
                   {enumLabel("blockerReason", blocker.reason)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">{blocker.shipmentNumber}</Typography>
               </Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5, lineHeight: 1.45 }}>
                 {blocker.detail}
               </Typography>
             </Paper>
@@ -259,11 +332,11 @@ export function BlockersPanel({ items, total }: { items: ControlTowerBlockerView
  */
 export function AdvisoriesPanel({ items, total }: { items: ControlTowerAdvisoryView[]; total: number }) {
   return (
-    <AppCard title={<PanelTitle icon={<InfoOutlined sx={{ fontSize: 19, color: "info.main" }} />} label={t("Conviene saber")} shown={items.length} total={total} />}>
+    <AppCard {...panelHeader({ icon: <InfoOutlined sx={{ fontSize: 19, color: "info.main" }} />, label: t("Conviene saber"), shown: items.length, total })}>
       {items.length === 0 ? (
         <Typography variant="body2" color="text.secondary">{t("Nada pendiente de mirar hoy.")}</Typography>
       ) : (
-        <Box sx={{ display: "grid", gap: 1 }}>
+        <Box sx={LIST_SX}>
           {items.map((advisory, index) => {
             const link = advisoryLink(advisory);
             const Icon = ADVISORY_ICON[advisory.type] ?? InfoOutlined;
@@ -275,7 +348,7 @@ export function AdvisoriesPanel({ items, total }: { items: ControlTowerAdvisoryV
               {...linkProps}
               variant="outlined"
               sx={{
-                p: 1.25, textDecoration: "none", color: "text.primary", display: "block",
+                ...ROW_SX,
                 // Azul y no ámbar: el color es la mitad del mensaje de que esto no detiene nada.
                 borderLeft: "3px solid", borderLeftColor: "info.main",
                 "&:hover": { borderColor: "info.main" },
@@ -283,7 +356,7 @@ export function AdvisoriesPanel({ items, total }: { items: ControlTowerAdvisoryV
             >
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
                 <Icon sx={{ fontSize: 17, color: "info.main" }} />
-                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, fontSize: T.bodyStrong }}>
                   {advisoryLabel(advisory.type)}
                 </Typography>
                 {!isKnownAdvisory(advisory.type) && (
@@ -300,7 +373,7 @@ export function AdvisoriesPanel({ items, total }: { items: ControlTowerAdvisoryV
                   </Typography>
                 )}
               </Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5, lineHeight: 1.45 }}>
                 {advisory.detail}
               </Typography>
             </Paper>

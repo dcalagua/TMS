@@ -4,6 +4,7 @@ import {
   Alert, Box, Button, Chip, IconButton, MenuItem, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, TextField, Tooltip, Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import {
   WarehouseRounded, DescriptionRounded, ContentCopyRounded, InventoryRounded, TaskAltRounded,
   CancelRounded, CircleRounded,
@@ -15,8 +16,10 @@ import {
   fetchTripWarehouseRawDocument, type DispatchDocumentView, type TripWarehouseView,
 } from "../../shared/api/warehouseApi";
 import {
-  AppCard, DetailGrid, DetailItem, FormDrawer, LoadingState, StatusChip,
+  DetailGrid, DetailItem, FormDrawer, LoadingState, StatusChip,
 } from "../../shared/ui/components";
+import { R } from "../../theme";
+import { WorkspaceCard } from "./WorkspaceCard";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDateTime, fmtDecimal, fmtQuantity, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
@@ -63,28 +66,25 @@ export function TripWarehouseCard({ companyId, trip, warehouse, loading, failed,
   const [rawFor, setRawFor] = useState<DispatchDocumentView | null>(null);
   const document = documents.find((entry) => entry.id === selectedId) ?? documents[0] ?? null;
 
-  const title = (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-      <WarehouseRounded sx={{ fontSize: 19, color: "text.disabled" }} />
-      {t("Despacho de almacén")}
-    </Box>
-  );
+  const title = t("Despacho de almacén");
+  const icon = <WarehouseRounded />;
 
   if (loading) {
-    return <AppCard title={title}><LoadingState minHeight={100} /></AppCard>;
+    return <WorkspaceCard icon={icon} title={title}><LoadingState minHeight={100} /></WorkspaceCard>;
   }
   if (failed || !warehouse) {
     return (
-      <AppCard title={title}>
+      <WorkspaceCard icon={icon} title={title}>
         <Typography variant="body2" color="text.secondary">
           {t("No se pudo consultar el despacho del almacén en este momento.")}
         </Typography>
-      </AppCard>
+      </WorkspaceCard>
     );
   }
 
   return (
-    <AppCard
+    <WorkspaceCard
+      icon={icon}
       title={title}
       actions={
         <StatusChip
@@ -94,7 +94,7 @@ export function TripWarehouseCard({ companyId, trip, warehouse, loading, failed,
         />
       }
     >
-      <DetailGrid columns={3}>
+      <DetailGrid columns={2}>
         <DetailItem label={t("Modo")} value={enumLabel("dispatchConfirmationMode", warehouse.dispatchConfirmationMode)} />
         <DetailItem
           label={t("Salió por")}
@@ -157,7 +157,7 @@ export function TripWarehouseCard({ companyId, trip, warehouse, loading, failed,
           onClose={() => setRawFor(null)}
         />
       )}
-    </AppCard>
+    </WorkspaceCard>
   );
 }
 
@@ -199,12 +199,12 @@ function DocumentSection({
         <StatusChip label={enumLabel("dispatchDocumentOutcome", document.outcome)} tone={outcomeTone(document.outcome)} />
         <StatusChip label={enumLabel("dispatchVerificationStatus", document.verificationStatus)} tone={verificationTone(document.verificationStatus)} />
         <Box sx={{ flex: 1 }} />
-        <Button size="small" startIcon={<DescriptionRounded />} onClick={onShowRaw}>
+        <Button size="small" variant="outlined" color="inherit" sx={{ borderColor: "divider" }} startIcon={<DescriptionRounded />} onClick={onShowRaw}>
           {t("Ver documento original")}
         </Button>
       </Box>
 
-      <DetailGrid columns={3}>
+      <DetailGrid columns={2}>
         <DetailItem label={t("Sistema")} value={document.sourceSystem} />
         <DetailItem label={t("Carga")} value={document.loadReference} />
         <DetailItem label={t("Despacho físico")} value={document.actualDispatchAt ? fmtDateTime(document.actualDispatchAt) : null} />
@@ -224,7 +224,7 @@ function DocumentSection({
 
       {/* Plan contra realidad. La marca de diferencia la pone el código de discrepancia del
           servidor, nunca una comparación hecha aquí. */}
-      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: "4px" }}>
+      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: `${R.md}px` }}>
         <Table size="small" aria-label={t("Plan contra despachado")}>
           <TableHead>
             <TableRow>
@@ -235,7 +235,7 @@ function DocumentSection({
           </TableHead>
           <TableBody>
             {rows.map((row) => (
-              <TableRow key={row.key} sx={row.differs ? { bgcolor: "action.hover" } : undefined}>
+              <TableRow key={row.key} sx={row.differs ? { bgcolor: (th) => alpha(th.palette.error.main, 0.08) } : undefined}>
                 <TableCell sx={{ ...cellSx, fontWeight: 700 }}>{t(row.label)}</TableCell>
                 <TableCell sx={cellSx}>{row.planned ?? "-"}</TableCell>
                 <TableCell sx={{ ...cellSx, color: row.differs ? "error.main" : undefined, fontWeight: row.differs ? 700 : undefined }}>
@@ -262,7 +262,7 @@ function DocumentSection({
         {document.discrepancies.length === 0 ? (
           <Typography variant="body2" color="text.secondary">{t("Sin diferencias con el plan.")}</Typography>
         ) : (
-          <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: "4px", maxHeight: 280 }}>
+          <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: `${R.md}px`, maxHeight: 280 }}>
             <Table size="small" stickyHeader aria-label={t("Diferencias con el plan")}>
               <TableHead>
                 <TableRow>

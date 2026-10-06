@@ -17,7 +17,7 @@ import { TRIP_STATUSES, type TripStatus } from "../../shared/api/planningApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  DataTable, ErrorState, KpiCard, LoadingState, PageHeader, Pagination, StatusChip, Toolbar,
+  DataTable, ErrorState, LoadingState, PageHeader, Pagination, StatusChip, Toolbar,
   type DataTableColumn,
 } from "../../shared/ui/components";
 import { TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
@@ -26,7 +26,7 @@ import { enumLabel } from "../../lib/enums";
 import type { StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
 import { fmtDateTime, fmtMinutes, fmtQuantity, fmtTime } from "../../lib/locale";
-import { BlockersPanel,
+import { BlockersPanel, BandMetric, KpiBand,
   AdvisoriesPanel, ExceptionsPanel, OutstandingStopsPanel, WorkloadPanel } from "./ControlTowerPanels";
 
 const PAGE_SIZE = 20;
@@ -226,46 +226,60 @@ export function ControlTowerPage() {
         }
       />
 
-      {/* La franja del día entero: no obedece a los filtros de abajo a propósito. */}
+      {/* La franja del día entero: no obedece a los filtros de abajo a propósito. Dos bandas: lo
+          que pasa con los envíos y lo que está en riesgo. */}
       <Box sx={{
         display: "grid", gap: 2, mb: 3,
-        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0,1fr))", lg: "repeat(4, minmax(0,1fr))" },
+        gridTemplateColumns: {
+          xs: "1fr",
+          lg: summary.ordersUnplanned !== null ? "minmax(0,5fr) minmax(0,4fr)" : "minmax(0,5fr) minmax(0,3fr)",
+        },
       }}>
-        <KpiCard icon={<DirectionsRunRounded />} color="warning.main" title={t("En tránsito")} value={fmtQuantity(summary.tripsInTransit)} />
-        <KpiCard icon={<ScheduleRounded />} color="info.main" title={t("Programados")} value={fmtQuantity(summary.tripsScheduled)} />
-        <KpiCard icon={<DoneAllRounded />} color="success.main" title={t("Completados")} value={fmtQuantity(summary.tripsCompleted)} />
-        <KpiCard
-          icon={<HourglassBottomRounded />} color="error.main"
-          title={t("Vencidos sin salir")} sub={t("Debían haber salido")}
-          value={fmtQuantity(summary.tripsOverdue)}
-        />
-        <KpiCard icon={<PendingActionsRounded />} color="error.main" title={t("Salieron tarde")} value={fmtQuantity(summary.tripsDepartedLate)} />
-        <KpiCard icon={<ReportProblemRounded />} color="error.main" title={t("Incidencias abiertas")} value={fmtQuantity(summary.openExceptions)} />
-        {/* JOB 12: lo único de esta fila que mira hacia adelante. */}
-        <KpiCard
-          icon={<BlockRounded />} color="warning.main"
-          title={t("No pueden salir")} sub={t("Bloqueados ahora mismo")}
-          value={fmtQuantity(summary.blockedShipments)}
-        />
-        <KpiCard
-          icon={<ScheduleRounded />} color="warning.main"
-          title={t("Paradas pendientes")} sub={t("{{n}} fuera de ventana", { n: fmtQuantity(summary.stopsPastWindow) })}
-          value={fmtQuantity(summary.outstandingStops)}
-        />
-        {/* `null` y no `0` cuando la cuenta no puede ver pedidos: un cero sería una afirmación
-            sobre una cola que la respuesta no tenía permiso para mirar. */}
-        {summary.ordersUnplanned !== null && (
-          <KpiCard icon={<PendingActionsRounded />} color="text.secondary" title={t("Pedidos sin planificar")} value={fmtQuantity(summary.ordersUnplanned)} />
-        )}
+        <KpiBand title={t("Envíos")}>
+          <BandMetric icon={<DirectionsRunRounded />} color="warning.main" title={t("En tránsito")} value={fmtQuantity(summary.tripsInTransit)} />
+          <BandMetric icon={<ScheduleRounded />} color="info.main" title={t("Programados")} value={fmtQuantity(summary.tripsScheduled)} />
+          <BandMetric icon={<DoneAllRounded />} color="success.main" title={t("Completados")} value={fmtQuantity(summary.tripsCompleted)} />
+          <BandMetric
+            icon={<HourglassBottomRounded />} color="error.main"
+            title={t("Vencidos sin salir")} sub={t("Debían haber salido")}
+            value={fmtQuantity(summary.tripsOverdue)}
+          />
+          <BandMetric icon={<PendingActionsRounded />} color="error.main" title={t("Salieron tarde")} value={fmtQuantity(summary.tripsDepartedLate)} />
+        </KpiBand>
+        <KpiBand title={t("Riesgos")}>
+          <BandMetric icon={<ReportProblemRounded />} color="error.main" title={t("Incidencias abiertas")} value={fmtQuantity(summary.openExceptions)} />
+          {/* JOB 12: lo único de esta fila que mira hacia adelante. */}
+          <BandMetric
+            icon={<BlockRounded />} color="warning.main"
+            title={t("No pueden salir")} sub={t("Bloqueados ahora mismo")}
+            value={fmtQuantity(summary.blockedShipments)}
+          />
+          <BandMetric
+            icon={<ScheduleRounded />} color="warning.main"
+            title={t("Paradas pendientes")} sub={t("{{n}} fuera de ventana", { n: fmtQuantity(summary.stopsPastWindow) })}
+            value={fmtQuantity(summary.outstandingStops)}
+          />
+          {/* `null` y no `0` cuando la cuenta no puede ver pedidos: un cero sería una afirmación
+              sobre una cola que la respuesta no tenía permiso para mirar. */}
+          {summary.ordersUnplanned !== null && (
+            <BandMetric icon={<PendingActionsRounded />} color="text.secondary" title={t("Pedidos sin planificar")} value={fmtQuantity(summary.ordersUnplanned)} />
+          )}
+        </KpiBand>
       </Box>
 
+      {/* Paneles en dos filas de alturas iguales: tres arriba, dos abajo. */}
       <Box sx={{
-        display: "grid", gap: 3, mb: 3, alignItems: "start",
+        display: "grid", gap: 2, mb: 2,
         gridTemplateColumns: { xs: "1fr", lg: "repeat(3, minmax(0, 1fr))" },
       }}>
         <WorkloadPanel items={overview.workload} total={summary.tripsInTransit + summary.tripsScheduled} />
         <ExceptionsPanel items={overview.openExceptions} total={summary.openExceptions} />
         <OutstandingStopsPanel items={overview.outstandingStops} total={summary.outstandingStops} />
+      </Box>
+      <Box sx={{
+        display: "grid", gap: 2, mb: 3,
+        gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(0, 1fr))" },
+      }}>
         <BlockersPanel items={overview.blockers} total={summary.blockedShipments} />
         {/* Debajo de los bloqueadores y visiblemente distinto (JOB 23). Dos corrientes, dos
             contadores: "qué está atascado" y "qué conviene saber" son preguntas diferentes, y una

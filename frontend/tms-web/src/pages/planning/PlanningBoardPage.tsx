@@ -5,7 +5,7 @@ import {
   Box, Button, Chip, Paper, Tab, Tabs, Typography, useMediaQuery, useTheme,
 } from "@mui/material";
 import {
-  ArrowBackRounded, AutoFixHighRounded, AddRounded, ViewKanbanRounded, LocalShippingRounded,
+  ArrowBackRounded, BoltRounded, AddRounded, LocalShippingRounded, CheckRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import { cancelPlanningRun, confirmPlanningRun, fetchPlanningRun } from "../../shared/api/planningApi";
@@ -14,10 +14,9 @@ import { useCompany } from "../../shared/company/CompanyContext";
 import {
   EmptyState, ErrorState, LoadingState, PageHeader, StatusChip,
 } from "../../shared/ui/components";
-import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
-import type { StatusTone } from "../../theme";
+import { R, type StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
 import { fmtDate } from "../../lib/locale";
 import { AutoPlanDrawer } from "./AutoPlanDrawer";
@@ -138,11 +137,12 @@ export function PlanningBoardPage() {
       trips={trips}
       canManage={isDraft && canManageTrips}
       onAssigned={refreshBoard}
+      title={isNarrow ? undefined : t("Pedidos elegibles")}
     />
   );
 
   const tripsPanel = trips.length === 0 ? (
-    <Paper variant="outlined" sx={{ borderRadius: "10px" }}>
+    <Paper variant="outlined" sx={{ borderRadius: `${R.lg}px` }}>
       <EmptyState
         icon={<LocalShippingRounded />}
         title={t("Este plan todavía no tiene viajes")}
@@ -152,7 +152,9 @@ export function PlanningBoardPage() {
   ) : (
     <Box sx={{
       display: "grid", gap: 2,
-      gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" },
+      // Dos columnas en un escritorio normal y tres cuando de verdad caben, sin que una tarjeta
+      // baje nunca de un ancho en el que las barras de capacidad se lean.
+      gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))",
     }}>
       {trips.map((trip) => (
         <TripCard key={trip.id} trip={trip} onOpen={() => setOpenTripId(trip.id)} />
@@ -163,21 +165,23 @@ export function PlanningBoardPage() {
   return (
     <>
       <Button
-        component={Link} to="/planning" size="small" startIcon={<ArrowBackRounded />}
-        sx={{ mb: 1, ml: -1 }}
+        component={Link} to="/planning" size="small" startIcon={<ArrowBackRounded sx={{ fontSize: "16px !important" }} />}
+        sx={{ mb: 1.5, ml: -1, fontWeight: 700 }}
       >
         {t("Volver a planes")}
       </Button>
 
       <PageHeader
-        icon={<ViewKanbanRounded />}
-        tint={ICON_TINTS["/planning"]}
         title={run.planNumber}
         subtitle={`${run.originName ?? run.originCode ?? ""} · ${fmtDate(run.planningDate)}`}
         meta={
           <>
             <StatusChip label={enumLabel("planningRunStatus", run.status)} tone={STATUS_TONE[run.status]} />
-            <Chip size="small" variant="outlined" label={t("{{count}} viajes", { count: trips.length })} />
+            <Chip
+              size="small" variant="outlined"
+              label={t("{{count}} viajes", { count: trips.length })}
+              sx={{ fontWeight: 700, color: "text.secondary", borderColor: "divider" }}
+            />
           </>
         }
         onRefresh={refreshBoard}
@@ -188,10 +192,10 @@ export function PlanningBoardPage() {
               <>
                 {/* Secundario y no principal: el plan que arma una persona sigue siendo el camino
                     normal, y este abre un paso de revisión en vez de hacer algo. */}
-                <Button variant="outlined" color="secondary" startIcon={<AutoFixHighRounded />} onClick={() => setShowAutoPlan(true)}>
+                <Button variant="outlined" color="inherit" startIcon={<BoltRounded />} onClick={() => setShowAutoPlan(true)} sx={{ borderColor: "divider" }}>
                   {t("Planificar automáticamente")}
                 </Button>
-                <Button variant="outlined" startIcon={<AddRounded />} onClick={() => setShowCreateTrip(true)}>
+                <Button variant="outlined" color="inherit" startIcon={<AddRounded />} onClick={() => setShowCreateTrip(true)} sx={{ borderColor: "divider" }}>
                   {t("Nuevo viaje")}
                 </Button>
               </>
@@ -201,7 +205,7 @@ export function PlanningBoardPage() {
                 <Button variant="outlined" color="error" onClick={() => void cancelPlan()}>
                   {t("Cancelar plan")}
                 </Button>
-                <Button variant="contained" onClick={() => void confirmPlan()}>
+                <Button variant="contained" startIcon={<CheckRounded />} onClick={() => void confirmPlan()}>
                   {t("Confirmar plan")}
                 </Button>
               </>
@@ -224,23 +228,21 @@ export function PlanningBoardPage() {
       )}
 
       <Box sx={{
-        display: "grid", gap: 3,
-        gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 4fr) minmax(0, 8fr)" },
+        display: "grid", gap: 2, alignItems: "start",
+        gridTemplateColumns: { xs: "1fr", lg: "370px minmax(0, 1fr)" },
       }}>
         {(!isNarrow || mobilePanel === "orders") && (
           <Box sx={{ minWidth: 0 }}>
-            {!isNarrow && (
-              <Typography variant="overline" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-                {t("Pedidos elegibles")}
-              </Typography>
-            )}
             {ordersPanel}
           </Box>
         )}
         {(!isNarrow || mobilePanel === "trips") && (
           <Box sx={{ minWidth: 0 }}>
             {!isNarrow && (
-              <Typography variant="overline" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+              <Typography
+                component="h2" variant="overline" color="text.secondary"
+                sx={{ display: "block", mb: 0.75, mt: -0.5, lineHeight: 1.6, letterSpacing: ".1em" }}
+              >
                 {t("Viajes")}
               </Typography>
             )}

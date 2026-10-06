@@ -66,8 +66,8 @@ export function SettlementPage() {
       header: t("Factura"),
       render: (row) => (
         <Box>
-          <Typography variant="body2" sx={{ fontWeight: 700 }}>{row.invoiceNumber}</Typography>
-          <Typography variant="caption" color="text.secondary">{fmtDate(row.invoiceDate)}</Typography>
+          <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{row.invoiceNumber}</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: "tabular-nums" }}>{fmtDate(row.invoiceDate)}</Typography>
         </Box>
       ),
     },
@@ -75,23 +75,30 @@ export function SettlementPage() {
     {
       key: "expectedAmount",
       header: t("Esperado"),
+      numeric: true,
       render: (row) => amount(row.expectedAmount, row.currency),
     },
     {
       key: "totalAmount",
       header: t("Facturado"),
-      render: (row) => `${fmtDecimal(row.totalAmount, 2)} ${row.currency}`,
+      numeric: true,
+      render: (row) => (
+        <Typography variant="body2" component="span" sx={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+          {`${fmtDecimal(row.totalAmount, 2)} ${row.currency}`}
+        </Typography>
+      ),
     },
     {
       key: "differenceAmount",
       header: t("Diferencia"),
+      numeric: true,
       render: (row) => {
         if (row.differenceAmount === null) return "—";
         const over = row.differenceAmount > 0;
         return (
           <Typography
-            variant="body2"
-            sx={{ fontWeight: 700, color: row.differenceAmount === 0 ? "text.secondary" : (over ? "error.main" : "warning.main") }}
+            variant="body2" component="span"
+            sx={{ fontWeight: 700, fontVariantNumeric: "tabular-nums", color: row.differenceAmount === 0 ? "text.secondary" : (over ? "error.main" : "warning.main") }}
           >
             {over ? "+" : ""}{fmtDecimal(row.differenceAmount, 2)}
           </Typography>
@@ -138,7 +145,7 @@ export function SettlementPage() {
           <TextField
             select size="small" label={t("Estado")} value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value as InvoiceStatus | ""); setPage(0); }}
-            sx={{ minWidth: 200 }}
+            sx={{ minWidth: 200, width: { sm: 260 } }}
           >
             <MenuItem value="">{t("Todos")}</MenuItem>
             {INVOICE_STATUSES.map((status) => (

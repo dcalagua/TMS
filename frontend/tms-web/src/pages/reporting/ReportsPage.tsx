@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
-  Alert, Box, Button, Chip, Table, TableBody, TableCell, TableContainer,
+  Alert, Box, Button, Chip, LinearProgress, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, TextField, Typography,
 } from "@mui/material";
 import {
@@ -17,6 +17,8 @@ import {
   AppCard, ErrorState, KpiCard, LoadingState, PageHeader, SectionHeader, dataTableSx,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
+import { alpha } from "@mui/material/styles";
+import { T } from "../../theme";
 import { notifyError } from "../../lib/ui";
 import { t } from "../../lib/i18n";
 import { fmtDate, fmtDateTime, fmtDecimal, fmtMoney, fmtPercent, fmtQuantity, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
@@ -139,7 +141,7 @@ export function ReportsPage() {
         <KpiCard icon={<ReportProblemRounded />} color="error.main" title={t("Incidencias")} value={fmtQuantity(exceptions.exceptions)} sub={t("{{n}} abiertas", { n: fmtQuantity(exceptions.open) })} />
       </Box>
 
-      <Box sx={{ display: "grid", gap: 3, mb: 3, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
+      <Box sx={{ display: "grid", gap: 2, mb: 3, gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(0,1fr))" } }}>
         <AppCard title={t("Envíos por día")}>
           <DailyColumnChart
             rows={daily}
@@ -167,45 +169,38 @@ export function ReportsPage() {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           {t("La carga total del rango sobre su capacidad total, no el promedio de los porcentajes por envío. Cubre {{n}} envíos.", { n: fmtQuantity(utilization.trips) })}
         </Typography>
-        <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, minmax(0,1fr))" } }}>
-          <KpiCard
+        <Box sx={{ display: "grid", columnGap: 3, rowGap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, minmax(0,1fr))" } }}>
+          <CapacityMetric
             icon={<LocalShippingRounded />} color="primary.main" title={t("Peso")}
-            value={pct(utilization.weightPercent)} progress={utilization.weightPercent ?? undefined}
+            value={pct(utilization.weightPercent)} progress={utilization.weightPercent}
             sub={`${fmtWeightKg(utilization.weightUsedKg)} / ${fmtWeightKg(utilization.weightCapacityKg)}`}
           />
-          <KpiCard
+          <CapacityMetric
             icon={<LocalShippingRounded />} color="info.main" title={t("Volumen")}
-            value={pct(utilization.volumePercent)} progress={utilization.volumePercent ?? undefined}
+            value={pct(utilization.volumePercent)} progress={utilization.volumePercent}
             sub={`${fmtVolumeM3(utilization.volumeUsedM3)} / ${fmtVolumeM3(utilization.volumeCapacityM3)}`}
           />
-          <KpiCard
+          <CapacityMetric
             icon={<LocalShippingRounded />} color="warning.main" title={t("Pallets")}
-            value={pct(utilization.palletsPercent)} progress={utilization.palletsPercent ?? undefined}
+            value={pct(utilization.palletsPercent)} progress={utilization.palletsPercent}
             sub={`${fmtDecimal(utilization.palletsUsed)} / ${fmtDecimal(utilization.palletCapacity)}`}
           />
         </Box>
       </AppCard>
 
-      <Box sx={{ display: "grid", gap: 3, my: 3, gridTemplateColumns: { xs: "1fr", lg: "repeat(3, minmax(0,1fr))" } }}>
+      <Box sx={{ display: "grid", gap: 2, my: 3, alignItems: "start", gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0,1fr))" } }}>
         <AppCard title={t("Pedidos")}>
           {orders === null ? (
             <Alert severity="info">{t("No disponible para tu cuenta.")}</Alert>
           ) : (
-            <Box sx={{ display: "grid", gap: 1 }}>
-              {[
+            <ValueList rows={[
                 [t("Pedidos de entrada"), fmtQuantity(orders.inputOrders)],
                 [t("Planificados"), `${fmtQuantity(orders.planned)} · ${pct(orders.plannedPercent)}`],
                 [t("Sin planificar"), fmtQuantity(orders.unplanned)],
                 [t("Listos para planificar"), fmtQuantity(orders.readyToPlan)],
                 [t("Sin liberar"), fmtQuantity(orders.notReady)],
                 [t("Cancelados"), fmtQuantity(orders.cancelled)],
-              ].map(([label, value]) => (
-                <Box key={label} sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
-                  <Typography variant="body2" color="text.secondary">{label}</Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{value}</Typography>
-                </Box>
-              ))}
-            </Box>
+              ]} />
           )}
         </AppCard>
 
@@ -213,20 +208,13 @@ export function ReportsPage() {
           {tenders === null ? (
             <Alert severity="info">{t("No disponible para tu cuenta.")}</Alert>
           ) : (
-            <Box sx={{ display: "grid", gap: 1 }}>
-              {[
+            <ValueList rows={[
                 [t("Intentos"), fmtQuantity(tenders.attempts)],
                 [t("Aceptadas"), `${fmtQuantity(tenders.accepted)} · ${pct(tenders.acceptancePercent)}`],
                 [t("Rechazadas"), `${fmtQuantity(tenders.rejected)} · ${pct(tenders.rejectionPercent)}`],
                 [t("Esperando respuesta"), fmtQuantity(tenders.awaitingResponse)],
                 [t("Vencidas"), fmtQuantity(tenders.expired)],
-              ].map(([label, value]) => (
-                <Box key={label} sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
-                  <Typography variant="body2" color="text.secondary">{label}</Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{value}</Typography>
-                </Box>
-              ))}
-            </Box>
+              ]} />
           )}
         </AppCard>
 
@@ -241,20 +229,15 @@ export function ReportsPage() {
             <Box sx={{ display: "grid", gap: 2 }}>
               {cost.map((entry) => (
                 <Box key={entry.currency}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
                     <PaidRounded sx={{ fontSize: 17, color: "text.disabled" }} />
                     <Typography variant="subtitle2">{entry.currency}</Typography>
                   </Box>
-                  {[
+                  <ValueList rows={[
                     [t("Estimado"), fmtMoney(entry.estimatedAmount, entry.currency)],
                     [t("Real"), fmtMoney(entry.actualAmount, entry.currency)],
                     [t("Diferencia"), entry.variance === null ? "-" : `${fmtMoney(entry.variance, entry.currency)} · ${pct(entry.variancePercent)}`],
-                  ].map(([label, value]) => (
-                    <Box key={label} sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
-                      <Typography variant="body2" color="text.secondary">{label}</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{value}</Typography>
-                    </Box>
-                  ))}
+                  ]} />
                 </Box>
               ))}
             </Box>
@@ -299,5 +282,62 @@ export function ReportsPage() {
         </TableContainer>
       </AppCard>
     </>
+  );
+}
+
+/** Una lista etiqueta a la izquierda, valor a la derecha, con divisores finos entre filas. */
+function ValueList({ rows }: { rows: [string, string][] }) {
+  return (
+    <Box>
+      {rows.map(([label, value]) => (
+        <Box key={label} sx={{
+          display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 1, py: 1.1,
+          "&:not(:last-of-type)": { borderBottom: "1px solid", borderBottomColor: "divider" },
+          "&:first-of-type": { pt: 0.25 },
+          "&:last-of-type": { pb: 0 },
+        }}>
+          <Typography variant="body2" color="text.secondary">{label}</Typography>
+          <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{value}</Typography>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
+/**
+ * Una dimensión del uso de capacidad en línea: icono y etiqueta a la izquierda, el porcentaje a
+ * la derecha, la barra debajo y los números absolutos al pie. El porcentaje es el del backend;
+ * sin porcentaje no hay barra, igual que antes.
+ */
+function CapacityMetric({ icon, title, value, progress, sub, color }: {
+  icon: ReactNode; title: string; value: string; progress: number | null; sub: string; color: string;
+}) {
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.75 }}>
+        <Box aria-hidden sx={{ color, display: "flex", "& svg": { fontSize: 17 } }}>{icon}</Box>
+        <Typography sx={{ flex: 1, minWidth: 0, fontSize: T.body - 0.5, fontWeight: 700, color: "text.secondary" }} noWrap>
+          {title}
+        </Typography>
+        <Typography component="div" sx={{
+          fontSize: T.figure - 4, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em",
+          fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
+        }}>
+          {value}
+        </Typography>
+      </Box>
+      {progress !== null && (
+        <LinearProgress
+          variant="determinate" value={Math.max(0, Math.min(100, progress))}
+          sx={(th) => ({
+            height: 6, borderRadius: "3px", bgcolor: alpha(th.palette.text.primary, 0.08),
+            "& .MuiLinearProgress-bar": { borderRadius: "3px", bgcolor: color },
+          })}
+        />
+      )}
+      <Typography sx={{ mt: 1, fontSize: T.label + 0.5, color: "text.secondary", fontVariantNumeric: "tabular-nums" }} noWrap>
+        {sub}
+      </Typography>
+    </Box>
   );
 }

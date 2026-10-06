@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Chip, MenuItem, TextField, Typography } from "@mui/material";
+import { Box, MenuItem, TextField, Typography } from "@mui/material";
 import { MapRounded } from "@mui/icons-material";
 import { fetchCarriers } from "../../shared/api/carriersApi";
 import { fetchDrivers } from "../../shared/api/driversApi";
@@ -102,31 +102,37 @@ export function TripsPage() {
       header: t("Envío"),
       render: (trip) => (
         <Box>
-          <Typography variant="body2" sx={{ fontWeight: 800 }}>{trip.shipmentNumber}</Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+            {trip.shipmentNumber}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", whiteSpace: "nowrap" }}>
             {trip.planNumber} · {t("Viaje {{number}}", { number: trip.tripNumber })}
           </Typography>
         </Box>
       ),
     },
-    { key: "date", header: t("Fecha"), render: (trip) => fmtDate(trip.planningDate) },
+    {
+      key: "date", header: t("Fecha"),
+      render: (trip) => <Box component="span" sx={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{fmtDate(trip.planningDate)}</Box>,
+    },
     { key: "origin", header: t("Origen"), render: (trip) => trip.originName ?? trip.originCode ?? "-" },
     { key: "carrier", header: t("Transportista"), render: (trip) => trip.carrierName ?? t("Flota propia") },
-    { key: "plate", header: t("Placa"), render: (trip) => trip.vehicleLicensePlate ?? "-" },
+    {
+      key: "plate", header: t("Placa"),
+      render: (trip) => <Box component="span" sx={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{trip.vehicleLicensePlate ?? "-"}</Box>,
+    },
     {
       key: "driver",
       header: t("Conductor"),
       render: (trip) => trip.driverName === null ? "-" : (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+        <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 0.4 }}>
           <Typography variant="body2">{trip.driverName}</Typography>
           {/* El estado de la licencia lo juzga el servidor contra la fecha del viaje; aquí solo
               se avisa cuando no es "vigente". */}
           {trip.driverLicenseStatus && trip.driverLicenseStatus !== "VALID" && (
-            <Chip
-              size="small"
-              color={trip.driverLicenseStatus === "EXPIRED" ? "error" : "warning"}
+            <StatusChip
+              tone={trip.driverLicenseStatus === "EXPIRED" ? "overdue" : "inProgress"}
               label={enumLabel("driverLicenseStatus", trip.driverLicenseStatus)}
-              sx={{ height: 20, fontSize: 10.5 }}
             />
           )}
         </Box>
@@ -139,11 +145,11 @@ export function TripsPage() {
       // salida, y ponerlas en columnas separadas obliga a restarlas de cabeza.
       render: (trip) => (
         <Box>
-          <Typography variant="body2">
+          <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
             {trip.plannedDepartureAt ? fmtTime(trip.plannedDepartureAt) : "-"}
           </Typography>
           {trip.actualDepartureAt && (
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
               {t("Real")}: {fmtTime(trip.actualDepartureAt)}
             </Typography>
           )}

@@ -102,7 +102,10 @@ export function DailyColumnChart({ rows, series, height = 280 }: DailyColumnChar
             <Legend
               verticalAlign="top"
               align="left"
-              height={28}
+              height={30}
+              iconType="square"
+              iconSize={10}
+              wrapperStyle={{ paddingLeft: 8 }}
               formatter={(value) => (
                 <Typography component="span" variant="caption" sx={{ color: "text.secondary" }}>{value}</Typography>
               )}
@@ -117,7 +120,7 @@ export function DailyColumnChart({ rows, series, height = 280 }: DailyColumnChar
               // Extremo redondeado de 4px anclado a la línea base, y 2px de hueco entre barras
               // contiguas para que dos columnas del mismo día no se lean como una.
               radius={[4, 4, 0, 0]}
-              maxBarSize={26}
+              maxBarSize={22}
             />
           ))}
         </BarChart>
