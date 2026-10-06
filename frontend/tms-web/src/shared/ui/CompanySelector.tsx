@@ -45,6 +45,7 @@ export function CompanySelector() {
       variant="standard"
       disableUnderline
       aria-label={t("Cambiar empresa")}
+      renderValue={(id) => companies.find((company) => company.id === id)?.name ?? ""}
       startAdornment={<ApartmentRounded sx={{ fontSize: 16, color: "text.secondary", ml: 1.3, mr: 0.9 }} />}
       MenuProps={{
         slotProps: {
