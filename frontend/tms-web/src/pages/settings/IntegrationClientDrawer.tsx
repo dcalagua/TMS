@@ -4,7 +4,7 @@ import { Controller, useForm } from "react-hook-form";
 import {
   Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Paper, TextField, Typography,
 } from "@mui/material";
-import { PowerRounded } from "@mui/icons-material";
+import { CheckRounded, PowerRounded } from "@mui/icons-material";
 import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchCarriers } from "../../shared/api/carriersApi";
@@ -12,8 +12,9 @@ import {
   createIntegrationClient, updateIntegrationClient,
   type IntegrationClientRequest, type IntegrationClientSecretView, type IntegrationClientView,
 } from "../../shared/api/integrationsApi";
-import { FormDrawer, SectionHeader } from "../../shared/ui/components";
+import { ActiveBadge, FormDrawer, FormMeta, FormRow, FormSection } from "../../shared/ui/components";
 import { t } from "../../lib/i18n";
+import { fmtDateTime } from "../../lib/locale";
 
 const FORM_ID = "integration-client-form";
 
@@ -142,25 +143,29 @@ export function IntegrationClientDrawer({
       open
       icon={<PowerRounded />}
       title={isEdit ? t("Editar la credencial") : t("Nueva credencial")}
-      subtitle={t("Con qué se autentica un socio y qué le dejas hacer.")}
+      subtitle={isEdit
+        ? [client.name, client.clientId].filter(Boolean).join(" · ")
+        : t("Con qué se autentica un socio y qué le dejas hacer.")}
+      titleAdornment={isEdit ? <ActiveBadge active={client.active} /> : undefined}
+      footerStart={isEdit ? <FormMeta>{t("Actualizado el {{date}}", { date: fmtDateTime(client.updatedAt) })}</FormMeta> : undefined}
       size="md"
       onClose={onClose}
       dirty={isDirty}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
-          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
-            {isSubmitting ? t("Guardando...") : isEdit ? t("Guardar") : t("Emitir credencial")}
+          <Button onClick={onClose} disabled={isSubmitting} color="inherit" sx={{ color: "text.secondary" }}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" startIcon={<CheckRounded />} disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : isEdit ? t("Guardar cambios") : t("Emitir credencial")}
           </Button>
         </>
       }
     >
       <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+        {formError && <Alert severity="error" sx={{ mb: 1 }}>{formError}</Alert>}
 
-        <SectionHeader title={t("Identificación")} />
-        <Box sx={{ display: "grid", gap: 2, mb: 3 }}>
+        <FormSection title={t("Identificación")} help={t("Qué sistema usa esta credencial, para reconocerla en la lista.")}>
+        <FormRow cols={1}>
           <TextField
             label={t("Nombre")} required size="small" fullWidth
             placeholder={t("p. ej. ERP de compras, telemetría de la flota")}
@@ -171,14 +176,18 @@ export function IntegrationClientDrawer({
             label={t("Descripción")} size="small" fullWidth multiline rows={2}
             {...register("description")}
           />
-        </Box>
+        </FormRow>
+        </FormSection>
 
-        <SectionHeader title={t("Alcances")} />
+        <FormSection
+          title={t("Alcances")}
+          help={t("Qué le dejas hacer, uno a uno y con su consecuencia escrita. Al menos uno.")}
+        >
         <Controller
           control={control}
           name="scopes"
           render={({ field }) => (
-            <Box sx={{ display: "grid", gap: 1, mb: 3 }}>
+            <Box sx={{ display: "grid", gap: 1 }}>
               {SCOPES.map((scope) => (
                 <Paper key={scope.code} variant="outlined" sx={{ p: 1.25 }}>
                   <FormControlLabel
@@ -212,11 +221,11 @@ export function IntegrationClientDrawer({
             </Box>
           )}
         />
+        </FormSection>
 
         {/* Solo cuando hace falta: una credencial de telemetría no pertenece a nadie. */}
         {answersTenders && (
-          <>
-            <SectionHeader title={t("Transportista")} />
+          <FormSection title={t("Transportista")} help={t("A quién pertenece la credencial que responde ofertas.")}>
             <Controller
               control={control}
               name="carrierId"
@@ -233,7 +242,7 @@ export function IntegrationClientDrawer({
                 </TextField>
               )}
             />
-          </>
+          </FormSection>
         )}
       </Box>
     </FormDrawer>

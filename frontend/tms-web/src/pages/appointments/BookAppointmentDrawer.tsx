@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Alert, Button, MenuItem, Stack, TextField, Typography } from "@mui/material";
-import { EventAvailableRounded } from "@mui/icons-material";
-import { FormDrawer } from "../../shared/ui/components";
+import { Alert, Box, Button, MenuItem, TextField } from "@mui/material";
+import { CheckRounded, EventAvailableRounded } from "@mui/icons-material";
+import { ContextCard, DateTimeInput, FormDrawer, StatusChip } from "../../shared/ui/components";
 import {
   APPOINTMENT_PURPOSES, bookAppointment,
   type AppointmentPurpose, type LocationResourceView,
@@ -79,20 +79,34 @@ export function BookAppointmentDrawer({
       size="sm"
       footer={
         <>
-          <Button onClick={onClose} disabled={submitting}>{t("Cancelar")}</Button>
-          <Button variant="contained" disabled={invalid || submitting} onClick={() => void submit()}>
-            {submitting ? t("Reservando...") : t("Reservar")}
+          <Button color="inherit" sx={{ color: "text.secondary" }} onClick={onClose} disabled={submitting}>{t("Cancelar")}</Button>
+          <Button variant="contained" startIcon={<CheckRounded />} disabled={invalid || submitting} onClick={() => void submit()}>
+            {submitting ? t("Reservando...") : t("Reservar cita")}
           </Button>
         </>
       }
     >
-      <Stack spacing={2}>
+      <Box sx={{ display: "grid", gap: 2 }}>
         {docks.length === 0 ? (
           <Alert severity="warning" variant="outlined">
             {t("Este sitio no tiene puertas activas. Configúralas antes de reservar.")}
           </Alert>
         ) : (
           <>
+            {selectedDock && (
+              <ContextCard
+                title={`${selectedDock.code} · ${selectedDock.name}`}
+                status={<StatusChip label={enumLabel("resourceType", selectedDock.resourceType)} />}
+                detail={selectedDock.openingHours.length === 0
+                  ? t("Sin horario configurado: la puerta se considera abierta.")
+                  : t("Abre: {{hours}}", {
+                      hours: selectedDock.openingHours
+                        .map((h) => `${enumLabel("dayOfWeek", h.day)} ${h.opensAt.slice(0, 5)}-${h.closesAt.slice(0, 5)}`)
+                        .join(" · "),
+                    })}
+              />
+            )}
+
             <TextField
               select size="small" label={t("Puerta")} value={resourceId} required
               onChange={(e) => { setResourceId(e.target.value); setTouched(true); }}
@@ -104,18 +118,6 @@ export function BookAppointmentDrawer({
               ))}
             </TextField>
 
-            {selectedDock && (
-              <Typography variant="caption" color="text.secondary">
-                {selectedDock.openingHours.length === 0
-                  ? t("Sin horario configurado: la puerta se considera abierta.")
-                  : t("Abre: {{hours}}", {
-                      hours: selectedDock.openingHours
-                        .map((h) => `${enumLabel("dayOfWeek", h.day)} ${h.opensAt.slice(0, 5)}-${h.closesAt.slice(0, 5)}`)
-                        .join(" · "),
-                    })}
-              </Typography>
-            )}
-
             <TextField
               select size="small" label={t("Tipo")} value={purpose}
               onChange={(e) => { setPurpose(e.target.value as AppointmentPurpose); setTouched(true); }}
@@ -125,15 +127,13 @@ export function BookAppointmentDrawer({
               ))}
             </TextField>
 
-            <TextField
-              size="small" type="datetime-local" label={t("Inicio")} value={start} required
-              onChange={(e) => { setStart(e.target.value); setTouched(true); }}
-              slotProps={{ inputLabel: { shrink: true } }}
+            <DateTimeInput
+              size="small" label={t("Inicio")} value={start} required
+              onChange={(v) => { setStart(v); setTouched(true); }}
             />
-            <TextField
-              size="small" type="datetime-local" label={t("Fin (opcional)")} value={end}
-              onChange={(e) => { setEnd(e.target.value); setTouched(true); }}
-              slotProps={{ inputLabel: { shrink: true } }}
+            <DateTimeInput
+              size="small" label={t("Fin (opcional)")} value={end}
+              onChange={(v) => { setEnd(v); setTouched(true); }}
               helperText={selectedDock
                 ? t("Vacío usa los {{m}} minutos por defecto de esta puerta.", { m: selectedDock.defaultSlotMinutes })
                 : undefined}
@@ -151,7 +151,7 @@ export function BookAppointmentDrawer({
             />
           </>
         )}
-      </Stack>
+      </Box>
     </FormDrawer>
   );
 }

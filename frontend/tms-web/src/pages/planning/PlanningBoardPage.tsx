@@ -2,13 +2,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  Box, Button, Chip, Paper, Tab, Tabs, Typography, useMediaQuery, useTheme,
+  Box, Button, ButtonBase, Chip, Paper, Tab, Tabs, Typography, useMediaQuery, useTheme,
 } from "@mui/material";
 import {
   ArrowBackRounded, BoltRounded, AddRounded, LocalShippingRounded, CheckRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
-import { cancelPlanningRun, confirmPlanningRun, fetchPlanningRun } from "../../shared/api/planningApi";
+import {
+  cancelPlanningRun, confirmPlanningRun, fetchEligibleOrders, fetchPlanningRun,
+} from "../../shared/api/planningApi";
 import { describeApiError, describePlanningError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
@@ -24,6 +26,7 @@ import { CreateTripDrawer } from "./CreateTripDrawer";
 import { EligibleOrdersPanel } from "./EligibleOrdersPanel";
 import { TripCard } from "./TripCard";
 import { TripDetailDrawer } from "./TripDetailDrawer";
+import { PlanSummaryStrip } from "./PlanSummaryStrip";
 
 const STATUS_TONE: Record<"DRAFT" | "CONFIRMED" | "CANCELLED", StatusTone> = {
   DRAFT: "open",
@@ -66,6 +69,18 @@ export function PlanningBoardPage() {
   const [showCreateTrip, setShowCreateTrip] = useState(false);
   const [showAutoPlan, setShowAutoPlan] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>("orders");
+
+  // Cuántos pedidos quedan por asignar, para el resumen del plan: una página de una fila de la
+  // misma consulta del panel de la izquierda. Comparte su prefijo de clave, así que cada asignación
+  // que invalida el panel invalida también este número.
+  const run0 = runQuery.data?.run;
+  const eligibleCountQuery = useQuery({
+    queryKey: ["eligible-orders", companyId, runId, "count"],
+    queryFn: ({ signal }) => fetchEligibleOrders({
+      companyId, originId: run0!.originId, serviceDate: run0!.planningDate, page: 0, size: 1, signal,
+    }),
+    enabled: run0 !== undefined,
+  });
 
   /**
    * Vuelve a sincronizar las dos mitades del tablero. La bolsa de elegibles también hay que
@@ -151,7 +166,7 @@ export function PlanningBoardPage() {
     </Paper>
   ) : (
     <Box sx={{
-      display: "grid", gap: 2,
+      display: "grid", gap: 1.5,
       // Dos columnas en un escritorio normal y tres cuando de verdad caben, sin que una tarjeta
       // baje nunca de un ancho en el que las barras de capacidad se lean.
       gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))",
@@ -159,6 +174,23 @@ export function PlanningBoardPage() {
       {trips.map((trip) => (
         <TripCard key={trip.id} trip={trip} onOpen={() => setOpenTripId(trip.id)} />
       ))}
+      {isDraft && canManageTrips && (
+        /* El mismo «Nuevo viaje» de la cabecera, donde se mira cuando faltan viajes. */
+        <ButtonBase
+          onClick={() => setShowCreateTrip(true)}
+          sx={{
+            minHeight: 200, borderRadius: `${R.lg}px`, border: "1.5px dashed", borderColor: "divider",
+            display: "flex", flexDirection: "column", gap: 1, color: "text.secondary",
+            "&:hover": { borderColor: "primary.main", color: "primary.main", bgcolor: "action.hover" },
+          }}
+        >
+          <Box sx={{ width: 40, height: 40, borderRadius: "50%", display: "grid", placeItems: "center", bgcolor: "action.selected" }}>
+            <AddRounded />
+          </Box>
+          <Typography sx={{ fontWeight: 800, color: "text.primary" }}>{t("Nuevo viaje")}</Typography>
+          <Typography variant="caption">{t("Vehículo y hora de salida")}</Typography>
+        </ButtonBase>
+      )}
     </Box>
   );
 
@@ -212,6 +244,12 @@ export function PlanningBoardPage() {
             )}
           </Box>
         }
+      />
+
+      <PlanSummaryStrip
+        trips={trips}
+        eligibleTotal={eligibleCountQuery.data?.totalElements}
+        eligibleLoading={eligibleCountQuery.isPending}
       />
 
       {/* Por debajo de `lg` los dos paneles se vuelven pestañas; por encima, una vista partida. */}
@@ -278,6 +316,7 @@ export function PlanningBoardPage() {
           companyId={companyId}
           runId={run.id}
           runVersion={run.version}
+          run={run}
           onClose={() => setShowCreateTrip(false)}
           onCreated={() => {
             setShowCreateTrip(false);

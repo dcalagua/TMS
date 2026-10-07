@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Alert, Box, Button, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, MenuItem, TextField, Typography } from "@mui/material";
 import { CallSplitRounded } from "@mui/icons-material";
-import { FormDrawer } from "../../shared/ui/components";
+import { ContextCard, FormDrawer, StatusChip } from "../../shared/ui/components";
 import type { EligibleOrderView, TripView } from "../../shared/api/planningApi";
-import { fmtDecimal, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
+import { fmtDate, fmtDecimal, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
 import { t } from "../../lib/i18n";
 
 interface SplitAssignDrawerProps {
@@ -68,16 +68,17 @@ export function SplitAssignDrawer({ open, order, trips, submitting, onClose, onS
     <FormDrawer
       open={open}
       title={t("Repartir pedido")}
-      subtitle={order.orderNumber}
+      subtitle={t("Sube a un viaje solo una parte; el resto sigue en la bolsa.")}
       icon={<CallSplitRounded />}
       onClose={onClose}
       dirty={touched}
       size="sm"
       footer={
         <>
-          <Button onClick={onClose} disabled={submitting}>{t("Cancelar")}</Button>
+          <Button onClick={onClose} disabled={submitting} color="inherit" sx={{ color: "text.secondary" }}>{t("Cancelar")}</Button>
           <Button
             variant="contained"
+            startIcon={<CallSplitRounded />}
             disabled={invalid || submitting}
             onClick={() => onSubmit(tripId, parsed)}
           >
@@ -86,7 +87,17 @@ export function SplitAssignDrawer({ open, order, trips, submitting, onClose, onS
         </>
       }
     >
-      <Stack spacing={2}>
+      <Box sx={{ display: "grid", gap: 2 }}>
+        <ContextCard
+          title={order.orderNumber}
+          status={order.partiallyAllocated ? <StatusChip label={t("Ya repartido")} tone="inProgress" /> : undefined}
+          detail={[
+            order.customerName,
+            order.destinationName ?? order.destinationCode,
+            fmtDate(order.serviceDate),
+          ].filter(Boolean).join(" · ")}
+        />
+
         <Alert severity="info" variant="outlined">
           {t("Sube a este viaje solo la parte indicada. El resto sigue en la bolsa para otro viaje; el pedido no se duplica.")}
         </Alert>
@@ -139,7 +150,7 @@ export function SplitAssignDrawer({ open, order, trips, submitting, onClose, onS
             {t("Un reparto tiene que llevar algo: peso, volumen o pallets.")}
           </Alert>
         )}
-      </Stack>
+      </Box>
     </FormDrawer>
   );
 }

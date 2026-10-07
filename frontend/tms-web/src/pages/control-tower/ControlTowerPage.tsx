@@ -1,10 +1,10 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Chip, MenuItem, TextField, Typography } from "@mui/material";
+import { Box, Chip, Typography } from "@mui/material";
 import {
   BroadcastOnPersonalRounded, DirectionsRunRounded, ScheduleRounded, ReportProblemRounded, BlockRounded,
-  DoneAllRounded, HourglassBottomRounded, PendingActionsRounded,
+  DoneAllRounded, HourglassBottomRounded, PendingActionsRounded, WarehouseRounded, BusinessRounded, FlagRounded,
 } from "@mui/icons-material";
 import { fetchCarriers } from "../../shared/api/carriersApi";
 import {
@@ -17,7 +17,7 @@ import { TRIP_STATUSES, type TripStatus } from "../../shared/api/planningApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  DataTable, ErrorState, LoadingState, PageHeader, Pagination, StatusChip, Toolbar,
+  DataTable, DateInput, ErrorState, FilterBar, LoadingState, PageHeader, Pagination, StatusChip,
   type DataTableColumn,
 } from "../../shared/ui/components";
 import { TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
@@ -34,6 +34,14 @@ const PAGE_SIZE = 20;
 /** Cada minuto: la torre es una pantalla que se deja abierta, y dos de sus contadores cambian
  * solos según avanza el reloj. */
 const POLL_MS = 60_000;
+
+interface TripFilters {
+  originId: string;
+  carrierId: string;
+  status: TripStatus | "";
+}
+
+const DEFAULT_FILTERS: TripFilters = { originId: "", carrierId: "", status: "" };
 
 const TIMELINESS_TONE: Record<DepartureTimeliness, StatusTone> = {
   NOT_APPLICABLE: "neutral",
@@ -62,9 +70,10 @@ export function ControlTowerPage() {
   const navigate = useNavigate();
 
   const [date, setDate] = useState("");
-  const [draft, setDraft] = useState({ originId: "", carrierId: "", status: "" as TripStatus | "" });
-  const [filters, setFilters] = useState({ originId: "", carrierId: "", status: "" as TripStatus | "" });
   const [page, setPage] = useState(0);
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
+  const [filters, setFiltersState] = useState<TripFilters>(DEFAULT_FILTERS);
+  const setFilters = (next: TripFilters) => { setFiltersState(next); setPage(0); };
 
   const overviewQuery = useQuery({
     queryKey: ["control-tower", companyId, date],
@@ -101,13 +110,6 @@ export function ControlTowerPage() {
     queryFn: ({ signal }) => fetchCarriers({ companyId, size: 200, active: true, sort: "code,asc", signal }),
     enabled: companyId !== "",
   });
-
-  function applyFilters() { setFilters(draft); setPage(0); }
-  function resetFilters() {
-    setDraft({ originId: "", carrierId: "", status: "" });
-    setFilters({ originId: "", carrierId: "", status: "" });
-    setPage(0);
-  }
 
   const columns: DataTableColumn<ControlTowerTripView>[] = [
     {
@@ -216,11 +218,10 @@ export function ControlTowerPage() {
         onRefresh={() => { void overviewQuery.refetch(); void tripsQuery.refetch(); }}
         refreshing={overviewQuery.isFetching || tripsQuery.isFetching}
         actions={
-          <TextField
-            size="small" type="date" label={t("Día")}
+          <DateInput
+            size="small" label={t("Día")}
             value={date || overview.date}
-            onChange={(e) => { setDate(e.target.value); setPage(0); }}
-            slotProps={{ inputLabel: { shrink: true } }}
+            onChange={(v) => { setDate(v); setPage(0); }}
             sx={{ width: 175 }}
           />
         }
@@ -287,43 +288,21 @@ export function ControlTowerPage() {
         <AdvisoriesPanel items={overview.advisories} total={summary.openAdvisories} />
       </Box>
 
-      <Toolbar
-        onApply={applyFilters}
-        onReset={resetFilters}
-        filters={
-          <>
-            <TextField
-              select size="small" label={t("Origen")} value={draft.originId}
-              onChange={(e) => setDraft({ ...draft, originId: e.target.value })}
-              sx={{ minWidth: 190 }}
-            >
-              <MenuItem value="">{t("Todos los orígenes")}</MenuItem>
-              {(originsQuery.data?.content ?? []).map((origin) => (
-                <MenuItem key={origin.id} value={origin.id}>{origin.name}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Transportista")} value={draft.carrierId}
-              onChange={(e) => setDraft({ ...draft, carrierId: e.target.value })}
-              sx={{ minWidth: 200 }}
-            >
-              <MenuItem value="">{t("Todos los transportistas")}</MenuItem>
-              {(carriersQuery.data?.content ?? []).map((carrier) => (
-                <MenuItem key={carrier.id} value={carrier.id}>{carrier.businessName}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Estado")} value={draft.status}
-              onChange={(e) => setDraft({ ...draft, status: e.target.value as TripStatus | "" })}
-              sx={{ minWidth: 180 }}
-            >
-              <MenuItem value="">{t("Todos los estados")}</MenuItem>
-              {TRIP_STATUSES.map((status) => (
-                <MenuItem key={status} value={status}>{enumLabel("tripStatus", status)}</MenuItem>
-              ))}
-            </TextField>
-          </>
-        }
+      <FilterBar
+        value={filters}
+        defaults={DEFAULT_FILTERS}
+        onChange={setFilters}
+        fields={[
+          { type: "select", key: "originId", label: t("Origen"), icon: <WarehouseRounded />,
+            allLabel: t("Todos los orígenes"),
+            options: (originsQuery.data?.content ?? []).map((origin) => ({ id: origin.id, label: origin.name })) },
+          { type: "select", key: "carrierId", label: t("Transportista"), icon: <BusinessRounded />,
+            allLabel: t("Todos los transportistas"),
+            options: (carriersQuery.data?.content ?? []).map((carrier) => ({ id: carrier.id, label: carrier.businessName })) },
+          { type: "select", key: "status", label: t("Estado"), icon: <FlagRounded />,
+            allLabel: t("Todos los estados"),
+            options: TRIP_STATUSES.map((status) => ({ id: status, label: enumLabel("tripStatus", status) })) },
+        ]}
       />
 
       {delayedCount > 0 && (

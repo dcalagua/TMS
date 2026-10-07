@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useForm, type Validate } from "react-hook-form";
 import { Alert, Box, Button, TextField, Typography } from "@mui/material";
-import { LocalOfferRounded } from "@mui/icons-material";
+import { CheckRounded, LocalOfferRounded } from "@mui/icons-material";
 import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import type { TenderRequest, TripTenderView } from "../../shared/api/tendersApi";
-import { FormDrawer } from "../../shared/ui/components";
+import { ContextCard, FormDateInput, FormDrawer, FormRow, StatusChip } from "../../shared/ui/components";
+import { TENDER_STATUS_TONE } from "../../shared/ui/statusTones";
+import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 
 const FORM_ID = "tender-form";
@@ -55,7 +57,7 @@ export function TenderDrawer({ carrierName, tender, onClose, onSubmit }: TenderD
   const [formError, setFormError] = useState<string | null>(null);
 
   const {
-    register, handleSubmit, setError, watch,
+    register, control, handleSubmit, setError, watch,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<TenderFormValues>({
     defaultValues: {
@@ -95,25 +97,37 @@ export function TenderDrawer({ carrierName, tender, onClose, onSubmit }: TenderD
       open
       icon={<LocalOfferRounded />}
       title={tender ? t("Editar la oferta") : t("Nueva oferta")}
-      subtitle={carrierName ?? t("Se crea como borrador: enviarla es una acción aparte.")}
-      size="md"
+      subtitle={t("Los términos de la oferta al transportista del envío.")}
+      size="sm"
       onClose={onClose}
       dirty={isDirty}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
-          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
-            {isSubmitting ? t("Guardando...") : t("Guardar")}
+          <Button color="inherit" sx={{ color: "text.secondary" }} onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" startIcon={<CheckRounded />} disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : tender ? t("Guardar oferta") : t("Crear oferta")}
           </Button>
         </>
       }
     >
-      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(submit)(event)} noValidate>
-        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(submit)(event)} noValidate
+        sx={{ display: "grid", gap: 2 }}>
+        {/* El transportista no se elige aquí: sale del vehículo planificado (ver arriba). */}
+        <ContextCard
+          title={carrierName ?? t("Transportista del envío")}
+          status={tender
+            ? <StatusChip label={enumLabel("tenderStatus", tender.status)} tone={TENDER_STATUS_TONE[tender.status]} />
+            : <StatusChip label={t("Nueva")} tone="neutral" />}
+          detail={tender
+            ? t("Intento {{attempt}}", { attempt: tender.attempt })
+            : t("Se crea como borrador: enviarla es una acción aparte.")}
+        />
+
+        {formError && <Alert severity="error">{formError}</Alert>}
 
         <Box sx={{ display: "grid", gap: 2 }}>
-          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "2fr 1fr" }}>
+          <FormRow template="minmax(0, 2fr) minmax(0, 1fr)">
             <TextField
               label={t("Importe ofrecido")} size="small" fullWidth type="number"
               error={Boolean(errors.offeredAmount)} helperText={errors.offeredAmount?.message}
@@ -127,13 +141,12 @@ export function TenderDrawer({ carrierName, tender, onClose, onSubmit }: TenderD
                 pattern: { value: CURRENCY_PATTERN, message: t("Tres letras, p. ej. PEN") },
               })}
             />
-          </Box>
+          </FormRow>
 
-          <TextField
-            label={t("Vence el")} size="small" fullWidth type="datetime-local"
-            slotProps={{ inputLabel: { shrink: true } }}
+          <FormDateInput
+            control={control} name="expiresAt" mode="datetime"
+            label={t("Vence el")} size="small" fullWidth
             helperText={t("Tiene que seguir en el futuro cuando se envíe la oferta, no cuando se redacta.")}
-            {...register("expiresAt")}
           />
 
           <TextField
@@ -145,7 +158,7 @@ export function TenderDrawer({ carrierName, tender, onClose, onSubmit }: TenderD
           />
         </Box>
 
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 2 }}>
+        <Typography variant="caption" color="text.secondary">
           {t("Todos los términos son opcionales: una oferta puede ser solo una pregunta.")}
         </Typography>
       </Box>

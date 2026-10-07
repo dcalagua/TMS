@@ -1,17 +1,48 @@
 import { useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
-import { Alert, Box, Button, MenuItem, TextField, Typography } from "@mui/material";
-import { InventoryRounded } from "@mui/icons-material";
+import { Alert, Box, Button, TextField, Typography } from "@mui/material";
+import { CheckRounded, InventoryRounded } from "@mui/icons-material";
 import {
   DELIVERY_RESULTS, DELIVERY_RESULTS_NEEDING_NOTES, DELIVERY_RESULTS_NEEDING_TIME,
   DELIVERY_RESULTS_WITH_RECEIVER,
   type DeliveryQuantitiesRequest, type DeliveryResult, type OrderDeliveryView,
 } from "../../shared/api/planningApi";
-import { FormDrawer } from "../../shared/ui/components";
+import { ContextCard, FormDateInput, FormDrawer, OptionCard, StatusChip } from "../../shared/ui/components";
+import { DELIVERY_RESULT_TONE } from "../../shared/ui/statusTones";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
+import { T } from "../../theme";
 
 const FORM_ID = "delivery-form";
+
+/** El tono de cada resultado como opción: el mismo color que tendrá luego su chip. */
+const RESULT_OPTION_TONE: Record<DeliveryResult, "primary" | "warning" | "error" | "neutral"> = {
+  DELIVERED: "primary",
+  PARTIAL: "warning",
+  REJECTED: "error",
+  FAILED: "error",
+  NOT_ATTEMPTED: "neutral",
+};
+
+/** Qué significa cada resultado, en una frase. Lo que pide el formulario se deriva de las listas de `planningApi`. */
+const RESULT_MEANING: Record<DeliveryResult, string> = {
+  DELIVERED: "Llegó todo lo que se llevó.",
+  PARTIAL: "Llegó una parte; el resto hay que perseguirlo.",
+  REJECTED: "El cliente no aceptó la mercancía.",
+  FAILED: "Se intentó y no se pudo entregar.",
+  NOT_ATTEMPTED: "La parada no se llegó a servir.",
+};
+
+/** La descripción de una opción: su significado y lo que el formulario va a pedir con ella. */
+function resultDescription(option: DeliveryResult): string {
+  const asks = [
+    DELIVERY_RESULTS_NEEDING_TIME.includes(option) ? t("la hora") : null,
+    DELIVERY_RESULTS_WITH_RECEIVER.includes(option) ? t("quién recibe") : null,
+    DELIVERY_RESULTS_NEEDING_NOTES.includes(option) ? t("una explicación") : null,
+  ].filter((part): part is string => part !== null);
+  const meaning = t(RESULT_MEANING[option]);
+  return asks.length === 0 ? meaning : `${meaning} ${t("Pide {{fields}}.", { fields: asks.join(", ") })}`;
+}
 
 export interface DeliveryValues {
   result: DeliveryResult;
@@ -117,45 +148,63 @@ export function DeliveryDrawer({ stopLabel, orderNumber, existing, onClose, onSu
       open
       icon={<InventoryRounded />}
       title={existing ? t("Corregir la entrega") : t("Registrar la entrega")}
-      subtitle={`${orderNumber} · ${stopLabel}`}
+      subtitle={existing
+        ? t("Reemplaza el registro completo: lo que borres aquí se quita.")
+        : t("Qué se entregó de este pedido en la parada, y en qué condiciones.")}
       size="md"
       onClose={onClose}
       dirty={isDirty}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
-          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
-            {isSubmitting ? t("Guardando...") : t("Guardar")}
+          <Button color="inherit" sx={{ color: "text.secondary" }} onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" startIcon={<CheckRounded />} disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : existing ? t("Guardar corrección") : t("Registrar entrega")}
           </Button>
         </>
       }
     >
       <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(submit)(event)} noValidate>
-        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
-
         <Box sx={{ display: "grid", gap: 2 }}>
+          <ContextCard
+            title={orderNumber}
+            status={existing && (
+              <StatusChip label={enumLabel("deliveryResult", existing.result)} tone={DELIVERY_RESULT_TONE[existing.result]} />
+            )}
+            detail={stopLabel}
+          />
+
+          {formError && <Alert severity="error">{formError}</Alert>}
+
           <Controller
             control={control}
             name="result"
             render={({ field }) => (
-              <TextField
-                select label={t("Resultado")} required size="small" fullWidth
-                value={field.value} onChange={(e) => field.onChange(e.target.value as DeliveryResult)}
-              >
-                {DELIVERY_RESULTS.map((option) => (
-                  <MenuItem key={option} value={option}>{enumLabel("deliveryResult", option)}</MenuItem>
-                ))}
-              </TextField>
+              <Box role="radiogroup" aria-label={t("Resultado")} aria-required sx={{ display: "grid", gap: 1 }}>
+                <Typography sx={{ fontSize: T.micro, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "text.secondary" }}>
+                  {t("Resultado")}
+                </Typography>
+                <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" } }}>
+                  {DELIVERY_RESULTS.map((option) => (
+                    <OptionCard
+                      key={option}
+                      selected={field.value === option}
+                      onSelect={() => field.onChange(option)}
+                      title={enumLabel("deliveryResult", option)}
+                      description={resultDescription(option)}
+                      tone={RESULT_OPTION_TONE[option]}
+                    />
+                  ))}
+                </Box>
+              </Box>
             )}
           />
 
           {needsTime && (
-            <TextField
-              label={t("Entregado el")} size="small" fullWidth type="datetime-local"
-              slotProps={{ inputLabel: { shrink: true } }}
+            <FormDateInput
+              control={control} name="deliveredAt" mode="datetime"
+              label={t("Entregado el")} size="small" fullWidth
               helperText={t("Cuándo ocurrió de verdad, no cuándo se está tecleando.")}
-              {...register("deliveredAt")}
             />
           )}
 
@@ -182,7 +231,7 @@ export function DeliveryDrawer({ stopLabel, orderNumber, existing, onClose, onSu
               cantidades, que es lo que hacía toda entrega antes de V45 y sigue valiendo. Lo que la
               pantalla nunca hace es rellenar ceros por comodidad — eso convertiría "no lo dije" en
               "no llegó nada". */}
-          <Typography variant="overline" color="text.secondary" sx={{ mt: 1 }}>
+          <Typography sx={{ mt: 1, fontSize: T.micro, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "text.secondary" }}>
             {t("Cantidades (opcional)")}
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>

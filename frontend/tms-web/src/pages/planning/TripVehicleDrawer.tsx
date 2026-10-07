@@ -2,15 +2,17 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Alert, Box, Button, MenuItem, TextField, Typography } from "@mui/material";
-import { LocalShippingRounded } from "@mui/icons-material";
+import { CheckRounded, LocalShippingRounded } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchVehicles } from "../../shared/api/vehiclesApi";
 import { updateTripVehicle, type TripDetailView, type TripView } from "../../shared/api/planningApi";
 import { describePlanningError } from "../../shared/api/problemMessages";
-import { FormDrawer } from "../../shared/ui/components";
+import { ContextCard, FormDateInput, FormDrawer, StatusChip } from "../../shared/ui/components";
+import { TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
+import { enumLabel } from "../../lib/enums";
 import { notifySuccess } from "../../lib/ui";
 import { t } from "../../lib/i18n";
-import { fmtDecimal } from "../../lib/locale";
+import { fmtDate, fmtDecimal } from "../../lib/locale";
 
 const FORM_ID = "trip-vehicle-form";
 
@@ -56,7 +58,7 @@ export function TripVehicleDrawer({ companyId, trip, onClose, onSaved }: TripVeh
   });
 
   const {
-    register, control, handleSubmit,
+    control, handleSubmit,
     formState: { isDirty, isSubmitting },
   } = useForm<TripVehicleFormValues>({
     defaultValues: {
@@ -89,48 +91,59 @@ export function TripVehicleDrawer({ companyId, trip, onClose, onSaved }: TripVeh
       open
       icon={<LocalShippingRounded />}
       title={t("Vehículo del viaje")}
-      subtitle={t("Viaje {{number}}", { number: trip.tripNumber })}
-      size="md"
+      subtitle={t("La unidad que hace el viaje y su salida planificada.")}
+      size="sm"
       onClose={onClose}
       dirty={isDirty}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
-          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
-            {isSubmitting ? t("Guardando...") : t("Guardar")}
+          <Button color="inherit" sx={{ color: "text.secondary" }} onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" startIcon={<CheckRounded />} disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : t("Asignar vehículo")}
           </Button>
         </>
       }
     >
-      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+      <Box
+        component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate
+        sx={{ display: "grid", gap: 2 }}
+      >
+        <ContextCard
+          title={t("Viaje {{number}}", { number: trip.tripNumber })}
+          status={<StatusChip label={enumLabel("tripStatus", trip.status)} tone={TRIP_STATUS_TONE[trip.status]} />}
+          detail={[
+            trip.shipmentNumber,
+            fmtDate(trip.planningDate),
+            trip.vehicleId
+              ? t("Ahora: {{vehicle}}", { vehicle: [trip.vehicleCode, trip.vehicleLicensePlate].filter(Boolean).join(" · ") })
+              : t("Sin vehículo asignado"),
+          ].join(" · ")}
+        />
 
-        <Box sx={{ display: "grid", gap: 2, mb: 2 }}>
-          <Controller
-            control={control}
-            name="vehicleId"
-            render={({ field }) => (
-              <TextField
-                select label={t("Vehículo")} required size="small" fullWidth
-                value={field.value} onChange={(e) => field.onChange(e.target.value)}
-              >
-                <MenuItem value="">{t("Selecciona un vehículo")}</MenuItem>
-                {(vehiclesQuery.data?.content ?? []).map((vehicle) => (
-                  <MenuItem key={vehicle.id} value={vehicle.id}>
-                    {vehicle.code} · {vehicle.licensePlate} · {fmtDecimal(vehicle.effectiveMaxWeightKg)} kg
-                  </MenuItem>
-                ))}
-              </TextField>
-            )}
-          />
-          <TextField
-            label={t("Salida planificada")} size="small" fullWidth type="datetime-local"
-            slotProps={{ inputLabel: { shrink: true } }}
-            {...register("plannedDepartureAt")}
-          />
-        </Box>
+        {formError && <Alert severity="error">{formError}</Alert>}
 
+        <Controller
+          control={control}
+          name="vehicleId"
+          render={({ field }) => (
+            <TextField
+              select label={t("Vehículo")} required size="small" fullWidth
+              value={field.value} onChange={(e) => field.onChange(e.target.value)}
+            >
+              <MenuItem value="">{t("Selecciona un vehículo")}</MenuItem>
+              {(vehiclesQuery.data?.content ?? []).map((vehicle) => (
+                <MenuItem key={vehicle.id} value={vehicle.id}>
+                  {vehicle.code} · {vehicle.licensePlate} · {fmtDecimal(vehicle.effectiveMaxWeightKg)} kg
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
+        />
+        <FormDateInput
+          control={control} name="plannedDepartureAt" mode="datetime"
+          label={t("Salida planificada")} size="small" fullWidth
+        />
         <Typography variant="caption" color="text.secondary">
           {t("Si la carga actual no cabe en la unidad elegida, el backend rechaza el cambio y dice qué dimensión se excede.")}
         </Typography>

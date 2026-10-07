@@ -1,10 +1,10 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Alert, Box, Chip, LinearProgress, MenuItem, TextField, Typography } from "@mui/material";
+import { Alert, Box, Chip, LinearProgress, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import {
   LocalShippingRounded, PlaceRounded, TaskAltRounded, PendingActionsRounded, ScheduleRounded,
-  ReportProblemRounded, DonutLargeRounded, TravelExploreRounded,
+  ReportProblemRounded, DonutLargeRounded, TravelExploreRounded, EventRounded, FlagRounded, BusinessRounded,
 } from "@mui/icons-material";
 import { fetchCarriers } from "../../shared/api/carriersApi";
 import {
@@ -15,7 +15,7 @@ import type { TripStatus } from "../../shared/api/planningApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  DataTable, KpiCard, PageHeader, Pagination, StatusChip, Toolbar, type DataTableColumn,
+  DataTable, FilterBar, KpiCard, PageHeader, Pagination, StatusChip, type DataTableColumn,
 } from "../../shared/ui/components";
 import { TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
@@ -47,6 +47,8 @@ interface Filters {
   status: TripStatus | "";
 }
 
+type BarFilters = Filters & { search: string };
+
 /**
  * Seguimiento de reparto: los envíos que están en la calle hoy, cuánto llevan hecho y dónde hay
  * un problema.
@@ -63,7 +65,6 @@ export function DeliveryTrackingPage() {
   const companyId = selected?.id ?? "";
 
   const initial: Filters = { date: today(), carrierId: "", status: "IN_TRANSIT" };
-  const [draft, setDraft] = useState<Filters>(initial);
   const [filters, setFilters] = useState<Filters>(initial);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
@@ -100,8 +101,15 @@ export function DeliveryTrackingPage() {
   const currentPage = Math.min(page, lastPage);
   const visible = rows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
-  function applyFilters() { setFilters(draft); setPage(0); }
-  function resetFilters() { setDraft(initial); setFilters(initial); setSearch(""); setPage(0); }
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar. La barra ve un solo
+  // objeto, pero la búsqueda se guarda aparte para no volver a pedir el tablero en cada tecla.
+  const barValue: BarFilters = { ...filters, search };
+  const barDefaults: BarFilters = { ...initial, search: "" };
+  const setBarValue = ({ search: nextSearch, ...next }: BarFilters) => {
+    setFilters(next);
+    setSearch(nextSearch);
+    setPage(0);
+  };
 
   const columns: DataTableColumn<ControlTowerTripView>[] = [
     {
@@ -236,46 +244,22 @@ export function DeliveryTrackingPage() {
         </Alert>
       )}
 
-      <Toolbar
-        onApply={applyFilters}
-        onReset={resetFilters}
-        filters={
-          <>
-            <TextField
-              size="small" type="date" label={t("Fecha")} value={draft.date}
-              onChange={(e) => setDraft({ ...draft, date: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ minWidth: 150, width: 150 }}
-            />
-            <TextField
-              select size="small" label={t("Estado")} value={draft.status}
-              onChange={(e) => setDraft({ ...draft, status: e.target.value as TripStatus | "" })}
-              sx={{ minWidth: 170 }}
-            >
-              {STATUS_OPTIONS.map((status) => (
-                <MenuItem key={status || "ALL"} value={status}>
-                  {status === "" ? t("Todos los estados") : enumLabel("tripStatus", status)}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Transportista")} value={draft.carrierId}
-              onChange={(e) => setDraft({ ...draft, carrierId: e.target.value })}
-              sx={{ minWidth: 190 }}
-            >
-              <MenuItem value="">{t("Todos los transportistas")}</MenuItem>
-              {(carriersQuery.data?.content ?? []).map((carrier) => (
-                <MenuItem key={carrier.id} value={carrier.id}>{carrier.businessName}</MenuItem>
-              ))}
-            </TextField>
-            {/* Local sobre lo ya traído: no es un filtro del servidor, así que no espera a "Aplicar". */}
-            <TextField
-              size="small" label={t("Buscar envío, placa o conductor")} value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-              sx={{ minWidth: 230, flex: { md: "1 1 230px" }, maxWidth: { md: 340 } }}
-            />
-          </>
-        }
+      {/* La búsqueda es local sobre lo ya traído; fecha, estado y transportista van al servidor. */}
+      <FilterBar
+        value={barValue}
+        defaults={barDefaults}
+        onChange={setBarValue}
+        fields={[
+          { type: "search", key: "search", placeholder: t("Buscar envío, placa o conductor"), width: 280 },
+          { type: "date", key: "date", label: t("Fecha"), icon: <EventRounded /> },
+          { type: "select", key: "status", label: t("Estado"), icon: <FlagRounded />,
+            allLabel: t("Todos los estados"),
+            options: STATUS_OPTIONS.filter((status) => status !== "")
+              .map((status) => ({ id: status, label: enumLabel("tripStatus", status) })) },
+          { type: "select", key: "carrierId", label: t("Transportista"), icon: <BusinessRounded />,
+            allLabel: t("Todos los transportistas"),
+            options: (carriersQuery.data?.content ?? []).map((carrier) => ({ id: carrier.id, label: carrier.businessName })) },
+        ]}
       />
 
       <DataTable

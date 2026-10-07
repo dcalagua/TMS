@@ -18,6 +18,7 @@ import {
 import {
   DetailGrid, DetailItem, FormDrawer, LoadingState, StatusChip,
 } from "../../shared/ui/components";
+import { DetailSection, KeyFacts } from "../../shared/ui/components/DetailLayout";
 import { R } from "../../theme";
 import { WorkspaceCard } from "./WorkspaceCard";
 import { enumLabel } from "../../lib/enums";
@@ -376,36 +377,54 @@ function RawDocumentDrawer({
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>{t("Cerrar")}</Button>
+          <Button variant="outlined" color="inherit" onClick={onClose} sx={{ borderColor: "divider" }}>{t("Cerrar")}</Button>
           <Button variant="contained" startIcon={<ContentCopyRounded />} disabled={text === ""} onClick={() => void copy()}>
             {t("Copiar")}
           </Button>
         </>
       }
     >
-      {rawQuery.isPending ? (
-        <LoadingState minHeight={160} />
-      ) : rawQuery.isError ? (
-        <Alert severity="error">{describeApiError(rawQuery.error as ApiError)}</Alert>
-      ) : (
-        <Box sx={{ position: "relative" }}>
-          <Tooltip title={t("Copiar")}>
-            <IconButton size="small" onClick={() => void copy()} sx={{ position: "absolute", top: 4, right: 4 }} aria-label={t("Copiar")}>
-              <ContentCopyRounded fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Box
-            component="pre"
-            sx={{
-              m: 0, p: 1.5, pr: 5, borderRadius: "4px", bgcolor: "action.hover", overflow: "auto", maxHeight: "70vh",
-              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize: 12, lineHeight: 1.5,
-              whiteSpace: "pre-wrap", wordBreak: "break-all",
-            }}
-          >
-            {text || t("El documento está vacío.")}
-          </Box>
+      <Box sx={{ display: "grid", gap: 2.5 }}>
+        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
+          <StatusChip label={enumLabel("dispatchDocumentOutcome", document.outcome)} tone={outcomeTone(document.outcome)} variant="solid" />
+          <StatusChip label={enumLabel("dispatchVerificationStatus", document.verificationStatus)} tone={verificationTone(document.verificationStatus)} />
+          {!document.current && <Chip size="small" variant="outlined" label={t("Revisión anterior")} />}
         </Box>
-      )}
+
+        <KeyFacts columns={4} items={[
+          { label: t("Sistema"), value: document.sourceSystem },
+          { label: t("Despacho"), value: document.dispatchReference },
+          { label: t("Revisión"), value: `r${document.revision}` },
+          { label: t("Recibido"), value: fmtDateTime(document.receivedAt) },
+        ]} />
+
+        <DetailSection title={t("Contenido tal cual llegó")}>
+          {rawQuery.isPending ? (
+            <LoadingState minHeight={160} />
+          ) : rawQuery.isError ? (
+            <Alert severity="error">{describeApiError(rawQuery.error as ApiError)}</Alert>
+          ) : (
+            <Box sx={{ position: "relative" }}>
+              <Tooltip title={t("Copiar")}>
+                <IconButton size="small" onClick={() => void copy()} sx={{ position: "absolute", top: 4, right: 4 }} aria-label={t("Copiar")}>
+                  <ContentCopyRounded fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Box
+                component="pre"
+                sx={{
+                  m: 0, p: 1.5, pr: 5, borderRadius: `${R.md}px`, bgcolor: "action.hover", overflow: "auto", maxHeight: "60vh",
+                  border: "1px solid", borderColor: "divider",
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize: 12, lineHeight: 1.5,
+                  whiteSpace: "pre-wrap", wordBreak: "break-all",
+                }}
+              >
+                {text || t("El documento está vacío.")}
+              </Box>
+            </Box>
+          )}
+        </DetailSection>
+      </Box>
     </FormDrawer>
   );
 }

@@ -1,4 +1,6 @@
 import { createTheme, darken, lighten, getContrastRatio, type Theme } from "@mui/material/styles";
+// Tipos de `components.MuiPickers*` en el tema (selectores de fecha/hora de MUI X).
+import type {} from "@mui/x-date-pickers/themeAugmentation";
 
 /** La familia de la suite. Se declara una vez y se reparte a todas las variantes: MUI no
  *  hereda `fontFamily` en las que traen la suya de fábrica. */
@@ -393,6 +395,16 @@ export function getTheme(mode: ColorMode, themeKey: ThemeKey = "forest", brandAc
             },
           },
           input: { padding: `${D.padY}px ${D.padX}px` },
+        },
+      },
+      /**
+       * Los selectores de fecha/hora (MUI X) no usan MuiOutlinedInput sino su propio campo, así
+       * que no heredan lo de arriba. Misma forma, alto, fondo y relleno que un input de texto.
+       */
+      MuiPickersOutlinedInput: {
+        styleOverrides: {
+          root: { borderRadius: 9, minHeight: D.controlH, backgroundColor: paper },
+          sectionsContainer: { padding: `${D.padY}px ${D.padX}px` },
         },
       },
       MuiTableCell: {

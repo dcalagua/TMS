@@ -1,7 +1,10 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Button, MenuItem, TextField, Typography } from "@mui/material";
-import { AddRounded, AltRouteRounded, EditRounded, BlockRounded, CheckCircleRounded } from "@mui/icons-material";
+import { Button, Typography } from "@mui/material";
+import {
+  AddRounded, AltRouteRounded, EditRounded, BlockRounded, CheckCircleRounded,
+  CropFreeRounded, TagRounded, ToggleOnRounded, TripOriginRounded,
+} from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import { activateRoute, deactivateRoute, fetchRoutes, type RouteView } from "../../shared/api/routesApi";
 import { fetchOrigins } from "../../shared/api/originsApi";
@@ -9,7 +12,7 @@ import { fetchZones } from "../../shared/api/zonesApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  ActionMenu, ActiveBadge, DataTable, PageHeader, Pagination, Toolbar, type DataTableColumn,
+  ActionMenu, ActiveBadge, DataTable, FilterBar, PageHeader, Pagination, type DataTableColumn,
 } from "../../shared/ui/components";
 import {
   ACTIVE_FILTER_OPTIONS, activeParam, notifySaved, toggleActiveRecord, type ActiveFilter,
@@ -40,8 +43,9 @@ export function RoutesPage() {
   const queryClient = useQueryClient();
 
   const [page, setPage] = useState(0);
-  const [draft, setDraft] = useState<AppliedFilters>(DEFAULT_FILTERS);
-  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
+  const [filters, setFiltersState] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const setFilters = (next: AppliedFilters) => { setFiltersState(next); setPage(0); };
   const [modal, setModal] = useState<ModalState>(null);
 
   const routesQuery = useQuery({
@@ -79,9 +83,6 @@ export function RoutesPage() {
     // enseñe las paradas de antes de guardar.
     void queryClient.invalidateQueries({ queryKey: ["route", companyId] });
   }
-
-  function applyFilters() { setFilters(draft); setPage(0); }
-  function resetFilters() { setDraft(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); setPage(0); }
 
   async function toggleActive(route: RouteView) {
     const changed = await toggleActiveRecord({
@@ -143,52 +144,22 @@ export function RoutesPage() {
         )}
       />
 
-      <Toolbar
-        onApply={applyFilters}
-        onReset={resetFilters}
-        filters={
-          <>
-            <TextField
-              size="small" label={t("Código")} value={draft.code}
-              onChange={(e) => setDraft({ ...draft, code: e.target.value })}
-              sx={{ minWidth: 150 }}
-            />
-            <TextField
-              size="small" label={t("Nombre")} value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              sx={{ minWidth: 180 }}
-            />
-            <TextField
-              select size="small" label={t("Origen")} value={draft.originId}
-              onChange={(e) => setDraft({ ...draft, originId: e.target.value })}
-              sx={{ minWidth: 190 }}
-            >
-              <MenuItem value="">{t("Todos los orígenes")}</MenuItem>
-              {(originsQuery.data?.content ?? []).map((origin) => (
-                <MenuItem key={origin.id} value={origin.id}>{origin.code} · {origin.name}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Zona")} value={draft.zoneId}
-              onChange={(e) => setDraft({ ...draft, zoneId: e.target.value })}
-              sx={{ minWidth: 170 }}
-            >
-              <MenuItem value="">{t("Todas las zonas")}</MenuItem>
-              {(zonesQuery.data?.content ?? []).map((zone) => (
-                <MenuItem key={zone.id} value={zone.id}>{zone.name}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Estado")} value={draft.active}
-              onChange={(e) => setDraft({ ...draft, active: e.target.value as ActiveFilter })}
-              sx={{ minWidth: 150 }}
-            >
-              {ACTIVE_FILTER_OPTIONS.map((option) => (
-                <MenuItem key={option.value} value={option.value}>{t(option.label)}</MenuItem>
-              ))}
-            </TextField>
-          </>
-        }
+      <FilterBar
+        value={filters}
+        defaults={DEFAULT_FILTERS}
+        onChange={setFilters}
+        fields={[
+          { type: "search", key: "name", placeholder: t("Nombre") },
+          { type: "select", key: "originId", label: t("Origen"), icon: <TripOriginRounded />,
+            allLabel: t("Todos los orígenes"),
+            options: (originsQuery.data?.content ?? []).map((o) => ({ id: o.id, label: `${o.code} · ${o.name}` })) },
+          { type: "select", key: "zoneId", label: t("Zona"), icon: <CropFreeRounded />,
+            allLabel: t("Todas las zonas"),
+            options: (zonesQuery.data?.content ?? []).map((z) => ({ id: z.id, label: z.name })) },
+          { type: "select", key: "active", label: t("Estado"), icon: <ToggleOnRounded />,
+            options: ACTIVE_FILTER_OPTIONS.map((o) => ({ id: o.value, label: t(o.label) })) },
+          { type: "text", key: "code", label: t("Código"), icon: <TagRounded /> },
+        ]}
       />
 
       <DataTable

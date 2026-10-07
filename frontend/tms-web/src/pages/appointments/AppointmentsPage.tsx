@@ -1,13 +1,13 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Alert, Box, Button, Chip, MenuItem, Paper, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, TextField, Tooltip, Typography,
+  Alert, Box, Button, Chip, Paper, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Tooltip, Typography,
 } from "@mui/material";
 import {
   EventAvailableRounded, CheckCircleRounded, CancelRounded, LocalShippingRounded,
   DoneAllRounded, PersonOffRounded, ScheduleRounded, Inventory2Outlined, LocalShippingOutlined,
-  MeetingRoomOutlined,
+  MeetingRoomOutlined, WarehouseRounded,
 } from "@mui/icons-material";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
@@ -19,13 +19,13 @@ import { fetchDestinations } from "../../shared/api/destinationsApi";
 import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
 import {
-  ActionMenu, EmptyState, ErrorState, LoadingState, PageHeader, StatusChip, dataTableSx,
+  ActionMenu, EmptyState, ErrorState, FilterBar, LoadingState, PageHeader, StatusChip, dataTableSx,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { confirmDialog, notifyError, notifySuccess, promptDialog } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
 import { R, T, neutralSoft, type StatusTone } from "../../theme";
-import { fmtDateTime } from "../../lib/locale";
+import { fmtDateTime, today } from "../../lib/locale";
 import { t } from "../../lib/i18n";
 import { BookAppointmentDrawer } from "./BookAppointmentDrawer";
 
@@ -47,7 +47,7 @@ export function AppointmentsPage() {
   const canManage = hasPermission("appointments.appointment:manage");
 
   const [locationId, setLocationId] = useState("");
-  const [day, setDay] = useState(() => new Date().toISOString().slice(0, 10));
+  const [day, setDay] = useState(today);
   const [booking, setBooking] = useState(false);
   const queryClient = useQueryClient();
 
@@ -192,26 +192,16 @@ export function AppointmentsPage() {
         )}
       />
 
-      <Paper variant="outlined" sx={{
-        borderRadius: `${R.md}px`, px: 1.75, py: 1.5, mb: 2,
-        display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "center",
-      }}>
-        <TextField
-          select size="small" label={t("Sitio")} value={locationId} sx={{ minWidth: 260, width: { md: 320 } }}
-          onChange={(e) => setLocationId(e.target.value)}
-        >
-          <MenuItem value="">{t("Selecciona un sitio")}</MenuItem>
-          {(locationsQuery.data?.content ?? []).map((location) => (
-            <MenuItem key={location.id} value={location.id}>{location.code} · {location.name}</MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          size="small" type="date" label={t("Día")} value={day}
-          onChange={(e) => setDay(e.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ width: 170 }}
-        />
-        {locationId !== "" && (
+      <FilterBar
+        value={{ locationId, day }}
+        defaults={{ locationId: "", day: today() }}
+        onChange={(next) => { setLocationId(next.locationId); setDay(next.day || today()); }}
+        fields={[
+          { type: "select", key: "locationId", label: t("Sitio"), icon: <WarehouseRounded />,
+            options: (locationsQuery.data?.content ?? []).map((location) => ({ id: location.id, label: `${location.code} · ${location.name}` })) },
+          { type: "date", key: "day", label: t("Día") },
+        ]}
+        trailing={locationId !== "" && (
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
             <Typography variant="body2" sx={{ fontWeight: 700, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>
               {t("{{count}} puerta(s)", { count: docks.length })}
@@ -221,7 +211,7 @@ export function AppointmentsPage() {
             )}
           </Box>
         )}
-      </Paper>
+      />
 
       {locationId === "" ? (
         <EmptyState

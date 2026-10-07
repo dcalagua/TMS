@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Controller, useForm, useWatch, type Validate } from "react-hook-form";
-import { Alert, Box, Button, MenuItem, TextField, Typography } from "@mui/material";
-import { LocalShippingRounded } from "@mui/icons-material";
+import { Alert, Box, Button, MenuItem, TextField } from "@mui/material";
+import { CheckRounded, LocalShippingRounded } from "@mui/icons-material";
 import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchCarriers } from "../../shared/api/carriersApi";
@@ -11,10 +11,10 @@ import {
   createVehicle, updateVehicle, VEHICLE_AVAILABILITY_STATUSES,
   type VehicleAvailabilityStatus, type VehicleRequest, type VehicleView,
 } from "../../shared/api/vehiclesApi";
-import { FormDrawer, SectionHeader } from "../../shared/ui/components";
+import { ActiveBadge, FormDrawer, FormMeta, FormRow, FormSection } from "../../shared/ui/components";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
-import { fmtDecimal } from "../../lib/locale";
+import { fmtDateTime, fmtDecimal } from "../../lib/locale";
 
 const FORM_ID = "vehicle-form";
 
@@ -118,15 +118,16 @@ export function VehicleFormDrawer({ companyId, vehicle, onClose, onSaved }: Vehi
     }
   }
 
-  const grid2 = { display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, mb: 3 } as const;
-  const grid3 = { display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, mb: 2 } as const;
-
   return (
     <FormDrawer
       open
       icon={<LocalShippingRounded />}
       title={isEdit ? t("Editar vehículo") : t("Nuevo vehículo")}
-      subtitle={t("Una unidad concreta de la flota, con su placa y su capacidad efectiva.")}
+      subtitle={isEdit
+        ? [vehicle.code, vehicle.licensePlate, vehicle.carrierBusinessName].filter(Boolean).join(" · ")
+        : t("Una unidad concreta de la flota, con su placa y su capacidad efectiva.")}
+      titleAdornment={isEdit ? <ActiveBadge active={vehicle.active} /> : undefined}
+      footerStart={isEdit ? <FormMeta>{t("Actualizado el {{date}}", { date: fmtDateTime(vehicle.updatedAt) })}</FormMeta> : undefined}
       size="lg"
       onClose={onClose}
       dirty={isDirty}
@@ -134,17 +135,17 @@ export function VehicleFormDrawer({ companyId, vehicle, onClose, onSaved }: Vehi
       footer={
         <>
           <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
-          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
-            {isSubmitting ? t("Guardando...") : t("Guardar")}
+          <Button type="submit" form={FORM_ID} variant="contained" startIcon={<CheckRounded />} disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : isEdit ? t("Guardar cambios") : t("Crear vehículo")}
           </Button>
         </>
       }
     >
       <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+        {formError && <Alert severity="error" sx={{ mb: 1 }}>{formError}</Alert>}
 
-        <SectionHeader title={t("Identificación")} />
-        <Box sx={grid2}>
+        <FormSection title={t("Identificación")} help={t("Cómo se reconoce la unidad en el sistema y en la calle.")}>
+        <FormRow template="180px minmax(0, 1fr)">
           <TextField
             label={t("Código")} required size="small" fullWidth
             error={Boolean(errors.code)} helperText={errors.code?.message}
@@ -162,10 +163,11 @@ export function VehicleFormDrawer({ companyId, vehicle, onClose, onSaved }: Vehi
               pattern: { value: PLATE_PATTERN, message: t("De 4 a 12 caracteres: letras, dígitos o guion") },
             })}
           />
-        </Box>
+        </FormRow>
+        </FormSection>
 
-        <SectionHeader title={t("Asignación")} />
-        <Box sx={grid2}>
+        <FormSection title={t("Asignación")} help={t("Qué tipo de unidad es, quién la opera y si está disponible.")}>
+        <FormRow>
           <Controller
             control={control}
             name="vehicleTypeId"
@@ -198,6 +200,8 @@ export function VehicleFormDrawer({ companyId, vehicle, onClose, onSaved }: Vehi
               </TextField>
             )}
           />
+        </FormRow>
+        <FormRow>
           <Controller
             control={control}
             name="availabilityStatus"
@@ -219,35 +223,37 @@ export function VehicleFormDrawer({ companyId, vehicle, onClose, onSaved }: Vehi
               maxLength: { value: 100, message: t("No puede superar los {{count}} caracteres", { count: 100 }) },
             })}
           />
-        </Box>
+        </FormRow>
+        </FormSection>
 
-        <SectionHeader title={t("Capacidades")} />
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          {t("Déjalas vacías para heredar la capacidad del tipo de vehículo. Solo rellena las que esta unidad concreta contradiga.")}
-        </Typography>
-        <Box sx={grid3}>
+        <FormSection
+          title={t("Capacidad efectiva")}
+          help={t("Vacía hereda la del tipo de vehículo. Rellena solo lo que esta unidad concreta contradiga.")}
+        >
+        <FormRow cols={3}>
           <TextField
             label={t("Peso propio (kg)")} size="small" fullWidth type="number"
-            placeholder={selectedType ? fmtDecimal(selectedType.maxWeightKg) : ""}
+            placeholder={selectedType ? `${fmtDecimal(selectedType.maxWeightKg)} ${t("(del tipo)")}` : ""}
             slotProps={{ inputLabel: { shrink: true } }}
             error={Boolean(errors.maxWeightOverrideKg)} helperText={errors.maxWeightOverrideKg?.message}
             {...register("maxWeightOverrideKg", { validate: optionalPositive })}
           />
           <TextField
             label={t("Volumen propio (m³)")} size="small" fullWidth type="number"
-            placeholder={selectedType ? fmtDecimal(selectedType.maxVolumeM3) : ""}
+            placeholder={selectedType ? `${fmtDecimal(selectedType.maxVolumeM3)} ${t("(del tipo)")}` : ""}
             slotProps={{ inputLabel: { shrink: true } }}
             error={Boolean(errors.maxVolumeOverrideM3)} helperText={errors.maxVolumeOverrideM3?.message}
             {...register("maxVolumeOverrideM3", { validate: optionalPositive })}
           />
           <TextField
             label={t("Pallets propios")} size="small" fullWidth type="number"
-            placeholder={selectedType ? String(selectedType.maxPallets) : ""}
+            placeholder={selectedType ? `${selectedType.maxPallets} ${t("(del tipo)")}` : ""}
             slotProps={{ inputLabel: { shrink: true } }}
             error={Boolean(errors.maxPalletsOverride)} helperText={errors.maxPalletsOverride?.message}
             {...register("maxPalletsOverride", { validate: optionalPositive })}
           />
-        </Box>
+        </FormRow>
+        </FormSection>
       </Box>
     </FormDrawer>
   );

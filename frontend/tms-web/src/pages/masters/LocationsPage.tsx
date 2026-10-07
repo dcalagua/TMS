@@ -1,12 +1,13 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
-  Box, Button, Chip, MenuItem, Table, TableBody, TableCell, TableContainer, TableHead,
-  TableRow, TextField, Typography, Paper,
+  Box, Button, Chip, Table, TableBody, TableCell, TableContainer, TableHead,
+  TableRow, Typography, Paper,
 } from "@mui/material";
 import {
   AddRounded, UploadRounded, EditRounded, BlockRounded, CheckCircleRounded,
   PlaceRounded, TripOriginRounded, PinDropRounded, MyLocationRounded,
+  CategoryRounded, CropFreeRounded, SwapHorizRounded, ToggleOnRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
@@ -18,9 +19,9 @@ import { fetchZones } from "../../shared/api/zonesApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  ActionMenu, ActiveBadge, DataTable, FilterChips, ImportDrawer, ImportOutcomeChip,
-  PageHeader, Pagination, Toolbar, dataTableSx,
-  type DataTableColumn, type FilterChip,
+  ActionMenu, ActiveBadge, DataTable, FilterBar, ImportDrawer, ImportOutcomeChip,
+  PageHeader, Pagination, dataTableSx,
+  type DataTableColumn,
 } from "../../shared/ui/components";
 import {
   ACTIVE_FILTER_OPTIONS, activeParam, notifySaved, toggleActiveRecord, type ActiveFilter,
@@ -82,8 +83,9 @@ export function LocationsPage({ view }: LocationsPageProps = {}) {
 
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [draft, setDraft] = useState<AppliedFilters>(defaultFilters);
-  const [filters, setFilters] = useState<AppliedFilters>(defaultFilters);
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
+  const [filters, setFiltersState] = useState<AppliedFilters>(defaultFilters);
+  const setFilters = (next: AppliedFilters) => { setFiltersState(next); setPage(0); };
   const [modal, setModal] = useState<ModalState>(null);
   const [geofenceFor, setGeofenceFor] = useState<LocationView | null>(null);
   const [showImport, setShowImport] = useState(false);
@@ -143,16 +145,6 @@ export function LocationsPage({ view }: LocationsPageProps = {}) {
     enabled: companyId !== "",
   });
   const zones = zonesQuery.data?.content ?? [];
-
-  function applyFilters() { setFilters(draft); setPage(0); }
-  function resetFilters() { setDraft(defaultFilters); setFilters(defaultFilters); setPage(0); }
-
-  function clearOne(patch: Partial<AppliedFilters>) {
-    const next = { ...filters, ...patch };
-    setDraft(next);
-    setFilters(next);
-    setPage(0);
-  }
 
   function refresh() {
     void queryClient.invalidateQueries({ queryKey: ["locations", companyId] });
@@ -238,34 +230,10 @@ export function LocationsPage({ view }: LocationsPageProps = {}) {
 
   const pageData = locationsQuery.data;
 
-  /* Qué está estrechando la lista ahora mismo. `active` solo cuenta cuando no es el valor por
-     defecto: "Activos" es el estado en reposo de la pantalla, no un filtro que alguien eligió. */
-  const activeChips: FilterChip[] = [
-    filters.search && {
-      key: "search", label: t("Buscar"), value: filters.search,
-      onClear: () => clearOne({ search: "" }),
-    },
-    filters.type && {
-      key: "type", label: t("Tipo"), value: enumLabel("locationType", filters.type),
-      onClear: () => clearOne({ type: "" }),
-    },
-    !view && filters.role && {
-      key: "role", label: t("Uso operacional"), value: enumLabel("locationRole", filters.role),
-      onClear: () => clearOne({ role: "" }),
-    },
-    filters.zoneId && {
-      key: "zone", label: t("Zona"),
-      value: zones.find((zone) => zone.id === filters.zoneId)?.name ?? filters.zoneId,
-      onClear: () => clearOne({ zoneId: "" }),
-    },
-    filters.active !== defaultFilters.active && {
-      key: "active", label: t("Estado"),
-      value: filters.active === "all" ? t("Todos") : t("Inactivos"),
-      onClear: () => clearOne({ active: defaultFilters.active }),
-    },
-  ].filter(Boolean) as FilterChip[];
-
-  const isFiltered = activeChips.length > 0;
+  /* Si algo está estrechando la lista ahora mismo: cualquier filtro distinto del estado en reposo
+     ("Activos", y el uso clavado de la vista, no cuentan como filtros que alguien eligió). */
+  const isFiltered = (Object.keys(defaultFilters) as (keyof AppliedFilters)[])
+    .some((key) => filters[key] !== defaultFilters[key]);
 
   return (
     <>
@@ -288,65 +256,26 @@ export function LocationsPage({ view }: LocationsPageProps = {}) {
         )}
       />
 
-      <Toolbar
-        onApply={applyFilters}
-        onReset={resetFilters}
-        activeFilterCount={activeChips.length}
-        filters={
-          <>
-            <TextField
-              size="small" type="search" label={t("Buscar")}
-              placeholder={t("Código, nombre o referencia externa")}
-              value={draft.search}
-              onChange={(e) => setDraft({ ...draft, search: e.target.value })}
-              sx={{ minWidth: 240, flex: 1 }}
-            />
-            <TextField
-              select size="small" label={t("Tipo")} value={draft.type}
-              onChange={(e) => setDraft({ ...draft, type: e.target.value as LocationType | "" })}
-              sx={{ minWidth: 180 }}
-            >
-              <MenuItem value="">{t("Todos los tipos")}</MenuItem>
-              {LOCATION_TYPES.map((type) => (
-                <MenuItem key={type} value={type}>{enumLabel("locationType", type)}</MenuItem>
-              ))}
-            </TextField>
-            {!view && (
-              <TextField
-                select size="small" label={t("Uso operacional")} value={draft.role}
-                onChange={(e) => setDraft({ ...draft, role: e.target.value as LocationRole | "" })}
-                sx={{ minWidth: 180 }}
-              >
-                <MenuItem value="">{t("Cualquier uso")}</MenuItem>
-                {LOCATION_ROLES.map((role) => (
-                  <MenuItem key={role} value={role}>{enumLabel("locationRole", role)}</MenuItem>
-                ))}
-              </TextField>
-            )}
-            <TextField
-              select size="small" label={t("Zona")} value={draft.zoneId}
-              onChange={(e) => setDraft({ ...draft, zoneId: e.target.value })}
-              sx={{ minWidth: 180 }}
-            >
-              <MenuItem value="">{t("Todas las zonas")}</MenuItem>
-              {zones.map((zone) => (
-                <MenuItem key={zone.id} value={zone.id}>{zone.name}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Estado")} value={draft.active}
-              onChange={(e) => setDraft({ ...draft, active: e.target.value as ActiveFilter })}
-              sx={{ minWidth: 150 }}
-            >
-              {ACTIVE_FILTER_OPTIONS.map((option) => (
-                <MenuItem key={option.value} value={option.value}>{t(option.label)}</MenuItem>
-              ))}
-            </TextField>
-          </>
-        }
+      <FilterBar
+        value={filters}
+        defaults={defaultFilters}
+        onChange={setFilters}
+        fields={[
+          { type: "search", key: "search", placeholder: t("Código, nombre o referencia externa"), width: 280 },
+          { type: "select", key: "type", label: t("Tipo"), icon: <CategoryRounded />,
+            allLabel: t("Todos los tipos"),
+            options: LOCATION_TYPES.map((type) => ({ id: type, label: enumLabel("locationType", type) })) },
+          // En Orígenes/Destinos el uso es la identidad de la pantalla, no un filtro que se ofrezca.
+          ...(view ? [] : [{ type: "select" as const, key: "role" as const, label: t("Uso operacional"),
+            icon: <SwapHorizRounded />, allLabel: t("Cualquier uso"),
+            options: LOCATION_ROLES.map((role) => ({ id: role, label: enumLabel("locationRole", role) })) }]),
+          { type: "select", key: "zoneId", label: t("Zona"), icon: <CropFreeRounded />,
+            allLabel: t("Todas las zonas"),
+            options: zones.map((zone) => ({ id: zone.id, label: zone.name })) },
+          { type: "select", key: "active", label: t("Estado"), icon: <ToggleOnRounded />,
+            options: ACTIVE_FILTER_OPTIONS.map((o) => ({ id: o.value, label: t(o.label) })) },
+        ]}
       />
-
-      <FilterChips chips={activeChips} onClearAll={resetFilters} />
 
       <DataTable
         columns={columns}
@@ -362,7 +291,7 @@ export function LocationsPage({ view }: LocationsPageProps = {}) {
         emptyMessage={isFiltered ? t("Ningun registro coincide con los filtros seleccionados.") : t(COPY.emptyMessage)}
         emptyAction={
           isFiltered ? (
-            <Button size="small" variant="outlined" onClick={resetFilters}>{t("Limpiar")}</Button>
+            <Button size="small" variant="outlined" onClick={() => setFilters(defaultFilters)}>{t("Limpiar")}</Button>
           ) : canManage ? (
             <Button size="small" variant="contained" startIcon={<AddRounded />} onClick={() => setModal({ mode: "create" })}>
               {t(COPY.neu)}

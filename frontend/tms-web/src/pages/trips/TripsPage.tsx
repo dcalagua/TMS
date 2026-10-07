@@ -1,8 +1,10 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, MenuItem, TextField, Typography } from "@mui/material";
-import { MapRounded } from "@mui/icons-material";
+import { Box, Typography } from "@mui/material";
+import {
+  MapRounded, EventRounded, FlagRounded, WarehouseRounded, BusinessRounded, BadgeRounded,
+} from "@mui/icons-material";
 import { fetchCarriers } from "../../shared/api/carriersApi";
 import { fetchDrivers } from "../../shared/api/driversApi";
 import type { ApiError } from "../../shared/api/httpClient";
@@ -11,7 +13,7 @@ import { fetchTrips, TRIP_STATUSES, type TripStatus, type TripView } from "../..
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  DataTable, PageHeader, Pagination, StatusChip, Toolbar, type DataTableColumn,
+  DataTable, FilterBar, PageHeader, Pagination, StatusChip, type DataTableColumn,
 } from "../../shared/ui/components";
 import { TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
@@ -51,8 +53,9 @@ export function TripsPage() {
   const navigate = useNavigate();
 
   const [page, setPage] = useState(0);
-  const [draft, setDraft] = useState<AppliedFilters>(DEFAULT_FILTERS);
-  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
+  const [filters, setFiltersState] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const setFilters = (next: AppliedFilters) => { setFiltersState(next); setPage(0); };
 
   const tripsQuery = useQuery({
     queryKey: ["trips", companyId, page, filters],
@@ -92,9 +95,6 @@ export function TripsPage() {
     queryFn: ({ signal }) => fetchDrivers({ companyId, size: 200, active: true, signal }),
     enabled: companyId !== "",
   });
-
-  function applyFilters() { setFilters(draft); setPage(0); }
-  function resetFilters() { setDraft(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); setPage(0); }
 
   const columns: DataTableColumn<TripView>[] = [
     {
@@ -178,70 +178,26 @@ export function TripsPage() {
         refreshing={tripsQuery.isFetching}
       />
 
-      <Toolbar
-        onApply={applyFilters}
-        onReset={resetFilters}
-        filters={
-          <>
-            <TextField
-              size="small" label={t("Envío")} value={draft.shipmentNumber}
-              onChange={(e) => setDraft({ ...draft, shipmentNumber: e.target.value })}
-              sx={{ minWidth: 160 }}
-            />
-            <TextField
-              select size="small" label={t("Estado")} value={draft.status}
-              onChange={(e) => setDraft({ ...draft, status: e.target.value as TripStatus | "" })}
-              sx={{ minWidth: 180 }}
-            >
-              <MenuItem value="">{t("Todos los estados")}</MenuItem>
-              {TRIP_STATUSES.map((status) => (
-                <MenuItem key={status} value={status}>{enumLabel("tripStatus", status)}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Origen")} value={draft.originId}
-              onChange={(e) => setDraft({ ...draft, originId: e.target.value })}
-              sx={{ minWidth: 180 }}
-            >
-              <MenuItem value="">{t("Todos los orígenes")}</MenuItem>
-              {(originsQuery.data?.content ?? []).map((origin) => (
-                <MenuItem key={origin.id} value={origin.id}>{origin.name}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Transportista")} value={draft.carrierId}
-              onChange={(e) => setDraft({ ...draft, carrierId: e.target.value })}
-              sx={{ minWidth: 190 }}
-            >
-              <MenuItem value="">{t("Todos los transportistas")}</MenuItem>
-              {(carriersQuery.data?.content ?? []).map((carrier) => (
-                <MenuItem key={carrier.id} value={carrier.id}>{carrier.businessName}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Conductor")} value={draft.driverId}
-              onChange={(e) => setDraft({ ...draft, driverId: e.target.value })}
-              sx={{ minWidth: 180 }}
-            >
-              <MenuItem value="">{t("Todos")}</MenuItem>
-              {(driversQuery.data?.content ?? []).map((driver) => (
-                <MenuItem key={driver.id} value={driver.id}>{driver.fullName}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              size="small" type="date" label={t("Desde")} value={draft.planningDateFrom}
-              onChange={(e) => setDraft({ ...draft, planningDateFrom: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ minWidth: 160 }}
-            />
-            <TextField
-              size="small" type="date" label={t("Hasta")} value={draft.planningDateTo}
-              onChange={(e) => setDraft({ ...draft, planningDateTo: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ minWidth: 160 }}
-            />
-          </>
-        }
+      <FilterBar
+        value={filters}
+        defaults={DEFAULT_FILTERS}
+        onChange={setFilters}
+        fields={[
+          { type: "search", key: "shipmentNumber", placeholder: t("Envío") },
+          { type: "dateRange", from: "planningDateFrom", to: "planningDateTo", label: t("Fecha"), icon: <EventRounded /> },
+          { type: "select", key: "status", label: t("Estado"), icon: <FlagRounded />,
+            allLabel: t("Todos los estados"),
+            options: TRIP_STATUSES.map((status) => ({ id: status, label: enumLabel("tripStatus", status) })) },
+          { type: "select", key: "originId", label: t("Origen"), icon: <WarehouseRounded />,
+            allLabel: t("Todos los orígenes"),
+            options: (originsQuery.data?.content ?? []).map((origin) => ({ id: origin.id, label: origin.name })) },
+          { type: "select", key: "carrierId", label: t("Transportista"), icon: <BusinessRounded />,
+            allLabel: t("Todos los transportistas"),
+            options: (carriersQuery.data?.content ?? []).map((carrier) => ({ id: carrier.id, label: carrier.businessName })) },
+          { type: "select", key: "driverId", label: t("Conductor"), icon: <BadgeRounded />,
+            allLabel: t("Todos"),
+            options: (driversQuery.data?.content ?? []).map((driver) => ({ id: driver.id, label: driver.fullName })) },
+        ]}
       />
 
       <DataTable

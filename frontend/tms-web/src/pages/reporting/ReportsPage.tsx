@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import {
   Alert, Box, Button, Chip, LinearProgress, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, TextField, Typography,
+  TableHead, TableRow, Typography,
 } from "@mui/material";
 import {
   BarChartRounded, DownloadRounded, LocalShippingRounded, ScheduleRounded,
@@ -14,7 +14,7 @@ import { downloadKpiCsv, fetchKpiReport } from "../../shared/api/reportingApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  AppCard, ErrorState, KpiCard, LoadingState, PageHeader, SectionHeader, dataTableSx,
+  AppCard, ErrorState, FilterBar, KpiCard, LoadingState, PageHeader, SectionHeader, dataTableSx,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { alpha } from "@mui/material/styles";
@@ -40,7 +40,7 @@ export function ReportsPage() {
   const { selected } = useCompany();
   const companyId = selected?.id ?? "";
 
-  const [range, setRange] = useState({ from: "", to: "" });
+  // Vacío = los últimos 30 días que decide el backend. Se aplica al elegirlo: no hay borrador.
   const [applied, setApplied] = useState({ from: "", to: "" });
   const [exporting, setExporting] = useState(false);
 
@@ -93,24 +93,18 @@ export function ReportsPage() {
         refreshing={reportQuery.isFetching}
         actions={
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-            <TextField
-              size="small" type="date" label={t("Desde")} value={range.from}
-              onChange={(e) => setRange({ ...range, from: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ width: 165 }}
-            />
-            <TextField
-              size="small" type="date" label={t("Hasta")} value={range.to}
-              onChange={(e) => setRange({ ...range, to: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ width: 165 }}
-            />
-            <Button variant="outlined" onClick={() => setApplied(range)}>{t("Aplicar")}</Button>
             <Button variant="contained" startIcon={<DownloadRounded />} disabled={exporting} onClick={() => void exportCsv()}>
               {t("Exportar CSV")}
             </Button>
           </Box>
         }
+      />
+
+      <FilterBar
+        value={applied}
+        defaults={{ from: "", to: "" }}
+        onChange={setApplied}
+        fields={[{ type: "dateRange", from: "from", to: "to", label: t("Periodo") }]}
       />
 
       <SectionHeader title={t("Envíos")} level={2} />

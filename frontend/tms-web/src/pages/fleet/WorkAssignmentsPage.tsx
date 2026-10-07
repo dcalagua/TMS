@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
-  Alert, Box, Button, Chip, Paper, TextField, Typography,
+  Alert, Box, Button, Chip, Paper, Typography,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import {
@@ -13,13 +13,13 @@ import {
 } from "../../shared/api/workAssignmentsApi";
 import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
-import { PageHeader, SectionHeader, StatusChip } from "../../shared/ui/components";
+import { FilterBar, PageHeader, SectionHeader, StatusChip } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { useCompany } from "../../shared/company/CompanyContext";
 import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
-import { fmtDateTime } from "../../lib/locale";
+import { fmtDateTime, today } from "../../lib/locale";
 import { R, T, neutralSoft } from "../../theme";
 
 /**
@@ -46,7 +46,7 @@ export function WorkAssignmentsPage() {
   const canManage = hasPermission("fleet.work_assignment:manage");
   const queryClient = useQueryClient();
 
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(today);
   const [busy, setBusy] = useState(false);
 
   const assignmentsQuery = useQuery({
@@ -85,14 +85,13 @@ export function WorkAssignmentsPage() {
         subtitle={t("Qué hace cada conductor y vehículo en el día, en orden, con el tiempo de desplazamiento entre envíos.")}
         onRefresh={refresh}
         refreshing={assignmentsQuery.isFetching}
-        actions={
-          <TextField
-            size="small" type="date" label={t("Fecha")} value={date}
-            onChange={(e) => setDate(e.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
-            sx={{ width: 170 }}
-          />
-        }
+      />
+
+      <FilterBar
+        value={{ date }}
+        defaults={{ date: today() }}
+        onChange={(next) => setDate(next.date || today())}
+        fields={[{ type: "date", key: "date", label: t("Fecha") }]}
       />
 
       {assignmentsQuery.isLoading ? (

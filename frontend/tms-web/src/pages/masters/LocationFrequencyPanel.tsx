@@ -13,7 +13,7 @@ import {
   deleteLocationFrequency, fetchLocationEligibility, fetchLocationFrequencies,
   type EligibilityView, type LocationFrequencyView,
 } from "../../shared/api/locationFrequenciesApi";
-import { ActiveBadge, LoadingState, dataTableSx } from "../../shared/ui/components";
+import { ActiveBadge, DateInput, LoadingState, dataTableSx } from "../../shared/ui/components";
 import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
 import { t } from "../../lib/i18n";
 import { fmtDate, today } from "../../lib/locale";
@@ -138,16 +138,14 @@ export function LocationFrequencyPanel({ companyId, locationId }: LocationFreque
             <MenuItem key={frequency.id} value={frequency.id}>{frequency.code} · {frequency.name}</MenuItem>
           ))}
         </TextField>
-        <TextField
-          size="small" type="date" label={t("Vigente desde")} value={effectiveFrom}
-          onChange={(e) => setEffectiveFrom(e.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
+        <DateInput
+          size="small" label={t("Vigente desde")} value={effectiveFrom}
+          onChange={(v) => setEffectiveFrom(v)}
           sx={{ minWidth: 165 }}
         />
-        <TextField
-          size="small" type="date" label={t("Vigente hasta")} value={effectiveTo}
-          onChange={(e) => setEffectiveTo(e.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
+        <DateInput
+          size="small" label={t("Vigente hasta")} value={effectiveTo}
+          onChange={(v) => setEffectiveTo(v)}
           sx={{ minWidth: 165 }}
         />
         <Button
@@ -210,10 +208,9 @@ export function LocationFrequencyPanel({ companyId, locationId }: LocationFreque
         {t("Comprueba si esta ubicación puede despachar o recibir servicio en una fecha concreta, según sus frecuencias asociadas.")}
       </Typography>
       <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap", mb: 1.5 }}>
-        <TextField
-          size="small" type="date" label={t("Fecha a verificar")} value={checkDate}
-          onChange={(e) => setCheckDate(e.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
+        <DateInput
+          size="small" label={t("Fecha a verificar")} value={checkDate}
+          onChange={(v) => setCheckDate(v)}
           sx={{ minWidth: 175 }}
         />
         <Button variant="outlined" startIcon={<FactCheckRounded />} onClick={() => void check()} disabled={checking}>

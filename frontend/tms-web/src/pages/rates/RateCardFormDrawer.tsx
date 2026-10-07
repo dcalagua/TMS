@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
-import { Alert, Box, Button, MenuItem, TextField, Typography } from "@mui/material";
-import { PaidRounded } from "@mui/icons-material";
+import { Alert, Box, Button, MenuItem, TextField } from "@mui/material";
+import { CheckRounded, PaidRounded } from "@mui/icons-material";
 import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchCarriers } from "../../shared/api/carriersApi";
@@ -14,10 +14,10 @@ import {
   createRateCard, RATE_CARD_SCOPES, updateRateCard,
   type RateCardRequest, type RateCardScope, type RateCardView,
 } from "../../shared/api/ratesApi";
-import { FormDrawer, SectionHeader } from "../../shared/ui/components";
+import { ActiveBadge, FormDateInput, FormDrawer, FormMeta, FormRow, FormSection } from "../../shared/ui/components";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
-import { today } from "../../lib/locale";
+import { fmtDateTime, today } from "../../lib/locale";
 
 const FORM_ID = "rate-card-form";
 
@@ -181,32 +181,34 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
     }
   }
 
-  const grid2 = { display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, mb: 3 } as const;
-
   return (
     <FormDrawer
       open
       icon={<PaidRounded />}
       title={isEdit ? t("Editar tarifario") : t("Nuevo tarifario")}
-      subtitle={t("Cómo se calcula lo que cuesta un envío con este transportista.")}
+      subtitle={isEdit
+        ? [rateCard.code, rateCard.name, rateCard.carrierName].filter(Boolean).join(" · ")
+        : t("Cómo se calcula lo que cuesta un envío con este transportista.")}
+      titleAdornment={isEdit ? <ActiveBadge active={rateCard.active} /> : undefined}
+      footerStart={isEdit ? <FormMeta>{t("Actualizado el {{date}}", { date: fmtDateTime(rateCard.updatedAt) })}</FormMeta> : undefined}
       size="lg"
       onClose={onClose}
       dirty={isDirty}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
-          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
-            {isSubmitting ? t("Guardando...") : t("Guardar")}
+          <Button onClick={onClose} disabled={isSubmitting} color="inherit" sx={{ color: "text.secondary" }}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" startIcon={<CheckRounded />} disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : isEdit ? t("Guardar cambios") : t("Crear tarifario")}
           </Button>
         </>
       }
     >
       <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+        {formError && <Alert severity="error" sx={{ mb: 1 }}>{formError}</Alert>}
 
-        <SectionHeader title={t("Identificación")} />
-        <Box sx={grid2}>
+        <FormSection title={t("Identificación")} help={t("Con qué código y nombre se reconoce el tarifario.")}>
+        <FormRow template="180px minmax(0, 1fr)">
           <TextField
             label={t("Código")} required size="small" fullWidth
             error={Boolean(errors.code)} helperText={errors.code?.message}
@@ -221,10 +223,14 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
             error={Boolean(errors.name)} helperText={errors.name?.message}
             {...register("name", { required: t("Este campo es obligatorio") })}
           />
-        </Box>
+        </FormRow>
+        </FormSection>
 
-        <SectionHeader title={t("Alcance")} />
-        <Box sx={grid2}>
+        <FormSection
+          title={t("Alcance")}
+          help={t("A qué transportista aplica y sobre qué: todo lo que haga, un origen, un carril o una ruta.")}
+        >
+        <FormRow>
           <Controller
             control={control}
             name="carrierId"
@@ -335,10 +341,11 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
               </TextField>
             )}
           />
-        </Box>
+        </FormRow>
+        </FormSection>
 
-        <SectionHeader title={t("Vigencia")} />
-        <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, mb: 3 }}>
+        <FormSection title={t("Vigencia")} help={t("En qué moneda se cobra y entre qué fechas vale.")}>
+        <FormRow cols={3}>
           <TextField
             label={t("Moneda")} required size="small" fullWidth placeholder="PEN"
             error={Boolean(errors.currency)} helperText={errors.currency?.message}
@@ -347,25 +354,25 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
               pattern: { value: CURRENCY_PATTERN, message: t("Tres letras, p. ej. PEN") },
             })}
           />
-          <TextField
-            label={t("Vigente desde")} required size="small" fullWidth type="date"
-            slotProps={{ inputLabel: { shrink: true } }}
+          <FormDateInput
+            control={control} name="validFrom" mode="date"
+            rules={{ required: t("Este campo es obligatorio") }}
+            label={t("Vigente desde")} required size="small" fullWidth
             error={Boolean(errors.validFrom)} helperText={errors.validFrom?.message}
-            {...register("validFrom", { required: t("Este campo es obligatorio") })}
           />
-          <TextField
-            label={t("Vigente hasta")} size="small" fullWidth type="date"
-            slotProps={{ inputLabel: { shrink: true } }}
+          <FormDateInput
+            control={control} name="validTo" mode="date"
+            label={t("Vigente hasta")} size="small" fullWidth
             helperText={t("Vacío = sin fecha de fin.")}
-            {...register("validTo")}
           />
-        </Box>
+        </FormRow>
+        </FormSection>
 
-        <SectionHeader title={t("Componentes")} />
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          {t("Todos son opcionales. Un tarifario de distancia pura deja peso y volumen vacíos; un mínimo solo es un precio plano.")}
-        </Typography>
-        <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" } }}>
+        <FormSection
+          title={t("Componentes")}
+          help={t("Todos son opcionales. Un tarifario de distancia pura deja peso y volumen vacíos; un mínimo solo es un precio plano.")}
+        >
+        <FormRow cols={3}>
           {([
             ["baseAmount", "Importe base"],
             ["amountPerKm", "Por kilómetro"],
@@ -394,7 +401,8 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
               })}
             />
           ))}
-        </Box>
+        </FormRow>
+        </FormSection>
       </Box>
     </FormDrawer>
   );

@@ -1,15 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  Alert, Box, Chip, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography,
+  Alert, Box, Button, Chip, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography,
 } from "@mui/material";
 import { SendRounded } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
-import { fetchWebhookDelivery } from "../../shared/api/integrationsApi";
+import { fetchWebhookDelivery, type WebhookDeliveryStatus } from "../../shared/api/integrationsApi";
 import { describeApiError } from "../../shared/api/problemMessages";
-import {
-  DetailGrid, DetailItem, FormDrawer, SectionHeader, StatusChip, dataTableSx,
-} from "../../shared/ui/components";
-import type { StatusTone } from "../../theme";
+import { FormDrawer, StatusChip, dataTableSx } from "../../shared/ui/components";
+import { DetailSection, KeyFacts } from "../../shared/ui/components/DetailLayout";
+import { R, type StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
 import { fmtDateTime, fmtQuantity } from "../../lib/locale";
 
@@ -18,6 +17,12 @@ interface WebhookDeliveryDrawerProps {
   deliveryId: string;
   onClose: () => void;
 }
+
+const STATUS_TONE: Record<WebhookDeliveryStatus, StatusTone> = {
+  PENDING: "inProgress",
+  PROCESSED: "done",
+  FAILED: "overdue",
+};
 
 const OUTCOME_TONE: Record<string, StatusTone> = {
   DELIVERED: "done",
@@ -50,40 +55,45 @@ export function WebhookDeliveryDrawer({ companyId, deliveryId, onClose }: Webhoo
       icon={<SendRounded />}
       title={t("Entrega")}
       subtitle={detail?.delivery.eventType}
+      titleAdornment={detail && (
+        <StatusChip label={detail.delivery.status} tone={STATUS_TONE[detail.delivery.status]} variant="solid" />
+      )}
       size="lg"
       onClose={onClose}
+      footer={
+        <Button variant="outlined" color="inherit" onClick={onClose} sx={{ borderColor: "divider" }}>{t("Cerrar")}</Button>
+      }
     >
       {detailQuery.isError && (
         <Alert severity="error">{describeApiError(detailQuery.error as ApiError)}</Alert>
       )}
 
       {detail && (
-        <>
-          <SectionHeader title={t("Resumen")} />
-          <DetailGrid columns={2}>
-            <DetailItem label={t("Suscripción")} value={detail.delivery.subscriptionName} />
-            <DetailItem label={t("Estado")} value={detail.delivery.status} />
-            {/* El id de evento es el valor con el que el receptor deduplica: es estable entre
-                intentos y reenvíos, y es lo primero que se le pide en una discusión. */}
-            <DetailItem label={t("ID de evento")} value={
-              <Typography component="code" variant="body2" sx={{ fontFamily: "monospace", wordBreak: "break-all" }}>
-                {detail.delivery.eventId}
-              </Typography>
-            } />
-            <DetailItem label={t("Ocurrió")} value={fmtDateTime(detail.delivery.occurredAt)} />
-            <DetailItem label={t("Intentos")} value={fmtQuantity(detail.delivery.attemptCount)} />
-            <DetailItem
-              label={t("Cerrada")}
-              value={detail.delivery.completedAt ? fmtDateTime(detail.delivery.completedAt) : null}
-            />
-          </DetailGrid>
-
+        <Box sx={{ display: "grid", gap: 2.5 }}>
           {detail.delivery.lastError && (
-            <Alert severity="error" sx={{ mt: 2 }}>{detail.delivery.lastError}</Alert>
+            <Alert severity="error">{detail.delivery.lastError}</Alert>
           )}
 
-          <Box sx={{ mt: 3 }}>
-            <SectionHeader title={t("Intentos")} />
+          <KeyFacts columns={3} items={[
+            { label: t("Suscripción"), value: detail.delivery.subscriptionName },
+            { label: t("Estado"), value: detail.delivery.status },
+            { label: t("Intentos"), value: fmtQuantity(detail.delivery.attemptCount) },
+            { label: t("Ocurrió"), value: fmtDateTime(detail.delivery.occurredAt) },
+            { label: t("Cerrada"), value: detail.delivery.completedAt ? fmtDateTime(detail.delivery.completedAt) : null },
+            // El id de evento es el valor con el que el receptor deduplica: es estable entre
+            // intentos y reenvíos, y es lo primero que se le pide en una discusión.
+            {
+              label: t("ID de evento"),
+              value: (
+                <Typography component="code" variant="body2" sx={{ fontFamily: "monospace", wordBreak: "break-all" }}>
+                  {detail.delivery.eventId}
+                </Typography>
+              ),
+              span: true,
+            },
+          ]} />
+
+          <DetailSection title={t("Intentos")}>
             <TableContainer component={Paper} variant="outlined">
               <Table size="small" sx={dataTableSx}>
                 <TableHead>
@@ -115,13 +125,14 @@ export function WebhookDeliveryDrawer({ companyId, deliveryId, onClose }: Webhoo
                 </TableBody>
               </Table>
             </TableContainer>
-          </Box>
+          </DetailSection>
 
-          <Box sx={{ mt: 3 }}>
-            <SectionHeader title={t("Cuerpo enviado")} />
-            <Paper
-              variant="outlined"
-              sx={{ p: 1.5, maxHeight: 320, overflow: "auto", bgcolor: "action.hover" }}
+          <DetailSection title={t("Cuerpo enviado")}>
+            <Box
+              sx={{
+                p: 1.5, maxHeight: 320, overflow: "auto", bgcolor: "action.hover",
+                border: "1px solid", borderColor: "divider", borderRadius: `${R.md}px`,
+              }}
             >
               <Typography
                 component="pre"
@@ -129,12 +140,12 @@ export function WebhookDeliveryDrawer({ companyId, deliveryId, onClose }: Webhoo
               >
                 {detail.payload}
               </Typography>
-            </Paper>
+            </Box>
             <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 0.75 }}>
               {t("Exactamente como lo mandó cada intento, sin reformatear.")}
             </Typography>
-          </Box>
-        </>
+          </DetailSection>
+        </Box>
       )}
     </FormDrawer>
   );

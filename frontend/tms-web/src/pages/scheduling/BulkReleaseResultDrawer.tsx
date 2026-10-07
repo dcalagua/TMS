@@ -1,7 +1,8 @@
 import { Box, Button, Typography } from "@mui/material";
-import { PlaylistAddCheckRounded } from "@mui/icons-material";
+import { CheckCircleRounded, PlaylistAddCheckRounded, WarningAmberRounded } from "@mui/icons-material";
 import type { BulkReleaseItem, BulkReleaseResult } from "../../shared/api/schedulingApi";
 import { DataTable, FormDrawer, StatusChip, type DataTableColumn } from "../../shared/ui/components";
+import { DetailSection, KeyFacts, VerdictBanner } from "../../shared/ui/components/DetailLayout";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 
@@ -44,6 +45,8 @@ export function BulkReleaseResultDrawer({ result, onClose }: { result: BulkRelea
     },
   ];
 
+  const allReleased = result.released === result.submitted;
+
   return (
     <FormDrawer
       open
@@ -54,12 +57,31 @@ export function BulkReleaseResultDrawer({ result, onClose }: { result: BulkRelea
       onClose={onClose}
       footer={<Button variant="contained" onClick={onClose}>{t("Cerrar")}</Button>}
     >
-      <DataTable
-        columns={columns}
-        rows={result.results}
-        rowKey={(item) => `${item.index}-${item.orderId}`}
-        emptyTitle={t("Sin pedidos")}
-      />
+      <Box sx={{ display: "grid", gap: 2.5 }}>
+        <VerdictBanner
+          tone={allReleased ? "success" : result.released === 0 ? "error" : "warning"}
+          icon={allReleased ? <CheckCircleRounded /> : <WarningAmberRounded />}
+          title={allReleased ? t("Todos liberados") : t("Liberación parcial")}
+          message={allReleased
+            ? t("Todos los pedidos pasaron a planificación.")
+            : t("Lo liberado se queda liberado. Los rechazos traen sus motivos abajo.")}
+        />
+
+        <KeyFacts columns={3} items={[
+          { label: t("Enviados"), value: result.submitted },
+          { label: t("Liberados"), value: result.released },
+          { label: t("No liberados"), value: result.refused },
+        ]} />
+
+        <DetailSection title={t("Pedido por pedido")}>
+          <DataTable
+            columns={columns}
+            rows={result.results}
+            rowKey={(item) => `${item.index}-${item.orderId}`}
+            emptyTitle={t("Sin pedidos")}
+          />
+        </DetailSection>
+      </Box>
     </FormDrawer>
   );
 }

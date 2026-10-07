@@ -2,9 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Controller, useForm, useWatch, type Validate } from "react-hook-form";
 import {
-  Alert, Autocomplete, Box, Button, Checkbox, FormControlLabel, FormGroup, MenuItem, TextField, Typography,
+  Alert, Autocomplete, Box, Button, MenuItem, TextField, Typography,
 } from "@mui/material";
-import { PlaceRounded } from "@mui/icons-material";
+import { CheckRounded, PlaceRounded } from "@mui/icons-material";
 import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
@@ -13,9 +13,12 @@ import {
 } from "../../shared/api/locationsApi";
 import { fetchZones } from "../../shared/api/zonesApi";
 import { LocationPickerMap } from "../../shared/maps/LocationPickerMap";
-import { FormDrawer, SectionHeader } from "../../shared/ui/components";
+import {
+  ActiveBadge, FormDrawer, FormMeta, FormRow, FormSection, OptionCard, SectionIndex,
+} from "../../shared/ui/components";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
+import { fmtDateTime } from "../../lib/locale";
 import { LocationFrequencyPanel } from "./LocationFrequencyPanel";
 
 const FORM_ID = "location-form";
@@ -194,114 +197,141 @@ export function LocationFormDrawer({ companyId, location, presetRole, onClose, o
     }
   }
 
-  const grid = { display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, mb: 3 } as const;
+  const sections = [
+    { id: "location-identification", label: t("Identificación") },
+    { id: "location-roles", label: t("Uso operacional") },
+    { id: "location-address", label: t("Dirección") },
+    { id: "location-geo", label: t("Ubicación geográfica") },
+    { id: "location-operation", label: t("Operación") },
+    { id: "location-external", label: t("Identificación externa") },
+    { id: "location-calendar", label: t("Calendario de servicio") },
+  ];
 
   return (
     <FormDrawer
       open
       icon={<PlaceRounded />}
       title={isEdit ? t("Editar ubicación") : t("Nueva ubicación")}
-      subtitle={t("Un lugar físico y los roles que cumple en la operación.")}
+      subtitle={isEdit
+        ? [location.code, location.name].filter(Boolean).join(" · ")
+        : t("Un lugar físico y los roles que cumple en la operación.")}
+      titleAdornment={isEdit ? <ActiveBadge active={location.active} /> : undefined}
+      footerStart={isEdit ? <FormMeta>{t("Actualizado el {{date}}", { date: fmtDateTime(location.updatedAt) })}</FormMeta> : undefined}
       size="lg"
       onClose={onClose}
       dirty={isDirty}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
-          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
-            {isSubmitting ? t("Guardando...") : t("Guardar")}
+          <Button onClick={onClose} disabled={isSubmitting} color="inherit" sx={{ color: "text.secondary" }}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" startIcon={<CheckRounded />} disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : isEdit ? t("Guardar cambios") : t("Crear ubicación")}
           </Button>
         </>
       }
     >
+      <SectionIndex sections={sections} />
+
       <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+        {formError && <Alert severity="error" sx={{ mb: 1 }}>{formError}</Alert>}
 
-        <SectionHeader title={t("Identificación")} />
-        <Box sx={grid}>
-          <TextField
-            label={t("Código")} required size="small" fullWidth
-            error={Boolean(errors.code)} helperText={errors.code?.message}
-            {...register("code", {
-              required: t("Este campo es obligatorio"),
-              maxLength: { value: 32, message: t("No puede superar los {{count}} caracteres", { count: 32 }) },
-              pattern: { value: CODE_PATTERN, message: t("Solo letras, dígitos, guion bajo o guion") },
-            })}
-          />
-          <TextField
-            label={t("Nombre")} required size="small" fullWidth
-            error={Boolean(errors.name)} helperText={errors.name?.message}
-            {...register("name", {
-              required: t("Este campo es obligatorio"),
-              maxLength: { value: 200, message: t("No puede superar los {{count}} caracteres", { count: 200 }) },
-            })}
-          />
+        <FormSection
+          id="location-identification"
+          title={t("Identificación")}
+          help={t("Qué es el lugar: su código, su nombre, su tipo y la zona a la que pertenece.")}
+        >
+          <FormRow template="180px minmax(0, 1fr)">
+            <TextField
+              label={t("Código")} required size="small" fullWidth
+              error={Boolean(errors.code)} helperText={errors.code?.message}
+              {...register("code", {
+                required: t("Este campo es obligatorio"),
+                maxLength: { value: 32, message: t("No puede superar los {{count}} caracteres", { count: 32 }) },
+                pattern: { value: CODE_PATTERN, message: t("Solo letras, dígitos, guion bajo o guion") },
+              })}
+            />
+            <TextField
+              label={t("Nombre")} required size="small" fullWidth
+              error={Boolean(errors.name)} helperText={errors.name?.message}
+              {...register("name", {
+                required: t("Este campo es obligatorio"),
+                maxLength: { value: 200, message: t("No puede superar los {{count}} caracteres", { count: 200 }) },
+              })}
+            />
+          </FormRow>
+          <FormRow>
+            <Controller
+              control={control}
+              name="type"
+              rules={{ required: true }}
+              render={({ field }) => (
+                <TextField
+                  select label={t("Tipo")} required size="small" fullWidth
+                  value={field.value} onChange={(e) => field.onChange(e.target.value as LocationType)}
+                  error={Boolean(errors.type)}
+                >
+                  {LOCATION_TYPES.map((type) => (
+                    <MenuItem key={type} value={type}>{enumLabel("locationType", type)}</MenuItem>
+                  ))}
+                </TextField>
+              )}
+            />
+            <Controller
+              control={control}
+              name="zoneId"
+              render={({ field }) => (
+                <TextField
+                  select label={t("Zona")} size="small" fullWidth
+                  value={field.value} onChange={(e) => field.onChange(e.target.value)}
+                >
+                  <MenuItem value="">{t("Sin zona")}</MenuItem>
+                  {zones.map((zone) => (
+                    <MenuItem key={zone.id} value={zone.id}>{zone.name}</MenuItem>
+                  ))}
+                </TextField>
+              )}
+            />
+          </FormRow>
+        </FormSection>
+
+        <FormSection
+          id="location-roles"
+          title={t("Uso operacional")}
+          help={t("Define cómo puede utilizarse este lugar en el transporte. Un mismo sitio puede ser origen y destino: la tienda recibe la entrega y despacha la devolución.")}
+        >
           <Controller
             control={control}
-            name="type"
-            rules={{ required: true }}
+            name="roles"
             render={({ field }) => (
-              <TextField
-                select label={t("Tipo")} required size="small" fullWidth
-                value={field.value} onChange={(e) => field.onChange(e.target.value as LocationType)}
-                error={Boolean(errors.type)}
-              >
-                {LOCATION_TYPES.map((type) => (
-                  <MenuItem key={type} value={type}>{enumLabel("locationType", type)}</MenuItem>
-                ))}
-              </TextField>
-            )}
-          />
-          <Controller
-            control={control}
-            name="zoneId"
-            render={({ field }) => (
-              <TextField
-                select label={t("Zona")} size="small" fullWidth
-                value={field.value} onChange={(e) => field.onChange(e.target.value)}
-              >
-                <MenuItem value="">{t("Sin zona")}</MenuItem>
-                {zones.map((zone) => (
-                  <MenuItem key={zone.id} value={zone.id}>{zone.name}</MenuItem>
-                ))}
-              </TextField>
-            )}
-          />
-        </Box>
-
-        <SectionHeader title={t("Uso operacional")} />
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          {t("Define cómo puede utilizarse este lugar en el transporte. Un mismo sitio puede ser origen y destino: la tienda recibe la entrega y despacha la devolución.")}
-        </Typography>
-        <Controller
-          control={control}
-          name="roles"
-          render={({ field }) => (
-            <FormGroup sx={{ mb: 3 }}>
-              {LOCATION_ROLES.map((role) => (
-                <FormControlLabel
-                  key={role}
-                  control={
-                    <Checkbox
-                      checked={field.value.includes(role)}
-                      onChange={(e) => {
-                        const next = e.target.checked
+              <FormRow>
+                {LOCATION_ROLES.map((role) => {
+                  const checked = field.value.includes(role);
+                  return (
+                    <OptionCard
+                      key={role}
+                      role="checkbox"
+                      selected={checked}
+                      onSelect={() => {
+                        const next = !checked
                           ? [...field.value, role]
                           : field.value.filter((r) => r !== role);
                         field.onChange(next);
                       }}
+                      title={role === "ORIGIN" ? t("Origen") : t("Destino")}
+                      description={role === "ORIGIN" ? t("Desde aquí salen envíos") : t("Aquí se entregan pedidos")}
                     />
-                  }
-                  label={role === "ORIGIN" ? t("Puede utilizarse como origen") : t("Puede utilizarse como destino")}
-                />
-              ))}
-            </FormGroup>
-          )}
-        />
+                  );
+                })}
+              </FormRow>
+            )}
+          />
+        </FormSection>
 
-        <SectionHeader title={t("Dirección")} />
-        <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "1fr", mb: 2 }}>
+        <FormSection
+          id="location-address"
+          title={t("Dirección")}
+          help={t("Dónde está el lugar y en qué zona horaria opera.")}
+        >
           <TextField
             label={t("Dirección")} size="small" fullWidth
             error={Boolean(errors.address)} helperText={errors.address?.message}
@@ -315,121 +345,141 @@ export function LocationFormDrawer({ companyId, location, presetRole, onClose, o
               maxLength: { value: 300, message: t("No puede superar los {{count}} caracteres", { count: 300 }) },
             })}
           />
-        </Box>
-        <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, mb: 2 }}>
-          <TextField label={t("Distrito")} size="small" fullWidth {...register("district")} />
-          <TextField label={t("Provincia")} size="small" fullWidth {...register("province")} />
-          <TextField label={t("Departamento")} size="small" fullWidth {...register("department")} />
-        </Box>
-        <Box sx={grid}>
-          <TextField
-            label={t("País")} required size="small" fullWidth
-            error={Boolean(errors.country)} helperText={errors.country?.message}
-            {...register("country", {
-              required: t("Este campo es obligatorio"),
-              maxLength: { value: 2, message: t("No puede superar los {{count}} caracteres", { count: 2 }) },
-            })}
-          />
-          <Controller
-            control={control}
-            name="timeZone"
-            rules={{
-              required: t("Este campo es obligatorio"),
-              validate: (value) => isValidTimeZone(value) || t("Debe ser una zona horaria IANA válida, por ejemplo America/Lima"),
+          <FormRow cols={3}>
+            <TextField label={t("Distrito")} size="small" fullWidth {...register("district")} />
+            <TextField label={t("Provincia")} size="small" fullWidth {...register("province")} />
+            <TextField label={t("Departamento")} size="small" fullWidth {...register("department")} />
+          </FormRow>
+          <FormRow template="180px minmax(0, 1fr)">
+            <TextField
+              label={t("País")} required size="small" fullWidth
+              error={Boolean(errors.country)} helperText={errors.country?.message}
+              {...register("country", {
+                required: t("Este campo es obligatorio"),
+                maxLength: { value: 2, message: t("No puede superar los {{count}} caracteres", { count: 2 }) },
+              })}
+            />
+            <Controller
+              control={control}
+              name="timeZone"
+              rules={{
+                required: t("Este campo es obligatorio"),
+                validate: (value) => isValidTimeZone(value) || t("Debe ser una zona horaria IANA válida, por ejemplo America/Lima"),
+              }}
+              render={({ field }) => (
+                <Autocomplete
+                  freeSolo
+                  size="small"
+                  options={TIME_ZONES}
+                  value={field.value}
+                  onChange={(_e, next) => field.onChange(next ?? "")}
+                  onInputChange={(_e, next) => field.onChange(next)}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label={t("Zona horaria")}
+                      required
+                      placeholder="America/Lima"
+                      error={Boolean(errors.timeZone)}
+                      helperText={errors.timeZone?.message}
+                    />
+                  )}
+                />
+              )}
+            />
+          </FormRow>
+        </FormSection>
+
+        <FormSection
+          id="location-geo"
+          title={t("Ubicación geográfica")}
+          help={t("Marca el punto en el mapa o escribe las coordenadas. Las dos o ninguna.")}
+        >
+          {/* El mapa escribe en los mismos dos campos que se pueden teclear a mano: sin clave de
+              API configurada desaparece y la entrada manual sigue intacta. */}
+          <LocationPickerMap
+            latitude={mapLatitude}
+            longitude={mapLongitude}
+            initialSearchValue={initialMapSearchValue}
+            onChange={(lat, lng) => {
+              setValue("latitude", lat.toFixed(6), { shouldDirty: true, shouldValidate: true });
+              setValue("longitude", lng.toFixed(6), { shouldDirty: true, shouldValidate: true });
             }}
-            render={({ field }) => (
-              <Autocomplete
-                freeSolo
-                size="small"
-                options={TIME_ZONES}
-                value={field.value}
-                onChange={(_e, next) => field.onChange(next ?? "")}
-                onInputChange={(_e, next) => field.onChange(next)}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label={t("Zona horaria")}
-                    required
-                    placeholder="America/Lima"
-                    error={Boolean(errors.timeZone)}
-                    helperText={errors.timeZone?.message}
-                  />
-                )}
-              />
-            )}
           />
-        </Box>
+          <FormRow>
+            <TextField
+              label={t("Latitud")} size="small" fullWidth placeholder="-12.046374"
+              error={Boolean(errors.latitude)} helperText={errors.latitude?.message}
+              {...register("latitude", { validate: validateLatitude })}
+            />
+            <TextField
+              label={t("Longitud")} size="small" fullWidth placeholder="-77.042793"
+              error={Boolean(errors.longitude)} helperText={errors.longitude?.message}
+              {...register("longitude", { validate: validateLongitude })}
+            />
+          </FormRow>
+        </FormSection>
 
-        <SectionHeader title={t("Ubicación geográfica")} />
-        {/* El mapa escribe en los mismos dos campos que se pueden teclear a mano: sin clave de
-            API configurada desaparece y la entrada manual sigue intacta. */}
-        <LocationPickerMap
-          latitude={mapLatitude}
-          longitude={mapLongitude}
-          initialSearchValue={initialMapSearchValue}
-          onChange={(lat, lng) => {
-            setValue("latitude", lat.toFixed(6), { shouldDirty: true, shouldValidate: true });
-            setValue("longitude", lng.toFixed(6), { shouldDirty: true, shouldValidate: true });
-          }}
-        />
-        <Box sx={grid}>
-          <TextField
-            label={t("Latitud")} size="small" fullWidth placeholder="-12.046374"
-            error={Boolean(errors.latitude)} helperText={errors.latitude?.message}
-            {...register("latitude", { validate: validateLatitude })}
-          />
-          <TextField
-            label={t("Longitud")} size="small" fullWidth placeholder="-77.042793"
-            error={Boolean(errors.longitude)} helperText={errors.longitude?.message}
-            {...register("longitude", { validate: validateLongitude })}
-          />
-        </Box>
+        <FormSection
+          id="location-operation"
+          title={t("Operación")}
+          help={t("Cuánto tarda de ordinario atender una parada en este lugar.")}
+        >
+          <FormRow template="180px minmax(0, 1fr)">
+            <TextField
+              label={t("Tiempo de atención (min)")} size="small" fullWidth type="number"
+              error={Boolean(errors.serviceTimeMinutes)} helperText={errors.serviceTimeMinutes?.message}
+              {...register("serviceTimeMinutes", {
+                validate: (value) => {
+                  if (value.trim() === "") return true;
+                  const parsed = Number(value);
+                  if (Number.isNaN(parsed)) return t("Debe ser un número");
+                  return parsed >= 0 || t("Debe ser cero o mayor");
+                },
+              })}
+            />
+          </FormRow>
+        </FormSection>
 
-        <SectionHeader title={t("Operación")} />
-        <Box sx={grid}>
-          <TextField
-            label={t("Tiempo de atención (min)")} size="small" fullWidth type="number"
-            error={Boolean(errors.serviceTimeMinutes)} helperText={errors.serviceTimeMinutes?.message}
-            {...register("serviceTimeMinutes", {
-              validate: (value) => {
-                if (value.trim() === "") return true;
-                const parsed = Number(value);
-                if (Number.isNaN(parsed)) return t("Debe ser un número");
-                return parsed >= 0 || t("Debe ser cero o mayor");
-              },
-            })}
-          />
-        </Box>
-
-        <SectionHeader title={t("Identificación externa")} />
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          {t("El sistema y la referencia externa identifican esta ubicación ante una integración. Van juntos o ninguno.")}
-        </Typography>
-        <Box sx={grid}>
-          <TextField
-            label={t("Sistema externo")} size="small" fullWidth placeholder={t("p. ej. EWM, ERP")}
-            error={Boolean(errors.externalSystem)} helperText={errors.externalSystem?.message}
-            {...register("externalSystem", { validate: validateExternalPair })}
-          />
-          <TextField
-            label={t("Referencia externa")} size="small" fullWidth
-            error={Boolean(errors.externalReference)} helperText={errors.externalReference?.message}
-            {...register("externalReference", { validate: validateExternalPair })}
-          />
-        </Box>
+        <FormSection
+          id="location-external"
+          title={t("Identificación externa")}
+          help={t("El sistema y la referencia externa identifican esta ubicación ante una integración. Van juntos o ninguno.")}
+        >
+          <FormRow>
+            <TextField
+              label={t("Sistema externo")} size="small" fullWidth placeholder={t("p. ej. EWM, ERP")}
+              error={Boolean(errors.externalSystem)} helperText={errors.externalSystem?.message}
+              {...register("externalSystem", { validate: validateExternalPair })}
+            />
+            <TextField
+              label={t("Referencia externa")} size="small" fullWidth
+              error={Boolean(errors.externalReference)} helperText={errors.externalReference?.message}
+              {...register("externalReference", { validate: validateExternalPair })}
+            />
+          </FormRow>
+        </FormSection>
       </Box>
 
       {/* El calendario de servicio vive fuera del <form>: sus asociaciones se guardan por su
           cuenta contra la ubicación ya existente, y anidar un formulario dentro de otro haría
-          que Enter en un desplegable enviara el formulario principal. */}
-      <SectionHeader title={t("Calendario de servicio")} />
-      {isEdit ? (
-        <LocationFrequencyPanel companyId={companyId} locationId={location.id} />
-      ) : (
-        <Typography variant="body2" color="text.secondary">
-          {t("Guarda la ubicación primero para poder asociarle frecuencias.")}
-        </Typography>
-      )}
+          que Enter en un desplegable enviara el formulario principal. La línea de arriba repone
+          el separador que la última sección del formulario no lleva. */}
+      <Box sx={{ borderTop: "1px solid", borderColor: "divider" }}>
+        <FormSection
+          id="location-calendar"
+          title={t("Calendario de servicio")}
+          help={t("Qué frecuencias atienden este lugar: los días en que se le puede dar servicio.")}
+        >
+          {isEdit ? (
+            <LocationFrequencyPanel companyId={companyId} locationId={location.id} />
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {t("Guarda la ubicación primero para poder asociarle frecuencias.")}
+            </Typography>
+          )}
+        </FormSection>
+      </Box>
     </FormDrawer>
   );
 }

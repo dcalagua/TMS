@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
-  Alert, Box, Button, Divider, Paper, Table, TableBody, TableCell, TableHead, TableRow,
+  Alert, Box, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   TextField, Typography,
 } from "@mui/material";
 import { ReceiptLongRounded } from "@mui/icons-material";
@@ -12,12 +12,14 @@ import {
 } from "../../shared/api/settlementApi";
 import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
-import { FormDrawer, SectionHeader, StatusChip } from "../../shared/ui/components";
+import { FormDrawer, StatusChip } from "../../shared/ui/components";
+import { DetailSection, KeyFacts } from "../../shared/ui/components/DetailLayout";
 import { INVOICE_STATUS_TONE, MATCH_STATUS_TONE } from "../../shared/ui/statusTones";
 import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDate, fmtDateTime, fmtDecimal } from "../../lib/locale";
+import { R, T } from "../../theme";
 
 interface InvoiceWorkspaceDrawerProps {
   companyId: string;
@@ -87,15 +89,62 @@ export function InvoiceWorkspaceDrawer({
       open
       title={invoice ? `${t("Factura")} ${invoice.invoiceNumber}` : t("Factura")}
       subtitle={invoice?.carrierName ?? undefined}
+      titleAdornment={invoice && (
+        <StatusChip
+          label={enumLabel("invoiceStatus", invoice.status)}
+          tone={INVOICE_STATUS_TONE[invoice.status]}
+          variant="solid"
+        />
+      )}
       icon={<ReceiptLongRounded />}
       onClose={onClose}
       size="lg"
-      footer={<Button onClick={onClose} disabled={busy}>{t("Cerrar")}</Button>}
+      footer={
+        <>
+          <Button variant="outlined" color="inherit" onClick={onClose} disabled={busy} sx={{ borderColor: "divider" }}>
+            {t("Cerrar")}
+          </Button>
+          <Box sx={{ flex: 1 }} />
+          {/* --- acciones, sólo las que el servidor permite --- */}
+          {invoice?.allowedTransitions.includes("UNDER_REVIEW") && (
+            <Button
+              variant="outlined" disabled={busy}
+              onClick={() => void run(() => beginInvoiceReview(companyId, invoice.id), t("En revisión"))}
+            >
+              {t("Revisar")}
+            </Button>
+          )}
+          {invoice?.allowedTransitions.includes("MATCHING") && (
+            <Button
+              variant="contained" disabled={busy}
+              onClick={() => void run(() => matchInvoice(companyId, invoice.id), t("Comparada"))}
+            >
+              {t("Comparar")}
+            </Button>
+          )}
+          {invoice?.allowedTransitions.includes("APPROVED") && (
+            <Button
+              variant="contained" color="success" disabled={busy || !canApprove}
+              onClick={() => void run(() => approveInvoice(companyId, invoice.id), t("Aprobada"))}
+            >
+              {t("Aprobar")}
+            </Button>
+          )}
+          {invoice?.status === "APPROVED" && (
+            <Button
+              variant="contained" disabled={busy}
+              onClick={() => void run(() => exportInvoice(companyId, invoice.id), t("Exportada"))}
+            >
+              {t("Exportar a contabilidad")}
+            </Button>
+          )}
+        </>
+      }
     >
       {invoiceQuery.isLoading || !invoice ? (
         <Typography variant="body2" color="text.secondary">{t("Cargando...")}</Typography>
       ) : (
-        <Box sx={{ display: "grid", gap: 3 }}>
+        <Box sx={{ display: "grid", gap: 2.5 }}>
           {/* --- cabecera --- */}
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
             <StatusChip
@@ -115,9 +164,26 @@ export function InvoiceWorkspaceDrawer({
             </Typography>
           </Box>
 
+          {/* El aviso que explica un botón deshabilitado, en vez de dejar a alguien adivinando. */}
+          {invoice.allowedTransitions.includes("APPROVED") && !canApprove && (
+            <Alert severity="warning" variant="outlined">
+              {t("Quedan {{count}} diferencias sin resolver. Acepta o rechaza cada una antes de aprobar.", {
+                count: openDifferences.length,
+              })}
+            </Alert>
+          )}
+
+          {invoice.export && (
+            <Alert severity="success" variant="outlined">
+              {t("Exportada a contabilidad el {{when}} con la referencia {{reference}}.", {
+                when: fmtDateTime(invoice.export.exportedAt),
+                reference: invoice.export.exportReference,
+              })}
+            </Alert>
+          )}
+
           {/* --- la comparación, que es la razón de existir de la pantalla --- */}
-          <Box>
-            <SectionHeader title={t("La comparación")} />
+          <DetailSection title={t("La comparación")}>
             {invoice.match === null ? (
               <Alert severity="info" variant="outlined">
                 {t("Todavía no se ha comparado. Pulsa Comparar para enfrentarla con lo que TMS esperaba.")}
@@ -130,12 +196,19 @@ export function InvoiceWorkspaceDrawer({
                     {t("Ningún envío de esta factura tiene coste estimado, así que TMS no tiene con qué compararla. No es un sobrecoste: es que no hay opinión que dar.")}
                   </Alert>
                 )}
-                <Paper variant="outlined" sx={{ p: 2, display: "flex", gap: 4, flexWrap: "wrap" }}>
-                  <Figure label={t("Esperado")} value={amount(invoice.match.expectedAmount, invoice.currency)} />
-                  <Figure label={t("Coste real")} value={amount(invoice.match.actualAmount, invoice.currency)} />
-                  <Figure label={t("Facturado")} value={amount(invoice.match.invoicedAmount, invoice.currency)} />
-                  <Figure label={t("Diferencia")} value={difference(invoice.match.differenceAmount)} strong />
-                </Paper>
+                <KeyFacts columns={4} items={[
+                  { label: t("Esperado"), value: amount(invoice.match.expectedAmount, invoice.currency) },
+                  { label: t("Coste real"), value: amount(invoice.match.actualAmount, invoice.currency) },
+                  { label: t("Facturado"), value: amount(invoice.match.invoicedAmount, invoice.currency) },
+                  {
+                    label: t("Diferencia"),
+                    value: (
+                      <Typography component="span" sx={{ fontWeight: 800, fontSize: T.body + 2 }}>
+                        {difference(invoice.match.differenceAmount)}
+                      </Typography>
+                    ),
+                  },
+                ]} />
                 <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
                   {/* La tolerancia congelada: ampliarla mañana no reescribe por qué esta cuadró. */}
                   {invoice.match.tolerancePercentage !== null || invoice.match.toleranceAbsolute !== null
@@ -150,52 +223,57 @@ export function InvoiceWorkspaceDrawer({
                 </Typography>
               </>
             )}
-          </Box>
+          </DetailSection>
 
           {/* --- las líneas, cada una con lo esperado al lado --- */}
-          <Box>
-            <SectionHeader title={t("Líneas")} />
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{t("Concepto")}</TableCell>
-                  <TableCell>{t("Envío")}</TableCell>
-                  <TableCell align="right">{t("Esperado")}</TableCell>
-                  <TableCell align="right">{t("Facturado")}</TableCell>
-                  <TableCell align="right">{t("Diferencia")}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {invoice.lines.map((line: InvoiceLineView) => (
-                  <TableRow key={line.id} hover>
-                    <TableCell>{line.description}</TableCell>
-                    <TableCell>
-                      {line.shipmentNumber ?? (
-                        <Typography variant="caption" color="text.secondary">
-                          {t("Sin envío")}
-                        </Typography>
-                      )}
-                    </TableCell>
-                    <TableCell align="right">{amount(line.expectedAmount, invoice.currency)}</TableCell>
-                    <TableCell align="right">{fmtDecimal(line.lineAmount, 2)}</TableCell>
-                    <TableCell align="right">{difference(line.differenceAmount)}</TableCell>
+          <DetailSection title={t("Líneas")}>
+            <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: `${R.md}px` }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>{t("Concepto")}</TableCell>
+                    <TableCell>{t("Envío")}</TableCell>
+                    <TableCell align="right">{t("Esperado")}</TableCell>
+                    <TableCell align="right">{t("Facturado")}</TableCell>
+                    <TableCell align="right">{t("Diferencia")}</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Box>
+                </TableHead>
+                <TableBody>
+                  {invoice.lines.map((line: InvoiceLineView) => (
+                    <TableRow key={line.id} hover>
+                      <TableCell>{line.description}</TableCell>
+                      <TableCell>
+                        {line.shipmentNumber ?? (
+                          <Typography variant="caption" color="text.secondary">
+                            {t("Sin envío")}
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell align="right">{amount(line.expectedAmount, invoice.currency)}</TableCell>
+                      <TableCell align="right">{fmtDecimal(line.lineAmount, 2)}</TableCell>
+                      <TableCell align="right">{difference(line.differenceAmount)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </DetailSection>
 
           {/* --- las diferencias, cada una con su frase --- */}
           {invoice.discrepancies.length > 0 && (
-            <Box>
-              <SectionHeader title={t("Diferencias")} />
+            <DetailSection
+              title={t("Diferencias")}
+              extra={openDifferences.length > 0
+                ? <StatusChip label={t("{{count}} sin resolver", { count: openDifferences.length })} tone="inProgress" />
+                : undefined}
+            >
               <Box sx={{ display: "grid", gap: 1 }}>
                 {invoice.discrepancies.map((discrepancy: FreightDiscrepancyView) => (
-                  <Paper
+                  <Box
                     key={discrepancy.id}
-                    variant="outlined"
                     sx={{
-                      p: 1.5, borderLeft: "3px solid",
+                      p: 1.5, border: "1px solid", borderColor: "divider", borderRadius: `${R.md}px`,
+                      borderLeft: "3px solid",
                       borderLeftColor: discrepancy.status === "OPEN" ? "warning.main" : "divider",
                     }}
                   >
@@ -236,16 +314,15 @@ export function InvoiceWorkspaceDrawer({
                         </Button>
                       </Box>
                     )}
-                  </Paper>
+                  </Box>
                 ))}
               </Box>
-            </Box>
+            </DetailSection>
           )}
 
           {/* --- las decisiones --- */}
           {invoice.approvals.length > 0 && (
-            <Box>
-              <SectionHeader title={t("Decisiones")} />
+            <DetailSection title={t("Decisiones")}>
               {invoice.approvals.map((approval) => (
                 <Typography key={approval.id} variant="body2" sx={{ mb: 0.5 }}>
                   {approval.decision === "APPROVED" ? t("Aprobada") : t("Rechazada")} ·{" "}
@@ -253,105 +330,41 @@ export function InvoiceWorkspaceDrawer({
                   {approval.comment ? ` · ${approval.comment}` : ""}
                 </Typography>
               ))}
-            </Box>
+            </DetailSection>
           )}
 
-          {invoice.export && (
-            <Alert severity="success" variant="outlined">
-              {t("Exportada a contabilidad el {{when}} con la referencia {{reference}}.", {
-                when: fmtDateTime(invoice.export.exportedAt),
-                reference: invoice.export.exportReference,
-              })}
-            </Alert>
-          )}
-
-          <Divider />
-
-          {/* --- acciones, sólo las que el servidor permite --- */}
-          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-            {invoice.allowedTransitions.includes("MATCHING") && (
-              <Button
-                variant="contained" disabled={busy}
-                onClick={() => void run(() => matchInvoice(companyId, invoice.id), t("Comparada"))}
-              >
-                {t("Comparar")}
-              </Button>
-            )}
-            {invoice.allowedTransitions.includes("UNDER_REVIEW") && (
-              <Button
-                variant="outlined" disabled={busy}
-                onClick={() => void run(() => beginInvoiceReview(companyId, invoice.id), t("En revisión"))}
-              >
-                {t("Revisar")}
-              </Button>
-            )}
-            {invoice.allowedTransitions.includes("APPROVED") && (
-              <Button
-                variant="contained" color="success" disabled={busy || !canApprove}
-                onClick={() => void run(() => approveInvoice(companyId, invoice.id), t("Aprobada"))}
-              >
-                {t("Aprobar")}
-              </Button>
-            )}
-            {invoice.status === "APPROVED" && (
-              <Button
-                variant="contained" disabled={busy}
-                onClick={() => void run(() => exportInvoice(companyId, invoice.id), t("Exportada"))}
-              >
-                {t("Exportar a contabilidad")}
-              </Button>
-            )}
-          </Box>
-
-          {/* El aviso que explica un botón deshabilitado, en vez de dejar a alguien adivinando. */}
-          {invoice.allowedTransitions.includes("APPROVED") && !canApprove && (
-            <Alert severity="warning" variant="outlined">
-              {t("Quedan {{count}} diferencias sin resolver. Acepta o rechaza cada una antes de aprobar.", {
-                count: openDifferences.length,
-              })}
-            </Alert>
-          )}
-
+          {/* El rechazo pide un motivo, así que se queda en el cuerpo junto a su campo. */}
           {invoice.allowedTransitions.includes("REJECTED") && (
-            <Box sx={{ display: "grid", gap: 1 }}>
-              <TextField
-                size="small" label={t("Motivo del rechazo")} value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                helperText={t("Obligatorio: el transportista tiene que poder responderlo.")}
-              />
-              <Box>
-                <Button
-                  variant="outlined" color="error" disabled={busy || rejectReason.trim() === ""}
-                  onClick={async () => {
-                    const confirmed = await confirmDialog({
-                      title: t("¿Rechazar la factura?"),
-                      text: t("Una factura rechazada es definitiva: el transportista emite una nota de crédito y un número nuevo."),
-                      confirmLabel: t("Sí, rechazar"),
-                      dangerous: true,
-                    });
-                    if (confirmed) {
-                      void run(() => rejectInvoice(companyId, invoice.id, rejectReason.trim()), t("Rechazada"));
-                    }
-                  }}
-                >
-                  {t("Rechazar factura")}
-                </Button>
+            <DetailSection title={t("Rechazo")}>
+              <Box sx={{ display: "grid", gap: 1 }}>
+                <TextField
+                  size="small" label={t("Motivo del rechazo")} value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  helperText={t("Obligatorio: el transportista tiene que poder responderlo.")}
+                />
+                <Box>
+                  <Button
+                    variant="outlined" color="error" disabled={busy || rejectReason.trim() === ""}
+                    onClick={async () => {
+                      const confirmed = await confirmDialog({
+                        title: t("¿Rechazar la factura?"),
+                        text: t("Una factura rechazada es definitiva: el transportista emite una nota de crédito y un número nuevo."),
+                        confirmLabel: t("Sí, rechazar"),
+                        dangerous: true,
+                      });
+                      if (confirmed) {
+                        void run(() => rejectInvoice(companyId, invoice.id, rejectReason.trim()), t("Rechazada"));
+                      }
+                    }}
+                  >
+                    {t("Rechazar factura")}
+                  </Button>
+                </Box>
               </Box>
-            </Box>
+            </DetailSection>
           )}
         </Box>
       )}
     </FormDrawer>
-  );
-}
-
-function Figure({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
-  return (
-    <Box>
-      <Typography variant="overline" color="text.secondary">{label}</Typography>
-      <Typography variant={strong ? "h6" : "body1"} sx={{ fontWeight: strong ? 800 : 600 }}>
-        {value}
-      </Typography>
-    </Box>
   );
 }

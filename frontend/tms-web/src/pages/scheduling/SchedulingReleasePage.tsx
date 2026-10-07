@@ -1,28 +1,27 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Button, Checkbox, MenuItem, TextField, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Checkbox, Tooltip, Typography } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import {
   EventRepeatRounded, CheckCircleRounded, WarningAmberRounded, BlockRounded, PanToolRounded,
   InventoryRounded, FactCheckRounded, OpenInNewRounded, PlaylistAddCheckRounded, ViewKanbanRounded,
-  DoneAllRounded,
+  DoneAllRounded, ArrowForwardRounded, ChevronRightRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
-import { ORDER_PRIORITIES, type OrderPriority, type OrderStatus } from "../../shared/api/ordersApi";
 import { fetchOrigins } from "../../shared/api/originsApi";
 import { fetchRoutes } from "../../shared/api/routesApi";
 import { createPlanningRun, fetchPlanningRuns } from "../../shared/api/planningApi";
 import {
-  ELIGIBILITIES, NO_ROUTE, activeFilterCount, bulkReleaseOrders, fetchSchedulingBoard,
+  NO_ROUTE, bulkReleaseOrders, fetchSchedulingBoard,
   fetchSchedulingSummary, isReleasable, needsOverride, planBulkRelease, primaryReason,
-  type BulkReleaseResult, type Eligibility, type SchedulingFilterParams, type SchedulingGroup,
+  type BulkReleaseResult, type SchedulingGroup,
   type SchedulingRow,
 } from "../../shared/api/schedulingApi";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  ActionMenu, AppCard, DataTable, PageHeader, Pagination, StatusChip, Toolbar,
+  ActionMenu, AppCard, DataTable, PageHeader, Pagination, StatusChip,
   type DataTableColumn,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
@@ -34,69 +33,20 @@ import { BulkReleaseResultDrawer } from "./BulkReleaseResultDrawer";
 import { HoldDrawer } from "./HoldDrawer";
 import { SchedulingDetailDrawer } from "./SchedulingDetailDrawer";
 import { askOverrideReason, reasonLabels, releaseWithOverride } from "./releaseFlow";
-import { EligibilityChip, FilterKpiCard } from "./schedulingUi";
-import { R } from "../../theme";
-import { reasonTone } from "./schedulingLabels";
+import { ELIGIBILITY_COLOR, EligibilityChip, KpiStrip } from "./schedulingUi";
+import { SchedulingFilterBar } from "./SchedulingFilterBar";
+import { R, T } from "../../theme";
 
 const PAGE_SIZE = 50;
 
 /** Pila monoespaciada para números de pedido y fechas/horas de la tabla. */
 const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 
-/** Filtros tal como los edita la pantalla: cadenas vacías en lugar de `undefined`. */
-interface Filters {
-  originId: string;
-  routeCode: string;
-  serviceDateFrom: string;
-  serviceDateTo: string;
-  customer: string;
-  priority: OrderPriority | "";
-  eligibility: Eligibility | "";
-  hold: "" | "with" | "without";
-  frequency: string;
-  status: "" | Extract<OrderStatus, "NOT_READY" | "READY_FOR_PLANNING">;
-}
-
-function todayIso(): string {
-  const now = new Date();
-  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 10);
-}
-
-function plusDays(iso: string, days: number): string {
-  const date = new Date(`${iso}T00:00:00`);
-  date.setDate(date.getDate() + days);
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 10);
-}
-
-function defaultFilters(): Filters {
-  const today = todayIso();
-  return {
-    originId: "", routeCode: "", serviceDateFrom: today, serviceDateTo: plusDays(today, 7), customer: "",
-    priority: "", eligibility: "", hold: "", frequency: "", status: "",
-  };
-}
-
-/** Los filtros de pantalla en el vocabulario de la API. */
-function toParams(filters: Filters): SchedulingFilterParams {
-  return {
-    originId: filters.originId || undefined,
-    routeCode: filters.routeCode || undefined,
-    serviceDateFrom: filters.serviceDateFrom || undefined,
-    serviceDateTo: filters.serviceDateTo || undefined,
-    customer: filters.customer.trim() || undefined,
-    priority: filters.priority || undefined,
-    eligibility: filters.eligibility || undefined,
-    hasHold: filters.hold === "" ? undefined : filters.hold === "with",
-    frequency: filters.frequency.trim() || undefined,
-    status: filters.status || undefined,
-  };
-}
+import { defaultFilters, toParams, type Filters } from "./schedulingFilterModel";
 
 type Panel =
   | { kind: "detail"; orderId: string }
-  | { kind: "hold"; orderId: string; orderNumber: string }
+  | { kind: "hold"; orderId: string; orderNumber: string; row: SchedulingRow }
   | { kind: "bulk"; result: BulkReleaseResult }
   | null;
 
@@ -125,8 +75,8 @@ export function SchedulingReleasePage() {
   const theme = useTheme();
 
   const [page, setPage] = useState(0);
-  const [draft, setDraft] = useState<Filters>(defaultFilters);
-  const [filters, setFilters] = useState<Filters>(draft);
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
+  const [filters, setFiltersState] = useState<Filters>(defaultFilters);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [panel, setPanel] = useState<Panel>(null);
   const [busy, setBusy] = useState(false);
@@ -167,8 +117,7 @@ export function SchedulingReleasePage() {
     void queryClient.invalidateQueries({ queryKey: ["eligible-orders", companyId] });
   }
 
-  function applyFilters() { setFilters(draft); setPage(0); setSelectedIds(new Set()); }
-  function resetFilters() { const reset = defaultFilters(); setDraft(reset); setFilters(reset); setPage(0); setSelectedIds(new Set()); }
+  const setFilters = useCallback((next: Filters) => { setFiltersState(next); setPage(0); setSelectedIds(new Set()); }, []);
 
   function toggle(row: SchedulingRow) {
     setSelectedIds((current) => {
@@ -288,84 +237,94 @@ export function SchedulingReleasePage() {
     {
       key: "order",
       header: t("Pedido"),
+      width: 190,
       render: (row) => (
-        <Box>
+        <Box sx={{ minWidth: 0 }}>
           <Typography variant="body2" noWrap sx={{ fontFamily: MONO, fontWeight: 700, letterSpacing: "-0.01em" }}>{row.orderNumber}</Typography>
-          {row.activeHolds > 0 && (
-            <Typography variant="caption" color={row.activeBlockingHolds > 0 ? "error" : "text.secondary"}
-              sx={{ display: "block", fontWeight: 700, lineHeight: 1.3 }}>
+          {row.activeHolds > 0 ? (
+            <Typography noWrap sx={{ fontSize: T.micro + 0.5, fontWeight: 700, color: row.activeBlockingHolds > 0 ? "error.main" : "text.secondary" }}>
               {row.activeBlockingHolds > 0 ? t("Retenido") : t("Con nota de retención")}
+            </Typography>
+          ) : (
+            <Typography noWrap sx={{ fontSize: T.micro + 0.5, color: "text.secondary", maxWidth: 200 }}>
+              {row.customerName ?? row.customerReference ?? t("Sin cliente")}
             </Typography>
           )}
         </Box>
       ),
     },
     {
-      key: "customer",
-      header: t("Cliente"),
+      key: "route",
+      header: t("Ruta"),
+      width: 250,
       render: (row) => (
-        <Typography variant="body2" noWrap sx={{ maxWidth: "12rem" }}>{row.customerName ?? row.customerReference ?? "-"}</Typography>
-      ),
-    },
-    {
-      key: "origin",
-      header: t("Origen"),
-      render: (row) => <Typography variant="body2" noWrap sx={{ maxWidth: "10rem" }}>{row.originCode ?? row.originName ?? "-"}</Typography>,
-    },
-    {
-      key: "destination",
-      header: t("Destino"),
-      render: (row) => (
-        <Tooltip title={row.destinationName ?? ""}>
-          <Typography variant="body2" noWrap sx={{ maxWidth: "12rem" }}>{row.destinationName ?? row.destinationCode ?? "-"}</Typography>
+        <Tooltip title={`${row.originName ?? row.originCode ?? "-"} → ${row.destinationName ?? row.destinationCode ?? "-"}`}>
+          <Box sx={{ minWidth: 0, maxWidth: 270 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+              <Typography noWrap sx={{ fontFamily: MONO, fontSize: T.micro + 0.5, fontWeight: 600, color: "text.secondary", flexShrink: 0 }}>
+                {row.originCode ?? row.originName ?? "-"}
+              </Typography>
+              <ArrowForwardRounded aria-hidden sx={{ fontSize: 13, color: "text.secondary", flexShrink: 0 }} />
+              <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>{row.destinationName ?? row.destinationCode ?? "-"}</Typography>
+            </Box>
+            {row.routeCode ? (
+              <Typography noWrap sx={{ fontFamily: MONO, fontSize: T.micro, color: "text.secondary" }}>
+                {t("Ruta")} {row.routeCode}
+              </Typography>
+            ) : (
+              <Typography noWrap sx={{ fontSize: T.micro, color: "warning.dark", fontWeight: 700 }}>
+                {enumLabel("routeResolution", row.routeResolution)}
+              </Typography>
+            )}
+          </Box>
         </Tooltip>
       ),
     },
     {
-      key: "route",
-      header: t("Ruta"),
-      render: (row) => row.routeCode
-        ? <Typography variant="body2" noWrap>{row.routeCode}</Typography>
-        : <Typography variant="caption" color="warning.dark" sx={{ fontWeight: 700 }}>{enumLabel("routeResolution", row.routeResolution)}</Typography>,
-    },
-    {
       key: "date",
-      header: t("Fecha despacho"),
-      render: (row) => <Typography variant="body2" noWrap sx={{ fontFamily: MONO }}>{fmtDate(row.scheduledDispatchDate)}</Typography>,
-    },
-    {
-      key: "cutoff",
-      header: t("Corte"),
-      render: (row) => row.releaseDeadline
-        ? <Typography variant="body2" noWrap sx={{ fontFamily: MONO }}>{fmtDateTime(row.releaseDeadline)}</Typography>
-        : <Typography variant="caption" color="text.secondary">{t("Sin calendario")}</Typography>,
+      header: t("Despacho"),
+      width: 160,
+      render: (row) => (
+        <Box>
+          <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>{fmtDate(row.scheduledDispatchDate)}</Typography>
+          <Typography noWrap sx={{ fontSize: T.micro + 0.5, color: row.releaseDeadline ? "warning.dark" : "text.secondary" }}>
+            {row.releaseDeadline ? `${t("Corte")} ${fmtDateTime(row.releaseDeadline)}` : t("Sin calendario")}
+          </Typography>
+        </Box>
+      ),
     },
     {
       key: "status",
       header: t("Estado"),
+      width: 180,
       render: (row) => (
         <StatusChip label={enumLabel("orderStatus", row.status)} tone={row.status === "READY_FOR_PLANNING" ? "open" : "neutral"} />
       ),
     },
-    { key: "eligibility", header: t("Elegibilidad"), render: (row) => <EligibilityChip eligibility={row.eligibility} /> },
     {
-      key: "reason",
-      header: t("Motivo"),
+      key: "eligibility",
+      header: t("Elegibilidad"),
       render: (row) => {
         const reason = primaryReason(row);
-        if (!reason) return "-";
         const more = row.reasons.length - 1;
         return (
-          <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
-            <StatusChip label={enumLabel("schedulingReason", reason.code)} tone={reasonTone(reason)} />
-            {more > 0 && <Typography variant="caption" color="text.secondary">+{more}</Typography>}
+          <Box sx={{ minWidth: 0 }}>
+            <EligibilityChip eligibility={row.eligibility} />
+            <Typography noWrap sx={{
+              fontSize: T.micro + 0.5, mt: "3px",
+              color: reason ? `${ELIGIBILITY_COLOR[reason.severity]}.main` : "text.secondary",
+              fontWeight: reason ? 600 : 400,
+            }}>
+              {reason ? enumLabel("schedulingReason", reason.code) : t("Sin observaciones")}
+              {more > 0 && <Box component="span" sx={{ color: "text.secondary", fontWeight: 400 }}> +{more}</Box>}
+            </Typography>
           </Box>
         );
       },
     },
     {
       key: "actions",
-      header: t("Acciones"),
+      header: "",
       actions: true,
       render: (row) => (
         <ActionMenu
@@ -380,7 +339,7 @@ export function SchedulingReleasePage() {
             ...(canManageHolds && row.status !== "CANCELLED" && row.status !== "DELIVERED"
               ? [{
                   key: "hold", label: t("Retener"), icon: <PanToolRounded />,
-                  onSelect: () => setPanel({ kind: "hold", orderId: row.orderId, orderNumber: row.orderNumber }),
+                  onSelect: () => setPanel({ kind: "hold", orderId: row.orderId, orderNumber: row.orderNumber, row }),
                 }]
               : []),
             {
@@ -397,35 +356,79 @@ export function SchedulingReleasePage() {
     },
   );
 
+  const groups = summaryQuery.data?.groups ?? [];
   const groupColumns: DataTableColumn<SchedulingGroup>[] = [
     {
       key: "date",
-      header: t("Fecha despacho"),
-      render: (group) => <Typography variant="body2" noWrap sx={{ fontFamily: MONO }}>{fmtDate(group.scheduledDispatchDate)}</Typography>,
+      header: t("Despacho"),
+      width: 140,
+      render: (group) => {
+        // La fecha se escribe fuerte solo en la primera fila de su día: las demás la repiten.
+        const index = groups.indexOf(group);
+        const first = index <= 0 || groups[index - 1].scheduledDispatchDate !== group.scheduledDispatchDate;
+        return (
+          <Typography variant="body2" noWrap sx={{ fontWeight: first ? 700 : 400, color: first ? "text.primary" : "text.secondary" }}>
+            {fmtDate(group.scheduledDispatchDate)}
+          </Typography>
+        );
+      },
     },
-    { key: "origin", header: t("Origen"), render: (group) => group.originCode ?? group.originName ?? "-" },
     {
-      key: "route",
-      header: t("Ruta"),
-      render: (group) => group.routeCode ?? <Typography variant="caption" color="text.secondary">{t("Sin ruta única")}</Typography>,
+      key: "group",
+      header: t("Origen · Ruta"),
+      width: 220,
+      render: (group) => (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
+          <Typography noWrap sx={{ fontFamily: MONO, fontSize: T.micro + 0.5, color: "text.secondary" }}>
+            {group.originCode ?? group.originName ?? "-"}
+          </Typography>
+          <ChevronRightRounded aria-hidden sx={{ fontSize: 15, color: "text.secondary" }} />
+          {group.routeCode
+            ? <Typography noWrap sx={{ fontFamily: MONO, fontSize: T.body - 0.5, fontWeight: 700 }}>{group.routeCode}</Typography>
+            : <Typography noWrap sx={{ fontSize: T.micro + 0.5, color: "warning.dark", fontWeight: 700 }}>{t("Sin ruta única")}</Typography>}
+        </Box>
+      ),
     },
-    { key: "total", header: t("Total"), numeric: true, render: (group) => fmtQuantity(group.counts.total) },
     {
-      key: "eligible", header: t("Elegibles"), numeric: true,
-      render: (group) => <Box component="span" sx={{ color: "primary.main", fontWeight: 700 }}>{fmtQuantity(group.counts.eligible)}</Box>,
+      // Una barra apilada en lugar de tres columnas de números: lo que importa es la proporción.
+      key: "eligibility",
+      header: t("Elegibilidad"),
+      render: (group) => {
+        const { total, eligible, warning, blocked } = group.counts;
+        const pct = (n: number) => (total > 0 ? `${(n / total) * 100}%` : "0%");
+        return (
+          <Tooltip title={t("{{e}} elegibles · {{w}} con aviso · {{b}} bloqueados", { e: eligible, w: warning, b: blocked })}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, minWidth: 0 }}>
+              <Box aria-hidden sx={{ display: "flex", width: 180, flexShrink: 0, height: 8, borderRadius: 4, overflow: "hidden", bgcolor: "action.hover" }}>
+                <Box sx={{ width: pct(eligible), bgcolor: "success.main" }} />
+                <Box sx={{ width: pct(warning), bgcolor: "warning.main" }} />
+                <Box sx={{ width: pct(blocked), bgcolor: "error.main" }} />
+              </Box>
+              <Typography noWrap sx={{ fontSize: T.micro + 0.5, fontWeight: 600, color: blocked > 0 ? "error.main" : "text.secondary", fontVariantNumeric: "tabular-nums" }}>
+                {t("{{e}} de {{n}}", { e: fmtQuantity(eligible), n: fmtQuantity(total) })}
+                {warning > 0 ? ` · ${fmtQuantity(warning)} ${t("aviso")}` : ""}
+                {blocked > 0 ? ` · ${fmtQuantity(blocked)} ${t("bloq.")}` : ""}
+              </Typography>
+            </Box>
+          </Tooltip>
+        );
+      },
     },
-    { key: "warning", header: t("Con aviso"), numeric: true, render: (group) => fmtQuantity(group.counts.warning) },
     {
-      key: "blocked", header: t("Bloqueados"), numeric: true,
-      render: (group) => group.counts.blocked > 0
-        ? <Box component="span" sx={{ color: "error.main", fontWeight: 700 }}>{fmtQuantity(group.counts.blocked)}</Box>
-        : fmtQuantity(group.counts.blocked),
+      key: "holds", header: t("Retenidos"), numeric: true, width: 100,
+      render: (group) => (
+        <Box component="span" sx={{ fontWeight: group.counts.withHolds > 0 ? 700 : 400, color: group.counts.withHolds > 0 ? "secondary.main" : "text.secondary" }}>
+          {fmtQuantity(group.counts.withHolds)}
+        </Box>
+      ),
     },
-    { key: "holds", header: t("Retenidos"), numeric: true, render: (group) => fmtQuantity(group.counts.withHolds) },
-    { key: "released", header: t("Liberados"), numeric: true, render: (group) => fmtQuantity(group.counts.released) },
+    {
+      key: "released", header: t("Liberados"), numeric: true, width: 110,
+      render: (group) => `${fmtQuantity(group.counts.released)} / ${fmtQuantity(group.counts.total)}`,
+    },
     {
       key: "open",
-      header: t("Acciones"),
+      header: "",
       actions: true,
       render: (group) => (
         <Button size="small" variant="outlined" color="inherit" startIcon={<ViewKanbanRounded />}
@@ -439,6 +442,8 @@ export function SchedulingReleasePage() {
 
   const pageData = boardQuery.data;
   const releasableSelected = selectedRows.filter(isReleasable).length;
+  const setEligibility = (eligibility: Filters["eligibility"], hold: Filters["hold"] = filters.hold === "with" ? "" : filters.hold) =>
+    setFilters({ ...filters, eligibility, hold });
 
   return (
     <>
@@ -451,101 +456,73 @@ export function SchedulingReleasePage() {
         refreshing={boardQuery.isFetching || summaryQuery.isFetching}
       />
 
-      <Box sx={{
-        display: "grid", gap: 2, mb: 2,
-        gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", sm: "repeat(3, minmax(0, 1fr))", md: "repeat(5, minmax(0, 1fr))" },
-      }}>
-        <FilterKpiCard icon={<InventoryRounded />} color="info" title={t("Total")} value={fmtQuantity(totals?.total ?? 0)}
-          loading={summaryQuery.isPending} active={filters.eligibility === "" && filters.hold !== "with"}
-          onClick={() => { setDraft({ ...draft, eligibility: "" }); setFilters({ ...filters, eligibility: "" }); setPage(0); }} />
-        <FilterKpiCard icon={<CheckCircleRounded />} color="success" title={t("Elegibles")} value={fmtQuantity(totals?.eligible ?? 0)}
-          loading={summaryQuery.isPending} active={filters.eligibility === "ELIGIBLE"}
-          onClick={() => { setDraft({ ...draft, eligibility: "ELIGIBLE" }); setFilters({ ...filters, eligibility: "ELIGIBLE" }); setPage(0); }} />
-        <FilterKpiCard icon={<WarningAmberRounded />} color="warning" title={t("Con aviso")} value={fmtQuantity(totals?.warning ?? 0)}
-          loading={summaryQuery.isPending} active={filters.eligibility === "WARNING"}
-          onClick={() => { setDraft({ ...draft, eligibility: "WARNING" }); setFilters({ ...filters, eligibility: "WARNING" }); setPage(0); }} />
-        <FilterKpiCard icon={<BlockRounded />} color="error" title={t("Bloqueados")} value={fmtQuantity(totals?.blocked ?? 0)}
-          loading={summaryQuery.isPending} active={filters.eligibility === "BLOCKED"}
-          onClick={() => { setDraft({ ...draft, eligibility: "BLOCKED" }); setFilters({ ...filters, eligibility: "BLOCKED" }); setPage(0); }} />
-        <FilterKpiCard icon={<PanToolRounded />} color="secondary" title={t("Con retención")} value={fmtQuantity(totals?.withHolds ?? 0)}
-          loading={summaryQuery.isPending} active={filters.hold === "with"}
-          onClick={() => { setDraft({ ...draft, hold: "with" }); setFilters({ ...filters, hold: "with" }); setPage(0); }} />
-      </Box>
+      <KpiStrip
+        loading={summaryQuery.isPending}
+        items={[
+          {
+            key: "total", icon: <InventoryRounded />, color: "info", title: t("Total"),
+            value: fmtQuantity(totals?.total ?? 0),
+            active: filters.eligibility === "" && filters.hold !== "with",
+            onClick: () => setEligibility(""),
+          },
+          {
+            key: "eligible", icon: <CheckCircleRounded />, color: "success", title: t("Elegibles"),
+            value: fmtQuantity(totals?.eligible ?? 0),
+            active: filters.eligibility === "ELIGIBLE", onClick: () => setEligibility("ELIGIBLE"),
+          },
+          {
+            key: "warning", icon: <WarningAmberRounded />, color: "warning", title: t("Con aviso"),
+            value: fmtQuantity(totals?.warning ?? 0), hint: t("Requieren motivo"),
+            active: filters.eligibility === "WARNING", onClick: () => setEligibility("WARNING"),
+          },
+          {
+            key: "blocked", icon: <BlockRounded />, color: "error", title: t("Bloqueados"),
+            value: fmtQuantity(totals?.blocked ?? 0), hint: t("No se pueden liberar"),
+            active: filters.eligibility === "BLOCKED", onClick: () => setEligibility("BLOCKED"),
+          },
+          {
+            key: "holds", icon: <PanToolRounded />, color: "secondary", title: t("Con retención"),
+            value: fmtQuantity(totals?.withHolds ?? 0),
+            active: filters.hold === "with", onClick: () => setEligibility("", "with"),
+          },
+        ]}
+      />
 
-      <Toolbar
-        onApply={applyFilters}
-        onReset={resetFilters}
-        activeFilterCount={activeFilterCount(toParams(filters))}
-        filters={
-          <>
-            <TextField select size="small" label={t("Origen")} value={draft.originId}
-              onChange={(e) => setDraft({ ...draft, originId: e.target.value })} sx={{ minWidth: 170 }}>
-              <MenuItem value="">{t("Todos los orígenes")}</MenuItem>
-              {(originsQuery.data?.content ?? []).map((origin) => (
-                <MenuItem key={origin.id} value={origin.id}>{origin.code} · {origin.name}</MenuItem>
-              ))}
-            </TextField>
-            <TextField select size="small" label={t("Ruta")} value={draft.routeCode}
-              onChange={(e) => setDraft({ ...draft, routeCode: e.target.value })} sx={{ minWidth: 150 }}>
-              <MenuItem value="">{t("Todas las rutas")}</MenuItem>
-              <MenuItem value={NO_ROUTE}>{t("Sin ruta única")}</MenuItem>
-              {(routesQuery.data?.content ?? []).map((route) => (
-                <MenuItem key={route.id} value={route.code}>{route.code}</MenuItem>
-              ))}
-            </TextField>
-            <TextField size="small" type="date" label={t("Despacho desde")} value={draft.serviceDateFrom}
-              onChange={(e) => setDraft({ ...draft, serviceDateFrom: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }} sx={{ minWidth: 150 }} />
-            <TextField size="small" type="date" label={t("Despacho hasta")} value={draft.serviceDateTo}
-              onChange={(e) => setDraft({ ...draft, serviceDateTo: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }} sx={{ minWidth: 150 }} />
-            <TextField size="small" label={t("Cliente")} value={draft.customer}
-              onChange={(e) => setDraft({ ...draft, customer: e.target.value })} sx={{ minWidth: 150 }} />
-            <TextField select size="small" label={t("Prioridad")} value={draft.priority}
-              onChange={(e) => setDraft({ ...draft, priority: e.target.value as OrderPriority | "" })} sx={{ minWidth: 140 }}>
-              <MenuItem value="">{t("Todas las prioridades")}</MenuItem>
-              {ORDER_PRIORITIES.map((priority) => (
-                <MenuItem key={priority} value={priority}>{enumLabel("orderPriority", priority)}</MenuItem>
-              ))}
-            </TextField>
-            <TextField select size="small" label={t("Elegibilidad")} value={draft.eligibility}
-              onChange={(e) => setDraft({ ...draft, eligibility: e.target.value as Eligibility | "" })} sx={{ minWidth: 140 }}>
-              <MenuItem value="">{t("Todas")}</MenuItem>
-              {ELIGIBILITIES.map((eligibility) => (
-                <MenuItem key={eligibility} value={eligibility}>{enumLabel("eligibility", eligibility)}</MenuItem>
-              ))}
-            </TextField>
-            <TextField select size="small" label={t("Retención")} value={draft.hold}
-              onChange={(e) => setDraft({ ...draft, hold: e.target.value as Filters["hold"] })} sx={{ minWidth: 140 }}>
-              <MenuItem value="">{t("Todas")}</MenuItem>
-              <MenuItem value="with">{t("Con retención")}</MenuItem>
-              <MenuItem value="without">{t("Sin retención")}</MenuItem>
-            </TextField>
-            <TextField size="small" label={t("Frecuencia")} value={draft.frequency}
-              onChange={(e) => setDraft({ ...draft, frequency: e.target.value })} sx={{ minWidth: 130 }} />
-            <TextField select size="small" label={t("Estado")} value={draft.status}
-              onChange={(e) => setDraft({ ...draft, status: e.target.value as Filters["status"] })} sx={{ minWidth: 170 }}>
-              <MenuItem value="">{t("Pendientes y liberados")}</MenuItem>
-              <MenuItem value="NOT_READY">{enumLabel("orderStatus", "NOT_READY")}</MenuItem>
-              <MenuItem value="READY_FOR_PLANNING">{enumLabel("orderStatus", "READY_FOR_PLANNING")}</MenuItem>
-            </TextField>
-          </>
-        }
+      <SchedulingFilterBar
+        value={filters}
+        onChange={setFilters}
+        origins={(originsQuery.data?.content ?? []).map((o) => ({ id: o.id, label: `${o.code} · ${o.name}` }))}
+        routes={canReadRoutes
+          ? (routesQuery.data?.content ?? []).map((r) => ({ id: r.code, label: `${r.code} · ${r.name}` }))
+          : null}
       />
 
       {/* La tabla del resumen va a sangre dentro de la tarjeta: sin su propio borde ni radio. */}
       <Box sx={{ mb: 2, "& .MuiCard-root .MuiPaper-root": { border: 0, borderRadius: 0 } }}>
-        <AppCard title={t("Resumen por origen, ruta y fecha")} flush>
+        <AppCard
+          title={t("Resumen por origen, ruta y fecha")}
+          flush
+          actions={
+            <Box aria-hidden sx={{ display: { xs: "none", sm: "flex" }, gap: 1.75, alignItems: "center" }}>
+              {([["success.main", t("Elegibles")], ["warning.main", t("Con aviso")], ["error.main", t("Bloqueados")]] as const).map(([color, label]) => (
+                <Box key={label} sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                  <Box sx={{ width: 10, height: 10, borderRadius: "3px", bgcolor: color }} />
+                  <Typography sx={{ fontSize: T.micro + 0.5, color: "text.secondary" }}>{label}</Typography>
+                </Box>
+              ))}
+            </Box>
+          }
+        >
           <DataTable
             columns={groupColumns}
-            rows={summaryQuery.data?.groups ?? []}
+            rows={groups}
             rowKey={(group) => `${group.scheduledDispatchDate}-${group.originId}-${group.routeCode ?? NO_ROUTE}`}
             isLoading={summaryQuery.isPending}
             error={summaryQuery.isError ? describeApiError(summaryQuery.error as ApiError) : null}
             onRetry={() => void summaryQuery.refetch()}
             emptyTitle={t("Sin pedidos")}
             emptyMessage={t("Ningún pedido coincide con los filtros.")}
-            maxHeight={260}
+            maxHeight={280}
           />
         </AppCard>
       </Box>
@@ -559,8 +536,8 @@ export function SchedulingReleasePage() {
         {canRelease && (
           <Box sx={(th) => ({
             display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap", px: 2, py: 1.25,
-            bgcolor: alpha(th.palette.primary.main, th.palette.mode === "dark" ? 0.16 : 0.1),
-            borderBottom: "1px solid", borderColor: alpha(th.palette.primary.main, 0.18),
+            bgcolor: alpha(th.palette.primary.main, th.palette.mode === "dark" ? 0.16 : 0.07),
+            borderBottom: "1px solid", borderColor: "divider",
           })}>
             <Button size="small" variant="outlined" color="inherit" startIcon={<DoneAllRounded />}
               onClick={selectReleasablePage} disabled={rows.length === 0}
@@ -575,12 +552,14 @@ export function SchedulingReleasePage() {
                 <Button size="small" color="inherit" sx={{ color: "text.secondary" }} onClick={() => setSelectedIds(new Set())}>
                   {t("Limpiar selección")}
                 </Button>
-                <Button size="small" variant="contained" startIcon={<PlaylistAddCheckRounded />}
-                  sx={{ ml: "auto" }}
-                  disabled={busy || releasableSelected === 0} onClick={() => void releaseSelected()}>
-                  {t("Liberar seleccionados")}
-                </Button>
               </>
+            )}
+            <Box sx={{ flex: 1 }} />
+            {selectedIds.size > 0 && (
+              <Button size="small" variant="contained" startIcon={<PlaylistAddCheckRounded />}
+                disabled={busy || releasableSelected === 0} onClick={() => void releaseSelected()}>
+                {t("Liberar seleccionados")}
+              </Button>
             )}
           </Box>
         )}
@@ -609,7 +588,7 @@ export function SchedulingReleasePage() {
           canRelease={canRelease}
           onClose={() => setPanel(null)}
           onChanged={refresh}
-          onPlaceHold={(row) => setPanel({ kind: "hold", orderId: row.orderId, orderNumber: row.orderNumber })}
+          onPlaceHold={(row) => setPanel({ kind: "hold", orderId: row.orderId, orderNumber: row.orderNumber, row })}
           onRelease={(row) => void releaseOne(row)}
         />
       )}
@@ -618,6 +597,7 @@ export function SchedulingReleasePage() {
           companyId={companyId}
           orderId={panel.orderId}
           orderNumber={panel.orderNumber}
+          row={panel.row}
           onClose={() => setPanel(null)}
           onPlaced={() => {
             setPanel(null);

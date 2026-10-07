@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  Alert, Box, Button, Chip, IconButton, Paper, Tab, Tabs, TextField, Tooltip, Typography,
+  Alert, Box, Button, Chip, IconButton, Paper, Tab, Tabs, Tooltip, Typography,
   useMediaQuery, useTheme,
 } from "@mui/material";
 import {
@@ -31,7 +31,7 @@ import {
   TripStopMap, type TripStopMapOrigin, type TripStopMapStop, type TripStopMapVehicle,
 } from "../../shared/maps/TripStopMap";
 import {
-  DetailGrid, DetailItem, ErrorState, LoadingState, PageHeader, StatusChip,
+  DateTimeInput, DetailGrid, DetailItem, ErrorState, LoadingState, PageHeader, StatusChip,
 } from "../../shared/ui/components";
 import { DELIVERY_RESULT_TONE, STOP_EXECUTION_TONE, TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
 import { TripDriverDrawer } from "../planning/TripDriverDrawer";
@@ -161,7 +161,9 @@ export function TripWorkspacePage() {
   const [delivery, setDelivery] = useState<{
     stopId: string; stopLabel: string; orderId: string; orderNumber: string; existing?: OrderDeliveryView;
   } | null>(null);
-  const [evidenceFor, setEvidenceFor] = useState<{ deliveryId: string; orderNumber: string } | null>(null);
+  const [evidenceFor, setEvidenceFor] = useState<{
+    deliveryId: string; orderNumber: string; stopLabel: string; result: OrderDeliveryView["result"];
+  } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const detail: TripDetailView | undefined = tripQuery.data;
@@ -562,10 +564,9 @@ export function TripWorkspacePage() {
               <>
                 {/* La hora la aporta el operador y vale para la siguiente acción que pulse:
                     vacía significa "ahora", que es lo que hace un despachador en vivo. */}
-                <TextField
-                  size="small" type="datetime-local" label={t("Hora real")}
-                  value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)}
-                  slotProps={{ inputLabel: { shrink: true } }}
+                <DateTimeInput
+                  size="small" label={t("Hora real")}
+                  value={occurredAt} onChange={(v) => setOccurredAt(v)}
                   sx={{ width: 215 }}
                 />
                 {/* Los botones se pintan desde `allowedTransitions`, que decide el servidor. Un
@@ -826,7 +827,10 @@ export function TripWorkspacePage() {
                                             size="small"
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              setEvidenceFor({ deliveryId: recorded.id, orderNumber: assignment.orderNumber });
+                                              setEvidenceFor({
+                                                deliveryId: recorded.id, orderNumber: assignment.orderNumber,
+                                                stopLabel, result: recorded.result,
+                                              });
                                             }}
                                           >
                                             <AttachFileRounded fontSize="small" />
@@ -984,6 +988,7 @@ export function TripWorkspacePage() {
       {problem && (
         <TripProblemDrawer
           mode={problem.mode}
+          shipmentNumber={trip.shipmentNumber}
           stops={stops}
           stopLabel={problem.stopLabel}
           onClose={() => setProblem(null)}
@@ -1004,6 +1009,8 @@ export function TripWorkspacePage() {
       {evidenceFor && (
         <DeliveryEvidenceDrawer
           orderNumber={evidenceFor.orderNumber}
+          stopLabel={evidenceFor.stopLabel}
+          status={<StatusChip label={enumLabel("deliveryResult", evidenceFor.result)} tone={DELIVERY_RESULT_TONE[evidenceFor.result]} />}
           onClose={() => setEvidenceFor(null)}
           onSubmit={submitEvidence}
         />
