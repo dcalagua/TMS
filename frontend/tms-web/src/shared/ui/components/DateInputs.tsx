@@ -195,31 +195,32 @@ export function DateInput({
     },
   };
 
-  if (mode === "time") {
-    return (
-      <TimePicker
-        {...common}
-        ampm={false}
-        minutesStep={minutesStep}
-        minTime={minD}
-        maxTime={maxD}
-        timeSteps={{ minutes: minutesStep }}
-      />
-    );
-  }
-  if (mode === "datetime") {
-    return (
-      <DateTimePicker
-        {...common}
-        ampm={false}
-        minutesStep={minutesStep}
-        minDateTime={minD}
-        maxDateTime={maxD}
-        timeSteps={{ minutes: minutesStep }}
-      />
-    );
-  }
-  return <DatePicker {...common} minDate={minD} maxDate={maxD} showDaysOutsideCurrentMonth />;
+  const picker = mode === "time" ? (
+    <TimePicker
+      {...common}
+      ampm={false}
+      minutesStep={minutesStep}
+      minTime={minD}
+      maxTime={maxD}
+      timeSteps={{ minutes: minutesStep }}
+    />
+  ) : mode === "datetime" ? (
+    <DateTimePicker
+      {...common}
+      ampm={false}
+      minutesStep={minutesStep}
+      minDateTime={minD}
+      maxDateTime={maxD}
+      timeSteps={{ minutes: minutesStep }}
+    />
+  ) : (
+    <DatePicker {...common} minDate={minD} maxDate={maxD} showDaysOutsideCurrentMonth />
+  );
+
+  // El campo trae su propio proveedor de localización: así funciona montado fuera de la app
+  // (una prueba que renderiza solo un panel, un portal) sin depender de que alguien más arriba
+  // lo haya puesto. Anidado bajo el de `main.tsx` no cambia nada.
+  return <DatePickersProvider>{picker}</DatePickersProvider>;
 }
 
 export const TimeInput = (props: Omit<DateInputProps, "mode">) => <DateInput {...props} mode="time" />;
