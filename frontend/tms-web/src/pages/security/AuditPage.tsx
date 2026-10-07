@@ -1,7 +1,9 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Box, Chip, MenuItem, TextField, Tooltip, Typography } from "@mui/material";
-import { HistoryRounded, PersonRounded, MemoryRounded } from "@mui/icons-material";
+import { Box, Chip, Tooltip, Typography } from "@mui/material";
+import {
+  HistoryRounded, PersonRounded, MemoryRounded, EventRounded, CategoryRounded, BoltRounded, FingerprintRounded,
+} from "@mui/icons-material";
 import {
   AUDIT_ACTIONS, AUDIT_AGGREGATE_TYPES, fetchAuditEvents,
   type AuditAction, type AuditAggregateType, type AuditEventView,
@@ -10,7 +12,7 @@ import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  DataTable, PageHeader, Pagination, Toolbar, type DataTableColumn,
+  DataTable, FilterBar, PageHeader, Pagination, type DataTableColumn,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { enumLabel } from "../../lib/enums";
@@ -51,8 +53,9 @@ export function AuditPage() {
   const companyId = selected?.id ?? "";
 
   const [page, setPage] = useState(0);
-  const [draft, setDraft] = useState<AppliedFilters>(DEFAULT_FILTERS);
-  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
+  const [filters, setFiltersState] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const setFilters = (next: AppliedFilters) => { setFiltersState(next); setPage(0); };
 
   const eventsQuery = useQuery({
     queryKey: ["audit-events", companyId, page, filters],
@@ -75,9 +78,6 @@ export function AuditPage() {
     enabled: companyId !== "",
     placeholderData: keepPreviousData,
   });
-
-  function applyFilters() { setFilters(draft); setPage(0); }
-  function resetFilters() { setDraft(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); setPage(0); }
 
   const columns: DataTableColumn<AuditEventView>[] = [
     { key: "when", header: t("Cuándo"), render: (event) => fmtDateTime(event.occurredAt) },
@@ -156,10 +156,7 @@ export function AuditPage() {
             size="small"
             label={event.correlationId.slice(0, 8)}
             onClick={() => {
-              const next = { ...DEFAULT_FILTERS, correlationId: event.correlationId as string };
-              setDraft(next);
-              setFilters(next);
-              setPage(0);
+              setFilters({ ...DEFAULT_FILTERS, correlationId: event.correlationId as string });
             }}
             sx={{ fontFamily: "monospace", fontSize: 10.5 }}
           />
@@ -181,55 +178,21 @@ export function AuditPage() {
         refreshing={eventsQuery.isFetching}
       />
 
-      <Toolbar
-        onApply={applyFilters}
-        onReset={resetFilters}
-        filters={
-          <>
-            <TextField
-              select size="small" label={t("Sobre qué")} value={draft.aggregateType}
-              onChange={(e) => setDraft({ ...draft, aggregateType: e.target.value as AuditAggregateType | "" })}
-              sx={{ minWidth: 200 }}
-            >
-              <MenuItem value="">{t("Todos")}</MenuItem>
-              {AUDIT_AGGREGATE_TYPES.map((type) => (
-                <MenuItem key={type} value={type}>{enumLabel("auditAggregateType", type)}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Acción")} value={draft.action}
-              onChange={(e) => setDraft({ ...draft, action: e.target.value as AuditAction | "" })}
-              sx={{ minWidth: 200 }}
-            >
-              <MenuItem value="">{t("Todas")}</MenuItem>
-              {AUDIT_ACTIONS.map((action) => (
-                <MenuItem key={action} value={action}>{enumLabel("auditAction", action)}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              size="small" label={t("ID del registro")} value={draft.aggregateId}
-              onChange={(e) => setDraft({ ...draft, aggregateId: e.target.value })}
-              sx={{ minWidth: 200 }}
-            />
-            <TextField
-              size="small" label={t("Correlación")} value={draft.correlationId}
-              onChange={(e) => setDraft({ ...draft, correlationId: e.target.value })}
-              sx={{ minWidth: 200 }}
-            />
-            <TextField
-              size="small" type="datetime-local" label={t("Desde")} value={draft.from}
-              onChange={(e) => setDraft({ ...draft, from: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ minWidth: 210 }}
-            />
-            <TextField
-              size="small" type="datetime-local" label={t("Hasta")} value={draft.to}
-              onChange={(e) => setDraft({ ...draft, to: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ minWidth: 210 }}
-            />
-          </>
-        }
+      <FilterBar
+        value={filters}
+        defaults={DEFAULT_FILTERS}
+        onChange={setFilters}
+        fields={[
+          { type: "search", key: "correlationId", placeholder: t("Correlación") },
+          { type: "dateRange", from: "from", to: "to", label: t("Cuándo"), icon: <EventRounded />, mode: "datetime" },
+          { type: "select", key: "aggregateType", label: t("Sobre qué"), icon: <CategoryRounded />,
+            allLabel: t("Todos"),
+            options: AUDIT_AGGREGATE_TYPES.map((type) => ({ id: type, label: enumLabel("auditAggregateType", type) })) },
+          { type: "select", key: "action", label: t("Acción"), icon: <BoltRounded />,
+            allLabel: t("Todas"),
+            options: AUDIT_ACTIONS.map((action) => ({ id: action, label: enumLabel("auditAction", action) })) },
+          { type: "text", key: "aggregateId", label: t("ID del registro"), icon: <FingerprintRounded /> },
+        ]}
       />
 
       <DataTable

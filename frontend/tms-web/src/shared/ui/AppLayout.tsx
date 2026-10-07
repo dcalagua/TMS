@@ -7,6 +7,7 @@ import {
 import { ThemeProvider, lighten } from "@mui/material/styles";
 import {
   MenuRounded, ChevronLeftRounded, ChevronRightRounded, LightModeRounded, DarkModeRounded,
+  ApartmentRounded, CorporateFareRounded,
 } from "@mui/icons-material";
 import { R, T, getTheme, SIDEBAR, brandSidebar, type ThemeKey } from "../../theme";
 import { useColorMode } from "../../lib/colorMode";
@@ -20,7 +21,7 @@ import { NavSearch } from "./NavSearch";
 import { NotificationsMenu } from "./NotificationsMenu";
 import { NAV_SECTIONS, OVERVIEW_NAV, leafOf, sectionOf, type NavLeaf } from "./navConfig";
 
-const DRAWER_WIDTH = 248;
+const DRAWER_WIDTH = 256;
 const RAIL_WIDTH = 72;
 const COLLAPSE_KEY = "ebim-sidebar-collapsed";
 
@@ -57,6 +58,9 @@ export function AppLayout() {
   const shellBg = themeKey === "brand"
     ? (brandAccent ? brandSidebar(brandAccent) : SIDEBAR.forest)
     : SIDEBAR[themeKey as Exclude<ThemeKey, "brand">];
+
+  /** El acento claro del indicador de activo: el del lockup, derivado del tema elegido. */
+  const activeAccent = lighten(theme.palette.primary.main, 0.55);
 
   const [drawerOpen, setDrawerOpen] = useState(!isMobile);
   const [collapsed, setCollapsed] = useState(() => {
@@ -95,7 +99,7 @@ export function AppLayout() {
   /** Los iconos de la barra superior, ahora sobre papel: neutros en reposo y con el realce
    *  de acción del tema al pasar por encima. */
   const topIconSx = {
-    color: "text.secondary", borderRadius: `${R.md}px`, width: 36, height: 36,
+    color: "text.secondary", borderRadius: `${R.sm}px`, width: 36, height: 36,
     transition: "background-color .15s ease, color .15s ease, transform .12s ease",
     "&:hover": { bgcolor: "action.hover", color: "text.primary" },
     "&:active": { transform: "scale(0.92)" },
@@ -119,28 +123,35 @@ export function AppLayout() {
         onClick={() => { navigate(item.to); if (isMobile) setDrawerOpen(false); }}
         selected={active}
         sx={{
-          mx: "8px", my: 0, py: "9px", minHeight: 0, borderRadius: `${R.md}px`,
+          position: "relative",
+          mx: "10px", my: "1px", py: 0, minHeight: 38, borderRadius: "10px",
           gap: isCollapsed ? 0 : "10px",
-          px: isCollapsed ? 1 : "10px",
+          px: isCollapsed ? 1 : "12px",
           justifyContent: isCollapsed ? "center" : "flex-start",
           color: SIDEBAR_TEXT,
           "&:hover": { bgcolor: "rgba(255,255,255,.08)" },
+          // Activo: fondo blanco al 14 % y una barra del acento claro a la izquierda. Se
+          // localiza de un vistazo sin pintar el icono (diseño v2 del menú).
           "&.Mui-selected": {
-            bgcolor: "rgba(255,255,255,.13)", color: "#fff",
+            bgcolor: "rgba(255,255,255,.14)", color: "#fff",
             "&:hover": { bgcolor: "rgba(255,255,255,.18)" },
+            "&::before": {
+              content: '""', position: "absolute", left: 0, top: "50%", transform: "translateY(-50%)",
+              width: 3, height: 18, borderRadius: "2px", bgcolor: activeAccent,
+            },
           },
           "&.Mui-focusVisible": { outline: "2px solid #fff", outlineOffset: "-2px" },
         }}
       >
         <ListItemIcon sx={{
-          minWidth: 0, color: "inherit", justifyContent: "center", "& svg": { fontSize: 18 },
+          minWidth: 0, color: "inherit", justifyContent: "center", "& svg": { fontSize: 19 },
         }}>
           {item.icon}
         </ListItemIcon>
         {!isCollapsed && (
           <ListItemText
             primary={t(item.label)}
-            slotProps={{ primary: { sx: { fontSize: T.body, fontWeight: active ? 700 : 500 } } }}
+            slotProps={{ primary: { sx: { fontSize: T.bodyStrong, fontWeight: active ? 700 : 500 } } }}
           />
         )}
       </ListItemButton>
@@ -152,17 +163,18 @@ export function AppLayout() {
 
   const sectionLabel = (text: string): ReactNode =>
     isCollapsed
-      ? <Box key={text} sx={{ my: 1.25, mx: "auto", width: 22, height: "2px", borderRadius: 1, bgcolor: "rgba(255,255,255,0.16)" }} />
+      ? <Box key={text} sx={{ my: 1.25, mx: "auto", width: 22, height: "2px", borderRadius: "4px", bgcolor: "rgba(255,255,255,0.16)" }} />
       : (
-        <Typography
-          key={text}
-          sx={{
-            px: "16px", pt: "12px", pb: "6px", display: "block", textTransform: "uppercase",
-            letterSpacing: ".12em", fontWeight: 800, fontSize: T.micro, opacity: 0.45,
-          }}
-        >
-          {text}
-        </Typography>
+        // Título en versalitas con una línea fina hasta el borde: separa los grupos sin cajas.
+        <Box key={text} sx={{ display: "flex", alignItems: "center", gap: "10px", px: "22px", pt: "16px", pb: "6px" }}>
+          <Typography sx={{
+            textTransform: "uppercase", letterSpacing: ".14em", fontWeight: 800, fontSize: T.micro,
+            color: "rgba(255,255,255,.72)", whiteSpace: "nowrap",
+          }}>
+            {text}
+          </Typography>
+          <Box aria-hidden sx={{ flex: 1, height: "1px", bgcolor: "rgba(255,255,255,.12)" }} />
+        </Box>
       );
 
   const drawer = (
@@ -183,11 +195,16 @@ export function AppLayout() {
             <>
               <Box sx={{ minWidth: 0 }}>
                 <ProductLockup name="eTMS" color="#fff" accentColor={lighten(theme.palette.primary.main, 0.55)} animated />
+                {/* La organización en su propia franja: es el contexto de todo el menú. */}
                 <Box sx={{
-                  mt: "8px", fontSize: T.label, fontWeight: 700, opacity: 0.7,
-                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  mt: "14px", display: "flex", alignItems: "center", gap: "8px",
+                  px: "10px", py: "8px", borderRadius: "10px", bgcolor: "rgba(0,0,0,.12)",
+                  fontSize: T.label + 0.5, fontWeight: 600, color: "rgba(255,255,255,.85)",
                 }}>
-                  {selected?.organization.name ?? t("Organización")}
+                  <CorporateFareRounded sx={{ fontSize: 16, opacity: 0.75, flexShrink: 0 }} />
+                  <Box component="span" sx={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {selected?.organization.name ?? t("Organización")}
+                  </Box>
                 </Box>
               </Box>
               {isMobile && (
@@ -232,10 +249,21 @@ export function AppLayout() {
           <>
             <Divider sx={{ borderColor: "rgba(255,255,255,.1)" }} />
             <Box sx={{
-              px: "16px", py: "12px", fontSize: T.micro, opacity: 0.6,
-              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              px: "16px", py: "12px", display: "flex", alignItems: "center", gap: "10px",
+              bgcolor: "rgba(0,0,0,.1)",
             }}>
-              {selected?.name ?? profile?.email ?? ""}
+              <Box aria-hidden sx={{
+                width: 28, height: 28, borderRadius: "8px", flexShrink: 0, display: "grid", placeItems: "center",
+                bgcolor: "rgba(255,255,255,.12)", color: "#fff", "& svg": { fontSize: 16 },
+              }}>
+                <ApartmentRounded />
+              </Box>
+              <Box component="span" sx={{
+                minWidth: 0, fontSize: T.body - 0.5, fontWeight: 700, color: "rgba(255,255,255,.9)",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}>
+                {selected?.name ?? profile?.email ?? ""}
+              </Box>
             </Box>
           </>
         )}
@@ -278,7 +306,7 @@ export function AppLayout() {
             aria-label={t("Ubicación")}
             sx={{
               display: "flex", alignItems: "center", gap: "6px", minWidth: 0,
-              fontSize: T.body, color: "text.secondary", mr: 1,
+              fontSize: T.body, color: "text.secondary", mr: 1.5,
             }}
           >
             {currentSection && !isMobile && (
@@ -288,12 +316,16 @@ export function AppLayout() {
               </>
             )}
             <Box component="span" aria-current="page" sx={{
-              color: "text.primary", fontWeight: 700, whiteSpace: "nowrap",
+              color: "text.primary", fontWeight: 700, fontSize: 16, letterSpacing: "-0.01em", whiteSpace: "nowrap",
               overflow: "hidden", textOverflow: "ellipsis",
             }}>
               {currentTitle}
             </Box>
           </Box>
+
+          {/* El ámbito va junto al título, como en el resto de la suite: dice sobre qué
+              empresa trabaja la pantalla que se está leyendo. */}
+          {!isMobile && <CompanySelector />}
 
           {/* Centro: buscador de pantallas */}
           <Box sx={{ flex: 1, display: "flex", justifyContent: "center", minWidth: 0 }}>
@@ -302,8 +334,6 @@ export function AppLayout() {
 
           {/* Derecha: contexto y controles */}
           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 0.4, flexShrink: 0 }}>
-            {!isMobile && <CompanySelector />}
-
             <Tooltip title={mode === "dark" ? t("Modo claro") : t("Modo oscuro")}>
               <IconButton onClick={toggleMode} sx={topIconSx} aria-label={t("Apariencia")}>
                 {mode === "dark" ? <LightModeRounded /> : <DarkModeRounded />}
@@ -312,8 +342,7 @@ export function AppLayout() {
 
             <NotificationsMenu iconSx={topIconSx} />
 
-            <Divider orientation="vertical" flexItem sx={{ mx: 1, my: 1.5 }} />
-
+            <Box sx={{ width: 8 }} />
             <AccountMenu />
           </Box>
         </Toolbar>

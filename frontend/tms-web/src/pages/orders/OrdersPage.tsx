@@ -1,15 +1,15 @@
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Box, Button, MenuItem, TextField, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Tooltip, Typography } from "@mui/material";
 import {
   AddRounded, UploadRounded, AssignmentTurnedInRounded, EditRounded, VisibilityRounded,
-  CheckCircleRounded, CancelRounded, ReplayRounded, ScaleRounded, ViewInArRounded, LayersRounded,
+  CheckCircleRounded, CancelRounded, ReplayRounded, ArrowForwardRounded,
 } from "@mui/icons-material";
 import { fetchDestinations } from "../../shared/api/destinationsApi";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
-  ORDER_PRIORITIES, ORDER_STATUSES, REOPENABLE_ORDER_STATUSES, cancelOrder, fetchOrders,
+  ORDER_STATUSES, REOPENABLE_ORDER_STATUSES, cancelOrder, fetchOrders,
   reopenOrderForPlanning,
   type OrderFulfillmentStatus, type OrderPriority, type OrderStatus, type OrderView,
 } from "../../shared/api/ordersApi";
@@ -17,19 +17,21 @@ import { fetchOrigins } from "../../shared/api/originsApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  ActionMenu, DataTable, KpiCard, PageHeader, Pagination, StatusChip, Toolbar,
+  ActionMenu, DataTable, PageHeader, Pagination, StatusChip,
   type DataTableColumn,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { confirmDialog, notifyError, notifySuccess, promptDialog } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
-import type { StatusTone } from "../../theme";
+import { T, type StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
 import { fmtDate, fmtDecimal, fmtQuantity, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
 import { OrderFormDrawer } from "./OrderFormDrawer";
 import { isPartlyPlanned } from "../../shared/api/ordersApi";
 import { OrderImportDrawer } from "./OrderImportDrawer";
 import { releaseWithOverride } from "../scheduling/releaseFlow";
+import { OrderFilterBar, OrderStatusTabs } from "./OrderFilters";
+import { DEFAULT_ORDER_FILTERS, type OrderFilters } from "./orderFilterModel";
 
 const PAGE_SIZE = 25;
 
@@ -52,42 +54,6 @@ const STATUS_TONE: Record<OrderStatus, StatusTone> = {
   CANCELLED: "cancelled",
 };
 
-/**
- * Los colores del resultado de entrega, aparte de `STATUS_TONE` porque las dos columnas
- * responden preguntas distintas: una dice si el pedido puede subir a un camión, la otra dice qué
- * pasó cuando subió. `PENDING` es neutro y no ámbar — un pedido que nadie ha entregado todavía
- * es el estado normal de casi toda la lista, no un problema.
- */
-const FULFILLMENT_TONE: Record<OrderFulfillmentStatus, StatusTone> = {
-  PENDING: "neutral",
-  DELIVERED: "done",
-  PARTIALLY_DELIVERED: "inProgress",
-  REJECTED: "overdue",
-  FAILED: "overdue",
-  NOT_ATTEMPTED: "neutral",
-};
-
-const PRIORITY_TONE: Record<OrderPriority, StatusTone> = {
-  LOW: "neutral",
-  NORMAL: "neutral",
-  HIGH: "inProgress",
-  URGENT: "overdue",
-};
-
-interface AppliedFilters {
-  orderNumber: string;
-  originId: string;
-  destinationId: string;
-  serviceDateFrom: string;
-  serviceDateTo: string;
-  status: OrderStatus | "";
-  priority: OrderPriority | "";
-}
-
-const DEFAULT_FILTERS: AppliedFilters = {
-  orderNumber: "", originId: "", destinationId: "", serviceDateFrom: "", serviceDateTo: "", status: "", priority: "",
-};
-
 type ModalState = { mode: "create" } | { mode: "edit"; orderId: string } | { mode: "import" } | null;
 
 /** Totales de las filas que están en pantalla. Deliberadamente no se presentan como una cifra de
@@ -104,6 +70,47 @@ function pageTotals(rows: OrderView[]) {
   );
 }
 
+/** Pila monoespaciada para los identificadores de pedido: se leen y se dictan carácter a carácter. */
+const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+
+/** Los parámetros de consulta de unos filtros, sin el estado: lo pone quien llama. */
+function filterQuery(filters: OrderFilters) {
+  return {
+    orderNumber: filters.orderNumber || undefined,
+    originId: filters.originId || undefined,
+    destinationId: filters.destinationId || undefined,
+    serviceDateFrom: filters.serviceDateFrom || undefined,
+    serviceDateTo: filters.serviceDateTo || undefined,
+    priority: filters.priority || undefined,
+  };
+}
+
+/** Texto principal y secundario de una celda de dos renglones. */
+function TwoLine({ primary, secondary, mono, strike }: {
+  primary: ReactNode; secondary?: ReactNode; mono?: boolean; strike?: boolean;
+}) {
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography variant="body2" noWrap sx={{
+        fontWeight: 600, fontFamily: mono ? MONO : undefined, letterSpacing: mono ? "-0.01em" : undefined,
+        textDecoration: strike ? "line-through" : undefined, fontVariantNumeric: "tabular-nums",
+      }}>
+        {primary}
+      </Typography>
+      {secondary && (
+        <Typography noWrap sx={{ fontSize: T.micro + 0.5, color: "text.secondary", mt: "1px" }}>
+          {secondary}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+const PRIORITY_COLOR: Partial<Record<OrderPriority, string>> = { HIGH: "warning.main", URGENT: "error.main" };
+const FULFILLMENT_COLOR: Partial<Record<OrderFulfillmentStatus, string>> = {
+  DELIVERED: "success.main", PARTIALLY_DELIVERED: "warning.main", REJECTED: "error.main", FAILED: "error.main",
+};
+
 export function OrdersPage() {
   const { selected, hasPermission } = useCompany();
   const companyId = selected?.id ?? "";
@@ -113,10 +120,11 @@ export function OrdersPage() {
   const [searchParams] = useSearchParams();
   const [page, setPage] = useState(0);
   // `?orderNumber=` abre la lista ya filtrada: es el "Ir al pedido" de Programación y Liberación.
-  const [draft, setDraft] = useState<AppliedFilters>(
-    () => ({ ...DEFAULT_FILTERS, orderNumber: searchParams.get("orderNumber") ?? "" }));
-  const [filters, setFilters] = useState<AppliedFilters>(draft);
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
+  const [filters, setFiltersState] = useState<OrderFilters>(
+    () => ({ ...DEFAULT_ORDER_FILTERS, orderNumber: searchParams.get("orderNumber") ?? "" }));
   const [modal, setModal] = useState<ModalState>(null);
+  const setFilters = useCallback((next: OrderFilters) => { setFiltersState(next); setPage(0); }, []);
 
   const ordersQuery = useQuery({
     queryKey: ["orders", companyId, page, filters],
@@ -126,17 +134,28 @@ export function OrdersPage() {
         page,
         size: PAGE_SIZE,
         sort: "serviceDate,desc",
-        orderNumber: filters.orderNumber || undefined,
-        originId: filters.originId || undefined,
-        destinationId: filters.destinationId || undefined,
-        serviceDateFrom: filters.serviceDateFrom || undefined,
-        serviceDateTo: filters.serviceDateTo || undefined,
+        ...filterQuery(filters),
         status: filters.status || undefined,
-        priority: filters.priority || undefined,
         signal,
       }),
     placeholderData: keepPreviousData,
   });
+
+  // Cuántos pedidos hay en cada estado con los demás filtros: una consulta de una fila por
+  // estado, de la que solo se lee `totalElements`. Es lo mismo que hace Inicio con sus contadores.
+  const countFilters = { ...filters, status: "" as const };
+  const countQueries = useQueries({
+    queries: ORDER_STATUSES.map((status) => ({
+      queryKey: ["orders", companyId, "count", status, countFilters],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        fetchOrders({ companyId, page: 0, size: 1, ...filterQuery(countFilters), status, signal }),
+      enabled: companyId !== "",
+      placeholderData: keepPreviousData,
+    })),
+  });
+  const counts = countQueries.every((q) => q.data)
+    ? Object.fromEntries(ORDER_STATUSES.map((status, i) => [status, countQueries[i].data!.totalElements])) as Record<OrderStatus, number>
+    : undefined;
 
   const originsQuery = useQuery({
     queryKey: ["origins-for-order-filter", companyId],
@@ -155,8 +174,6 @@ export function OrdersPage() {
     void queryClient.invalidateQueries({ queryKey: ["eligible-orders", companyId] });
   }
 
-  function applyFilters() { setFilters(draft); setPage(0); }
-  function resetFilters() { setDraft(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); setPage(0); }
 
   async function markReady(order: OrderView) {
     const confirmed = await confirmDialog({
@@ -220,67 +237,103 @@ export function OrdersPage() {
     {
       key: "orderNumber",
       header: t("Pedido"),
-      render: (order) => <Typography variant="body2" sx={{ fontWeight: 800 }}>{order.orderNumber}</Typography>,
+      width: 190,
+      render: (order) => (
+        <TwoLine mono primary={order.orderNumber} secondary={order.customerName ?? t("Sin cliente")} />
+      ),
     },
     {
-      key: "origin",
-      header: t("Origen"),
+      // Origen y destino en una sola columna: se leen como un trayecto, que es lo que son.
+      key: "route",
+      header: t("Ruta"),
+      width: 250,
       render: (order) => (
-        <Tooltip title={order.originName ?? ""}>
-          <Typography variant="body2" noWrap sx={{ maxWidth: "14rem" }}>
-            {order.originName ?? order.originCode ?? "-"}
-          </Typography>
+        <Tooltip title={`${order.originName ?? order.originCode ?? "-"} → ${order.destinationName ?? order.destinationCode ?? "-"}`}>
+          <Box sx={{ minWidth: 0, maxWidth: 260 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+              <Typography noWrap sx={{ fontFamily: MONO, fontSize: T.micro + 0.5, fontWeight: 600, color: "text.secondary", flexShrink: 0 }}>
+                {order.originCode ?? order.originName ?? "-"}
+              </Typography>
+              <ArrowForwardRounded aria-hidden sx={{ fontSize: 13, color: "text.secondary", flexShrink: 0 }} />
+              <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
+                {order.destinationName ?? order.destinationCode ?? "-"}
+              </Typography>
+            </Box>
+            {order.destinationCode && (
+              <Typography noWrap sx={{ fontFamily: MONO, fontSize: T.micro, color: "text.secondary", mt: "1px" }}>
+                {t("Destino")} {order.destinationCode}
+              </Typography>
+            )}
+          </Box>
         </Tooltip>
       ),
     },
     {
-      key: "destination",
-      header: t("Destino"),
+      key: "serviceDate",
+      header: t("Servicio"),
+      width: 140,
       render: (order) => (
-        <Tooltip title={order.destinationName ?? ""}>
-          <Typography variant="body2" noWrap sx={{ maxWidth: "14rem" }}>
-            {order.destinationName ?? order.destinationCode ?? "-"}
-          </Typography>
-        </Tooltip>
+        <TwoLine
+          primary={fmtDate(order.serviceDate)}
+          strike={order.status === "CANCELLED"}
+          secondary={order.requestedWindowStart && order.requestedWindowEnd
+            ? `${order.requestedWindowStart.slice(0, 5)} – ${order.requestedWindowEnd.slice(0, 5)}`
+            : t("Sin ventana")}
+        />
       ),
     },
-    { key: "serviceDate", header: t("Fecha requerida"), render: (order) => fmtDate(order.serviceDate) },
     {
+      // Solo Alta y Urgente llevan color: si todo destaca, nada destaca.
       key: "priority",
       header: t("Prioridad"),
+      width: 110,
+      render: (order) => {
+        const color = PRIORITY_COLOR[order.priority];
+        return (
+          <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+            <Box aria-hidden sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: color ?? "divider", flexShrink: 0 }} />
+            <Typography variant="body2" sx={{ fontWeight: color ? 700 : 500, color: color ?? "text.secondary" }}>
+              {enumLabel("orderPriority", order.priority)}
+            </Typography>
+          </Box>
+        );
+      },
+    },
+    {
+      key: "load",
+      header: t("Carga"),
+      width: 190,
       render: (order) => (
-        <StatusChip label={enumLabel("orderPriority", order.priority)} tone={PRIORITY_TONE[order.priority]} />
+        <TwoLine
+          primary={fmtWeightKg(order.totalWeightKg)}
+          secondary={`${fmtVolumeM3(order.totalVolumeM3)} · ${fmtDecimal(order.totalPallets)} ${t("pallets")} · ${fmtQuantity(order.lineCount)} ${order.lineCount === 1 ? t("línea") : t("líneas")}`}
+        />
       ),
     },
-    { key: "weight", header: t("Peso"), numeric: true, render: (order) => fmtWeightKg(order.totalWeightKg) },
-    { key: "volume", header: t("Volumen"), numeric: true, render: (order) => fmtVolumeM3(order.totalVolumeM3) },
-    { key: "pallets", header: t("Pallets"), numeric: true, render: (order) => fmtDecimal(order.totalPallets) },
-    { key: "lines", header: t("Líneas"), numeric: true, render: (order) => fmtQuantity(order.lineCount) },
     {
+      // El estado de planificación y, debajo, el resultado de la entrega. Un pedido rechazado en
+      // el muelle sigue siendo un pedido planificado: enseñar solo "Planificado" le diría al
+      // despachador que el trabajo está hecho, por eso la entrega tiene color cuando algo falló.
       key: "status",
       header: t("Estado"),
       render: (order) => (
-        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
-          <StatusChip label={enumLabel("orderStatus", order.status)} tone={STATUS_TONE[order.status]} />
-          {isPartlyPlanned(order) && (
-            <Tooltip title={t("Parte del pedido ya está en un viaje; el resto sigue planificable")}>
-              <span><StatusChip label={t("Parcialmente planificado")} tone="neutral" /></span>
-            </Tooltip>
-          )}
+        <Box sx={{ minWidth: 0 }}>
+          <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+            <StatusChip label={enumLabel("orderStatus", order.status)} tone={STATUS_TONE[order.status]} />
+            {isPartlyPlanned(order) && (
+              <Tooltip title={t("Parte del pedido ya está en un viaje; el resto sigue planificable")}>
+                <span><StatusChip label={t("Parcialmente planificado")} tone="neutral" /></span>
+              </Tooltip>
+            )}
+          </Box>
+          <Typography noWrap sx={{
+            fontSize: T.micro + 0.5, mt: "3px",
+            color: FULFILLMENT_COLOR[order.fulfillmentStatus] ?? "text.secondary",
+            fontWeight: FULFILLMENT_COLOR[order.fulfillmentStatus] ? 600 : 400,
+          }}>
+            {t("Entrega")}: {enumLabel("orderFulfillmentStatus", order.fulfillmentStatus)}
+          </Typography>
         </Box>
-      ),
-    },
-    {
-      // Columna propia, al lado del estado de planificación y no en su lugar. Un pedido que
-      // rechazaron en el muelle sigue siendo un pedido planificado, y una lista que solo
-      // enseñara "Planificado" le estaría diciendo al despachador que el trabajo está hecho.
-      key: "fulfillment",
-      header: t("Entrega"),
-      render: (order) => (
-        <StatusChip
-          label={enumLabel("orderFulfillmentStatus", order.fulfillmentStatus)}
-          tone={FULFILLMENT_TONE[order.fulfillmentStatus]}
-        />
       ),
     },
   ];
@@ -288,7 +341,7 @@ export function OrdersPage() {
   if (canManage) {
     columns.push({
       key: "actions",
-      header: t("Acciones"),
+      header: "",
       actions: true,
       render: (order) => {
         const editable = order.status === "NOT_READY" || order.status === "READY_FOR_PLANNING";
@@ -343,6 +396,8 @@ export function OrdersPage() {
   const pageData = ordersQuery.data;
   const rows = pageData?.content ?? [];
   const totals = pageTotals(rows);
+  const toOptions = (items: { id: string; code: string; name: string }[] | undefined) =>
+    (items ?? []).map((item) => ({ id: item.id, label: `${item.code} · ${item.name}` }));
 
   return (
     <>
@@ -350,7 +405,7 @@ export function OrdersPage() {
         icon={<AssignmentTurnedInRounded />}
         tint={ICON_TINTS["/orders"]}
         title={t("Pedidos")}
-        subtitle={t("Pedidos de transporte: cabecera más líneas. Los totales siempre los calcula y controla el backend.")}
+        subtitle={t("Pedidos de transporte por fecha de servicio. Los totales los calcula el backend.")}
         onRefresh={refresh}
         refreshing={ordersQuery.isFetching}
         actions={canManage && (
@@ -365,84 +420,17 @@ export function OrdersPage() {
         )}
       />
 
-      {/* Los totales de la página, no de la empresa: el backend pagina y esta suma solo puede
-          hablar de lo que hay en pantalla. Se dice literalmente, debajo. */}
-      <Box sx={{
-        display: "grid", gap: 2, mb: 2,
-        gridTemplateColumns: { xs: "1fr", sm: "repeat(3, minmax(0, 1fr))" },
-      }}>
-        <KpiCard icon={<ScaleRounded />} color="info.main" title={t("Peso en esta página")} value={fmtWeightKg(totals.weight)} loading={ordersQuery.isPending} />
-        <KpiCard icon={<ViewInArRounded />} color="secondary.main" title={t("Volumen en esta página")} value={fmtVolumeM3(totals.volume)} loading={ordersQuery.isPending} />
-        <KpiCard icon={<LayersRounded />} color="warning.main" title={t("Pallets en esta página")} value={fmtDecimal(totals.pallets)} loading={ordersQuery.isPending} />
-      </Box>
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
-        {t("Los totales corresponden solo a los pedidos de esta página.")}
-      </Typography>
+      <OrderStatusTabs
+        value={filters.status}
+        counts={counts}
+        onChange={(status) => setFilters({ ...filters, status })}
+      />
 
-      <Toolbar
-        onApply={applyFilters}
-        onReset={resetFilters}
-        filters={
-          <>
-            <TextField
-              size="small" label={t("Pedido")} value={draft.orderNumber}
-              onChange={(e) => setDraft({ ...draft, orderNumber: e.target.value })}
-              sx={{ minWidth: 150 }}
-            />
-            <TextField
-              select size="small" label={t("Origen")} value={draft.originId}
-              onChange={(e) => setDraft({ ...draft, originId: e.target.value })}
-              sx={{ minWidth: 190 }}
-            >
-              <MenuItem value="">{t("Todos los orígenes")}</MenuItem>
-              {(originsQuery.data?.content ?? []).map((origin) => (
-                <MenuItem key={origin.id} value={origin.id}>{origin.name}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Destino")} value={draft.destinationId}
-              onChange={(e) => setDraft({ ...draft, destinationId: e.target.value })}
-              sx={{ minWidth: 190 }}
-            >
-              <MenuItem value="">{t("Todos los destinos")}</MenuItem>
-              {(destinationsQuery.data?.content ?? []).map((destination) => (
-                <MenuItem key={destination.id} value={destination.id}>{destination.name}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              size="small" type="date" label={t("Desde")} value={draft.serviceDateFrom}
-              onChange={(e) => setDraft({ ...draft, serviceDateFrom: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ minWidth: 160 }}
-            />
-            <TextField
-              size="small" type="date" label={t("Hasta")} value={draft.serviceDateTo}
-              onChange={(e) => setDraft({ ...draft, serviceDateTo: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ minWidth: 160 }}
-            />
-            <TextField
-              select size="small" label={t("Estado")} value={draft.status}
-              onChange={(e) => setDraft({ ...draft, status: e.target.value as OrderStatus | "" })}
-              sx={{ minWidth: 180 }}
-            >
-              <MenuItem value="">{t("Todos los estados")}</MenuItem>
-              {ORDER_STATUSES.map((status) => (
-                <MenuItem key={status} value={status}>{enumLabel("orderStatus", status)}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Prioridad")} value={draft.priority}
-              onChange={(e) => setDraft({ ...draft, priority: e.target.value as OrderPriority | "" })}
-              sx={{ minWidth: 180 }}
-            >
-              <MenuItem value="">{t("Todas las prioridades")}</MenuItem>
-              {ORDER_PRIORITIES.map((priority) => (
-                <MenuItem key={priority} value={priority}>{enumLabel("orderPriority", priority)}</MenuItem>
-              ))}
-            </TextField>
-          </>
-        }
+      <OrderFilterBar
+        value={filters}
+        onChange={setFilters}
+        origins={toOptions(originsQuery.data?.content)}
+        destinations={toOptions(destinationsQuery.data?.content)}
       />
 
       <DataTable
@@ -456,7 +444,18 @@ export function OrdersPage() {
         emptyTitle={t("Sin pedidos")}
         emptyMessage={t("Crea un pedido o ajusta los filtros.")}
         onRowClick={(order) => setModal({ mode: "edit", orderId: order.id })}
-        footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
+        footer={pageData && pageData.totalElements > 0 ? (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+            {/* Los totales de la página, no de la empresa: el backend pagina y esta suma solo
+                puede hablar de lo que hay en pantalla. Se dice literalmente. */}
+            <Typography sx={{ fontSize: T.micro, color: "text.secondary", fontVariantNumeric: "tabular-nums", order: { xs: 2, md: 0 } }}>
+              {t("Esta página")}: {fmtWeightKg(totals.weight)} · {fmtVolumeM3(totals.volume)} · {fmtDecimal(totals.pallets)} {t("pallets")}
+            </Typography>
+            <Box sx={{ flex: 1, minWidth: 280 }}>
+              <Pagination page={pageData} onPageChange={setPage} />
+            </Box>
+          </Box>
+        ) : undefined}
       />
 
       {(modal?.mode === "create" || modal?.mode === "edit") && (

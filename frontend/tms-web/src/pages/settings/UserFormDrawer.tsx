@@ -4,14 +4,14 @@ import { Controller, useForm } from "react-hook-form";
 import {
   Alert, Box, Button, Checkbox, FormControlLabel, Paper, TextField, Typography,
 } from "@mui/material";
-import { PersonAddRounded, PersonRounded } from "@mui/icons-material";
+import { CheckRounded, PersonAddRounded, PersonRounded } from "@mui/icons-material";
 import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
   fetchAssignableRoles, inviteUser, updateUserProfile, updateUserRoles,
   type AdministeredUserView,
 } from "../../shared/api/administrationApi";
-import { FormDrawer, SectionHeader } from "../../shared/ui/components";
+import { ActiveBadge, FormDrawer, FormRow, FormSection } from "../../shared/ui/components";
 import { t } from "../../lib/i18n";
 
 const FORM_ID = "user-form";
@@ -98,25 +98,33 @@ export function UserFormDrawer({ companyId, user, onClose, onSaved }: UserFormDr
       open
       icon={isEdit ? <PersonRounded /> : <PersonAddRounded />}
       title={isEdit ? t("Editar acceso") : t("Invitar a alguien")}
-      subtitle={isEdit ? user.email : t("Se le da acceso a esta empresa con los roles que elijas.")}
+      subtitle={isEdit
+        ? [user.fullName, user.email].filter(Boolean).join(" · ")
+        : t("Se le da acceso a esta empresa con los roles que elijas.")}
+      titleAdornment={isEdit ? <ActiveBadge active={user.membershipActive} /> : undefined}
       size="md"
       onClose={onClose}
       dirty={isDirty}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
-          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
-            {isSubmitting ? t("Guardando...") : isEdit ? t("Guardar") : t("Invitar")}
+          <Button onClick={onClose} disabled={isSubmitting} color="inherit" sx={{ color: "text.secondary" }}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" startIcon={<CheckRounded />} disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : isEdit ? t("Guardar cambios") : t("Invitar persona")}
           </Button>
         </>
       }
     >
       <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+        {formError && <Alert severity="error" sx={{ mb: 1 }}>{formError}</Alert>}
 
-        <SectionHeader title={t("Identidad")} />
-        <Box sx={{ display: "grid", gap: 2, mb: 3 }}>
+        <FormSection
+          title={t("Identidad")}
+          help={isEdit
+            ? t("Cómo se llama la persona. El correo no se cambia: sería invitar a otra.")
+            : t("A quién se invita y cómo se llama.")}
+        >
+        <FormRow cols={1}>
           {!isEdit && (
             <TextField
               label={t("Correo electrónico")} required size="small" fullWidth type="email"
@@ -132,11 +140,12 @@ export function UserFormDrawer({ companyId, user, onClose, onSaved }: UserFormDr
             error={Boolean(errors.fullName)} helperText={errors.fullName?.message}
             {...register("fullName", { required: t("Este campo es obligatorio") })}
           />
-        </Box>
+        </FormRow>
+        </FormSection>
 
-        <SectionHeader title={t("Roles")} />
+        <FormSection title={t("Roles")} help={t("Lo que puede hacer en esta empresa. Al menos uno.")}>
         {user?.organizationWide && (
-          <Alert severity="info" sx={{ mb: 2 }}>
+          <Alert severity="info">
             {t("Esta persona tiene un rol de organización: alcanza a todas las empresas y no se cambia desde aquí.")}
           </Alert>
         )}
@@ -183,6 +192,7 @@ export function UserFormDrawer({ companyId, user, onClose, onSaved }: UserFormDr
             </Box>
           )}
         />
+        </FormSection>
       </Box>
     </FormDrawer>
   );

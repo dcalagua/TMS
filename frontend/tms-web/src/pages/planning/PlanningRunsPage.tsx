@@ -1,8 +1,11 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, MenuItem, TextField, Typography } from "@mui/material";
-import { AddRounded, ViewKanbanRounded, OpenInNewRounded } from "@mui/icons-material";
+import { Box, Button, Typography } from "@mui/material";
+import {
+  AddRounded, ViewKanbanRounded, ArrowForwardRounded, BoltRounded, PanToolOutlined,
+  WarehouseRounded, EventRounded, FlagRounded,
+} from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchOrigins } from "../../shared/api/originsApi";
 import {
@@ -12,7 +15,7 @@ import {
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  DataTable, PageHeader, Pagination, StatusChip, Toolbar, type DataTableColumn,
+  DataTable, FilterBar, PageHeader, Pagination, StatusChip, type DataTableColumn,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { enumLabel } from "../../lib/enums";
@@ -55,8 +58,9 @@ export function PlanningRunsPage() {
   const navigate = useNavigate();
 
   const [page, setPage] = useState(0);
-  const [draft, setDraft] = useState<AppliedFilters>(DEFAULT_FILTERS);
-  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
+  const [filters, setFiltersState] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const setFilters = (next: AppliedFilters) => { setFiltersState(next); setPage(0); };
   const [showCreate, setShowCreate] = useState(false);
 
   const runsQuery = useQuery({
@@ -83,14 +87,26 @@ export function PlanningRunsPage() {
     enabled: companyId !== "",
   });
 
-  function applyFilters() { setFilters(draft); setPage(0); }
-  function resetFilters() { setDraft(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); setPage(0); }
-
   const columns: DataTableColumn<PlanningRunView>[] = [
-    { key: "planNumber", header: t("Plan"), render: (run) => <Typography variant="body2" sx={{ fontWeight: 800 }}>{run.planNumber}</Typography> },
+    { key: "planNumber", header: t("Plan"), render: (run) => (
+        <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: "tabular-nums", letterSpacing: ".01em", whiteSpace: "nowrap" }}>
+          {run.planNumber}
+        </Typography>
+      ) },
     { key: "origin", header: t("Origen"), render: (run) => run.originName ?? run.originCode ?? "-" },
     { key: "planningDate", header: t("Fecha de planificación"), render: (run) => fmtDate(run.planningDate) },
-    { key: "mode", header: t("Modo"), render: (run) => run.mode === "AUTOMATIC" ? t("Automático") : t("Manual") },
+    {
+      key: "mode",
+      header: t("Modo"),
+      render: (run) => (
+        <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.75, whiteSpace: "nowrap" }}>
+          {run.mode === "AUTOMATIC"
+            ? <BoltRounded aria-hidden sx={{ fontSize: 15, color: "text.secondary" }} />
+            : <PanToolOutlined aria-hidden sx={{ fontSize: 14, color: "text.secondary" }} />}
+          {run.mode === "AUTOMATIC" ? t("Automático") : t("Manual")}
+        </Box>
+      ),
+    },
     {
       key: "status",
       header: t("Estado"),
@@ -104,8 +120,9 @@ export function PlanningRunsPage() {
       actions: true,
       render: (run) => (
         <Button
-          size="small" variant="outlined" endIcon={<OpenInNewRounded />}
+          size="small" variant="outlined" color="inherit" endIcon={<ArrowForwardRounded sx={{ fontSize: "15px !important" }} />}
           onClick={(e) => { e.stopPropagation(); navigate(`/planning/${run.id}`); }}
+          sx={{ borderColor: "divider", whiteSpace: "nowrap" }}
         >
           {t("Abrir")}
         </Button>
@@ -131,50 +148,21 @@ export function PlanningRunsPage() {
         )}
       />
 
-      <Toolbar
-        onApply={applyFilters}
-        onReset={resetFilters}
-        filters={
-          <>
-            <TextField
-              size="small" label={t("Plan")} value={draft.planNumber}
-              onChange={(e) => setDraft({ ...draft, planNumber: e.target.value })}
-              sx={{ minWidth: 150 }}
-            />
-            <TextField
-              select size="small" label={t("Origen")} value={draft.originId}
-              onChange={(e) => setDraft({ ...draft, originId: e.target.value })}
-              sx={{ minWidth: 200 }}
-            >
-              <MenuItem value="">{t("Todos los orígenes")}</MenuItem>
-              {(originsQuery.data?.content ?? []).map((origin) => (
-                <MenuItem key={origin.id} value={origin.id}>{origin.name}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              size="small" type="date" label={t("Desde")} value={draft.planningDateFrom}
-              onChange={(e) => setDraft({ ...draft, planningDateFrom: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ minWidth: 160 }}
-            />
-            <TextField
-              size="small" type="date" label={t("Hasta")} value={draft.planningDateTo}
-              onChange={(e) => setDraft({ ...draft, planningDateTo: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ minWidth: 160 }}
-            />
-            <TextField
-              select size="small" label={t("Estado")} value={draft.status}
-              onChange={(e) => setDraft({ ...draft, status: e.target.value as PlanningRunStatus | "" })}
-              sx={{ minWidth: 180 }}
-            >
-              <MenuItem value="">{t("Todos los estados")}</MenuItem>
-              {PLANNING_RUN_STATUSES.map((status) => (
-                <MenuItem key={status} value={status}>{enumLabel("planningRunStatus", status)}</MenuItem>
-              ))}
-            </TextField>
-          </>
-        }
+      <FilterBar
+        value={filters}
+        defaults={DEFAULT_FILTERS}
+        onChange={setFilters}
+        fields={[
+          { type: "search", key: "planNumber", placeholder: t("Plan") },
+          { type: "select", key: "originId", label: t("Origen"), icon: <WarehouseRounded />,
+            allLabel: t("Todos los orígenes"),
+            options: (originsQuery.data?.content ?? []).map((origin) => ({ id: origin.id, label: origin.name })) },
+          { type: "dateRange", from: "planningDateFrom", to: "planningDateTo", label: t("Fecha de planificación"),
+            icon: <EventRounded /> },
+          { type: "select", key: "status", label: t("Estado"), icon: <FlagRounded />,
+            allLabel: t("Todos los estados"),
+            options: PLANNING_RUN_STATUSES.map((status) => ({ id: status, label: enumLabel("planningRunStatus", status) })) },
+        ]}
       />
 
       <DataTable

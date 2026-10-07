@@ -79,6 +79,11 @@ export const dataTableSx: SxProps<Theme> = {
     bgcolor: (theme: Theme) => neutralSoft(theme.palette.mode === "dark"),
   },
   "& tbody .actions-col": { zIndex: 1 },
+  // La celda anclada lleva fondo opaco para tapar lo que pasa por debajo al desplazar; con el
+  // fondo del papel fijo, en hover quedaba un recuadro blanco sobre la fila gris.
+  "& tbody tr:hover .actions-col": {
+    bgcolor: (theme: Theme) => neutralSoft(theme.palette.mode === "dark"),
+  },
   // La columna del chevron: una señal, no un dato. Angosta y sin título.
   "& .open-col": { width: "36px", padding: 0, textAlign: "center", color: "text.secondary" },
 };

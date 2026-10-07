@@ -7,7 +7,7 @@ import { t } from "../../../lib/i18n";
 
 export type DrawerSize = "sm" | "md" | "lg" | "xl";
 
-const WIDTH: Record<DrawerSize, number> = { sm: 420, md: 560, lg: 760, xl: 980 };
+const WIDTH: Record<DrawerSize, number> = { sm: 440, md: 560, lg: 760, xl: 980 };
 
 export interface FormDrawerProps {
   open: boolean;
@@ -31,6 +31,10 @@ export interface FormDrawerProps {
   dirty?: boolean;
   /** Icono de identidad a la izquierda del título. */
   icon?: ReactNode;
+  /** Junto al título: el estado del registro (p. ej. el chip «Activo»). */
+  titleAdornment?: ReactNode;
+  /** Al inicio del pie, a la izquierda de los botones: cuándo se actualizó, qué falta. */
+  footerStart?: ReactNode;
 }
 
 /**
@@ -47,7 +51,7 @@ export interface FormDrawerProps {
  */
 export function FormDrawer({
   open, title, subtitle, onClose, children, footer, size = "md",
-  loading = false, closeOnBackdrop = true, dirty = false, icon,
+  loading = false, closeOnBackdrop = true, dirty = false, icon, titleAdornment, footerStart,
 }: FormDrawerProps) {
   /**
    * El camino de descarte por el que pasa todo cierre "blando". El trabajo sin guardar nunca se
@@ -109,12 +113,15 @@ export function FormDrawer({
       }}>
         {icon && (
           <Box sx={{
-            width: 36, height: 36, borderRadius: 2, flexShrink: 0, display: "grid", placeItems: "center",
+            width: 36, height: 36, borderRadius: "8px", flexShrink: 0, display: "grid", placeItems: "center",
             bgcolor: "action.hover", color: "primary.main", "& svg": { fontSize: 20 },
           }}>{icon}</Box>
         )}
         <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.25 }}>{title}</Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.25 }}>{title}</Typography>
+            {titleAdornment}
+          </Box>
           {subtitle && (
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>{subtitle}</Typography>
           )}
@@ -124,7 +131,9 @@ export function FormDrawer({
         </IconButton>
       </Box>
 
-      <Box sx={{ flex: 1, overflowY: "auto", px: 2.5, py: 2.5 }}>
+      {/* Contenedor de consulta: las secciones y filas del formulario se maquetan según el ancho
+          de este cuerpo (FormLayout), no según el de la pantalla. */}
+      <Box sx={{ flex: 1, overflowY: "auto", px: 2.5, py: 2.5, containerType: "inline-size", containerName: "formbody" }}>
         {loading ? <LoadingState /> : children}
       </Box>
 
@@ -132,9 +141,10 @@ export function FormDrawer({
         <>
           <Divider />
           <Box sx={{
-            display: "flex", justifyContent: "flex-end", gap: 1, px: 2.5, py: 1.75, flexShrink: 0,
+            display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 1, px: 2.5, py: 1.75, flexShrink: 0,
             bgcolor: "background.paper",
           }}>
+            {footerStart && <Box sx={{ flex: 1, minWidth: 0, display: { xs: "none", sm: "block" } }}>{footerStart}</Box>}
             {footer}
           </Box>
         </>

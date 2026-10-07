@@ -2,22 +2,23 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  Box, Button, Chip, Paper, Tab, Tabs, Typography, useMediaQuery, useTheme,
+  Box, Button, ButtonBase, Chip, Paper, Tab, Tabs, Typography, useMediaQuery, useTheme,
 } from "@mui/material";
 import {
-  ArrowBackRounded, AutoFixHighRounded, AddRounded, ViewKanbanRounded, LocalShippingRounded,
+  ArrowBackRounded, BoltRounded, AddRounded, LocalShippingRounded, CheckRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
-import { cancelPlanningRun, confirmPlanningRun, fetchPlanningRun } from "../../shared/api/planningApi";
+import {
+  cancelPlanningRun, confirmPlanningRun, fetchEligibleOrders, fetchPlanningRun,
+} from "../../shared/api/planningApi";
 import { describeApiError, describePlanningError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
   EmptyState, ErrorState, LoadingState, PageHeader, StatusChip,
 } from "../../shared/ui/components";
-import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
-import type { StatusTone } from "../../theme";
+import { R, type StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
 import { fmtDate } from "../../lib/locale";
 import { AutoPlanDrawer } from "./AutoPlanDrawer";
@@ -25,6 +26,7 @@ import { CreateTripDrawer } from "./CreateTripDrawer";
 import { EligibleOrdersPanel } from "./EligibleOrdersPanel";
 import { TripCard } from "./TripCard";
 import { TripDetailDrawer } from "./TripDetailDrawer";
+import { PlanSummaryStrip } from "./PlanSummaryStrip";
 
 const STATUS_TONE: Record<"DRAFT" | "CONFIRMED" | "CANCELLED", StatusTone> = {
   DRAFT: "open",
@@ -67,6 +69,18 @@ export function PlanningBoardPage() {
   const [showCreateTrip, setShowCreateTrip] = useState(false);
   const [showAutoPlan, setShowAutoPlan] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>("orders");
+
+  // Cuántos pedidos quedan por asignar, para el resumen del plan: una página de una fila de la
+  // misma consulta del panel de la izquierda. Comparte su prefijo de clave, así que cada asignación
+  // que invalida el panel invalida también este número.
+  const run0 = runQuery.data?.run;
+  const eligibleCountQuery = useQuery({
+    queryKey: ["eligible-orders", companyId, runId, "count"],
+    queryFn: ({ signal }) => fetchEligibleOrders({
+      companyId, originId: run0!.originId, serviceDate: run0!.planningDate, page: 0, size: 1, signal,
+    }),
+    enabled: run0 !== undefined,
+  });
 
   /**
    * Vuelve a sincronizar las dos mitades del tablero. La bolsa de elegibles también hay que
@@ -138,11 +152,12 @@ export function PlanningBoardPage() {
       trips={trips}
       canManage={isDraft && canManageTrips}
       onAssigned={refreshBoard}
+      title={isNarrow ? undefined : t("Pedidos elegibles")}
     />
   );
 
   const tripsPanel = trips.length === 0 ? (
-    <Paper variant="outlined" sx={{ borderRadius: "10px" }}>
+    <Paper variant="outlined" sx={{ borderRadius: `${R.lg}px` }}>
       <EmptyState
         icon={<LocalShippingRounded />}
         title={t("Este plan todavía no tiene viajes")}
@@ -151,33 +166,54 @@ export function PlanningBoardPage() {
     </Paper>
   ) : (
     <Box sx={{
-      display: "grid", gap: 2,
-      gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" },
+      display: "grid", gap: 1.5,
+      // Dos columnas en un escritorio normal y tres cuando de verdad caben, sin que una tarjeta
+      // baje nunca de un ancho en el que las barras de capacidad se lean.
+      gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))",
     }}>
       {trips.map((trip) => (
         <TripCard key={trip.id} trip={trip} onOpen={() => setOpenTripId(trip.id)} />
       ))}
+      {isDraft && canManageTrips && (
+        /* El mismo «Nuevo viaje» de la cabecera, donde se mira cuando faltan viajes. */
+        <ButtonBase
+          onClick={() => setShowCreateTrip(true)}
+          sx={{
+            minHeight: 200, borderRadius: `${R.lg}px`, border: "1.5px dashed", borderColor: "divider",
+            display: "flex", flexDirection: "column", gap: 1, color: "text.secondary",
+            "&:hover": { borderColor: "primary.main", color: "primary.main", bgcolor: "action.hover" },
+          }}
+        >
+          <Box sx={{ width: 40, height: 40, borderRadius: "50%", display: "grid", placeItems: "center", bgcolor: "action.selected" }}>
+            <AddRounded />
+          </Box>
+          <Typography sx={{ fontWeight: 800, color: "text.primary" }}>{t("Nuevo viaje")}</Typography>
+          <Typography variant="caption">{t("Vehículo y hora de salida")}</Typography>
+        </ButtonBase>
+      )}
     </Box>
   );
 
   return (
     <>
       <Button
-        component={Link} to="/planning" size="small" startIcon={<ArrowBackRounded />}
-        sx={{ mb: 1, ml: -1 }}
+        component={Link} to="/planning" size="small" startIcon={<ArrowBackRounded sx={{ fontSize: "16px !important" }} />}
+        sx={{ mb: 1.5, ml: -1, fontWeight: 700 }}
       >
         {t("Volver a planes")}
       </Button>
 
       <PageHeader
-        icon={<ViewKanbanRounded />}
-        tint={ICON_TINTS["/planning"]}
         title={run.planNumber}
         subtitle={`${run.originName ?? run.originCode ?? ""} · ${fmtDate(run.planningDate)}`}
         meta={
           <>
             <StatusChip label={enumLabel("planningRunStatus", run.status)} tone={STATUS_TONE[run.status]} />
-            <Chip size="small" variant="outlined" label={t("{{count}} viajes", { count: trips.length })} />
+            <Chip
+              size="small" variant="outlined"
+              label={t("{{count}} viajes", { count: trips.length })}
+              sx={{ fontWeight: 700, color: "text.secondary", borderColor: "divider" }}
+            />
           </>
         }
         onRefresh={refreshBoard}
@@ -188,10 +224,10 @@ export function PlanningBoardPage() {
               <>
                 {/* Secundario y no principal: el plan que arma una persona sigue siendo el camino
                     normal, y este abre un paso de revisión en vez de hacer algo. */}
-                <Button variant="outlined" color="secondary" startIcon={<AutoFixHighRounded />} onClick={() => setShowAutoPlan(true)}>
+                <Button variant="outlined" color="inherit" startIcon={<BoltRounded />} onClick={() => setShowAutoPlan(true)} sx={{ borderColor: "divider" }}>
                   {t("Planificar automáticamente")}
                 </Button>
-                <Button variant="outlined" startIcon={<AddRounded />} onClick={() => setShowCreateTrip(true)}>
+                <Button variant="outlined" color="inherit" startIcon={<AddRounded />} onClick={() => setShowCreateTrip(true)} sx={{ borderColor: "divider" }}>
                   {t("Nuevo viaje")}
                 </Button>
               </>
@@ -201,13 +237,19 @@ export function PlanningBoardPage() {
                 <Button variant="outlined" color="error" onClick={() => void cancelPlan()}>
                   {t("Cancelar plan")}
                 </Button>
-                <Button variant="contained" onClick={() => void confirmPlan()}>
+                <Button variant="contained" startIcon={<CheckRounded />} onClick={() => void confirmPlan()}>
                   {t("Confirmar plan")}
                 </Button>
               </>
             )}
           </Box>
         }
+      />
+
+      <PlanSummaryStrip
+        trips={trips}
+        eligibleTotal={eligibleCountQuery.data?.totalElements}
+        eligibleLoading={eligibleCountQuery.isPending}
       />
 
       {/* Por debajo de `lg` los dos paneles se vuelven pestañas; por encima, una vista partida. */}
@@ -224,23 +266,21 @@ export function PlanningBoardPage() {
       )}
 
       <Box sx={{
-        display: "grid", gap: 3,
-        gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 4fr) minmax(0, 8fr)" },
+        display: "grid", gap: 2, alignItems: "start",
+        gridTemplateColumns: { xs: "1fr", lg: "370px minmax(0, 1fr)" },
       }}>
         {(!isNarrow || mobilePanel === "orders") && (
           <Box sx={{ minWidth: 0 }}>
-            {!isNarrow && (
-              <Typography variant="overline" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-                {t("Pedidos elegibles")}
-              </Typography>
-            )}
             {ordersPanel}
           </Box>
         )}
         {(!isNarrow || mobilePanel === "trips") && (
           <Box sx={{ minWidth: 0 }}>
             {!isNarrow && (
-              <Typography variant="overline" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+              <Typography
+                component="h2" variant="overline" color="text.secondary"
+                sx={{ display: "block", mb: 0.75, mt: -0.5, lineHeight: 1.6, letterSpacing: ".1em" }}
+              >
                 {t("Viajes")}
               </Typography>
             )}
@@ -276,6 +316,7 @@ export function PlanningBoardPage() {
           companyId={companyId}
           runId={run.id}
           runVersion={run.version}
+          run={run}
           onClose={() => setShowCreateTrip(false)}
           onCreated={() => {
             setShowCreateTrip(false);

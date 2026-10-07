@@ -1,0 +1,3 @@
+     × explica la suspensión comercial sin confundirla con un permiso 3ms
+ FAIL  src/shared/api/problemMessages.test.ts > describeApiError > explica la suspensión comercial sin confundirla con un permiso
+AssertionError: expected 'Algo salió mal. Vuelve a intentarlo.' to contain 'suscripción'

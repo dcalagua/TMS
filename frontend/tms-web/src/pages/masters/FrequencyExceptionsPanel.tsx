@@ -10,7 +10,7 @@ import {
 } from "../../shared/api/frequenciesApi";
 import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
-import { LoadingState, StatusChip, dataTableSx } from "../../shared/ui/components";
+import { DateInput, LoadingState, StatusChip, TimeInput, dataTableSx } from "../../shared/ui/components";
 import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
 import { t } from "../../lib/i18n";
 import { fmtDate } from "../../lib/locale";
@@ -115,10 +115,9 @@ export function FrequencyExceptionsPanel({ companyId, frequencyId, canManage }: 
 
       {canManage && (
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, alignItems: "flex-start", mb: 2 }}>
-          <TextField
-            size="small" type="date" label={t("Fecha")} value={date}
-            onChange={(e) => setDate(e.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
+          <DateInput
+            size="small" label={t("Fecha")} value={date}
+            onChange={(v) => setDate(v)}
             sx={{ minWidth: 165 }}
           />
           <TextField
@@ -132,10 +131,9 @@ export function FrequencyExceptionsPanel({ companyId, frequencyId, canManage }: 
           {/* Solo para una fecha abierta: una cerrada no despacha, así que un corte no
               significaría nada y el backend lo rechazaría. */}
           {kind === "open" && (
-            <TextField
-              size="small" type="time" label={t("Corte")} value={cutoff}
-              onChange={(e) => setCutoff(e.target.value)}
-              slotProps={{ inputLabel: { shrink: true } }}
+            <TimeInput
+              size="small" label={t("Corte")} value={cutoff}
+              onChange={(v) => setCutoff(v)}
               sx={{ minWidth: 130 }}
             />
           )}

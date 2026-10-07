@@ -20,7 +20,7 @@ export function LogisticsDocumentsTable({ documents, showOrder }: {
 }) {
   const cellSx = { py: 0.5, px: 1, fontSize: 12.5 } as const;
   return (
-    <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
+    <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: "4px" }}>
       <Table size="small" aria-label={t("Documentos")}>
         <TableHead>
           <TableRow>

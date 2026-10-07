@@ -5,7 +5,9 @@ import {
   TableHead, TableRow, Typography,
 } from "@mui/material";
 import { AltRouteRounded, PlayArrowRounded, SkipNextRounded, StopRounded } from "@mui/icons-material";
-import { AppCard, LoadingState, StatusChip, dataTableSx } from "../../shared/ui/components";
+import { LoadingState, StatusChip, dataTableSx } from "../../shared/ui/components";
+import { R } from "../../theme";
+import { WorkspaceCard } from "./WorkspaceCard";
 import {
   advanceTenderWaterfall, fetchTenderWaterfall, startTenderWaterfall, stopTenderWaterfall,
   type TenderWaterfallView, type WaterfallCandidateStatus,
@@ -96,19 +98,15 @@ export function TenderWaterfallCard({ companyId, tripId, canManage }: TenderWate
   }
 
   if (waterfall.isPending) {
-    return <AppCard title={t("Cascada de tendering")}><LoadingState /></AppCard>;
+    return <WorkspaceCard icon={<AltRouteRounded />} title={t("Cascada de tendering")}><LoadingState /></WorkspaceCard>;
   }
 
   const plan = waterfall.data;
 
   return (
-    <AppCard
-      title={
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <AltRouteRounded fontSize="small" />
-          <span>{t("Cascada de tendering")}</span>
-        </Box>
-      }
+    <WorkspaceCard
+      icon={<AltRouteRounded />}
+      title={t("Cascada de tendering")}
       actions={plan && <StatusChip label={enumLabel("waterfallStatus", plan.status)} tone={STATUS_TONE[plan.status]} />}
     >
       {!plan ? (
@@ -124,7 +122,7 @@ export function TenderWaterfallCard({ companyId, tripId, canManage }: TenderWate
         </>
       ) : (
         <>
-          <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap", mb: 2 }}>
+          <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "repeat(3, minmax(0, 1fr))", mb: 1.5 }}>
             <Stat label={t("Ofertas hechas")} value={`${plan.attemptsUsed} / ${plan.maxAttempts}`} />
             <Stat label={t("Plazo por oferta")} value={t("{{m}} min", { m: plan.responseMinutes })} />
             <Stat label={t("Iniciada")} value={fmtDateTime(plan.startedAt)} />
@@ -147,7 +145,7 @@ export function TenderWaterfallCard({ companyId, tripId, canManage }: TenderWate
             <Alert severity="info" variant="outlined" sx={{ mb: 2 }}>{plan.outcomeNote}</Alert>
           )}
 
-          <TableContainer sx={{ mb: 2 }}>
+          <TableContainer sx={{ mb: 1.5, border: "1px solid", borderColor: "divider", borderRadius: `${R.md}px` }}>
             <Table size="small" sx={dataTableSx}>
               <TableHead>
                 <TableRow>
@@ -195,7 +193,7 @@ export function TenderWaterfallCard({ companyId, tripId, canManage }: TenderWate
           )}
         </>
       )}
-    </AppCard>
+    </WorkspaceCard>
   );
 }
 
@@ -203,7 +201,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <Box>
       <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>{label}</Typography>
-      <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{value}</Typography>
+      <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{value}</Typography>
     </Box>
   );
 }

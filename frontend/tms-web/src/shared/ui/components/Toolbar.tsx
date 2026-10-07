@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Badge, Box, Button, Chip, Collapse, Paper, Typography, useMediaQuery, useTheme } from "@mui/material";
-import { FilterAltRounded, SearchRounded, CloseRounded } from "@mui/icons-material";
+import { FilterAltRounded } from "@mui/icons-material";
 import { t } from "../../../lib/i18n";
 
 export interface ToolbarProps {
@@ -52,7 +52,7 @@ export function Toolbar({ primary, filters, onApply, onReset, activeFilterCount 
             variant="outlined"
             onSubmit={(e) => { e.preventDefault(); onApply?.(); }}
             sx={{
-              borderRadius: "10px", p: 1.5,
+              borderRadius: "12px", px: 1.75, py: 1.5,
               display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 1.5,
             }}
           >
@@ -60,12 +60,12 @@ export function Toolbar({ primary, filters, onApply, onReset, activeFilterCount 
             {(onApply || onReset) && (
               <Box sx={{ display: "flex", gap: 1, ml: { md: "auto" } }}>
                 {onReset && (
-                  <Button size="small" variant="outlined" onClick={onReset} startIcon={<CloseRounded />}>
+                  <Button size="small" color="inherit" onClick={onReset} sx={{ color: "text.secondary" }}>
                     {t("Limpiar")}
                   </Button>
                 )}
                 {onApply && (
-                  <Button size="small" type="submit" variant="contained" startIcon={<SearchRounded />}>
+                  <Button size="small" type="submit" variant="contained" disableElevation startIcon={<FilterAltRounded />}>
                     {t("Aplicar filtros")}
                   </Button>
                 )}

@@ -1,7 +1,8 @@
 import type { MouseEvent, ReactNode } from "react";
 import {
-  Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography,
+  Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, useTheme,
 } from "@mui/material";
+import type { Theme } from "@mui/material/styles";
 import { ChevronRightRounded } from "@mui/icons-material";
 import { dataTableSx, TABLE_MAX_H } from "./tableStyles";
 import { EmptyState, ErrorState, SkeletonTable } from "./states";
@@ -20,6 +21,17 @@ function fromRowControl(event: MouseEvent<HTMLElement>): boolean {
   const control = (event.target as HTMLElement | null)
     ?.closest("button, a, input, select, textarea, [role='button'], [role='menuitem']");
   return control !== null && control !== event.currentTarget;
+}
+
+/**
+ * El acento de fila va dentro de un `box-shadow`, que no entiende rutas del tema. Las pantallas
+ * pasan tanto hex como `"error.main"`; sin resolverlas aquí, las segundas no pintaban nada.
+ */
+function resolveColor(theme: Theme, color: string): string {
+  if (/^(#|rgb|hsl|var\()/.test(color)) return color;
+  const [key, shade = "main"] = color.split(".");
+  const palette = theme.palette as unknown as Record<string, Record<string, string> | undefined>;
+  return palette[key]?.[shade] ?? color;
 }
 
 export interface DataTableColumn<T> {
@@ -83,6 +95,7 @@ export function DataTable<T>({
   emptyTitle, emptyMessage, emptyAction, caption, total, footer, onRowClick, rowAccent,
   maxHeight = TABLE_MAX_H,
 }: DataTableProps<T>) {
+  const theme = useTheme();
   if (error) {
     return (
       <Paper variant="outlined" sx={{ borderRadius: `${R.lg}px` }}>
@@ -159,7 +172,8 @@ export function DataTable<T>({
               </TableRow>
             ) : (
               rows.map((row) => {
-                const accent = rowAccent?.(row) ?? null;
+                const rawAccent = rowAccent?.(row) ?? null;
+                const accent = rawAccent ? resolveColor(theme, rawAccent) : null;
                 return (
                   /* Una fila que abre el detalle tiene que abrirlo también con el teclado. Con
                      `onClick` a secas, las pantallas cuyo único camino al detalle es pulsar la

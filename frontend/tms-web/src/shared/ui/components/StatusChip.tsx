@@ -1,4 +1,4 @@
-import { Chip, useTheme, type ChipProps } from "@mui/material";
+import { Box, Chip, useTheme, type ChipProps } from "@mui/material";
 import { STATUS, type StatusTone } from "../../../theme";
 
 interface StatusChipProps {
@@ -24,29 +24,20 @@ export function StatusChip({ label, tone = "neutral", variant = "soft", size = "
   const theme = useTheme();
   const mode = theme.palette.mode === "dark" ? "dark" : "light";
 
-  if (tone === "neutral") {
-    const neutral = STATUS[mode].cancelled;
-    return (
-      <Chip
-        label={label} size={size} icon={icon} onClick={onClick}
-        sx={{
-          bgcolor: variant === "solid" ? neutral.bg : neutral.soft,
-          color: variant === "solid" ? neutral.text : neutral.softText,
-          border: variant === "soft" ? "1px solid" : "none",
-          borderColor: "divider",
-          "& .MuiChip-icon": { color: "inherit" },
-        }}
-      />
-    );
-  }
-
-  const token = STATUS[mode][tone];
+  const token = STATUS[mode][tone === "neutral" ? "cancelled" : tone];
+  const solid = variant === "solid";
+  // El chip suave lleva un punto del color del estado: el tono se lee aunque el fondo sea tenue
+  // y la etiqueta sea larga. Es decoración, así que va oculto al lector de pantalla.
+  const dot = !solid && !icon
+    ? <Box component="span" aria-hidden sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: token.bg, flexShrink: 0, ml: "8px !important", mr: "-2px !important" }} />
+    : icon;
   return (
     <Chip
-      label={label} size={size} icon={icon} onClick={onClick}
+      label={label} size={size} icon={dot} onClick={onClick}
       sx={{
-        bgcolor: variant === "solid" ? token.bg : token.soft,
-        color: variant === "solid" ? token.text : token.softText,
+        bgcolor: solid ? token.bg : token.soft,
+        color: solid ? token.text : token.softText,
+        fontWeight: 700,
         "& .MuiChip-icon": { color: "inherit" },
       }}
     />

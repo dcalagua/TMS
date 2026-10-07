@@ -1,9 +1,10 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Alert, Box, Chip, LinearProgress, MenuItem, TextField, Typography } from "@mui/material";
+import { Alert, Box, Chip, LinearProgress, Typography } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import {
   LocalShippingRounded, PlaceRounded, TaskAltRounded, PendingActionsRounded, ScheduleRounded,
-  ReportProblemRounded, DonutLargeRounded, TravelExploreRounded,
+  ReportProblemRounded, DonutLargeRounded, TravelExploreRounded, EventRounded, FlagRounded, BusinessRounded,
 } from "@mui/icons-material";
 import { fetchCarriers } from "../../shared/api/carriersApi";
 import {
@@ -14,7 +15,7 @@ import type { TripStatus } from "../../shared/api/planningApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  DataTable, KpiCard, PageHeader, Pagination, StatusChip, Toolbar, type DataTableColumn,
+  DataTable, FilterBar, KpiCard, PageHeader, Pagination, StatusChip, type DataTableColumn,
 } from "../../shared/ui/components";
 import { TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
@@ -46,6 +47,8 @@ interface Filters {
   status: TripStatus | "";
 }
 
+type BarFilters = Filters & { search: string };
+
 /**
  * Seguimiento de reparto: los envíos que están en la calle hoy, cuánto llevan hecho y dónde hay
  * un problema.
@@ -62,7 +65,6 @@ export function DeliveryTrackingPage() {
   const companyId = selected?.id ?? "";
 
   const initial: Filters = { date: today(), carrierId: "", status: "IN_TRANSIT" };
-  const [draft, setDraft] = useState<Filters>(initial);
   const [filters, setFilters] = useState<Filters>(initial);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
@@ -99,8 +101,15 @@ export function DeliveryTrackingPage() {
   const currentPage = Math.min(page, lastPage);
   const visible = rows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
-  function applyFilters() { setFilters(draft); setPage(0); }
-  function resetFilters() { setDraft(initial); setFilters(initial); setSearch(""); setPage(0); }
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar. La barra ve un solo
+  // objeto, pero la búsqueda se guarda aparte para no volver a pedir el tablero en cada tecla.
+  const barValue: BarFilters = { ...filters, search };
+  const barDefaults: BarFilters = { ...initial, search: "" };
+  const setBarValue = ({ search: nextSearch, ...next }: BarFilters) => {
+    setFilters(next);
+    setSearch(nextSearch);
+    setPage(0);
+  };
 
   const columns: DataTableColumn<ControlTowerTripView>[] = [
     {
@@ -150,7 +159,7 @@ export function DeliveryTrackingPage() {
             <LinearProgress
               variant="determinate" value={progress ?? 0}
               color={row.stopsPastWindow > 0 ? "warning" : "primary"}
-              sx={{ height: 5, borderRadius: 3, mt: 0.5 }}
+              sx={{ height: 5, borderRadius: "12px", mt: 0.5 }}
               aria-label={t("Progreso de paradas")}
             />
           </Box>
@@ -196,21 +205,35 @@ export function DeliveryTrackingPage() {
         refreshing={boardQuery.isFetching}
       />
 
-      <Box sx={{
-        display: "grid", gap: 2, mb: 3,
-        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0,1fr))", md: "repeat(4, minmax(0,1fr))", xl: "repeat(7, minmax(0,1fr))" },
-      }}>
+      <Box sx={(th) => ({
+        display: "grid", gap: { xs: 1.5, xl: 1.25 }, mb: 2.5,
+        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0,1fr))", md: "repeat(4, minmax(0,1fr))", lg: "repeat(7, minmax(0,1fr))" },
+        // Siete cifras en una fila: tarjetas más compactas en pantalla ancha.
+        [th.breakpoints.up("lg")]: {
+          "& .MuiCardContent-root": { p: 1.5, gap: 1, "&:last-child": { pb: 1.5 } },
+        },
+      })}>
         <KpiCard loading={boardQuery.isPending} icon={<LocalShippingRounded />} color="warning.main" title={t("Viajes en reparto")} value={fmtQuantity(kpis.tripsInTransit)} />
         <KpiCard loading={boardQuery.isPending} icon={<PlaceRounded />} color="info.main" title={t("Paradas totales")} value={fmtQuantity(kpis.stopsTotal)} />
         <KpiCard loading={boardQuery.isPending} icon={<TaskAltRounded />} color="success.main" title={t("Paradas resueltas")} sub={t("Atendidas, omitidas o fallidas")} value={fmtQuantity(kpis.stopsResolved)} />
         <KpiCard loading={boardQuery.isPending} icon={<PendingActionsRounded />} color="text.secondary" title={t("Paradas pendientes")} value={fmtQuantity(kpis.stopsPending)} />
         <KpiCard loading={boardQuery.isPending} icon={<ScheduleRounded />} color="warning.main" title={t("Fuera de ventana")} value={fmtQuantity(kpis.stopsPastWindow)} />
         <KpiCard loading={boardQuery.isPending} icon={<ReportProblemRounded />} color="error.main" title={t("Incidencias abiertas")} value={fmtQuantity(kpis.openExceptions)} />
-        <KpiCard
-          loading={boardQuery.isPending} icon={<DonutLargeRounded />} color="primary.main" title={t("Progreso")}
-          value={kpis.progressPercent === null ? "-" : fmtPercent(kpis.progressPercent)}
-          progress={kpis.progressPercent ?? undefined}
-        />
+        {/* El avance del día es la cifra que resume la fila: su tarjeta va teñida del color primario. */}
+        <Box sx={(th) => ({
+          minWidth: 0,
+          "& .MuiCard-root": {
+            bgcolor: alpha(th.palette.primary.main, th.palette.mode === "dark" ? 0.14 : 0.07),
+            borderColor: alpha(th.palette.primary.main, 0.3),
+          },
+          "& .MuiCard-root > .MuiCardContent-root > .MuiTypography-root": { color: "primary.main" },
+        })}>
+          <KpiCard
+            loading={boardQuery.isPending} icon={<DonutLargeRounded />} color="primary.main" title={t("Progreso")}
+            value={kpis.progressPercent === null ? "-" : fmtPercent(kpis.progressPercent)}
+            progress={kpis.progressPercent ?? undefined}
+          />
+        </Box>
       </Box>
 
       {snapshot?.truncated && (
@@ -221,46 +244,22 @@ export function DeliveryTrackingPage() {
         </Alert>
       )}
 
-      <Toolbar
-        onApply={applyFilters}
-        onReset={resetFilters}
-        filters={
-          <>
-            <TextField
-              size="small" type="date" label={t("Fecha")} value={draft.date}
-              onChange={(e) => setDraft({ ...draft, date: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ minWidth: 160 }}
-            />
-            <TextField
-              select size="small" label={t("Estado")} value={draft.status}
-              onChange={(e) => setDraft({ ...draft, status: e.target.value as TripStatus | "" })}
-              sx={{ minWidth: 170 }}
-            >
-              {STATUS_OPTIONS.map((status) => (
-                <MenuItem key={status || "ALL"} value={status}>
-                  {status === "" ? t("Todos los estados") : enumLabel("tripStatus", status)}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Transportista")} value={draft.carrierId}
-              onChange={(e) => setDraft({ ...draft, carrierId: e.target.value })}
-              sx={{ minWidth: 190 }}
-            >
-              <MenuItem value="">{t("Todos los transportistas")}</MenuItem>
-              {(carriersQuery.data?.content ?? []).map((carrier) => (
-                <MenuItem key={carrier.id} value={carrier.id}>{carrier.businessName}</MenuItem>
-              ))}
-            </TextField>
-            {/* Local sobre lo ya traído: no es un filtro del servidor, así que no espera a "Aplicar". */}
-            <TextField
-              size="small" label={t("Buscar envío, placa o conductor")} value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-              sx={{ minWidth: 230 }}
-            />
-          </>
-        }
+      {/* La búsqueda es local sobre lo ya traído; fecha, estado y transportista van al servidor. */}
+      <FilterBar
+        value={barValue}
+        defaults={barDefaults}
+        onChange={setBarValue}
+        fields={[
+          { type: "search", key: "search", placeholder: t("Buscar envío, placa o conductor"), width: 280 },
+          { type: "date", key: "date", label: t("Fecha"), icon: <EventRounded /> },
+          { type: "select", key: "status", label: t("Estado"), icon: <FlagRounded />,
+            allLabel: t("Todos los estados"),
+            options: STATUS_OPTIONS.filter((status) => status !== "")
+              .map((status) => ({ id: status, label: enumLabel("tripStatus", status) })) },
+          { type: "select", key: "carrierId", label: t("Transportista"), icon: <BusinessRounded />,
+            allLabel: t("Todos los transportistas"),
+            options: (carriersQuery.data?.content ?? []).map((carrier) => ({ id: carrier.id, label: carrier.businessName })) },
+        ]}
       />
 
       <DataTable

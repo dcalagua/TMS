@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { Alert, Box, Button, MenuItem, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, MenuItem, TextField } from "@mui/material";
 import { ReportProblemRounded } from "@mui/icons-material";
 import {
   STOP_SCOPED_EXCEPTION_TYPES, TRIP_EXCEPTION_TYPES,
   type TripExceptionType, type TripStopView,
 } from "../../shared/api/planningApi";
-import { FormDrawer } from "../../shared/ui/components";
+import { ContextCard, FormDrawer, StatusChip } from "../../shared/ui/components";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 
@@ -23,6 +23,8 @@ export type TripProblemMode = "skip" | "fail" | "report";
 
 interface TripProblemDrawerProps {
   mode: TripProblemMode;
+  /** El envío sobre el que se actúa, para la tarjeta de contexto. */
+  shipmentNumber?: string;
   /** Las paradas del viaje, para el selector del modo `report`. */
   stops: TripStopView[];
   /** La parada afectada en los modos `skip` y `fail`. */
@@ -61,7 +63,7 @@ const COPY: Record<TripProblemMode, { title: string; subtitle: string; confirm: 
  * En los modos de parada la lista de tipos se acota a los que tienen sentido en una parada: el
  * backend rechaza los demás, y ofrecer un motivo que va a fallar es ofrecer un error.
  */
-export function TripProblemDrawer({ mode, stops, stopLabel, onClose, onSubmit }: TripProblemDrawerProps) {
+export function TripProblemDrawer({ mode, shipmentNumber, stops, stopLabel, onClose, onSubmit }: TripProblemDrawerProps) {
   const [formError, setFormError] = useState<string | null>(null);
   const copy = COPY[mode];
   const types = mode === "report" ? TRIP_EXCEPTION_TYPES : STOP_SCOPED_EXCEPTION_TYPES;
@@ -95,28 +97,30 @@ export function TripProblemDrawer({ mode, stops, stopLabel, onClose, onSubmit }:
       open
       icon={<ReportProblemRounded />}
       title={t(copy.title)}
-      subtitle={stopLabel ?? t(copy.subtitle)}
-      size="md"
+      subtitle={t(copy.subtitle)}
+      size="sm"
       onClose={onClose}
       dirty={isDirty}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
-          <Button type="submit" form={FORM_ID} variant="contained" color="error" disabled={isSubmitting}>
+          <Button color="inherit" sx={{ color: "text.secondary" }} onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" color="error" startIcon={<ReportProblemRounded />} disabled={isSubmitting}>
             {isSubmitting ? t("Guardando...") : t(copy.confirm)}
           </Button>
         </>
       }
     >
-      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(submit)(event)} noValidate>
-        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(submit)(event)} noValidate
+        sx={{ display: "grid", gap: 2 }}>
+        {/* Sobre qué se actúa: la parada en los modos de parada, el envío entero al reportar. */}
+        <ContextCard
+          title={stopLabel ?? (shipmentNumber ? t("Envío {{number}}", { number: shipmentNumber }) : t("Todo el viaje"))}
+          status={<StatusChip label={stopLabel ? t("Parada") : t("Viaje")} tone="neutral" />}
+          detail={stopLabel && shipmentNumber ? t("Envío {{number}}", { number: shipmentNumber }) : undefined}
+        />
 
-        {stopLabel && (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {t(copy.subtitle)}
-          </Typography>
-        )}
+        {formError && <Alert severity="error">{formError}</Alert>}
 
         <Box sx={{ display: "grid", gap: 2 }}>
           {mode === "report" && (

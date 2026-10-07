@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Alert, Box, Button, TextField, Typography } from "@mui/material";
-import { EditNoteRounded } from "@mui/icons-material";
+import { CheckRounded, EditNoteRounded } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import { recordActualTripCost, type TripCostView } from "../../shared/api/ratesApi";
 import { describeApiError } from "../../shared/api/problemMessages";
-import { FormDrawer } from "../../shared/ui/components";
+import { ContextCard, FormDrawer, FormRow, StatusChip } from "../../shared/ui/components";
 import { notifySuccess } from "../../lib/ui";
 import { t } from "../../lib/i18n";
 import { fmtMoney } from "../../lib/locale";
@@ -74,49 +74,62 @@ export function ActualCostDrawer({ companyId, tripId, cost, onClose, onSaved }: 
       open
       icon={<EditNoteRounded />}
       title={t("Costo real del viaje")}
-      subtitle={cost.estimatedAmount !== null
-        ? t("Estimado: {{amount}}", { amount: fmtMoney(cost.estimatedAmount, cost.currency ?? "PEN") })
-        : t("Este viaje no tiene estimado.")}
-      size="md"
+      subtitle={t("Lo que de verdad se pagó, contra lo que dijo el tarifario.")}
+      size="sm"
       onClose={onClose}
       dirty={isDirty}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
-          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
-            {isSubmitting ? t("Guardando...") : t("Guardar")}
+          <Button color="inherit" sx={{ color: "text.secondary" }} onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" startIcon={<CheckRounded />} disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : t("Registrar costo real")}
           </Button>
         </>
       }
     >
-      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate
+        sx={{ display: "grid", gap: 2 }}>
+        <ContextCard
+          title={cost.estimatedAmount !== null
+            ? t("Estimado: {{amount}}", { amount: fmtMoney(cost.estimatedAmount, cost.currency ?? "PEN") })
+            : t("Este viaje no tiene estimado.")}
+          status={cost.closed
+            ? <StatusChip label={t("Cerrado")} tone="done" />
+            : cost.actualAmount !== null ? <StatusChip label={t("Real registrado")} tone="inProgress" /> : undefined}
+          detail={cost.rateCardCode
+            ? [cost.rateCardCode, cost.rateCardName].filter(Boolean).join(" · ")
+            : undefined}
+        />
+
+        {formError && <Alert severity="error">{formError}</Alert>}
 
         <Box sx={{ display: "grid", gap: 2 }}>
-          <TextField
-            label={t("Importe")} required size="small" fullWidth type="number"
-            error={Boolean(errors.amount)} helperText={errors.amount?.message}
-            {...register("amount", {
-              required: t("Este campo es obligatorio"),
-              validate: (value) => {
-                const parsed = Number(value);
-                if (Number.isNaN(parsed)) return t("Debe ser un número");
-                return parsed >= 0 || t("Debe ser cero o mayor");
-              },
-            })}
-          />
-
-          {needsCurrency && (
+          <FormRow template={needsCurrency ? "minmax(0, 1fr) 120px" : "minmax(0, 1fr)"}>
             <TextField
-              label={t("Moneda")} required size="small" fullWidth placeholder="PEN"
-              error={Boolean(errors.currency)} helperText={errors.currency?.message}
-              {...register("currency", {
+              label={t("Importe")} required size="small" fullWidth type="number"
+              error={Boolean(errors.amount)} helperText={errors.amount?.message}
+              {...register("amount", {
                 required: t("Este campo es obligatorio"),
-                maxLength: { value: 3, message: t("No puede superar los {{count}} caracteres", { count: 3 }) },
+                validate: (value) => {
+                  const parsed = Number(value);
+                  if (Number.isNaN(parsed)) return t("Debe ser un número");
+                  return parsed >= 0 || t("Debe ser cero o mayor");
+                },
               })}
             />
-          )}
+
+            {needsCurrency && (
+              <TextField
+                label={t("Moneda")} required size="small" fullWidth placeholder="PEN"
+                error={Boolean(errors.currency)} helperText={errors.currency?.message}
+                {...register("currency", {
+                  required: t("Este campo es obligatorio"),
+                  maxLength: { value: 3, message: t("No puede superar los {{count}} caracteres", { count: 3 }) },
+                })}
+              />
+            )}
+          </FormRow>
 
           <TextField
             label={t("Referencia")} size="small" fullWidth
@@ -136,7 +149,7 @@ export function ActualCostDrawer({ companyId, tripId, cost, onClose, onSaved }: 
           />
         </Box>
 
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 2 }}>
+        <Typography variant="caption" color="text.secondary">
           {t("La diferencia contra el estimado la calcula el backend al guardar.")}
         </Typography>
       </Box>

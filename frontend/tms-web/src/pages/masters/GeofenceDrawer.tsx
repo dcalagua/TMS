@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { Alert, Button, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, TextField, Typography } from "@mui/material";
 import { MyLocationRounded } from "@mui/icons-material";
-import { FormDrawer } from "../../shared/ui/components";
+import { ContextCard, FormDrawer, StatusChip } from "../../shared/ui/components";
 import { setLocationGeofence, type LocationView } from "../../shared/api/locationsApi";
 import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { notifyError, notifySuccess } from "../../lib/ui";
 import { t } from "../../lib/i18n";
+import { fmtDecimal } from "../../lib/locale";
 
 interface GeofenceDrawerProps {
   companyId: string;
@@ -55,14 +56,14 @@ export function GeofenceDrawer({ companyId, location, onClose, onSaved }: Geofen
     <FormDrawer
       open
       title={t("Geocerco")}
-      subtitle={`${location.code} · ${location.name}`}
+      subtitle={t("El círculo alrededor del sitio. Informa; no registra llegadas.")}
       icon={<MyLocationRounded />}
       onClose={onClose}
       dirty={touched}
       size="sm"
       footer={
         <>
-          <Button onClick={onClose} disabled={submitting}>{t("Cancelar")}</Button>
+          <Button onClick={onClose} disabled={submitting} color="inherit" sx={{ color: "text.secondary" }}>{t("Cancelar")}</Button>
           <Button
             variant="contained"
             disabled={invalid || submitting || !hasCoordinates}
@@ -73,7 +74,18 @@ export function GeofenceDrawer({ companyId, location, onClose, onSaved }: Geofen
         </>
       }
     >
-      <Stack spacing={2}>
+      <Box sx={{ display: "grid", gap: 2 }}>
+        <ContextCard
+          title={`${location.code} · ${location.name}`}
+          status={location.geofenceRadiusM !== null
+            ? <StatusChip label={t("{{radius}} m", { radius: fmtDecimal(location.geofenceRadiusM) })} tone="open" />
+            : <StatusChip label={t("Sin geocerco")} tone="neutral" />}
+          detail={[
+            location.address ?? location.district,
+            hasCoordinates ? `${location.latitude}, ${location.longitude}` : t("Sin coordenadas"),
+          ].filter(Boolean).join(" · ")}
+        />
+
         {!hasCoordinates && (
           <Alert severity="warning" variant="outlined">
             {t("Este sitio no tiene coordenadas, así que un círculo a su alrededor sería un círculo alrededor de nada. Ponle latitud y longitud primero.")}
@@ -95,7 +107,7 @@ export function GeofenceDrawer({ companyId, location, onClose, onSaved }: Geofen
             {t("Un geocerco informa: sirve para ver que un vehículo reportó una posición dentro del círculo. No cambia el estado de ninguna parada ni registra llegadas por sí solo — la llegada la sigue registrando quien llegó.")}
           </Typography>
         </Alert>
-      </Stack>
+      </Box>
     </FormDrawer>
   );
 }
