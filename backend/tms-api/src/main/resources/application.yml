@@ -118,33 +118,6 @@ tms:
     # stay absent, so "did not record its revision" stays distinguishable from "is the wrong
     # revision".
     commit: ${TMS_RELEASE_COMMIT:}
-  platform:
-    # EBIM MasterAdmin, the control plane, calling /internal/platform/**. The property names follow
-    # this product's namespace; the environment variables are the ones the platform contract
-    # specifies, so an operator configuring QAS sets EBIM_MASTERADMIN_M2M_* and never has to know
-    # what Java calls them (docs/platform-provisioning/SECURITY.md carries the mapping).
-    m2m:
-      # Off by default. A deployment that has not been given the control plane's public key must not
-      # look like one that accepts provisioning calls.
-      enabled: ${EBIM_MASTERADMIN_M2M_ENABLED:false}
-      issuer: ${EBIM_MASTERADMIN_M2M_ISSUER:masteradmin.ebim}
-      audience: ${EBIM_MASTERADMIN_M2M_AUDIENCE:tms.ebim}
-      # ES256 and nothing else. HS256 would turn a public key into a shared secret the control plane
-      # and every reader of it could mint tokens with; the verifier refuses anything but this value.
-      algorithm: ${EBIM_MASTERADMIN_M2M_ALGORITHM:ES256}
-      # exp - iat. A control-plane token is minted for one call; a long-lived one is a credential.
-      max-token-lifetime: ${EBIM_MASTERADMIN_M2M_MAX_TOKEN_LIFETIME:300s}
-      clock-skew: 30s
-      create-scope: ${EBIM_MASTERADMIN_M2M_CREATE_SCOPE:tms:tenant:create}
-      read-scope: ${EBIM_MASTERADMIN_M2M_READ_SCOPE:tms:tenant:read}
-      # The PEM, base64-encoded. No literal default and no file-path setting: the key is supplied as
-      # a secret by the deployment, never read from a developer's disk and never committed.
-      public-key-base64: ${EBIM_MASTERADMIN_M2M_PUBLIC_KEY_B64:}
-    provisioning:
-      # The request carries the tenant administrator's email and the company's registration data.
-      # Storing it beside the hash is a deliberate retention decision, not a default - the same
-      # stance tms.integration takes for inbound partner payloads.
-      retain-request-snapshot: ${TMS_PLATFORM_RETAIN_REQUEST_SNAPSHOT:false}
   security:
     jwt:
       # Supabase Auth coordinates. No default: a deployment that does not set these fails at

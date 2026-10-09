@@ -402,4 +402,52 @@ CROSS JOIN (VALUES
 ) AS v(code, first_name, last_name, dni, phone, license, category, expires)
 ON CONFLICT (company_id, code) DO NOTHING;
 
+-- 10. Tarifarios -----------------------------------------------------------------------------
+--
+-- Sin esto, valorar un viaje falla con "No active rate card covers shipment ... on ...", y el
+-- mensaje es correcto: no hay nada con que ponerle precio. Un maestro de flota sin su parte
+-- comercial deja la pantalla de costos inservible.
+--
+-- Un tarifario cubre un viaje cuando coinciden CUATRO cosas (`RateCardSelector`): el
+-- transportista, la fecha dentro de su vigencia, el ambito, y el tipo de vehiculo cuando el
+-- tarifario nombra uno. Por eso el de cada transportista es de ambito CARRIER y sin fecha de
+-- fin: es la red que garantiza que cualquier viaje suyo se pueda valorar.
+--
+-- `ck_rate_card_has_a_component` exige que cobre por algo. Una tarifa sin ningun componente no
+-- es una tarifa a medias, es una que no sabe facturar.
+
+INSERT INTO tms.rate_card (company_id, code, name, carrier_id, scope, currency, valid_from,
+                           base_amount, amount_per_km, amount_per_stop, fuel_surcharge_percent,
+                           minimum_amount, created_by, updated_by)
+SELECT ca.company_id, v.code, v.name, ca.id, 'CARRIER', 'PEN', DATE '2026-01-01',
+       v.base, v.per_km, v.per_stop, v.fuel, v.minimum, s.author_id, s.author_id
+FROM seed_ctx s
+CROSS JOIN (VALUES
+    ('TAR-PACIFICO', 'Tarifa base Transportes del Pacifico', 'C-PACIFICO', 180.00, 2.60, 25.00, 8.0, 250.00),
+    ('TAR-ANDINA',   'Tarifa base Andina Cargo',             'C-ANDINA',   165.00, 2.45, 22.00, 8.0, 230.00),
+    ('TAR-EXPRESS',  'Tarifa base Log Express',              'C-EXPRESS',  120.00, 2.10, 18.00, 8.0, 170.00),
+    ('TAR-MISTI',    'Tarifa base Transportes Misti',        'C-MISTI',    140.00, 2.30, 20.00, 7.0, 200.00)
+) AS v(code, name, carrier_code, base, per_km, per_stop, fuel, minimum)
+JOIN tms.carrier ca ON ca.code = v.carrier_code
+JOIN tms.company c ON c.id = ca.company_id
+JOIN tms.organization o ON o.id = c.organization_id AND o.code = 'DEMO'
+ON CONFLICT (company_id, code) DO NOTHING;
+
+-- Un precio negociado para un corredor concreto, mas barato por kilometro que la tarifa general
+-- del mismo transportista. Existe para que el ambito se note: `RateCardSelector` ordena por
+-- especificidad, asi que en un viaje que declara la ruta R-CENTRO este gana al de ambito CARRIER.
+-- Un tarifario que nunca compite con otro no prueba que la seleccion funcione.
+INSERT INTO tms.rate_card (company_id, code, name, carrier_id, scope, route_id, currency,
+                           valid_from, base_amount, amount_per_km, amount_per_stop,
+                           fuel_surcharge_percent, minimum_amount, created_by, updated_by)
+SELECT r.company_id, 'TAR-PACIFICO-CENTRO', 'Corredor centro - Pacifico (negociado)', ca.id,
+       'ROUTE', r.id, 'PEN', DATE '2026-01-01', 150.00, 2.40, 20.00, 8.0, 240.00,
+       s.author_id, s.author_id
+FROM seed_ctx s
+JOIN tms.route r ON r.code = 'R-CENTRO'
+JOIN tms.company c ON c.id = r.company_id
+JOIN tms.organization o ON o.id = c.organization_id AND o.code = 'DEMO'
+JOIN tms.carrier ca ON ca.company_id = r.company_id AND ca.code = 'C-PACIFICO'
+ON CONFLICT (company_id, code) DO NOTHING;
+
 COMMIT;

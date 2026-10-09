@@ -116,19 +116,8 @@ class EndpointContractTest {
     void permission_guarded_endpoints_declare_the_company_they_are_scoped_to(JavaClasses classes) {
         List<String> offenders = new ArrayList<>();
         for (Method handler : handlersIn(classes)) {
-<<<<<<< HEAD
-            if (!handler.isAnnotationPresent(PreAuthorize.class)
-                    || takes(handler, IntegrationPrincipal.class)
-                    // A control-plane handler (V51) is machine-to-machine in the strongest sense:
-                    // it has no tenant at all. It creates them, so there is no company scope for a
-                    // @PreAuthorize expression to be evaluated in - the authority it checks is the
-                    // token's scope. Recognised the same way an integration handler is, by the
-                    // principal it takes rather than by its package.
-                    || takes(handler, com.ebim.tms.platform.application.ProvisioningCaller.class)) {
-=======
             if (!handler.isAnnotationPresent(PreAuthorize.class) || takes(handler, IntegrationPrincipal.class)
                     || takes(handler, PlatformCaller.class)) {
->>>>>>> 0553f16bcbe492f36da45425f8a02d6719982bf4
                 continue;
             }
             if (!takes(handler, CompanyScope.class)) {

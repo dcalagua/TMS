@@ -77,12 +77,6 @@ class SchemaExposureIntegrationTest {
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
             "work_assignment", "work_assignment_trip",
-<<<<<<< HEAD
-            // V51: control-plane provisioning. RLS enabled and p_backend_managed, like the identity
-            // tables - and, unlike them, no privilege at all for tms_app: a table that lists every
-            // tenant must not be reachable by the role every tenant's requests run as.
-            "platform_tenant", "platform_provisioning");
-=======
             // V53: what a warehouse system reported (ADR-013).
             "external_dispatch", "external_dispatch_order", "warehouse_milestone",
             // V51: MasterAdmin provisioning. Owner connection only - tms_app holds no grant and a
@@ -92,7 +86,6 @@ class SchemaExposureIntegrationTest {
             "order_hold",
             // V55: the documents that travel with orders (ADR-015).
             "logistics_document", "logistics_document_order");
->>>>>>> 0553f16bcbe492f36da45425f8a02d6719982bf4
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the
@@ -155,16 +148,11 @@ class SchemaExposureIntegrationTest {
      * runs as cannot read them at all. Provisioning writes on the owner connection because it runs
      * before any company exists.
      */
-<<<<<<< HEAD
-    private static final List<String> COMPANY_COLUMN_WITHOUT_TENANT_POLICY =
-            List.of("membership", "platform_tenant", "platform_provisioning");
-=======
     private static final List<String> COMPANY_COLUMN_WITHOUT_TENANT_POLICY = List.of("membership",
             // V51: records which company a MasterAdmin provisioning created. Written before any company
             // scope exists and never reachable by tms_app (no grant, deny-all policy) - the tenant
             // policy would have nothing to protect and would make the row unwritable.
             "platform_provisioning_request");
->>>>>>> 0553f16bcbe492f36da45425f8a02d6719982bf4
 
     private static String jdbcUrl;
 
