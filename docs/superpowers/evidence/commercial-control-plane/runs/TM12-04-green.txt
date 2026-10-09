@@ -1,0 +1,16 @@
+t04i.txt:[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.027 s -- in commercial access
+t04i.txt:[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.969 s -- in com.ebim.tms.integration.api.IntegrationApiTenancyTest
+t04i.txt:[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.521 s -- in com.ebim.tms.integration.api.IntegrationShipmentApiTest
+t04i.txt:[INFO] BUILD SUCCESS
+t04.txt:[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.002 s -- in com.ebim.tms.integration.api.IntegrationApiTenancyTest
+t04.txt:[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in com.ebim.tms.shared.security.CommercialAccessFilterTest
+t04.txt:[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.114 s -- in com.ebim.tms.shared.security.CrossTenantAttackTest
+t04.txt:[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.037 s -- in com.ebim.tms.iam.entitlements.CommercialEntitlementServiceTest
+t04.txt:[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.059 s -- in com.ebim.tms.iam.entitlements.CommercialAccessTest
+t04.txt:[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.587 s -- in com.ebim.tms.iam.api.CommercialAccessSecurityTest
+t04.txt:[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.038 s -- in company scope
+t04.txt:[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.397 s -- in com.ebim.tms.iam.api.ApiSecurityTest
+t04.txt:[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.183 s -- in com.ebim.tms.architecture.LayeringTest
+t04.txt:[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.383 s -- in com.ebim.tms.architecture.ModuleBoundaryTest
+t04.txt:[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.048 s -- in com.ebim.tms.architecture.EndpointContractTest
+t04.txt:[INFO] BUILD SUCCESS

@@ -1,12 +1,12 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
-  Button, Chip, MenuItem, Paper, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, TextField, Typography,
+  Button, Chip, Paper, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Typography,
 } from "@mui/material";
 import {
   AddRounded, UploadRounded, AccountTreeRounded, EditRounded, BlockRounded,
-  CheckCircleRounded, AcUnitRounded,
+  CheckCircleRounded, AcUnitRounded, CategoryRounded, QrCodeRounded, ToggleOnRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
@@ -17,8 +17,8 @@ import {
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  ActionMenu, ActiveBadge, DataTable, ImportDrawer, ImportOutcomeChip, PageHeader,
-  Pagination, Toolbar, dataTableSx, type DataTableColumn,
+  ActionMenu, ActiveBadge, DataTable, FilterBar, ImportDrawer, ImportOutcomeChip, PageHeader,
+  Pagination, dataTableSx, type DataTableColumn,
 } from "../../shared/ui/components";
 import {
   ACTIVE_FILTER_OPTIONS, activeParam, notifySaved, toggleActiveRecord, type ActiveFilter,
@@ -49,8 +49,9 @@ export function VehicleTypesPage() {
   const queryClient = useQueryClient();
 
   const [page, setPage] = useState(0);
-  const [draft, setDraft] = useState<AppliedFilters>(DEFAULT_FILTERS);
-  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
+  const [filters, setFiltersState] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const setFilters = (next: AppliedFilters) => { setFiltersState(next); setPage(0); };
   const [modal, setModal] = useState<ModalState>(null);
   const [showImport, setShowImport] = useState(false);
 
@@ -76,9 +77,6 @@ export function VehicleTypesPage() {
     // Un vehículo hereda su capacidad del tipo, así que su lista queda obsoleta con esto.
     void queryClient.invalidateQueries({ queryKey: ["vehicles", companyId] });
   }
-
-  function applyFilters() { setFilters(draft); setPage(0); }
-  function resetFilters() { setDraft(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); setPage(0); }
 
   async function toggleActive(vehicleType: VehicleTypeView) {
     const changed = await toggleActiveRecord({
@@ -160,42 +158,19 @@ export function VehicleTypesPage() {
         )}
       />
 
-      <Toolbar
-        onApply={applyFilters}
-        onReset={resetFilters}
-        filters={
-          <>
-            <TextField
-              size="small" label={t("Código")} value={draft.code}
-              onChange={(e) => setDraft({ ...draft, code: e.target.value })}
-              sx={{ minWidth: 150 }}
-            />
-            <TextField
-              size="small" label={t("Nombre")} value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              sx={{ minWidth: 200 }}
-            />
-            <TextField
-              select size="small" label={t("Tipo de carrocería")} value={draft.bodyType}
-              onChange={(e) => setDraft({ ...draft, bodyType: e.target.value as VehicleBodyType | "" })}
-              sx={{ minWidth: 190 }}
-            >
-              <MenuItem value="">{t("Todos los tipos")}</MenuItem>
-              {VEHICLE_BODY_TYPES.map((type) => (
-                <MenuItem key={type} value={type}>{enumLabel("vehicleBodyType", type)}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Estado")} value={draft.active}
-              onChange={(e) => setDraft({ ...draft, active: e.target.value as ActiveFilter })}
-              sx={{ minWidth: 150 }}
-            >
-              {ACTIVE_FILTER_OPTIONS.map((option) => (
-                <MenuItem key={option.value} value={option.value}>{t(option.label)}</MenuItem>
-              ))}
-            </TextField>
-          </>
-        }
+      <FilterBar
+        value={filters}
+        defaults={DEFAULT_FILTERS}
+        onChange={setFilters}
+        fields={[
+          { type: "search", key: "name", placeholder: t("Nombre") },
+          { type: "select", key: "bodyType", label: t("Tipo de carrocería"), icon: <CategoryRounded />,
+            allLabel: t("Todos los tipos"),
+            options: VEHICLE_BODY_TYPES.map((type) => ({ id: type, label: enumLabel("vehicleBodyType", type) })) },
+          { type: "select", key: "active", label: t("Estado"), icon: <ToggleOnRounded />,
+            options: ACTIVE_FILTER_OPTIONS.map((o) => ({ id: o.value, label: t(o.label) })) },
+          { type: "text", key: "code", label: t("Código"), icon: <QrCodeRounded /> },
+        ]}
       />
 
       <DataTable

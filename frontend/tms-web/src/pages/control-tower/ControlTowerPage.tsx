@@ -1,10 +1,10 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Chip, MenuItem, TextField, Typography } from "@mui/material";
+import { Box, Chip, Typography } from "@mui/material";
 import {
   BroadcastOnPersonalRounded, DirectionsRunRounded, ScheduleRounded, ReportProblemRounded, BlockRounded,
-  DoneAllRounded, HourglassBottomRounded, PendingActionsRounded,
+  DoneAllRounded, HourglassBottomRounded, PendingActionsRounded, WarehouseRounded, BusinessRounded, FlagRounded,
 } from "@mui/icons-material";
 import { fetchCarriers } from "../../shared/api/carriersApi";
 import {
@@ -17,7 +17,7 @@ import { TRIP_STATUSES, type TripStatus } from "../../shared/api/planningApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  DataTable, ErrorState, KpiCard, LoadingState, PageHeader, Pagination, StatusChip, Toolbar,
+  DataTable, DateInput, ErrorState, FilterBar, LoadingState, PageHeader, Pagination, StatusChip,
   type DataTableColumn,
 } from "../../shared/ui/components";
 import { TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
@@ -26,7 +26,7 @@ import { enumLabel } from "../../lib/enums";
 import type { StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
 import { fmtDateTime, fmtMinutes, fmtQuantity, fmtTime } from "../../lib/locale";
-import { BlockersPanel,
+import { BlockersPanel, BandMetric, KpiBand,
   AdvisoriesPanel, ExceptionsPanel, OutstandingStopsPanel, WorkloadPanel } from "./ControlTowerPanels";
 
 const PAGE_SIZE = 20;
@@ -34,6 +34,14 @@ const PAGE_SIZE = 20;
 /** Cada minuto: la torre es una pantalla que se deja abierta, y dos de sus contadores cambian
  * solos según avanza el reloj. */
 const POLL_MS = 60_000;
+
+interface TripFilters {
+  originId: string;
+  carrierId: string;
+  status: TripStatus | "";
+}
+
+const DEFAULT_FILTERS: TripFilters = { originId: "", carrierId: "", status: "" };
 
 const TIMELINESS_TONE: Record<DepartureTimeliness, StatusTone> = {
   NOT_APPLICABLE: "neutral",
@@ -62,9 +70,10 @@ export function ControlTowerPage() {
   const navigate = useNavigate();
 
   const [date, setDate] = useState("");
-  const [draft, setDraft] = useState({ originId: "", carrierId: "", status: "" as TripStatus | "" });
-  const [filters, setFilters] = useState({ originId: "", carrierId: "", status: "" as TripStatus | "" });
   const [page, setPage] = useState(0);
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
+  const [filters, setFiltersState] = useState<TripFilters>(DEFAULT_FILTERS);
+  const setFilters = (next: TripFilters) => { setFiltersState(next); setPage(0); };
 
   const overviewQuery = useQuery({
     queryKey: ["control-tower", companyId, date],
@@ -101,13 +110,6 @@ export function ControlTowerPage() {
     queryFn: ({ signal }) => fetchCarriers({ companyId, size: 200, active: true, sort: "code,asc", signal }),
     enabled: companyId !== "",
   });
-
-  function applyFilters() { setFilters(draft); setPage(0); }
-  function resetFilters() {
-    setDraft({ originId: "", carrierId: "", status: "" });
-    setFilters({ originId: "", carrierId: "", status: "" });
-    setPage(0);
-  }
 
   const columns: DataTableColumn<ControlTowerTripView>[] = [
     {
@@ -216,56 +218,69 @@ export function ControlTowerPage() {
         onRefresh={() => { void overviewQuery.refetch(); void tripsQuery.refetch(); }}
         refreshing={overviewQuery.isFetching || tripsQuery.isFetching}
         actions={
-          <TextField
-            size="small" type="date" label={t("Día")}
+          <DateInput
+            size="small" label={t("Día")}
             value={date || overview.date}
-            onChange={(e) => { setDate(e.target.value); setPage(0); }}
-            slotProps={{ inputLabel: { shrink: true } }}
+            onChange={(v) => { setDate(v); setPage(0); }}
             sx={{ width: 175 }}
           />
         }
       />
 
-      {/* La franja del día entero: no obedece a los filtros de abajo a propósito. */}
+      {/* La franja del día entero: no obedece a los filtros de abajo a propósito. Dos bandas: lo
+          que pasa con los envíos y lo que está en riesgo. */}
       <Box sx={{
         display: "grid", gap: 2, mb: 3,
-        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0,1fr))", lg: "repeat(4, minmax(0,1fr))" },
+        gridTemplateColumns: {
+          xs: "1fr",
+          lg: summary.ordersUnplanned !== null ? "minmax(0,5fr) minmax(0,4fr)" : "minmax(0,5fr) minmax(0,3fr)",
+        },
       }}>
-        <KpiCard icon={<DirectionsRunRounded />} color="warning.main" title={t("En tránsito")} value={fmtQuantity(summary.tripsInTransit)} />
-        <KpiCard icon={<ScheduleRounded />} color="info.main" title={t("Programados")} value={fmtQuantity(summary.tripsScheduled)} />
-        <KpiCard icon={<DoneAllRounded />} color="success.main" title={t("Completados")} value={fmtQuantity(summary.tripsCompleted)} />
-        <KpiCard
-          icon={<HourglassBottomRounded />} color="error.main"
-          title={t("Vencidos sin salir")} sub={t("Debían haber salido")}
-          value={fmtQuantity(summary.tripsOverdue)}
-        />
-        <KpiCard icon={<PendingActionsRounded />} color="error.main" title={t("Salieron tarde")} value={fmtQuantity(summary.tripsDepartedLate)} />
-        <KpiCard icon={<ReportProblemRounded />} color="error.main" title={t("Incidencias abiertas")} value={fmtQuantity(summary.openExceptions)} />
-        {/* JOB 12: lo único de esta fila que mira hacia adelante. */}
-        <KpiCard
-          icon={<BlockRounded />} color="warning.main"
-          title={t("No pueden salir")} sub={t("Bloqueados ahora mismo")}
-          value={fmtQuantity(summary.blockedShipments)}
-        />
-        <KpiCard
-          icon={<ScheduleRounded />} color="warning.main"
-          title={t("Paradas pendientes")} sub={t("{{n}} fuera de ventana", { n: fmtQuantity(summary.stopsPastWindow) })}
-          value={fmtQuantity(summary.outstandingStops)}
-        />
-        {/* `null` y no `0` cuando la cuenta no puede ver pedidos: un cero sería una afirmación
-            sobre una cola que la respuesta no tenía permiso para mirar. */}
-        {summary.ordersUnplanned !== null && (
-          <KpiCard icon={<PendingActionsRounded />} color="text.secondary" title={t("Pedidos sin planificar")} value={fmtQuantity(summary.ordersUnplanned)} />
-        )}
+        <KpiBand title={t("Envíos")}>
+          <BandMetric icon={<DirectionsRunRounded />} color="warning.main" title={t("En tránsito")} value={fmtQuantity(summary.tripsInTransit)} />
+          <BandMetric icon={<ScheduleRounded />} color="info.main" title={t("Programados")} value={fmtQuantity(summary.tripsScheduled)} />
+          <BandMetric icon={<DoneAllRounded />} color="success.main" title={t("Completados")} value={fmtQuantity(summary.tripsCompleted)} />
+          <BandMetric
+            icon={<HourglassBottomRounded />} color="error.main"
+            title={t("Vencidos sin salir")} sub={t("Debían haber salido")}
+            value={fmtQuantity(summary.tripsOverdue)}
+          />
+          <BandMetric icon={<PendingActionsRounded />} color="error.main" title={t("Salieron tarde")} value={fmtQuantity(summary.tripsDepartedLate)} />
+        </KpiBand>
+        <KpiBand title={t("Riesgos")}>
+          <BandMetric icon={<ReportProblemRounded />} color="error.main" title={t("Incidencias abiertas")} value={fmtQuantity(summary.openExceptions)} />
+          {/* JOB 12: lo único de esta fila que mira hacia adelante. */}
+          <BandMetric
+            icon={<BlockRounded />} color="warning.main"
+            title={t("No pueden salir")} sub={t("Bloqueados ahora mismo")}
+            value={fmtQuantity(summary.blockedShipments)}
+          />
+          <BandMetric
+            icon={<ScheduleRounded />} color="warning.main"
+            title={t("Paradas pendientes")} sub={t("{{n}} fuera de ventana", { n: fmtQuantity(summary.stopsPastWindow) })}
+            value={fmtQuantity(summary.outstandingStops)}
+          />
+          {/* `null` y no `0` cuando la cuenta no puede ver pedidos: un cero sería una afirmación
+              sobre una cola que la respuesta no tenía permiso para mirar. */}
+          {summary.ordersUnplanned !== null && (
+            <BandMetric icon={<PendingActionsRounded />} color="text.secondary" title={t("Pedidos sin planificar")} value={fmtQuantity(summary.ordersUnplanned)} />
+          )}
+        </KpiBand>
       </Box>
 
+      {/* Paneles en dos filas de alturas iguales: tres arriba, dos abajo. */}
       <Box sx={{
-        display: "grid", gap: 3, mb: 3, alignItems: "start",
+        display: "grid", gap: 2, mb: 2,
         gridTemplateColumns: { xs: "1fr", lg: "repeat(3, minmax(0, 1fr))" },
       }}>
         <WorkloadPanel items={overview.workload} total={summary.tripsInTransit + summary.tripsScheduled} />
         <ExceptionsPanel items={overview.openExceptions} total={summary.openExceptions} />
         <OutstandingStopsPanel items={overview.outstandingStops} total={summary.outstandingStops} />
+      </Box>
+      <Box sx={{
+        display: "grid", gap: 2, mb: 3,
+        gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(0, 1fr))" },
+      }}>
         <BlockersPanel items={overview.blockers} total={summary.blockedShipments} />
         {/* Debajo de los bloqueadores y visiblemente distinto (JOB 23). Dos corrientes, dos
             contadores: "qué está atascado" y "qué conviene saber" son preguntas diferentes, y una
@@ -273,43 +288,21 @@ export function ControlTowerPage() {
         <AdvisoriesPanel items={overview.advisories} total={summary.openAdvisories} />
       </Box>
 
-      <Toolbar
-        onApply={applyFilters}
-        onReset={resetFilters}
-        filters={
-          <>
-            <TextField
-              select size="small" label={t("Origen")} value={draft.originId}
-              onChange={(e) => setDraft({ ...draft, originId: e.target.value })}
-              sx={{ minWidth: 190 }}
-            >
-              <MenuItem value="">{t("Todos los orígenes")}</MenuItem>
-              {(originsQuery.data?.content ?? []).map((origin) => (
-                <MenuItem key={origin.id} value={origin.id}>{origin.name}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Transportista")} value={draft.carrierId}
-              onChange={(e) => setDraft({ ...draft, carrierId: e.target.value })}
-              sx={{ minWidth: 200 }}
-            >
-              <MenuItem value="">{t("Todos los transportistas")}</MenuItem>
-              {(carriersQuery.data?.content ?? []).map((carrier) => (
-                <MenuItem key={carrier.id} value={carrier.id}>{carrier.businessName}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Estado")} value={draft.status}
-              onChange={(e) => setDraft({ ...draft, status: e.target.value as TripStatus | "" })}
-              sx={{ minWidth: 180 }}
-            >
-              <MenuItem value="">{t("Todos los estados")}</MenuItem>
-              {TRIP_STATUSES.map((status) => (
-                <MenuItem key={status} value={status}>{enumLabel("tripStatus", status)}</MenuItem>
-              ))}
-            </TextField>
-          </>
-        }
+      <FilterBar
+        value={filters}
+        defaults={DEFAULT_FILTERS}
+        onChange={setFilters}
+        fields={[
+          { type: "select", key: "originId", label: t("Origen"), icon: <WarehouseRounded />,
+            allLabel: t("Todos los orígenes"),
+            options: (originsQuery.data?.content ?? []).map((origin) => ({ id: origin.id, label: origin.name })) },
+          { type: "select", key: "carrierId", label: t("Transportista"), icon: <BusinessRounded />,
+            allLabel: t("Todos los transportistas"),
+            options: (carriersQuery.data?.content ?? []).map((carrier) => ({ id: carrier.id, label: carrier.businessName })) },
+          { type: "select", key: "status", label: t("Estado"), icon: <FlagRounded />,
+            allLabel: t("Todos los estados"),
+            options: TRIP_STATUSES.map((status) => ({ id: status, label: enumLabel("tripStatus", status) })) },
+        ]}
       />
 
       {delayedCount > 0 && (

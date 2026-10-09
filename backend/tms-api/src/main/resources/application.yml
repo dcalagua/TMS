@@ -218,6 +218,12 @@ tms:
     # exp - iat may not exceed this; 300s is also the hard ceiling the code enforces.
     max-token-lifetime: ${TMS_PLATFORM_M2M_MAX_TOKEN_LIFETIME:300s}
     clock-skew: ${TMS_PLATFORM_M2M_CLOCK_SKEW:30s}
+  platform-entitlements:
+    # MasterAdmin -> TMS commercial entitlements (ebim.entitlements/v1, migration V56, ADR-017,
+    # docs/platform-provisioning/ENTITLEMENTS.md). Rides on the platform-provisioning chain, key and
+    # switch above, with scopes tms:entitlements:write|read. The environment a snapshot must be issued
+    # for: DEV, QAS, DEMO or PRD. Empty (default) refuses every snapshot with ENVIRONMENT_MISMATCH.
+    environment: ${TMS_ENTITLEMENTS_ENVIRONMENT:}
   tracking:
     # Vehicle positions (migration V29, docs/domain/TRACKING_V1.md). There is deliberately no
     # `enabled` flag: intake is gated by the integration.tracking:write scope, which an

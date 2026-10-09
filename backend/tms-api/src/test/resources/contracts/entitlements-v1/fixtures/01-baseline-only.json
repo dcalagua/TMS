@@ -1,0 +1,82 @@
+{
+  "id": "01-baseline-only",
+  "description": "App activa sin nada vendido: todas las sellables ACTIVE con enabled=false; solo baseline.",
+  "receiver": {
+    "environment": "DEV",
+    "productCode": "fixture",
+    "knownCapabilities": [
+      "fixture.ai.insights",
+      "fixture.docs.monthly",
+      "fixture.promotions",
+      "fixture.reports",
+      "fixture.users.max"
+    ],
+    "baselineCapabilities": [
+      "fixture.core"
+    ],
+    "provisionedTenants": [
+      "00000000-0000-4ccc-8000-000000000001"
+    ],
+    "enforcementMode": "SHADOW",
+    "writeScope": "fixture:entitlements:write",
+    "readScope": "fixture:entitlements:read"
+  },
+  "steps": [
+    {
+      "step": 1,
+      "tenantPath": "00000000-0000-4ccc-8000-000000000001",
+      "snapshot": {
+        "schema": "ebim.entitlements/v1",
+        "environment": "DEV",
+        "controlPlaneTenantId": "00000000-0000-4ccc-8000-000000000001",
+        "productCode": "fixture",
+        "external": {
+          "tenantId": "fixture-ext-01",
+          "organizationId": "fixture-org-01",
+          "companyIds": []
+        },
+        "snapshotVersion": 1,
+        "previousVersion": null,
+        "effectiveAt": "2026-10-01T00:00:01Z",
+        "issuedAt": "2026-10-01T00:00:11Z",
+        "appActive": true,
+        "planCode": null,
+        "capabilities": [
+          {
+            "code": "fixture.ai.insights",
+            "enabled": false,
+            "scope": {
+              "level": "TENANT"
+            },
+            "sources": []
+          },
+          {
+            "code": "fixture.promotions",
+            "enabled": false,
+            "scope": {
+              "level": "COMPANY"
+            },
+            "sources": []
+          },
+          {
+            "code": "fixture.reports",
+            "enabled": false,
+            "scope": {
+              "level": "TENANT"
+            },
+            "sources": []
+          }
+        ],
+        "limits": [],
+        "allowances": [],
+        "aiCredits": {
+          "weights": [],
+          "weightsVersion": 0
+        },
+        "correlationId": "00000000-0000-4ccc-8000-0000000c0011",
+        "idempotencyKey": "ma-ent-v1-0640f12dcace91d9b75aa164a40760134799901849311c2184a20f73cbb10cdf",
+        "checksum": "sha256:3748296d0b4542a63cfc4bf0955f7e2449f5522d8b6d70fac3640f8ffafc534b"
+      }
+    }
+  ]
+}

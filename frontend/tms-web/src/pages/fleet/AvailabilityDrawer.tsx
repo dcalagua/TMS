@@ -1,10 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
-import {
-  Alert, Button, Chip, IconButton, MenuItem, Stack, Table, TableBody, TableCell, TableHead,
-  TableRow, TextField, Tooltip, Typography,
-} from "@mui/material";
-import { BuildCircleRounded, DeleteOutlineRounded } from "@mui/icons-material";
-import { FormDrawer } from "../../shared/ui/components";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Alert, Box, Button, IconButton, MenuItem, TextField, Tooltip, Typography } from "@mui/material";
+import { BuildCircleRounded, CheckRounded, DeleteOutlineRounded } from "@mui/icons-material";
+import { ContextCard, DateTimeInput, FormDrawer, StatusChip } from "../../shared/ui/components";
 import {
   DRIVER_UNAVAILABILITY_REASONS, VEHICLE_UNAVAILABILITY_REASONS, blockDriver, blockVehicle,
   listDriverUnavailability, listVehicleUnavailability, releaseDriver, releaseVehicle,
@@ -15,6 +12,7 @@ import { describeApiError } from "../../shared/api/problemMessages";
 import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
+import { T } from "../../theme";
 
 interface AvailabilityDrawerProps {
   companyId: string;
@@ -122,97 +120,116 @@ export function AvailabilityDrawer({
     <FormDrawer
       open
       title={isVehicle ? t("Disponibilidad del vehículo") : t("Disponibilidad del conductor")}
-      subtitle={resourceLabel}
+      subtitle={isVehicle
+        ? t("Cuándo el vehículo no puede salir, y por qué.")
+        : t("Cuándo el conductor no puede trabajar, y por qué.")}
       icon={<BuildCircleRounded />}
       onClose={onClose}
       dirty={touched}
-      size="md"
-      footer={<Button onClick={onClose} disabled={submitting}>{t("Cerrar")}</Button>}
+      size="sm"
+      footer={
+        <>
+          <Button color="inherit" sx={{ color: "text.secondary" }} onClick={onClose} disabled={submitting}>{t("Cerrar")}</Button>
+          {canManage && (
+            <Button variant="contained" startIcon={<CheckRounded />} disabled={invalid || submitting} onClick={() => void submit()}>
+              {submitting ? t("Registrando...") : t("Registrar ventana")}
+            </Button>
+          )}
+        </>
+      }
     >
-      <Stack spacing={3}>
-        {canManage && (
-          <Stack spacing={2}>
-            <Typography variant="subtitle2">{t("Registrar una ventana")}</Typography>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
-                select size="small" label={t("Motivo")} value={reason} sx={{ minWidth: 180 }}
-                onChange={(e) => { setReason(e.target.value as UnavailabilityReason); setTouched(true); }}
-              >
-                {reasons.map((value) => (
-                  <MenuItem key={value} value={value}>{enumLabel("unavailabilityReason", value)}</MenuItem>
-                ))}
-              </TextField>
-              <TextField
-                size="small" type="datetime-local" label={t("Desde")} value={startsAt} required
-                onChange={(e) => { setStartsAt(e.target.value); setTouched(true); }}
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
-              <TextField
-                size="small" type="datetime-local" label={t("Hasta")} value={endsAt} required
-                onChange={(e) => { setEndsAt(e.target.value); setTouched(true); }}
-                slotProps={{ inputLabel: { shrink: true } }}
-                helperText={endsAt !== "" && endsAt <= startsAt ? t("Debe terminar después de empezar.") : " "}
-                error={endsAt !== "" && endsAt <= startsAt}
-              />
-            </Stack>
+      <Box sx={{ display: "grid", gap: 2.5 }}>
+        <ContextCard
+          title={resourceLabel}
+          status={blocks !== null && (
+            <StatusChip
+              label={blocks.length === 0
+                ? t("Disponible")
+                : blocks.length === 1 ? t("{{count}} ventana", { count: 1 }) : t("{{count}} ventanas", { count: blocks.length })}
+              tone={blocks.length === 0 ? "done" : "inProgress"}
+            />
+          )}
+          detail={isVehicle ? t("Vehículo") : t("Conductor")}
+        />
+
+        {canManage && section(t("Registrar una ventana"), (
+          <>
+            <TextField
+              select size="small" label={t("Motivo")} value={reason}
+              onChange={(e) => { setReason(e.target.value as UnavailabilityReason); setTouched(true); }}
+            >
+              {reasons.map((value) => (
+                <MenuItem key={value} value={value}>{enumLabel("unavailabilityReason", value)}</MenuItem>
+              ))}
+            </TextField>
+            <DateTimeInput
+              size="small" label={t("Desde")} value={startsAt} required
+              onChange={(v) => { setStartsAt(v); setTouched(true); }}
+            />
+            <DateTimeInput
+              size="small" label={t("Hasta")} value={endsAt} required
+              onChange={(v) => { setEndsAt(v); setTouched(true); }}
+              helperText={endsAt !== "" && endsAt <= startsAt ? t("Debe terminar después de empezar.") : " "}
+              error={endsAt !== "" && endsAt <= startsAt}
+            />
             <TextField
               size="small" label={t("Notas")} value={notes} multiline minRows={1}
               onChange={(e) => { setNotes(e.target.value); setTouched(true); }}
             />
-            <Stack direction="row" sx={{ justifyContent: "flex-end" }}>
-              <Button variant="contained" disabled={invalid || submitting} onClick={() => void submit()}>
-                {submitting ? t("Registrando...") : t("Registrar")}
-              </Button>
-            </Stack>
-          </Stack>
-        )}
+          </>
+        ))}
 
-        <Stack spacing={1}>
-          <Typography variant="subtitle2">{t("Ventanas registradas")}</Typography>
-          {blocks === null ? (
-            <Typography variant="body2" color="text.secondary">{t("Cargando...")}</Typography>
-          ) : blocks.length === 0 ? (
-            <Alert severity="info" variant="outlined">
-              {isVehicle
-                ? t("Sin ventanas: el vehículo está disponible siempre.")
-                : t("Sin ventanas: el conductor está disponible siempre.")}
-            </Alert>
-          ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{t("Motivo")}</TableCell>
-                  <TableCell>{t("Desde")}</TableCell>
-                  <TableCell>{t("Hasta")}</TableCell>
-                  <TableCell>{t("Notas")}</TableCell>
-                  {canManage && <TableCell align="right">{t("Acciones")}</TableCell>}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {blocks.map((block) => (
-                  <TableRow key={block.id} hover>
-                    <TableCell>
-                      <Chip size="small" label={enumLabel("unavailabilityReason", block.reason)} />
-                    </TableCell>
-                    <TableCell>{new Date(block.startsAt).toLocaleString()}</TableCell>
-                    <TableCell>{new Date(block.endsAt).toLocaleString()}</TableCell>
-                    <TableCell>{block.notes ?? "—"}</TableCell>
-                    {canManage && (
-                      <TableCell align="right">
-                        <Tooltip title={t("Liberar")}>
-                          <IconButton size="small" onClick={() => void release(block)}>
-                            <DeleteOutlineRounded fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </Stack>
-      </Stack>
+        {section(t("Ventanas registradas"), blocks === null ? (
+          <Typography variant="body2" color="text.secondary">{t("Cargando...")}</Typography>
+        ) : blocks.length === 0 ? (
+          <Alert severity="info" variant="outlined">
+            {isVehicle
+              ? t("Sin ventanas: el vehículo está disponible siempre.")
+              : t("Sin ventanas: el conductor está disponible siempre.")}
+          </Alert>
+        ) : (
+          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}>
+            {blocks.map((block) => (
+              <Box
+                key={block.id}
+                sx={{
+                  display: "flex", alignItems: "flex-start", gap: 1, px: 1.5, py: 1.25,
+                  "& + &": { borderTop: "1px solid", borderColor: "divider" },
+                }}
+              >
+                <Box sx={{ flex: 1, minWidth: 0, display: "grid", gap: 0.5 }}>
+                  <Box><StatusChip label={enumLabel("unavailabilityReason", block.reason)} /></Box>
+                  <Typography sx={{ fontSize: T.body - 0.5, fontVariantNumeric: "tabular-nums" }}>
+                    {new Date(block.startsAt).toLocaleString()} → {new Date(block.endsAt).toLocaleString()}
+                  </Typography>
+                  {block.notes && (
+                    <Typography sx={{ fontSize: T.micro + 0.5, color: "text.secondary" }}>{block.notes}</Typography>
+                  )}
+                </Box>
+                {canManage && (
+                  <Tooltip title={t("Liberar")}>
+                    <IconButton size="small" onClick={() => void release(block)}>
+                      <DeleteOutlineRounded fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Box>
+            ))}
+          </Box>
+        ))}
+      </Box>
     </FormDrawer>
+  );
+}
+
+/** Un bloque del cajón con su título pequeño en mayúsculas, como en los paneles de detalle. */
+function section(title: string, children: ReactNode) {
+  return (
+    <Box component="section" aria-label={title} sx={{ display: "grid", gap: 1.5 }}>
+      <Typography sx={{ fontSize: T.micro, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "text.secondary" }}>
+        {title}
+      </Typography>
+      {children}
+    </Box>
   );
 }

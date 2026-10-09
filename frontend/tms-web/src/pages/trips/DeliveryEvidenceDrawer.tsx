@@ -1,9 +1,9 @@
-import { useState, type ChangeEvent } from "react";
+import { useState, type ChangeEvent, type ReactNode } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Alert, Box, Button, MenuItem, TextField, Typography } from "@mui/material";
 import { AttachFileRounded, UploadFileRounded } from "@mui/icons-material";
 import { EVIDENCE_TYPES, type EvidenceType } from "../../shared/api/planningApi";
-import { FormDrawer } from "../../shared/ui/components";
+import { ContextCard, FormDateInput, FormDrawer } from "../../shared/ui/components";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 
@@ -17,6 +17,10 @@ export interface DeliveryEvidenceValues {
 
 interface DeliveryEvidenceDrawerProps {
   orderNumber: string;
+  /** La parada en la que se registró la entrega, para la tarjeta de contexto. */
+  stopLabel?: string;
+  /** El resultado ya registrado de la entrega, como chip de estado. */
+  status?: ReactNode;
   onClose: () => void;
   /** Lanza un `Error` con la frase del servidor si el backend rechaza. */
   onSubmit: (values: DeliveryEvidenceValues) => Promise<void>;
@@ -30,12 +34,12 @@ interface DeliveryEvidenceDrawerProps {
  * configuración, no un error que haya cometido el operador, y presentarlo como un fallo rojo
  * genérico haría que alguien fuera a buscar el problema donde no está.
  */
-export function DeliveryEvidenceDrawer({ orderNumber, onClose, onSubmit }: DeliveryEvidenceDrawerProps) {
+export function DeliveryEvidenceDrawer({ orderNumber, stopLabel, status, onClose, onSubmit }: DeliveryEvidenceDrawerProps) {
   const [formError, setFormError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
 
   const {
-    register, control, handleSubmit,
+    control, handleSubmit,
     formState: { isDirty, isSubmitting },
   } = useForm<{ evidenceType: EvidenceType; capturedAt: string }>({
     defaultValues: { evidenceType: "SIGNATURE", capturedAt: "" },
@@ -68,22 +72,29 @@ export function DeliveryEvidenceDrawer({ orderNumber, onClose, onSubmit }: Deliv
       open
       icon={<AttachFileRounded />}
       title={t("Adjuntar prueba de entrega")}
-      subtitle={orderNumber}
-      size="md"
+      subtitle={t("Una firma, una foto o un documento de la entrega.")}
+      size="sm"
       onClose={onClose}
       dirty={isDirty || file !== null}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
-          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting || file === null}>
-            {isSubmitting ? t("Subiendo...") : t("Adjuntar")}
+          <Button color="inherit" sx={{ color: "text.secondary" }} onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" startIcon={<AttachFileRounded />} disabled={isSubmitting || file === null}>
+            {isSubmitting ? t("Subiendo...") : t("Adjuntar prueba")}
           </Button>
         </>
       }
     >
-      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(submit)(event)} noValidate>
-        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(submit)(event)} noValidate
+        sx={{ display: "grid", gap: 2 }}>
+        <ContextCard
+          title={t("Pedido {{number}}", { number: orderNumber })}
+          status={status}
+          detail={stopLabel ? t("Entrega registrada en {{stop}}", { stop: stopLabel }) : t("Entrega ya registrada")}
+        />
+
+        {formError && <Alert severity="error">{formError}</Alert>}
 
         <Box sx={{ display: "grid", gap: 2 }}>
           <Controller
@@ -101,15 +112,15 @@ export function DeliveryEvidenceDrawer({ orderNumber, onClose, onSubmit }: Deliv
             )}
           />
 
-          <TextField
-            label={t("Capturado el")} size="small" fullWidth type="datetime-local"
-            slotProps={{ inputLabel: { shrink: true } }}
+          <FormDateInput
+            control={control} name="capturedAt" mode="datetime"
+            label={t("Capturado el")} size="small" fullWidth
             helperText={t("Cuándo se tomó la firma o la foto. Opcional.")}
-            {...register("capturedAt")}
           />
 
           <Box>
-            <Button component="label" variant="outlined" startIcon={<UploadFileRounded />}>
+            <Button component="label" variant="outlined" startIcon={<UploadFileRounded />} fullWidth
+              sx={{ justifyContent: "flex-start", borderStyle: "dashed", py: 1.25, textTransform: "none" }}>
               {file ? file.name : t("Elegir fichero")}
               <input type="file" hidden accept="image/*,application/pdf" onChange={pickFile} />
             </Button>

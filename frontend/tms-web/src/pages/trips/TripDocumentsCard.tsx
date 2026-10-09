@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { Box, Typography } from "@mui/material";
+import { Typography } from "@mui/material";
 import { DescriptionRounded } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchTripDocuments } from "../../shared/api/logisticsDocumentsApi";
 import { describeApiError } from "../../shared/api/problemMessages";
-import { AppCard, LoadingState } from "../../shared/ui/components";
+import { LoadingState } from "../../shared/ui/components";
+import { WorkspaceCard } from "./WorkspaceCard";
 import { LogisticsDocumentsTable } from "../../shared/ui/LogisticsDocumentsTable";
 import { t } from "../../lib/i18n";
 
@@ -27,13 +28,9 @@ export function TripDocumentsCard({ companyId, tripId, orderNumbers }: {
     entry.documents.map((document) => ({ ...document, orderLabel: orderNumbers.get(entry.orderId) ?? entry.orderId })));
 
   return (
-    <AppCard
-      title={
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <DescriptionRounded sx={{ fontSize: 19, color: "text.disabled" }} />
-          {t("Documentos")}
-        </Box>
-      }
+    <WorkspaceCard
+      icon={<DescriptionRounded />}
+      title={t("Documentos")}
     >
       {documentsQuery.isPending ? (
         <LoadingState minHeight={80} />
@@ -46,6 +43,6 @@ export function TripDocumentsCard({ companyId, tripId, orderNumbers }: {
       ) : (
         <LogisticsDocumentsTable documents={rows} showOrder />
       )}
-    </AppCard>
+    </WorkspaceCard>
   );
 }

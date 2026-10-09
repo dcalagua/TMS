@@ -1,0 +1,1144 @@
+# TM18-04 full backend suite WITHOUT database (Docker socket denied in sandbox; DB-backed tests skip), ./mvnw -o -B clean test, Mockito -javaagent
+Picked up JAVA_TOOL_OPTIONS: -Djava.net.preferIPv4Stack=true
+/var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/jansi-2.4.3-66a04c410dc193bd-libjansi.jnilib.lck (Operation not permitted)
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------------------< com.ebim.tms:tms-api >------------------------
+[INFO] Building tms-api 0.1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.5.0:clean (default-clean) @ tms-api ---
+[INFO] Deleting /Users/edudavidmorenoccama/Documents/Documentos-Edus-MacBook-Pro-2/EBIM/TMS/.worktrees/ebim-commercial-control-plane-v1/backend/tms-api/target
+[INFO] 
+[INFO] --- spring-boot:4.0.7:build-info (default) @ tms-api ---
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ tms-api ---
+[INFO] Copying 3 resources from src/main/resources to target/classes
+[INFO] Copying 54 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.14.1:compile (default-compile) @ tms-api ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 846 source files with javac [debug parameters release 21] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ tms-api ---
+[INFO] Copying 22 resources from src/test/resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.14.1:testCompile (default-testCompile) @ tms-api ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 205 source files with javac [debug parameters release 21] to target/test-classes
+[INFO] /Users/edudavidmorenoccama/Documents/Documentos-Edus-MacBook-Pro-2/EBIM/TMS/.worktrees/ebim-commercial-control-plane-v1/backend/tms-api/src/test/java/com/ebim/tms/audit/application/AuditQueryServiceTest.java: Some input files use unchecked or unsafe operations.
+[INFO] /Users/edudavidmorenoccama/Documents/Documentos-Edus-MacBook-Pro-2/EBIM/TMS/.worktrees/ebim-commercial-control-plane-v1/backend/tms-api/src/test/java/com/ebim/tms/audit/application/AuditQueryServiceTest.java: Recompile with -Xlint:unchecked for details.
+[INFO] 
+[INFO] --- surefire:3.5.6:test (default-test) @ tms-api ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+Picked up JAVA_TOOL_OPTIONS: -Djava.net.preferIPv4Stack=true
+[INFO] Running Smoke: authenticate -> masters -> fleet -> order -> plan -> confirm -> dispatch -> deliver -> close out -> reopen
+[WARNING] Tests run: 20, Failures: 0, Errors: 0, Skipped: 20, Time elapsed: 0.002 s -- in Smoke: authenticate -> masters -> fleet -> order -> plan -> confirm -> dispatch -> deliver -> close out -> reopen
+[INFO] Running com.ebim.tms.database.AuditVocabularyMigrationTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.037 s -- in com.ebim.tms.database.AuditVocabularyMigrationTest
+[INFO] Running com.ebim.tms.database.RoutingCacheConstraintIntegrationTest
+[WARNING] Tests run: 9, Failures: 0, Errors: 0, Skipped: 9, Time elapsed: 0 s -- in com.ebim.tms.database.RoutingCacheConstraintIntegrationTest
+[INFO] Running com.ebim.tms.database.MasterDataLocationFrequencyConstraintIntegrationTest
+[WARNING] Tests run: 9, Failures: 0, Errors: 0, Skipped: 9, Time elapsed: 0 s -- in com.ebim.tms.database.MasterDataLocationFrequencyConstraintIntegrationTest
+[INFO] Running com.ebim.tms.database.IntegrationTenancyIsolationIntegrationTest
+[WARNING] Tests run: 16, Failures: 0, Errors: 0, Skipped: 16, Time elapsed: 0.001 s -- in com.ebim.tms.database.IntegrationTenancyIsolationIntegrationTest
+[INFO] Running com.ebim.tms.database.MasterDataRouteConstraintIntegrationTest
+[WARNING] Tests run: 15, Failures: 0, Errors: 0, Skipped: 15, Time elapsed: 0 s -- in com.ebim.tms.database.MasterDataRouteConstraintIntegrationTest
+[INFO] Running com.ebim.tms.database.SchemaExposureIntegrationTest
+[WARNING] Tests run: 11, Failures: 0, Errors: 0, Skipped: 11, Time elapsed: 0 s -- in com.ebim.tms.database.SchemaExposureIntegrationTest
+[INFO] Running com.ebim.tms.database.MasterDataConstraintIntegrationTest
+[WARNING] Tests run: 6, Failures: 0, Errors: 0, Skipped: 6, Time elapsed: 0.001 s -- in com.ebim.tms.database.MasterDataConstraintIntegrationTest
+[INFO] Running com.ebim.tms.database.ApplicationDatabaseStartupIntegrationTest
+[WARNING] Tests run: 1, Failures: 0, Errors: 0, Skipped: 1, Time elapsed: 0 s -- in com.ebim.tms.database.ApplicationDatabaseStartupIntegrationTest
+[INFO] Running com.ebim.tms.database.MigrationConventionTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.088 s -- in com.ebim.tms.database.MigrationConventionTest
+[INFO] Running com.ebim.tms.database.PersistedEnumConstraintTest
+[WARNING] Tests run: 3, Failures: 0, Errors: 0, Skipped: 3, Time elapsed: 0 s -- in com.ebim.tms.database.PersistedEnumConstraintTest
+[INFO] Running com.ebim.tms.database.OrderConstraintIntegrationTest
+[WARNING] Tests run: 25, Failures: 0, Errors: 0, Skipped: 25, Time elapsed: 0 s -- in com.ebim.tms.database.OrderConstraintIntegrationTest
+[INFO] Running com.ebim.tms.database.FlywayMigrationIntegrationTest
+[WARNING] Tests run: 4, Failures: 0, Errors: 0, Skipped: 4, Time elapsed: 0.001 s -- in com.ebim.tms.database.FlywayMigrationIntegrationTest
+[INFO] Running com.ebim.tms.database.ShipmentOutboxTenancyIsolationIntegrationTest
+[WARNING] Tests run: 7, Failures: 0, Errors: 0, Skipped: 7, Time elapsed: 0 s -- in com.ebim.tms.database.ShipmentOutboxTenancyIsolationIntegrationTest
+[INFO] Running com.ebim.tms.database.TenancyConstraintIntegrationTest
+[WARNING] Tests run: 10, Failures: 0, Errors: 0, Skipped: 10, Time elapsed: 0 s -- in com.ebim.tms.database.TenancyConstraintIntegrationTest
+[INFO] Running com.ebim.tms.database.PlanningConstraintIntegrationTest
+[WARNING] Tests run: 32, Failures: 0, Errors: 0, Skipped: 32, Time elapsed: 0 s -- in com.ebim.tms.database.PlanningConstraintIntegrationTest
+[INFO] Running com.ebim.tms.database.LocalSeedIntegrationTest
+[WARNING] Tests run: 2, Failures: 0, Errors: 0, Skipped: 2, Time elapsed: 0 s -- in com.ebim.tms.database.LocalSeedIntegrationTest
+[INFO] Running com.ebim.tms.database.MasterDataDestinationFrequencyConstraintIntegrationTest
+[WARNING] Tests run: 11, Failures: 0, Errors: 0, Skipped: 11, Time elapsed: 0 s -- in com.ebim.tms.database.MasterDataDestinationFrequencyConstraintIntegrationTest
+[INFO] Running com.ebim.tms.database.FleetConstraintIntegrationTest
+[WARNING] Tests run: 18, Failures: 0, Errors: 0, Skipped: 18, Time elapsed: 0.001 s -- in com.ebim.tms.database.FleetConstraintIntegrationTest
+[INFO] Running com.ebim.tms.database.DeliveredQuantityConstraintIntegrationTest
+[WARNING] Tests run: 3, Failures: 0, Errors: 0, Skipped: 3, Time elapsed: 0 s -- in com.ebim.tms.database.DeliveredQuantityConstraintIntegrationTest
+[INFO] Running com.ebim.tms.database.CanonicalLocationConstraintIntegrationTest
+[WARNING] Tests run: 2, Failures: 0, Errors: 0, Skipped: 2, Time elapsed: 0 s -- in com.ebim.tms.database.CanonicalLocationConstraintIntegrationTest
+[INFO] Running com.ebim.tms.database.TenantRlsIsolationIntegrationTest
+[WARNING] Tests run: 5, Failures: 0, Errors: 0, Skipped: 5, Time elapsed: 0 s -- in com.ebim.tms.database.TenantRlsIsolationIntegrationTest
+[INFO] Running com.ebim.tms.rates.application.RateCardServiceTest
+[INFO] Running what a card must charge
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in what a card must charge
+[INFO] Running overlapping agreements
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in overlapping agreements
+[INFO] Running the scope trio
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in the scope trio
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.313 s -- in com.ebim.tms.rates.application.RateCardServiceTest
+[INFO] Running com.ebim.tms.rates.application.TripCostServiceTest
+[INFO] Running reading
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.039 s -- in reading
+[INFO] Running estimating on demand
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in estimating on demand
+[INFO] Running the actual, and closing it
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in the actual, and closing it
+[INFO] Running estimating at confirmation
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in estimating at confirmation
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.067 s -- in com.ebim.tms.rates.application.TripCostServiceTest
+[INFO] Running com.ebim.tms.rates.domain.RateCardSelectorTest
+[INFO] Running candidates
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in candidates
+[INFO] Running ranking
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in ranking
+[INFO] Running lane pricing (V39)
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in lane pricing (V39)
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in com.ebim.tms.rates.domain.RateCardSelectorTest
+[INFO] Running com.ebim.tms.rates.domain.TripCostCalculatorTest
+[INFO] Running components
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in components
+[INFO] Running what cannot be calculated
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in what cannot be calculated
+[INFO] Running the minimum
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the minimum
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in com.ebim.tms.rates.domain.TripCostCalculatorTest
+[INFO] Running com.ebim.tms.rates.domain.RateEngineV2CalculatorTest
+[INFO] Running where the kilometres came from
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in where the kilometres came from
+[INFO] Running the stop-off charge
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in the stop-off charge
+[INFO] Running the accessorials
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the accessorials
+[INFO] Running the limits
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in the limits
+[INFO] Running the fuel surcharge
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the fuel surcharge
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in com.ebim.tms.rates.domain.RateEngineV2CalculatorTest
+[INFO] Running com.ebim.tms.settlement.api.SettlementApiIntegrationTest
+[WARNING] Tests run: 5, Failures: 0, Errors: 0, Skipped: 5, Time elapsed: 0 s -- in com.ebim.tms.settlement.api.SettlementApiIntegrationTest
+[INFO] Running com.ebim.tms.settlement.domain.InvoiceStatusTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.settlement.domain.InvoiceStatusTest
+[INFO] Running com.ebim.tms.settlement.domain.ToleranceTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.settlement.domain.ToleranceTest
+[INFO] Running com.ebim.tms.settlement.domain.FreightMatcherTest
+[INFO] Running unknown is never zero
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in unknown is never zero
+[INFO] Running reproducibility
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in reproducibility
+[INFO] Running within tolerance
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in within tolerance
+[INFO] Running a shipment is billed once
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in a shipment is billed once
+[INFO] Running what cannot be compared
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in what cannot be compared
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in com.ebim.tms.settlement.domain.FreightMatcherTest
+[INFO] Running com.ebim.tms.costing.api.OwnFleetCostingApiIntegrationTest
+[WARNING] Tests run: 3, Failures: 0, Errors: 0, Skipped: 3, Time elapsed: 0 s -- in com.ebim.tms.costing.api.OwnFleetCostingApiIntegrationTest
+[INFO] Running com.ebim.tms.costing.domain.OwnFleetProfileResolverTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.ebim.tms.costing.domain.OwnFleetProfileResolverTest
+[INFO] Running com.ebim.tms.costing.domain.OwnFleetCostCalculatorTest
+[INFO] Running money
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in money
+[INFO] Running what is unknown never becomes zero
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in what is unknown never becomes zero
+[INFO] Running a fixed-only profile
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in a fixed-only profile
+[INFO] Running a complete profile over a measured trip
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in a complete profile over a measured trip
+[INFO] Running time and distance are charged over the resource's duty, not the trip alone
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in time and distance are charged over the resource's duty, not the trip alone
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.ebim.tms.costing.domain.OwnFleetCostCalculatorTest
+[INFO] Running com.ebim.tms.costing.domain.TransportCostComparisonTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.ebim.tms.costing.domain.TransportCostComparisonTest
+[INFO] Running com.ebim.tms.appointments.application.AppointmentOverlapBackstopTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.106 s -- in com.ebim.tms.appointments.application.AppointmentOverlapBackstopTest
+[INFO] Running com.ebim.tms.appointments.application.AppointmentServiceIntegrationTest
+[WARNING] Tests run: 5, Failures: 0, Errors: 0, Skipped: 5, Time elapsed: 0 s -- in com.ebim.tms.appointments.application.AppointmentServiceIntegrationTest
+[INFO] Running com.ebim.tms.appointments.domain.AppointmentStatusTest
+[INFO] Tests run: 27, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.025 s -- in com.ebim.tms.appointments.domain.AppointmentStatusTest
+[INFO] Running com.ebim.tms.notification.application.NotificationRecorderTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.097 s -- in com.ebim.tms.notification.application.NotificationRecorderTest
+[INFO] Running com.ebim.tms.notification.application.NotificationServiceTest
+[INFO] Running who sees what
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in who sees what
+[INFO] Running the panel
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in the panel
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in com.ebim.tms.notification.application.NotificationServiceTest
+[INFO] Running com.ebim.tms.integration.api.IntegrationApiTenancyTest
+[INFO] Running idempotency
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.055 s -- in idempotency
+[INFO] Running scopes
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.033 s -- in scopes
+[INFO] Running commercial access
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in commercial access
+[INFO] Running inbox
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.051 s -- in inbox
+[INFO] Running tenancy
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.033 s -- in tenancy
+[INFO] Running authentication
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.025 s -- in authentication
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.337 s -- in com.ebim.tms.integration.api.IntegrationApiTenancyTest
+[INFO] Running com.ebim.tms.integration.api.IntegrationShipmentApiTest
+[INFO] Running tenancy
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.271 s -- in tenancy
+[INFO] Running filtering
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.019 s -- in filtering
+[INFO] Running detail
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in detail
+[INFO] Running change feed
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in change feed
+[INFO] Running scopes
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in scopes
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.331 s -- in com.ebim.tms.integration.api.IntegrationShipmentApiTest
+[INFO] Running com.ebim.tms.integration.application.IntegrationAuthenticationServiceTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.053 s -- in com.ebim.tms.integration.application.IntegrationAuthenticationServiceTest
+[INFO] Running com.ebim.tms.integration.application.WebhookTargetPolicyTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.ebim.tms.integration.application.WebhookTargetPolicyTest
+[INFO] Running com.ebim.tms.integration.application.WebhookDispatchServiceTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.059 s -- in com.ebim.tms.integration.application.WebhookDispatchServiceTest
+[INFO] Running com.ebim.tms.integration.application.IntegrationHealthServiceTest
+[INFO] Running tenancy
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.048 s -- in tenancy
+[INFO] Running when nothing has gone wrong
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in when nothing has gone wrong
+[INFO] Running a queue that is not draining
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in a queue that is not draining
+[INFO] Running the inbound side
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the inbound side
+[INFO] Running the failure that looks like silence
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in the failure that looks like silence
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.054 s -- in com.ebim.tms.integration.application.IntegrationHealthServiceTest
+[INFO] Running com.ebim.tms.integration.application.IntegrationTenderServiceTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.integration.application.IntegrationTenderServiceTest
+[INFO] Running com.ebim.tms.integration.application.WebhookBackoffTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.ebim.tms.integration.application.WebhookBackoffTest
+[INFO] Running com.ebim.tms.integration.domain.IntegrationSecretsTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.ebim.tms.integration.domain.IntegrationSecretsTest
+[INFO] Running com.ebim.tms.integration.domain.IntegrationClientTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.ebim.tms.integration.domain.IntegrationClientTest
+[INFO] Running com.ebim.tms.integration.domain.WebhookDeliveryTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.ebim.tms.integration.domain.WebhookDeliveryTest
+[INFO] Running com.ebim.tms.integration.domain.WebhookAttemptOutcomeTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.ebim.tms.integration.domain.WebhookAttemptOutcomeTest
+[INFO] Running com.ebim.tms.integration.domain.WebhookSubscriptionTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.integration.domain.WebhookSubscriptionTest
+[INFO] Running com.ebim.tms.integration.domain.WebhookSecretsTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.ebim.tms.integration.domain.WebhookSecretsTest
+[INFO] Running com.ebim.tms.integration.domain.WebhookSecretCipherTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.ebim.tms.integration.domain.WebhookSecretCipherTest
+[INFO] Running com.ebim.tms.integration.domain.WebhookEventTypeTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in com.ebim.tms.integration.domain.WebhookEventTypeTest
+[INFO] Running com.ebim.tms.planning.api.PlanningApiIntegrationTest
+[WARNING] Tests run: 69, Failures: 0, Errors: 0, Skipped: 69, Time elapsed: 0 s -- in com.ebim.tms.planning.api.PlanningApiIntegrationTest
+[INFO] Running com.ebim.tms.planning.api.AutoPlanPreviewIntegrationTest
+[WARNING] Tests run: 2, Failures: 0, Errors: 0, Skipped: 2, Time elapsed: 0 s -- in com.ebim.tms.planning.api.AutoPlanPreviewIntegrationTest
+[INFO] Running com.ebim.tms.planning.application.TripDeliveryServiceTest
+[INFO] Running the time it accepts
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.257 s -- in the time it accepts
+[INFO] Running what it writes
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in what it writes
+[INFO] Running before it records anything
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in before it records anything
+[INFO] Running the result it accepts
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in the result it accepts
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.274 s -- in com.ebim.tms.planning.application.TripDeliveryServiceTest
+[INFO] Running com.ebim.tms.planning.application.ControlTowerAdvisoriesTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.144 s -- in com.ebim.tms.planning.application.ControlTowerAdvisoriesTest
+[INFO] Running com.ebim.tms.planning.application.PlanningEngineV2Test
+[INFO] Running it refuses a trip that cannot be driven in a shift
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in it refuses a trip that cannot be driven in a shift
+[INFO] Running it scores what it proposed
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in it scores what it proposed
+[INFO] Running it sequences stops by distance
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in it sequences stops by distance
+[INFO] Running it plans what is actually outstanding
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in it plans what is actually outstanding
+[INFO] Running the guarantees it shares with V1
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in the guarantees it shares with V1
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.015 s -- in com.ebim.tms.planning.application.PlanningEngineV2Test
+[INFO] Running com.ebim.tms.planning.application.TripAlertPublisherTest
+[INFO] Running deliveries
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.042 s -- in deliveries
+[INFO] Running departure
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in departure
+[INFO] Running driver licences
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in driver licences
+[INFO] Running trip exceptions
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.022 s -- in trip exceptions
+[INFO] Running tenders
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.023 s -- in tenders
+[INFO] Running completion
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in completion
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.092 s -- in com.ebim.tms.planning.application.TripAlertPublisherTest
+[INFO] Running com.ebim.tms.planning.application.OrderExecutionPropagatorTest
+[INFO] Running departure
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.046 s -- in departure
+[INFO] Running close-out
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in close-out
+[INFO] Running a delivery recorded against the trip
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in a delivery recorded against the trip
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.050 s -- in com.ebim.tms.planning.application.OrderExecutionPropagatorTest
+[INFO] Running com.ebim.tms.planning.application.PlanningCapacityServiceTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.planning.application.PlanningCapacityServiceTest
+[INFO] Running com.ebim.tms.planning.application.ControlTowerSummaryTest
+[INFO] Running tenancy
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in tenancy
+[INFO] Running what a caller is allowed to be told
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in what a caller is allowed to be told
+[INFO] Running the shipment counts
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in the shipment counts
+[INFO] Running which service windows can have closed
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in which service windows can have closed
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in com.ebim.tms.planning.application.ControlTowerSummaryTest
+[INFO] Running com.ebim.tms.planning.application.TenderWaterfallResponseRoutingTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.093 s -- in com.ebim.tms.planning.application.TenderWaterfallResponseRoutingTest
+[INFO] Running com.ebim.tms.planning.application.TripTenderServiceTest
+[INFO] Running answering in the UI
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.075 s -- in answering in the UI
+[INFO] Running withdrawing
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in withdrawing
+[INFO] Running offering a shipment
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in offering a shipment
+[INFO] Running sending
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in sending
+[INFO] Running the carrier answering for itself
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in the carrier answering for itself
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.094 s -- in com.ebim.tms.planning.application.TripTenderServiceTest
+[INFO] Running com.ebim.tms.planning.application.KpiServiceTest
+[INFO] Running the CSV export
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.026 s -- in the CSV export
+[INFO] Running the daily series
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in the daily series
+[INFO] Running the headline sections
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in the headline sections
+[INFO] Running the sections a caller may not see
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the sections a caller may not see
+[INFO] Running the gated sections, once the caller holds them
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in the gated sections, once the caller holds them
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.043 s -- in com.ebim.tms.planning.application.KpiServiceTest
+[INFO] Running com.ebim.tms.planning.application.TripRoutingServiceTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.026 s -- in com.ebim.tms.planning.application.TripRoutingServiceTest
+[INFO] Running com.ebim.tms.planning.application.ControlTowerBlockersTest
+[INFO] Running a shipment agreed with one carrier and carrying another's truck
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in a shipment agreed with one carrier and carrying another's truck
+[INFO] Running a shipment whose resources cannot work
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in a shipment whose resources cannot work
+[INFO] Running when nothing is stuck
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in when nothing is stuck
+[INFO] Running more than fits on a screen
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in more than fits on a screen
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in com.ebim.tms.planning.application.ControlTowerBlockersTest
+[INFO] Running com.ebim.tms.planning.application.PlanningEngineComparisonTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in com.ebim.tms.planning.application.PlanningEngineComparisonTest
+[INFO] Running com.ebim.tms.planning.application.KpiRangeTest
+[INFO] Running when the caller names both ends
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in when the caller names both ends
+[INFO] Running the days it enumerates
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the days it enumerates
+[INFO] Running when the caller names one end
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in when the caller names one end
+[INFO] Running when the caller names neither end
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in when the caller names neither end
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.ebim.tms.planning.application.KpiRangeTest
+[INFO] Running com.ebim.tms.planning.application.TripExecutionServiceTest
+[INFO] Running the driver re-check
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.029 s -- in the driver re-check
+[INFO] Running dispatch
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in dispatch
+[INFO] Running concurrency and retries
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in concurrency and retries
+[INFO] Running alerts
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in alerts
+[INFO] Running markReadyForDispatch
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in markReadyForDispatch
+[INFO] Running complete
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in complete
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.049 s -- in com.ebim.tms.planning.application.TripExecutionServiceTest
+[INFO] Running com.ebim.tms.planning.application.AutoPlanningServiceTest
+[INFO] Running what the day cannot absorb
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.070 s -- in what the day cannot absorb
+[INFO] Running properties of an applied plan
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in properties of an applied plan
+[INFO] Running what routing measured, and what it could not
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in what routing measured, and what it could not
+[INFO] Running writing a proposal that is still valid
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in writing a proposal that is still valid
+[INFO] Running losing a race between the snapshot and the write
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in losing a race between the snapshot and the write
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.092 s -- in com.ebim.tms.planning.application.AutoPlanningServiceTest
+[INFO] Running com.ebim.tms.planning.application.TripStopExecutionServiceTest
+[INFO] Running before it records anything
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.024 s -- in before it records anything
+[INFO] Running what it writes
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in what it writes
+[INFO] Running the time it accepts
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in the time it accepts
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.031 s -- in com.ebim.tms.planning.application.TripStopExecutionServiceTest
+[INFO] Running com.ebim.tms.planning.application.TripExceptionServiceTest
+[INFO] Running a repeat of an open problem
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.026 s -- in a repeat of an open problem
+[INFO] Running the rule itself
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in the rule itself
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.029 s -- in com.ebim.tms.planning.application.TripExceptionServiceTest
+[INFO] Running com.ebim.tms.planning.application.PlanningEnginesTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.ebim.tms.planning.application.PlanningEnginesTest
+[INFO] Running com.ebim.tms.planning.application.TripDriverAssignmentTest
+[INFO] Running the four assignment rules
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.071 s -- in the four assignment rules
+[INFO] Running naming a driver
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in naming a driver
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.074 s -- in com.ebim.tms.planning.application.TripDriverAssignmentTest
+[INFO] Running com.ebim.tms.planning.application.ProposalPricerTest
+[INFO] Running when every trip has an agreement in one currency
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in when every trip has an agreement in one currency
+[INFO] Running the KPI block it feeds
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the KPI block it feeds
+[INFO] Running what it refuses to report
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in what it refuses to report
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.ebim.tms.planning.application.ProposalPricerTest
+[INFO] Running com.ebim.tms.planning.application.ShipmentTimeRulesTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.ebim.tms.planning.application.ShipmentTimeRulesTest
+[INFO] Running com.ebim.tms.planning.application.HeuristicPlanningEngineTest
+[INFO] Running capacity
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in capacity
+[INFO] Running nothing to do
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in nothing to do
+[INFO] Running ordering
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in ordering
+[INFO] Running corridors
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in corridors
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.ebim.tms.planning.application.HeuristicPlanningEngineTest
+[INFO] Running com.ebim.tms.planning.application.CarrierRankingTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.planning.application.CarrierRankingTest
+[INFO] Running com.ebim.tms.planning.domain.TripStopExecutionTest
+[INFO] Running the trip above it
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in the trip above it
+[INFO] Running a stop
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in a stop
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.ebim.tms.planning.domain.TripStopExecutionTest
+[INFO] Running com.ebim.tms.planning.domain.TripExecutionLifecycleTest
+[INFO] Running cancellation
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in cancellation
+[INFO] Running the happy path
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in the happy path
+[INFO] Running illegal moves
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in illegal moves
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.ebim.tms.planning.domain.TripExecutionLifecycleTest
+[INFO] Running com.ebim.tms.planning.domain.StopScheduleEngineTest
+[INFO] Running rule 1: an unmeasurable leg ends the chain
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in rule 1: an unmeasurable leg ends the chain
+[INFO] Running rule 3: a window is never made to fit
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in rule 3: a window is never made to fit
+[INFO] Running the arithmetic
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the arithmetic
+[INFO] Running reproducibility
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in reproducibility
+[INFO] Running rule 2: provenance degrades and never upgrades
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in rule 2: provenance degrades and never upgrades
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.ebim.tms.planning.domain.StopScheduleEngineTest
+[INFO] Running com.ebim.tms.planning.domain.TripShipmentTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.ebim.tms.planning.domain.TripShipmentTest
+[INFO] Running com.ebim.tms.planning.domain.DepartureDelayTest
+[INFO] Running a trip that has already left
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in a trip that has already left
+[INFO] Running a trip that has not left
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in a trip that has not left
+[INFO] Running the vocabulary
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in the vocabulary
+[INFO] Running a trip there is nothing to judge
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in a trip there is nothing to judge
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.planning.domain.DepartureDelayTest
+[INFO] Running com.ebim.tms.planning.domain.DeliveryResultTest
+[INFO] Running the rules of each result
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the rules of each result
+[INFO] Running the entity asserting them
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in the entity asserting them
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.ebim.tms.planning.domain.DeliveryResultTest
+[INFO] Running com.ebim.tms.planning.domain.StopServiceWindowTest
+[INFO] Running a stop the vehicle has reached
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in a stop the vehicle has reached
+[INFO] Running a stop nobody has reached
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in a stop nobody has reached
+[INFO] Running resolving the window
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in resolving the window
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.planning.domain.StopServiceWindowTest
+[INFO] Running com.ebim.tms.planning.domain.DeliveryQuantitiesTest
+[INFO] Running what it answers
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in what it answers
+[INFO] Running absent is not zero
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in absent is not zero
+[INFO] Running the invariant
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the invariant
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.ebim.tms.planning.domain.DeliveryQuantitiesTest
+[INFO] Running com.ebim.tms.planning.domain.TenderWaterfallTest
+[INFO] Running walking the list
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in walking the list
+[INFO] Running ending
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in ending
+[INFO] Running a candidate's own rules
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in a candidate's own rules
+[INFO] Running the attempt ceiling
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in the attempt ceiling
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.ebim.tms.planning.domain.TenderWaterfallTest
+[INFO] Running com.ebim.tms.planning.domain.StopExecutionStatusTest
+[INFO] Running resolution
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in resolution
+[INFO] Running the transition table
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in the transition table
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.planning.domain.StopExecutionStatusTest
+[INFO] Running com.ebim.tms.planning.domain.TripTenderTest
+[INFO] Running expiry
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in expiry
+[INFO] Running the offer
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the offer
+[INFO] Running the answer
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the answer
+[INFO] Running sending
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in sending
+[INFO] Running withdrawal
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in withdrawal
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.ebim.tms.planning.domain.TripTenderTest
+[INFO] Running com.ebim.tms.planning.domain.TenderStatusTest
+[INFO] Running the state predicates
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the state predicates
+[INFO] Running the transition table
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the transition table
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.planning.domain.TenderStatusTest
+[INFO] Running com.ebim.tms.planning.domain.TripStatusTest
+[INFO] Running the transition table
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the transition table
+[INFO] Running the state predicates
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the state predicates
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.planning.domain.TripStatusTest
+[INFO] Running com.ebim.tms.planning.domain.KpiRateTest
+[INFO] Running a percentage of something
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in a percentage of something
+[INFO] Running a percentage of nothing
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in a percentage of nothing
+[INFO] Running a utilisation percentage
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in a utilisation percentage
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.planning.domain.KpiRateTest
+[INFO] Running com.ebim.tms.planning.domain.TripAcceptedCarrierTest
+[INFO] Running when the accepting carrier owns the vehicle
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in when the accepting carrier owns the vehicle
+[INFO] Running when another carrier accepts
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in when another carrier accepts
+[INFO] Running who is recorded as having touched it
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in who is recorded as having touched it
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.planning.domain.TripAcceptedCarrierTest
+[INFO] Running com.ebim.tms.shared.config.LocalProfileDatabaseGuardTest
+[INFO] Running URLs that name this machine
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in URLs that name this machine
+[INFO] Running when Flyway was built from the DataSource and carries no URL of its own
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.145 s -- in when Flyway was built from the DataSource and carries no URL of its own
+[INFO] Running URLs that do not
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in URLs that do not
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.152 s -- in com.ebim.tms.shared.config.LocalProfileDatabaseGuardTest
+[INFO] Running com.ebim.tms.shared.security.CommercialAccessFilterTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.ebim.tms.shared.security.CommercialAccessFilterTest
+[INFO] Running com.ebim.tms.shared.security.TenantRuntimeRoleHealthIndicatorTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.075 s -- in com.ebim.tms.shared.security.TenantRuntimeRoleHealthIndicatorTest
+[INFO] Running com.ebim.tms.shared.security.TenantRuntimeRoleCheckTest
+[INFO] Running re-evaluation policy
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in re-evaluation policy
+[INFO] Running diagnosis
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in diagnosis
+[INFO] Running a refused role is not a failed database
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in a refused role is not a failed database
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in com.ebim.tms.shared.security.TenantRuntimeRoleCheckTest
+[INFO] Running com.ebim.tms.shared.security.CapabilityTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.ebim.tms.shared.security.CapabilityTest
+[INFO] Running com.ebim.tms.shared.security.SupabaseJwtDecodersTest
+[INFO] Running the decoder bean
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.018 s -- in the decoder bean
+[INFO] Running missing configuration
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in missing configuration
+[INFO] Running other settings
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in other settings
+[INFO] Running production hardening
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in production hardening
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.021 s -- in com.ebim.tms.shared.security.SupabaseJwtDecodersTest
+[INFO] Running com.ebim.tms.shared.security.CrossTenantAttackTest
+[INFO] Running permissions inside a company the caller does belong to
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.587 s -- in permissions inside a company the caller does belong to
+[INFO] Running putting another tenant in the request body
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in putting another tenant in the request body
+[INFO] Running claiming another tenant in the token itself
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.025 s -- in claiming another tenant in the token itself
+[INFO] Running naming another tenant's row with a valid header
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.045 s -- in naming another tenant's row with a valid header
+[INFO] Running selecting another tenant with the company header
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.026 s -- in selecting another tenant with the company header
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.723 s -- in com.ebim.tms.shared.security.CrossTenantAttackTest
+[INFO] Running com.ebim.tms.shared.io.DelimitedTextReaderTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.shared.io.DelimitedTextReaderTest
+[INFO] Running com.ebim.tms.shared.io.DelimitedTextWriterTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.shared.io.DelimitedTextWriterTest
+[INFO] Running com.ebim.tms.shared.imports.ImportGridMapperTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.ebim.tms.shared.imports.ImportGridMapperTest
+[INFO] Running com.ebim.tms.shared.imports.ImportValuesTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.shared.imports.ImportValuesTest
+[INFO] Running com.ebim.tms.shared.storage.EvidenceStoragePropertiesTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.ebim.tms.shared.storage.EvidenceStoragePropertiesTest
+[INFO] Running com.ebim.tms.shared.storage.LocalFilesystemEvidenceStorageTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in com.ebim.tms.shared.storage.LocalFilesystemEvidenceStorageTest
+[INFO] Running com.ebim.tms.shared.audit.AuditActorProviderTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.ebim.tms.shared.audit.AuditActorProviderTest
+[INFO] Running com.ebim.tms.shared.api.PagingConventionsTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.ebim.tms.shared.api.PagingConventionsTest
+[INFO] Running com.ebim.tms.shared.api.DocumentationExposureTest
+[INFO] Running with public documentation (development default)
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.311 s -- in with public documentation (development default)
+[INFO] Running with documentation closed (production)
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.229 s -- in with documentation closed (production)
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.541 s -- in com.ebim.tms.shared.api.DocumentationExposureTest
+[INFO] Running com.ebim.tms.shared.api.SystemInfoControllerTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.242 s -- in com.ebim.tms.shared.api.SystemInfoControllerTest
+[INFO] Running com.ebim.tms.shared.reference.DriverLicenseStatusTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.ebim.tms.shared.reference.DriverLicenseStatusTest
+[INFO] Running com.ebim.tms.shared.reference.OrderAmountsTest
+[INFO] Running arithmetic
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in arithmetic
+[INFO] Running scale must not change the answer
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in scale must not change the answer
+[INFO] Running the ceiling
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the ceiling
+[INFO] Running the allocation view
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in the allocation view
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.shared.reference.OrderAmountsTest
+[INFO] Running com.ebim.tms.observability.MetricCatalogueTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.160 s -- in com.ebim.tms.observability.MetricCatalogueTest
+[INFO] Running com.ebim.tms.architecture.NativeQueryQuotingTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.480 s -- in com.ebim.tms.architecture.NativeQueryQuotingTest
+[INFO] Running com.ebim.tms.iam.provisioning.security.PlatformM2mJwtDecodersTest
+[INFO] Running claims
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.015 s -- in claims
+[INFO] Running the algorithm is pinned to ES256
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.066 s -- in the algorithm is pinned to ES256
+[INFO] Running configuration fails closed
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in configuration fails closed
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.124 s -- in com.ebim.tms.iam.provisioning.security.PlatformM2mJwtDecodersTest
+[INFO] Running com.ebim.tms.iam.provisioning.api.PlatformProvisioningApiTest
+[INFO] Running authentication and scopes
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.293 s -- in authentication and scopes
+[INFO] Running create, replay and conflicts
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.070 s -- in create, replay and conflicts
+[INFO] Running health
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in health
+[INFO] Running status and tenant isolation
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.034 s -- in status and tenant isolation
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.429 s -- in com.ebim.tms.iam.provisioning.api.PlatformProvisioningApiTest
+[INFO] Running com.ebim.tms.iam.provisioning.api.PlatformProvisioningDisabledApiTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.205 s -- in com.ebim.tms.iam.provisioning.api.PlatformProvisioningDisabledApiTest
+[INFO] Running com.ebim.tms.iam.provisioning.application.GenericRequestAdapterTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.iam.provisioning.application.GenericRequestAdapterTest
+[INFO] Running com.ebim.tms.iam.provisioning.application.PlatformTenantProvisionerTransactionTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.056 s -- in com.ebim.tms.iam.provisioning.application.PlatformTenantProvisionerTransactionTest
+[INFO] Running com.ebim.tms.iam.provisioning.application.PlatformTenantProvisionerTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.014 s -- in com.ebim.tms.iam.provisioning.application.PlatformTenantProvisionerTest
+[INFO] Running com.ebim.tms.iam.provisioning.application.PlatformProvisioningServiceTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.029 s -- in com.ebim.tms.iam.provisioning.application.PlatformProvisioningServiceTest
+[INFO] Running com.ebim.tms.iam.entitlements.MasterAdminMailboxBridgeTest
+[WARNING] Tests run: 1, Failures: 0, Errors: 0, Skipped: 1, Time elapsed: 0 s -- in com.ebim.tms.iam.entitlements.MasterAdminMailboxBridgeTest
+[INFO] Running com.ebim.tms.iam.entitlements.JcsTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.019 s -- in com.ebim.tms.iam.entitlements.JcsTest
+[INFO] Running com.ebim.tms.iam.entitlements.CommercialEntitlementServiceTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.026 s -- in com.ebim.tms.iam.entitlements.CommercialEntitlementServiceTest
+[INFO] Running com.ebim.tms.iam.entitlements.CommercialAccessTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.ebim.tms.iam.entitlements.CommercialAccessTest
+[INFO] Running com.ebim.tms.iam.entitlements.EntitlementsManifestTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.ebim.tms.iam.entitlements.EntitlementsManifestTest
+[INFO] Running com.ebim.tms.iam.entitlements.TmsEntitlementsReceiverTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in com.ebim.tms.iam.entitlements.TmsEntitlementsReceiverTest
+[INFO] Running com.ebim.tms.iam.entitlements.CommercialAccessGateAdapterTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.ebim.tms.iam.entitlements.CommercialAccessGateAdapterTest
+[INFO] Running com.ebim.tms.iam.entitlements.PlatformEntitlementsApiTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.298 s -- in com.ebim.tms.iam.entitlements.PlatformEntitlementsApiTest
+[INFO] Running com.ebim.tms.iam.entitlements.PlatformEntitlementsIntegrationTest
+[WARNING] Tests run: 6, Failures: 0, Errors: 0, Skipped: 6, Time elapsed: 0 s -- in com.ebim.tms.iam.entitlements.PlatformEntitlementsIntegrationTest
+[INFO] Running com.ebim.tms.iam.entitlements.EntitlementsFixturesPinTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.ebim.tms.iam.entitlements.EntitlementsFixturesPinTest
+[INFO] Running com.ebim.tms.iam.entitlements.PlatformEntitlementsContractFixturesTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.028 s -- in com.ebim.tms.iam.entitlements.PlatformEntitlementsContractFixturesTest
+[INFO] Running com.ebim.tms.iam.api.CommercialAccessSecurityTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.334 s -- in com.ebim.tms.iam.api.CommercialAccessSecurityTest
+[INFO] Running com.ebim.tms.iam.api.ApiSecurityTest
+[INFO] Running authentication
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.252 s -- in authentication
+[INFO] Running error documents
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in error documents
+[INFO] Running permissions
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.021 s -- in permissions
+[INFO] Running company scope
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.037 s -- in company scope
+[INFO] Running cross-origin contract
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in cross-origin contract
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.347 s -- in com.ebim.tms.iam.api.ApiSecurityTest
+[INFO] Running com.ebim.tms.iam.infrastructure.IdentityResolutionIntegrationTest
+[WARNING] Tests run: 10, Failures: 0, Errors: 0, Skipped: 10, Time elapsed: 0 s -- in com.ebim.tms.iam.infrastructure.IdentityResolutionIntegrationTest
+[INFO] Running com.ebim.tms.audit.application.AuditQueryServiceTest
+[INFO] Running the company is the caller's, never the request's
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in the company is the caller's, never the request's
+[INFO] Running what a page looks like
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in what a page looks like
+[INFO] Running filters
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in filters
+[INFO] Running rendering an entry
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in rendering an entry
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.052 s -- in com.ebim.tms.audit.application.AuditQueryServiceTest
+[INFO] Running com.ebim.tms.tracking.application.TrackingQueryServiceTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.096 s -- in com.ebim.tms.tracking.application.TrackingQueryServiceTest
+[INFO] Running com.ebim.tms.tracking.application.TrackingIngestionServiceTest
+[INFO] Running the sampling rule
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in the sampling rule
+[INFO] Running what a position must satisfy
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in what a position must satisfy
+[INFO] Running what a position may be attached to
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in what a position may be attached to
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.014 s -- in com.ebim.tms.tracking.application.TrackingIngestionServiceTest
+[INFO] Running com.ebim.tms.routing.application.RoutingServiceTest
+[INFO] Running the provider chain
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.071 s -- in the provider chain
+[INFO] Running the matrix
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in the matrix
+[INFO] Running cases that need neither cache nor provider
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in cases that need neither cache nor provider
+[INFO] Running inside a read-only transaction
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in inside a read-only transaction
+[INFO] Running timestamp precision
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in timestamp precision
+[INFO] Running the cache
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in the cache
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.090 s -- in com.ebim.tms.routing.application.RoutingServiceTest
+[INFO] Running com.ebim.tms.routing.application.RoutingServiceIntegrationTest
+[WARNING] Tests run: 8, Failures: 0, Errors: 0, Skipped: 8, Time elapsed: 0 s -- in com.ebim.tms.routing.application.RoutingServiceIntegrationTest
+[INFO] Running com.ebim.tms.routing.domain.GeodesicDistanceTest
+[INFO] Running the road estimate
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the road estimate
+[INFO] Running great-circle distance
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in great-circle distance
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.ebim.tms.routing.domain.GeodesicDistanceTest
+[INFO] Running com.ebim.tms.orders.api.OrderImportApiIntegrationTest
+[WARNING] Tests run: 17, Failures: 0, Errors: 0, Skipped: 17, Time elapsed: 0 s -- in com.ebim.tms.orders.api.OrderImportApiIntegrationTest
+[INFO] Running com.ebim.tms.orders.api.OrderApiIntegrationTest
+[WARNING] Tests run: 23, Failures: 0, Errors: 0, Skipped: 23, Time elapsed: 0 s -- in com.ebim.tms.orders.api.OrderApiIntegrationTest
+[INFO] Running com.ebim.tms.orders.application.imports.OrderImportValidatorTest
+[INFO] Tests run: 30, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.030 s -- in com.ebim.tms.orders.application.imports.OrderImportValidatorTest
+[INFO] Running com.ebim.tms.orders.application.imports.OrderImportParserTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.384 s -- in com.ebim.tms.orders.application.imports.OrderImportParserTest
+[INFO] Running com.ebim.tms.orders.application.imports.OrderImportTemplateTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.440 s -- in com.ebim.tms.orders.application.imports.OrderImportTemplateTest
+[INFO] Running com.ebim.tms.orders.application.OrderPlanningServiceExecutionTest
+[INFO] Running the row lock
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in the row lock
+[INFO] Running markInExecution
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in markInExecution
+[INFO] Running closeOut
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in closeOut
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in com.ebim.tms.orders.application.OrderPlanningServiceExecutionTest
+[INFO] Running com.ebim.tms.orders.domain.OrderTotalsTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.orders.domain.OrderTotalsTest
+[INFO] Running com.ebim.tms.orders.domain.OrderStatusTest
+[INFO] Running the planning half
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the planning half
+[INFO] Running invariants that hold across the whole table
+[INFO] Tests run: 25, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in invariants that hold across the whole table
+[INFO] Running the execution half
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in the execution half
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in com.ebim.tms.orders.domain.OrderStatusTest
+[INFO] Running com.ebim.tms.masterdata.api.RouteApiIntegrationTest
+[WARNING] Tests run: 15, Failures: 0, Errors: 0, Skipped: 15, Time elapsed: 0 s -- in com.ebim.tms.masterdata.api.RouteApiIntegrationTest
+[INFO] Running com.ebim.tms.masterdata.api.LocationFrequencyApiIntegrationTest
+[WARNING] Tests run: 4, Failures: 0, Errors: 0, Skipped: 4, Time elapsed: 0 s -- in com.ebim.tms.masterdata.api.LocationFrequencyApiIntegrationTest
+[INFO] Running com.ebim.tms.masterdata.api.LocationApiIntegrationTest
+[WARNING] Tests run: 5, Failures: 0, Errors: 0, Skipped: 5, Time elapsed: 0 s -- in com.ebim.tms.masterdata.api.LocationApiIntegrationTest
+[INFO] Running com.ebim.tms.masterdata.api.FrequencyApiIntegrationTest
+[WARNING] Tests run: 1, Failures: 0, Errors: 0, Skipped: 1, Time elapsed: 0 s -- in com.ebim.tms.masterdata.api.FrequencyApiIntegrationTest
+[INFO] Running com.ebim.tms.masterdata.api.ZoneApiIntegrationTest
+[WARNING] Tests run: 1, Failures: 0, Errors: 0, Skipped: 1, Time elapsed: 0 s -- in com.ebim.tms.masterdata.api.ZoneApiIntegrationTest
+[INFO] Running com.ebim.tms.masterdata.api.LocationImportApiIntegrationTest
+[WARNING] Tests run: 10, Failures: 0, Errors: 0, Skipped: 10, Time elapsed: 0 s -- in com.ebim.tms.masterdata.api.LocationImportApiIntegrationTest
+[INFO] Running com.ebim.tms.masterdata.application.imports.LocationImportValidatorTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.ebim.tms.masterdata.application.imports.LocationImportValidatorTest
+[INFO] Running com.ebim.tms.masterdata.application.imports.LocationImportTemplateTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.056 s -- in com.ebim.tms.masterdata.application.imports.LocationImportTemplateTest
+[INFO] Running com.ebim.tms.masterdata.domain.LocationModelTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.masterdata.domain.LocationModelTest
+[INFO] Running com.ebim.tms.masterdata.domain.FrequencyCalendarTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.masterdata.domain.FrequencyCalendarTest
+[INFO] Running com.ebim.tms.masterdata.domain.RouteStopServiceTimeTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.masterdata.domain.RouteStopServiceTimeTest
+[INFO] Running com.ebim.tms.masterdata.domain.FrequencyExceptionTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in com.ebim.tms.masterdata.domain.FrequencyExceptionTest
+[INFO] Running com.ebim.tms.masterdata.domain.LocationEligibilityEvaluatorTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.ebim.tms.masterdata.domain.LocationEligibilityEvaluatorTest
+[INFO] Running com.ebim.tms.fleet.api.FleetApiIntegrationTest
+[WARNING] Tests run: 4, Failures: 0, Errors: 0, Skipped: 4, Time elapsed: 0 s -- in com.ebim.tms.fleet.api.FleetApiIntegrationTest
+[INFO] Running com.ebim.tms.fleet.api.CarrierImportApiIntegrationTest
+[WARNING] Tests run: 8, Failures: 0, Errors: 0, Skipped: 8, Time elapsed: 0 s -- in com.ebim.tms.fleet.api.CarrierImportApiIntegrationTest
+[INFO] Running com.ebim.tms.fleet.api.VehicleImportApiIntegrationTest
+[WARNING] Tests run: 12, Failures: 0, Errors: 0, Skipped: 12, Time elapsed: 0 s -- in com.ebim.tms.fleet.api.VehicleImportApiIntegrationTest
+[INFO] Running com.ebim.tms.fleet.api.WorkAssignmentApiIntegrationTest
+[WARNING] Tests run: 3, Failures: 0, Errors: 0, Skipped: 3, Time elapsed: 0 s -- in com.ebim.tms.fleet.api.WorkAssignmentApiIntegrationTest
+[INFO] Running com.ebim.tms.fleet.api.VehicleTypeImportApiIntegrationTest
+[WARNING] Tests run: 8, Failures: 0, Errors: 0, Skipped: 8, Time elapsed: 0 s -- in com.ebim.tms.fleet.api.VehicleTypeImportApiIntegrationTest
+[INFO] Running com.ebim.tms.fleet.application.imports.CarrierImportValidatorTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.ebim.tms.fleet.application.imports.CarrierImportValidatorTest
+[INFO] Running com.ebim.tms.fleet.application.imports.CarrierImportTemplateTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.027 s -- in com.ebim.tms.fleet.application.imports.CarrierImportTemplateTest
+[INFO] Running com.ebim.tms.fleet.application.imports.VehicleTypeImportTemplateTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.040 s -- in com.ebim.tms.fleet.application.imports.VehicleTypeImportTemplateTest
+[INFO] Running com.ebim.tms.fleet.application.imports.VehicleTypeImportValidatorTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.ebim.tms.fleet.application.imports.VehicleTypeImportValidatorTest
+[INFO] Running com.ebim.tms.fleet.application.imports.VehicleImportTemplateTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.035 s -- in com.ebim.tms.fleet.application.imports.VehicleImportTemplateTest
+[INFO] Running com.ebim.tms.fleet.application.imports.VehicleImportValidatorTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.ebim.tms.fleet.application.imports.VehicleImportValidatorTest
+[INFO] Running com.ebim.tms.fleet.application.ResourceAvailabilityIntegrationTest
+[WARNING] Tests run: 6, Failures: 0, Errors: 0, Skipped: 6, Time elapsed: 0 s -- in com.ebim.tms.fleet.application.ResourceAvailabilityIntegrationTest
+[INFO] Running com.ebim.tms.fleet.application.DriverServiceTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.079 s -- in com.ebim.tms.fleet.application.DriverServiceTest
+[INFO] Running com.ebim.tms.fleet.application.EffectiveCapacityResolverTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.ebim.tms.fleet.application.EffectiveCapacityResolverTest
+[INFO] Running com.ebim.tms.fleet.domain.WorkSequenceValidatorTest
+[INFO] Running the reposition between two shipments
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in the reposition between two shipments
+[INFO] Running the whole day is revalidated, never one leg
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in the whole day is revalidated, never one leg
+[INFO] Running scheduling grants no authority
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in scheduling grants no authority
+[INFO] Running what the driver and vehicle can do
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in what the driver and vehicle can do
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in com.ebim.tms.fleet.domain.WorkSequenceValidatorTest
+[INFO] Running com.ebim.tms.fleet.domain.WorkAssignmentTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.ebim.tms.fleet.domain.WorkAssignmentTest
+[INFO] Running com.ebim.tms.performance.ControlTowerScalePerformanceTest
+[WARNING] Tests run: 2, Failures: 0, Errors: 0, Skipped: 2, Time elapsed: 0 s -- in com.ebim.tms.performance.ControlTowerScalePerformanceTest
+[INFO] Running com.ebim.tms.architecture.LayeringTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.637 s -- in com.ebim.tms.architecture.LayeringTest
+[INFO] Running com.ebim.tms.architecture.PersistenceMappingTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.671 s -- in com.ebim.tms.architecture.PersistenceMappingTest
+[INFO] Running com.ebim.tms.architecture.SecretExposureTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.014 s -- in com.ebim.tms.architecture.SecretExposureTest
+[INFO] Running com.ebim.tms.architecture.TenantScopedRepositoryTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.020 s -- in com.ebim.tms.architecture.TenantScopedRepositoryTest
+[INFO] Running com.ebim.tms.architecture.ModuleBoundaryTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.282 s -- in com.ebim.tms.architecture.ModuleBoundaryTest
+[INFO] Running com.ebim.tms.architecture.EndpointContractTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.024 s -- in com.ebim.tms.architecture.EndpointContractTest
+[WARNING] ForkStarter IOException: java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama
+java.io.IOException: Unable to create temporary directory /var/folders/02/vrdncpd56xbcn15nw_8jjyh40000gn/T/surefire-edudavidmorenoccama. See the dump file /Users/edudavidmorenoccama/Documents/Documentos-Edus-MacBook-Pro-2/EBIM/TMS/.worktrees/ebim-commercial-control-plane-v1/backend/tms-api/target/surefire-reports/2026-09-29T03-47-47_786-jvmRun1.dumpstream
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 1915, Failures: 0, Errors: 0, Skipped: 406
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  18.809 s
+[INFO] Finished at: 2026-09-29T03:48:01-05:00
+[INFO] ------------------------------------------------------------------------
+EXIT=0

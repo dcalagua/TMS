@@ -140,9 +140,9 @@ export function Pagination({ page, onPageChange, onPageSizeChange, sizeOptions =
                   border: 0, cursor: "pointer", fontFamily: "inherit",
                   fontSize: T.micro, fontWeight: n === current ? 800 : 600,
                   fontVariantNumeric: "tabular-nums",
-                  bgcolor: n === current ? "action.selected" : "transparent",
-                  color: n === current ? "primary.dark" : "text.secondary",
-                  "&:hover": { bgcolor: n === current ? "action.selected" : "action.hover" },
+                  bgcolor: n === current ? "primary.main" : "transparent",
+                  color: n === current ? "primary.contrastText" : "text.secondary",
+                  "&:hover": { bgcolor: n === current ? "primary.dark" : "action.hover" },
                   "&:focus-visible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: "1px" },
                 }}
               >

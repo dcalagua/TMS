@@ -2,12 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Alert, Box, Button, MenuItem, TextField, Typography } from "@mui/material";
-import { ViewKanbanRounded } from "@mui/icons-material";
+import { CheckRounded, ViewKanbanRounded } from "@mui/icons-material";
 import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchOrigins } from "../../shared/api/originsApi";
 import { createPlanningRun, type PlanningRunDetailView } from "../../shared/api/planningApi";
-import { FormDrawer } from "../../shared/ui/components";
+import { FormDateInput, FormDrawer } from "../../shared/ui/components";
 import { t } from "../../lib/i18n";
 import { today } from "../../lib/locale";
 
@@ -69,52 +69,52 @@ export function PlanningRunFormDrawer({ companyId, onClose, onCreated }: Plannin
       icon={<ViewKanbanRounded />}
       title={t("Nuevo plan")}
       subtitle={t("Un plan agrupa los viajes de un origen para un día concreto.")}
-      size="md"
+      size="sm"
       onClose={onClose}
       dirty={isDirty}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
-          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
+          <Button color="inherit" sx={{ color: "text.secondary" }} onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" startIcon={<CheckRounded />} disabled={isSubmitting}>
             {isSubmitting ? t("Guardando...") : t("Abrir plan")}
           </Button>
         </>
       }
     >
-      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+      <Box
+        component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate
+        sx={{ display: "grid", gap: 2 }}
+      >
+        {formError && <Alert severity="error">{formError}</Alert>}
 
-        <Box sx={{ display: "grid", gap: 2, mb: 2 }}>
-          <Controller
-            control={control}
-            name="originId"
-            rules={{ required: t("Este campo es obligatorio") }}
-            render={({ field }) => (
-              <TextField
-                select label={t("Origen")} required size="small" fullWidth
-                value={field.value} onChange={(e) => field.onChange(e.target.value)}
-                error={Boolean(errors.originId)} helperText={errors.originId?.message}
-              >
-                <MenuItem value="">{t("Selecciona un origen")}</MenuItem>
-                {(originsQuery.data?.content ?? []).map((origin) => (
-                  <MenuItem key={origin.id} value={origin.id}>{origin.code} · {origin.name}</MenuItem>
-                ))}
-              </TextField>
-            )}
-          />
-          <TextField
-            label={t("Fecha de planificación")} required size="small" fullWidth type="date"
-            slotProps={{ inputLabel: { shrink: true } }}
-            error={Boolean(errors.planningDate)} helperText={errors.planningDate?.message}
-            {...register("planningDate", { required: t("Este campo es obligatorio") })}
-          />
-          <TextField
-            label={t("Notas")} size="small" fullWidth multiline rows={3}
-            {...register("notes")}
-          />
-        </Box>
-
+        <Controller
+          control={control}
+          name="originId"
+          rules={{ required: t("Este campo es obligatorio") }}
+          render={({ field }) => (
+            <TextField
+              select label={t("Origen")} required size="small" fullWidth
+              value={field.value} onChange={(e) => field.onChange(e.target.value)}
+              error={Boolean(errors.originId)} helperText={errors.originId?.message}
+            >
+              <MenuItem value="">{t("Selecciona un origen")}</MenuItem>
+              {(originsQuery.data?.content ?? []).map((origin) => (
+                <MenuItem key={origin.id} value={origin.id}>{origin.code} · {origin.name}</MenuItem>
+              ))}
+            </TextField>
+          )}
+        />
+        <FormDateInput
+          control={control} name="planningDate" mode="date"
+          rules={{ required: t("Este campo es obligatorio") }}
+          label={t("Fecha de planificación")} required size="small" fullWidth
+          error={Boolean(errors.planningDate)} helperText={errors.planningDate?.message}
+        />
+        <TextField
+          label={t("Notas")} size="small" fullWidth multiline rows={3}
+          {...register("notes")}
+        />
         <Typography variant="caption" color="text.secondary">
           {t("Solo entran en el plan los pedidos liberados para planificación con ese origen y esa fecha.")}
         </Typography>

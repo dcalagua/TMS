@@ -1,8 +1,8 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Box, Button, Chip, MenuItem, TextField, Typography } from "@mui/material";
+import { Box, Button, Chip, Typography } from "@mui/material";
 import {
-  PersonAddRounded, GroupsRounded, EditRounded, BlockRounded, CheckCircleRounded,
+  PersonAddRounded, GroupsRounded, EditRounded, BlockRounded, CheckCircleRounded, ToggleOnRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
@@ -12,7 +12,7 @@ import {
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  ActionMenu, ActiveBadge, DataTable, PageHeader, Pagination, StatusChip, Toolbar,
+  ActionMenu, ActiveBadge, DataTable, FilterBar, PageHeader, Pagination, StatusChip,
   type DataTableColumn,
 } from "../../shared/ui/components";
 import { ACTIVE_FILTER_OPTIONS, activeParam, type ActiveFilter } from "../../shared/ui/masterActions";
@@ -23,6 +23,13 @@ import { fmtDate } from "../../lib/locale";
 import { UserFormDrawer } from "./UserFormDrawer";
 
 const PAGE_SIZE = 25;
+
+interface AppliedFilters {
+  search: string;
+  active: ActiveFilter;
+}
+
+const DEFAULT_FILTERS: AppliedFilters = { search: "", active: "active" };
 
 type ModalState = { mode: "invite" } | { mode: "edit"; user: AdministeredUserView } | null;
 
@@ -42,8 +49,9 @@ export function UsersPage() {
   const queryClient = useQueryClient();
 
   const [page, setPage] = useState(0);
-  const [draft, setDraft] = useState({ search: "", active: "active" as ActiveFilter });
-  const [filters, setFilters] = useState({ search: "", active: "active" as ActiveFilter });
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
+  const [filters, setFiltersState] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const setFilters = (next: AppliedFilters) => { setFiltersState(next); setPage(0); };
   const [modal, setModal] = useState<ModalState>(null);
 
   const usersQuery = useQuery({
@@ -73,13 +81,6 @@ export function UsersPage() {
   const roleName = (code: string) => rolesQuery.data?.find((role) => role.code === code)?.name ?? code;
 
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["admin-users", companyId] });
-
-  function applyFilters() { setFilters(draft); setPage(0); }
-  function resetFilters() {
-    setDraft({ search: "", active: "active" });
-    setFilters({ search: "", active: "active" });
-    setPage(0);
-  }
 
   async function toggleAccess(user: AdministeredUserView) {
     const confirmed = await confirmDialog({
@@ -187,29 +188,16 @@ export function UsersPage() {
         )}
       />
 
-      <Toolbar
-        onApply={applyFilters}
-        onReset={resetFilters}
-        filters={
-          <>
-            {/* Un solo cuadro sobre nombre y correo: así es como se busca a una persona. */}
-            <TextField
-              size="small" type="search" label={t("Buscar")} value={draft.search}
-              placeholder={t("Nombre o correo")}
-              onChange={(e) => setDraft({ ...draft, search: e.target.value })}
-              sx={{ minWidth: 260, flex: 1 }}
-            />
-            <TextField
-              select size="small" label={t("Estado")} value={draft.active}
-              onChange={(e) => setDraft({ ...draft, active: e.target.value as ActiveFilter })}
-              sx={{ minWidth: 150 }}
-            >
-              {ACTIVE_FILTER_OPTIONS.map((option) => (
-                <MenuItem key={option.value} value={option.value}>{t(option.label)}</MenuItem>
-              ))}
-            </TextField>
-          </>
-        }
+      <FilterBar
+        value={filters}
+        defaults={DEFAULT_FILTERS}
+        onChange={setFilters}
+        fields={[
+          // Un solo cuadro sobre nombre y correo: así es como se busca a una persona.
+          { type: "search", key: "search", placeholder: t("Nombre o correo"), width: 260 },
+          { type: "select", key: "active", label: t("Estado"), icon: <ToggleOnRounded />,
+            options: ACTIVE_FILTER_OPTIONS.map((o) => ({ id: o.value, label: t(o.label) })) },
+        ]}
       />
 
       <DataTable

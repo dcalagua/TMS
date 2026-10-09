@@ -3,7 +3,7 @@ import { useState } from "react";
 import {
   Alert, Box, Button, Chip, MenuItem, Paper, Stack, TextField, Typography,
 } from "@mui/material";
-import { PaymentsRounded } from "@mui/icons-material";
+import { CheckRounded, PaymentsRounded } from "@mui/icons-material";
 import {
   createOwnFleetProfile, listOwnFleetProfiles, setOwnFleetProfileActive, updateOwnFleetProfile,
   type OwnFleetCostProfileRequest, type OwnFleetCostProfileView,
@@ -12,7 +12,9 @@ import { fetchVehicles } from "../../shared/api/vehiclesApi";
 import { fetchVehicleTypes } from "../../shared/api/vehicleTypesApi";
 import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
-import { DataTable, FormDrawer, PageHeader, type DataTableColumn } from "../../shared/ui/components";
+import {
+  ActiveBadge, DataTable, DateInput, FormDrawer, FormRow, FormSection, PageHeader, type DataTableColumn,
+} from "../../shared/ui/components";
 import { useCompany } from "../../shared/company/CompanyContext";
 import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
 import { t } from "../../lib/i18n";
@@ -247,99 +249,117 @@ function ProfileDrawer({ companyId, profile, onClose, onSaved }: DrawerProps) {
     <FormDrawer
       open
       title={editingExisting ? t("Editar perfil de costo") : t("Nuevo perfil de costo")}
-      subtitle={t("Costo interno estimado — sin margen")}
+      subtitle={editingExisting
+        ? `${scopeText(profile)} · ${profile.currency}`
+        : t("Costo interno estimado — sin margen")}
+      titleAdornment={editingExisting ? <ActiveBadge active={profile.active} /> : undefined}
       icon={<PaymentsRounded />}
       onClose={onClose}
       dirty={touched}
-      size="md"
+      size="lg"
       footer={
         <>
-          <Button onClick={onClose} disabled={submitting}>{t("Cancelar")}</Button>
+          <Button onClick={onClose} disabled={submitting} color="inherit" sx={{ color: "text.secondary" }}>{t("Cancelar")}</Button>
           <Button
             variant="contained"
+            startIcon={<CheckRounded />}
             disabled={submitting || !targetChosen || !anyRate}
             onClick={() => void submit()}
           >
-            {submitting ? t("Guardando...") : t("Guardar")}
+            {submitting ? t("Guardando...") : editingExisting ? t("Guardar cambios") : t("Crear perfil")}
           </Button>
         </>
       }
     >
-      <Stack spacing={2}>
-        <Alert severity="warning" variant="outlined">
-          {t("Deja un campo VACÍO para lo que no modelas: no se cobra y no falta nada. Escribe 0 sólo si de verdad lo cobras a cero — eso sí se cobra, y sigue exigiendo su cantidad. No son lo mismo.")}
-        </Alert>
-
-        <TextField
-          select size="small" label={t("Se aplica a")} value={target}
-          disabled={editingExisting}
-          helperText={editingExisting
-            ? t("Un perfil no se puede mover a otro vehículo: reformularía lo que ya se costeó con él.")
-            : t("El perfil de un vehículo concreto le gana al de su tipo.")}
-          onChange={(e) => { setTarget(e.target.value as "VEHICLE" | "VEHICLE_TYPE"); setTouched(true); }}
+      <Box>
+        <FormSection
+          title={t("Se aplica a")}
+          help={t("El camión propio, o el tipo de camión, cuyo costo modela este perfil.")}
         >
-          <MenuItem value="VEHICLE">{t("Un vehículo")}</MenuItem>
-          <MenuItem value="VEHICLE_TYPE">{t("Un tipo de vehículo")}</MenuItem>
-        </TextField>
+          <FormRow>
+            <TextField
+              select size="small" label={t("Se aplica a")} value={target}
+              disabled={editingExisting}
+              helperText={editingExisting
+                ? t("Un perfil no se puede mover a otro vehículo: reformularía lo que ya se costeó con él.")
+                : t("El perfil de un vehículo concreto le gana al de su tipo.")}
+              onChange={(e) => { setTarget(e.target.value as "VEHICLE" | "VEHICLE_TYPE"); setTouched(true); }}
+            >
+              <MenuItem value="VEHICLE">{t("Un vehículo")}</MenuItem>
+              <MenuItem value="VEHICLE_TYPE">{t("Un tipo de vehículo")}</MenuItem>
+            </TextField>
 
-        {target === "VEHICLE" ? (
-          <TextField
-            select size="small" label={t("Vehículo")} value={vehicleId}
-            disabled={editingExisting}
-            helperText={t("Sólo vehículos propios. Uno de transportista tiene precio, no costo interno.")}
-            onChange={(e) => { setVehicleId(e.target.value); setTouched(true); }}
-          >
-            {ownVehicles.map((vehicle) => (
-              <MenuItem key={vehicle.id} value={vehicle.id}>
-                {vehicle.code} · {vehicle.licensePlate}
-              </MenuItem>
-            ))}
-          </TextField>
-        ) : (
-          <TextField
-            select size="small" label={t("Tipo de vehículo")} value={vehicleTypeId}
-            disabled={editingExisting}
-            onChange={(e) => { setVehicleTypeId(e.target.value); setTouched(true); }}
-          >
-            {(vehicleTypes.data?.content ?? []).map((type) => (
-              <MenuItem key={type.id} value={type.id}>{type.code} · {type.name}</MenuItem>
-            ))}
-          </TextField>
-        )}
+            {target === "VEHICLE" ? (
+              <TextField
+                select size="small" label={t("Vehículo")} value={vehicleId}
+                disabled={editingExisting}
+                helperText={t("Sólo vehículos propios. Uno de transportista tiene precio, no costo interno.")}
+                onChange={(e) => { setVehicleId(e.target.value); setTouched(true); }}
+              >
+                {ownVehicles.map((vehicle) => (
+                  <MenuItem key={vehicle.id} value={vehicle.id}>
+                    {vehicle.code} · {vehicle.licensePlate}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : (
+              <TextField
+                select size="small" label={t("Tipo de vehículo")} value={vehicleTypeId}
+                disabled={editingExisting}
+                onChange={(e) => { setVehicleTypeId(e.target.value); setTouched(true); }}
+              >
+                {(vehicleTypes.data?.content ?? []).map((type) => (
+                  <MenuItem key={type.id} value={type.id}>{type.code} · {type.name}</MenuItem>
+                ))}
+              </TextField>
+            )}
+          </FormRow>
+        </FormSection>
 
-        <Stack direction="row" spacing={2}>
-          <TextField
-            size="small" label={t("Moneda")} value={currency} sx={{ width: 120 }}
-            helperText={t("Sin conversión")}
-            onChange={(e) => { setCurrency(e.target.value.toUpperCase()); setTouched(true); }}
-          />
-          <TextField
-            size="small" type="date" label={t("Vigente desde")} value={from}
-            slotProps={{ inputLabel: { shrink: true } }}
-            onChange={(e) => { setFrom(e.target.value); setTouched(true); }}
-          />
-          <TextField
-            size="small" type="date" label={t("Hasta")} value={to}
-            slotProps={{ inputLabel: { shrink: true } }}
-            helperText={t("Vacío = sigue vigente")}
-            onChange={(e) => { setTo(e.target.value); setTouched(true); }}
-          />
-        </Stack>
+        <FormSection title={t("Vigencia")} help={t("En qué moneda se expresa el costo y entre qué fechas vale.")}>
+          <FormRow template="140px minmax(0, 1fr) minmax(0, 1fr)">
+            <TextField
+              size="small" label={t("Moneda")} value={currency} fullWidth
+              helperText={t("Sin conversión")}
+              onChange={(e) => { setCurrency(e.target.value.toUpperCase()); setTouched(true); }}
+            />
+            <DateInput
+              size="small" label={t("Vigente desde")} value={from}
+              onChange={(v) => { setFrom(v); setTouched(true); }}
+            />
+            <DateInput
+              size="small" label={t("Hasta")} value={to}
+              helperText={t("Vacío = sigue vigente")}
+              onChange={(v) => { setTo(v); setTouched(true); }}
+            />
+          </FormRow>
+        </FormSection>
 
-        {rateFields.map(({ field, label, help }) => (
-          <TextField
-            key={field} size="small" type="number" label={label} value={rates[field]}
-            helperText={help}
-            onChange={(e) => set(field, e.target.value)}
-          />
-        ))}
-
-        {!anyRate && (
-          <Alert severity="error" variant="outlined">
-            {t("Un perfil que no cobra nada no es un perfil. Pon al menos un componente.")}
+        <FormSection
+          title={t("Componentes")}
+          help={t("Lo que cuesta operar el camión: por viaje, por kilómetro o por hora. Pon al menos uno.")}
+        >
+          <Alert severity="warning" variant="outlined">
+            {t("Deja un campo VACÍO para lo que no modelas: no se cobra y no falta nada. Escribe 0 sólo si de verdad lo cobras a cero — eso sí se cobra, y sigue exigiendo su cantidad. No son lo mismo.")}
           </Alert>
-        )}
-      </Stack>
+
+          <FormRow>
+            {rateFields.map(({ field, label, help }) => (
+              <TextField
+                key={field} size="small" type="number" label={label} value={rates[field]} fullWidth
+                helperText={help}
+                onChange={(e) => set(field, e.target.value)}
+              />
+            ))}
+          </FormRow>
+
+          {!anyRate && (
+            <Alert severity="error" variant="outlined">
+              {t("Un perfil que no cobra nada no es un perfil. Pon al menos un componente.")}
+            </Alert>
+          )}
+        </FormSection>
+      </Box>
     </FormDrawer>
   );
 }

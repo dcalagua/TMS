@@ -1,8 +1,9 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Box, Button, Chip, MenuItem, TextField, Typography } from "@mui/material";
+import { Box, Button, Chip, Typography } from "@mui/material";
 import {
   AddRounded, CalendarViewWeekRounded, EditRounded, BlockRounded, CheckCircleRounded,
+  TagRounded, ToggleOnRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
@@ -11,7 +12,7 @@ import {
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  ActionMenu, ActiveBadge, DataTable, PageHeader, Pagination, Toolbar, type DataTableColumn,
+  ActionMenu, ActiveBadge, DataTable, FilterBar, PageHeader, Pagination, type DataTableColumn,
 } from "../../shared/ui/components";
 import {
   ACTIVE_FILTER_OPTIONS, activeParam, notifySaved, toggleActiveRecord, type ActiveFilter,
@@ -48,8 +49,9 @@ export function FrequenciesPage() {
   const queryClient = useQueryClient();
 
   const [page, setPage] = useState(0);
-  const [draft, setDraft] = useState<AppliedFilters>(DEFAULT_FILTERS);
-  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
+  const [filters, setFiltersState] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const setFilters = (next: AppliedFilters) => { setFiltersState(next); setPage(0); };
   const [modal, setModal] = useState<ModalState>(null);
 
   const frequenciesQuery = useQuery({
@@ -69,9 +71,6 @@ export function FrequenciesPage() {
   });
 
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["frequencies", companyId] });
-
-  function applyFilters() { setFilters(draft); setPage(0); }
-  function resetFilters() { setDraft(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); setPage(0); }
 
   async function toggleActive(frequency: FrequencyView) {
     const changed = await toggleActiveRecord({
@@ -157,32 +156,16 @@ export function FrequenciesPage() {
         )}
       />
 
-      <Toolbar
-        onApply={applyFilters}
-        onReset={resetFilters}
-        filters={
-          <>
-            <TextField
-              size="small" label={t("Código")} value={draft.code}
-              onChange={(e) => setDraft({ ...draft, code: e.target.value })}
-              sx={{ minWidth: 160 }}
-            />
-            <TextField
-              size="small" label={t("Nombre")} value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              sx={{ minWidth: 200 }}
-            />
-            <TextField
-              select size="small" label={t("Estado")} value={draft.active}
-              onChange={(e) => setDraft({ ...draft, active: e.target.value as ActiveFilter })}
-              sx={{ minWidth: 150 }}
-            >
-              {ACTIVE_FILTER_OPTIONS.map((option) => (
-                <MenuItem key={option.value} value={option.value}>{t(option.label)}</MenuItem>
-              ))}
-            </TextField>
-          </>
-        }
+      <FilterBar
+        value={filters}
+        defaults={DEFAULT_FILTERS}
+        onChange={setFilters}
+        fields={[
+          { type: "search", key: "name", placeholder: t("Nombre") },
+          { type: "text", key: "code", label: t("Código"), icon: <TagRounded /> },
+          { type: "select", key: "active", label: t("Estado"), icon: <ToggleOnRounded />,
+            options: ACTIVE_FILTER_OPTIONS.map((o) => ({ id: o.value, label: t(o.label) })) },
+        ]}
       />
 
       <DataTable

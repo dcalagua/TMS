@@ -1,7 +1,10 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Box, Button, MenuItem, TextField, Typography } from "@mui/material";
-import { AddRounded, PaidRounded, EditRounded, BlockRounded, CheckCircleRounded } from "@mui/icons-material";
+import { Box, Button, Typography } from "@mui/material";
+import {
+  AddRounded, PaidRounded, EditRounded, BlockRounded, CheckCircleRounded,
+  BusinessRounded, CategoryRounded, EventAvailableRounded, TagRounded, ToggleOnRounded,
+} from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchCarriers } from "../../shared/api/carriersApi";
 import {
@@ -11,7 +14,7 @@ import {
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  ActionMenu, ActiveBadge, DataTable, PageHeader, Pagination, Toolbar, type DataTableColumn,
+  ActionMenu, ActiveBadge, DataTable, FilterBar, PageHeader, Pagination, type DataTableColumn,
 } from "../../shared/ui/components";
 import {
   ACTIVE_FILTER_OPTIONS, activeParam, notifySaved, toggleActiveRecord, type ActiveFilter,
@@ -52,8 +55,9 @@ export function RateCardsPage() {
   const queryClient = useQueryClient();
 
   const [page, setPage] = useState(0);
-  const [draft, setDraft] = useState<AppliedFilters>(DEFAULT_FILTERS);
-  const [filters, setFilters] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
+  const [filters, setFiltersState] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const setFilters = (next: AppliedFilters) => { setFiltersState(next); setPage(0); };
   const [modal, setModal] = useState<ModalState>(null);
 
   const cardsQuery = useQuery({
@@ -82,9 +86,6 @@ export function RateCardsPage() {
   });
 
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["rate-cards", companyId] });
-
-  function applyFilters() { setFilters(draft); setPage(0); }
-  function resetFilters() { setDraft(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); setPage(0); }
 
   async function toggleActive(rateCard: RateCardView) {
     const changed = await toggleActiveRecord({
@@ -172,59 +173,24 @@ export function RateCardsPage() {
         )}
       />
 
-      <Toolbar
-        onApply={applyFilters}
-        onReset={resetFilters}
-        filters={
-          <>
-            <TextField
-              size="small" label={t("Código")} value={draft.code}
-              onChange={(e) => setDraft({ ...draft, code: e.target.value })}
-              sx={{ minWidth: 140 }}
-            />
-            <TextField
-              size="small" label={t("Nombre")} value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              sx={{ minWidth: 180 }}
-            />
-            <TextField
-              select size="small" label={t("Transportista")} value={draft.carrierId}
-              onChange={(e) => setDraft({ ...draft, carrierId: e.target.value })}
-              sx={{ minWidth: 200 }}
-            >
-              <MenuItem value="">{t("Todos los transportistas")}</MenuItem>
-              {(carriersQuery.data?.content ?? []).map((carrier) => (
-                <MenuItem key={carrier.id} value={carrier.id}>{carrier.businessName}</MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select size="small" label={t("Ámbito")} value={draft.scope}
-              onChange={(e) => setDraft({ ...draft, scope: e.target.value as RateCardScope | "" })}
-              sx={{ minWidth: 170 }}
-            >
-              <MenuItem value="">{t("Todos")}</MenuItem>
-              {RATE_CARD_SCOPES.map((scope) => (
-                <MenuItem key={scope} value={scope}>{enumLabel("rateCardScope", scope)}</MenuItem>
-              ))}
-            </TextField>
-            {/* "Vigente el" y no un rango: la pregunta real es "qué tarifa aplica ese día". */}
-            <TextField
-              size="small" type="date" label={t("Vigente el")} value={draft.onDate}
-              onChange={(e) => setDraft({ ...draft, onDate: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ minWidth: 170 }}
-            />
-            <TextField
-              select size="small" label={t("Estado")} value={draft.active}
-              onChange={(e) => setDraft({ ...draft, active: e.target.value as ActiveFilter })}
-              sx={{ minWidth: 150 }}
-            >
-              {ACTIVE_FILTER_OPTIONS.map((option) => (
-                <MenuItem key={option.value} value={option.value}>{t(option.label)}</MenuItem>
-              ))}
-            </TextField>
-          </>
-        }
+      <FilterBar
+        value={filters}
+        defaults={DEFAULT_FILTERS}
+        onChange={setFilters}
+        fields={[
+          { type: "search", key: "name", placeholder: t("Nombre") },
+          { type: "select", key: "carrierId", label: t("Transportista"), icon: <BusinessRounded />,
+            allLabel: t("Todos los transportistas"),
+            options: (carriersQuery.data?.content ?? []).map((c) => ({ id: c.id, label: c.businessName })) },
+          { type: "select", key: "scope", label: t("Ámbito"), icon: <CategoryRounded />,
+            allLabel: t("Todos"),
+            options: RATE_CARD_SCOPES.map((s) => ({ id: s, label: enumLabel("rateCardScope", s) })) },
+          // "Vigente el" y no un rango: la pregunta real es "qué tarifa aplica ese día".
+          { type: "date", key: "onDate", label: t("Vigente el"), icon: <EventAvailableRounded /> },
+          { type: "select", key: "active", label: t("Estado"), icon: <ToggleOnRounded />,
+            options: ACTIVE_FILTER_OPTIONS.map((o) => ({ id: o.value, label: t(o.label) })) },
+          { type: "text", key: "code", label: t("Código"), icon: <TagRounded />, more: true },
+        ]}
       />
 
       <DataTable

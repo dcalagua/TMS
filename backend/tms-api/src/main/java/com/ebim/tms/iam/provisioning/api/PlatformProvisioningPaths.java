@@ -15,6 +15,15 @@ public final class PlatformProvisioningPaths {
     public static final String HEALTH = BASE + "/health";
     public static final String TENANTS = BASE + "/tenants";
     public static final String TENANT = BASE + "/tenants/*";
+    /** Commercial entitlements (ebim.entitlements/v1, V56): additive, with scopes of their own. */
+    public static final String TENANT_ENTITLEMENTS = BASE + "/tenants/*/entitlements";
+    public static final String ENTITLEMENTS_MANIFEST = BASE + "/entitlements/manifest";
+
+    /** Whether a request URI belongs to the entitlements contract, whose errors are {@code {error, message}}. */
+    public static boolean isEntitlements(String requestUri) {
+        return requestUri != null && (requestUri.equals(ENTITLEMENTS_MANIFEST)
+                || (requestUri.startsWith(TENANTS + "/") && requestUri.endsWith("/entitlements")));
+    }
 
     private PlatformProvisioningPaths() {}
 }

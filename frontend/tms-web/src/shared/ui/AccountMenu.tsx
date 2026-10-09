@@ -9,7 +9,7 @@ import {
   PaletteRounded, LanguageRounded, DensityMediumRounded,
 } from "@mui/icons-material";
 import { useColorMode } from "../../lib/colorMode";
-import { DENSITY_LIST, THEME_LIST, type Density, type ThemeKey } from "../../theme";
+import { DENSITY_LIST, R, THEME_LIST, type Density, type ThemeKey } from "../../theme";
 import { getLang, setLang, t } from "../../lib/i18n";
 import { confirmDialog } from "../../lib/ui";
 import { useAuth } from "../auth/AuthContext";
@@ -68,9 +68,9 @@ export function AccountMenu({ iconSx }: { iconSx?: object }) {
         <Button
           onClick={(e) => setAnchor(e.currentTarget)} color="inherit"
           sx={{
-            textTransform: "none", borderRadius: 99, minWidth: 0,
-            pl: 0.6, pr: isMobile ? 0.6 : 1.1, py: 0.45,
-            border: "1px solid", borderColor: "divider", bgcolor: "background.default",
+            textTransform: "none", borderRadius: `${R.sm}px`, minWidth: 0,
+            pl: 0.6, pr: isMobile ? 0.6 : 1.1, py: 0.5,
+            border: "1px solid", borderColor: "divider", bgcolor: "background.paper",
             transition: "background-color .15s, border-color .15s",
             "&:hover": { bgcolor: "action.hover", borderColor: "text.disabled" },
             ...iconSx,
@@ -85,7 +85,7 @@ export function AccountMenu({ iconSx }: { iconSx?: object }) {
           {!isMobile && (
             <>
               <Box sx={{ ml: 1, textAlign: "left", maxWidth: 150 }}>
-                <Typography noWrap sx={{ fontWeight: 700, lineHeight: 1.15, fontSize: 13 }}>
+                <Typography noWrap sx={{ fontWeight: 700, lineHeight: 1.15, fontSize: 13, color: "text.primary" }}>
                   {name}
                 </Typography>
                 {selected && (
@@ -106,7 +106,7 @@ export function AccountMenu({ iconSx }: { iconSx?: object }) {
         onClose={() => setAnchor(null)}
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         transformOrigin={{ vertical: "top", horizontal: "right" }}
-        slotProps={{ paper: { sx: { mt: 1, width: 300, borderRadius: 2.5, overflow: "hidden" } } }}
+        slotProps={{ paper: { sx: { mt: 1, width: 300, borderRadius: "10px", overflow: "hidden" } } }}
       >
         <Box sx={{ px: 2, py: 1.5 }}>
           <Typography variant="subtitle1" noWrap>{name}</Typography>

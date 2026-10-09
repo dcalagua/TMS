@@ -67,7 +67,7 @@ export function SkeletonTable({ columns = 5, rows = 6 }: { columns?: number; row
         {Array.from({ length: rows }).map((_, r) => (
           <Stack key={r} direction="row" spacing={1.5}>
             {Array.from({ length: columns }).map((__, c) => (
-              <MuiSkeleton key={c} variant="rounded" height={18} sx={{ flex: c === 0 ? 2 : 1, borderRadius: 1 }} />
+              <MuiSkeleton key={c} variant="rounded" height={18} sx={{ flex: c === 0 ? 2 : 1, borderRadius: "4px" }} />
             ))}
           </Stack>
         ))}

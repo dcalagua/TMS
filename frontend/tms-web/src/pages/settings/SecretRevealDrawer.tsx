@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Alert, Box, Button, IconButton, Paper, Tooltip, Typography } from "@mui/material";
-import { ContentCopyRounded, CheckRounded, KeyRounded } from "@mui/icons-material";
+import { Alert, Box, Button, IconButton, Tooltip, Typography } from "@mui/material";
+import { ContentCopyRounded, CheckRounded, KeyRounded, WarningAmberRounded } from "@mui/icons-material";
 import { FormDrawer } from "../../shared/ui/components";
+import { DetailSection, VerdictBanner } from "../../shared/ui/components/DetailLayout";
+import { R, T } from "../../theme";
 import { t } from "../../lib/i18n";
 import { fmtDateTime } from "../../lib/locale";
 
@@ -58,48 +60,59 @@ export function SecretRevealDrawer({ title, notice, fields, previousValidUntil, 
       closeOnBackdrop={false}
       footer={<Button onClick={onClose} variant="contained">{t("Ya lo copié, cerrar")}</Button>}
     >
-      <Alert severity="warning" sx={{ mb: 3 }}>{notice}</Alert>
+      <Box sx={{ display: "grid", gap: 2.5 }}>
+        <VerdictBanner
+          tone="warning"
+          icon={<WarningAmberRounded />}
+          title={t("Cópialo ahora")}
+          message={notice}
+        />
 
-      <Box sx={{ display: "grid", gap: 2 }}>
-        {fields.map((field) => (
-          <Paper
-            key={field.label}
-            variant="outlined"
-            sx={{ p: 1.5, ...(field.primary ? { borderColor: "primary.main" } : {}) }}
-          >
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
-              <Typography variant="caption" sx={{
-                textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 700, color: "text.secondary",
-              }}>
-                {field.label}
-              </Typography>
-              <Box sx={{ flex: 1 }} />
-              <Tooltip title={copied === field.label ? t("Copiado") : t("Copiar")}>
-                <IconButton size="small" onClick={() => void copy(field)}>
-                  {copied === field.label ? <CheckRounded fontSize="small" color="success" /> : <ContentCopyRounded fontSize="small" />}
-                </IconButton>
-              </Tooltip>
-            </Box>
-            <Typography
-              component="code"
-              sx={{
-                display: "block", wordBreak: "break-all", fontFamily: "monospace", fontSize: 13,
-                bgcolor: "action.hover", px: 1, py: 0.75, borderRadius: 1,
-              }}
-            >
-              {field.value}
-            </Typography>
-          </Paper>
-        ))}
+        <DetailSection title={t("Valores")}>
+          <Box sx={{ display: "grid", gap: 1.5 }}>
+            {fields.map((field) => (
+              <Box
+                key={field.label}
+                sx={{
+                  p: 1.5, border: "1px solid", borderColor: field.primary ? "primary.main" : "divider",
+                  borderRadius: `${R.md}px`,
+                }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+                  <Typography sx={{
+                    fontSize: T.micro - 0.5, textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 700, color: "text.secondary",
+                  }}>
+                    {field.label}
+                  </Typography>
+                  <Box sx={{ flex: 1 }} />
+                  <Tooltip title={copied === field.label ? t("Copiado") : t("Copiar")}>
+                    <IconButton size="small" onClick={() => void copy(field)}>
+                      {copied === field.label ? <CheckRounded fontSize="small" color="success" /> : <ContentCopyRounded fontSize="small" />}
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+                <Typography
+                  component="code"
+                  sx={{
+                    display: "block", wordBreak: "break-all", fontFamily: "monospace", fontSize: 13,
+                    bgcolor: "action.hover", px: 1, py: 0.75, borderRadius: "4px",
+                  }}
+                >
+                  {field.value}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </DetailSection>
+
+        {previousValidUntil && (
+          <Alert severity="info">
+            {t("El secreto anterior sigue valiendo hasta {{until}}, para que el socio tenga tiempo de cambiarlo.", {
+              until: fmtDateTime(previousValidUntil),
+            })}
+          </Alert>
+        )}
       </Box>
-
-      {previousValidUntil && (
-        <Alert severity="info" sx={{ mt: 3 }}>
-          {t("El secreto anterior sigue valiendo hasta {{until}}, para que el socio tenga tiempo de cambiarlo.", {
-            until: fmtDateTime(previousValidUntil),
-          })}
-        </Alert>
-      )}
     </FormDrawer>
   );
 }

@@ -5,7 +5,7 @@ import {
   Alert, Box, Button, IconButton, MenuItem, Paper, TextField, Tooltip, Typography,
 } from "@mui/material";
 import {
-  AltRouteRounded, AddRounded, ArrowUpwardRounded, ArrowDownwardRounded, DeleteRounded,
+  AltRouteRounded, AddRounded, ArrowUpwardRounded, ArrowDownwardRounded, CheckRounded, DeleteRounded,
 } from "@mui/icons-material";
 import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
@@ -18,8 +18,11 @@ import {
   type RouteDetailView, type RouteRequest, type RouteStopRequest,
 } from "../../shared/api/routesApi";
 import { describeApiError } from "../../shared/api/problemMessages";
-import { FormDrawer, LoadingState, SectionHeader } from "../../shared/ui/components";
+import {
+  ActiveBadge, FormDrawer, FormMeta, FormRow, FormSection, LoadingState,
+} from "../../shared/ui/components";
 import { t } from "../../lib/i18n";
+import { fmtDateTime } from "../../lib/locale";
 
 const FORM_ID = "route-form";
 
@@ -229,32 +232,34 @@ function RouteForm({
     }
   }
 
-  const grid = { display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, mb: 3 } as const;
-
   return (
     <FormDrawer
       open
       icon={<AltRouteRounded />}
       title={isEdit ? t("Editar ruta") : t("Nueva ruta")}
-      subtitle={t("Origen, cadencia y la secuencia de paradas que recorre.")}
+      subtitle={isEdit
+        ? [route.code, route.name, route.originName].filter(Boolean).join(" · ")
+        : t("Origen, cadencia y la secuencia de paradas que recorre.")}
+      titleAdornment={isEdit ? <ActiveBadge active={route.active} /> : undefined}
+      footerStart={isEdit ? <FormMeta>{t("Actualizado el {{date}}", { date: fmtDateTime(route.updatedAt) })}</FormMeta> : undefined}
       size="xl"
       onClose={onClose}
       dirty={isDirty}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
-          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
-            {isSubmitting ? t("Guardando...") : t("Guardar")}
+          <Button onClick={onClose} disabled={isSubmitting} color="inherit" sx={{ color: "text.secondary" }}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" startIcon={<CheckRounded />} disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : isEdit ? t("Guardar cambios") : t("Crear ruta")}
           </Button>
         </>
       }
     >
       <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+        {formError && <Alert severity="error" sx={{ mb: 1 }}>{formError}</Alert>}
 
-        <SectionHeader title={t("Identificación")} />
-        <Box sx={grid}>
+        <FormSection title={t("Identificación")} help={t("Con qué código y nombre se reconoce la ruta.")}>
+        <FormRow template="180px minmax(0, 1fr)">
           <TextField
             label={t("Código")} required size="small" fullWidth
             error={Boolean(errors.code)} helperText={errors.code?.message}
@@ -272,10 +277,11 @@ function RouteForm({
               maxLength: { value: 200, message: t("No puede superar los {{count}} caracteres", { count: 200 }) },
             })}
           />
-        </Box>
+        </FormRow>
+        </FormSection>
 
-        <SectionHeader title={t("Operación")} />
-        <Box sx={grid}>
+        <FormSection title={t("Operación")} help={t("Desde dónde sale, en qué zona trabaja y con qué cadencia.")}>
+        <FormRow cols={3}>
           <Controller
             control={control}
             name="originId"
@@ -323,10 +329,11 @@ function RouteForm({
               </TextField>
             )}
           />
-        </Box>
+        </FormRow>
+        </FormSection>
 
-        <SectionHeader title={t("Referencia")} />
-        <Box sx={grid}>
+        <FormSection title={t("Referencia")} help={t("Distancia y duración habituales del recorrido completo. Opcionales.")}>
+        <FormRow>
           <TextField
             label={t("Distancia de referencia (km)")} size="small" fullWidth type="number"
             error={Boolean(errors.referenceDistanceKm)} helperText={errors.referenceDistanceKm?.message}
@@ -351,14 +358,14 @@ function RouteForm({
               },
             })}
           />
-        </Box>
+        </FormRow>
+        </FormSection>
 
-        <SectionHeader title={t("Paradas")} />
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          {t("El orden de la lista ES la secuencia de paradas. Deja el tiempo de atención vacío para heredar el de la ubicación.")}
-        </Typography>
-
-        <Box sx={{ display: "flex", gap: 1.5, mb: 2, alignItems: "flex-start" }}>
+        <FormSection
+          title={t("Paradas")}
+          help={t("El orden de la lista ES la secuencia de paradas. Deja el tiempo de atención vacío para heredar el de la ubicación.")}
+        >
+        <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start" }}>
           <TextField
             select size="small" label={t("Destino a agregar")} value={stopToAdd}
             onChange={(e) => setStopToAdd(e.target.value)}
@@ -446,6 +453,7 @@ function RouteForm({
             })}
           </Box>
         )}
+        </FormSection>
       </Box>
     </FormDrawer>
   );

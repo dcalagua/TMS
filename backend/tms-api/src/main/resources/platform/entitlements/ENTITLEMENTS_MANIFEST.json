@@ -1,0 +1,17 @@
+{
+  "schema": "ebim.capabilities/v1",
+  "productCode": "tms",
+  "manifestVersion": "2026-09-28.1",
+  "capabilities": [
+    {
+      "code": "tms.core",
+      "name": "TMS",
+      "description": "Operacion de TMS by EBIM para la organizacion. Baseline: todo tenant aprovisionado la tiene; solo appActive=false la suspende. TMS no registra capacidades vendibles, limites ni asignaciones: sus permisos RBAC no son capacidades pagadas.",
+      "kind": "FEATURE",
+      "isBaseline": true,
+      "scopeLevel": "TENANT",
+      "status": "ACTIVE",
+      "introducedInContract": "entitlements.v1"
+    }
+  ]
+}

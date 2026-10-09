@@ -127,6 +127,12 @@ Authoritative documents live under `docs/architecture/`:
   derived from route resolution, destination and route frequencies, lead time and cutoff, and holds
   (a separate table). No new order state, no scheduler, no PlanningBatch. An origin with no active
   route is `NOT_CONFIGURED` (informative, never blocking). Implemented with V54.
+- `ADR-017-commercial-entitlements.md` - MasterAdmin pushes a versioned `ebim.entitlements/v1`
+  snapshot to `/internal/platform-provisioning/tenants/{id}/entitlements` (scopes
+  `tms:entitlements:write|read`); TMS stores it durably (V56) and enforces only `appActive`, from
+  the local copy, through a `CommercialAccessGate` separate from RBAC. No permission is a paid
+  capability; the sellable registry is empty. Mode seeded SHADOW. Numbered 017 because 013-016 are
+  taken on unmerged branches. Contract: `docs/platform-provisioning/ENTITLEMENTS.md`.
 
 Database and security detail lives in `docs/database/DATA_MODEL.md`,
 `docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.

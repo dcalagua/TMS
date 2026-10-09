@@ -2,14 +2,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  Alert, Box, Button, Chip, Divider, IconButton, Paper, Tab, Tabs, TextField, Tooltip, Typography,
+  Alert, Box, Button, Chip, IconButton, Paper, Tab, Tabs, Tooltip, Typography,
   useMediaQuery, useTheme,
 } from "@mui/material";
 import {
-  ArrowBackRounded, MapRounded, FlagRounded, PlayArrowRounded, DoneAllRounded, CancelRounded,
+  ArrowBackRounded, FlagRounded, PlayArrowRounded, DoneAllRounded, CancelRounded,
   PlaceRounded, BuildRounded, CheckRounded, SkipNextRounded, ReportProblemRounded,
   InventoryRounded, AttachFileRounded, DownloadRounded, BadgeRounded, EditRounded,
-  HourglassTopRounded,
+  HourglassTopRounded, LocalShippingOutlined, MapOutlined, PlaceOutlined, ReportProblemOutlined,
+  HistoryRounded, Inventory2Outlined,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
@@ -30,10 +31,9 @@ import {
   TripStopMap, type TripStopMapOrigin, type TripStopMapStop, type TripStopMapVehicle,
 } from "../../shared/maps/TripStopMap";
 import {
-  AppCard, DetailGrid, DetailItem, ErrorState, LoadingState, PageHeader, StatusChip,
+  DateTimeInput, DetailGrid, DetailItem, ErrorState, LoadingState, PageHeader, StatusChip,
 } from "../../shared/ui/components";
 import { DELIVERY_RESULT_TONE, STOP_EXECUTION_TONE, TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
-import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { TripDriverDrawer } from "../planning/TripDriverDrawer";
 import { confirmDialog, notifyError, notifySuccess, promptDialog } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
@@ -50,6 +50,8 @@ import { TripWarehouseCard } from "./TripWarehouseCard";
 import { TripDocumentsCard } from "./TripDocumentsCard";
 import { TripRouteCard } from "./TripRouteCard";
 import { TenderWaterfallCard } from "./TenderWaterfallCard";
+import { WorkspaceCard } from "./WorkspaceCard";
+import { R, STATUS, neutralSoft, type StatusTone } from "../../theme";
 
 function formatServiceWindow(start: string | null, end: string | null): string | null {
   if (!start && !end) return null;
@@ -62,6 +64,20 @@ function toInstant(localValue: string): string | null {
   const date = new Date(localValue);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
+
+/** El círculo numerado de una parada, en el color de su estado: relleno sólido cuando ya pasó
+ * algo, y el gris suave de reposo mientras está sin iniciar. */
+function stopBadgeColors(mode: "light" | "dark", tone: StatusTone): { bg: string; fg: string } {
+  if (tone === "neutral") {
+    const token = STATUS[mode].cancelled;
+    return { bg: token.soft, fg: token.softText };
+  }
+  const token = STATUS[mode][tone];
+  return { bg: token.bg, fg: token.text };
+}
+
+/** Los botones pequeños delineados de la pantalla llevan el filete del tema, no el del color. */
+const QUIET_OUTLINE = { borderColor: "divider" } as const;
 
 /** Las tres acciones de parada que no piden motivo. */
 const STOP_ACTIONS = {
@@ -145,7 +161,9 @@ export function TripWorkspacePage() {
   const [delivery, setDelivery] = useState<{
     stopId: string; stopLabel: string; orderId: string; orderNumber: string; existing?: OrderDeliveryView;
   } | null>(null);
-  const [evidenceFor, setEvidenceFor] = useState<{ deliveryId: string; orderNumber: string } | null>(null);
+  const [evidenceFor, setEvidenceFor] = useState<{
+    deliveryId: string; orderNumber: string; stopLabel: string; result: OrderDeliveryView["result"];
+  } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const detail: TripDetailView | undefined = tripQuery.data;
@@ -519,20 +537,22 @@ export function TripWorkspacePage() {
 
   return (
     <>
-      <Button component={Link} to="/trips" size="small" startIcon={<ArrowBackRounded />} sx={{ mb: 1, ml: -1 }}>
+      <Button
+        component={Link} to="/trips" size="small"
+        startIcon={<ArrowBackRounded sx={{ fontSize: "16px !important" }} />}
+        sx={{ mb: 1.5, ml: -1, fontWeight: 700 }}
+      >
         {t("Volver a viajes")}
       </Button>
 
       <PageHeader
-        icon={<MapRounded />}
-        tint={ICON_TINTS["/trips"]}
         title={trip.shipmentNumber}
         subtitle={`${trip.originName ?? trip.originCode ?? ""} · ${fmtDate(trip.planningDate)}`}
         meta={
           <>
             <StatusChip label={enumLabel("tripStatus", trip.status)} tone={TRIP_STATUS_TONE[trip.status]} variant="solid" />
             {openExceptions.length > 0 && (
-              <Chip size="small" color="error" label={t("{{count}} incidencias", { count: openExceptions.length })} />
+              <StatusChip tone="overdue" label={t("{{count}} incidencias", { count: openExceptions.length })} />
             )}
           </>
         }
@@ -544,10 +564,9 @@ export function TripWorkspacePage() {
               <>
                 {/* La hora la aporta el operador y vale para la siguiente acción que pulse:
                     vacía significa "ahora", que es lo que hace un despachador en vivo. */}
-                <TextField
-                  size="small" type="datetime-local" label={t("Hora real")}
-                  value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)}
-                  slotProps={{ inputLabel: { shrink: true } }}
+                <DateTimeInput
+                  size="small" label={t("Hora real")}
+                  value={occurredAt} onChange={(v) => setOccurredAt(v)}
                   sx={{ width: 215 }}
                 />
                 {/* Los botones se pintan desde `allowedTransitions`, que decide el servidor. Un
@@ -586,7 +605,7 @@ export function TripWorkspacePage() {
                   </Button>
                 )}
                 <Button
-                  variant="outlined" color="warning" startIcon={<ReportProblemRounded />}
+                  variant="outlined" color="warning" startIcon={<ReportProblemOutlined />}
                   onClick={() => setProblem({ mode: "report" })}
                 >
                   {t("Reportar")}
@@ -603,15 +622,19 @@ export function TripWorkspacePage() {
       />
 
       <Box sx={{
-        display: "grid", gap: 3, alignItems: "start",
+        display: "grid", gap: 2, alignItems: "start",
         gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 7fr) minmax(0, 5fr)" },
       }}>
-        {/* Columna izquierda: el envío y sus paradas — lo que se acciona. */}
-        <Box sx={{ display: "grid", gap: 3, minWidth: 0 }}>
-          <AppCard
+        {/* Columna izquierda: el envío, sus paradas y lo que le fue pasando — lo que se acciona. */}
+        <Box sx={{ display: "grid", gap: 2, minWidth: 0 }}>
+          <WorkspaceCard
+            icon={<LocalShippingOutlined />}
             title={t("Envío")}
             actions={canExecute && trip.status !== "COMPLETED" && trip.status !== "CANCELLED" && (
-              <Button size="small" startIcon={<BadgeRounded />} onClick={() => setShowDriverDrawer(true)}>
+              <Button
+                size="small" variant="outlined" color="inherit" sx={QUIET_OUTLINE}
+                startIcon={<BadgeRounded />} onClick={() => setShowDriverDrawer(true)}
+              >
                 {t("Conductor")}
               </Button>
             )}
@@ -626,11 +649,9 @@ export function TripWorkspacePage() {
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
                     {trip.driverName}
                     {trip.driverLicenseStatus && trip.driverLicenseStatus !== "VALID" && (
-                      <Chip
-                        size="small"
-                        color={trip.driverLicenseStatus === "EXPIRED" ? "error" : "warning"}
+                      <StatusChip
+                        tone={trip.driverLicenseStatus === "EXPIRED" ? "overdue" : "inProgress"}
                         label={enumLabel("driverLicenseStatus", trip.driverLicenseStatus)}
-                        sx={{ height: 20, fontSize: 10.5 }}
                       />
                     )}
                   </Box>
@@ -645,7 +666,7 @@ export function TripWorkspacePage() {
             {trip.cancelReason && (
               <Alert severity="error" sx={{ mt: 2 }}>{trip.cancelReason}</Alert>
             )}
-          </AppCard>
+          </WorkspaceCard>
 
           {isNarrow && (
             <Tabs
@@ -660,8 +681,8 @@ export function TripWorkspacePage() {
           )}
 
           {(!isNarrow || mobileTab === "map") && (
-            <AppCard title={t("Recorrido")} flush>
-              <Box sx={{ p: 2, pb: 0 }}>
+            <WorkspaceCard icon={<MapOutlined />} title={t("Recorrido")}>
+              <Box sx={{ borderRadius: `${R.md}px`, overflow: "hidden" }}>
                 <TripStopMap
                   origin={mapOrigin}
                   stops={mapStops}
@@ -671,11 +692,11 @@ export function TripWorkspacePage() {
                   height={300}
                 />
               </Box>
-            </AppCard>
+            </WorkspaceCard>
           )}
 
           {(!isNarrow || mobileTab === "stops") && (
-            <AppCard title={t("Paradas")}>
+            <WorkspaceCard icon={<PlaceOutlined />} title={t("Paradas")}>
               {stops.length === 0 ? (
                 <Alert severity="info">{t("Este viaje todavía no tiene paradas.")}</Alert>
               ) : (
@@ -687,6 +708,7 @@ export function TripWorkspacePage() {
                     const selected = stop.destinationId === selectedStopId;
                     const allows = (outcome: string) => stop.allowedExecutionTransitions.includes(outcome as never);
                     const stopAssignments = assignments.filter((a) => a.destinationId === stop.destinationId);
+                    const badge = stopBadgeColors(theme.palette.mode, STOP_EXECUTION_TONE[stop.executionStatus]);
 
                     return (
                       <Paper
@@ -694,21 +716,26 @@ export function TripWorkspacePage() {
                         variant="outlined"
                         onClick={() => setSelectedStopId(stop.destinationId)}
                         sx={{
-                          p: 1.75, cursor: "pointer",
+                          p: 1.5, cursor: "pointer", borderRadius: `${R.md}px`,
+                          // El borde seleccionado suma medio píxel: se compensa en el padding para
+                          // que la tarjeta no salte al pulsarla.
+                          border: selected ? "1.5px solid" : "1px solid",
                           borderColor: selected ? "primary.main" : "divider",
-                          bgcolor: selected ? "action.hover" : "transparent",
+                          ...(selected ? { p: "11.5px" } : {}),
+                          bgcolor: "background.paper",
                         }}
                       >
-                        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, flexWrap: "wrap" }}>
-                          <Box sx={{
-                            width: 28, height: 28, borderRadius: "50%", flexShrink: 0, display: "grid", placeItems: "center",
-                            bgcolor: "primary.main", color: "primary.contrastText", fontWeight: 800, fontSize: 13,
+                        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.25, flexWrap: "wrap" }}>
+                          <Box aria-hidden sx={{
+                            width: 26, height: 26, borderRadius: "50%", flexShrink: 0, display: "grid", placeItems: "center",
+                            bgcolor: badge.bg, color: badge.fg, fontWeight: 800, fontSize: 12.5,
+                            fontVariantNumeric: "tabular-nums",
                           }}>
                             {stop.sequence}
                           </Box>
                           <Box sx={{ flex: 1, minWidth: 160 }}>
                             <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.3 }}>{stopLabel}</Typography>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                               {[stop.address, window].filter(Boolean).join(" · ") || stop.destinationCode}
                             </Typography>
                           </Box>
@@ -719,7 +746,7 @@ export function TripWorkspacePage() {
                         </Box>
 
                         {(stop.actualArrivalAt || stop.actualDepartureAt || stop.dwellMinutes !== null) && (
-                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75, ml: 5.5 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75, fontVariantNumeric: "tabular-nums" }}>
                             {stop.actualArrivalAt && `${t("Llegada")} ${fmtTime(stop.actualArrivalAt)}`}
                             {stop.actualDepartureAt && ` · ${t("Salida")} ${fmtTime(stop.actualDepartureAt)}`}
                             {stop.dwellMinutes !== null && ` · ${t("Permanencia")} ${fmtMinutes(stop.dwellMinutes)}`}
@@ -727,58 +754,29 @@ export function TripWorkspacePage() {
                         )}
 
                         {stop.executionNotes && (
-                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, ml: 5.5 }}>
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                             {stop.executionNotes}
                           </Typography>
-                        )}
-
-                        {/* Las acciones de parada se pintan desde `allowedExecutionTransitions`,
-                            que está vacía mientras el vehículo no ha salido: una parada no se
-                            puede trabajar antes de que su camión se vaya. */}
-                        {canExecute && stop.allowedExecutionTransitions.length > 0 && (
-                          <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mt: 1.25, ml: 5.5 }}>
-                            {(["ARRIVED", "IN_SERVICE", "COMPLETED"] as const).map((outcome) =>
-                              allows(outcome) ? (
-                                <Button
-                                  key={outcome} size="small" variant="outlined"
-                                  startIcon={STOP_ACTIONS[outcome].icon}
-                                  disabled={busy}
-                                  onClick={(e) => { e.stopPropagation(); void runStopAction(stop, outcome); }}
-                                >
-                                  {t(STOP_ACTIONS[outcome].label)}
-                                </Button>
-                              ) : null,
-                            )}
-                            {allows("SKIPPED") && (
-                              <Button
-                                size="small" color="warning" startIcon={<SkipNextRounded />}
-                                onClick={(e) => { e.stopPropagation(); setProblem({ mode: "skip", stopId: stop.id, stopLabel }); }}
-                              >
-                                {t("Saltar")}
-                              </Button>
-                            )}
-                            {allows("FAILED") && (
-                              <Button
-                                size="small" color="error" startIcon={<ReportProblemRounded />}
-                                onClick={(e) => { e.stopPropagation(); setProblem({ mode: "fail", stopId: stop.id, stopLabel }); }}
-                              >
-                                {t("Fallida")}
-                              </Button>
-                            )}
-                          </Box>
                         )}
 
                         {/* Los pedidos de esta parada y qué se entregó de cada uno. Un pedido sin
                             entrega registrada simplemente no tiene entrada: aquí no se inventa
                             un estado "pendiente" que el backend no tiene. */}
                         {stopAssignments.length > 0 && (
-                          <Box sx={{ mt: 1.5, ml: 5.5 }}>
-                            <Divider sx={{ mb: 1 }} />
+                          <Box sx={{ mt: 1.25, display: "grid", gap: 0.75 }}>
                             {stopAssignments.map((assignment) => {
                               const recorded = stopDeliveries.find((entry) => entry.orderId === assignment.orderId);
                               return (
-                                <Box key={assignment.assignmentId} sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", py: 0.5 }}>
-                                  <Typography variant="body2" sx={{ fontWeight: 700, minWidth: 100 }}>
+                                <Box
+                                  key={assignment.assignmentId}
+                                  sx={(th) => ({
+                                    display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap",
+                                    minHeight: 36, px: 1.25, py: 0.25, borderRadius: `${R.sm}px`,
+                                    bgcolor: neutralSoft(th.palette.mode === "dark"),
+                                  })}
+                                >
+                                  <Inventory2Outlined aria-hidden sx={{ fontSize: 15, color: "text.secondary" }} />
+                                  <Typography variant="body2" sx={{ fontWeight: 700, minWidth: 90, fontVariantNumeric: "tabular-nums" }}>
                                     {assignment.orderNumber}
                                   </Typography>
                                   {recorded ? (
@@ -829,7 +827,10 @@ export function TripWorkspacePage() {
                                             size="small"
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              setEvidenceFor({ deliveryId: recorded.id, orderNumber: assignment.orderNumber });
+                                              setEvidenceFor({
+                                                deliveryId: recorded.id, orderNumber: assignment.orderNumber,
+                                                stopLabel, result: recorded.result,
+                                              });
                                             }}
                                           >
                                             <AttachFileRounded fontSize="small" />
@@ -843,17 +844,99 @@ export function TripWorkspacePage() {
                             })}
                           </Box>
                         )}
+                        {/* Las acciones de parada se pintan desde `allowedExecutionTransitions`,
+                            que está vacía mientras el vehículo no ha salido: una parada no se
+                            puede trabajar antes de que su camión se vaya. */}
+                        {canExecute && stop.allowedExecutionTransitions.length > 0 && (
+                          <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mt: 1.25 }}>
+                            {(["ARRIVED", "IN_SERVICE", "COMPLETED"] as const).map((outcome) =>
+                              allows(outcome) ? (
+                                <Button
+                                  key={outcome} size="small" variant="outlined" color="inherit" sx={QUIET_OUTLINE}
+                                  startIcon={STOP_ACTIONS[outcome].icon}
+                                  disabled={busy}
+                                  onClick={(e) => { e.stopPropagation(); void runStopAction(stop, outcome); }}
+                                >
+                                  {t(STOP_ACTIONS[outcome].label)}
+                                </Button>
+                              ) : null,
+                            )}
+                            {allows("SKIPPED") && (
+                              <Button
+                                size="small" variant="outlined" color="warning" startIcon={<SkipNextRounded />}
+                                onClick={(e) => { e.stopPropagation(); setProblem({ mode: "skip", stopId: stop.id, stopLabel }); }}
+                              >
+                                {t("Saltar")}
+                              </Button>
+                            )}
+                            {allows("FAILED") && (
+                              <Button
+                                size="small" variant="outlined" color="error" startIcon={<ReportProblemRounded />}
+                                onClick={(e) => { e.stopPropagation(); setProblem({ mode: "fail", stopId: stop.id, stopLabel }); }}
+                              >
+                                {t("Fallida")}
+                              </Button>
+                            )}
+                          </Box>
+                        )}
+
                       </Paper>
                     );
                   })}
                 </Box>
               )}
-            </AppCard>
+            </WorkspaceCard>
           )}
+
+          {exceptions.length > 0 && (
+            <WorkspaceCard icon={<ReportProblemOutlined />} title={t("Incidencias")}>
+              <Box sx={{ display: "grid", gap: 1 }}>
+                {exceptions.map((exception) => (
+                  <Paper key={exception.id} variant="outlined" sx={{ p: 1.5, borderRadius: `${R.md}px` }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        {enumLabel("tripExceptionType", exception.exceptionType)}
+                      </Typography>
+                      <StatusChip
+                        label={enumLabel("tripExceptionStatus", exception.status)}
+                        tone={exception.status === "OPEN" ? "overdue" : "done"}
+                      />
+                      <Box sx={{ flex: 1 }} />
+                      {canExecute && exception.status === "OPEN" && (
+                        <Button
+                          size="small" variant="outlined" color="inherit" sx={QUIET_OUTLINE}
+                          startIcon={<CheckRounded />}
+                          disabled={busy} onClick={() => void resolveProblem(exception)}
+                        >
+                          {t("Resolver")}
+                        </Button>
+                      )}
+                    </Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                      {exception.stopSequence !== null && `${exception.stopSequence}. ${exception.stopDestinationName ?? ""} · `}
+                      {fmtDateTime(exception.reportedAt)}
+                    </Typography>
+                    {exception.notes && (
+                      <Typography variant="body2" sx={{ mt: 0.5 }}>{exception.notes}</Typography>
+                    )}
+                    {exception.resolutionNotes && (
+                      <Typography variant="body2" color="success.main" sx={{ mt: 0.5 }}>
+                        {exception.resolutionNotes}
+                      </Typography>
+                    )}
+                  </Paper>
+                ))}
+              </Box>
+            </WorkspaceCard>
+          )}
+
+          <WorkspaceCard icon={<HistoryRounded />} title={t("Historia del viaje")}>
+            <TripTimeline events={eventsQuery.data ?? []} loading={eventsQuery.isPending} />
+          </WorkspaceCard>
         </Box>
 
-        {/* Columna derecha: lo que se lee — recorrido, rastreo, dinero, ofertas, incidencias y la historia. */}
-        <Box sx={{ display: "grid", gap: 3, minWidth: 0 }}>
+        {/* Columna derecha: lo que se lee — recorrido, rastreo, almacén, documentos, dinero y ofertas. */}
+        <Box sx={{ display: "grid", gap: 2, minWidth: 0 }}>
           {/* Primero el recorrido: es la pregunta que se hace antes de salir, no después. */}
           <TripRouteCard routing={detail.routing} />
 
@@ -889,7 +972,6 @@ export function TripWorkspacePage() {
             />
           )}
 
-
           {canReadTenders && (
             <TripTenderCard
               companyId={companyId}
@@ -900,52 +982,13 @@ export function TripWorkspacePage() {
             />
           )}
 
-          {exceptions.length > 0 && (
-            <AppCard title={t("Incidencias")}>
-              <Box sx={{ display: "grid", gap: 1 }}>
-                {exceptions.map((exception) => (
-                  <Paper key={exception.id} variant="outlined" sx={{ p: 1.5 }}>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        {enumLabel("tripExceptionType", exception.exceptionType)}
-                      </Typography>
-                      <StatusChip
-                        label={enumLabel("tripExceptionStatus", exception.status)}
-                        tone={exception.status === "OPEN" ? "overdue" : "done"}
-                      />
-                    </Box>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                      {exception.stopSequence !== null && `${exception.stopSequence}. ${exception.stopDestinationName ?? ""} · `}
-                      {fmtDateTime(exception.reportedAt)}
-                    </Typography>
-                    {exception.notes && (
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{exception.notes}</Typography>
-                    )}
-                    {exception.resolutionNotes && (
-                      <Typography variant="body2" color="success.main" sx={{ mt: 0.5 }}>
-                        {exception.resolutionNotes}
-                      </Typography>
-                    )}
-                    {canExecute && exception.status === "OPEN" && (
-                      <Button size="small" sx={{ mt: 1 }} disabled={busy} onClick={() => void resolveProblem(exception)}>
-                        {t("Resolver")}
-                      </Button>
-                    )}
-                  </Paper>
-                ))}
-              </Box>
-            </AppCard>
-          )}
-
-          <AppCard title={t("Historia del viaje")}>
-            <TripTimeline events={eventsQuery.data ?? []} loading={eventsQuery.isPending} />
-          </AppCard>
         </Box>
       </Box>
 
       {problem && (
         <TripProblemDrawer
           mode={problem.mode}
+          shipmentNumber={trip.shipmentNumber}
           stops={stops}
           stopLabel={problem.stopLabel}
           onClose={() => setProblem(null)}
@@ -966,6 +1009,8 @@ export function TripWorkspacePage() {
       {evidenceFor && (
         <DeliveryEvidenceDrawer
           orderNumber={evidenceFor.orderNumber}
+          stopLabel={evidenceFor.stopLabel}
+          status={<StatusChip label={enumLabel("deliveryResult", evidenceFor.result)} tone={DELIVERY_RESULT_TONE[evidenceFor.result]} />}
           onClose={() => setEvidenceFor(null)}
           onSubmit={submitEvidence}
         />

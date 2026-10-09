@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Alert, Box, Button, Chip, MenuItem, Paper, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, TextField, Tooltip, Typography,
+  Alert, Box, Button, Chip, Paper, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Tooltip, Typography,
 } from "@mui/material";
 import {
   EventAvailableRounded, CheckCircleRounded, CancelRounded, LocalShippingRounded,
-  DoneAllRounded, PersonOffRounded, ScheduleRounded,
+  DoneAllRounded, PersonOffRounded, ScheduleRounded, Inventory2Outlined, LocalShippingOutlined,
+  MeetingRoomOutlined, WarehouseRounded,
 } from "@mui/icons-material";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
@@ -18,13 +19,13 @@ import { fetchDestinations } from "../../shared/api/destinationsApi";
 import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
 import {
-  ActionMenu, EmptyState, ErrorState, LoadingState, PageHeader, StatusChip, dataTableSx,
+  ActionMenu, EmptyState, ErrorState, FilterBar, LoadingState, PageHeader, StatusChip, dataTableSx,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { confirmDialog, notifyError, notifySuccess, promptDialog } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
-import type { StatusTone } from "../../theme";
-import { fmtDateTime } from "../../lib/locale";
+import { R, T, neutralSoft, type StatusTone } from "../../theme";
+import { fmtDateTime, today } from "../../lib/locale";
 import { t } from "../../lib/i18n";
 import { BookAppointmentDrawer } from "./BookAppointmentDrawer";
 
@@ -46,7 +47,7 @@ export function AppointmentsPage() {
   const canManage = hasPermission("appointments.appointment:manage");
 
   const [locationId, setLocationId] = useState("");
-  const [day, setDay] = useState(() => new Date().toISOString().slice(0, 10));
+  const [day, setDay] = useState(today);
   const [booking, setBooking] = useState(false);
   const queryClient = useQueryClient();
 
@@ -191,33 +192,26 @@ export function AppointmentsPage() {
         )}
       />
 
-      <Paper variant="outlined" sx={{ p: 2, mb: 2, display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
-        <TextField
-          select size="small" label={t("Sitio")} value={locationId} sx={{ minWidth: 260 }}
-          onChange={(e) => setLocationId(e.target.value)}
-        >
-          <MenuItem value="">{t("Selecciona un sitio")}</MenuItem>
-          {(locationsQuery.data?.content ?? []).map((location) => (
-            <MenuItem key={location.id} value={location.id}>{location.code} · {location.name}</MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          size="small" type="date" label={t("Día")} value={day}
-          onChange={(e) => setDay(e.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
-        />
-        {locationId !== "" && (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <Typography variant="caption" color="text.secondary">
+      <FilterBar
+        value={{ locationId, day }}
+        defaults={{ locationId: "", day: today() }}
+        onChange={(next) => { setLocationId(next.locationId); setDay(next.day || today()); }}
+        fields={[
+          { type: "select", key: "locationId", label: t("Sitio"), icon: <WarehouseRounded />,
+            options: (locationsQuery.data?.content ?? []).map((location) => ({ id: location.id, label: `${location.code} · ${location.name}` })) },
+          { type: "date", key: "day", label: t("Día") },
+        ]}
+        trailing={locationId !== "" && (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+            <Typography variant="body2" sx={{ fontWeight: 700, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>
               {t("{{count}} puerta(s)", { count: docks.length })}
             </Typography>
             {outOfService > 0 && (
-              <Chip size="small" color="warning" variant="outlined"
-                label={t("{{n}} fuera de servicio", { n: outOfService })} />
+              <StatusChip tone="inProgress" label={t("{{n}} fuera de servicio", { n: outOfService })} />
             )}
           </Box>
         )}
-      </Paper>
+      />
 
       {locationId === "" ? (
         <EmptyState
@@ -237,12 +231,18 @@ export function AppointmentsPage() {
         <>
           {/* La zona horaria se dice en voz alta: una hora sin decir de dónde es, es cómo un
               camión llega con cinco horas de diferencia. */}
-          <Alert severity="info" variant="outlined" sx={{ mb: 1.5 }}>
+          <Alert
+            severity="info"
+            sx={{
+              mb: 1.5, py: 0.25, borderRadius: `${R.md}px`, border: "none", fontSize: T.body,
+              alignItems: "center", "& .MuiAlert-icon": { fontSize: 18, py: 0.5 },
+            }}
+          >
             {t("Las horas se muestran en la zona de tu navegador ({{zone}}).", {
               zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             })}
           </Alert>
-          <TableContainer component={Paper} variant="outlined">
+          <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: `${R.lg}px` }}>
             <Table size="small" sx={dataTableSx}>
               <TableHead>
                 <TableRow>
@@ -257,20 +257,43 @@ export function AppointmentsPage() {
               <TableBody>
                 {rows.map((appointment) => (
                   <TableRow key={appointment.id}>
-                    <TableCell sx={{ fontWeight: 700 }}>{appointment.resourceCode ?? "-"}</TableCell>
-                    <TableCell sx={{ fontVariantNumeric: "tabular-nums" }}>
-                      {fmtDateTime(appointment.windowStart)} → {fmtDateTime(appointment.windowEnd)}
-                      {appointment.rescheduledFromStart && (
-                        <Tooltip title={t("Movida desde {{when}}", {
-                          when: fmtDateTime(appointment.rescheduledFromStart),
+                    <TableCell>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Box aria-hidden sx={(th) => ({
+                          width: 26, height: 24, flexShrink: 0, borderRadius: "6px", display: "grid", placeItems: "center",
+                          bgcolor: neutralSoft(th.palette.mode === "dark"), color: "text.secondary",
+                          "& svg": { fontSize: 15 },
                         })}>
-                          <Chip size="small" variant="outlined" sx={{ ml: 1 }}
-                            icon={<ScheduleRounded />} label={t("Movida")} />
-                        </Tooltip>
-                      )}
+                          <MeetingRoomOutlined />
+                        </Box>
+                        <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+                          {appointment.resourceCode ?? "-"}
+                        </Typography>
+                      </Box>
                     </TableCell>
-                    <TableCell>{enumLabel("appointmentPurpose", appointment.purpose)}</TableCell>
-                    <TableCell>{appointment.reference ?? "-"}</TableCell>
+                    <TableCell sx={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <span>{fmtDateTime(appointment.windowStart)} → {fmtDateTime(appointment.windowEnd)}</span>
+                        {appointment.rescheduledFromStart && (
+                          <Tooltip title={t("Movida desde {{when}}", {
+                            when: fmtDateTime(appointment.rescheduledFromStart),
+                          })}>
+                            <Chip size="small" variant="outlined"
+                              icon={<ScheduleRounded />} label={t("Movida")}
+                              sx={{ height: 22, fontSize: T.label, fontWeight: 700, color: "text.secondary", "& .MuiChip-icon": { fontSize: 14 } }} />
+                          </Tooltip>
+                        )}
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                        <Box component="span" aria-hidden sx={{ display: "inline-flex", color: "text.secondary", "& svg": { fontSize: 17 } }}>
+                          {appointment.purpose === "PICKUP" ? <Inventory2Outlined /> : <LocalShippingOutlined />}
+                        </Box>
+                        {enumLabel("appointmentPurpose", appointment.purpose)}
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={{ fontVariantNumeric: "tabular-nums" }}>{appointment.reference ?? "-"}</TableCell>
                     <TableCell>
                       <StatusChip
                         label={enumLabel("appointmentStatus", appointment.status)}

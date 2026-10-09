@@ -1,5 +1,6 @@
 package com.ebim.tms.shared.api;
 
+import com.ebim.tms.shared.security.CommercialAccessSuspendedException;
 import com.ebim.tms.shared.security.CompanyScopeDeniedException;
 import com.ebim.tms.shared.security.CompanyScopeInvalidException;
 import com.ebim.tms.shared.security.CompanyScopeRequiredException;
@@ -117,6 +118,12 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     public ResponseEntity<ProblemDetail> handleCompanyScopeDenied(
             CompanyScopeDeniedException failure, WebRequest request) {
         return respond(ApiProblems.of(ProblemType.COMPANY_SCOPE_FORBIDDEN, failure.getMessage()), request);
+    }
+
+    @ExceptionHandler(CommercialAccessSuspendedException.class)
+    public ResponseEntity<ProblemDetail> handleCommercialAccessSuspended(
+            CommercialAccessSuspendedException failure, WebRequest request) {
+        return respond(ApiProblems.of(ProblemType.COMMERCIAL_ACCESS_SUSPENDED, failure.getMessage()), request);
     }
 
     @ExceptionHandler(CompanyScopeInvalidException.class)

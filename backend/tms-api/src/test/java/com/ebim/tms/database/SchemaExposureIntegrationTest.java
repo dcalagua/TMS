@@ -85,7 +85,11 @@ class SchemaExposureIntegrationTest {
             // V54: holds on an order (ADR-014). Lifted, never deleted - no DELETE grant.
             "order_hold",
             // V55: the documents that travel with orders (ADR-015).
-            "logistics_document", "logistics_document_order");
+            "logistics_document", "logistics_document_order",
+            // V56: MasterAdmin commercial entitlements. Same posture as V51 - owner only, tms_app holds
+            // no grant and a deny-all policy; the scoped read goes through a SECURITY DEFINER function.
+            "platform_entitlement_applied", "platform_entitlement_audit", "platform_entitlement_jti",
+            "platform_entitlement_mode", "platform_entitlement_mode_event", "platform_entitlement_shadow_diff");
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the

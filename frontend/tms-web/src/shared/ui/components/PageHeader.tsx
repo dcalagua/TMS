@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
-import { Box, Typography, IconButton, Tooltip } from "@mui/material";
+import { Box, Button, Typography } from "@mui/material";
 import { RefreshRounded } from "@mui/icons-material";
-import { alpha } from "@mui/material/styles";
 import { TableSearch } from "./TableSearch";
 import { t } from "../../../lib/i18n";
 
@@ -12,7 +11,10 @@ interface PageHeaderProps {
   subtitle?: string;
   /** Icono a la izquierda del título; se pinta dentro de la baldosa de identidad del módulo. */
   icon?: ReactNode;
-  /** Color de la baldosa. Token del theme o hex; por defecto el primario. */
+  /**
+   * @deprecated Diseño v2: todas las baldosas usan el primario del tema, para que la cabecera
+   * se lea igual en todo el producto. Se conserva para no romper las llamadas existentes.
+   */
   tint?: string;
   /** Datos cortos junto al título — un conteo, una fecha, un estado. */
   meta?: ReactNode;
@@ -35,8 +37,9 @@ interface PageHeaderProps {
  * producto.
  */
 export function PageHeader({
-  title, subtitle, icon, tint = "primary.main", meta, search, onRefresh, refreshing, actions,
+  title, subtitle, icon, meta, search, onRefresh, refreshing, actions,
 }: PageHeaderProps) {
+  const tint = "primary.main";
   return (
     <Box
       sx={{
@@ -53,12 +56,12 @@ export function PageHeader({
               const [k, sub = "main"] = tint.split(".");
               const palette = th.palette as unknown as Record<string, Record<string, string>>;
               const main = tint.startsWith("#") ? tint : (palette[k]?.[sub] ?? th.palette.primary.main);
+              // Baldosa plana del diseño v2: color sólido, sin degradado ni sombra.
               return {
-                width: 44, height: 44, flexShrink: 0, borderRadius: 2.5,
+                width: 44, height: 44, flexShrink: 0, borderRadius: "12px",
                 display: "grid", placeItems: "center",
-                background: `linear-gradient(135deg, ${main} 0%, ${alpha(main, 0.72)} 100%)`,
-                color: "#fff", boxShadow: `0 5px 14px ${alpha(main, 0.38)}`,
-                "& svg": { fontSize: 23 },
+                bgcolor: main, color: "#fff",
+                "& svg": { fontSize: 22 },
               };
             }}
           >
@@ -67,11 +70,11 @@ export function PageHeader({
         )}
         <Box sx={{ minWidth: 0 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-            <Typography variant="h5" noWrap>{title}</Typography>
+            <Typography variant="h5" noWrap sx={{ fontSize: 21, fontWeight: 800, letterSpacing: "-0.02em" }}>{title}</Typography>
             {meta}
           </Box>
           {subtitle && (
-            <Typography variant="body2" color="text.secondary" noWrap>{subtitle}</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>{subtitle}</Typography>
           )}
         </Box>
       </Box>
@@ -81,13 +84,16 @@ export function PageHeader({
           <TableSearch value={search.value} onChange={search.onChange} placeholder={search.placeholder} />
         )}
         {onRefresh && (
-          <Tooltip title={t("Recargar")}>
-            <span>
-              <IconButton onClick={onRefresh} disabled={refreshing} aria-label={t("Recargar")}>
-                <RefreshRounded />
-              </IconButton>
-            </span>
-          </Tooltip>
+          <Button
+            variant="outlined"
+            color="inherit"
+            onClick={onRefresh}
+            disabled={refreshing}
+            startIcon={<RefreshRounded />}
+            sx={{ borderColor: "divider", whiteSpace: "nowrap" }}
+          >
+            {t("Recargar")}
+          </Button>
         )}
         {actions}
       </Box>

@@ -3,6 +3,7 @@ package com.ebim.tms.shared.security;
 import com.ebim.tms.shared.api.ApiHeaders;
 import com.ebim.tms.shared.api.ApiExceptionResponder;
 import java.util.List;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
@@ -74,7 +75,10 @@ public class SecurityConfig {
             TmsAuthenticationEntryPoint authenticationEntryPoint,
             TmsAccessDeniedHandler accessDeniedHandler,
             ApiExceptionResponder apiExceptionResponder,
-            CorsConfigurationSource corsConfigurationSource) throws Exception {
+            CorsConfigurationSource corsConfigurationSource,
+            ObjectProvider<CommercialAccessGate> commercialAccessGate) throws Exception {
+
+        CompanyScopeFilter companyScopeFilter = new CompanyScopeFilter(apiExceptionResponder);
 
         http
                 // Stateless token API: no cookie session to protect, so CSRF is not applicable.
@@ -98,7 +102,7 @@ public class SecurityConfig {
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
                 // Company selection is validated against membership immediately after the token
                 // is accepted, so authorities are company-scoped before any authorization runs.
-                .addFilterAfter(new CompanyScopeFilter(apiExceptionResponder), BearerTokenAuthenticationFilter.class)
+                .addFilterAfter(companyScopeFilter, BearerTokenAuthenticationFilter.class)
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
@@ -107,6 +111,11 @@ public class SecurityConfig {
                         .contentTypeOptions(Customizer.withDefaults())
                         .referrerPolicy(referrer -> referrer.policy(ReferrerPolicy.NO_REFERRER))
                         .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true)));
+
+        // Commercial access (ADR-017) is decided once the company is bound, before any authorization
+        // runs. Absent when iam.entitlements is not wired, in which case nothing changes.
+        commercialAccessGate.ifAvailable(gate -> http.addFilterAfter(
+                new CommercialAccessFilter(gate, apiExceptionResponder), CompanyScopeFilter.class));
 
         return http.build();
     }

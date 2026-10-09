@@ -7,7 +7,7 @@ import {
   type ApiError,
 } from "../api/httpClient";
 import { isAuthProblem } from "../api/problemMessages";
-import { supabase } from "./supabaseClient";
+import { setRememberSession, supabase } from "./supabaseClient";
 
 export type AuthStatus = "loading" | "signedOut" | "signedIn";
 
@@ -24,8 +24,13 @@ export interface SignInResult {
 interface AuthContextValue {
   status: AuthStatus;
   user: AuthUser | null;
-  signIn(email: string, password: string): Promise<SignInResult>;
+  /** `remember` decide si la sesión sobrevive al cierre del navegador. Por defecto, sí. */
+  signIn(email: string, password: string, remember?: boolean): Promise<SignInResult>;
   signOut(): Promise<void>;
+  /** Envía el correo con el enlace de recuperación, que vuelve a `/reset-password`. */
+  requestPasswordReset(email: string): Promise<SignInResult>;
+  /** Fija una contraseña nueva para la sesión abierta (la de recuperación, normalmente). */
+  updatePassword(password: string): Promise<SignInResult>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -124,7 +129,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       status,
       user,
-      async signIn(email, password) {
+      async signIn(email, password, remember = true) {
+        // Antes del login: la sesión que produzca se escribe ya en el almacenamiento elegido.
+        setRememberSession(remember);
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) return { ok: false, message: error.message };
         // Adopta la sesión de la llamada que la produjo en vez de esperar a
@@ -139,6 +146,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.auth.signOut();
         setUser(null);
         setStatus("signedOut");
+      },
+      async requestPasswordReset(email) {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        return error ? { ok: false, message: error.message } : { ok: true };
+      },
+      async updatePassword(password) {
+        const { error } = await supabase.auth.updateUser({ password });
+        return error ? { ok: false, message: error.message } : { ok: true };
       },
     }),
     [applySession, status, user],

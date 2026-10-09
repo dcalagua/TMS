@@ -1,13 +1,13 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Box, MenuItem, TextField, Typography } from "@mui/material";
-import { ReceiptLongRounded } from "@mui/icons-material";
+import { Box, Typography } from "@mui/material";
+import { FactCheckRounded, ReceiptLongRounded } from "@mui/icons-material";
 import {
   INVOICE_STATUSES, fetchInvoices,
   type CarrierInvoiceSummaryView, type InvoiceStatus,
 } from "../../shared/api/settlementApi";
 import {
-  DataTable, PageHeader, Pagination, StatusChip, Toolbar, type DataTableColumn,
+  DataTable, FilterBar, PageHeader, Pagination, StatusChip, type DataTableColumn,
 } from "../../shared/ui/components";
 import { INVOICE_STATUS_TONE, MATCH_STATUS_TONE } from "../../shared/ui/statusTones";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
@@ -18,6 +18,12 @@ import { useCompany } from "../../shared/company/CompanyContext";
 import { InvoiceWorkspaceDrawer } from "./InvoiceWorkspaceDrawer";
 
 const PAGE_SIZE = 25;
+
+interface AppliedFilters {
+  status: InvoiceStatus | "";
+}
+
+const DEFAULT_FILTERS: AppliedFilters = { status: "" };
 
 /**
  * Auditoría de flete (migración V46).
@@ -38,14 +44,16 @@ export function SettlementPage() {
   const companyId = selected?.id ?? "";
   const queryClient = useQueryClient();
   const [page, setPage] = useState(0);
-  const [statusFilter, setStatusFilter] = useState<InvoiceStatus | "">("");
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
+  const [filters, setFiltersState] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const setFilters = (next: AppliedFilters) => { setFiltersState(next); setPage(0); };
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
 
   const invoicesQuery = useQuery({
-    queryKey: ["settlement-invoices", companyId, page, statusFilter],
+    queryKey: ["settlement-invoices", companyId, page, filters.status],
     queryFn: ({ signal }) => fetchInvoices(
       companyId,
-      { page, size: PAGE_SIZE, status: statusFilter ? [statusFilter] : undefined },
+      { page, size: PAGE_SIZE, status: filters.status ? [filters.status] : undefined },
       signal,
     ),
     placeholderData: keepPreviousData,
@@ -66,8 +74,8 @@ export function SettlementPage() {
       header: t("Factura"),
       render: (row) => (
         <Box>
-          <Typography variant="body2" sx={{ fontWeight: 700 }}>{row.invoiceNumber}</Typography>
-          <Typography variant="caption" color="text.secondary">{fmtDate(row.invoiceDate)}</Typography>
+          <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{row.invoiceNumber}</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: "tabular-nums" }}>{fmtDate(row.invoiceDate)}</Typography>
         </Box>
       ),
     },
@@ -75,23 +83,30 @@ export function SettlementPage() {
     {
       key: "expectedAmount",
       header: t("Esperado"),
+      numeric: true,
       render: (row) => amount(row.expectedAmount, row.currency),
     },
     {
       key: "totalAmount",
       header: t("Facturado"),
-      render: (row) => `${fmtDecimal(row.totalAmount, 2)} ${row.currency}`,
+      numeric: true,
+      render: (row) => (
+        <Typography variant="body2" component="span" sx={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+          {`${fmtDecimal(row.totalAmount, 2)} ${row.currency}`}
+        </Typography>
+      ),
     },
     {
       key: "differenceAmount",
       header: t("Diferencia"),
+      numeric: true,
       render: (row) => {
         if (row.differenceAmount === null) return "—";
         const over = row.differenceAmount > 0;
         return (
           <Typography
-            variant="body2"
-            sx={{ fontWeight: 700, color: row.differenceAmount === 0 ? "text.secondary" : (over ? "error.main" : "warning.main") }}
+            variant="body2" component="span"
+            sx={{ fontWeight: 700, fontVariantNumeric: "tabular-nums", color: row.differenceAmount === 0 ? "text.secondary" : (over ? "error.main" : "warning.main") }}
           >
             {over ? "+" : ""}{fmtDecimal(row.differenceAmount, 2)}
           </Typography>
@@ -131,21 +146,15 @@ export function SettlementPage() {
         refreshing={invoicesQuery.isFetching}
       />
 
-      <Toolbar
-        onApply={() => setPage(0)}
-        onReset={() => { setStatusFilter(""); setPage(0); }}
-        filters={
-          <TextField
-            select size="small" label={t("Estado")} value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value as InvoiceStatus | ""); setPage(0); }}
-            sx={{ minWidth: 200 }}
-          >
-            <MenuItem value="">{t("Todos")}</MenuItem>
-            {INVOICE_STATUSES.map((status) => (
-              <MenuItem key={status} value={status}>{enumLabel("invoiceStatus", status)}</MenuItem>
-            ))}
-          </TextField>
-        }
+      <FilterBar
+        value={filters}
+        defaults={DEFAULT_FILTERS}
+        onChange={setFilters}
+        fields={[
+          { type: "select", key: "status", label: t("Estado"), icon: <FactCheckRounded />,
+            allLabel: t("Todos"),
+            options: INVOICE_STATUSES.map((status) => ({ id: status, label: enumLabel("invoiceStatus", status) })) },
+        ]}
       />
 
       <DataTable

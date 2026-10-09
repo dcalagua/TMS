@@ -162,10 +162,10 @@ export function CapacityBar({ kind, dimension }: { kind: CapacityUnit; dimension
         value={unlimited || percentUsed === null ? 0 : Math.max(0, Math.min(100, percentUsed))}
         aria-label={`${label}: ${amount(used)}`}
         sx={(th) => ({
-          height: 7, borderRadius: 3,
+          height: 7, borderRadius: "12px",
           bgcolor: alpha(th.palette.text.primary, 0.09),
           "& .MuiLinearProgress-bar": {
-            borderRadius: 3,
+            borderRadius: "12px",
             // Sin vehículo asignado no hay nada que colorear: la barra queda apagada y vacía.
             bgcolor: unlimited ? alpha(th.palette.text.primary, 0.22) : color,
           },

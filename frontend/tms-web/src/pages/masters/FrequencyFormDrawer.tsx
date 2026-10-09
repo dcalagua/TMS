@@ -4,14 +4,17 @@ import {
   Alert, Box, Button, Checkbox, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, TextField, Typography,
 } from "@mui/material";
-import { CalendarViewWeekRounded } from "@mui/icons-material";
+import { CalendarViewWeekRounded, CheckRounded } from "@mui/icons-material";
 import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
   createFrequency, updateFrequency, type FrequencyRequest, type FrequencyView,
 } from "../../shared/api/frequenciesApi";
-import { FormDrawer, SectionHeader, dataTableSx } from "../../shared/ui/components";
+import {
+  ActiveBadge, FormDateInput, FormDrawer, FormMeta, FormRow, FormSection, dataTableSx,
+} from "../../shared/ui/components";
 import { t } from "../../lib/i18n";
+import { fmtDateTime } from "../../lib/locale";
 import { DAY_NAMES } from "./FrequenciesPage";
 import { FrequencyExceptionsPanel } from "./FrequencyExceptionsPanel";
 
@@ -65,7 +68,7 @@ export function FrequencyFormDrawer({ companyId, frequency, onClose, onSaved }: 
   const isEdit = frequency !== null;
   const [formError, setFormError] = useState<string | null>(null);
   const {
-    register, handleSubmit, setError,
+    register, control, handleSubmit, setError,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<FrequencyFormValues>({
     defaultValues: {
@@ -104,53 +107,61 @@ export function FrequencyFormDrawer({ companyId, frequency, onClose, onSaved }: 
       open
       icon={<CalendarViewWeekRounded />}
       title={isEdit ? t("Editar frecuencia") : t("Nueva frecuencia")}
-      subtitle={t("Cadencia semanal de servicio, con su corte y su anticipación por día.")}
+      subtitle={isEdit
+        ? [frequency.code, frequency.name].filter(Boolean).join(" · ")
+        : t("Cadencia semanal de servicio, con su corte y su anticipación por día.")}
+      titleAdornment={isEdit ? <ActiveBadge active={frequency.active} /> : undefined}
+      footerStart={isEdit ? <FormMeta>{t("Actualizado el {{date}}", { date: fmtDateTime(frequency.updatedAt) })}</FormMeta> : undefined}
       size="lg"
       onClose={onClose}
       dirty={isDirty}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
-          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
-            {isSubmitting ? t("Guardando...") : t("Guardar")}
+          <Button onClick={onClose} disabled={isSubmitting} color="inherit" sx={{ color: "text.secondary" }}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" startIcon={<CheckRounded />} disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : isEdit ? t("Guardar cambios") : t("Crear frecuencia")}
           </Button>
         </>
       }
     >
       <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+        {formError && <Alert severity="error" sx={{ mb: 1 }}>{formError}</Alert>}
 
-        <SectionHeader title={t("Identificación")} />
-        <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 2fr" }, mb: 2 }}>
+        <FormSection title={t("Identificación")} help={t("Cómo se reconoce la frecuencia al asignarla a destinos y rutas.")}>
+          <FormRow template="180px minmax(0, 1fr)">
+            <TextField
+              label={t("Código")} required size="small" fullWidth
+              error={Boolean(errors.code)} helperText={errors.code?.message}
+              {...register("code", {
+                required: t("Este campo es obligatorio"),
+                maxLength: { value: 32, message: t("No puede superar los {{count}} caracteres", { count: 32 }) },
+                pattern: { value: CODE_PATTERN, message: t("Solo letras, dígitos, guion bajo o guion") },
+              })}
+            />
+            <TextField
+              label={t("Nombre")} required size="small" fullWidth
+              error={Boolean(errors.name)} helperText={errors.name?.message}
+              {...register("name", {
+                required: t("Este campo es obligatorio"),
+                maxLength: { value: 200, message: t("No puede superar los {{count}} caracteres", { count: 200 }) },
+              })}
+            />
+          </FormRow>
           <TextField
-            label={t("Código")} required size="small" fullWidth
-            error={Boolean(errors.code)} helperText={errors.code?.message}
-            {...register("code", {
-              required: t("Este campo es obligatorio"),
-              maxLength: { value: 32, message: t("No puede superar los {{count}} caracteres", { count: 32 }) },
-              pattern: { value: CODE_PATTERN, message: t("Solo letras, dígitos, guion bajo o guion") },
+            label={t("Descripción")} size="small" fullWidth
+            error={Boolean(errors.description)} helperText={errors.description?.message}
+            {...register("description", {
+              maxLength: { value: 1000, message: t("No puede superar los {{count}} caracteres", { count: 1000 }) },
             })}
           />
-          <TextField
-            label={t("Nombre")} required size="small" fullWidth
-            error={Boolean(errors.name)} helperText={errors.name?.message}
-            {...register("name", {
-              required: t("Este campo es obligatorio"),
-              maxLength: { value: 200, message: t("No puede superar los {{count}} caracteres", { count: 200 }) },
-            })}
-          />
-        </Box>
-        <TextField
-          label={t("Descripción")} size="small" fullWidth sx={{ mb: 3 }}
-          error={Boolean(errors.description)} helperText={errors.description?.message}
-          {...register("description", {
-            maxLength: { value: 1000, message: t("No puede superar los {{count}} caracteres", { count: 1000 }) },
-          })}
-        />
+        </FormSection>
 
-        <SectionHeader title={t("Cadencia semanal")} />
-        <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
+        <FormSection
+          title={t("Cadencia semanal")}
+          help={t("Qué días hay servicio, hasta qué hora se aceptan pedidos y con cuántos días de anticipación.")}
+        >
+        <TableContainer component={Paper} variant="outlined">
           <Table size="small" sx={dataTableSx}>
             <TableHead>
               <TableRow>
@@ -174,10 +185,10 @@ export function FrequencyFormDrawer({ companyId, frequency, onClose, onSaved }: 
                       />
                     </TableCell>
                     <TableCell>
-                      <TextField
-                        type="time" size="small" sx={{ width: 130 }}
-                        aria-label={t("Hora de corte de {{day}}", { day })}
-                        {...register(`weeklyRules.${index}.cutoffTime`)}
+                      <FormDateInput
+                        control={control} name={`weeklyRules.${index}.cutoffTime`} mode="time"
+                        ariaLabel={t("Hora de corte de {{day}}", { day })}
+                        size="small" sx={{ width: 130 }}
                       />
                     </TableCell>
                     <TableCell>
@@ -196,20 +207,27 @@ export function FrequencyFormDrawer({ companyId, frequency, onClose, onSaved }: 
             </TableBody>
           </Table>
         </TableContainer>
+        </FormSection>
       </Box>
 
       {/* Las excepciones viven fuera del <form>: se guardan por su cuenta contra la frecuencia
           ya existente, y anidar un formulario dentro de otro no es válido. */}
-      <SectionHeader title={t("Excepciones")} />
-      {frequency ? (
-        <FrequencyExceptionsPanel companyId={companyId} frequencyId={frequency.id} canManage />
-      ) : (
-        // Un sub-recurso necesita algo de lo que colgar. Decirlo es mejor que un panel que
-        // parece roto porque cada llamada suya daría 404.
-        <Typography variant="body2" color="text.secondary">
-          {t("Guarda la frecuencia primero para poder añadirle excepciones.")}
-        </Typography>
-      )}
+      <Box sx={{ borderTop: "1px solid", borderColor: "divider" }}>
+        <FormSection
+          title={t("Excepciones")}
+          help={t("Fechas concretas en las que la cadencia semanal no aplica. Se guardan al momento.")}
+        >
+          {frequency ? (
+            <FrequencyExceptionsPanel companyId={companyId} frequencyId={frequency.id} canManage />
+          ) : (
+            // Un sub-recurso necesita algo de lo que colgar. Decirlo es mejor que un panel que
+            // parece roto porque cada llamada suya daría 404.
+            <Typography variant="body2" color="text.secondary">
+              {t("Guarda la frecuencia primero para poder añadirle excepciones.")}
+            </Typography>
+          )}
+        </FormSection>
+      </Box>
     </FormDrawer>
   );
 }

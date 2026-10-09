@@ -1,0 +1,93 @@
+{
+  "description": "Vectores JCS (RFC 8785) de ebim.entitlements/v1. input = texto JSON de entrada; canonical = salida esperada; sha256 = hex de los bytes UTF-8 de canonical. sqlDomain = el vector cae en el dominio que la implementación SQL (platform.jcs_canonical) debe reproducir.",
+  "vectors": [
+    {
+      "id": "key-order",
+      "description": "Claves ordenadas; anidado",
+      "input": "{\"b\":2,\"a\":1,\"c\":{\"z\":true,\"y\":null}}",
+      "canonical": "{\"a\":1,\"b\":2,\"c\":{\"y\":null,\"z\":true}}",
+      "sha256": "8de4da99ba10a81ad0712ed5ca145e6017393749463cfdafc1a6b16836ad4d1d",
+      "sqlDomain": true
+    },
+    {
+      "id": "rfc8785-key-sorting",
+      "description": "Ejemplo RFC 8785 §3.2.3: orden por unidades UTF-16",
+      "input": "{\"\\u20ac\":\"Euro Sign\",\"\\r\":\"Carriage Return\",\"\\ufb33\":\"Hebrew Letter Dalet With Dagesh\",\"1\":\"One\",\"\\ud83d\\ude00\":\"Emoji: Grinning Face\",\"\\u0080\":\"Control\",\"\\u00f6\":\"Latin Small Letter O With Diaeresis\"}",
+      "canonical": "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control\",\"ö\":\"Latin Small Letter O With Diaeresis\",\"€\":\"Euro Sign\",\"😀\":\"Emoji: Grinning Face\",\"דּ\":\"Hebrew Letter Dalet With Dagesh\"}",
+      "sha256": "5e321556d22018a9656991a9e94f77ec175fa193e52a2429d312f8419ec8b08c",
+      "sqlDomain": false
+    },
+    {
+      "id": "unicode-values",
+      "description": "Unicode literal en valores, sin escapar",
+      "input": "{\"s\":\"Almac\\u00e9n \\u20ac \\ud83d\\ude00 \\u00f1\"}",
+      "canonical": "{\"s\":\"Almacén € 😀 ñ\"}",
+      "sha256": "9564099aad41013f7cfeee67d818cefa93b653586d88322bc65f61edf0c63679",
+      "sqlDomain": true
+    },
+    {
+      "id": "escapes",
+      "description": "Escapes cortos, \\u00xx en minúsculas, \"/\" y DEL literales",
+      "input": "{\"e\":\"a\\\"b\\\\c\\n\\t\\b\\f\\r\\u0001\\u001F\\/\\u007f\"}",
+      "canonical": "{\"e\":\"a\\\"b\\\\c\\n\\t\\b\\f\\r\\u0001\\u001f/\"}",
+      "sha256": "38dee623555e22c5490c909ab483d436fa3a8b83c057798c502fe7e6ab18fce3",
+      "sqlDomain": true
+    },
+    {
+      "id": "integers",
+      "description": "Enteros",
+      "input": "{\"a\":0,\"b\":-7,\"c\":9007199254740991,\"d\":100}",
+      "canonical": "{\"a\":0,\"b\":-7,\"c\":9007199254740991,\"d\":100}",
+      "sha256": "3474ee30f83d89b7bd9e63fec0f719eebb6cee0ac6e7a159b9a3231d35abbb81",
+      "sqlDomain": true
+    },
+    {
+      "id": "decimals",
+      "description": "Decimales: ceros finales fuera",
+      "input": "{\"a\":4.50,\"b\":0.002,\"c\":-1.5,\"d\":10.0}",
+      "canonical": "{\"a\":4.5,\"b\":0.002,\"c\":-1.5,\"d\":10}",
+      "sha256": "4d1458148566503caf3ebc4580378a8e3cfcb0789aed7c1908adcf291d431e28",
+      "sqlDomain": true
+    },
+    {
+      "id": "negative-zero",
+      "description": "-0 se serializa como 0",
+      "input": "[-0,0.0]",
+      "canonical": "[0,0]",
+      "sha256": "3d5812abc84c11768aa73a732c85d75dbed439188f5bb3239e9b762ea31d9862",
+      "sqlDomain": false
+    },
+    {
+      "id": "exponents",
+      "description": "1e21 y mayores en exponencial; 1e20 plano; pequeños",
+      "input": "[1e21,1E30,1e20,0.000001,1e-7,333333333.33333329]",
+      "canonical": "[1e+21,1e+30,100000000000000000000,0.000001,1e-7,333333333.3333333]",
+      "sha256": "c0dd64432c1323afeede3ac5314c32528b65f5856a325be9cee867298b656b46",
+      "sqlDomain": false
+    },
+    {
+      "id": "empty-containers",
+      "description": "Arreglos y objetos vacíos",
+      "input": "{\"b\":{},\"a\":[]}",
+      "canonical": "{\"a\":[],\"b\":{}}",
+      "sha256": "9959f7ea5ff37e0cf81634a894845a335eb6e26fbad0877944e9bc009b4f0644",
+      "sqlDomain": true
+    },
+    {
+      "id": "literals-and-array-order",
+      "description": "Literales; el orden de arreglos se conserva",
+      "input": "{\"x\":[3,1,2,true,false,null]}",
+      "canonical": "{\"x\":[3,1,2,true,false,null]}",
+      "sha256": "c9a35aeef41adfdb7922756a46449375699fcb922c76cb1c4c9749be7a989f7f",
+      "sqlDomain": true
+    },
+    {
+      "id": "whitespace",
+      "description": "Sin espacios en la salida",
+      "input": "{ \"a\" : [ 1 , { \"c\" : \"d\" , \"b\" : \"e\" } ] }",
+      "canonical": "{\"a\":[1,{\"b\":\"e\",\"c\":\"d\"}]}",
+      "sha256": "c714c03c80a30063e6a5093dddf9460ee48956d2e4e76b96be7039951a63e763",
+      "sqlDomain": true
+    }
+  ]
+}

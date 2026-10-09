@@ -57,14 +57,15 @@ export function NavSearch() {
       noOptionsText={t("Sin resultados")}
       blurOnSelect
       clearOnBlur
-      sx={{ width: { xs: 180, sm: 280, md: 380 }, maxWidth: "100%" }}
+      forcePopupIcon={false}
+      sx={{ width: { xs: 180, sm: 320, md: 460 }, maxWidth: "100%" }}
       renderOption={(props, option) => {
         const { key, ...rest } = props as { key: string } & Record<string, unknown>;
         const tint = ICON_TINTS[option.to] ?? DEFAULT_TINT;
         return (
           <Box component="li" key={key} {...rest} sx={{ gap: 1.25 }}>
             <Box sx={{
-              width: 26, height: 26, borderRadius: 1.75, flexShrink: 0, display: "grid", placeItems: "center",
+              width: 26, height: 26, borderRadius: "7px", flexShrink: 0, display: "grid", placeItems: "center",
               bgcolor: alpha(tint, 0.18), color: tint, "& svg": { fontSize: 16 },
             }}>
               {option.icon}
@@ -76,7 +77,7 @@ export function NavSearch() {
       renderInput={(params) => (
         <TextField
           {...params}
-          placeholder={t("Buscar")}
+          placeholder={t("Buscar pantallas y módulos…")}
           aria-label={t("Buscar")}
           slotProps={{
             ...params.slotProps,
@@ -94,7 +95,7 @@ export function NavSearch() {
             // lienzo por fondo: sobre blanco, un campo blanco no se distingue de la barra.
             "& .MuiOutlinedInput-root": {
               bgcolor: "background.default",
-              borderRadius: `${R.md}px`,
+              borderRadius: `${R.sm}px`,
               transition: "background-color .15s, border-color .15s",
               "& fieldset": { borderColor: "divider" },
               "&:hover fieldset": { borderColor: "text.disabled" },

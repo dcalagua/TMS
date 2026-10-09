@@ -2,15 +2,17 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Alert, Box, Button, Chip, MenuItem, TextField, Typography } from "@mui/material";
-import { BadgeRounded } from "@mui/icons-material";
+import { BadgeRounded, CheckRounded } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchDrivers } from "../../shared/api/driversApi";
 import { updateTripDriver, type TripDetailView, type TripView } from "../../shared/api/planningApi";
 import { describePlanningError } from "../../shared/api/problemMessages";
-import { FormDrawer } from "../../shared/ui/components";
+import { ContextCard, FormDrawer, StatusChip } from "../../shared/ui/components";
+import { TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
 import { notifySuccess } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
+import { fmtDate } from "../../lib/locale";
 
 const FORM_ID = "trip-driver-form";
 
@@ -75,29 +77,44 @@ export function TripDriverDrawer({ companyId, trip, onClose, onSaved }: TripDriv
       open
       icon={<BadgeRounded />}
       title={t("Conductor del viaje")}
-      subtitle={t("Viaje {{number}}", { number: trip.tripNumber })}
-      size="md"
+      subtitle={t("Quién conduce el viaje. Se puede cambiar hasta la salida.")}
+      size="sm"
       onClose={onClose}
       dirty={isDirty}
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
-          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
-            {isSubmitting ? t("Guardando...") : t("Guardar")}
+          <Button color="inherit" sx={{ color: "text.secondary" }} onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" startIcon={<CheckRounded />} disabled={isSubmitting}>
+            {isSubmitting ? t("Guardando...") : t("Guardar conductor")}
           </Button>
         </>
       }
     >
-      <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+      <Box
+        component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate
+        sx={{ display: "grid", gap: 2 }}
+      >
+        <ContextCard
+          title={t("Viaje {{number}}", { number: trip.tripNumber })}
+          status={<StatusChip label={enumLabel("tripStatus", trip.status)} tone={TRIP_STATUS_TONE[trip.status]} />}
+          detail={[
+            trip.shipmentNumber,
+            fmtDate(trip.planningDate),
+            trip.driverId
+              ? t("Ahora: {{driver}}", { driver: [trip.driverCode, trip.driverName].filter(Boolean).join(" · ") })
+              : t("Sin conductor asignado"),
+          ].join(" · ")}
+        />
+
+        {formError && <Alert severity="error">{formError}</Alert>}
 
         <Controller
           control={control}
           name="driverId"
           render={({ field }) => (
             <TextField
-              select label={t("Conductor")} size="small" fullWidth sx={{ mb: 2 }}
+              select label={t("Conductor")} size="small" fullWidth
               value={field.value} onChange={(e) => field.onChange(e.target.value)}
               helperText={t("Déjalo sin conductor para liberar a la persona y dejar el viaje sin asignar.")}
             >

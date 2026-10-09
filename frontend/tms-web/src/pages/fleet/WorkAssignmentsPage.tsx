@@ -1,22 +1,26 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
-  Alert, Box, Button, Chip, Paper, TextField, Typography,
+  Alert, Box, Button, Chip, Paper, Typography,
 } from "@mui/material";
-import { EventNoteRounded } from "@mui/icons-material";
+import { alpha } from "@mui/material/styles";
+import {
+  BadgeOutlined, CheckRounded, EventNoteRounded, LocalShippingOutlined,
+} from "@mui/icons-material";
 import {
   cancelWorkAssignment, confirmWorkAssignment, fetchWorkAssignments,
   type WorkAssignmentConflictView, type WorkAssignmentView,
 } from "../../shared/api/workAssignmentsApi";
 import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
-import { PageHeader, SectionHeader, StatusChip } from "../../shared/ui/components";
+import { FilterBar, PageHeader, SectionHeader, StatusChip } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { useCompany } from "../../shared/company/CompanyContext";
 import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
-import { fmtDateTime } from "../../lib/locale";
+import { fmtDateTime, today } from "../../lib/locale";
+import { R, T, neutralSoft } from "../../theme";
 
 /**
  * El día de cada conductor y vehículo (migración V47).
@@ -42,7 +46,7 @@ export function WorkAssignmentsPage() {
   const canManage = hasPermission("fleet.work_assignment:manage");
   const queryClient = useQueryClient();
 
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(today);
   const [busy, setBusy] = useState(false);
 
   const assignmentsQuery = useQuery({
@@ -81,19 +85,19 @@ export function WorkAssignmentsPage() {
         subtitle={t("Qué hace cada conductor y vehículo en el día, en orden, con el tiempo de desplazamiento entre envíos.")}
         onRefresh={refresh}
         refreshing={assignmentsQuery.isFetching}
-        actions={
-          <TextField
-            size="small" type="date" label={t("Fecha")} value={date}
-            onChange={(e) => setDate(e.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
-          />
-        }
+      />
+
+      <FilterBar
+        value={{ date }}
+        defaults={{ date: today() }}
+        onChange={(next) => setDate(next.date || today())}
+        fields={[{ type: "date", key: "date", label: t("Fecha") }]}
       />
 
       {assignmentsQuery.isLoading ? (
         <Typography variant="body2" color="text.secondary">{t("Cargando...")}</Typography>
       ) : assignments.length === 0 ? (
-        <Alert severity="info" variant="outlined">
+        <Alert severity="info" sx={{ borderRadius: `${R.md}px` }}>
           {t("Nadie tiene trabajo planificado para este día.")}
         </Alert>
       ) : (
@@ -134,96 +138,141 @@ function ResourceDay({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const hasConflicts = assignment.conflicts.length > 0;
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", mb: 1.5 }}>
-        <Typography variant="body1" sx={{ fontWeight: 800 }}>
-          {assignment.vehicleCode ?? assignment.vehicleId}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {assignment.driverName ?? t("Sin conductor asignado")}
-        </Typography>
+    <Paper variant="outlined" sx={{ borderRadius: `${R.lg}px`, overflow: "hidden" }}>
+      {/* Cabecera del recurso: vehículo, conductor, estado y si la secuencia es viable. */}
+      <Box sx={{
+        display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap",
+        px: 2, py: 1.5, borderBottom: 1, borderColor: "divider",
+      }}>
+        <Box aria-hidden sx={(th) => ({
+          width: 36, height: 36, flexShrink: 0, borderRadius: `${R.sm}px`, display: "grid", placeItems: "center",
+          bgcolor: neutralSoft(th.palette.mode === "dark"), color: "text.secondary", "& svg": { fontSize: 20 },
+        })}>
+          <LocalShippingOutlined />
+        </Box>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body1" sx={{ fontWeight: 800, lineHeight: 1.25, fontVariantNumeric: "tabular-nums" }}>
+            {assignment.vehicleCode ?? assignment.vehicleId}
+          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, color: "text.secondary" }}>
+            <BadgeOutlined aria-hidden sx={{ fontSize: 14 }} />
+            <Typography
+              variant="body2" color="text.secondary"
+              sx={{ fontSize: T.body - 0.5, fontStyle: assignment.driverName ? "normal" : "italic" }}
+            >
+              {assignment.driverName ?? t("Sin conductor asignado")}
+            </Typography>
+          </Box>
+        </Box>
         <StatusChip
           label={enumLabel("workAssignmentStatus", assignment.status)}
           tone={assignment.status === "CONFIRMED" ? "done" : assignment.status === "CANCELLED" ? "cancelled" : "open"}
         />
         {/* Factible no es permitido: los envíos siguen pasando por sus propios guards al salir. */}
         {assignment.feasible
-          ? <Chip size="small" color="success" variant="outlined" label={t("Secuencia viable")} />
-          : <Chip size="small" color="warning" label={t("{{n}} conflictos", { n: assignment.conflicts.length })} />}
-        <Box sx={{ flex: 1 }} />
+          ? <Chip size="small" color="success" variant="outlined" label={t("Secuencia viable")} sx={{ fontWeight: 700 }} />
+          : <StatusChip tone="inProgress" label={t("{{n}} conflictos", { n: assignment.conflicts.length })} />}
         {canManage && assignment.status === "PLANNED" && (
-          <>
-            <Button size="small" variant="contained" disabled={busy} onClick={onConfirm}>
-              {t("Confirmar")}
-            </Button>
+          <Box sx={{ display: "flex", gap: 1, ml: "auto" }}>
             <Button size="small" variant="outlined" color="error" disabled={busy} onClick={onCancel}>
               {t("Cancelar")}
             </Button>
-          </>
+            <Button
+              size="small" variant="contained" disableElevation disabled={busy} onClick={onConfirm}
+              startIcon={<CheckRounded />}
+            >
+              {t("Confirmar")}
+            </Button>
+          </Box>
         )}
       </Box>
 
-      {assignment.trips.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
-          {t("Sin envíos todavía.")}
-        </Typography>
-      ) : (
-        <Box sx={{ display: "grid", gap: 0.75 }}>
-          {assignment.trips.map((trip) => (
-            <Box key={trip.tripId}>
-              {/* El desplazamiento va ENTRE dos envíos, así que se dibuja antes del segundo.
-                  `null` en el primero es correcto; `null` después significa que el tramo no se
-                  pudo medir, y eso se dice - no se pinta como cero. */}
-              {trip.sequence > 1 && (
-                <Typography variant="caption" color="text.secondary" sx={{ display: "block", pl: 4, py: 0.25 }}>
-                  {trip.repositionMinutes === null
-                    ? t("↓ desplazamiento sin medir")
-                    : t("↓ {{n}} min de desplazamiento", { n: trip.repositionMinutes })}
-                </Typography>
-              )}
-              <Paper
-                variant="outlined"
-                sx={{ p: 1.25, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}
-              >
-                <Box sx={{
-                  width: 26, height: 26, borderRadius: "50%", flexShrink: 0, display: "grid",
-                  placeItems: "center", bgcolor: "primary.main", color: "primary.contrastText",
-                  fontWeight: 800, fontSize: 12,
-                }}>
-                  {trip.sequence}
-                </Box>
-                <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                  {trip.shipmentNumber ?? trip.tripId}
-                </Typography>
-                <Box sx={{ flex: 1 }} />
-                <Typography variant="caption" color="text.secondary">
-                  {trip.plannedStart && trip.plannedEnd
-                    ? `${fmtDateTime(trip.plannedStart)} → ${fmtDateTime(trip.plannedEnd)}`
-                    : t("Sin ventana conocida")}
-                </Typography>
-              </Paper>
-            </Box>
-          ))}
-        </Box>
-      )}
-
-      {assignment.conflicts.length > 0 && (
-        <Box sx={{ mt: 1.5 }}>
-          <SectionHeader title={t("Conflictos")} level={4} />
-          <Box sx={{ display: "grid", gap: 0.5 }}>
-            {assignment.conflicts.map((conflict: WorkAssignmentConflictView, index) => (
-              <Alert key={`${conflict.reason}-${index}`} severity="warning" variant="outlined">
-                <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                  {conflict.sequence > 0 ? `#${conflict.sequence} · ` : ""}
-                  {enumLabel("resourceRejectionReason", conflict.reason)}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">{conflict.detail}</Typography>
-              </Alert>
+      <Box sx={{
+        p: 2, display: "grid", gap: 2.5, alignItems: "start",
+        gridTemplateColumns: { xs: "1fr", lg: hasConflicts ? "minmax(0,1fr) 400px" : "1fr" },
+      }}>
+        {assignment.trips.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            {t("Sin envíos todavía.")}
+          </Typography>
+        ) : (
+          <Box>
+            {assignment.trips.map((trip) => (
+              <Box key={trip.tripId}>
+                {/* El desplazamiento va ENTRE dos envíos, así que se dibuja antes del segundo.
+                    `null` en el primero es correcto; `null` después significa que el tramo no se
+                    pudo medir, y eso se dice - no se pinta como cero. */}
+                {trip.sequence > 1 && (
+                  <Box sx={{ ml: "13px", pl: 1.25, py: 0.5, borderLeft: "1.5px solid", borderColor: "divider" }}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: "block", lineHeight: 1.4,
+                        color: trip.repositionMinutes === null ? "warning.dark" : "text.secondary",
+                        fontWeight: trip.repositionMinutes === null ? 700 : 500,
+                      }}
+                    >
+                      {trip.repositionMinutes === null
+                        ? t("↓ desplazamiento sin medir")
+                        : t("↓ {{n}} min de desplazamiento", { n: trip.repositionMinutes })}
+                    </Typography>
+                  </Box>
+                )}
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    px: 1.5, py: 1, borderRadius: `${R.md}px`,
+                    display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap",
+                  }}
+                >
+                  <Box sx={(th) => ({
+                    width: 24, height: 24, borderRadius: "50%", flexShrink: 0, display: "grid", placeItems: "center",
+                    bgcolor: alpha(th.palette.primary.main, th.palette.mode === "dark" ? 0.22 : 0.12),
+                    color: "primary.main", fontWeight: 800, fontSize: T.label, fontVariantNumeric: "tabular-nums",
+                  })}>
+                    {trip.sequence}
+                  </Box>
+                  <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>
+                    {trip.shipmentNumber ?? trip.tripId}
+                  </Typography>
+                  <Typography
+                    variant="caption" color="text.secondary"
+                    sx={{ ml: "auto", textAlign: "right", fontVariantNumeric: "tabular-nums" }}
+                  >
+                    {trip.plannedStart && trip.plannedEnd
+                      ? `${fmtDateTime(trip.plannedStart)} → ${fmtDateTime(trip.plannedEnd)}`
+                      : t("Sin ventana conocida")}
+                  </Typography>
+                </Paper>
+              </Box>
             ))}
           </Box>
-        </Box>
-      )}
+        )}
+
+        {hasConflicts && (
+          <Box>
+            <SectionHeader title={t("Conflictos")} level={4} />
+            <Box sx={{ display: "grid", gap: 1 }}>
+              {assignment.conflicts.map((conflict: WorkAssignmentConflictView, index) => (
+                <Alert
+                  key={`${conflict.reason}-${index}`} severity="warning"
+                  sx={{ borderRadius: `${R.md}px`, border: "none", "& .MuiAlert-icon": { fontSize: 18 } }}
+                >
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: "warning.dark" }}>
+                    {conflict.sequence > 0 ? `#${conflict.sequence} · ` : ""}
+                    {enumLabel("resourceRejectionReason", conflict.reason)}
+                  </Typography>
+                  <Typography variant="caption" color="text.primary" sx={{ display: "block", lineHeight: 1.45 }}>
+                    {conflict.detail}
+                  </Typography>
+                </Alert>
+              ))}
+            </Box>
+          </Box>
+        )}
+      </Box>
     </Paper>
   );
 }

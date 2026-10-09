@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Alert, Autocomplete, Box, Button, TextField, Typography } from "@mui/material";
-import { AddBusinessRounded } from "@mui/icons-material";
+import { Alert, Autocomplete, Box, Button, TextField } from "@mui/material";
+import { AddBusinessRounded, CheckRounded } from "@mui/icons-material";
 import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import { createCompany, type CompanyCreateRequest } from "../../shared/api/administrationApi";
-import { FormDrawer } from "../../shared/ui/components";
+import { FormDrawer, FormRow, FormSection } from "../../shared/ui/components";
 import { t } from "../../lib/i18n";
 
 const FORM_ID = "company-create-form";
@@ -78,58 +78,64 @@ export function CompanyCreateDrawer({ companyId, onClose, onCreated }: CompanyCr
       closeOnBackdrop={!isSubmitting}
       footer={
         <>
-          <Button onClick={onClose} disabled={isSubmitting}>{t("Cancelar")}</Button>
-          <Button type="submit" form={FORM_ID} variant="contained" disabled={isSubmitting}>
+          <Button onClick={onClose} disabled={isSubmitting} color="inherit" sx={{ color: "text.secondary" }}>{t("Cancelar")}</Button>
+          <Button type="submit" form={FORM_ID} variant="contained" startIcon={<CheckRounded />} disabled={isSubmitting}>
             {isSubmitting ? t("Guardando...") : t("Crear empresa")}
           </Button>
         </>
       }
     >
       <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
-        {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+        {formError && <Alert severity="error" sx={{ mb: 1 }}>{formError}</Alert>}
 
-        <Box sx={{ display: "grid", gap: 2 }}>
-          <TextField
-            label={t("Código")} required size="small" fullWidth
-            helperText={errors.code?.message ?? t("No se puede cambiar después: es la clave con la que la nombran las integraciones.")}
-            error={Boolean(errors.code)}
-            {...register("code", {
-              required: t("Este campo es obligatorio"),
-              maxLength: { value: 32, message: t("No puede superar los {{count}} caracteres", { count: 32 }) },
-              pattern: { value: CODE_PATTERN, message: t("Solo letras, dígitos, guion bajo o guion") },
-            })}
-          />
-          <TextField
-            label={t("Nombre")} required size="small" fullWidth
-            error={Boolean(errors.name)} helperText={errors.name?.message}
-            {...register("name", { required: t("Este campo es obligatorio") })}
-          />
-          <TextField
-            label={t("RUC")} size="small" fullWidth
-            error={Boolean(errors.taxIdentifier)} helperText={errors.taxIdentifier?.message}
-            {...register("taxIdentifier")}
-          />
-          <Autocomplete
-            freeSolo
-            size="small"
-            options={TIME_ZONES}
-            value={watch("timeZone")}
-            onChange={(_e, next) => setValue("timeZone", next ?? "", { shouldDirty: true })}
-            onInputChange={(_e, next) => setValue("timeZone", next, { shouldDirty: true })}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label={t("Zona horaria")} required placeholder="America/Lima"
-                error={Boolean(errors.timeZone)} helperText={errors.timeZone?.message}
-              />
-            )}
-          />
+        <FormSection title={t("Identificación")} help={t("Cómo se nombra la empresa dentro de la organización y ante las integraciones.")}>
+          <FormRow template="180px minmax(0, 1fr)">
+            <TextField
+              label={t("Código")} required size="small" fullWidth
+              helperText={errors.code?.message ?? t("No se puede cambiar después: es la clave con la que la nombran las integraciones.")}
+              error={Boolean(errors.code)}
+              {...register("code", {
+                required: t("Este campo es obligatorio"),
+                maxLength: { value: 32, message: t("No puede superar los {{count}} caracteres", { count: 32 }) },
+                pattern: { value: CODE_PATTERN, message: t("Solo letras, dígitos, guion bajo o guion") },
+              })}
+            />
+            <TextField
+              label={t("Nombre")} required size="small" fullWidth
+              error={Boolean(errors.name)} helperText={errors.name?.message}
+              {...register("name", { required: t("Este campo es obligatorio") })}
+            />
+          </FormRow>
+        </FormSection>
+
+        <FormSection
+          title={t("Fiscal y horario")}
+          help={t("La zona horaria decide a qué día operativo pertenece una fecha de servicio.")}
+        >
+          <FormRow template="180px minmax(0, 1fr)">
+            <TextField
+              label={t("RUC")} size="small" fullWidth
+              error={Boolean(errors.taxIdentifier)} helperText={errors.taxIdentifier?.message}
+              {...register("taxIdentifier")}
+            />
+            <Autocomplete
+              freeSolo
+              size="small"
+              options={TIME_ZONES}
+              value={watch("timeZone")}
+              onChange={(_e, next) => setValue("timeZone", next ?? "", { shouldDirty: true })}
+              onInputChange={(_e, next) => setValue("timeZone", next, { shouldDirty: true })}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label={t("Zona horaria")} required placeholder="America/Lima"
+                  error={Boolean(errors.timeZone)} helperText={errors.timeZone?.message}
+                />
+              )}
+            />
+          </FormRow>
           <input type="hidden" {...register("timeZone", { required: t("Este campo es obligatorio") })} />
-        </Box>
-
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 2 }}>
-          {t("La zona horaria decide a qué día operativo pertenece una fecha de servicio.")}
-        </Typography>
+        </FormSection>
       </Box>
     </FormDrawer>
   );

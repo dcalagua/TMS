@@ -12,12 +12,16 @@ import {
   closeTripCost, estimateTripCost, fetchTripCost, reopenTripCost, type TripCostView,
 } from "../../shared/api/ratesApi";
 import { describeApiError } from "../../shared/api/problemMessages";
-import { AppCard, LoadingState, StatusChip, dataTableSx } from "../../shared/ui/components";
+import { LoadingState, StatusChip, dataTableSx } from "../../shared/ui/components";
+import { R, surfaceRaised } from "../../theme";
+import { WorkspaceCard } from "./WorkspaceCard";
 import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDateTime, fmtDecimal, fmtMoney } from "../../lib/locale";
 import { ActualCostDrawer } from "./ActualCostDrawer";
+
+const OUTLINED_SX = { borderColor: "divider" } as const;
 
 interface TripCostCardProps {
   companyId: string;
@@ -75,35 +79,35 @@ export function TripCostCard({ companyId, tripId, canManage }: TripCostCardProps
   const cost = costQuery.data;
 
   return (
-    <AppCard
+    <WorkspaceCard
+      icon={<PaidRounded />}
       title={
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <PaidRounded sx={{ fontSize: 19, color: "text.disabled" }} />
+        <>
           {t("Costo del viaje")}
           {cost?.closed && <StatusChip label={t("Cerrado")} tone="done" />}
-        </Box>
+        </>
       }
       actions={canManage && cost && (
         <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
           {!cost.closed && (
             <>
               <Button
-                size="small" startIcon={<CalculateRounded />} disabled={busy}
+                size="small" variant="outlined" color="inherit" sx={OUTLINED_SX} startIcon={<CalculateRounded />} disabled={busy}
                 onClick={() => void run(() => estimateTripCost(companyId, tripId), t("Costo estimado"))}
               >
                 {t("Estimar")}
               </Button>
-              <Button size="small" startIcon={<EditNoteRounded />} onClick={() => setShowActual(true)}>
+              <Button size="small" variant="outlined" color="inherit" sx={OUTLINED_SX} startIcon={<EditNoteRounded />} onClick={() => setShowActual(true)}>
                 {t("Costo real")}
               </Button>
-              <Button size="small" startIcon={<LockRounded />} disabled={busy} onClick={() => void close()}>
+              <Button size="small" variant="outlined" color="inherit" sx={OUTLINED_SX} startIcon={<LockRounded />} disabled={busy} onClick={() => void close()}>
                 {t("Cerrar")}
               </Button>
             </>
           )}
           {cost.closed && (
             <Button
-              size="small" startIcon={<LockOpenRounded />} disabled={busy}
+              size="small" variant="outlined" color="inherit" sx={OUTLINED_SX} startIcon={<LockOpenRounded />} disabled={busy}
               onClick={() => void run(() => reopenTripCost(companyId, tripId), t("Costo reabierto"))}
             >
               {t("Reabrir")}
@@ -123,10 +127,19 @@ export function TripCostCard({ companyId, tripId, canManage }: TripCostCardProps
         </Alert>
       ) : (
         <>
-          <Box sx={{
-            display: "grid", gap: 2, mb: 2,
+          {/* Las tres cifras en una franja tintada, separadas por filetes: se leen como una sola
+              cuenta (estimado, real y lo que se desvió) y no como tres tarjetas sueltas. */}
+          <Box sx={(th) => ({
+            display: "grid", mb: 1.5, borderRadius: `${R.md}px`,
+            bgcolor: surfaceRaised(th.palette.mode === "dark"),
+            border: "1px solid", borderColor: "divider",
             gridTemplateColumns: { xs: "1fr", sm: "repeat(3, minmax(0, 1fr))" },
-          }}>
+            "& > *": { px: 1.5, py: 1.1, minWidth: 0 },
+            "& > * + *": {
+              borderTop: { xs: "1px solid", sm: 0 }, borderLeft: { xs: 0, sm: "1px solid" },
+              borderColor: "divider",
+            },
+          })}>
             {[
               { label: t("Estimado"), value: fmtMoney(cost.estimatedAmount, cost.currency ?? "PEN"), color: "text.primary" },
               { label: t("Real"), value: cost.actualAmount === null ? "-" : fmtMoney(cost.actualAmount, cost.currency ?? "PEN"), color: "text.primary" },
@@ -138,10 +151,10 @@ export function TripCostCard({ companyId, tripId, canManage }: TripCostCardProps
               },
             ].map((item) => (
               <Box key={item.label}>
-                <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", fontWeight: 700, letterSpacing: ".06em" }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontWeight: 600 }}>
                   {item.label}
                 </Typography>
-                <Typography sx={{ fontWeight: 800, fontSize: "1.25rem", fontVariantNumeric: "tabular-nums", color: item.color }}>
+                <Typography sx={{ fontWeight: 800, fontSize: 16, fontVariantNumeric: "tabular-nums", color: item.color, whiteSpace: "nowrap" }}>
                   {item.value}
                 </Typography>
               </Box>
@@ -162,7 +175,7 @@ export function TripCostCard({ companyId, tripId, canManage }: TripCostCardProps
           )}
 
           {cost.components.length > 0 && (
-            <TableContainer component={Paper} variant="outlined">
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: `${R.md}px` }}>
               <Table size="small" sx={dataTableSx}>
                 <TableHead>
                   <TableRow>
@@ -221,6 +234,6 @@ export function TripCostCard({ companyId, tripId, canManage }: TripCostCardProps
           onSaved={(next) => { applyCost(next); setShowActual(false); }}
         />
       )}
-    </AppCard>
+    </WorkspaceCard>
   );
 }

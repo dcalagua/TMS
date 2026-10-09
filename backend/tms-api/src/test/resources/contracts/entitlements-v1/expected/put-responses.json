@@ -1,0 +1,221 @@
+{
+  "description": "Respuesta esperada de cada PUT, en orden, sobre un receptor vacío configurado con fixture.receiver. \"$iso8601\" = cualquier instante ISO-8601 UTC. En errores, además de \"error\" el receptor devuelve \"message\" (texto libre, no se compara).",
+  "responses": {
+    "01-baseline-only": [
+      {
+        "step": 1,
+        "status": 200,
+        "body": {
+          "appliedVersion": 1,
+          "appliedChecksum": "sha256:3748296d0b4542a63cfc4bf0955f7e2449f5522d8b6d70fac3640f8ffafc534b",
+          "appliedAt": "$iso8601",
+          "status": "APPLIED",
+          "unknownCapabilities": [],
+          "replayed": false
+        }
+      }
+    ],
+    "02-plan-grants": [
+      {
+        "step": 1,
+        "status": 200,
+        "body": {
+          "appliedVersion": 1,
+          "appliedChecksum": "sha256:efb6f6da10a7840a27b3ccac9b9b3024d111669b3e3bcf286d263d882054001c",
+          "appliedAt": "$iso8601",
+          "status": "APPLIED",
+          "unknownCapabilities": [],
+          "replayed": false
+        }
+      }
+    ],
+    "03-plan-plus-addon": [
+      {
+        "step": 1,
+        "status": 200,
+        "body": {
+          "appliedVersion": 1,
+          "appliedChecksum": "sha256:f6d60051140269bd0f27157943fa94e2b3a333f3ad54593357000091c92d7600",
+          "appliedAt": "$iso8601",
+          "status": "APPLIED",
+          "unknownCapabilities": [],
+          "replayed": false
+        }
+      },
+      {
+        "step": 2,
+        "status": 200,
+        "body": {
+          "appliedVersion": 1,
+          "appliedChecksum": "sha256:f6d60051140269bd0f27157943fa94e2b3a333f3ad54593357000091c92d7600",
+          "appliedAt": "$iso8601",
+          "status": "APPLIED",
+          "unknownCapabilities": [],
+          "replayed": true
+        }
+      }
+    ],
+    "04-addon-removed": [
+      {
+        "step": 1,
+        "status": 200,
+        "body": {
+          "appliedVersion": 1,
+          "appliedChecksum": "sha256:aa9169253438df58ee9c6e5534ae5bc466142301f1019e0fb4f84432de9b9425",
+          "appliedAt": "$iso8601",
+          "status": "APPLIED",
+          "unknownCapabilities": [],
+          "replayed": false
+        }
+      },
+      {
+        "step": 2,
+        "status": 200,
+        "body": {
+          "appliedVersion": 2,
+          "appliedChecksum": "sha256:78ff2ed30f2de09afdc677d33eff99c8974b6005b6790dc6ab88179d4cb065ba",
+          "appliedAt": "$iso8601",
+          "status": "APPLIED",
+          "unknownCapabilities": [],
+          "replayed": false
+        }
+      }
+    ],
+    "05-limit-update": [
+      {
+        "step": 1,
+        "status": 200,
+        "body": {
+          "appliedVersion": 1,
+          "appliedChecksum": "sha256:6ac5020734b64b15fd53bc846f8456caa6a91cbc5089b72c6d038ed10ec20af4",
+          "appliedAt": "$iso8601",
+          "status": "APPLIED",
+          "unknownCapabilities": [],
+          "replayed": false
+        }
+      },
+      {
+        "step": 2,
+        "status": 200,
+        "body": {
+          "appliedVersion": 2,
+          "appliedChecksum": "sha256:2d57c8a1cc6b47efb6dfbfd60a553ee3c720bb621d87fdd21ada894ce1937614",
+          "appliedAt": "$iso8601",
+          "status": "APPLIED",
+          "unknownCapabilities": [],
+          "replayed": false
+        }
+      }
+    ],
+    "06-app-inactive": [
+      {
+        "step": 1,
+        "status": 200,
+        "body": {
+          "appliedVersion": 1,
+          "appliedChecksum": "sha256:834b120a4bf504cf3fb19413004f4b24fb91373ea732892996e9db4c2fc5d4f6",
+          "appliedAt": "$iso8601",
+          "status": "APPLIED",
+          "unknownCapabilities": [],
+          "replayed": false
+        }
+      }
+    ],
+    "07-unknown-capability": [
+      {
+        "step": 1,
+        "status": 200,
+        "body": {
+          "appliedVersion": 1,
+          "appliedChecksum": "sha256:ea7cfc8b2d862678bfce5b209f9ccaddfe954de933dc3b20136a558838097116",
+          "appliedAt": "$iso8601",
+          "status": "APPLIED_WITH_WARNINGS",
+          "unknownCapabilities": [
+            "fixture.ghost"
+          ],
+          "replayed": false
+        }
+      }
+    ],
+    "08-stale": [
+      {
+        "step": 1,
+        "status": 200,
+        "body": {
+          "appliedVersion": 3,
+          "appliedChecksum": "sha256:02cfcaae0aaf631c8181b9dbfd8bd0061920d6e0f93cfa1b28e52de58583bde8",
+          "appliedAt": "$iso8601",
+          "status": "APPLIED",
+          "unknownCapabilities": [],
+          "replayed": false
+        }
+      },
+      {
+        "step": 2,
+        "status": 409,
+        "body": {
+          "error": "STALE_SNAPSHOT",
+          "appliedVersion": 3
+        }
+      }
+    ],
+    "09-conflict": [
+      {
+        "step": 1,
+        "status": 200,
+        "body": {
+          "appliedVersion": 1,
+          "appliedChecksum": "sha256:c3a5c21969e55205489d09be360f7d6ff95a08dcb5b256b46dfe2bd82d5c3453",
+          "appliedAt": "$iso8601",
+          "status": "APPLIED",
+          "unknownCapabilities": [],
+          "replayed": false
+        }
+      },
+      {
+        "step": 2,
+        "status": 409,
+        "body": {
+          "error": "VERSION_CONFLICT",
+          "appliedVersion": 1
+        }
+      }
+    ],
+    "10-bad-checksum": [
+      {
+        "step": 1,
+        "status": 422,
+        "body": {
+          "error": "CHECKSUM_MISMATCH"
+        }
+      }
+    ],
+    "11-wrong-environment": [
+      {
+        "step": 1,
+        "status": 422,
+        "body": {
+          "error": "ENVIRONMENT_MISMATCH"
+        }
+      }
+    ],
+    "12-forbidden-keys": [
+      {
+        "step": 1,
+        "status": 422,
+        "body": {
+          "error": "SNAPSHOT_INVALID"
+        }
+      }
+    ],
+    "13-tenant-not-provisioned": [
+      {
+        "step": 1,
+        "status": 404,
+        "body": {
+          "error": "TENANT_NOT_PROVISIONED"
+        }
+      }
+    ]
+  }
+}

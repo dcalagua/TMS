@@ -24,9 +24,14 @@
     "@googlemaps/js-api-loader": "^2.1.1",
     "@mui/icons-material": "^9.1.1",
     "@mui/material": "^9.1.2",
+    "@mui/x-date-pickers": "^9.15.0",
     "@supabase/supabase-js": "^2.108.2",
     "@tanstack/react-query": "^5.101.4",
+<<<<<<< HEAD
     "leaflet": "^1.9.4",
+=======
+    "dayjs": "^1.11.23",
+>>>>>>> c375859168042870ab0002c7635233f3ddfb42c1
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-hook-form": "^7.85.0",

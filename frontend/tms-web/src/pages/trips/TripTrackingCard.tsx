@@ -1,7 +1,8 @@
 import { Alert, Box, Typography } from "@mui/material";
 import { MyLocationRounded, SpeedRounded } from "@mui/icons-material";
 import type { TripTrackingView } from "../../shared/api/trackingApi";
-import { AppCard, DetailGrid, DetailItem, LoadingState } from "../../shared/ui/components";
+import { DetailGrid, DetailItem, LoadingState } from "../../shared/ui/components";
+import { WorkspaceCard } from "./WorkspaceCard";
 import { t } from "../../lib/i18n";
 import { fmtDateTime, fmtDecimal, fmtMinutes } from "../../lib/locale";
 
@@ -35,13 +36,9 @@ function ageMinutes(occurredAt: string): number | null {
  */
 export function TripTrackingCard({ tracking, loading, failed }: TripTrackingCardProps) {
   return (
-    <AppCard
-      title={
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <MyLocationRounded sx={{ fontSize: 19, color: "text.disabled" }} />
-          {t("Ubicación del vehículo")}
-        </Box>
-      }
+    <WorkspaceCard
+      icon={<MyLocationRounded />}
+      title={t("Ubicación del vehículo")}
     >
       {loading ? (
         <LoadingState minHeight={100} />
@@ -88,12 +85,12 @@ export function TripTrackingCard({ tracking, loading, failed }: TripTrackingCard
             />
           </DetailGrid>
 
-          <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 1.5 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.5 }}>
             {t("Proveedor")}: {tracking.lastPosition.provider}
             {tracking.vehicleLicensePlate && ` · ${tracking.vehicleLicensePlate}`}
           </Typography>
         </>
       )}
-    </AppCard>
+    </WorkspaceCard>
   );
 }
