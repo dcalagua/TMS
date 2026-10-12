@@ -189,7 +189,8 @@ tms:
       # *results* are recorded either way - the result is the fact, the artefact is corroboration -
       # so this only turns the attachments on. See docs/domain/PROOF_OF_DELIVERY_V1.md.
       #
-      # LOCAL writes to a private directory on the application's own volume: fine for a single node
+      # SUPABASE writes to a private Supabase Storage bucket (ADR-020): survives redeploys and works
+      # with more than one instance. LOCAL writes to a private directory on the application's own volume: fine for a single node
       # or a container with a mounted volume, not an answer for two instances behind a balancer.
       # Supabase Storage is the next implementation of EvidenceStoragePort and needs no change to
       # any caller, because a storage key is opaque.
@@ -197,6 +198,15 @@ tms:
       # Required when mode is LOCAL. Must be absolute, and must be a directory no web server
       # serves - the only route to these bytes is an authenticated, company-scoped API request.
       root: ${TMS_EVIDENCE_STORAGE_ROOT:}
+      # Required when mode is SUPABASE (ADR-020): a private bucket of the project, reached by the
+      # backend only. The service key is the project's service_role key (a JWT - Storage refuses the
+      # newer sb_secret keys); it bypasses row level security, so it lives in the deployment's secret
+      # settings and nowhere else, and it is never logged.
+      supabase:
+        url: ${TMS_EVIDENCE_SUPABASE_URL:}
+        service-key: ${TMS_EVIDENCE_SUPABASE_SERVICE_KEY:}
+        bucket: ${TMS_EVIDENCE_SUPABASE_BUCKET:tms-evidence}
+        timeout: ${TMS_EVIDENCE_SUPABASE_TIMEOUT:30s}
       # Enough for a phone photo of a pallet, far short of a video. The schema refuses anything
       # over 25 MB regardless (ck_delivery_evidence_size).
       max-file-size: ${TMS_EVIDENCE_MAX_FILE_SIZE:5MB}
