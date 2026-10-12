@@ -179,6 +179,13 @@ export interface RequestOptions {
    * para que un fallo llegue igualmente como Problem Details.
    */
   accept?: string;
+  /**
+   * Cabeceras adicionales propias de un endpoint concreto - hoy, el `Idempotency-Key` de las
+   * mutaciones del portal de transportistas (ADR-018 §5). No pueden pisar las del contrato
+   * (`Authorization`, `X-Company-Id`, `X-Correlation-Id`, `Accept`, `Content-Type`): esas las
+   * pone siempre este cliente.
+   */
+  headers?: Record<string, string>;
 }
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
@@ -249,6 +256,7 @@ async function sendRequest(path: string, options: RequestOptions, token: string 
   const correlationId = generateCorrelationId();
 
   const headers: Record<string, string> = {
+    ...options.headers,
     // Sigue siendo `application/json` para una descarga: lo que se negocia aquí es la forma
     // del *error*, y los endpoints que devuelven un fichero ignoran Accept en su caso de éxito.
     Accept: accept ?? "application/json",
@@ -333,7 +341,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
  */
 export function apiUpload<T>(
   path: string,
-  options: { companyId?: string; formData: FormData; signal?: AbortSignal },
+  options: { companyId?: string; formData: FormData; signal?: AbortSignal; headers?: Record<string, string> },
 ): Promise<T> {
   return apiRequest<T>(path, { method: "POST", ...options });
 }

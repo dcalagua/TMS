@@ -24,6 +24,9 @@ import java.util.UUID;
  *
  * @param permissions the union of the permissions granted by every active membership that
  *     applies to this company - the company-scoped membership and any organization-wide one
+ * @param carrierId the carrier this caller acts for in this company (ADR-018), or null for everyone
+ *     who is not a carrier user. Set, the caller sees only that carrier's trips - in the services
+ *     and, through {@code tms.current_carrier_id()}, in Row Level Security
  */
 public record CompanyScope(
         UUID companyId,
@@ -33,10 +36,23 @@ public record CompanyScope(
         UUID organizationId,
         String organizationCode,
         String organizationName,
-        Set<Permission> permissions) {
+        Set<Permission> permissions,
+        UUID carrierId) {
 
     public CompanyScope {
         permissions = Set.copyOf(permissions);
+    }
+
+    /** A scope that acts for no carrier: every caller except a carrier-portal user. */
+    public CompanyScope(UUID companyId, String companyCode, String companyName, String timeZone,
+            UUID organizationId, String organizationCode, String organizationName, Set<Permission> permissions) {
+        this(companyId, companyCode, companyName, timeZone, organizationId, organizationCode, organizationName,
+                permissions, null);
+    }
+
+    /** True for a carrier-portal user (ADR-018): their world is one carrier's trips. */
+    public boolean isCarrierScoped() {
+        return carrierId != null;
     }
 
     public boolean has(Permission permission) {

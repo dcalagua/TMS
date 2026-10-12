@@ -10,12 +10,8 @@ import java.security.DigestOutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
-import java.time.LocalDate;
 import java.util.HexFormat;
-import java.util.Locale;
-import java.util.Map;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 /**
  * An {@link EvidenceStoragePort} that writes to a private directory on the application's own
@@ -51,21 +47,6 @@ public class LocalFilesystemEvidenceStorage implements EvidenceStoragePort {
      * derived from the file name, because the file name is the caller's and the media type is
      * already on the allow-list.
      */
-    private static final Map<String, String> EXTENSIONS = Map.of(
-            "image/jpeg", "jpg",
-            "image/png", "png",
-            "image/webp", "webp",
-            "image/heic", "heic",
-            "application/pdf", "pdf");
-
-    /** Anything the map above does not name. The bytes are typed in the database, not by this suffix. */
-    private static final String DEFAULT_EXTENSION = "bin";
-
-    /** Exactly the shape {@link #keyFor} produces, and nothing else, is readable. */
-    private static final Pattern KEY_PATTERN = Pattern.compile(
-            "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/\\d{4}/\\d{2}/"
-                    + "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.[a-z0-9]{1,8}$");
-
     private static final int COPY_BUFFER_BYTES = 8192;
 
     private final Path root;
@@ -147,30 +128,13 @@ public class LocalFilesystemEvidenceStorage implements EvidenceStoragePort {
      * a fresh UUID, and an extension chosen from the media type.
      */
     private String keyFor(UUID companyId, String contentType) {
-        LocalDate today = LocalDate.now(clock);
-        String extension = EXTENSIONS.getOrDefault(
-                contentType == null ? "" : contentType.trim().toLowerCase(Locale.ROOT), DEFAULT_EXTENSION);
-        return "%s/%04d/%02d/%s.%s".formatted(
-                companyId, today.getYear(), today.getMonthValue(), UUID.randomUUID(), extension);
+        return EvidenceKeys.newKey(companyId, contentType, clock);
     }
 
-    /**
-     * A key turned into a path, with both checks that make that safe: the key must have exactly the
-     * shape {@link #keyFor} produces and must name the company doing the asking, and the resolved
-     * path must still be under the root once normalised.
-     *
-     * <p>The second check cannot fail given the first, and is here anyway: it is the one that keeps
-     * holding if the key format ever changes.
-     */
     private Path resolve(UUID companyId, String storageKey) {
-        if (storageKey == null || !KEY_PATTERN.matcher(storageKey).matches()) {
-            throw new EvidenceStorageException("Malformed evidence key");
-        }
-        if (!storageKey.startsWith(companyId.toString() + "/")) {
-            // A key belonging to another tenant. The database scoping should have caught it; this
-            // is the layer that makes a leaked key useless on its own.
-            throw new EvidenceStorageException("Evidence key does not belong to this company");
-        }
+        // A malformed key, or one belonging to another tenant. The database scoping should have
+        // caught the second; this is the layer that makes a leaked key useless on its own.
+        EvidenceKeys.requireOwned(companyId, storageKey);
         Path resolved = root.resolve(storageKey).normalize();
         if (!resolved.startsWith(root)) {
             throw new EvidenceStorageException("Evidence key escapes the storage root");

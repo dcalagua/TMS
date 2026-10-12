@@ -8,6 +8,9 @@
 // español pasó a ser la clave y el inglés su traducción, de modo que ninguna de las 4.706
 // líneas de traducción ya hechas se perdió al dejar i18next.
 
+import { EN_SHIPMENT_TRACKING } from "./i18n.shipmentTracking";
+import { EN_PORTAL_OFFLINE } from "./i18n.portalOffline";
+
 const EN_CHROME: Record<string, string> = {
   "Citas de muelle": "Dock appointments",
   // ── Navegación / chrome ─────────────────────────────────────────────
@@ -2284,7 +2287,101 @@ const EN_SCHEDULING: Record<string, string> = {
   "Pendientes y liberados": "Pending and released",
 };
 
-const EN: Record<string, string> = { ...EN_CHROME, ...EN_DATA, ...EN_APP, ...EN_SCHEDULING };
+// ── Portal de transportistas y entrega de documentos (ADR-018) ──
+// Su propio mapa, como Programación: el portal, el monitor de oficina y sus etiquetas de enum.
+const EN_DOCUMENT_DELIVERY: Record<string, string> = {
+  // Portal
+  "Portal del transportista": "Carrier portal",
+  "Tu acceso no incluye el portal": "Your access does not include the portal",
+  "Tu usuario de transportista no tiene un rol con acceso a los viajes. Pide a la oficina que te asigne el rol de operador de transportista.":
+    "Your carrier user has no role with access to trips. Ask the office to grant you the carrier operator role.",
+  "Mis viajes": "My trips", "{{n}} días": "{{n}} days", "Solo con pendientes": "Pending only",
+  "Cargando viajes...": "Loading trips...", "Cargando viaje...": "Loading trip...",
+  "Nada pendiente": "Nothing pending", "Sin viajes despachados": "No dispatched trips",
+  "Todos los documentos de tus viajes de estos días ya están reportados.":
+    "Every document on your trips for these days has been reported.",
+  "Aquí aparecen los viajes de tu transportista cuando el almacén los despacha.":
+    "Your carrier's trips show up here once the warehouse dispatches them.",
+  "Abrir viaje {{n}}": "Open trip {{n}}", "Despachado {{when}}": "Dispatched {{when}}",
+  "Despacho sin hora": "Dispatch time unknown", "Sin placa": "No plate",
+  "{{done}}/{{total}} entregados": "{{done}}/{{total}} delivered", "{{n}} paradas": "{{n}} stops",
+  "Documentos entregados": "Documents delivered", "{{n}} pendientes": "{{n}} pending",
+  "{{n}} rechazados": "{{n}} rejected", "{{n}} no entregados": "{{n}} not delivered",
+  "{{n}} cargos recibidos": "{{n}} signed copies returned",
+  "Este sistema no tiene dónde guardar fotos: por ahora solo se pueden reportar rechazos y no entregas.":
+    "This system has nowhere to store photos: for now only rejections and non-deliveries can be reported.",
+  "Sin documentos": "No documents", "Este viaje no lleva documentos que reportar.": "This trip carries no documents to report.",
+  "Documentos sin parada": "Documents without a stop", "Parada {{n}}": "Stop {{n}}",
+  "Su pedido no coincide con ninguna parada del viaje.": "Their order matches no stop of the trip.",
+  "Cargo recibido": "Signed copy returned", "Reporte enviado": "Report sent", "Enviar reporte": "Send report",
+  "Último reporte": "Last report", "Corregir el reporte": "Correct the report",
+  "La oficina ya recibió el cargo de este documento: el reporte ya no se puede cambiar.":
+    "The office already received this document's signed copy: the report can no longer be changed.",
+  "¿Qué pasó con el documento?": "What happened to the document?",
+  "No se puede marcar «Entregado»: este sistema no tiene dónde guardar la foto obligatoria. Sí puedes reportar un rechazo o una no entrega.":
+    "\"Delivered\" is unavailable: this system has nowhere to store the mandatory photo. You can still report a rejection or a non-delivery.",
+  "Observación (obligatoria)": "Remark (required)", "Observación (opcional)": "Remark (optional)",
+  "Fotos (obligatorio)": "Photos (required)", "Fotos (opcional)": "Photos (optional)",
+  "Firma del cliente (opcional)": "Customer signature (optional)",
+  "Elige qué pasó con el documento.": "Choose what happened to the document.",
+  "Este despliegue no guarda fotos, y una entrega necesita una. Avisa a la oficina.":
+    "This deployment does not store photos, and a delivery needs one. Tell the office.",
+  "Elige el motivo.": "Choose the reason.", "Con el motivo «Otro», cuenta qué pasó.": "With reason \"Other\", say what happened.",
+  "Para marcarlo entregado hace falta al menos una foto.": "At least one photo is needed to mark it delivered.",
+  "Como mucho {{n}} fotos.": "At most {{n}} photos.",
+  "Alguna foto no es JPEG, PNG ni WebP. Vuelve a tomarla.": "A photo is not JPEG, PNG or WebP. Take it again.",
+  "Alguna foto pesa más de 6 MB. Vuelve a tomarla.": "A photo is larger than 6 MB. Take it again.",
+  "No se pudo enviar: revisa la señal y vuelve a intentarlo. El reporte no se duplicará.":
+    "Could not send: check your signal and try again. The report will not be duplicated.",
+  "Recuadro de firma": "Signature box", "Firma aquí con el dedo": "Sign here with your finger",
+  "Borrar firma": "Clear signature", "Foto {{n}}": "Photo {{n}}", "Quitar foto {{n}}": "Remove photo {{n}}",
+  "Tomar foto": "Take photo", "Otra foto": "Another photo", "{{n}} de {{max}} fotos": "{{n}} of {{max}} photos",
+  "Sin fotos ni firma.": "No photos or signature.",
+  // Monitor de oficina
+  "Entrega de documentos": "Document delivery",
+  "Qué pasó con cada factura, guía y GRE de los envíos despachados, y qué cargos faltan por volver. Abre una fila para ver fotos, firma e historial.":
+    "What happened to every invoice, delivery note and GRE on dispatched shipments, and which signed copies are still to come back. Open a row for photos, signature and history.",
+  "Cliente / pedidos": "Customer / orders", "Reportado": "Reported", "Fotos": "Photos", "Cargo": "Signed copy",
+  "Por recibir": "To be returned", "Recibido": "Returned", "Inconsistencia": "Inconsistency", "Inconsistencias": "Inconsistencies",
+  "Documentos": "Documents", "Pendientes": "Pending", "Entregados": "Delivered", "Rechazados": "Rejected",
+  "No entregados": "Not delivered", "Cargo por recibir": "Signed copy pending", "{{n}} recibidos": "{{n}} returned",
+  "Documento y mercadería no coinciden": "Document and goods disagree", "Por transportista": "By carrier",
+  "Documento, envío, pedido o cliente": "Document, shipment, order or customer", "Despacho": "Dispatch",
+  "Ningún documento de envíos despachados coincide con las fechas y los filtros.":
+    "No document on dispatched shipments matches the dates and filters.",
+  "¿Confirmar cargo recibido?": "Confirm signed copy returned?",
+  "Confirma que el cargo firmado de {{doc}} volvió a la oficina. Después, el transportista ya no podrá cambiar su reporte.":
+    "Confirm the signed copy of {{doc}} came back to the office. After this the carrier can no longer change the report.",
+  "Confirmar cargo": "Confirm return", "Confirmar cargo recibido": "Confirm signed copy returned",
+  "No se pudo confirmar el cargo": "The return could not be confirmed", "Abrir viaje": "Open trip",
+  "Despachado": "Dispatched", "Reportado por": "Reported by", "Sin reporte": "Not reported", "Ocurrió": "Happened",
+  "Observación": "Remark", "Fotos y firma": "Photos and signature", "Historial": "History",
+  "El transportista todavía no reportó este documento.": "The carrier has not reported this document yet.",
+  "ocurrió {{when}}": "happened {{when}}", "Sin transportista": "No carrier",
+  "El transportista reportó el documento como entregado, pero la entrega de la mercadería de su pedido en este viaje se registró como fallida o rechazada. Uno de los dos registros no es correcto: confírmalo con el transportista.":
+    "The carrier reported the document as delivered, but the delivery of its order's goods on this trip was recorded as failed or rejected. One of the two records is wrong: check with the carrier.",
+  "La mercadería del pedido figura entregada en este viaje, pero el documento no se reportó como entregado. Puede faltar el reporte, o el documento no llegó al cliente.":
+    "The order's goods show as delivered on this trip, but the document was not reported as delivered. The report may be missing, or the document did not reach the customer.",
+  // Usuarios
+  "Solo para usuarios de un transportista: entran al portal y ven únicamente los viajes despachados de ese transportista.":
+    "Only for a carrier's users: they use the portal and see only that carrier's dispatched trips.",
+  "Ninguno: acceso de oficina": "None: office access",
+  "No se pudo cargar la lista de transportistas.": "The carrier list could not be loaded.",
+  "Solo se ofrecen roles de transportista: un usuario de transportista no puede tener roles de oficina.":
+    "Only carrier roles are offered: a carrier user cannot hold office roles.",
+  "Oficina": "Office",
+  // Enums
+  "Guía de remisión / Nota de entrega": "Delivery note", "GRE remitente": "Shipper GRE", "GRE transportista": "Carrier GRE",
+  "Factura": "Invoice", "Otro": "Other", "Pendiente": "Pending", "Entregado": "Delivered", "Rechazado": "Rejected",
+  "No entregado": "Not delivered", "Cliente ausente": "Customer absent", "Local cerrado": "Premises closed",
+  "Cliente rechazó": "Customer refused", "Dirección no encontrada": "Address not found",
+  "Error en el documento": "Document error", "Mercadería rechazada": "Goods rejected",
+  "Documento entregado, mercadería no": "Document delivered, goods not",
+  "Mercadería entregada, documento no": "Goods delivered, document not",
+  "Reporte del transportista": "Carrier report", "Cargo recibido en oficina": "Signed copy returned to the office",
+};
+
+const EN: Record<string, string> = { ...EN_CHROME, ...EN_DATA, ...EN_APP, ...EN_SCHEDULING, ...EN_DOCUMENT_DELIVERY, ...EN_SHIPMENT_TRACKING, ...EN_PORTAL_OFFLINE };
 
 export type Lang = "es" | "en";
 

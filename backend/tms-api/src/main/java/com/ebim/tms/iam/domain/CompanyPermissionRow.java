@@ -18,4 +18,6 @@ public record CompanyPermissionRow(
         UUID organizationId,
         String organizationCode,
         String organizationName,
-        String permissionCode) {}
+        String permissionCode,
+        /** The membership's carrier (ADR-018), or null for an ordinary membership. */
+        UUID carrierId) {}

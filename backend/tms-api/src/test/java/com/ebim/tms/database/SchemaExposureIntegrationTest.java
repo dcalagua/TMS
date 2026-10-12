@@ -86,6 +86,9 @@ class SchemaExposureIntegrationTest {
             "order_hold",
             // V55: the documents that travel with orders (ADR-015).
             "logistics_document", "logistics_document_order",
+            // V57: document delivery tracking (ADR-018).
+            "document_delivery", "document_delivery_order", "document_delivery_event",
+            "document_delivery_evidence",
             // V56: MasterAdmin commercial entitlements. Same posture as V51 - owner only, tms_app holds
             // no grant and a deny-all policy; the scoped read goes through a SECURITY DEFINER function.
             "platform_entitlement_applied", "platform_entitlement_audit", "platform_entitlement_jti",
@@ -133,7 +136,10 @@ class SchemaExposureIntegrationTest {
             // V54: holds on an order (ADR-014).
             "order_hold",
             // V55: the documents that travel with orders (ADR-015).
-            "logistics_document", "logistics_document_order");
+            "logistics_document", "logistics_document_order",
+            // V57: document delivery tracking (ADR-018).
+            "document_delivery", "document_delivery_order", "document_delivery_event",
+            "document_delivery_evidence");
 
     /**
      * The only tables allowed to carry a {@code company_id} and <em>not</em> the tenant policy.
@@ -376,6 +382,12 @@ class SchemaExposureIntegrationTest {
         // V55: a document is replaced, never deleted; its order links are rewritten whole.
         withheld.put("logistics_document", List.of("DELETE"));
         withheld.put("logistics_document_order", List.of("UPDATE"));
+        // V57: a tracked document is reported and returned, never removed; its history and
+        // evidence are append-only.
+        withheld.put("document_delivery", List.of("DELETE"));
+        withheld.put("document_delivery_order", List.of("UPDATE", "DELETE"));
+        withheld.put("document_delivery_event", List.of("UPDATE", "DELETE"));
+        withheld.put("document_delivery_evidence", List.of("UPDATE", "DELETE"));
         // Canonical location replaced these; they are read-only projections now (V23).
         withheld.put("origin", List.of("INSERT", "UPDATE", "DELETE"));
         withheld.put("destination", List.of("INSERT", "UPDATE", "DELETE"));

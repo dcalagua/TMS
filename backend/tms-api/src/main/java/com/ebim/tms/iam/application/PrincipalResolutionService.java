@@ -64,7 +64,7 @@ public class PrincipalResolutionService implements PrincipalLoader {
         Map<UUID, CompanyPermissionRow> companies = new LinkedHashMap<>();
         Map<UUID, Set<Permission>> permissions = new LinkedHashMap<>();
 
-        for (CompanyPermissionRow row : rows) {
+        for (CompanyPermissionRow row : ordinaryAccessWins(rows)) {
             companies.putIfAbsent(row.companyId(), row);
             Permission permission = Permission.fromCode(row.permissionCode()).orElse(null);
             if (permission == null) {
@@ -86,7 +86,31 @@ public class PrincipalResolutionService implements PrincipalLoader {
                 row.organizationId(),
                 row.organizationCode(),
                 row.organizationName(),
-                permissions.getOrDefault(companyId, Set.of()))));
+                permissions.getOrDefault(companyId, Set.of()),
+                row.carrierId())));
         return List.copyOf(scopes);
+    }
+
+    /**
+     * Drops the carrier rows of a company the user also reaches through an ordinary membership
+     * (ADR-018 section 1). Unioning the two would give one scope both the office permissions and a
+     * carrier restriction, which nobody can reason about; the administration screen refuses to build
+     * that pairing, so meeting it here means it was made by hand, and it is logged. Two carrier
+     * memberships cannot reach one company: there is one membership per (user, company).
+     */
+    private static List<CompanyPermissionRow> ordinaryAccessWins(List<CompanyPermissionRow> rows) {
+        Set<UUID> ordinary = new java.util.HashSet<>();
+        Set<UUID> carrier = new java.util.HashSet<>();
+        for (CompanyPermissionRow row : rows) {
+            (row.carrierId() == null ? ordinary : carrier).add(row.companyId());
+        }
+        if (java.util.Collections.disjoint(ordinary, carrier)) {
+            return rows;
+        }
+        carrier.stream().filter(ordinary::contains).forEach(companyId -> log.warn(
+                "Ignoring carrier membership for company {}: the user also holds ordinary access there", companyId));
+        return rows.stream()
+                .filter(row -> row.carrierId() == null || !ordinary.contains(row.companyId()))
+                .toList();
     }
 }

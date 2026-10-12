@@ -1,9 +1,61 @@
+import { createHash } from 'node:crypto'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { defineConfig } from 'vitest/config'
+import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+
+/**
+ * Sella `dist/sw.js` con la huella del build y con los ficheros que debe precachear (ADR-019 §1).
+ *
+ * <h2>Por qué no basta con la caché en tiempo de ejecución</h2>
+ * Un service worker nuevo puede activarse en el primer arranque SIN señal (las pestañas viejas ya
+ * se cerraron). Al activarse borra las cachés del build anterior, y su `index.html` apunta a
+ * ficheros con hash nuevos que nadie ha descargado todavía: pantalla en blanco justo donde el
+ * portal tiene que funcionar. Por eso instala ya con la entrada de la app y las pantallas del
+ * portal (y lo que estas importan), no con todo: Reportes o Planificación no hacen falta en ruta.
+ *
+ * <p>La huella cambia `sw.js` en cada despliegue, que es lo que hace que el navegador vea una
+ * versión nueva y la app ofrezca «Nueva versión disponible».
+ */
+function serviceWorkerBuildStamp(): Plugin {
+  let precache: string[] = []
+  let buildId = 'dev'
+  return {
+    name: 'etms-sw-build-id',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const chunks = Object.values(bundle).filter((item) => item.type === 'chunk')
+      const byName = new Map(chunks.map((chunk) => [chunk.fileName, chunk]))
+      const wanted = new Set<string>()
+      const visit = (fileName: string) => {
+        if (wanted.has(fileName)) return
+        const chunk = byName.get(fileName)
+        if (!chunk) return
+        wanted.add(fileName)
+        chunk.viteMetadata?.importedCss.forEach((css) => wanted.add(css))
+        chunk.imports.forEach(visit)
+      }
+      chunks
+        .filter((chunk) => chunk.isEntry || chunk.moduleIds.some((id) => id.includes('/src/pages/portal/')))
+        .forEach((chunk) => visit(chunk.fileName))
+      precache = [...wanted].sort().map((fileName) => `/${fileName}`)
+      buildId = createHash('sha256').update(Object.keys(bundle).sort().join('\n')).digest('hex').slice(0, 12)
+    },
+    writeBundle(options) {
+      const file = join(options.dir ?? 'dist', 'sw.js')
+      if (!existsSync(file)) return
+      const source = readFileSync(file, 'utf8')
+        .replace('"__ETMS_BUILD_ID__"', JSON.stringify(buildId))
+        .replace('[] /* __ETMS_PRECACHE__ */', JSON.stringify(precache))
+      writeFileSync(file, source)
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), serviceWorkerBuildStamp()],
   server: {
     // El backend se alcanza por URL absoluta (VITE_API_BASE_URL), no por proxy de desarrollo,
     // para que local y desplegado ejerciten exactamente el mismo camino de código.

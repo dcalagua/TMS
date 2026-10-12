@@ -56,7 +56,8 @@ class ApplicationDatabaseStartupIntegrationTest {
                     .isEqualTo(String.valueOf(MigrationScripts.scripts().size()));
             assertThat(scalar(statement, "SELECT count(*)::text FROM tms.flyway_schema_history WHERE NOT success"))
                     .isEqualTo("0");
-            assertThat(scalar(statement, "SELECT count(*)::text FROM tms.role")).isEqualTo("4");
+            // The four of V3 and CARRIER_OPERATOR (V57, ADR-018).
+            assertThat(scalar(statement, "SELECT count(*)::text FROM tms.role")).isEqualTo("5");
             assertThat(scalar(statement, "SELECT to_regclass('public.membership')::text")).isNull();
         }
     }

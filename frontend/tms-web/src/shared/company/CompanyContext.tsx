@@ -2,10 +2,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { t } from "../../lib/i18n";
 import { notifyError } from "../../lib/ui";
-import { onApiResponseError, type ApiError } from "../api/httpClient";
+import { ApiError, onApiResponseError } from "../api/httpClient";
 import { fetchMe, type CompanyAccessView, type MeView, type UserView } from "../api/meApi";
 import { describeApiError, isCompanyScopeStale } from "../api/problemMessages";
 import { useAuth } from "../auth/AuthContext";
+import { readMeCopy, writeMeCopy } from "./meOfflineCopy";
 
 const STORAGE_KEY = "tms.selectedCompanyId";
 
@@ -53,7 +54,8 @@ function storeCompanyId(companyId: string | null): void {
  * el backend valida esa cabecera por su cuenta en cada llamada con ámbito de empresa.
  */
 export function CompanyProvider({ children }: { children: ReactNode }) {
-  const { status: authStatus } = useAuth();
+  const { status: authStatus, user } = useAuth();
+  const userId = user?.id ?? null;
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(readStoredCompanyId);
 
@@ -68,9 +70,24 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
   const meQuery = useQuery<MeView, ApiError>({
     queryKey: ["me"],
-    queryFn: ({ signal }) => fetchMe(signal),
+    queryFn: async ({ signal }) => {
+      try {
+        const me = await fetchMe(signal);
+        if (userId) writeMeCopy(userId, me);
+        return me;
+      } catch (error) {
+        // Sin respuesta (la red dice estar pero no llega nada): la copia, si la hay. Una respuesta
+        // del servidor, aunque sea un error, manda siempre.
+        const copy = !(error instanceof ApiError) && !signal.aborted ? readMeCopy(userId) : undefined;
+        if (copy) return copy;
+        throw error;
+      }
+    },
     enabled: authStatus === "signedIn",
     staleTime: 60_000,
+    // ADR-019 §1: un usuario de transportista sin señal arranca con su última copia de `/me`
+    // (solo existe para ellos; ver `meOfflineCopy`). La respuesta real la sustituye al llegar.
+    placeholderData: () => readMeCopy(userId),
   });
 
   useEffect(() => {

@@ -1,7 +1,7 @@
 # ADR-015 - Logistics documents beside the order
 
 **Status:** Accepted for the model and read-only ingestion (V55). Document **delivery tracking**
-(the paper trail after the truck) is proposed and not implemented - see section 5.
+(section 5) was decided and implemented by ADR-018 / V57 on 2026-10-12.
 **Date:** 2026-09-27
 **Constrained by:** ADR-003 (company scope), ADR-005 (tenant RLS), ADR-006 (evidence storage),
 ADR-009 (order execution lifecycle), `docs/domain/SPLIT_ORDER_EXECUTION.md`

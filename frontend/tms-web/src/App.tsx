@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "./app/queryClient";
 import { UiHost } from "./lib/ui";
 import { AuthProvider } from "./shared/auth/AuthContext";
 import { ProtectedRoute } from "./shared/auth/ProtectedRoute";
 import { CompanyProvider } from "./shared/company/CompanyContext";
+import { OfficeOnly } from "./shared/company/OfficeOnly";
 import { RequireCompany } from "./shared/company/RequireCompany";
 import { AppLayout } from "./shared/ui/AppLayout";
 import { AccountPage } from "./pages/AccountPage";
@@ -13,6 +14,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
+import { PortalLayout } from "./pages/portal/PortalLayout";
 import {
   AuditPage, CarriersPage, CompanySettingsPage, ControlTowerPage, DestinationsPage, DriversPage,
   FrequenciesPage, IntegrationsPage, LocationsPage, OrdersPage, OriginsPage, PlanningBoardPage,
@@ -22,7 +24,8 @@ import {
   WorkAssignmentsPage,
   PlanningRunsPage, RateCardsPage, ReportsPage, RoutesPage, SchedulingReleasePage, TripWorkspacePage, TripsPage,
   UsersPage, VehicleTypesPage, VehiclesPage, ZonesPage,
-  DeliveryTrackingPage,
+  DeliveryTrackingPage, ShipmentTrackingPage,
+  DocumentDeliveriesPage, PortalTripPage, PortalTripsPage,
 } from "./app/lazyRoutes";
 
 /**
@@ -49,66 +52,81 @@ export default function App() {
             <Route path="/reset-password" element={<ResetPasswordPage />} />
 
             <Route element={<ProtectedRoute />}>
-              <Route element={<AppLayout />}>
-                <Route index element={<DashboardPage />} />
+              {/* ADR-018: el portal de transportistas, con su propio armazón para el teléfono y
+                  sin el menú de oficina. `PortalLayout` es también su puerta: lo abre quien
+                  tiene CARRIER_PORTAL en la empresa elegida. */}
+              <Route path="portal" element={<PortalLayout />}>
+                <Route index element={<PortalTripsPage />} />
+                <Route path="trips/:tripId" element={<PortalTripPage />} />
+                <Route path="*" element={<Navigate to="/portal" replace />} />
+              </Route>
 
-                {/* Fuera de RequireCompany a propósito: un perfil es de la persona, no de la
-                    empresa a la que la sesión resulte estar apuntando. */}
-                <Route path="account" element={<AccountPage />} />
+              {/* La aplicación de oficina. Quien opera la empresa elegida como transportista
+                  sale de aquí hacia /portal, sea cual sea la ruta que pidió (incluida `/`). */}
+              <Route element={<OfficeOnly />}>
+                <Route element={<AppLayout />}>
+                  <Route index element={<DashboardPage />} />
 
-                <Route element={<RequireCompany />}>
-                  {/* Dentro de RequireCompany, a diferencia del dashboard: cada número de estas
-                      dos pantallas es "de esta empresa", y sin una no hay nada que enseñar. */}
-                  <Route path="control-tower" element={<ControlTowerPage />} />
-                  <Route path="reporting" element={<ReportsPage />} />
+                  {/* Fuera de RequireCompany a propósito: un perfil es de la persona, no de la
+                      empresa a la que la sesión resulte estar apuntando. */}
+                  <Route path="account" element={<AccountPage />} />
 
-                  <Route path="masters/locations" element={<LocationsPage />} />
-                  <Route path="masters/origins" element={<OriginsPage />} />
-                  <Route path="masters/destinations" element={<DestinationsPage />} />
-                  <Route path="masters/zones" element={<ZonesPage />} />
-                  <Route path="masters/frequencies" element={<FrequenciesPage />} />
-                  <Route path="masters/routes" element={<RoutesPage />} />
+                  <Route element={<RequireCompany />}>
+                    {/* Dentro de RequireCompany, a diferencia del dashboard: cada número de estas
+                        dos pantallas es "de esta empresa", y sin una no hay nada que enseñar. */}
+                    <Route path="control-tower" element={<ControlTowerPage />} />
+                    <Route path="reporting" element={<ReportsPage />} />
 
-                  <Route path="fleet/carriers" element={<CarriersPage />} />
-                  <Route path="fleet/vehicle-types" element={<VehicleTypesPage />} />
-                  <Route path="fleet/vehicles" element={<VehiclesPage />} />
-                  <Route path="fleet/drivers" element={<DriversPage />} />
+                    <Route path="masters/locations" element={<LocationsPage />} />
+                    <Route path="masters/origins" element={<OriginsPage />} />
+                    <Route path="masters/destinations" element={<DestinationsPage />} />
+                    <Route path="masters/zones" element={<ZonesPage />} />
+                    <Route path="masters/frequencies" element={<FrequenciesPage />} />
+                    <Route path="masters/routes" element={<RoutesPage />} />
 
-                  <Route path="orders" element={<OrdersPage />} />
-                  <Route path="scheduling" element={<SchedulingReleasePage />} />
+                    <Route path="fleet/carriers" element={<CarriersPage />} />
+                    <Route path="fleet/vehicle-types" element={<VehicleTypesPage />} />
+                    <Route path="fleet/vehicles" element={<VehiclesPage />} />
+                    <Route path="fleet/drivers" element={<DriversPage />} />
 
-                  <Route path="planning" element={<PlanningRunsPage />} />
-                  <Route path="planning/:runId" element={<PlanningBoardPage />} />
+                    <Route path="orders" element={<OrdersPage />} />
+                    <Route path="scheduling" element={<SchedulingReleasePage />} />
 
-                  <Route path="rates/rate-cards" element={<RateCardsPage />} />
-                  {/* Bajo `costing` y no bajo `rates`: una tarifa es un acuerdo comercial con un
-                      transportista y esto es un modelo financiero de nuestra propia operación. */}
-                  <Route path="costing/own-fleet" element={<OwnFleetCostProfilesPage />} />
+                    <Route path="planning" element={<PlanningRunsPage />} />
+                    <Route path="planning/:runId" element={<PlanningBoardPage />} />
 
-                  <Route path="trips" element={<TripsPage />} />
-                  <Route path="delivery-tracking" element={<DeliveryTrackingPage />} />
-                  <Route path="appointments" element={<AppointmentsPage />} />
-                  <Route path="settlement" element={<SettlementPage />} />
-                  <Route path="work-assignments" element={<WorkAssignmentsPage />} />
-                  {/* Una ruta completa y no un drawer sobre la lista: un despachador se queda
-                      dentro de un viaje durante minutos, y `/trips/{id}` es lo que se pega en un
-                      chat cuando alguien pregunta dónde está un camión. */}
-                  <Route path="trips/:tripId" element={<TripWorkspacePage />} />
+                    <Route path="rates/rate-cards" element={<RateCardsPage />} />
+                    {/* Bajo `costing` y no bajo `rates`: una tarifa es un acuerdo comercial con un
+                        transportista y esto es un modelo financiero de nuestra propia operación. */}
+                    <Route path="costing/own-fleet" element={<OwnFleetCostProfilesPage />} />
 
-                  {/* Configuración. Dentro de RequireCompany como cualquier otra pantalla de
-                      administración: las dos van de *esta* empresa, y los endpoints que hay
-                      detrás rechazan una petición sin X-Company-Id. */}
-                  <Route path="settings/company" element={<CompanySettingsPage />} />
-                  <Route path="settings/users" element={<UsersPage />} />
-                  <Route path="settings/integrations" element={<IntegrationsPage />} />
+                    <Route path="trips" element={<TripsPage />} />
+                    <Route path="delivery-tracking" element={<DeliveryTrackingPage />} />
+                    <Route path="shipment-tracking" element={<ShipmentTrackingPage />} />
+                    <Route path="document-deliveries" element={<DocumentDeliveriesPage />} />
+                    <Route path="appointments" element={<AppointmentsPage />} />
+                    <Route path="settlement" element={<SettlementPage />} />
+                    <Route path="work-assignments" element={<WorkAssignmentsPage />} />
+                    {/* Una ruta completa y no un drawer sobre la lista: un despachador se queda
+                        dentro de un viaje durante minutos, y `/trips/{id}` es lo que se pega en un
+                        chat cuando alguien pregunta dónde está un camión. */}
+                    <Route path="trips/:tripId" element={<TripWorkspacePage />} />
 
-                  {/* El histórico de auditoría, al lado de la administración de usuarios que en
-                      buena parte explica. Solo lectura y tras su propio permiso: quién hizo qué
-                      no es algo que todo planificador necesite. */}
-                  <Route path="security/audit" element={<AuditPage />} />
+                    {/* Configuración. Dentro de RequireCompany como cualquier otra pantalla de
+                        administración: las dos van de *esta* empresa, y los endpoints que hay
+                        detrás rechazan una petición sin X-Company-Id. */}
+                    <Route path="settings/company" element={<CompanySettingsPage />} />
+                    <Route path="settings/users" element={<UsersPage />} />
+                    <Route path="settings/integrations" element={<IntegrationsPage />} />
+
+                    {/* El histórico de auditoría, al lado de la administración de usuarios que en
+                        buena parte explica. Solo lectura y tras su propio permiso: quién hizo qué
+                        no es algo que todo planificador necesite. */}
+                    <Route path="security/audit" element={<AuditPage />} />
+                  </Route>
+
+                  <Route path="*" element={<NotFoundPage />} />
                 </Route>
-
-                <Route path="*" element={<NotFoundPage />} />
               </Route>
             </Route>
           </Routes>

@@ -64,6 +64,12 @@ public class TenantScopedDataSource extends DelegatingDataSource {
 
     static final String RUNTIME_ROLE = "tms_app";
     static final String COMPANY_SETTING = "tms.company_id";
+    /**
+     * The carrier a carrier-portal user acts for (ADR-018), read by {@code tms.current_carrier_id()}
+     * and the restrictive {@code p_carrier_scope} policies of V57. Always written - empty for every
+     * other caller - so a pooled connection can never carry a previous request's carrier.
+     */
+    static final String CARRIER_SETTING = "tms.carrier_id";
 
     public TenantScopedDataSource(DataSource delegate) {
         super(delegate);
@@ -91,9 +97,11 @@ public class TenantScopedDataSource extends DelegatingDataSource {
             // not carry SQL anyway - but a setting written from request-derived data is not
             // the place to rely on that.
             try (PreparedStatement statement =
-                    connection.prepareStatement("SELECT set_config(?, ?, false)")) {
+                    connection.prepareStatement("SELECT set_config(?, ?, false), set_config(?, ?, false)")) {
                 statement.setString(1, COMPANY_SETTING);
                 statement.setString(2, companyId);
+                statement.setString(3, CARRIER_SETTING);
+                statement.setString(4, scope.get().carrierId() == null ? "" : scope.get().carrierId().toString());
                 statement.execute();
             }
             try (Statement statement = connection.createStatement()) {
@@ -150,7 +158,8 @@ public class TenantScopedDataSource extends DelegatingDataSource {
         private void reset() {
             try (Statement statement = delegate.createStatement()) {
                 statement.execute("RESET ROLE");
-                statement.execute("SELECT set_config('" + COMPANY_SETTING + "', '', false)");
+                statement.execute("SELECT set_config('" + COMPANY_SETTING + "', '', false), set_config('"
+                        + CARRIER_SETTING + "', '', false)");
             } catch (SQLException resetFailure) {
                 // The pool is about to reuse this connection and we no longer know its role.
                 // Returning it would silently run the next request as tms_app with a stale

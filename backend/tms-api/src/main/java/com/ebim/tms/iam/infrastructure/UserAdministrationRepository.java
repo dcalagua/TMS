@@ -61,7 +61,8 @@ public class UserAdministrationRepository {
                    u.active                 AS user_active,
                    m.active                 AS membership_active,
                    (m.company_id IS NULL)   AS organization_wide,
-                   m.created_at             AS created_at
+                   m.created_at             AS created_at,
+                   m.carrier_id             AS carrier_id
             FROM tms.membership m
             JOIN tms.app_user u ON u.id = m.app_user_id
             """;
@@ -128,7 +129,7 @@ public class UserAdministrationRepository {
             """;
 
     private static final String COMPANY_MEMBERSHIP_SQL = """
-            SELECT id, active
+            SELECT id, active, carrier_id
             FROM tms.membership
             WHERE app_user_id = :appUserId
               AND organization_id = :organizationId
@@ -136,9 +137,19 @@ public class UserAdministrationRepository {
             """;
 
     private static final String INSERT_MEMBERSHIP_SQL = """
-            INSERT INTO tms.membership (app_user_id, organization_id, company_id, created_by, updated_by)
-            VALUES (:appUserId, :organizationId, :companyId, :actorId, :actorId)
+            INSERT INTO tms.membership (app_user_id, organization_id, company_id, carrier_id, created_by,
+                                        updated_by)
+            VALUES (:appUserId, :organizationId, :companyId, :carrierId, :actorId, :actorId)
             RETURNING id
+            """;
+
+    /** Rule 2 of the class comment, for the carrier a revoked membership comes back with. */
+    private static final String SET_MEMBERSHIP_CARRIER_SQL = """
+            UPDATE tms.membership
+               SET carrier_id = :carrierId,
+                   updated_by = :actorId
+             WHERE id = :membershipId
+               AND company_id = :companyId
             """;
 
     /** Rule 2 of the class comment: {@code company_id = :companyId} never matches a NULL. */
@@ -302,18 +313,30 @@ public class UserAdministrationRepository {
                 .param("organizationId", organizationId)
                 .param("companyId", companyId)
                 .query((rs, rowNum) -> new ExistingMembership(
-                        rs.getObject("id", UUID.class), rs.getBoolean("active")))
+                        rs.getObject("id", UUID.class), rs.getBoolean("active"),
+                        rs.getObject("carrier_id", UUID.class)))
                 .optional();
     }
 
-    public UUID insertMembership(UUID appUserId, UUID organizationId, UUID companyId, UUID actorId) {
+    public UUID insertMembership(UUID appUserId, UUID organizationId, UUID companyId, UUID carrierId,
+            UUID actorId) {
         return jdbcClient.sql(INSERT_MEMBERSHIP_SQL)
                 .param("appUserId", appUserId)
                 .param("organizationId", organizationId)
                 .param("companyId", companyId)
+                .param("carrierId", carrierId)
                 .param("actorId", actorId)
                 .query(UUID.class)
                 .single();
+    }
+
+    public int setMembershipCarrier(UUID membershipId, UUID companyId, UUID carrierId, UUID actorId) {
+        return jdbcClient.sql(SET_MEMBERSHIP_CARRIER_SQL)
+                .param("membershipId", membershipId)
+                .param("companyId", companyId)
+                .param("carrierId", carrierId)
+                .param("actorId", actorId)
+                .update();
     }
 
     /** @return the number of rows changed - zero when the membership is organization-wide */
@@ -404,7 +427,8 @@ public class UserAdministrationRepository {
             rs.getBoolean("user_active"),
             rs.getBoolean("membership_active"),
             rs.getBoolean("organization_wide"),
-            rs.getObject("created_at", OffsetDateTime.class));
+            rs.getObject("created_at", OffsetDateTime.class),
+            rs.getObject("carrier_id", UUID.class));
 
     private static List<String> splitCodes(String aggregated) {
         if (aggregated == null || aggregated.isBlank()) {
@@ -419,11 +443,16 @@ public class UserAdministrationRepository {
         public boolean assignableToCompanyMembership() {
             return RoleCatalogueRow.SCOPE_COMPANY.equals(scopeLevel);
         }
+
+        /** A role only a carrier membership may hold (ADR-018). */
+        public boolean carrierRole() {
+            return RoleCatalogueRow.SCOPE_CARRIER.equals(scopeLevel);
+        }
     }
 
     /** An existing {@code tms.app_user} found by email - the invite path's "this person is already here". */
     public record ExistingAppUser(UUID id, String fullName, boolean active) {}
 
     /** An existing company-scoped membership, active or revoked. */
-    public record ExistingMembership(UUID id, boolean active) {}
+    public record ExistingMembership(UUID id, boolean active, UUID carrierId) {}
 }

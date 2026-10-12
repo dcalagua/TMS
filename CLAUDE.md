@@ -127,6 +127,22 @@ Authoritative documents live under `docs/architecture/`:
   derived from route resolution, destination and route frequencies, lead time and cutoff, and holds
   (a separate table). No new order state, no scheduler, no PlanningBatch. An origin with no active
   route is `NOT_CONFIGURED` (informative, never blocking). Implemented with V54.
+- `ADR-018-carrier-document-delivery-tracking.md` - carrier portal and document delivery tracking.
+  A carrier user is a membership with `carrier_id` holding only `CARRIER` roles (`CARRIER_OPERATOR`);
+  they see the trips assigned to their carrier once the warehouse dispatch (ADR-013) arrives, in
+  Java and through restrictive RLS policies keyed on `tms.current_carrier_id()`. Each document on a
+  trip is tracked `PENDING` -> `DELIVERED` (photo mandatory) / `REJECTED` / `NOT_DELIVERED` (reason),
+  every portal write carries an `Idempotency-Key`, and the office confirms the signed copy's return.
+  Nothing moves an order or a trip. Supersedes ADR-016 and ADR-015 section 5. Implemented with V57.
+- `ADR-019-carrier-offline-capture-and-shipment-tracking.md` - the carrier portal works without
+  signal: a hand-written service worker caches the shell (never `/api`), trips are kept in IndexedDB
+  per user, and reports (with photos) queue in an outbox replayed with their `Idempotency-Key`.
+  Plus `GET /api/v1/monitoring/shipment-tracking`: the shipments the warehouse actually dispatched,
+  with stops, documents and a map; not a live fleet map. Amends ADR-018 section 7.
+- `ADR-020-evidence-in-supabase-storage.md` - evidence (POD photos, carrier document photos and
+  signatures) may live in a private Supabase Storage bucket (`tms-evidence`, no policies), written and
+  read by the backend only with the `service_role` key, mode `SUPABASE` of `EvidenceStoragePort`.
+  Same keys as the volume store, no URLs. Lifts the Storage deferral for evidence only.
 - `ADR-017-commercial-entitlements.md` - MasterAdmin pushes a versioned `ebim.entitlements/v1`
   snapshot to `/internal/platform-provisioning/tenants/{id}/entitlements` (scopes
   `tms:entitlements:write|read`); TMS stores it durably (V56) and enforces only `appActive`, from
@@ -147,7 +163,7 @@ Read these before changing schema, security or module boundaries. If an implemen
 
 ## Deferred by decision (do not introduce early)
 
-OR-Tools/route optimization, EWM integration, ERP integration, Kafka/microservices/event sourcing, Supabase Realtime, Storage, and live map tracking. Add them only when a concrete requirement and an ADR justify them.
+OR-Tools/route optimization, EWM integration, ERP integration, Kafka/microservices/event sourcing, Supabase Realtime, Storage (except evidence, ADR-020), and live map tracking. Add them only when a concrete requirement and an ADR justify them.
 
 GPS/telematics has left this list under ADR-007, and only as far as the ADR goes: TMS owns a
 normalised position contract, its storage and its sampling policy, and ships **no vendor adapter**.

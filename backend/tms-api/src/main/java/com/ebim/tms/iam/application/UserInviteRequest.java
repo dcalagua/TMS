@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Gives one person access to the company the request is scoped to.
@@ -35,5 +36,15 @@ public record UserInviteRequest(
         String fullName,
 
         @NotEmpty(message = "at least one role is required")
-        List<@NotBlank(message = "must not be blank") String> roleCodes) {
+        List<@NotBlank(message = "must not be blank") String> roleCodes,
+
+        /**
+         * The carrier this person will act for (ADR-018). Set, the membership is a carrier
+         * membership and only CARRIER roles may be granted; null, an ordinary one.
+         */
+        UUID carrierId) {
+
+    public UserInviteRequest(String email, String fullName, List<String> roleCodes) {
+        this(email, fullName, roleCodes, null);
+    }
 }

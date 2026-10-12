@@ -1,10 +1,12 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Alert, Box, Chip, LinearProgress, Typography } from "@mui/material";
+import { Link } from "react-router-dom";
+import { Alert, Box, Button, Chip, LinearProgress, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import {
   LocalShippingRounded, PlaceRounded, TaskAltRounded, PendingActionsRounded, ScheduleRounded,
   ReportProblemRounded, DonutLargeRounded, TravelExploreRounded, EventRounded, FlagRounded, BusinessRounded,
+  RouteRounded,
 } from "@mui/icons-material";
 import { fetchCarriers } from "../../shared/api/carriersApi";
 import {
@@ -203,6 +205,12 @@ export function DeliveryTrackingPage() {
         subtitle={t("Los envíos en la calle, cuánto llevan hecho y dónde hay un problema. Abre una fila para ver entregas, ubicación y despacho del almacén.")}
         onRefresh={() => void boardQuery.refetch()}
         refreshing={boardQuery.isFetching}
+        actions={
+          <Button component={Link} to="/shipment-tracking" variant="outlined" color="inherit" size="small"
+            startIcon={<RouteRounded />} sx={{ borderColor: "divider" }}>
+            {t("Seguimiento de despachos")}
+          </Button>
+        }
       />
 
       <Box sx={(th) => ({

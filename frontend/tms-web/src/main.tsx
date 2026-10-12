@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { ColorModeProvider } from "./lib/colorMode";
+import { registerServiceWorker } from "./lib/serviceWorker";
 import { DatePickersProvider } from "./shared/ui/components/DateInputs";
 import "./index.css";
 
@@ -17,3 +18,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </BrowserRouter>
   </React.StrictMode>,
 );
+
+// ADR-019 §1: el armazón offline del portal. No hace nada fuera de un build de producción.
+registerServiceWorker();

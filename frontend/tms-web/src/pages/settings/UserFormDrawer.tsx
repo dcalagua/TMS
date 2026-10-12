@@ -1,15 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import {
-  Alert, Box, Button, Checkbox, FormControlLabel, Paper, TextField, Typography,
+  Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Paper, TextField, Typography,
 } from "@mui/material";
 import { CheckRounded, PersonAddRounded, PersonRounded } from "@mui/icons-material";
+import { fetchCarriers } from "../../shared/api/carriersApi";
 import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
   fetchAssignableRoles, inviteUser, updateUserProfile, updateUserRoles,
-  type AdministeredUserView,
+  rolesForMembership, type AdministeredUserView,
 } from "../../shared/api/administrationApi";
 import { ActiveBadge, FormDrawer, FormRow, FormSection } from "../../shared/ui/components";
 import { t } from "../../lib/i18n";
@@ -22,6 +23,8 @@ interface UserFormValues {
   email: string;
   fullName: string;
   roleCodes: string[];
+  /** `""` = membresía de oficina. Solo se elige al invitar. */
+  carrierId: string;
 }
 
 interface UserFormDrawerProps {
@@ -32,7 +35,7 @@ interface UserFormDrawerProps {
   onSaved: () => void;
 }
 
-const KNOWN_FIELDS = new Set<keyof UserFormValues>(["email", "fullName", "roleCodes"]);
+const KNOWN_FIELDS = new Set<keyof UserFormValues>(["email", "fullName", "roleCodes", "carrierId"]);
 
 /**
  * Invitar a alguien a esta empresa, o cambiarle el nombre y los roles.
@@ -54,18 +57,37 @@ export function UserFormDrawer({ companyId, user, onClose, onSaved }: UserFormDr
     queryKey: ["assignable-roles", companyId],
     queryFn: ({ signal }) => fetchAssignableRoles(companyId, signal),
   });
-  const roles = rolesQuery.data ?? [];
+
+  // Solo al invitar: el transportista de una membresía no se cambia después (sería otra persona
+  // con otro acceso), así que en edición se enseña y no se pide la lista.
+  const carriersQuery = useQuery({
+    queryKey: ["carriers-for-user-invite", companyId],
+    queryFn: ({ signal }) => fetchCarriers({ companyId, size: 200, active: true, sort: "businessName,asc", signal }),
+    enabled: !isEdit,
+  });
 
   const {
-    register, control, handleSubmit, setError,
+    register, control, handleSubmit, setError, setValue, getValues,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<UserFormValues>({
     defaultValues: {
       email: user?.email ?? "",
       fullName: user?.fullName ?? "",
       roleCodes: user?.roleCodes ?? [],
+      carrierId: user?.carrierId ?? "",
     },
   });
+
+  const carrierId = useWatch({ control, name: "carrierId" });
+  const carrierScoped = carrierId !== "";
+  const roles = rolesForMembership(rolesQuery.data ?? [], carrierScoped);
+
+  /** Cambiar de oficina a transportista (o al revés) deja fuera los roles de la otra familia. */
+  function changeCarrier(next: string) {
+    setValue("carrierId", next, { shouldDirty: true });
+    const allowed = new Set(rolesForMembership(rolesQuery.data ?? [], next !== "").map((role) => role.code));
+    setValue("roleCodes", getValues("roleCodes").filter((code) => allowed.has(code)), { shouldDirty: true });
+  }
 
   async function onSubmit(values: UserFormValues) {
     setFormError(null);
@@ -85,6 +107,7 @@ export function UserFormDrawer({ companyId, user, onClose, onSaved }: UserFormDr
           email: values.email.trim(),
           fullName: values.fullName.trim(),
           roleCodes: values.roleCodes,
+          carrierId: values.carrierId || null,
         });
       }
       onSaved();
@@ -141,6 +164,36 @@ export function UserFormDrawer({ companyId, user, onClose, onSaved }: UserFormDr
             {...register("fullName", { required: t("Este campo es obligatorio") })}
           />
         </FormRow>
+        </FormSection>
+
+        <FormSection
+          title={t("Transportista")}
+          help={t("Solo para usuarios de un transportista: entran al portal y ven únicamente los viajes despachados de ese transportista.")}
+        >
+          {isEdit ? (
+            <Typography variant="body2">
+              {user.carrierName ?? (user.carrierId ? user.carrierId : t("Ninguno: acceso de oficina"))}
+            </Typography>
+          ) : (
+            <TextField
+              select size="small" fullWidth label={t("Transportista")}
+              value={carrierId}
+              onChange={(e) => changeCarrier(e.target.value)}
+              error={Boolean(errors.carrierId) || carriersQuery.isError}
+              helperText={errors.carrierId?.message
+                ?? (carriersQuery.isError ? t("No se pudo cargar la lista de transportistas.") : undefined)}
+            >
+              <MenuItem value="">{t("Ninguno: acceso de oficina")}</MenuItem>
+              {(carriersQuery.data?.content ?? []).map((carrier) => (
+                <MenuItem key={carrier.id} value={carrier.id}>{carrier.businessName}</MenuItem>
+              ))}
+            </TextField>
+          )}
+          {carrierScoped && (
+            <Alert severity="info" sx={{ mt: 1 }}>
+              {t("Solo se ofrecen roles de transportista: un usuario de transportista no puede tener roles de oficina.")}
+            </Alert>
+          )}
         </FormSection>
 
         <FormSection title={t("Roles")} help={t("Lo que puede hacer en esta empresa. Al menos uno.")}>

@@ -1,5 +1,6 @@
 package com.ebim.tms.orders.infrastructure;
 
+import com.ebim.tms.shared.reference.LogisticsDocumentLinkListener;
 import com.ebim.tms.shared.reference.LogisticsDocumentPort;
 import com.ebim.tms.shared.reference.OrderExternalKey;
 import com.ebim.tms.shared.reference.OrderReferencePort;
@@ -29,10 +30,14 @@ class JdbcLogisticsDocumentAdapter implements LogisticsDocumentPort {
 
     private final JdbcClient jdbc;
     private final OrderReferencePort orderReferences;
+    /** Planning's document tracking (ADR-018), told of every new or changed link. */
+    private final List<LogisticsDocumentLinkListener> linkListeners;
 
-    JdbcLogisticsDocumentAdapter(JdbcClient jdbc, OrderReferencePort orderReferences) {
+    JdbcLogisticsDocumentAdapter(JdbcClient jdbc, OrderReferencePort orderReferences,
+            List<LogisticsDocumentLinkListener> linkListeners) {
         this.jdbc = jdbc;
         this.orderReferences = orderReferences;
+        this.linkListeners = List.copyOf(linkListeners);
     }
 
     private record Stored(UUID id, Command asStored, Set<UUID> orderIds) {
@@ -84,6 +89,12 @@ class JdbcLogisticsDocumentAdapter implements LogisticsDocumentPort {
                     INSERT INTO tms.logistics_document_order (document_id, order_id, company_id)
                     VALUES (:id, :orderId, :companyId)
                     """).param("id", id).param("orderId", orderId).param("companyId", companyId).update();
+        }
+        if (!orderIds.isEmpty()) {
+            for (LogisticsDocumentLinkListener listener : linkListeners) {
+                listener.documentLinked(scope, id, command.documentType(), command.documentNumber(),
+                        Set.copyOf(orderIds));
+            }
         }
         return new Intake(id, outcome, linked, unknown);
     }

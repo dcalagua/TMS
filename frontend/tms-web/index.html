@@ -3,7 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- El portal de transportistas añade `viewport-fit=cover` al montarse (PortalLayout) para
+         respetar env(safe-area-inset-*); la oficina conserva este viewport tal cual. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- ADR-018/ADR-019: el portal de transportistas se instala en el teléfono y trabaja sin
+         señal. El service worker (public/sw.js, registrado solo en producción) guarda el
+         armazón de la app; los datos y la cola de reportes viven en IndexedDB. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#2F8159" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="eTMS Transportista" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
     <title>eTMS by EBIM</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

@@ -24,9 +24,19 @@ public record RoleCatalogueRow(
         List<String> permissionCodes) {
 
     public static final String SCOPE_COMPANY = "COMPANY";
+    /** A role for a carrier membership only (ADR-018). Granted anywhere else it grants nothing. */
+    public static final String SCOPE_CARRIER = "CARRIER";
 
     /** Whether this role can be attached to a company-scoped membership and mean something. */
     public boolean assignableToCompanyMembership() {
         return SCOPE_COMPANY.equals(scopeLevel);
+    }
+
+    /**
+     * Whether a company screen may grant it at all: a company role to an ordinary membership, a
+     * carrier role to a carrier one (ADR-018). Only organization-wide roles are out of its reach.
+     */
+    public boolean assignableFromCompanyScreen() {
+        return SCOPE_COMPANY.equals(scopeLevel) || SCOPE_CARRIER.equals(scopeLevel);
     }
 }
