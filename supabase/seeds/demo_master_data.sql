@@ -450,4 +450,43 @@ JOIN tms.organization o ON o.id = c.organization_id AND o.code = 'DEMO'
 JOIN tms.carrier ca ON ca.company_id = r.company_id AND ca.code = 'C-PACIFICO'
 ON CONFLICT (company_id, code) DO NOTHING;
 
+-- 11. Muelles y puertas ----------------------------------------------------------------------
+--
+-- Sin esto, reservar una cita falla con "Este sitio no tiene puertas activas": la pantalla de
+-- citas de muelle reparte vehiculos entre recursos, y sin recursos no hay nada que repartir.
+--
+-- SIN CALENDARIO, Y A PROPOSITO. `AppointmentService` lo dice: "a door with no calendar at all
+-- is open". Un recurso sin horario esta siempre disponible, que es la postura correcta para
+-- datos de demostracion - poner un horario aqui solo anadiria una segunda forma de que una
+-- reserva sea rechazada sin ensenar nada nuevo. Una empresa real configura sus horas cuando las
+-- tiene, y entonces el mismo recurso empieza a cerrar.
+--
+-- Un centro de distribucion tiene varios muelles; una tienda, una sola puerta de recepcion. Y
+-- la duracion por defecto sigue a esa diferencia: descargar un camion completo en un CD no es lo
+-- mismo que dejar unas cajas en una tienda.
+
+-- Muelles de los centros de distribucion: tres por centro, una hora por cita.
+INSERT INTO tms.location_resource (company_id, location_id, code, name, resource_type,
+                                   default_slot_minutes, created_by, updated_by)
+SELECT l.company_id, l.id, 'M-' || lpad(n::text, 2, '0'), 'Muelle ' || n, 'DOCK', 60,
+       s.author_id, s.author_id
+FROM seed_ctx s
+CROSS JOIN tms.location l
+JOIN tms.company c ON c.id = l.company_id
+JOIN tms.organization o ON o.id = c.organization_id AND o.code = 'DEMO'
+CROSS JOIN generate_series(1, 3) AS n
+WHERE l.location_type = 'DISTRIBUTION_CENTER'
+ON CONFLICT (location_id, code) DO NOTHING;
+
+-- Puerta de recepcion de cada tienda: una sola, media hora.
+INSERT INTO tms.location_resource (company_id, location_id, code, name, resource_type,
+                                   default_slot_minutes, created_by, updated_by)
+SELECT l.company_id, l.id, 'P-01', 'Puerta de recepcion', 'DOOR', 30, s.author_id, s.author_id
+FROM seed_ctx s
+CROSS JOIN tms.location l
+JOIN tms.company c ON c.id = l.company_id
+JOIN tms.organization o ON o.id = c.organization_id AND o.code = 'DEMO'
+WHERE l.location_type = 'STORE'
+ON CONFLICT (location_id, code) DO NOTHING;
+
 COMMIT;

@@ -11,6 +11,7 @@ import com.ebim.tms.planning.infrastructure.TransportEventRepository;
 import com.ebim.tms.planning.infrastructure.TripExceptionRepository;
 import com.ebim.tms.planning.infrastructure.TripRepository;
 import com.ebim.tms.shared.api.InvalidRequestException;
+import com.ebim.tms.shared.api.ProblemTimes;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.security.CompanyScope;
@@ -158,8 +159,8 @@ public class TripExceptionService {
 
         OffsetDateTime occurredAt = resolveOccurredAt(request.occurredAt());
         if (occurredAt.isBefore(exception.reportedAt())) {
-            throw new InvalidRequestException(
-                    "occurredAt cannot be before the problem was reported (" + exception.reportedAt() + ").");
+            throw new InvalidRequestException("occurredAt cannot be before the problem was reported ("
+                    + ProblemTimes.at(exception.reportedAt(), scope.zoneId()) + ").");
         }
 
         exception.resolve(occurredAt, auditActorProvider.requireAppUserId(), request.notes().trim());

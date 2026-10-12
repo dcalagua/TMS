@@ -882,6 +882,7 @@ const EN_DATA: Record<string, string> = {
   "Mantenimiento": "Maintenance",
   "Mapa": "Map",
   "Mapa de paradas": "Stops map",
+  "Mapa de la ubicación del vehículo": "Vehicle location map",
   "Mapa para seleccionar la ubicación": "Map to pick the location",
   "Marca «Puede utilizarse como destino» en una ubicación o crea una nueva.": "Tick “Can be used as destination” on a location, or create a new one.",
   "Marca «Puede utilizarse como origen» en una ubicación o crea una nueva.": "Tick “Can be used as origin” on a location, or create a new one.",
@@ -1630,6 +1631,11 @@ const EN_APP: Record<string, string> = {
   "Cuerpo enviado": "Body sent",
   "Cuándo": "When",
   "Cuándo ocurrió de verdad, no cuándo se está tecleando.": "When it actually happened, not when it is being typed.",
+  "±{{margin}} · entre {{min}} y {{max}}": "±{{margin}} · between {{min}} and {{max}}",
+  "Las líneas suman {{value}}: hay que declarar exactamente eso.":
+    "The lines add up to {{value}}: that is exactly what must be declared.",
+  "Cuándo ocurrió de verdad, no cuándo se está tecleando. No antes de las {{time}}.":
+    "When it actually happened, not when it is being typed. Not before {{time}}.",
   "Cuándo se tomó la firma o la foto. Opcional.": "When the signature or photo was taken. Optional.",
   "Cómo se calcula lo que cuesta un envío con este transportista.": "How a shipment's cost with this carrier is calculated.",
   "Cómo se resolvió": "How it was resolved",

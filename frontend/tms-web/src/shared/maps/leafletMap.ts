@@ -56,6 +56,50 @@ export function pinIcon(color: string): L.DivIcon {
 }
 
 /**
+ * Un marcador de parada: un disco con su número dentro.
+ *
+ * `filled` distingue lo seleccionado - y el origen, que siempre va relleno - del resto. El
+ * numero se dibuja dentro del SVG y no como una etiqueta aparte, para que marcador y numero no
+ * puedan separarse al hacer zoom.
+ */
+export function stopIcon(label: string, filled: boolean, ink: string): L.DivIcon {
+  const fill = filled ? ink : "#ffffff";
+  const text = filled ? "#ffffff" : ink;
+  return L.divIcon({
+    className: "tms-map-stop",
+    html:
+      `<svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">` +
+      `<circle cx="15" cy="15" r="12.5" fill="${fill}" stroke="${ink}" stroke-width="2"/>` +
+      `<text x="15" y="19.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"` +
+      ` font-size="12" font-weight="700" fill="${text}">${label}</text>` +
+      `</svg>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+  });
+}
+
+/**
+ * El marcador del vehiculo: un disco con anillo blanco y un anillo exterior, sin numero.
+ *
+ * Deliberadamente una FORMA distinta de la de una parada, y no el mismo circulo en otro color.
+ * El color por si solo seria la unica senal que separa una posicion reportada de una parada
+ * planificada, y eso falla para un despachador con daltonismo y vuelve a fallar en una
+ * impresion en blanco y negro.
+ */
+export function vehicleIcon(color: string): L.DivIcon {
+  return L.divIcon({
+    className: "tms-map-vehicle",
+    html:
+      `<svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">` +
+      `<circle cx="15" cy="15" r="11" fill="${color}" stroke="#ffffff" stroke-width="3"/>` +
+      `<circle cx="15" cy="15" r="13" fill="none" stroke="${color}" stroke-width="1.5"/>` +
+      `</svg>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+  });
+}
+
+/**
  * Filtro que oscurece las teselas en modo oscuro.
  *
  * Las teselas estándar de OSM sólo existen en claro, y un rectángulo blanco dentro de una

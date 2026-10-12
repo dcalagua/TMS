@@ -16,6 +16,7 @@ import com.ebim.tms.planning.infrastructure.TripOrderAssignmentRepository;
 import com.ebim.tms.planning.infrastructure.TripRepository;
 import com.ebim.tms.shared.api.ConflictException;
 import com.ebim.tms.shared.api.InvalidRequestException;
+import com.ebim.tms.shared.api.ProblemTimes;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.audit.AuditActor;
 import com.ebim.tms.shared.audit.AuditActorProvider;
@@ -25,6 +26,7 @@ import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
@@ -120,7 +122,7 @@ public class TripDeliveryService {
         String receiverName = blankToNull(request.receiverName());
         String receiverDocument = blankToNull(request.receiverDocument());
         requireConsistent(result, request.deliveredAt(), receiverName, receiverDocument, notes);
-        OffsetDateTime deliveredAt = resolveDeliveredAt(request.deliveredAt(), trip, stop);
+        OffsetDateTime deliveredAt = resolveDeliveredAt(request.deliveredAt(), trip, stop, scope.zoneId());
 
         AuditActor actor = auditActorProvider.current().orElseThrow(() -> new IllegalStateException(
                 "no authenticated actor: a delivery must be recorded inside an authenticated request"));
@@ -346,7 +348,8 @@ public class TripDeliveryService {
      * tightly still when one was recorded. Null passes straight through - the results that allow no
      * time, and the ones that merely do not require one, are equally entitled to have none.
      */
-    private static OffsetDateTime resolveDeliveredAt(OffsetDateTime requested, Trip trip, TripStop stop) {
+    private static OffsetDateTime resolveDeliveredAt(OffsetDateTime requested, Trip trip, TripStop stop,
+            ZoneId zone) {
         if (requested == null) {
             return null;
         }
@@ -356,7 +359,8 @@ public class TripDeliveryService {
         }
         OffsetDateTime earliest = stop.actualArrivalAt() != null ? stop.actualArrivalAt() : trip.actualDepartureAt();
         if (earliest != null && requested.isBefore(earliest)) {
-            throw new InvalidRequestException("deliveredAt cannot be before " + earliest + ".");
+            throw new InvalidRequestException(
+                    "deliveredAt cannot be before " + ProblemTimes.at(earliest, zone) + ".");
         }
         return requested;
     }

@@ -3,6 +3,7 @@ import { MyLocationRounded, SpeedRounded } from "@mui/icons-material";
 import type { TripTrackingView } from "../../shared/api/trackingApi";
 import { DetailGrid, DetailItem, LoadingState } from "../../shared/ui/components";
 import { WorkspaceCard } from "./WorkspaceCard";
+import { VehicleTrackMap } from "../../shared/maps/VehicleTrackMap";
 import { t } from "../../lib/i18n";
 import { fmtDateTime, fmtDecimal, fmtMinutes } from "../../lib/locale";
 
@@ -61,6 +62,17 @@ export function TripTrackingCard({ tracking, loading, failed }: TripTrackingCard
         </Alert>
       ) : (
         <>
+          {/* El mapa va primero: "dónde está" se responde señalando, no leyendo dos decimales.
+              Las coordenadas se conservan debajo porque son el dato exacto que alguien copia
+              para dárselo a un conductor por teléfono. */}
+          <Box sx={{ mb: 1.5 }}>
+            <VehicleTrackMap
+              position={tracking.lastPosition}
+              track={tracking.track}
+              label={tracking.vehicleLicensePlate ?? undefined}
+            />
+          </Box>
+
           <DetailGrid columns={2}>
             <DetailItem
               label={t("Última posición")}

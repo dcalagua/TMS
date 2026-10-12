@@ -24,6 +24,7 @@ import {
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDecimal, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
+import { marginHint } from "./declaredTotals";
 import { T } from "../../theme";
 import { OrderDocumentsSection } from "./OrderDocumentsSection";
 
@@ -140,8 +141,19 @@ function previewTotals(lines: OrderLineFormValues[], declared: DeclaredFormValue
     weight: weight ?? declaredWeight ?? 0,
     volume: volume ?? declaredVolume ?? 0,
     pallets: pallets ?? declaredPallets ?? 0,
+    /**
+     * Lo que dicen las LÍNEAS, antes de caer en lo declarado. `null` significa que ninguna línea
+     * nombró esa medida.
+     *
+     * Hace falta aparte porque los campos de arriba colapsan las dos cosas, y la diferencia
+     * importa: el backend sólo contrasta una cifra declarada contra las líneas cuando las líneas
+     * también la dicen. Sin esta distinción, el formulario anunciaría un margen sobre un cero
+     * que nadie calculó.
+     */
+    fromLines: { weight, volume, pallets },
   };
 }
+
 
 export function OrderFormDrawer({ companyId, orderId, canManage, onClose, onSaved }: OrderFormDrawerProps) {
   const orderQuery = useQuery({
@@ -629,17 +641,20 @@ function OrderForm({
             <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" } }}>
               <TextField
                 label={t("Peso declarado (kg)")} size="small" type="number" disabled={!isEditable}
-                error={Boolean(errors.declaredWeightKg)} helperText={errors.declaredWeightKg?.message}
+                error={Boolean(errors.declaredWeightKg)}
+                helperText={errors.declaredWeightKg?.message ?? marginHint(totals.fromLines.weight, 2)}
                 {...register("declaredWeightKg")}
               />
               <TextField
                 label={t("Volumen declarado (m³)")} size="small" type="number" disabled={!isEditable}
-                error={Boolean(errors.declaredVolumeM3)} helperText={errors.declaredVolumeM3?.message}
+                error={Boolean(errors.declaredVolumeM3)}
+                helperText={errors.declaredVolumeM3?.message ?? marginHint(totals.fromLines.volume, 3)}
                 {...register("declaredVolumeM3")}
               />
               <TextField
                 label={t("Pallets declarados")} size="small" type="number" disabled={!isEditable}
-                error={Boolean(errors.declaredPallets)} helperText={errors.declaredPallets?.message}
+                error={Boolean(errors.declaredPallets)}
+                helperText={errors.declaredPallets?.message ?? marginHint(totals.fromLines.pallets, 2)}
                 {...register("declaredPallets")}
               />
             </Box>

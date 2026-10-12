@@ -20,6 +20,7 @@ import com.ebim.tms.planning.infrastructure.TripRepository;
 import com.ebim.tms.planning.infrastructure.WarehouseMilestoneRepository;
 import com.ebim.tms.planning.domain.AssignmentStatus;
 import com.ebim.tms.shared.api.ConflictException;
+import com.ebim.tms.shared.api.ProblemTimes;
 import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.reference.CarrierLookupPort;
 import com.ebim.tms.shared.reference.DispatchConfirmationCommand;
@@ -221,9 +222,10 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
         // (or made ready) cannot be recorded as that plan's departure without inventing a time.
         OffsetDateTime earliest = trip.status() == TripStatus.CONFIRMED ? trip.confirmedAt() : trip.readyAt();
         if (earliest != null && at.isBefore(earliest)) {
-            notes.add(Discrepancy.of(Code.NOT_APPLIED, "The warehouse dispatched at " + at + ", before the shipment "
-                    + "was " + (trip.status() == TripStatus.CONFIRMED ? "confirmed" : "made ready") + " (" + earliest
-                    + ") in TMS. A person must resolve it."));
+            notes.add(Discrepancy.of(Code.NOT_APPLIED,
+                    "The warehouse dispatched at " + ProblemTimes.at(at, scope.zoneId()) + ", before the shipment was "
+                    + (trip.status() == TripStatus.CONFIRMED ? "confirmed" : "made ready")
+                    + " (" + ProblemTimes.at(earliest, scope.zoneId()) + ") in TMS. A person must resolve it."));
             return ExternalDispatchOutcome.UNAPPLIED;
         }
         for (DispatchReadiness.Blocker blocker : readiness.evaluate(scope, trip, at)) {
