@@ -1,6 +1,9 @@
 # ADR-016 - Carrier and driver portal: identity before screens
 
-**Status:** Proposed - **blocked on a security decision; nothing implemented.**
+**Status:** Superseded by ADR-018 (2026-10-12): approved in its carrier-scoped variant and implemented with
+V57. A login per driver remains deferred.
+
+**Original status:** Proposed - blocked on a security decision; nothing implemented.
 **Date:** 2026-09-27
 **Constrained by:** ADR-001 (React -> Spring Boot -> PostgreSQL), ADR-003 (company scope), ADR-005
 (tenant RLS), ADR-006 (evidence storage), ADR-007 (positions inform, never move a lifecycle),
