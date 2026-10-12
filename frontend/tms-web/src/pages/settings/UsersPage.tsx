@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Box, Button, Chip, Typography } from "@mui/material";
 import {
   PersonAddRounded, GroupsRounded, EditRounded, BlockRounded, CheckCircleRounded, ToggleOnRounded,
+  LocalShippingRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
@@ -131,6 +132,15 @@ export function UsersPage() {
           )}
         </Box>
       ),
+    },
+    {
+      // ADR-018: un usuario de transportista solo entra al portal; decirlo en la lista evita que
+      // alguien le busque roles de oficina que nunca podrá tener.
+      key: "carrier",
+      header: t("Transportista"),
+      render: (user) => user.carrierId
+        ? <Chip size="small" color="info" variant="outlined" icon={<LocalShippingRounded />} label={user.carrierName ?? t("Transportista")} />
+        : <Typography variant="caption" color="text.secondary">{t("Oficina")}</Typography>,
     },
     { key: "since", header: t("Desde"), render: (user) => fmtDate(user.createdAt) },
     {

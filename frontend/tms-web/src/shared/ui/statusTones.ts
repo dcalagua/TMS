@@ -2,6 +2,7 @@ import type {
   DeliveryResult, StopExecutionStatus, TripExceptionStatus, TripStatus,
 } from "../api/planningApi";
 import type { InvoiceStatus, MatchStatus } from "../api/settlementApi";
+import type { DocumentDeliveryStatus } from "../api/documentDeliveriesApi";
 import type { TenderStatus } from "../api/tendersApi";
 import type { StatusTone } from "../../theme";
 
@@ -102,4 +103,18 @@ export const MATCH_STATUS_TONE: Record<MatchStatus, StatusTone> = {
   MATCHED: "done",
   DISCREPANCY: "inProgress",
   UNMATCHABLE: "neutral",
+};
+
+/**
+ * ADR-018: el estado de un documento en un viaje.
+ *
+ * `NOT_DELIVERED` es ámbar y `REJECTED` rojo, por la misma razón que una parada saltada y una
+ * fallida: un documento que no llegó se vuelve a intentar, uno que el cliente rechazó es una
+ * conversación comercial que alguien tiene que tener.
+ */
+export const DOCUMENT_DELIVERY_STATUS_TONE: Record<DocumentDeliveryStatus, StatusTone> = {
+  PENDING: "neutral",
+  DELIVERED: "done",
+  REJECTED: "overdue",
+  NOT_DELIVERED: "inProgress",
 };

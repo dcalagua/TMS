@@ -11,6 +11,8 @@ import {
   EventNoteRounded,
   TravelExploreRounded,
   EventRepeatRounded,
+  FactCheckRounded,
+  RouteRounded,
 } from "@mui/icons-material";
 
 /** Una hoja del menú: una pantalla concreta. */
@@ -52,6 +54,8 @@ export const ICON_TINTS: Record<string, string> = {
   "/planning": "#B085F5",
   "/trips": "#66BB6A",
   "/delivery-tracking": "#FF7043",
+  "/shipment-tracking": "#EC407A",
+  "/document-deliveries": "#26A69A",
   "/appointments": "#FFA726",
   "/settlement": "#8D6E63",
   "/work-assignments": "#7E57C2",
@@ -114,6 +118,13 @@ export const NAV_SECTIONS: NavSection[] = [
       // de control, así que comparte su capability y no la de Viajes.
       { to: "/delivery-tracking", label: "Seguimiento de reparto", icon: <TravelExploreRounded />,
         capability: "TRANSPORT_MONITOR_VIEW" },
+      // ADR-019 §2: lo que el almacén despachó de verdad, con mapa y documentos. Mismo permiso que el
+      // seguimiento de reparto (`monitoring.transport:read`).
+      { to: "/shipment-tracking", label: "Seguimiento de despachos", icon: <RouteRounded />,
+        capability: "TRANSPORT_MONITOR_VIEW" },
+      // ADR-018: lo que pasó con los papeles de esos mismos envíos, y qué cargos faltan por volver.
+      { to: "/document-deliveries", label: "Entrega de documentos", icon: <FactCheckRounded />,
+        capability: "DOCUMENT_DELIVERY_VIEW" },
       // Después de Viajes: una cita existe por un viaje, y la garita la lee justo antes de que
       // llegue. Su propia entrada y no una pestaña del workspace porque quien la mira - patio,
       // garita, almacén - no planifica envíos.

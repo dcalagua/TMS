@@ -20,6 +20,32 @@ export interface CompanyAccessView {
   organization: OrganizationView;
   permissions: string[];
   capabilities: string[];
+  /**
+   * ADR-018 §1: el transportista de una membresía de transportista, o `null` para una membresía
+   * de oficina. Opcional en el tipo porque un backend anterior a V57 no lo envía, y su ausencia
+   * significa exactamente lo mismo que `null`.
+   */
+  carrierId?: string | null;
+  carrierName?: string | null;
+}
+
+/** Las capabilities que el frontend consulta por nombre. El resto viajan como texto. */
+export const CAPABILITY = {
+  /** ADR-018: el portal móvil de transportistas (`/portal`). */
+  CARRIER_PORTAL: "CARRIER_PORTAL",
+  /** ADR-018: el monitor de entrega de documentos de la oficina. */
+  DOCUMENT_DELIVERY_VIEW: "DOCUMENT_DELIVERY_VIEW",
+  /** ADR-018: confirmar que el cargo firmado volvió a la oficina. */
+  DOCUMENT_DELIVERY_MANAGE: "DOCUMENT_DELIVERY_MANAGE",
+} as const;
+
+/**
+ * ¿Opera quien llama en esta empresa como transportista? Una membresía de transportista solo ve
+ * el portal: la aplicación de oficina la reenvía a `/portal` y no le enseña su menú. Es
+ * orientación de UX; lo que de verdad la limita son los permisos de sus roles `CARRIER`.
+ */
+export function isCarrierScoped(company: Pick<CompanyAccessView, "carrierId"> | null | undefined): boolean {
+  return company?.carrierId !== undefined && company.carrierId !== null && company.carrierId !== "";
 }
 
 export interface UserView {

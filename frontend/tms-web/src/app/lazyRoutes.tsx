@@ -74,6 +74,18 @@ export const TripWorkspacePage = lazy(() =>
   import("../pages/trips/TripWorkspacePage").then((m) => ({ default: m.TripWorkspacePage })));
 export const DeliveryTrackingPage = lazy(() =>
   import("../pages/delivery-tracking/DeliveryTrackingPage").then((m) => ({ default: m.DeliveryTrackingPage })));
+// ADR-019 §2: los envíos que el almacén despachó, con su mapa. Junto al seguimiento de reparto, sin tocarlo.
+export const ShipmentTrackingPage = lazy(() =>
+  import("../pages/shipment-tracking/ShipmentTrackingPage").then((m) => ({ default: m.ShipmentTrackingPage })));
+
+// ADR-018: el monitor de oficina y las dos pantallas del portal de transportistas. El portal es
+// su propio trozo: un transportista nunca descarga una pantalla de oficina, ni al revés.
+export const DocumentDeliveriesPage = lazy(() =>
+  import("../pages/document-deliveries/DocumentDeliveriesPage").then((m) => ({ default: m.DocumentDeliveriesPage })));
+export const PortalTripsPage = lazy(() =>
+  import("../pages/portal/PortalTripsPage").then((m) => ({ default: m.PortalTripsPage })));
+export const PortalTripPage = lazy(() =>
+  import("../pages/portal/PortalTripPage").then((m) => ({ default: m.PortalTripPage })));
 
 export const CompanySettingsPage = lazy(() =>
   import("../pages/settings/CompanySettingsPage").then((m) => ({ default: m.CompanySettingsPage })));

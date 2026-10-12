@@ -223,6 +223,43 @@ export const ENUM_LABELS = {
     OTHER: "Otro documento",
   },
   /**
+   * ADR-018: el mismo tipo de documento, con la etiqueta corta del portal y del monitor de entrega.
+   * Corta a propósito: va en una tarjeta de móvil y en una celda de tabla, al lado del número.
+   */
+  deliveryDocumentType: {
+    DELIVERY_NOTE: "Guía de remisión / Nota de entrega",
+    GRE_REMITENTE: "GRE remitente",
+    GRE_TRANSPORTISTA: "GRE transportista",
+    INVOICE: "Factura",
+    OTHER: "Otro",
+  },
+  /** ADR-018 §4: qué pasó con un documento en un viaje. Sin estado parcial. */
+  documentDeliveryStatus: {
+    DELIVERED: "Entregado",
+    NOT_DELIVERED: "No entregado",
+    PENDING: "Pendiente",
+    REJECTED: "Rechazado",
+  },
+  /** ADR-018 §4: por qué un documento se rechazó o no se entregó. */
+  documentDeliveryReason: {
+    ADDRESS_NOT_FOUND: "Dirección no encontrada",
+    CUSTOMER_ABSENT: "Cliente ausente",
+    CUSTOMER_CLOSED: "Local cerrado",
+    CUSTOMER_REFUSED: "Cliente rechazó",
+    DOCUMENT_ERROR: "Error en el documento",
+    GOODS_REJECTED: "Mercadería rechazada",
+    OTHER: "Otro",
+  },
+  /** ADR-018 §4: dónde el documento y la entrega de la mercadería (ADR-009) no cuentan lo mismo. */
+  documentInconsistency: {
+    DOCUMENT_DELIVERED_GOODS_FAILED: "Documento entregado, mercadería no",
+    GOODS_DELIVERED_DOCUMENT_NOT: "Mercadería entregada, documento no",
+  },
+  documentDeliveryEventType: {
+    REPORTED: "Reporte del transportista",
+    RETURNED: "Cargo recibido en oficina",
+  },
+  /**
    * ADR-014: si un pedido puede liberarse ahora. No es un estado del pedido; se deriva al leer.
    */
   eligibility: {

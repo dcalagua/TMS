@@ -7,7 +7,10 @@ import { t } from "./i18n";
 
 type Severity = "success" | "info" | "warning" | "error";
 
-interface ToastReq { id: number; message: string; detail?: string; severity: Severity }
+/** Una acción dentro del toast: «Siguiente documento» tras guardar un reporte, p. ej. */
+export interface ToastAction { label: string; onClick: () => void }
+
+interface ToastReq { id: number; message: string; detail?: string; severity: Severity; action?: ToastAction }
 interface ConfirmReq {
   id: number; title: string; message?: string; confirmText: string; cancelText: string;
   severity: Severity; resolve: (v: boolean) => void;
@@ -27,6 +30,14 @@ let seq = 1;
 /** Muestra un toast (reemplaza a alert()). */
 export function toast(message: string, severity: Severity = "success", detail?: string) {
   toastListener?.({ id: seq++, message, detail, severity });
+}
+
+/**
+ * Un toast con un botón de acción: lo que sigue de forma natural a lo que se acaba de hacer.
+ * Se queda más tiempo que un toast simple, para dar tiempo a tocarlo.
+ */
+export function notifyWithAction(message: string, action: ToastAction, severity: Severity = "success", detail?: string) {
+  toastListener?.({ id: seq++, message, detail, severity, action });
 }
 
 /** Confirmación de éxito de una acción. Equivalente al `notifySuccess` de la suite. */
@@ -149,11 +160,21 @@ export function UiHost() {
         <Snackbar
           key={toastState.id}
           open={open}
-          autoHideDuration={toastState.severity === "error" ? 8000 : 4000}
+          autoHideDuration={toastState.severity === "error" || toastState.action ? 8000 : 4000}
           onClose={() => setOpen(false)}
           anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
         >
-          <Alert severity={toastState.severity} variant="filled" onClose={() => setOpen(false)} sx={{ width: "100%", maxWidth: 520 }}>
+          <Alert
+            severity={toastState.severity} variant="filled" onClose={() => setOpen(false)} sx={{ width: "100%", maxWidth: 520 }}
+            action={toastState.action ? (
+              <Button
+                color="inherit" size="small" sx={{ fontWeight: 800, minHeight: 40 }}
+                onClick={() => { setOpen(false); toastState.action?.onClick(); }}
+              >
+                {toastState.action.label}
+              </Button>
+            ) : undefined}
+          >
             {toastState.detail ? <AlertTitle sx={{ fontWeight: 800 }}>{toastState.message}</AlertTitle> : toastState.message}
             {toastState.detail}
           </Alert>

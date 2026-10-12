@@ -93,6 +93,12 @@ export interface AdministeredUserView {
   organizationWide: boolean
   roleCodes: string[]
   createdAt: string
+  /**
+   * ADR-018 §1: el transportista de una membresía de transportista; `null` para una de oficina.
+   * Opcional porque un backend anterior a V57 no lo envía.
+   */
+  carrierId?: string | null
+  carrierName?: string | null
 }
 
 /** Mirrors the backend's `RoleView`. */
@@ -100,16 +106,31 @@ export interface RoleView {
   code: string
   name: string
   description: string | null
-  scopeLevel: 'ORGANIZATION' | 'COMPANY'
+  /**
+   * `CARRIER` (ADR-018): solo se concede a una membresía de transportista, y una membresía de
+   * transportista solo recibe roles `CARRIER`. La pantalla ofrece una familia u otra según si se
+   * eligió transportista.
+   */
+  scopeLevel: 'ORGANIZATION' | 'COMPANY' | 'CARRIER'
   /** An ORGANIZATION role on a company membership grants nothing, so the picker refuses it. */
   assignable: boolean
   permissionCodes: string[]
+}
+
+/**
+ * ADR-018: los roles que admite una membresía. Una de transportista solo recibe roles `CARRIER`,
+ * y una de oficina ninguno; el backend rechaza cualquier otra pareja, así que no se ofrece.
+ */
+export function rolesForMembership(roles: RoleView[], carrierScoped: boolean): RoleView[] {
+  return roles.filter((role) => (role.scopeLevel === 'CARRIER') === carrierScoped)
 }
 
 export interface UserInviteRequest {
   email: string
   fullName: string
   roleCodes: string[]
+  /** ADR-018: con transportista, la membresía es de transportista y solo admite roles `CARRIER`. */
+  carrierId?: string | null
 }
 
 export interface UserListParams {
