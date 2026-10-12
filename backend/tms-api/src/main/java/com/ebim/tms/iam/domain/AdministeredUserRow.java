@@ -31,4 +31,6 @@ public record AdministeredUserRow(
         boolean userActive,
         boolean membershipActive,
         boolean organizationWide,
-        OffsetDateTime createdAt) {}
+        OffsetDateTime createdAt,
+        /** The carrier this membership acts for (ADR-018), or null. */
+        UUID carrierId) {}

@@ -43,6 +43,11 @@ public class JdbcIdentityRepository implements IdentityRepository {
      *       organization-wide use grants nothing when it is attached to a company-scoped
      *       membership. The database cannot express that pairing, so it is enforced here -
      *       it is the rule Step 02 handed over as "a Java rule; no trigger enforces it".</li>
+     *   <li>{@code (m.carrier_id IS NULL) = (r.scope_level <> 'CARRIER')}: a carrier membership
+     *       (ADR-018) grants the permissions of {@code CARRIER} roles and nothing else, and an
+     *       ordinary membership grants no {@code CARRIER} role. This one line is what keeps a carrier
+     *       user out of every office endpoint and an office user out of the portal, whatever roles an
+     *       administrator attached.</li>
      * </ul>
      *
      * <p>The driving index is {@code ix_membership_app_user_active}.
@@ -55,7 +60,8 @@ public class JdbcIdentityRepository implements IdentityRepository {
                    o.id            AS organization_id,
                    o.code          AS organization_code,
                    o.name          AS organization_name,
-                   p.code          AS permission_code
+                   p.code          AS permission_code,
+                   m.carrier_id    AS carrier_id
             FROM tms.membership m
             JOIN tms.organization o
               ON o.id = m.organization_id AND o.active
@@ -67,6 +73,7 @@ public class JdbcIdentityRepository implements IdentityRepository {
             JOIN tms.role r
               ON r.id = mr.role_id AND r.active
              AND (m.company_id IS NULL OR r.scope_level <> 'ORGANIZATION')
+             AND (m.carrier_id IS NULL) = (r.scope_level <> 'CARRIER')
             JOIN tms.role_permission rp
               ON rp.role_id = r.id
             JOIN tms.permission p
@@ -106,7 +113,8 @@ public class JdbcIdentityRepository implements IdentityRepository {
                         rs.getObject("organization_id", UUID.class),
                         rs.getString("organization_code"),
                         rs.getString("organization_name"),
-                        rs.getString("permission_code")))
+                        rs.getString("permission_code"),
+                        rs.getObject("carrier_id", UUID.class)))
                 .list();
     }
 }

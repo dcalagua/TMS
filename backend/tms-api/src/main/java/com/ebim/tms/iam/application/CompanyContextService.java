@@ -1,6 +1,8 @@
 package com.ebim.tms.iam.application;
 
+import com.ebim.tms.shared.reference.CarrierLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 /**
@@ -14,7 +16,14 @@ import org.springframework.stereotype.Service;
 @Service
 public class CompanyContextService {
 
+    /** Optional, as in {@link MeService}: the carrier's name is a label. */
+    private final ObjectProvider<CarrierLookupPort> carriers;
+
+    public CompanyContextService(ObjectProvider<CarrierLookupPort> carriers) {
+        this.carriers = carriers;
+    }
+
     public CompanyAccessView describe(CompanyScope scope) {
-        return CompanyAccessViews.from(scope);
+        return CompanyAccessViews.from(scope, carriers.getIfAvailable());
     }
 }

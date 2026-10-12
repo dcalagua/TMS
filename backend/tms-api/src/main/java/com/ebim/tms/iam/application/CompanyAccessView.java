@@ -19,4 +19,7 @@ public record CompanyAccessView(
         String timeZone,
         OrganizationView organization,
         List<String> permissions,
-        List<String> capabilities) {}
+        List<String> capabilities,
+        /** The carrier this account acts for here (ADR-018); null for everyone but carrier users. */
+        UUID carrierId,
+        String carrierName) {}

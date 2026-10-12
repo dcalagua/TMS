@@ -36,9 +36,11 @@ public record AdministeredUserView(
         boolean membershipActive,
         boolean organizationWide,
         List<String> roleCodes,
-        OffsetDateTime createdAt) {
+        OffsetDateTime createdAt,
+        UUID carrierId,
+        String carrierName) {
 
-    public static AdministeredUserView from(AdministeredUserRow row, List<String> roleCodes) {
+    public static AdministeredUserView from(AdministeredUserRow row, List<String> roleCodes, String carrierName) {
         return new AdministeredUserView(
                 row.membershipId(),
                 row.appUserId(),
@@ -48,6 +50,8 @@ public record AdministeredUserView(
                 row.membershipActive(),
                 row.organizationWide(),
                 List.copyOf(roleCodes),
-                row.createdAt());
+                row.createdAt(),
+                row.carrierId(),
+                carrierName);
     }
 }

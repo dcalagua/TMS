@@ -15,14 +15,19 @@ import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.audit.AuditAggregateType;
 import com.ebim.tms.shared.audit.AuditRecorder;
+import com.ebim.tms.shared.reference.CarrierLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -71,14 +76,17 @@ public class UserAdministrationService {
     private final CompanyAdministrationRepository companyRepository;
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
+    /** A carrier user's carrier (ADR-018): checked on invite, named in the list. */
+    private final CarrierLookupPort carriers;
 
     public UserAdministrationService(UserAdministrationRepository repository,
             CompanyAdministrationRepository companyRepository,
-            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder) {
+            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder, CarrierLookupPort carriers) {
         this.repository = repository;
         this.companyRepository = companyRepository;
         this.auditActorProvider = auditActorProvider;
         this.auditRecorder = auditRecorder;
+        this.carriers = carriers;
     }
 
     @Transactional(readOnly = true)
@@ -98,16 +106,19 @@ public class UserAdministrationService {
         // and the one that matters most here because the alternative is a query per person.
         Map<UUID, List<String>> rolesByMembership =
                 repository.roleCodesOf(rows.stream().map(AdministeredUserRow::membershipId).toList());
+        Map<UUID, String> carrierNames = carrierNames(scope, rows.stream()
+                .map(AdministeredUserRow::carrierId).filter(Objects::nonNull).collect(Collectors.toSet()));
         List<AdministeredUserView> content = rows.stream()
                 .map(row -> AdministeredUserView.from(
-                        row, rolesByMembership.getOrDefault(row.membershipId(), List.of())))
+                        row, rolesByMembership.getOrDefault(row.membershipId(), List.of()),
+                        row.carrierId() == null ? null : carrierNames.get(row.carrierId())))
                 .toList();
         return new PageResponse<>(content, pageQuery.pageNumber(), pageQuery.pageSize(), total);
     }
 
     @Transactional(readOnly = true)
     public AdministeredUserView get(CompanyScope scope, UUID membershipId) {
-        return toView(find(scope, membershipId));
+        return toView(scope, find(scope, membershipId));
     }
 
     /**
@@ -132,7 +143,11 @@ public class UserAdministrationService {
     public AdministeredUserView invite(CompanyScope scope, UserInviteRequest request) {
         UUID actorId = auditActorProvider.requireAppUserId();
         String email = request.email().trim().toLowerCase(Locale.ROOT);
-        Set<UUID> roleIds = resolveAssignableRoles(request.roleCodes());
+        UUID carrierId = request.carrierId();
+        if (carrierId != null && carriers.findActiveInCompany(carrierId, scope.companyId()).isEmpty()) {
+            throw new InvalidRequestException("The carrier is not an active carrier of this company.");
+        }
+        Set<UUID> roleIds = resolveAssignableRoles(request.roleCodes(), carrierId);
         List<String> roleCodes = normalizedCodes(request.roleCodes());
 
         UUID appUserId = resolveOrCreateProfile(email, request.fullName().trim(), actorId);
@@ -156,12 +171,16 @@ public class UserAdministrationService {
                 throw new ConflictException("'" + email + "' already has access to this company.");
             }
             repository.setMembershipActive(membership.id(), scope.companyId(), true, actorId);
+            if (!Objects.equals(membership.carrierId(), carrierId)) {
+                // Let back in as what they are invited as now - carrier user or not - like the roles.
+                repository.setMembershipCarrier(membership.id(), scope.companyId(), carrierId, actorId);
+            }
             membershipId = membership.id();
             action = AuditAction.ACTIVATE;
         } else {
             try {
                 membershipId = repository.insertMembership(
-                        appUserId, scope.organizationId(), scope.companyId(), actorId);
+                        appUserId, scope.organizationId(), scope.companyId(), carrierId, actorId);
             } catch (DataIntegrityViolationException raced) {
                 // uq_membership_user_organization_company, lost between the read above and here.
                 throw new ConflictException("'" + email + "' already has access to this company.");
@@ -170,9 +189,14 @@ public class UserAdministrationService {
         }
         repository.replaceMembershipRoles(membershipId, roleIds, actorId);
 
-        auditRecorder.record(scope, AuditAggregateType.MEMBERSHIP, membershipId, action,
-                Map.of("email", email, "roles", roleCodes));
-        return toView(find(scope, membershipId));
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("email", email);
+        detail.put("roles", roleCodes);
+        if (carrierId != null) {
+            detail.put("carrierId", carrierId.toString());
+        }
+        auditRecorder.record(scope, AuditAggregateType.MEMBERSHIP, membershipId, action, detail);
+        return toView(scope, find(scope, membershipId));
     }
 
     /** Corrects the display name. See {@link UserProfileRequest} for what is deliberately not here. */
@@ -189,7 +213,7 @@ public class UserAdministrationService {
             auditRecorder.record(scope, AuditAggregateType.APP_USER, row.appUserId(), AuditAction.UPDATE,
                     Map.of("email", row.email(), "fullName", fullName));
         }
-        return toView(find(scope, membershipId));
+        return toView(scope, find(scope, membershipId));
     }
 
     /** Replaces the roles held in this company. Refused for yourself and for an organization-wide row. */
@@ -199,7 +223,7 @@ public class UserAdministrationService {
         UUID actorId = auditActorProvider.requireAppUserId();
         requireNotSelf(row, actorId, "change your own roles");
 
-        Set<UUID> roleIds = resolveAssignableRoles(request.roleCodes());
+        Set<UUID> roleIds = resolveAssignableRoles(request.roleCodes(), row.carrierId());
         List<String> before = repository.roleCodesOf(membershipId);
         repository.replaceMembershipRoles(membershipId, roleIds, actorId);
         List<String> after = normalizedCodes(request.roleCodes());
@@ -208,7 +232,7 @@ public class UserAdministrationService {
         // answers the question, "VIEWER" alone only says where it ended up.
         auditRecorder.record(scope, AuditAggregateType.MEMBERSHIP, membershipId, AuditAction.ROLES_CHANGED,
                 Map.of("email", row.email(), "rolesBefore", before, "rolesAfter", after));
-        return toView(find(scope, membershipId));
+        return toView(scope, find(scope, membershipId));
     }
 
     /**
@@ -240,11 +264,23 @@ public class UserAdministrationService {
             auditRecorder.record(scope, AuditAggregateType.MEMBERSHIP, membershipId,
                     active ? AuditAction.ACTIVATE : AuditAction.DEACTIVATE, Map.of("email", row.email()));
         }
-        return toView(find(scope, membershipId));
+        return toView(scope, find(scope, membershipId));
     }
 
-    private AdministeredUserView toView(AdministeredUserRow row) {
-        return AdministeredUserView.from(row, repository.roleCodesOf(row.membershipId()));
+    private AdministeredUserView toView(CompanyScope scope, AdministeredUserRow row) {
+        String carrierName = row.carrierId() == null ? null
+                : carrierNames(scope, Set.of(row.carrierId())).get(row.carrierId());
+        return AdministeredUserView.from(row, repository.roleCodesOf(row.membershipId()), carrierName);
+    }
+
+    private Map<UUID, String> carrierNames(CompanyScope scope, Set<UUID> carrierIds) {
+        if (carrierIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, String> names = new HashMap<>();
+        carriers.findAllInCompany(carrierIds, scope.companyId())
+                .forEach((id, carrier) -> names.put(id, carrier.name()));
+        return names;
     }
 
     /**
@@ -281,7 +317,7 @@ public class UserAdministrationService {
      * administrator who mistypes a code has to be told, not quietly given a smaller grant than they
      * asked for.
      */
-    private Set<UUID> resolveAssignableRoles(List<String> requestedCodes) {
+    private Set<UUID> resolveAssignableRoles(List<String> requestedCodes, UUID carrierId) {
         Set<String> codes = new LinkedHashSet<>(normalizedCodes(requestedCodes));
         Map<String, RoleReference> found = repository.findRolesByCode(codes);
 
@@ -291,7 +327,18 @@ public class UserAdministrationService {
             if (role == null) {
                 throw new InvalidRequestException("'" + code + "' is not a role in this installation.");
             }
-            if (!role.assignableToCompanyMembership()) {
+            // ADR-018: a carrier membership holds carrier roles and nothing else, and an ordinary one
+            // holds none. The identity query enforces the same pairing; refusing it here is what
+            // keeps an administrator from saving a role that would silently grant nothing.
+            if (carrierId != null) {
+                if (!role.carrierRole()) {
+                    throw new InvalidRequestException("'" + code + "' is not a carrier role. A carrier user may "
+                            + "only hold carrier roles.");
+                }
+            } else if (role.carrierRole()) {
+                throw new InvalidRequestException("'" + code + "' is a carrier role. Choose the carrier this "
+                        + "person works for.");
+            } else if (!role.assignableToCompanyMembership()) {
                 throw new InvalidRequestException("'" + code + "' is an organization-wide role and cannot be "
                         + "granted for a single company. It would grant nothing.");
             }

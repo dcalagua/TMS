@@ -74,6 +74,13 @@ public enum Capability {
 
     TRANSPORT_MONITOR_VIEW(Permission.MONITORING_TRANSPORT_READ),
 
+    /** The document delivery monitor (ADR-018). */
+    DOCUMENT_DELIVERY_VIEW(Permission.PLANNING_DOCUMENT_DELIVERY_READ),
+    DOCUMENT_DELIVERY_MANAGE(Permission.PLANNING_DOCUMENT_DELIVERY_RETURN),
+
+    /** The carrier portal (ADR-018): the only capability a carrier user holds. */
+    CARRIER_PORTAL(Permission.PORTAL_TRIP_READ, Permission.PORTAL_DOCUMENT_REPORT),
+
     /**
      * The dock board (migration V41).
      *

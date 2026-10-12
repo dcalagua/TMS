@@ -160,6 +160,22 @@ public enum Permission {
 
     MONITORING_TRANSPORT_READ("monitoring.transport:read"),
 
+    /**
+     * The document delivery monitor and the office's return confirmation (migration V57, ADR-018).
+     * Split like everything else: reading what the carriers reported is not the authority to say
+     * the signed copy is back on the shelf.
+     */
+    PLANNING_DOCUMENT_DELIVERY_READ("planning.document_delivery:read"),
+    PLANNING_DOCUMENT_DELIVERY_RETURN("planning.document_delivery:return"),
+
+    /**
+     * The carrier portal (migration V57, ADR-018). Held only through a CARRIER role on a carrier
+     * membership, which the identity query guarantees: a portal permission never reaches an office
+     * user, and an office permission never reaches a carrier user.
+     */
+    PORTAL_TRIP_READ("portal.trip:read"),
+    PORTAL_DOCUMENT_REPORT("portal.document:report"),
+
     AUDIT_LOG_READ("audit.log:read");
 
     private static final Map<String, Permission> BY_CODE = Arrays.stream(values())

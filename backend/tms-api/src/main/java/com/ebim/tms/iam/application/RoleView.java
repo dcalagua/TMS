@@ -32,7 +32,7 @@ public record RoleView(
                 row.name(),
                 row.description(),
                 row.scopeLevel(),
-                row.assignableToCompanyMembership(),
+                row.assignableFromCompanyScreen(),
                 row.permissionCodes());
     }
 }

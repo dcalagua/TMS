@@ -46,8 +46,11 @@ spring:
       # because each endpoint enforces its own afterwards: OrderImportService checks the bytes it
       # received, and LocalFilesystemEvidenceStorage stops writing the moment its own ceiling is
       # passed. Neither depends on this number alone being right.
+      # The request envelope is wider than one file because a carrier's document report (ADR-018)
+      # carries up to five photos and a signature in one request; each file is still held to 6 MB
+      # here and to the evidence store's own ceiling.
       max-file-size: 6MB
-      max-request-size: 8MB
+      max-request-size: 32MB
   threads:
     virtual:
       enabled: true

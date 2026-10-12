@@ -98,6 +98,8 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
     private final OriginLookupPort originLookupPort;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    /** ADR-018: a dispatch is what makes a trip's documents visible to its carrier. */
+    private final DocumentDeliveryTracker documentDeliveries;
 
     @SuppressWarnings("java:S107")
     public ExternalDispatchService(ExternalDispatchRepository dispatches, ExternalDispatchOrderRepository dispatchOrders,
@@ -108,7 +110,7 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
             CompanySettingsPort companySettings, OrderPlanningPort orderPlanningPort,
             OrderReferencePort orderReferencePort, CarrierLookupPort carrierLookupPort,
             VehicleLookupPort vehicleLookupPort, DriverLookupPort driverLookupPort, OriginLookupPort originLookupPort,
-            ObjectMapper objectMapper, Clock clock) {
+            ObjectMapper objectMapper, Clock clock, DocumentDeliveryTracker documentDeliveries) {
         this.dispatches = dispatches;
         this.dispatchOrders = dispatchOrders;
         this.milestones = milestones;
@@ -128,6 +130,7 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
         this.originLookupPort = originLookupPort;
         this.objectMapper = objectMapper;
         this.clock = clock;
+        this.documentDeliveries = documentDeliveries;
     }
 
     // -----------------------------------------------------------------------------------------
@@ -187,6 +190,8 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
         ExternalDispatch stored = store(scope, command, trip.orElse(null), outcome, verification,
                 discrepancies, reconciled.orders(), current.orElse(null));
         trip.ifPresent(value -> recordOnTimeline(scope, value, stored, discrepancies.size()));
+        // After the document is stored: the visibility rule (ADR-018 section 3) reads it.
+        trip.ifPresent(value -> documentDeliveries.trackTrip(scope, value.id()));
         return resultOf(stored, outcome.name(), true);
     }
 

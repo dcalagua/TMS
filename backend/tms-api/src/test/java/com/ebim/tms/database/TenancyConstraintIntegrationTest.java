@@ -227,16 +227,22 @@ class TenancyConstraintIntegrationTest {
         // PLANNER hold it; VIEWER does not - it is not a read. Reading holds needs only
         // orders.order:read.
         //
+        // V57 took it to 66 (ADR-018): planning.document_delivery read/return for the office, and
+        // portal.trip:read and portal.document:report, held by CARRIER_OPERATOR alone - the fifth
+        // role and the only one of level CARRIER. ORGANIZATION_ADMIN therefore no longer holds the
+        // whole catalogue: it holds everything except the two portal permissions.
+        //
         // These totals are deliberately exact rather than "at least". The catalogue is a schema
         // contract: a permission that appears without a migration declaring it, or a grant that
         // widens a role silently, is the kind of change this test exists to make visible. The
         // named invariants below are the ones that carry meaning - the counts only anchor them.
-        assertThat(count("SELECT count(*) FROM tms.role")).isEqualTo(4);
-        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(62);
+        assertThat(count("SELECT count(*) FROM tms.role")).isEqualTo(5);
+        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(66);
         assertThat(count("SELECT count(*) FROM tms.permission WHERE code = resource || ':' || action"))
-                .isEqualTo(62);
+                .isEqualTo(66);
 
-        // 62 + 61 + 32 + 18. ORGANIZATION_ADMIN holds the whole catalogue; COMPANY_ADMIN holds
+        // 64 + 63 + 34 + 19 + 2 (V57: the office permissions to the four office roles, the read
+        // only to VIEWER; the two portal permissions to CARRIER_OPERATOR). ORGANIZATION_ADMIN holds the whole catalogue; COMPANY_ADMIN holds
         // all of it but iam.organization:manage, which is asserted by name further down.
         //
         // V46's six settlement permissions do NOT go to everybody, and the gaps are the control.
@@ -248,19 +254,25 @@ class TenancyConstraintIntegrationTest {
         // V52's planning.trip:dispatch-override goes to the two administrator roles only: dispatching
         // past the warehouse is a supervisor's decision, not a planner's.
         // V54's orders.hold:manage goes to both administrators and PLANNER.
-        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(173);
+        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(182);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'ORGANIZATION_ADMIN'"))
-                .isEqualTo(62);
+                .isEqualTo(64);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'COMPANY_ADMIN'"))
-                .isEqualTo(61);
+                .isEqualTo(63);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'PLANNER'"))
-                .isEqualTo(32);
+                .isEqualTo(34);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'VIEWER'"))
-                .isEqualTo(18);
+                .isEqualTo(19);
+        // ADR-018: the portal and the office never share a permission.
+        assertThat(count("SELECT count(*) FROM tms.role_permission rp"
+                + " JOIN tms.role r ON r.id = rp.role_id"
+                + " JOIN tms.permission p ON p.id = rp.permission_id"
+                + " WHERE (r.scope_level = 'CARRIER') <> (p.resource LIKE 'portal.%')"))
+                .isZero();
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id"
                 + " JOIN tms.permission p ON p.id = rp.permission_id"
