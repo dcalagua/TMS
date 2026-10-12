@@ -44,6 +44,11 @@
 --     admin@demo.local          ORGANIZATION_ADMIN, organization-wide
 --     planner.lima@demo.local   PLANNER,  scoped to DEMO-LIMA
 --     viewer@demo.local         VIEWER,   scoped to DEMO-LIMA
+-- and, from the carrier portal demo seeds:
+--     transportista.trsa@demo.local   CARRIER_OPERATOR, TRSA in DEMO-LIMA and TRSA in DEMO-AREQUIPA
+--     transportista.trsb@demo.local   CARRIER_OPERATOR, TRSB in DEMO-LIMA
+--     transportista.traq@demo.local   CARRIER_OPERATOR, TRAQ in DEMO-AREQUIPA
+--     planner.arequipa@demo.local     PLANNER,  scoped to DEMO-AREQUIPA
 
 \if :{?demo_password}
 \else
@@ -70,7 +75,15 @@ CREATE TEMP TABLE demo_auth_user (
 INSERT INTO demo_auth_user (id, email, full_name) VALUES
     ('00000000-0000-4000-a000-000000000001', 'admin@demo.local',        'Demo Organization Admin'),
     ('00000000-0000-4000-a000-000000000002', 'planner.lima@demo.local', 'Demo Planner Lima'),
-    ('00000000-0000-4000-a000-000000000003', 'viewer@demo.local',       'Demo Viewer');
+    ('00000000-0000-4000-a000-000000000003', 'viewer@demo.local',       'Demo Viewer'),
+    -- Carrier portal users (ADR-018). Their app_user rows come from carrier_portal_demo_seed.sql;
+    -- without that file these accounts sign in and are "not provisioned", which is harmless.
+    ('00000000-0000-4000-a000-000000000004', 'transportista.trsa@demo.local', 'Despacho Transportes Rapidos del Sur'),
+    ('00000000-0000-4000-a000-000000000005', 'transportista.trsb@demo.local', 'Despacho Logistica Andina'),
+    -- DEMO-AREQUIPA (carrier_portal_demo_seed_arequipa.sql). transportista.trsa@demo.local above also
+    -- holds a carrier membership there, so it needs no second account.
+    ('00000000-0000-4000-a000-000000000006', 'transportista.traq@demo.local', 'Despacho Transportes del Misti'),
+    ('00000000-0000-4000-a000-000000000007', 'planner.arequipa@demo.local',   'Demo Planner Arequipa');
 
 -- ---------------------------------------------------------------------------------------------
 -- 1. auth.users - only the ones that do not exist yet
