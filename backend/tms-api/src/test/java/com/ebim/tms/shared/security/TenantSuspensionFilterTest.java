@@ -101,6 +101,39 @@ class TenantSuspensionFilterTest {
         assertThat(responded).isEmpty();
     }
 
+    @ParameterizedTest(name = "POST {0} is the user's own session state: allowed while suspended, gate not asked")
+    @ValueSource(strings = {"/api/v1/notifications/7f1c0000-0000-4000-8000-000000000001/read",
+            "/api/v1/notifications/read-all"})
+    void sessionStateWritesPass(String path) throws Exception {
+        TenantSuspensionFilter filter = new TenantSuspensionFilter(s -> {
+            throw new AssertionError("a session-state write must not consult the gate");
+        }, responder);
+        SecurityContextHolder.getContext().setAuthentication(new Scoped(scope()));
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(new MockHttpServletRequest("POST", path), new MockHttpServletResponse(), chain);
+
+        assertThat(chain.getRequest()).isNotNull();
+        assertThat(responded).isEmpty();
+    }
+
+    @ParameterizedTest(name = "{0} {1} is not session state: refused while suspended")
+    @org.junit.jupiter.params.provider.CsvSource({
+        "DELETE, /api/v1/notifications/read-all",
+        "POST, /api/v1/notifications/read-all/extra",
+        "POST, /api/v1/orders/123/read",
+        "POST, /api/v1/notifications"})
+    void lookalikesAreRefused(String method, String path) throws Exception {
+        TenantSuspensionFilter filter = new TenantSuspensionFilter(s -> Optional.of(NON_PAYMENT), responder);
+        SecurityContextHolder.getContext().setAuthentication(new Scoped(scope()));
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(new MockHttpServletRequest(method, path), new MockHttpServletResponse(), chain);
+
+        assertThat(chain.getRequest()).isNull();
+        assertThat(responded).singleElement().isInstanceOf(TenantSuspendedException.class);
+    }
+
     @Test
     @DisplayName("an active organization writes through untouched")
     void activePasses() throws Exception {

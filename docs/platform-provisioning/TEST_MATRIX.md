@@ -81,10 +81,10 @@ a 409 would mean the lock was doing the work a replay should do.
 | Suite | Runs without Docker | What it proves |
 |---|---|---|
 | `PlatformLifecycleApiTest` (14) | yes | routes through the real MasterAdmin chain: PUT/GET, replay, `VERSION_CONFLICT`, `STALE_LIFECYCLE`, 404, `PRODUCT_MISMATCH`, `WRONG_ENVIRONMENT`, `INVALID_LIFECYCLE` (14 malformed bodies), scope separation, 401, `JTI_REPLAYED`, other methods denied |
-| `TenantSuspensionFilterTest` (10) | yes | writes refused, reads never consult the gate, unscoped passes, fail closed |
-| `TenantSuspensionSecurityTest` (6) | yes | user chain: 423 `tenant-suspended` with `error`/`reason`, reads and `/me` continue and carry the state, other organizations write, reactivation resumes, membership first |
+| `TenantSuspensionFilterTest` (16) | yes | writes refused, reads never consult the gate, unscoped passes, session-state writes (notification read marks) pass and look-alikes do not, fail closed |
+| `TenantSuspensionSecurityTest` (8) | yes | user chain: 423 `tenant-suspended` with `error`/`reason`; login allowed - `/me` (scoped or not) and `/companies/current` answer; notification read marks writable; reads continue; other organizations write; reactivation resumes; membership first |
 | `IntegrationApiTenancyTest$TenantSuspension` (3) | yes | partner chain: 423 before intake, reads continue, reactivation |
-| `TenantSuspensionCoverageTest` (2) | yes | every write route is a company-scoped `/api/v1` route, an `/integration` route or the MasterAdmin channel; both tenant chains register the filter |
+| `TenantSuspensionCoverageTest` (3) | yes | every write route is a company-scoped `/api/v1` route, an `/integration` route or the MasterAdmin channel; both tenant chains register the filter; no auth/session write route exists in the API and every session-state exemption matches a real route |
 | `PlatformLifecycleIntegrationTest` (5) | **no** (Testcontainers) | V58 + `JdbcLifecycleRepository` on the whole Flyway history: version rules, guards, append-only, runtime role locked out, SECURITY DEFINER reads |
 
 ## 3. What these tests do not prove

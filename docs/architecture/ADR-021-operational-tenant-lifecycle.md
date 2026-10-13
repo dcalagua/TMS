@@ -36,7 +36,9 @@ to a trip already on the road". The decision below makes that call explicitly.
 3. **What SUSPENDED means: writes stop, nothing else.** A single filter,
    `shared.security.TenantSuspensionFilter`, in both tenant chains right after the company scope is
    bound, refuses every company-scoped request whose method is not GET/HEAD/OPTIONS with `423`
-   `tenant-suspended` (`error: TENANT_SUSPENDED`, `reason`). Reads, exports, login and `/me` continue;
+   `tenant-suspended` (`error: TENANT_SUSPENDED`, `reason`). Login, refresh and logout never reach the
+   API (Supabase Auth from the browser); the only session-state writes the API has - the user's own
+   notification read marks - are exempt by an explicit, tested list. Reads, exports, login and `/me` continue;
    data is never touched; `ACTIVE` resumes everything without intervention. A trip already on the road
    therefore keeps its state; nobody in the customer's organization (office, carrier portal, partner
    API) can record further changes until reactivation. That is the answer to DESIGN section 9.

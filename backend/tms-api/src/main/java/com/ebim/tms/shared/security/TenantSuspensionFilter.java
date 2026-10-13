@@ -6,12 +6,14 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
@@ -31,6 +33,13 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *   <li>unscoped requests such as {@code /api/v1/me}: that is where the application learns about the
  *       suspension and can explain it. Every business write needs a company scope, so none slips
  *       through here ({@code TenantSuspensionCoverageTest}).</li>
+ *   <li>login and session: the contract keeps login allowed. TMS has no login, refresh, logout or
+ *       password route of its own - the browser talks to Supabase Auth directly (ADR-001), company
+ *       switching is the {@code X-Company-Id} header plus {@code GET /me}, and display preferences
+ *       live in the browser - so nothing of that reaches this filter
+ *       ({@code TenantSuspensionCoverageTest} keeps it so). The one per-user session state the API
+ *       stores, the notification inbox's read marks ({@link #SESSION_STATE_WRITES}), is exempt: it is
+ *       the user's own inbox, not the tenant's operation.</li>
  * </ul>
  *
  * <p>Independent of {@link CommercialAccessFilter}: commercial is not operational access (D-14). It
@@ -44,6 +53,16 @@ public class TenantSuspensionFilter extends OncePerRequestFilter {
     /** RFC 9110 safe methods TMS serves. TRACE is not served at all. */
     static final Set<String> READ_METHODS = Set.of("GET", "HEAD", "OPTIONS");
 
+    /**
+     * Writes that are per-user session state, not tenant operation, and stay allowed while suspended:
+     * marking the caller's own notifications read. Matched under any API base path.
+     */
+    public static final List<String> SESSION_STATE_WRITES = List.of(
+            "/**/notifications/*/read",
+            "/**/notifications/read-all");
+
+    private static final AntPathMatcher PATHS = new AntPathMatcher();
+
     private final TenantOperationGate gate;
     private final ApiExceptionResponder responder;
 
@@ -55,7 +74,7 @@ public class TenantSuspensionFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        if (READ_METHODS.contains(request.getMethod())) {
+        if (READ_METHODS.contains(request.getMethod()) || isSessionStateWrite(request)) {
             chain.doFilter(request, response);
             return;
         }
@@ -85,5 +104,12 @@ public class TenantSuspensionFilter extends OncePerRequestFilter {
             return;
         }
         chain.doFilter(request, response);
+    }
+
+    /** Whether a POST is one of the {@link #SESSION_STATE_WRITES}. */
+    static boolean isSessionStateWrite(HttpServletRequest request) {
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        return "POST".equals(request.getMethod())
+                && SESSION_STATE_WRITES.stream().anyMatch(pattern -> PATHS.match(pattern, path));
     }
 }

@@ -86,6 +86,30 @@ class TenantSuspensionCoverageTest {
                 .doesNotContain("new TenantSuspensionFilter(");
     }
 
+    /**
+     * Contract section 5: login stays allowed. TMS keeps it allowed by having no authentication or
+     * session route at all - login, refresh, logout and password changes go from the browser to
+     * Supabase Auth, company selection is a header - so a route of that kind appearing in the API
+     * must be added to {@code TenantSuspensionFilter.SESSION_STATE_WRITES} consciously.
+     */
+    @Test
+    @DisplayName("no authentication or session write lives in the API, and every session-state exemption matches a real route")
+    void loginAndSessionAreOutsideTheFilter() throws ClassNotFoundException {
+        List<Route> routes = writeRoutes();
+        assertThat(routes)
+                .filteredOn(route -> route.path().toLowerCase().matches(
+                        ".*/(login|logout|signin|signout|session|sessions|token|refresh|password|auth|preferences)(/.*)?"))
+                .as("an auth/session write in the API would be blocked by a suspension; exempt it explicitly")
+                .isEmpty();
+
+        org.springframework.util.AntPathMatcher matcher = new org.springframework.util.AntPathMatcher();
+        for (String pattern : com.ebim.tms.shared.security.TenantSuspensionFilter.SESSION_STATE_WRITES) {
+            assertThat(routes)
+                    .as("exemption %s must match an existing write route, or it is dead", pattern)
+                    .anyMatch(route -> matcher.match(pattern, route.path().replaceAll("\\{[^}]+}", "x")));
+        }
+    }
+
     private static String source(Path root, Class<?> type) throws IOException {
         return Files.readString(root.resolve(type.getName().replace('.', '/') + ".java"));
     }

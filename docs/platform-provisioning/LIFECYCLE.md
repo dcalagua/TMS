@@ -129,6 +129,8 @@ same `423 TENANT_SUSPENDED`.
 | `/internal/platform-provisioning/**` | the channel that reactivates; it is a different chain and carries no suspension filter |
 | `/actuator/health`, `GET` system info | anonymous, read-only |
 | Reads, `/api/v1/me`, `/api/v1/companies/current` | the contract keeps reads and login; `/me` is where the banner comes from |
+| Login, refresh, logout, password | never reach the TMS API: the browser talks to Supabase Auth directly (ADR-001). Company switching is the `X-Company-Id` header plus `GET /me`; display preferences live in the browser. `TenantSuspensionCoverageTest` fails if an auth/session write route appears in the API |
+| `POST /api/v1/notifications/{id}/read`, `POST /api/v1/notifications/read-all` | the user's own inbox read marks - session state, not tenant operation (`TenantSuspensionFilter.SESSION_STATE_WRITES`; the coverage test checks each pattern still matches a real route) |
 | **Webhook dispatcher** (`WebhookDispatchScheduler`, the product's only scheduled job) | not gated. It delivers to the customer's own endpoint events that were recorded **before** the suspension (no write can create new ones while suspended). Its claim query is a cross-tenant JPA `FOR UPDATE SKIP LOCKED` that could not be validated against PostgreSQL in this change (no Docker); gating it is a candidate for a follow-up |
 | Carrier-portal outbox (browser) | its reports get `423`, which the outbox treats like a 5xx: they stay PENDING on the phone with backoff and go out by themselves after reactivation |
 

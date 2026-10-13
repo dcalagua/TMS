@@ -74,7 +74,8 @@ import org.springframework.web.bind.annotation.RestController;
     CompanyContextService.class,
     SecurityTestConfiguration.class,
     TenantSuspensionSecurityTest.LocalLifecycle.class,
-    TenantSuspensionSecurityTest.ProbeController.class
+    TenantSuspensionSecurityTest.ProbeController.class,
+    TenantSuspensionSecurityTest.InboxProbeController.class
 })
 @EnableConfigurationProperties(TmsSecurityProperties.class)
 @ActiveProfiles("test")
@@ -119,6 +120,23 @@ class TenantSuspensionSecurityTest {
         @DeleteMapping
         Map<String, String> remove(CompanyScope scope) {
             return Map.of("deleted", scope.companyId().toString());
+        }
+    }
+
+    /** Stands for NotificationController's read marks: the user's own inbox state. */
+    @RestController
+    @RequestMapping("/api/v1/notifications")
+    static class InboxProbeController {
+
+        @PostMapping("/{notificationId}/read")
+        Map<String, String> markRead(CompanyScope scope, @org.springframework.web.bind.annotation.PathVariable
+                String notificationId) {
+            return Map.of("read", notificationId);
+        }
+
+        @PostMapping("/read-all")
+        Map<String, String> markAllRead(CompanyScope scope) {
+            return Map.of("read", "all");
         }
     }
 
@@ -187,6 +205,40 @@ class TenantSuspensionSecurityTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.companies[0].operationalStatus.state").value("ACTIVE"))
                 .andExpect(jsonPath("$.companies[0].operationalStatus.reason").isEmpty());
+    }
+
+    @Test
+    @DisplayName("login is allowed: a suspended user authenticates and /me answers, with or without a company selected")
+    void loginAndMeStayAllowed() throws Exception {
+        set(NORTH_TENANT, TestPrincipals.NORTH_ORG, 1, LifecycleState.SUSPENDED, LifecycleState.Reason.NON_PAYMENT);
+
+        // Unscoped (what the web sends right after login) and scoped to the suspended company.
+        mockMvc.perform(as(get("/api/v1/me"), TestPrincipals.PLANNER_AUTH_USER, null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.id").isNotEmpty());
+        mockMvc.perform(as(get("/api/v1/me"), TestPrincipals.PLANNER_AUTH_USER, TestPrincipals.NORTH_LIMA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.companies[0].operationalStatus.state").value("SUSPENDED"));
+        // Selecting the company is the X-Company-Id header plus this read: allowed.
+        mockMvc.perform(as(get("/api/v1/companies/current"), TestPrincipals.PLANNER_AUTH_USER,
+                        TestPrincipals.NORTH_LIMA))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("the user's own session state (notification read marks) is writable while suspended")
+    void sessionStateStaysWritable() throws Exception {
+        set(NORTH_TENANT, TestPrincipals.NORTH_ORG, 1, LifecycleState.SUSPENDED, LifecycleState.Reason.MANUAL);
+
+        mockMvc.perform(as(post("/api/v1/notifications/7f1c0000-0000-4000-8000-000000000001/read"),
+                        TestPrincipals.PLANNER_AUTH_USER, TestPrincipals.NORTH_LIMA))
+                .andExpect(status().isOk());
+        mockMvc.perform(as(post("/api/v1/notifications/read-all"), TestPrincipals.PLANNER_AUTH_USER,
+                        TestPrincipals.NORTH_LIMA))
+                .andExpect(status().isOk());
+        // ... while an operational write of the same user in the same company is refused.
+        mockMvc.perform(as(post(PROBE), TestPrincipals.PLANNER_AUTH_USER, TestPrincipals.NORTH_LIMA))
+                .andExpect(status().isLocked());
     }
 
     @Test
