@@ -113,6 +113,20 @@ describe("la cola de reportes", () => {
     expect((await store.listOutbox(USER))[0].state).toBe("FAILED");
   });
 
+  it("un 423 de cuenta suspendida la deja PENDING para enviarla sola al reactivar (ADR-021)", async () => {
+    const { engine, store, send, advance } = setup();
+    send.mockRejectedValueOnce(problem(423, "tenant-suspended", "Suspended."));
+    await engine.enqueue(draft());
+
+    await engine.sync();
+    expect((await store.listOutbox(USER))[0].state).toBe("PENDING");
+
+    send.mockResolvedValueOnce(OK);
+    advance(BACKOFF_BASE_MS * 64);
+    await engine.sync();
+    expect(await store.listOutbox(USER)).toHaveLength(0);
+  });
+
   it("sin red: se queda PENDING con espera exponencial y no se reintenta antes de tiempo", async () => {
     const { engine, store, send, advance } = setup();
     send.mockRejectedValueOnce(new TypeError("Failed to fetch"));

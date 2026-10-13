@@ -29,7 +29,8 @@ export class OfflineNoDataError extends Error {
 /**
  * Qué hacer con un reporte que no salió (ADR-019 §1):
  * - `network`: sin respuesta. Se queda en cola con espera exponencial.
- * - `server`: 5xx (o 408/429). Igual: el servidor no dijo que el reporte esté mal.
+ * - `server`: 5xx (o 408/429), y también 423 `tenant-suspended` (ADR-021): el servidor no dijo que el
+ *   reporte esté mal, solo que la cuenta está suspendida; sale solo cuando MasterAdmin la reactive.
  * - `auth`: la sesión no vale. Se pausa la cola hasta que haya una sesión.
  * - `rejected`: 400/403/404/409. Queda FAILED con la razón del servidor, para que la persona decida.
  */
@@ -38,7 +39,7 @@ export type SendFailure = "network" | "server" | "auth" | "rejected";
 export function classifySendError(error: unknown): SendFailure {
   if (!(error instanceof ApiError)) return "network";
   if (isAuthFailureResponse(error.status, error.code)) return "auth";
-  if (error.status >= 500 || error.status === 408 || error.status === 429) return "server";
+  if (error.status >= 500 || error.status === 408 || error.status === 429 || error.status === 423) return "server";
   return "rejected";
 }
 

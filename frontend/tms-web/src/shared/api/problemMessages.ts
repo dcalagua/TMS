@@ -18,6 +18,8 @@ const CODE_COPY: Record<ProblemCode, string> = {
   "company-scope-forbidden": "Ya no tienes acceso a esa compañía. Elige otra.",
   "commercial-access-suspended":
     "La suscripción de TMS de tu organización no está activa. Tus datos se conservan; contacta a tu ejecutivo de EBIM.",
+  "tenant-suspended":
+    "La cuenta de tu organización está suspendida: puedes consultar y exportar tus datos, pero no registrar cambios. Si es por falta de pago, regulariza el pago con tu proveedor.",
   "access-denied": "No tienes permiso para realizar esta acción.",
   "validation-failed": "Hay campos que debes corregir.",
   "malformed-request": "No se pudo procesar la solicitud.",
@@ -46,6 +48,11 @@ export function describeApiError(error: ApiError): string {
  * fallo de autenticación. */
 export function isAuthProblem(error: ApiError): boolean {
   return isAuthFailureResponse(error.status, error.code);
+}
+
+/** True cuando el servidor rechazó una escritura porque la operación de la organización está suspendida (ADR-021). */
+export function isTenantSuspended(error: ApiError): boolean {
+  return error.code === "tenant-suspended";
 }
 
 /** True para el único código que significa "recarga `/me`, la empresa elegida está obsoleta". */

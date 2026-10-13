@@ -6,6 +6,7 @@ import {
   describePlanningError,
   isAuthProblem,
   isCompanyScopeStale,
+  isTenantSuspended,
 } from "./problemMessages";
 
 /**
@@ -51,6 +52,17 @@ describe("describeApiError", () => {
 
     expect(message).toContain("suscripción");
     expect(message).not.toBe(describeApiError(problem(403, "access-denied")));
+  });
+
+  it("explica la suspensión operativa (ADR-021): la lectura sigue y se nombra el pago", () => {
+    const message = describeApiError(problem(423, "tenant-suspended"));
+
+    expect(message).toContain("suspendida");
+    expect(message).toContain("consultar");
+    expect(message).toContain("regulariza el pago con tu proveedor");
+    expect(message).not.toBe(describeApiError(problem(403, "commercial-access-suspended")));
+    expect(isTenantSuspended(problem(423, "tenant-suspended"))).toBe(true);
+    expect(isTenantSuspended(problem(403, "access-denied"))).toBe(false);
   });
 
   it("no filtra el detail del backend en la copy genérica", () => {

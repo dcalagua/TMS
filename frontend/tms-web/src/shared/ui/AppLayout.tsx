@@ -19,6 +19,7 @@ import { AccountMenu } from "./AccountMenu";
 import { CompanySelector } from "./CompanySelector";
 import { NavSearch } from "./NavSearch";
 import { NotificationsMenu } from "./NotificationsMenu";
+import { TenantSuspendedBanner } from "./TenantSuspendedBanner";
 import { NAV_SECTIONS, OVERVIEW_NAV, leafOf, sectionOf, type NavLeaf } from "./navConfig";
 
 const DRAWER_WIDTH = 256;
@@ -405,6 +406,9 @@ export function AppLayout() {
          * de un metro, que es donde el ojo pierde el renglón al volver.
          */}
         <Box sx={{ maxWidth: 1600, mx: "auto", width: "100%" }}>
+          {/* ADR-021: aviso fijo mientras MasterAdmin tenga suspendida la organización. Solo UX:
+              el servidor rechaza las escrituras con 423 tenant-suspended de todos modos. */}
+          <TenantSuspendedBanner company={selected} />
           {/* El único límite de Suspense de la app: el armazón se queda en pantalla mientras se
               descarga el trozo de una pantalla, en lugar de parpadear entero. */}
           <Suspense fallback={<LoadingState minHeight="50vh" />}>

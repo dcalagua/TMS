@@ -7,6 +7,19 @@ export interface OrganizationView {
 }
 
 /**
+ * El estado operativo de la organización de una empresa, tal como EBIM MasterAdmin lo fijó por
+ * última vez (`lifecycle.v1`, ADR-021). Es el insumo del aviso «Cuenta suspendida» y nada más: con
+ * `SUSPENDED` el backend rechaza toda escritura con `423 tenant-suspended` muestre lo que muestre
+ * la pantalla, y la lectura sigue disponible.
+ */
+export interface OperationalStatusView {
+  state: "ACTIVE" | "SUSPENDED";
+  /** Solo con `SUSPENDED`. */
+  reason: "NON_PAYMENT" | "MANUAL" | "TERMINATED" | null;
+  appliedAt: string | null;
+}
+
+/**
  * Una empresa en la que quien llama puede operar, reflejo del `CompanyAccessView` del backend.
  * `permissions` y `capabilities` son insumo de UX, no concesiones: esconder o mostrar una
  * entrada de menú a partir de ellos no cambia nada de lo que el backend permite, porque cada
@@ -27,6 +40,18 @@ export interface CompanyAccessView {
    */
   carrierId?: string | null;
   carrierName?: string | null;
+  /**
+   * ADR-021: el estado operativo de su organización. Opcional porque un backend anterior a V58 no
+   * lo envía; su ausencia equivale a `ACTIVE`.
+   */
+  operationalStatus?: OperationalStatusView | null;
+}
+
+/** ¿Está suspendida la operación de esta empresa? Solo UX: el servidor es la autoridad. */
+export function isOperationSuspended(
+  company: Pick<CompanyAccessView, "operationalStatus"> | null | undefined,
+): boolean {
+  return company?.operationalStatus?.state === "SUSPENDED";
 }
 
 /** Las capabilities que el frontend consulta por nombre. El resto viajan como texto. */

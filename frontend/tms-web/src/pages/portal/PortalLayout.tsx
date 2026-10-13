@@ -11,6 +11,7 @@ import { CAPABILITY, isCarrierScoped } from "../../shared/api/meApi";
 import { useAuth } from "../../shared/auth/AuthContext";
 import { useCompany } from "../../shared/company/CompanyContext";
 import { EmptyState, ErrorState, LoadingState } from "../../shared/ui/components";
+import { TenantSuspendedBanner } from "../../shared/ui/TenantSuspendedBanner";
 import { useColorMode } from "../../lib/colorMode";
 import { t, tp } from "../../lib/i18n";
 import { applyServiceWorkerUpdate, useServiceWorkerUpdate } from "../../lib/serviceWorker";
@@ -212,9 +213,13 @@ function PortalShell({ allowed }: { allowed: boolean }) {
             message={t("Tu usuario de transportista no tiene un rol con acceso a los viajes. Pide a la oficina que te asigne el rol de operador de transportista.")}
           />
         ) : (
-          <Suspense fallback={<LoadingState minHeight="50vh" />}>
-            <Outlet />
-          </Suspense>
+          <>
+            {/* ADR-021: el mismo aviso que la oficina; los reportes pendientes esperan en la cola. */}
+            <TenantSuspendedBanner company={selected} />
+            <Suspense fallback={<LoadingState minHeight="50vh" />}>
+              <Outlet />
+            </Suspense>
+          </>
         )}
       </Box>
 
