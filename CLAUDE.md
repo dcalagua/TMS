@@ -149,6 +149,12 @@ Authoritative documents live under `docs/architecture/`:
   the local copy, through a `CommercialAccessGate` separate from RBAC. No permission is a paid
   capability; the sellable registry is empty. Mode seeded SHADOW. Numbered 017 because 013-016 are
   taken on unmerged branches. Contract: `docs/platform-provisioning/ENTITLEMENTS.md`.
+- `ADR-021-operational-tenant-lifecycle.md` - MasterAdmin suspends/reactivates a tenant through
+  `PUT|GET /internal/platform-provisioning/tenants/{id}/lifecycle` (`lifecycle.v1`, scopes
+  `tms:lifecycle:write|read`, V58). While `SUSPENDED`, `TenantSuspensionFilter` (user and partner
+  chains) refuses every company-scoped write with `423 tenant-suspended`; reads, login, `/me` and the
+  MasterAdmin channel stay open; data is never touched. Separate from commercial access (D-14) and
+  from RBAC. Contract: `docs/platform-provisioning/LIFECYCLE.md`.
 
 Database and security detail lives in `docs/database/DATA_MODEL.md`,
 `docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.

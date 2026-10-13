@@ -76,6 +76,17 @@ about a real rollback rather than about validation that ran first.
 Case 9 asserts `201` **and** `200` — not "at least one succeeded". Two 201s would mean two tenants;
 a 409 would mean the lock was doing the work a replay should do.
 
+## 2b. Operational lifecycle (`lifecycle.v1`, ADR-021)
+
+| Suite | Runs without Docker | What it proves |
+|---|---|---|
+| `PlatformLifecycleApiTest` (14) | yes | routes through the real MasterAdmin chain: PUT/GET, replay, `VERSION_CONFLICT`, `STALE_LIFECYCLE`, 404, `PRODUCT_MISMATCH`, `WRONG_ENVIRONMENT`, `INVALID_LIFECYCLE` (14 malformed bodies), scope separation, 401, `JTI_REPLAYED`, other methods denied |
+| `TenantSuspensionFilterTest` (10) | yes | writes refused, reads never consult the gate, unscoped passes, fail closed |
+| `TenantSuspensionSecurityTest` (6) | yes | user chain: 423 `tenant-suspended` with `error`/`reason`, reads and `/me` continue and carry the state, other organizations write, reactivation resumes, membership first |
+| `IntegrationApiTenancyTest$TenantSuspension` (3) | yes | partner chain: 423 before intake, reads continue, reactivation |
+| `TenantSuspensionCoverageTest` (2) | yes | every write route is a company-scoped `/api/v1` route, an `/integration` route or the MasterAdmin channel; both tenant chains register the filter |
+| `PlatformLifecycleIntegrationTest` (5) | **no** (Testcontainers) | V58 + `JdbcLifecycleRepository` on the whole Flyway history: version rules, guards, append-only, runtime role locked out, SECURITY DEFINER reads |
+
 ## 3. What these tests do not prove
 
 - **Nothing has run against QAS.** No QAS URL, no deployed instance, no token minted by the real

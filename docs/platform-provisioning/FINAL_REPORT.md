@@ -37,7 +37,7 @@ de que exista compañía alguna. Verificado en ejecución: `has_table_privilege(
 - **Create:** `POST /internal/platform/v1/tenants`
 - **Get:** `GET /internal/platform/v1/tenants/{controlPlaneTenantId}`
 
-Sin DELETE, sin suspend, sin activate.
+Sin DELETE, sin suspend, sin activate (en este contrato; la suspensión llegó después por `lifecycle.v1`, ADR-021 y `LIFECYCLE.md`).
 
 | | |
 |---|---|

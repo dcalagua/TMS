@@ -145,6 +145,12 @@ stance `tms.integration` takes for inbound partner payloads.
 
 ## 9. What V1 does not do
 
-No `DELETE`, no suspend, no activate. Deleting a tenant means deleting a customer's transport
-history; suspending one means deciding what happens to a trip already on the road. Both are design
-conversations, and an endpoint that quietly implemented either would be making them by default.
+No `DELETE`, no suspend, no activate **on this contract**. Deleting a tenant means deleting a
+customer's transport history; suspending one means deciding what happens to a trip already on the
+road. Both are design conversations, and an endpoint that quietly implemented either would be making
+them by default.
+
+Suspension has since been decided explicitly (2026-10-13, ADR-021): MasterAdmin's separate
+`lifecycle.v1` channel suspends and reactivates a tenant; while suspended, its writes are refused with
+`423 tenant-suspended` and everything else - reads, exports, login, data - is untouched, so a trip on
+the road keeps its state. See [`LIFECYCLE.md`](LIFECYCLE.md). Deletion is still not offered.

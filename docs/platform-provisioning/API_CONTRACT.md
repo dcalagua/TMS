@@ -15,7 +15,9 @@
 | Read scope | `tms:tenant:read` |
 | Max token lifetime (`exp - iat`) | `300` seconds |
 
-V1 has **no** delete, suspend or activate.
+V1 has **no** delete. Suspend / reactivate is a separate MasterAdmin contract, `lifecycle.v1`
+(`PUT|GET /internal/platform-provisioning/tenants/{controlPlaneTenantId}/lifecycle`, scopes
+`tms:lifecycle:write|read`): see [`LIFECYCLE.md`](LIFECYCLE.md) and ADR-021.
 
 ## Required headers
 

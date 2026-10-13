@@ -661,6 +661,7 @@ unambiguous, and RFC 9457 does not require it to resolve. **Branch on `type` or 
 | `401` | `unauthenticated` | Credential missing, malformed, unknown, revoked, inactive, wrong secret, scopeless, or its company is deactivated |
 | `403` | `access-denied` | Authenticated, but the credential lacks the scope for this endpoint |
 | `403` | `company-scope-forbidden` | An `X-Company-Id` was sent naming a company other than the credential's own |
+| `423` | `tenant-suspended` | The organization's operation is suspended by EBIM MasterAdmin (ADR-021). Writes are refused until it is reactivated; GETs keep working. Body carries `error: TENANT_SUSPENDED` and `reason`. Retry later, do not change the payload |
 | `400` | `company-scope-invalid` | An `X-Company-Id` was sent that is not a UUID |
 | `404` | `resource-not-found` | A referenced master (origin, destination, zone) does not exist **in this company** |
 | `409` | `conflict` | Business conflict, e.g. an order already planned, or a code/external-reference collision |
