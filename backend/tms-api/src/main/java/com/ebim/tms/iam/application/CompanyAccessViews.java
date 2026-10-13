@@ -13,7 +13,7 @@ final class CompanyAccessViews {
 
     private CompanyAccessViews() {}
 
-    static CompanyAccessView from(CompanyScope scope, CarrierLookupPort carriers) {
+    static CompanyAccessView from(CompanyScope scope, CarrierLookupPort carriers, OperationalStatusView status) {
         String carrierName = scope.carrierId() == null || carriers == null ? null
                 : Optional.ofNullable(carriers.findAllInCompany(Set.of(scope.carrierId()),
                         scope.companyId()).get(scope.carrierId())).map(MasterReference::name).orElse(null);
@@ -26,6 +26,7 @@ final class CompanyAccessViews {
                 scope.permissions().stream().map(Permission::code).sorted().toList(),
                 Capability.from(scope.permissions()).stream().map(Enum::name).toList(),
                 scope.carrierId(),
-                carrierName);
+                carrierName,
+                status == null ? OperationalStatusView.ACTIVE : status);
     }
 }

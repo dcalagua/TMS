@@ -36,6 +36,7 @@ import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.security.CompanyScopeLoader;
 import com.ebim.tms.shared.security.TmsAccessDeniedHandler;
 import com.ebim.tms.shared.security.TmsAuthenticationEntryPoint;
+import com.ebim.tms.shared.security.TenantOperationGate;
 import com.ebim.tms.shared.security.TmsJwtAuthenticationConverter;
 import com.ebim.tms.shared.web.WebConfig;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -166,6 +167,9 @@ class IntegrationApiTenancyTest {
     @Autowired
     private SwitchableCommercialAccess commercialAccess;
 
+    @Autowired
+    private SwitchableTenantOperation tenantOperation;
+
     /** A credential of company A holding both write scopes; the default caller of most tests. */
     private Credential partnerOfA;
 
@@ -175,6 +179,8 @@ class IntegrationApiTenancyTest {
         locationIntake.reset();
         orderIntake.reset();
         commercialAccess.suspended.clear();
+        tenantOperation.suspended.clear();
+        tenantOperation.askedFor.clear();
         partnerOfA = clients.issue(COMPANY_A, IntegrationScope.LOCATION_WRITE, IntegrationScope.ORDER_WRITE);
     }
 
@@ -590,6 +596,49 @@ class IntegrationApiTenancyTest {
     }
 
     // ---------------------------------------------------------------------
+    // Operational suspension (lifecycle.v1, ADR-021)
+    // ---------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("tenant suspension")
+    class TenantSuspension {
+
+        @Test
+        @DisplayName("a suspended organization's partner write is 423 TENANT_SUSPENDED before any intake")
+        void writeIsRefused() throws Exception {
+            tenantOperation.suspended.add(ORGANIZATION);
+
+            mockMvc.perform(authenticated(post(ORDERS), partnerOfA).content(ORDER_BODY))
+                    .andExpect(status().isLocked())
+                    .andExpect(jsonPath("$.code").value("tenant-suspended"))
+                    .andExpect(jsonPath("$.error").value("TENANT_SUSPENDED"))
+                    .andExpect(jsonPath("$.reason").value("NON_PAYMENT"));
+
+            assertThat(orderIntake.scopes()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("its partner reads go on, and the gate is not even asked")
+        void readsGoOn() throws Exception {
+            tenantOperation.suspended.add(ORGANIZATION);
+
+            mockMvc.perform(authenticated(get(PING), partnerOfA)).andExpect(status().isOk());
+
+            assertThat(tenantOperation.askedFor).isEmpty();
+        }
+
+        @Test
+        @DisplayName("ACTIVE again: the same write goes through, asked for the credential's company")
+        void reactivationResumes() throws Exception {
+            mockMvc.perform(authenticated(post(ORDERS), partnerOfA).content(ORDER_BODY))
+                    .andExpect(status().isCreated());
+
+            assertThat(tenantOperation.askedFor).containsExactly(COMPANY_A);
+            assertThat(orderIntake.scopes()).containsExactly(COMPANY_A);
+        }
+    }
+
+    // ---------------------------------------------------------------------
     // Fixtures
     // ---------------------------------------------------------------------
 
@@ -676,6 +725,26 @@ class IntegrationApiTenancyTest {
         @Bean
         SwitchableCommercialAccess commercialAccessGate() {
             return new SwitchableCommercialAccess();
+        }
+
+        /** Every organization active unless a test suspends it (ADR-021). */
+        @Bean
+        SwitchableTenantOperation tenantOperationGate() {
+            return new SwitchableTenantOperation();
+        }
+    }
+
+    static final class SwitchableTenantOperation implements TenantOperationGate {
+
+        final java.util.Set<UUID> suspended = ConcurrentHashMap.newKeySet();
+        final List<UUID> askedFor = java.util.Collections.synchronizedList(new ArrayList<>());
+
+        @Override
+        public Optional<Suspension> currentSuspension(CompanyScope scope) {
+            askedFor.add(scope.companyId());
+            return suspended.contains(scope.organizationId())
+                    ? Optional.of(new Suspension("NON_PAYMENT", java.time.Instant.EPOCH))
+                    : Optional.empty();
         }
     }
 

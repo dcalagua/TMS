@@ -76,7 +76,8 @@ public class SecurityConfig {
             TmsAccessDeniedHandler accessDeniedHandler,
             ApiExceptionResponder apiExceptionResponder,
             CorsConfigurationSource corsConfigurationSource,
-            ObjectProvider<CommercialAccessGate> commercialAccessGate) throws Exception {
+            ObjectProvider<CommercialAccessGate> commercialAccessGate,
+            ObjectProvider<TenantOperationGate> tenantOperationGate) throws Exception {
 
         CompanyScopeFilter companyScopeFilter = new CompanyScopeFilter(apiExceptionResponder);
 
@@ -116,6 +117,12 @@ public class SecurityConfig {
         // runs. Absent when iam.entitlements is not wired, in which case nothing changes.
         commercialAccessGate.ifAvailable(gate -> http.addFilterAfter(
                 new CommercialAccessFilter(gate, apiExceptionResponder), CompanyScopeFilter.class));
+
+        // Operational suspension (lifecycle.v1, ADR-021) is a separate decision from the commercial one:
+        // writes of a suspended organization are refused with 423, reads go on. Registered after the
+        // commercial filter (same anchor, insertion order). Absent when iam.lifecycle is not wired.
+        tenantOperationGate.ifAvailable(gate -> http.addFilterAfter(
+                new TenantSuspensionFilter(gate, apiExceptionResponder), CompanyScopeFilter.class));
 
         return http.build();
     }

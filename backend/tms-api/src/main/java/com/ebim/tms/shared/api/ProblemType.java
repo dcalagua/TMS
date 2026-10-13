@@ -44,6 +44,15 @@ public enum ProblemType {
      */
     COMMERCIAL_ACCESS_SUSPENDED("commercial-access-suspended", "Commercial access is suspended", HttpStatus.FORBIDDEN),
 
+    /**
+     * EBIM MasterAdmin has suspended the operation of the organization ({@code lifecycle.v1}, ADR-021):
+     * writes are refused, reads go on. Distinct from {@link #COMMERCIAL_ACCESS_SUSPENDED} (commercial is
+     * not operational access, D-14) and from {@link #ACCESS_DENIED}: no role can lift it, and no data is
+     * lost - operation resumes when MasterAdmin sends {@code ACTIVE}. The document also carries the
+     * contract's stable {@code error: TENANT_SUSPENDED} and the {@code reason}.
+     */
+    TENANT_SUSPENDED("tenant-suspended", "Tenant operation is suspended", HttpStatus.LOCKED),
+
     /** Authenticated and scoped, but the caller lacks the permission the operation requires. */
     ACCESS_DENIED("access-denied", "Access denied", HttpStatus.FORBIDDEN),
 

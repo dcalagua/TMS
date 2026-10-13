@@ -92,7 +92,10 @@ class SchemaExposureIntegrationTest {
             // V56: MasterAdmin commercial entitlements. Same posture as V51 - owner only, tms_app holds
             // no grant and a deny-all policy; the scoped read goes through a SECURITY DEFINER function.
             "platform_entitlement_applied", "platform_entitlement_audit", "platform_entitlement_jti",
-            "platform_entitlement_mode", "platform_entitlement_mode_event", "platform_entitlement_shadow_diff");
+            "platform_entitlement_mode", "platform_entitlement_mode_event", "platform_entitlement_shadow_diff",
+            // V58: MasterAdmin operational lifecycle (ADR-021). Same posture as V56 - owner only, tms_app
+            // holds no grant and a deny-all policy; the scoped reads go through SECURITY DEFINER functions.
+            "platform_tenant_lifecycle", "platform_tenant_lifecycle_audit");
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the

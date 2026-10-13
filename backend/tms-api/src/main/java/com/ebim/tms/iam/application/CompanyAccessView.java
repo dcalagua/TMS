@@ -22,4 +22,6 @@ public record CompanyAccessView(
         List<String> capabilities,
         /** The carrier this account acts for here (ADR-018); null for everyone but carrier users. */
         UUID carrierId,
-        String carrierName) {}
+        String carrierName,
+        /** The organization's operational state (lifecycle.v1, ADR-021): the banner's input, never a grant. */
+        OperationalStatusView operationalStatus) {}
