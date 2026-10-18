@@ -178,4 +178,29 @@ describe("la tarjeta de despacho de almacén", () => {
     expect(screen.getByText("SEAL_MISMATCH")).toBeInTheDocument();
     expect(screen.getByText("Precinto distinto")).toBeInTheDocument();
   });
+
+  it("muestra el remolque y la huella del contrato v1.1 sin compararlos; sin huella, el motivo", () => {
+    render(
+      <TripWarehouseCard
+        companyId="c-1" trip={TRIP} loading={false} failed={false} orderNumbers={new Map()}
+        warehouse={warehouse({
+          documents: [doc({
+            vehicleTrailerPlate: "C4X-991",
+            discrepancies: [],
+            orders: [
+              { orderId: "o-1", externalSource: "SAPB1_PE", externalReference: "PED-1011", warehouseOrderNumber: "OUT-9", status: "SHIPPED", handlingUnits: 2, weightKg: 790, volumeM3: null, matchResult: "MATCHED", stacks: 10, effectiveVolumeM3: 0.1503, loadingMeters: null, geometryReason: null },
+              { orderId: "o-2", externalSource: "SAPB1_PE", externalReference: "PED-1012", warehouseOrderNumber: "OUT-10", status: "SHIPPED", handlingUnits: 1, weightKg: null, volumeM3: null, matchResult: "MATCHED", stacks: null, effectiveVolumeM3: null, loadingMeters: null, geometryReason: "NEST_INCREMENT_MISSING" },
+            ],
+          })],
+        })}
+      />,
+    );
+
+    expect(screen.getByText("Remolque")).toBeInTheDocument();
+    expect(screen.getByText("C4X-991")).toBeInTheDocument();
+    expect(screen.getByText(/10 pilas/)).toBeInTheDocument();
+    expect(screen.getByText(/Sin huella: Sin incremento de anidado/)).toBeInTheDocument();
+    // El remolque no es una diferencia: la placa comparada sigue siendo la del tracto.
+    expect(screen.getByText("Sin diferencias con el plan.")).toBeInTheDocument();
+  });
 });

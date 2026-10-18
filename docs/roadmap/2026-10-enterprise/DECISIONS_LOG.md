@@ -211,3 +211,38 @@
   `v1/dispatch-confirmation.json` queda igual (sigue siendo el ejemplo v1).
 - **Commit(s):** el de la fase 30 (repo EWM).
 
+
+### 2026-10-18 · fase 30 (ciclo 2) · La lectura de la POD no puede ver el despacho
+
+- **Regla/decisión afectada:** `ArchitectureTest.tmsDeliveryProjectionDoesNotPost` (EWM): el paquete
+  `integration.tms.delivery` no puede depender de `fulfillment`; y el checklist del EWM exige
+  `WarehouseAccess.require` contra el almacén del agregado.
+- **Motivo:** para leer la POD «del despacho» hace falta la carga, el almacén y los pedidos del despacho,
+  que viven en `fulfillment`; y `fulfillment` no puede conocer al conector TMS (`tmsConnectorUsesTheWriters`).
+- **Camino elegido:** `TmsDeliveryShipmentLookup` lee esos tres datos con un `SELECT` escrito a mano sobre
+  `out_shipment`/`out_shipment_line` (el mismo patrón que la línea de tiempo), sin repositorio ajeno. El
+  endpoint vive en el paquete de la POD (`GET /api/v1/shipments/{id}/tms-deliveries`) y el guardia va contra
+  el almacén del despacho. Una prueba unitaria fija que el rechazo llega antes de leer una entrega.
+- **Commit(s):** el de la fase 30 ciclo 2 (repo EWM).
+
+### 2026-10-18 · fase 30 (ciclo 2) · El fan-out de la etapa `TMS_DELIVERY` se mide en su propia IT
+
+- **Regla/decisión afectada:** checklist EWM «si agregaste una etapa al proceso: lo mide
+  `ProcessQueryFanOutIT` comparando 1 dato contra 6».
+- **Motivo:** `ProcessQueryFanOutIT` extiende `InboundFixtures` y sólo arma la cadena de entrada; la etapa
+  nueva es de la salida.
+- **Camino elegido:** `TmsDeliveryStageFanOutIT` (mismo paquete, mismo `QueryCounter`, mismo criterio: un
+  pedido con 1 entrega contra uno con 6, mismas sentencias). `ProcessQueryFanOutIT` sigue verde.
+- **Commit(s):** el de la fase 30 ciclo 2 (repo EWM).
+
+### 2026-10-18 · fase 30 (ciclo 2) · «Planificado por TMS» en un endpoint aparte, no en el detalle de la carga
+
+- **Regla/decisión afectada:** plan de la fase («la pantalla de la carga muestra Planificado por TMS al lado
+  de lo real»).
+- **Motivo:** el detalle de la carga (`LoadDetail`) es la respuesta de cada escaneo del andén (lote 05 lo
+  midió); sumarle el plan serían tres consultas más por bulto subido, para un dato que un escaneo no cambia.
+- **Camino elegido:** `GET /api/v1/shipment-loads/{id}/external-plan` (módulo de carga, nombre neutro: la
+  carga no sabe quién la planificó) y una pestaña «Planificado por TMS» que lo pide al abrirse, sólo en
+  cargas con número externo. Lo real sale de los bultos activos del pedido, sólo kg y m³ (sinónimos de
+  código, no conversión); lo demás se cuenta (reglas 77/199).
+- **Commit(s):** el de la fase 30 ciclo 2 (repo EWM).

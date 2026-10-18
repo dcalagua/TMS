@@ -209,6 +209,10 @@ function DocumentSection({
         <DetailItem label={t("Sistema")} value={document.sourceSystem} />
         <DetailItem label={t("Carga")} value={document.loadReference} />
         <DetailItem label={t("Despacho físico")} value={document.actualDispatchAt ? fmtDateTime(document.actualDispatchAt) : null} />
+        {/* El remolque (contrato v1.1) se muestra y no se compara: la placa del plan es la del tracto. */}
+        {document.vehicleTrailerPlate && (
+          <DetailItem label={t("Remolque")} value={document.vehicleTrailerPlate} />
+        )}
         <DetailItem label={t("Precinto")} value={document.sealNumber} />
         <DetailItem label={t("Guía de transporte")} value={document.transportDocumentNumber} />
         <DetailItem label={t("Recibido")} value={fmtDateTime(document.receivedAt)} />
@@ -325,6 +329,7 @@ function DocumentSection({
                       order.status,
                       order.handlingUnits === null ? null : `${fmtQuantity(order.handlingUnits)} ${t("bultos")}`,
                       order.weightKg === null ? null : fmtWeightKg(order.weightKg),
+                      footprintText(order),
                     ].filter(Boolean).join(" · ")}
                   </Typography>
                   <Box sx={{ flex: 1 }} />
@@ -337,6 +342,22 @@ function DocumentSection({
       )}
     </Box>
   );
+}
+
+/**
+ * La huella que calculó el almacén (contrato v1.1): pilas, volumen efectivo y metros lineales.
+ * Se muestra tal cual; todavía no se compara con el plan. Sin huella, el motivo del almacén.
+ */
+function footprintText(order: DispatchDocumentView["orders"][number]): string | null {
+  const parts = [
+    order.stacks == null ? null : `${fmtQuantity(order.stacks)} ${t("pilas")}`,
+    order.effectiveVolumeM3 == null ? null : `${fmtVolumeM3(order.effectiveVolumeM3)} ${t("efectivos")}`,
+    order.loadingMeters == null ? null : `${fmtDecimal(order.loadingMeters, 2)} ${t("m lineales")}`,
+  ].filter(Boolean);
+  if (parts.length > 0) return parts.join(" · ");
+  return order.geometryReason
+    ? `${t("Sin huella")}: ${enumLabel("dispatchGeometryReason", order.geometryReason)}`
+    : null;
 }
 
 /**

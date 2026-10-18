@@ -53,6 +53,12 @@ export interface DispatchDocumentOrderView {
   weightKg: number | null
   volumeM3: number | null
   matchResult: DispatchOrderMatch | string
+  // Contract v1.1 (V60): the footprint the warehouse computed. Stored and shown, not compared yet
+  // (that is phase 45). Absent or null when the warehouse did not say; then `geometryReason` says why.
+  stacks?: number | null
+  effectiveVolumeM3?: number | null
+  loadingMeters?: number | null
+  geometryReason?: string | null
 }
 
 /** Mirrors `TripWarehouseView.Document` - one dispatch document (SLS) as the warehouse sent it. */
@@ -70,7 +76,10 @@ export interface DispatchDocumentView {
   actualDispatchAt: string | null
   carrierCode: string | null
   carrierName: string | null
+  /** The tractor / truck plate. The only plate `VEHICLE_MISMATCH` compares. */
   vehicleLicensePlate: string | null
+  /** Contract v1.1 (V60): the trailer, when there is one. Shown, never compared (no trailer master). */
+  vehicleTrailerPlate?: string | null
   driverName: string | null
   driverDocumentNumber: string | null
   sealNumber: string | null

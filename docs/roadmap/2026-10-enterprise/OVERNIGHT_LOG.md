@@ -498,3 +498,59 @@ Frentes (TMS y EWM): no se tocó código de front en este ciclo; no se corrieron
   `OUTBOUND_SHIPMENT_V1.md` §3.2 con `delivery`.
 - Fuera de la fase: `orders[].geometry` del plan (fase 40), `GEOMETRY_VARIANCE` (fase 45), API de resultados por
   línea en el TMS.
+
+## 30 · Plan del TMS, POD, placa y huella en el SLS (2026-10-18, ciclo 2 de 2 · cierre)
+
+Commits: EWM «fase 30 ciclo 2» y TMS «fase 30 ciclo 2» (hashes en `30-ewm-plan-and-pod.done`). Continúa el
+ciclo 1 sin rehacerlo: lo que faltaba era la lectura y las pantallas.
+
+### Qué entró
+
+**EWM (sin migración)**
+1. **Lectura de la POD**, separada del proyector: `TmsDeliveryQueryService` (sólo lee) +
+   `GET /api/v1/shipments/{id}/tms-deliveries` (`ShippingPolicy.READ`, guardia contra el almacén del
+   despacho). `TmsDeliveryShipmentLookup` lee carga/almacén/pedidos del despacho con un `SELECT` propio
+   (el paquete no puede ver `fulfillment`). Bloques no registrados viajan ausentes, nunca en cero.
+2. **Línea de tiempo**: `DocumentKind.TMS_DELIVERY` y etapa `TMS_DELIVERY` al final de la salida, de una
+   consulta por conjunto; `NOT_APPLICABLE` sin entregas, `DONE` con alguna; nota
+   `TMS_DELIVERY_NOT_COMPLETE` con FAILED/PARTIAL/REJECTED. Front: la unión `TipoDeDocumento` y `NOMBRE_DE`
+   (sin pantalla: se dibuja como texto).
+3. **Pantalla del despacho**: pestaña «Entrega (TMS)» y enlace **«Crear devolución»** para
+   FAILED/PARTIAL/REJECTED → devoluciones con el formulario **prellenado** (despacho y pedido originales,
+   nota del TMS). No hay POST: lo guarda una persona (regla 193). Estados `DELIVERED`/`REJECTED`/
+   `NOT_ATTEMPTED` en `TONO_DE_ESTADO`/`TEXTO_DE_ESTADO`.
+4. **Pantalla de la carga**: `GET /api/v1/shipment-loads/{id}/external-plan` (`ExternalPlanQueryService`)
+   y pestaña «Planificado por TMS» (cargas con número externo): por pedido, planificado (kg, m³, pallets)
+   al lado de lo real de sus bultos activos (sólo kg/m³, lo no medido contado), y las paradas con ventana.
+   Tracto y remolque visibles en carga y despacho (`transport.vehiclePlate` en los tipos del front).
+5. Docs EWM: `CURRENT_CAPABILITIES.md` (2 filas pasan a ✅), `DESIGN.md` §3.6.
+
+**TMS (sólo front y docs; backend sin cambios desde `4d95697`)**
+1. `warehouseApi.ts`: `vehicleTrailerPlate` y, por pedido, `stacks`/`effectiveVolumeM3`/`loadingMeters`/
+   `geometryReason` (opcionales, contrato v1.1). `TripWarehouseCard`: «Remolque» (no comparado) y la
+   huella por pedido, o «Sin huella: <motivo>» (catálogo `dispatchGeometryReason` en `enums.ts`).
+2. `OUTBOUND_SHIPMENT_V1.md` §3.2: el bloque `delivery` (ejemplo y reglas). `WAREHOUSE_EXECUTION_V1.md`
+   §7.2: nota del consumidor EWM.
+3. `DECISIONS_LOG.md` (+3: lectura de la POD sin ver el despacho, fan-out en IT propia, plan externo en
+   endpoint aparte), `PHASE_MAP.md`.
+
+### Pruebas
+
+| Repo | Comando | Resultado |
+|---|---|---|
+| EWM backend | `./mvnw -B clean verify` (completo, Testcontainers) | unitarias **1720/1720** (ciclo 1: 1718) · IT **1693/1693** (ciclo 1: 1689) · BUILD SUCCESS |
+| EWM backend | nuevas | `TmsDeliveryQueryServiceTest` 2 (fuera de alcance rebota antes de leer; despacho inexistente), `TmsOutboundIT.EnPantalla` 3 (plan externo planificado/real; POD en el despacho + etapa `TMS_DELIVERY` + nota, sin contabilizar ni crear RMA; 404), `TmsDeliveryStageFanOutIT` 1 (1 contra 6 entregas). `LoadingAuthorizationTest` ajustado (bean nuevo) |
+| EWM frontend | `npm run typecheck` · `npm run test` | OK · **1467/1467** (123 archivos; nuevo `salidaTms.test.tsx`, 6) |
+| EWM | `python3 scripts/auditar-alcance-de-almacen.py --gaps` | GAP 0 (87 controladores, 454 endpoints) |
+| TMS backend | `./mvnw -B test` (completo, sin cambios de código en este ciclo) | **2354 corridas, 1 fallo, 0 errores, 2 omitidas**: el fallo es el conocido de la línea base `PlatformLifecycleIntegrationTest.versionRules` (fase 00) |
+| TMS frontend | `npm run typecheck && npm run lint && npm test` | OK · lint 0 errores (avisos previos) · **315/315** (+1 en `TripWarehouseCard.test.tsx`) |
+| Migraciones | ninguna tocada en este ciclo | TMS V1–V60 / EWM V1–V57 intactas |
+
+### Qué quedó fuera (y por qué)
+
+- `orders[].geometry` del plan (fase 40) y `GEOMETRY_VARIANCE` (fase 45): fuera de la fase por plan.
+- API del TMS para registrar resultados por línea: `lines` sigue saliendo `[]` (DECISIONS_LOG ciclo 1).
+- Las líneas del RMA no se prellenan: el TMS casi nunca registra líneas; las carga quien recibe.
+- V57 del EWM y V60 del TMS siguen **sin aplicar** en las bases compartidas (validadas sólo con
+  Testcontainers, como manda el pack).
+

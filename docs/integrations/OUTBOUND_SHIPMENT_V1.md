@@ -290,6 +290,38 @@ Additive: a partner that integrated before them keeps seeing exactly what it saw
 The receiver's identity **document** is deliberately not published. No partner has asked for it, and
 it is the more sensitive half of the pair - see `docs/domain/PROOF_OF_DELIVERY_V1.md`.
 
+### The `delivery` block (plan v1.1, phase 30)
+
+Additive, like the five fields above, and the **same fact** with the detail they cannot carry: the
+amounts and per-line results migration V45 records (`WAREHOUSE_EXECUTION_V1.md` §7.2). The flat
+fields stay, so a v1 consumer is unaffected and a v1.1 consumer reads either.
+
+```json
+"delivery": {
+  "result": "PARTIAL",
+  "deliveredAt": "2026-08-20T09:47:00Z",
+  "receiverName": "R. Diaz",
+  "evidenceCount": 2,
+  "attempted": { "weightKg": 1560.00, "volumeM3": 5.200, "pallets": 3.00 },
+  "delivered": { "weightKg": 1040.00, "volumeM3": 3.470, "pallets": 2.00 },
+  "refused": null,
+  "lines": []
+}
+```
+
+| Field | Rule |
+|---|---|
+| `delivery` | `null` until a result is recorded - the same moment `deliveryResult` stops being `null` |
+| `result`, `deliveredAt`, `receiverName`, `evidenceCount` | Identical to `deliveryResult`, `deliveredAt`, `deliveryReceiverName`, `evidenceCount`. The notes stay in the flat `deliveryNotes` |
+| `attempted`, `delivered`, `refused` | One block each, `{weightKg, volumeM3, pallets}`. A block is **`null` when no amounts were recorded - never zero for unknown**: zero refused kilos says "nothing was refused", which is a different fact |
+| `lines[]` | `{lineNumber, materialCode, uom, quantityAttempted, quantityDelivered, quantityRefused}` per order line, in the line's own unit; `lineNumber` is the ERP's. Empty when the result was recorded per order (today, always: no TMS screen writes per-line results yet) |
+
+Read by set for the whole shipment (one query, not one per order). The same webhook that announces
+plan changes announces a recorded result as `DELIVERY_RESULT_RECORDED` (`WAREHOUSE_EXECUTION_V1.md`
+§7.2); the warehouse then pulls this endpoint. **EWM projects it and never posts stock from it** (EWM
+V57, `out_shipment_delivery`): the goods left with the warehouse's goods issue, and a failed or partial
+delivery is a reason for a person to open a return there, not a stock movement.
+
 ---
 
 ## 4. What is deliberately absent from the payload

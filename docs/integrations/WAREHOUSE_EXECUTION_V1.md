@@ -591,6 +591,14 @@ exactly as above, except `geometry`, which stays absent until phase 40. Details 
   select it, and recording a delivery publishes it to the outbox and fans it out through the same signed
   webhook v1 (§3.2), with `type` = `DELIVERY_RESULT_RECORDED` and `resource` = the shipment.
 
+**EWM consumer (phase 30, EWM V57).** The warehouse stores what TMS planned per order (`weightKg`,
+`volumeM3`, `pallets`) and the stops with their windows next to its own load, and shows them as
+"Planificado por TMS" beside what the load actually carries (kilograms and m³ only, nothing converted).
+It informs and validates nothing. `delivery` (or, from a TMS without it, the flat v1 fields) is
+projected per trip and order into `out_shipment_delivery`, read on the dispatch screen and as the last
+stage of the outbound timeline. **It never posts stock** - the goods left with the goods issue - and a
+`FAILED`/`PARTIAL`/`REJECTED` result only offers a link to a pre-filled return that a person saves.
+
 ### 7.3 `DISPATCH_CONFIRMED` - v1.1 fields
 
 Additive request fields on `POST /integration/v1/dispatch-confirmations` (§4.1):

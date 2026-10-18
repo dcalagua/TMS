@@ -208,6 +208,24 @@ export const ENUM_LABELS = {
     UNKNOWN: "Desconocido",
     VARIANCE: "Con diferencia",
   },
+  /**
+   * Contrato v1.1 §7.3: por qué el almacén no calculó la huella de un pedido. Un motivo nuevo
+   * se muestra con su código: el catálogo es del emisor y crece.
+   */
+  dispatchGeometryReason: {
+    DIMENSION_UOM_NOT_CONVERTIBLE: "Unidad de medida de las dimensiones no convertible",
+    DIMENSION_UOM_NOT_DECLARED: "Sin unidad de medida de las dimensiones",
+    ITEM_TALLER_THAN_VEHICLE: "Más alto que el vehículo",
+    MAX_TOP_LOAD_UOM_DIFFERS: "Carga máxima encima en otra unidad",
+    NEST_INCREMENT_MISSING: "Sin incremento de anidado",
+    PROFILE_INCOMPLETE: "Perfil físico incompleto",
+    QUANTITY_NOT_IN_BASE_UOM: "Cantidad fuera de la unidad base",
+    QUANTITY_NOT_WHOLE: "Cantidad no entera",
+    STACK_LIMIT_NOT_DECLARED: "Sin límite de apilado",
+    STACK_MODE_NOT_DECLARED: "Sin modo de apilado",
+    UNIT_WEIGHT_MISSING: "Sin peso unitario",
+    UOM_NOT_COUNTABLE: "Unidad no contable",
+  },
   /** ADR-013 §13.10: hitos del almacén. Informan; nunca mueven el ciclo de vida. */
   warehouseMilestoneType: {
     LOAD_CANCELLED: "Carga cancelada",
