@@ -345,3 +345,18 @@ grouped query (`CarrierInvoiceRepository.settlementKpis`, `GROUPING SETS ((carri
 Money is per carrier **and currency** (one row each); the company-wide figures are counts and hours. No FX.
 The screen ("Liquidación de fletes" on `/reports`) shows four tiles and the per-carrier table. The daily CSV
 export is unchanged: settlement is not a per-day series.
+
+## 13. Finance (V68, ADR-026 section 8)
+
+`KpiReportView.finance`, null without `settlement.accrual:read` (and absent from a backend before V68). Per currency,
+never summed across currencies:
+
+- **Open accrual balance**: accrued - consumed - reversed of the `OPEN` and `PARTIALLY_SETTLED` accruals whose service
+  date is on or before the end of the range.
+- **Accrual vs invoice**: over the accruals served in the range that an approved invoice consumed, what the authorised
+  documents billed for those trips minus what was accrued (and the percentage of the accrued).
+- **Cost per kg**: cost allocated to orders by the current allocation runs of the range, over the kilograms that
+  received cost.
+
+Company-wide: **average days to payment**, first approval to last payment, of the invoices that became `PAID` with the
+last payment in the range.

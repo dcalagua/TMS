@@ -74,6 +74,8 @@ export const AccrualsPage = lazy(() =>
   import("../pages/settlement/AccrualsPage").then((m) => ({ default: m.AccrualsPage })));
 export const PayablesPage = lazy(() =>
   import("../pages/settlement/PayablesPage").then((m) => ({ default: m.PayablesPage })));
+export const CostToServePage = lazy(() =>
+  import("../pages/settlement/CostToServePage").then((m) => ({ default: m.CostToServePage })));
 export const WorkAssignmentsPage = lazy(() =>
   import("../pages/fleet/WorkAssignmentsPage").then((m) => ({ default: m.WorkAssignmentsPage })));
 export const OwnFleetCostProfilesPage = lazy(() =>

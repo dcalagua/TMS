@@ -685,3 +685,65 @@
 - **Camino elegido:** el ejecutor registra un `ProblemTypedException` 4xx como `REJECTED` con su estado y lo relanza; uno 5xx
   sigue el camino de fallo.
 - **Commit(s):** el de la fase 65, ciclo 1.
+
+### 2026-10-18 · fase 70 · Permiso `settlement.cost_allocation`, no `cost-allocation`
+
+- **Regla/decisión afectada:** ADR-026 §7 («permiso `settlement.cost-allocation:read`»), `PHASE_MAP.md` fila 70.
+- **Motivo:** `ck_permission_resource_shape` no admite guiones en el recurso (lo mismo que en la fase 20 con
+  `masterdata.material_profile`).
+- **Camino elegido:** `settlement.cost_allocation:read` (cuatro roles de oficina) y `:manage` (dos administradores).
+  Capacidades `COST_TO_SERVE_VIEW` y `COST_ALLOCATION_MANAGE`.
+- **Commit(s):** el de la fase 70, ciclo 1.
+
+### 2026-10-18 · fase 70 · Cuarto disparador `TRIP_EXECUTED` y qué hace el barrido
+
+- **Regla/decisión afectada:** ADR-026 §5 (disparadores `TRIP_COST_CLOSED|INVOICE_APPROVED|MANUAL`).
+- **Motivo:** el plan pide repartir «el real si está, si no el estimado»: sin un primer reparto sobre el estimado, el
+  reporte quedaría vacío hasta que cierre el costo o llegue la factura (semanas).
+- **Camino elegido:** el barrido (`CostAllocationSweep`, cada 10 min, ventana de 62 días por salida) crea la versión 1
+  con `TRIP_EXECUTED` sobre el estimado (o `TRIP_COST_CLOSED` si ya cerró) y una nueva con `TRIP_COST_CLOSED` cuando el
+  costo se cierra (o se vuelve a cerrar) después del reparto vigente. Una vez que el reparto está en `INVOICED`, un cierre
+  posterior no lo mueve. Un disparador automático que daría lo mismo no escribe; «Recalcular» de una persona siempre
+  escribe versión. Viajes fuera de la ventana: «Recalcular».
+- **Commit(s):** el de la fase 70, ciclo 1.
+
+### 2026-10-18 · fase 70 · Reemplazar una versión: grant por columna + guardia, no función SECURITY DEFINER
+
+- **Regla/decisión afectada:** ADR-026 §4 («la implementación elige la función SECURITY DEFINER»).
+- **Motivo:** la misma regla («sólo `superseded_at`, de nulo a valor, una vez») se sostiene con menos superficie con
+  `GRANT UPDATE (superseded_at)` para `tms_app` y un disparador guardia que también frena al dueño.
+- **Camino elegido:** `tr_trip_cost_allocation_run_guard` + grant por columna; las filas de reparto, append-only puro.
+  Probado con `tms_app` y con el dueño (IT).
+- **Commit(s):** el de la fase 70, ciclo 1.
+
+### 2026-10-18 · fase 70 · Qué es «facturado» y qué pasa con la flota propia
+
+- **Regla/decisión afectada:** ADR-026 §3 (factura aprobada > real cerrado > estimado; `OWN_FLEET_QUOTE`).
+- **Motivo:** el ADR no dice cómo cuentan notas y penalidades, y la cotización de flota propia se calcula al vuelo
+  (no se guarda).
+- **Camino elegido:** facturado = suma de las líneas del viaje en todos los documentos autorizados (NC resta, ND suma,
+  penalidad cuenta), mínimo 0, en la moneda del costo del viaje si se facturó en ella. Flota propia: se reparte su
+  `trip_cost` (real o estimado) si lo tiene; la cotización de `costing` queda para el ciclo 2; sin `trip_cost` no se
+  reparte y el barrido lo cuenta.
+- **Commit(s):** el de la fase 70, ciclo 1.
+
+### 2026-10-18 · fase 70 · El reporte lee sólo tablas de `settlement` (copia al calcular)
+
+- **Regla/decisión afectada:** `ModuleBoundaryTest` / dueños de tablas (pedidos y maestros no son de `settlement`).
+- **Motivo:** agrupar por cliente, destino y ruta en SQL obligaría a `settlement` a leer `transport_order`, `location`
+  y `route`.
+- **Camino elegido:** al calcular, la corrida copia número de envío, transportista y ruta (código - nombre), y cada fila
+  número de pedido, cliente (`customer_reference`, si no `customer_name`), destino (código - nombre) y las medidas del
+  ledger, leídos por puertos (`OrderReferencePort.costReferencesOf`, `DestinationLookupPort`, `RouteTemplateLookupPort`,
+  `TripSettlementLookupPort.findAllocationSource`). Una versión se lee como fue; un renombre se ve en la próxima.
+- **Commit(s):** el de la fase 70, ciclo 1.
+
+### 2026-10-18 · fase 70 · KPIs de finanzas: definiciones y permiso
+
+- **Regla/decisión afectada:** ADR-026 §8.
+- **Motivo:** el ADR nombra los cuatro indicadores sin definirlos.
+- **Camino elegido:** bloque `finance` del reporte de KPIs con `settlement.accrual:read`; provisión abierta al final del
+  rango; varianza = facturado − provisionado de provisiones servidas en el rango y ya consumidas; días a pago = primera
+  aprobación → último pago de las facturas `PAID` con último pago en el rango (calendario de la empresa); costo por kg =
+  costo repartido / kg que recibieron costo. Por moneda; los días son de toda la empresa. `KPIS_REPORTING_V1.md` §13.
+- **Commit(s):** el de la fase 70, ciclo 1.

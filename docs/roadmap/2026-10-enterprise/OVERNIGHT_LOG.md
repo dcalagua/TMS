@@ -1127,3 +1127,78 @@ El EWM no se tocó.
   exportación).
 - «Mis facturas» sin conexión (el portal de viajes sí funciona offline; las facturas no se guardan en IndexedDB).
 - Exportar antigüedad / vencimientos a CSV; sin entradas nuevas en `i18n.ts` (como las fases 50–60).
+
+## 70 · Costo por pedido y por cliente + KPIs de finanzas (2026-10-18, ciclo 1 de 2 · completa con corte declarado)
+
+Plan `03` F-5, ADR-026, D-08. Sólo TMS. **Sin margen: no hay tarifa de venta** (dicho en la API, en la pantalla y en el CSV
+por la columna de base).
+
+### Qué entró
+
+1. **V68** `V68__trip_cost_allocation.sql`: `company_settings.cost_allocation_basis` (nula = propiedad
+   `tms.finance.cost-allocation.default-basis`, `WEIGHT`); `trip_cost_allocation_run` (versión por viaje, base, fuente del
+   costo, moneda, costo, repartido, pedidos y pedidos sin base con motivo, fecha de servicio, disparador, quién; una sola
+   vigente por `uq_trip_cost_allocation_run_current`); `trip_cost_allocation` (una fila por asignación del ledger: medidas,
+   cantidad base, participación 6 dec., monto 2 dec., o `NO_BASIS` sin monto); append-only (filas por trigger y grant; la
+   corrida sólo se reemplaza una vez: grant de columna + `tr_trip_cost_allocation_run_guard`); RLS por tenant; permisos
+   `settlement.cost_allocation:read|manage`; acción `COST_ALLOCATED`.
+2. **Reparto puro** `CostAllocator`: peso, volumen efectivo, piso, pallets, paradas (partes iguales por destino, luego peso),
+   partes iguales. Lo que no tiene medida no recibe nada y se cuenta; si nada es medible, no se reparte y se dice. Montos
+   HALF_UP a céntimos con el resto de redondeo a la mayor participación: la suma es exacta.
+3. **Qué costo**: facturado (líneas del viaje en documentos autorizados, neto de IGV; NC resta, ND suma) > real cerrado >
+   estimado. **Cuándo**: barrido (`CostAllocationSweep`, 10 min, 62 días) al salir el viaje (`TRIP_EXECUTED`) y al cerrar
+   el costo (`TRIP_COST_CLOSED`); al aprobar la factura en la misma transacción (`INVOICE_APPROVED`); «Recalcular»
+   (`MANUAL`, `settlement.cost_allocation:manage`). Recalcular nunca pisa: versión + 1, la anterior queda legible.
+4. **API**: `GET /settlement/cost-to-serve?from&to&groupBy=CUSTOMER|DESTINATION|ROUTE` (costo, viajes, pedidos, sin base,
+   kg, m³, costo/kg, costo/m³, costo/pedido, totales por moneda con fuente del costo), `GET …/cost-to-serve/export?format=CSV|JSON`,
+   `GET /settlement/cost-allocation/trips/{id}` (vigente + versiones), `GET …/versions/{n}`, `POST …/recalculate`.
+5. **KPIs** (`KpiReportView.finance`, con `settlement.accrual:read`): provisión abierta, varianza provisión vs factura,
+   días a pago promedio, costo por kg; por moneda.
+6. **Front**: «Costo para servir» (`/settlement/cost-to-serve`, menú con `COST_TO_SERVE_VIEW`): filtro de fecha de servicio,
+   agrupar por cliente/destino/ruta, tarjetas por moneda, tabla, exportar CSV, aviso «Sin margen»; base de reparto en
+   «Configuración de empresa»; sección «Finanzas de fletes» en Reportes.
+
+### Desvíos registrados (`DECISIONS_LOG.md`, +6)
+
+Permiso con guion bajo; disparador `TRIP_EXECUTED`; reemplazo por grant de columna + guardia; qué es «facturado» y flota
+propia sin cotización de `costing`; el reporte lee copias tomadas al calcular; definiciones de los KPIs de finanzas.
+
+### Archivos
+
+- Migración: `backend/tms-api/src/main/resources/db/migration/V68__trip_cost_allocation.sql`.
+- Nuevos (main): `settlement/domain/{CostAllocator, CostAllocationRun, CostAllocationLine, AllocationCostSource,
+  AllocationTrigger, UnallocatedReason}`, `settlement/application/{CostAllocationService, CostAllocationSweep,
+  CostAllocationView, CostToServeReportService, CostToServeView}`, `settlement/infrastructure/{CostAllocationRepository,
+  CostToServeQueries, CostAllocationSweepScheduler}`, `settlement/api/CostToServeController`,
+  `shared/settings/CostAllocationBasis`, `planning/application/KpiFinanceView`.
+- Modificados (main): `CompanySettings`, `iam` (`CompanyAdministrationService`, `CompanyProfileRequest`, `CompanySettingsView`,
+  `CompanyAdministrationRepository`, `JdbcCompanySettingsAdapter`), `TripSettlementLookupPort` + `TripSettlementLookupAdapter`,
+  `OrderReferencePort` + `OrderReferenceAdapter`, `SettlementKpiPort` + `SettlementKpiAdapter`, `KpiReportView`, `KpiService`,
+  `SettlementService.approve`, `Permission`, `Capability`, `AuditAction`, `application.yml`.
+- Pruebas: `CostAllocatorTest` (19: tabla por base, faltantes contados, ninguno medible, sin pedidos, redondeo exacto en
+  todas las bases), `CostAllocationSweepTest` (4), `CostToServeApiIntegrationTest` (5), `TenancyConstraintIntegrationTest`
+  (75 permisos / 205 asignaciones), `SchemaExposureIntegrationTest` (dos tablas).
+- Front: `shared/api/{costToServeApi, administrationApi, reportingApi, meApi}.ts`, `pages/settlement/CostToServePage`,
+  `pages/reporting/ReportsPage`, `pages/settings/CompanySettingsPage`, `App.tsx`, `app/lazyRoutes.tsx`, `navConfig.tsx`,
+  `lib/enums.ts`; pruebas `CostToServePage.test.tsx` (3), `ReportsPage.test.tsx` (+2).
+- Docs: ADR-026 «Implementation notes», `KPIS_REPORTING_V1.md` §13, `PHASE_MAP.md`, `DECISIONS_LOG.md`.
+
+### Pruebas
+
+| Repo | Comando | Resultado |
+|---|---|---|
+| TMS backend | `./mvnw -B test` (completo, Testcontainers) | **2613 corridas, 1 fallo, 0 errores, 2 omitidas** · 4 min 52 s (fase 65: 2585; +28). El único rojo es el conocido `PlatformLifecycleIntegrationTest.versionRules` (fase 00) |
+| TMS backend | nuevas | estimado → v1 (`TRIP_EXECUTED`, 300/700, pedido sin peso `NO_BASIS`); barrido dos veces = nada; cierre 1200 → v2 (360/840) y v1 intacta y reemplazada; factura 1100 aprobada → v3 `INVOICED` en la transacción de la aprobación (330/770), un barrido posterior no la mueve; versiones legibles por API; «Recalcular» 403 a planificador/visor, siempre versión nueva, 409 sin costo; paradas 125/375/500; reporte por cliente/destino/ruta con costo/kg 2,0, costo/m³ 200, costo/pedido 300, sin margen, CSV y 400 con formato inválido; KPIs con `finance`; otra empresa: reporte vacío, 404 al viaje y al recalcular; append-only con dueño y con `tms_app`; dos vigentes imposibles |
+| TMS frontend | `npm run typecheck && npm run lint && npm test` | OK · lint 0 errores · **394/394** en 58 archivos (fase 65: 389; +5) |
+| Migraciones | `git diff` de V1–V67 | intactas; sólo V68 nueva |
+
+El EWM no se tocó.
+
+### Qué quedó fuera (ciclo 2)
+
+- Cotización de flota propia (`costing`, `OWN_FLEET_QUOTE`) como fuente del costo.
+- Cajón «Reparto del viaje» en la ficha del viaje (la API `GET/POST /settlement/cost-allocation/trips/{id}` ya existe) y
+  detalle por pedido desde el reporte.
+- Volver la base de la empresa a «por defecto de la instalación» una vez elegida (hoy se cambia, no se borra).
+- Viajes que salieron hace más de 62 días y cierran costo después: sólo «Recalcular» (sin barrido de rango a mano).
+- Sin entradas nuevas en `i18n.ts` (como las fases 50–65).

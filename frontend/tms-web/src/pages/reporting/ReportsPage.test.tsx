@@ -115,6 +115,41 @@ describe("ReportsPage", () => {
     expect(within(rows[1]).getAllByText("—").length).toBeGreaterThanOrEqual(2);
   });
 
+  /** Fase 70: finanzas de fletes por moneda, con días a pago y costo por kg. */
+  it("pinta las finanzas: provisión abierta, varianza, días a pago y costo por kg", async () => {
+    const report: KpiReportView = {
+      ...KPI_REPORT_FIXTURE,
+      finance: {
+        averageDaysToPayment: 12.5, paidInvoices: 4,
+        byCurrency: [{
+          currency: "PEN", openAccrualBalance: 3200, openAccruals: 5, accrualsBilled: 3, accruedAmount: 3000,
+          invoicedAmount: 3150, varianceAmount: 150, variancePercent: 5, allocatedCost: 6000,
+          allocatedWeightKg: 12000, costPerKg: 0.5,
+        }],
+      },
+    };
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify(report), {
+      status: 200, headers: { "content-type": "application/json" },
+    }));
+
+    renderPage();
+
+    expect(await screen.findByText("Finanzas de fletes")).toBeInTheDocument();
+    expect(screen.getByText("12,5 d")).toBeInTheDocument();
+    const row = screen.getByText("PEN", { selector: "td" }).closest("tr") as HTMLElement;
+    expect(within(row).getByText("0,5 PEN")).toBeInTheDocument();
+  });
+
+  it("las finanzas dicen 'no disponible' sin permiso de provisiones (o con un backend anterior)", async () => {
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({ ...KPI_REPORT_FIXTURE, finance: null }), {
+      status: 200, headers: { "content-type": "application/json" },
+    }));
+
+    renderPage();
+
+    expect(await screen.findByText("Provisión, pago y costo por kg")).toBeInTheDocument();
+  });
+
   it("la liquidación dice 'no disponible' cuando la cuenta no puede leer facturas", async () => {
     fetchMock.mockImplementation(async () => new Response(JSON.stringify(KPI_REPORT_FIXTURE), {
       status: 200, headers: { "content-type": "application/json" },

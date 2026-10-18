@@ -68,3 +68,34 @@
 
 Sales tariffs and margin (roadmap item 4), carbon allocation, allocation across multi-leg trips (no
 multi-leg model exists).
+
+## Implementation notes (phase 70, V68)
+
+- **V68** `V68__trip_cost_allocation.sql` (the provisional number held). `company_settings.cost_allocation_basis`
+  (nullable; null = `tms.finance.cost-allocation.default-basis`, `WEIGHT`), `trip_cost_allocation_run`,
+  `trip_cost_allocation`, RLS per tenant, permissions `settlement.cost_allocation:read|manage` (underscore, not hyphen:
+  `ck_permission_resource_shape`, as `masterdata.material_profile` in phase 20), audit action `COST_ALLOCATED` on the
+  `TRIP` aggregate.
+- **Superseding** (section 4): a column-level grant `UPDATE (superseded_at)` for `tms_app` plus the guard trigger
+  `tr_trip_cost_allocation_run_guard`, which allows only `superseded_at` NULL -> set, once, and refuses DELETE, also for
+  the owner. No SECURITY DEFINER function: the grant and the guard hold the same rule with less surface.
+- **Triggers**: `TRIP_EXECUTED` joins the three of section 5 - the first run, on the estimate, when a trip that left has
+  none (the plan says "the actual if there is one, else the estimate"). The sweep (`CostAllocationSweep`, every 10 min,
+  lookback 62 days over departures) writes `TRIP_EXECUTED` or `TRIP_COST_CLOSED`; approval writes `INVOICE_APPROVED` in
+  its own transaction (credit and debit notes too); `POST .../recalculate` writes `MANUAL`. An automatic trigger whose
+  result would equal the current run writes nothing; a person's recalculation always writes a version. Once a run rests
+  on `INVOICED`, a later close of the trip cost does not move it.
+- **Invoiced figure**: the sum of the lines for the trip over every authorised document (`InvoiceStatus.AUTHORISED`),
+  so a credit note subtracts, a debit note adds and an accepted penalty counts; floored at 0; in the trip cost's
+  currency when billed in it.
+- **Own fleet**: allocated from its `trip_cost` (actual or estimate) when it has one. The `costing` quote
+  (`OWN_FLEET_QUOTE`) is not consulted yet; without a `trip_cost` the trip is not allocated and is counted by the sweep.
+- **What the report groups by** is copied onto the run (shipment, carrier, route label) and its rows (order number,
+  customer label, destination label, the ledger measures) when computed, so the report reads `settlement` tables only
+  and a version reads as it was.
+- **STOPS**: a stop is the order's destination; equal parts between the stops that have at least one weighed order,
+  then by weight within the stop.
+- **Finance KPIs** (`KpiReportView.finance`, shown with `settlement.accrual:read`): open accrual balance at the end of
+  the range; accrual vs invoice for accruals served in the range and consumed (invoiced lines - accrued); average days
+  from the first approval to the last payment of the invoices paid in full in the range (company calendar); cost per kg
+  of the current allocations in the range.

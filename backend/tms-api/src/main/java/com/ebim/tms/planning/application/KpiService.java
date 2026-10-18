@@ -130,6 +130,10 @@ public class KpiService {
                 scope.has(Permission.SETTLEMENT_INVOICE_READ)
                         ? KpiSettlementView.from(settlementKpiPort.totals(companyId, range.from(), range.to()))
                         : null,
+                scope.has(Permission.SETTLEMENT_ACCRUAL_READ)
+                        ? KpiFinanceView.from(settlementKpiPort.finance(companyId, scope.zoneId(), range.from(),
+                                range.to()))
+                        : null,
                 series.rows());
     }
 

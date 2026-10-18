@@ -15,11 +15,14 @@ public record CompanySettingsView(
         String orderNumberPrefix,
         String shipmentNumberPrefix,
         String dispatchConfirmationMode,
-        String accrualTrigger) {
+        String accrualTrigger,
+        /** Null = the deployment default (V68). */
+        String costAllocationBasis) {
 
     public static CompanySettingsView from(CompanySettings settings) {
         return new CompanySettingsView(settings.defaultCountry(), settings.orderNumberPrefix(),
                 settings.shipmentNumberPrefix(), settings.dispatchConfirmationMode().name(),
-                settings.accrualTrigger().name());
+                settings.accrualTrigger().name(),
+                settings.costAllocationBasis() == null ? null : settings.costAllocationBasis().name());
     }
 }

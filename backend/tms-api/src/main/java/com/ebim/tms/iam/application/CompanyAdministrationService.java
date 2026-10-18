@@ -78,7 +78,10 @@ public class CompanyAdministrationService {
                 null, null,
                 request.accrualTrigger() == null
                         ? before.settings().accrualTrigger()
-                        : request.accrualTrigger());
+                        : request.accrualTrigger(),
+                request.costAllocationBasis() == null
+                        ? before.settings().costAllocationBasis()
+                        : request.costAllocationBasis());
 
         if (repository.updateCompany(scope.companyId(), name, taxIdentifier, timeZone, actorId) == 0) {
             // The row was there a statement ago, so this is a company deactivated or removed
@@ -206,6 +209,11 @@ public class CompanyAdministrationService {
             // Moves which month a freight cost lands in: both ends, like the dispatch mode.
             changes.put("accrualTriggerFrom", before.settings().accrualTrigger().name());
             changes.put("accrualTrigger", after.accrualTrigger().name());
+        }
+        if (before.settings().costAllocationBasis() != after.costAllocationBasis()) {
+            // Changes what every later allocation run divides by (V68): both ends.
+            changes.put("costAllocationBasisFrom", String.valueOf(before.settings().costAllocationBasis()));
+            changes.put("costAllocationBasis", String.valueOf(after.costAllocationBasis()));
         }
         return changes;
     }

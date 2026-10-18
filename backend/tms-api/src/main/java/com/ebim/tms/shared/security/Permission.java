@@ -144,6 +144,13 @@ public enum Permission {
     SETTLEMENT_PAYMENT_CONFIRM("settlement.payment:confirm"),
 
     /**
+     * Cost to serve (migration V68, ADR-026): what each order, customer, destination and route cost.
+     * Reading is for everyone who reads accruals; recalculating a trip's allocation is an administrator's.
+     */
+    SETTLEMENT_COST_ALLOCATION_READ("settlement.cost_allocation:read"),
+    SETTLEMENT_COST_ALLOCATION_MANAGE("settlement.cost_allocation:manage"),
+
+    /**
      * A driver-and-vehicle pairing's day (migration V47).
      *
      * <p>Under {@code fleet} rather than {@code planning} because the thing being scheduled is a

@@ -80,4 +80,18 @@ class OrderReferenceAdapter implements OrderReferencePort {
         }
         return byId;
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, OrderCostReference> costReferencesOf(Set<UUID> orderIds, UUID companyId) {
+        Map<UUID, OrderCostReference> byId = new HashMap<>();
+        if (orderIds.isEmpty()) {
+            return byId;
+        }
+        for (TransportOrder order : orders.findByIdInAndCompanyId(orderIds, companyId)) {
+            byId.put(order.id(), new OrderCostReference(order.id(), order.orderNumber(), order.destinationId(),
+                    order.customerReference(), order.customerName()));
+        }
+        return byId;
+    }
 }

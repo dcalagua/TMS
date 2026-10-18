@@ -2,6 +2,7 @@ package com.ebim.tms.shared.reference;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -55,5 +56,50 @@ public interface SettlementKpiPort {
             BigDecimal amountSaved,
             BigDecimal cycleMedianHours,
             BigDecimal cycleP90Hours) {
+    }
+
+    /**
+     * The finance figures of the range (V68, ADR-026 section 8): open accrual balance at {@code to},
+     * accrual against invoice for the trips served in the range and already billed, days from approval
+     * to payment for the invoices paid in full in the range, and cost per kg from the current cost
+     * allocations of the range. Per currency; the days are company-wide (a count, not money).
+     *
+     * @param zone the company's calendar, which an approval instant is a day of
+     */
+    FinanceKpiTotals finance(UUID companyId, ZoneId zone, LocalDate from, LocalDate to);
+
+    /**
+     * @param averageDaysToPayment approval to the last payment, in days, one decimal; null when none
+     *                             was paid in full in the range
+     */
+    record FinanceKpiTotals(List<CurrencyFinance> byCurrency, BigDecimal averageDaysToPayment, long paidInvoices) {
+
+        public FinanceKpiTotals {
+            byCurrency = List.copyOf(byCurrency);
+        }
+    }
+
+    /**
+     * @param openAccrualBalance  accrued - consumed - reversed of the OPEN and PARTIALLY_SETTLED
+     *                            accruals served up to the end of the range
+     * @param accrualsBilled      accruals served in the range that an approved invoice consumed
+     * @param accruedAmount       what those accruals provisioned
+     * @param invoicedAmount      what the authorised documents billed for the same trips (net of IGV)
+     * @param varianceAmount      invoiced - accrued: positive when the carrier billed more than provisioned
+     * @param allocatedCost       cost allocated to orders served in the range (current runs)
+     * @param allocatedWeightKg   the kilograms that cost was spread over
+     * @param costPerKg           allocatedCost / allocatedWeightKg, four decimals; null without weight
+     */
+    record CurrencyFinance(
+            String currency,
+            BigDecimal openAccrualBalance,
+            long openAccruals,
+            long accrualsBilled,
+            BigDecimal accruedAmount,
+            BigDecimal invoicedAmount,
+            BigDecimal varianceAmount,
+            BigDecimal allocatedCost,
+            BigDecimal allocatedWeightKg,
+            BigDecimal costPerKg) {
     }
 }

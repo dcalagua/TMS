@@ -217,5 +217,8 @@ public enum AuditAction {
     /** The second person refused the keyed payment, with a reason. */
     PAYMENT_REQUEST_REJECTED,
     /** A payment was recorded: reported by the ERP, or keyed and confirmed by two people. */
-    PAYMENT_RECORDED
+    PAYMENT_RECORDED,
+
+    /** A trip's cost was allocated to its orders: a new version of the allocation (V68, ADR-026). */
+    COST_ALLOCATED
 }

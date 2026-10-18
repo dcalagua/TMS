@@ -1,6 +1,7 @@
 package com.ebim.tms.iam.application;
 
 import com.ebim.tms.shared.settings.AccrualTrigger;
+import com.ebim.tms.shared.settings.CostAllocationBasis;
 import com.ebim.tms.shared.settings.DispatchConfirmationMode;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -66,7 +67,18 @@ public record CompanyProfileRequest(
         DispatchConfirmationMode dispatchConfirmationMode,
 
         // Optional (V65, ADR-023): absent keeps the company's current trigger, like the dispatch mode.
-        AccrualTrigger accrualTrigger) {
+        AccrualTrigger accrualTrigger,
+
+        // Optional (V68, ADR-026): absent keeps the company's current basis.
+        CostAllocationBasis costAllocationBasis) {
+
+    /** The V65 shape, for callers that predate cost allocation. */
+    public CompanyProfileRequest(String name, String taxIdentifier, String timeZone, String defaultCountry,
+            String orderNumberPrefix, String shipmentNumberPrefix,
+            DispatchConfirmationMode dispatchConfirmationMode, AccrualTrigger accrualTrigger) {
+        this(name, taxIdentifier, timeZone, defaultCountry, orderNumberPrefix, shipmentNumberPrefix,
+                dispatchConfirmationMode, accrualTrigger, null);
+    }
 
     /** The V52 shape, for callers that predate freight accruals. */
     public CompanyProfileRequest(String name, String taxIdentifier, String timeZone, String defaultCountry,

@@ -127,6 +127,7 @@ public class SettlementService {
     private final PaymentTermsResolver paymentTermsResolver;
     private final com.ebim.tms.shared.reference.BusinessEventPublisher businessEventPublisher;
     private final java.time.Clock clock;
+    private final CostAllocationService costAllocationService;
 
     public SettlementService(CarrierInvoiceRepository invoiceRepository, FreightMatchRepository matchRepository,
             FreightDiscrepancyRepository discrepancyRepository, SettlementApprovalRepository approvalRepository,
@@ -137,7 +138,8 @@ public class SettlementService {
             io.micrometer.core.instrument.MeterRegistry meterRegistry, AccrualService accrualService,
             FiscalSettingsResolver fiscalSettingsResolver, CpeValidationPort cpeValidationPort,
             GlAccountMappingRepository glAccountMappingRepository, PaymentTermsResolver paymentTermsResolver,
-            com.ebim.tms.shared.reference.BusinessEventPublisher businessEventPublisher, java.time.Clock clock) {
+            com.ebim.tms.shared.reference.BusinessEventPublisher businessEventPublisher, java.time.Clock clock,
+            CostAllocationService costAllocationService) {
         this.invoiceRepository = invoiceRepository;
         this.matchRepository = matchRepository;
         this.discrepancyRepository = discrepancyRepository;
@@ -158,6 +160,7 @@ public class SettlementService {
         this.paymentTermsResolver = paymentTermsResolver;
         this.businessEventPublisher = businessEventPublisher;
         this.clock = clock;
+        this.costAllocationService = costAllocationService;
     }
 
     // ------------------------------------------------------------------ receiving
@@ -669,6 +672,8 @@ public class SettlementService {
         // The accrual of each billed trip is consumed in this same transaction (V65, ADR-023): an
         // approval that committed without it would leave an obligation counted twice.
         accrualService.consumeApprovedInvoice(scope, invoice, actorId);
+        // And the trips it billed are re-allocated to their orders on the invoiced figure (V68, ADR-026).
+        costAllocationService.allocateApprovedInvoice(scope, invoice, actorId);
         publish(scope, invoice, com.ebim.tms.shared.reference.BusinessEventPublisher.INVOICE_APPROVED);
         return toView(scope, invoice);
     }

@@ -168,6 +168,32 @@ export interface KpiSettlementView {
   byCarrier: KpiSettlementCarrierRow[]
 }
 
+/**
+ * Mirrors the backend's `KpiFinanceView.CurrencyRow` (V68, ADR-026 §8): una moneda. `varianceAmount`
+ * es facturado − provisionado de los viajes servidos en el rango que ya se facturaron.
+ */
+export interface KpiFinanceCurrencyRow {
+  currency: string
+  openAccrualBalance: number
+  openAccruals: number
+  accrualsBilled: number
+  accruedAmount: number
+  invoicedAmount: number
+  varianceAmount: number
+  variancePercent: number | null
+  allocatedCost: number
+  allocatedWeightKg: number
+  costPerKg: number | null
+}
+
+/** Mirrors the backend's `KpiFinanceView`. Null sin `settlement.accrual:read`. */
+export interface KpiFinanceView {
+  byCurrency: KpiFinanceCurrencyRow[]
+  /** De aprobada a pagada (último pago), de las facturas pagadas del todo en el rango. */
+  averageDaysToPayment: number | null
+  paidInvoices: number
+}
+
 /** Mirrors the backend's `KpiDailyRow` - one operating day, including the days nothing happened on. */
 export interface KpiDailyRow {
   date: string
@@ -205,6 +231,8 @@ export interface KpiReportView {
   tenders: KpiTenderView | null
   cost: KpiCostView[] | null
   settlement: KpiSettlementView | null
+  /** Ausente en un backend anterior a V68; null sin `settlement.accrual:read`. */
+  finance?: KpiFinanceView | null
   daily: KpiDailyRow[]
 }
 

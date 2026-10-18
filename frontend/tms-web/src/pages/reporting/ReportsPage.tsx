@@ -11,7 +11,9 @@ import {
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import { saveDownloadedFile } from "../../shared/api/httpClient";
-import { downloadKpiCsv, fetchKpiReport, type KpiSettlementView } from "../../shared/api/reportingApi";
+import {
+  downloadKpiCsv, fetchKpiReport, type KpiFinanceView, type KpiSettlementView,
+} from "../../shared/api/reportingApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
@@ -76,6 +78,7 @@ export function ReportsPage() {
 
   const report = reportQuery.data;
   const { shipments, service, exceptions, utilization, orders, tenders, cost, settlement, daily } = report;
+  const finance = report.finance ?? null;
 
   /** Un porcentaje del backend, o una raya. Nunca un cero inventado. */
   const pct = (value: number | null) => (value === null ? "-" : fmtPercent(value, 1));
@@ -249,6 +252,15 @@ export function ReportsPage() {
         <SettlementSection settlement={settlement} />
       )}
 
+      <SectionHeader title={t("Finanzas de fletes")} level={2} />
+      {finance === null ? (
+        <AppCard title={t("Provisión, pago y costo por kg")}>
+          <Alert severity="info">{t("No disponible para tu cuenta.")}</Alert>
+        </AppCard>
+      ) : (
+        <FinanceSection finance={finance} />
+      )}
+
       {/* La tabla diaria es la vista alternativa de las dos gráficas de arriba: los mismos
           números en texto, para quien necesite leerlos exactos o copiarlos. */}
       <AppCard title={t("Detalle por día")} flush>
@@ -380,6 +392,72 @@ function SettlementSection({ settlement }: { settlement: KpiSettlementView }) {
       </AppCard>
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
         {t("Observado: lo facturado por encima de lo esperado en las facturas con diferencia. Ahorrado: la parte de eso que se rechazó.")}
+      </Typography>
+    </Box>
+  );
+}
+
+/**
+ * Finanzas del rango (fase 70, ADR-026 §8): la provisión todavía abierta, cuánto se desvió la factura
+ * de lo provisionado, cuántos días van de aprobar a pagar y el costo por kg de lo repartido. Una fila
+ * por moneda: TMS no convierte.
+ */
+function FinanceSection({ finance }: { finance: KpiFinanceView }) {
+  const days = finance.averageDaysToPayment === null ? "—" : `${fmtDecimal(finance.averageDaysToPayment, 1)} d`;
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Box sx={{
+        display: "grid", gap: 2, mb: 2,
+        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0,1fr))", lg: "repeat(4, minmax(0,1fr))" },
+      }}>
+        <KpiCard
+          icon={<TimerRounded />} color="info.main" title={t("Días a pago (promedio)")}
+          value={days} sub={t("{{n}} facturas pagadas, de aprobada a pagada", { n: fmtQuantity(finance.paidInvoices) })}
+        />
+      </Box>
+      <AppCard title={t("Por moneda")} flush>
+        {finance.byCurrency.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+            {t("Sin provisiones ni costos repartidos en el rango.")}
+          </Typography>
+        ) : (
+          <TableContainer>
+            <Table size="small" sx={dataTableSx}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>{t("Moneda")}</TableCell>
+                  <TableCell className="numeric-col">{t("Provisión abierta")}</TableCell>
+                  <TableCell className="numeric-col">{t("Provisionado (facturados)")}</TableCell>
+                  <TableCell className="numeric-col">{t("Facturado")}</TableCell>
+                  <TableCell className="numeric-col">{t("Varianza")}</TableCell>
+                  <TableCell className="numeric-col">{t("Costo por kg")}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {finance.byCurrency.map((row) => (
+                  <TableRow key={row.currency} hover>
+                    <TableCell sx={{ fontWeight: 600 }}>{row.currency}</TableCell>
+                    <TableCell className="numeric-col">
+                      {`${fmtMoney(row.openAccrualBalance, row.currency)} · ${fmtQuantity(row.openAccruals)}`}
+                    </TableCell>
+                    <TableCell className="numeric-col">{fmtMoney(row.accruedAmount, row.currency)}</TableCell>
+                    <TableCell className="numeric-col">{fmtMoney(row.invoicedAmount, row.currency)}</TableCell>
+                    <TableCell className="numeric-col">
+                      {`${fmtMoney(row.varianceAmount, row.currency)}${
+                        row.variancePercent === null ? "" : ` · ${fmtPercent(row.variancePercent, 1)}`}`}
+                    </TableCell>
+                    <TableCell className="numeric-col">
+                      {row.costPerKg === null ? "—" : `${fmtDecimal(row.costPerKg, 4)} ${row.currency}`}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </AppCard>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+        {t("Varianza: lo facturado menos lo provisionado, en los viajes del rango que ya tienen factura aprobada. Costo por kg: sobre los kg que recibieron costo en el reparto.")}
       </Typography>
     </Box>
   );

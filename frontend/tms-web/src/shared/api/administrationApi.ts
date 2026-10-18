@@ -1,6 +1,7 @@
 import { apiRequest } from './httpClient'
 import type { OrganizationView } from './meApi'
 import type { PageResponse } from './pageResponse'
+import type { CostAllocationBasis } from './costToServeApi'
 
 /** Mirrors the backend's `CompanySettingsView` (migration V34). */
 export interface CompanySettingsView {
@@ -17,6 +18,11 @@ export interface CompanySettingsView {
   dispatchConfirmationMode?: DispatchConfirmationMode
   /** Cuándo nace la provisión de flete (V65, ADR-023, D-07). Ausente en un backend anterior: `DISPATCHED`. */
   accrualTrigger?: AccrualTrigger
+  /**
+   * Cómo se reparte el costo de un viaje entre sus pedidos (V68, ADR-026). Null = el valor por
+   * defecto de la instalación (peso); ausente en un backend anterior.
+   */
+  costAllocationBasis?: CostAllocationBasis | null
 }
 
 /** Mirrors `AccrualTrigger` (`shared/settings`): al despachar (por defecto) o al entregar. */
@@ -74,6 +80,8 @@ export interface CompanyProfileRequest {
   dispatchConfirmationMode?: DispatchConfirmationMode
   /** Opcional, como el modo: omitirlo conserva el disparador actual. */
   accrualTrigger?: AccrualTrigger
+  /** Opcional: omitirlo conserva la base actual (V68). */
+  costAllocationBasis?: CostAllocationBasis
 }
 
 /** Mirrors the backend's `CompanyCreateRequest`. There is no `organizationId`: the caller's own is used. */

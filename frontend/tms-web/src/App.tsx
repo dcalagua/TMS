@@ -19,7 +19,7 @@ import {
   AuditPage, CarriersPage, CompanySettingsPage, ControlTowerPage, DestinationsPage, DriversPage,
   FrequenciesPage, IntegrationsPage, LocationsPage, MaterialProfilesPage, OrdersPage, OriginsPage, PlanningBoardPage,
   AppointmentsPage,
-  SettlementPage, TolerancePoliciesPage, AccrualsPage, PayablesPage,
+  SettlementPage, TolerancePoliciesPage, AccrualsPage, PayablesPage, CostToServePage,
   OwnFleetCostProfilesPage,
   WorkAssignmentsPage,
   PlanningRunsPage, RateCardsPage, ReportsPage, RoutesPage, SchedulingReleasePage, TripWorkspacePage, TripsPage,
@@ -115,6 +115,7 @@ export default function App() {
                     <Route path="settlement/tolerances" element={<TolerancePoliciesPage />} />
                     <Route path="settlement/accruals" element={<AccrualsPage />} />
                     <Route path="settlement/payables" element={<PayablesPage />} />
+                    <Route path="settlement/cost-to-serve" element={<CostToServePage />} />
                     <Route path="work-assignments" element={<WorkAssignmentsPage />} />
                     {/* Una ruta completa y no un drawer sobre la lista: un despachador se queda
                         dentro de un viaje durante minutos, y `/trips/{id}` es lo que se pega en un

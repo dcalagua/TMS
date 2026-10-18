@@ -142,6 +142,16 @@ tms:
       sweep-interval: ${TMS_ACCRUAL_SWEEP_INTERVAL:5m}
       lookback: ${TMS_ACCRUAL_SWEEP_LOOKBACK:31d}
   finance:
+    cost-allocation:
+      # Cost to serve (ADR-026, V68, D-08). The base a company without its own
+      # (company_settings.cost_allocation_basis) splits a trip's cost by: WEIGHT, EFFECTIVE_VOLUME,
+      # FLOOR_AREA, PALLETS, STOPS or EQUAL. The sweep allocates trips that left within `lookback` and
+      # re-allocates those whose cost was closed after their current run; older trips are
+      # recalculated by hand (POST /settlement/cost-allocation/trips/{id}/recalculate).
+      default-basis: ${TMS_COST_ALLOCATION_DEFAULT_BASIS:WEIGHT}
+      sweep-enabled: ${TMS_COST_ALLOCATION_SWEEP_ENABLED:true}
+      sweep-interval: ${TMS_COST_ALLOCATION_SWEEP_INTERVAL:10m}
+      lookback: ${TMS_COST_ALLOCATION_SWEEP_LOOKBACK:62d}
     pe:
       # Peruvian fiscal defaults (ADR-024 part 2, V66, decision D-06): what a company that has not
       # set its own value in company_settings gets. Known values in force; verify each percentage

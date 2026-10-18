@@ -17,6 +17,7 @@ import {
   TuneRounded,
   AccountBalanceWalletRounded,
   PaymentsRounded,
+  InsightsRounded,
 } from "@mui/icons-material";
 
 /** Una hoja del menú: una pantalla concreta. */
@@ -83,6 +84,7 @@ export const ICON_TINTS: Record<string, string> = {
   "/settlement/tolerances": "#A1887F",
   "/settlement/accruals": "#BCAAA4",
   "/settlement/payables": "#C49A6C",
+  "/settlement/cost-to-serve": "#A1887F",
   "/work-assignments": "#7E57C2",
   "/masters/locations": "#4FC3F7",
   "/masters/origins": "#4DB6AC",
@@ -173,6 +175,10 @@ export const NAV_SECTIONS: NavSection[] = [
       // pide lo mismo que leer facturas; registrar y confirmar un pago, sus propios permisos.
       { to: "/settlement/payables", label: "Cuentas por pagar", icon: <PaymentsRounded />,
         capability: "SETTLEMENT_VIEW" },
+      // Fase 70 (ADR-026): el costo de los viajes repartido entre sus pedidos, por cliente, destino
+      // y ruta. Sin margen - no hay tarifa de venta. Su propio permiso de lectura.
+      { to: "/settlement/cost-to-serve", label: "Costo para servir", icon: <InsightsRounded />,
+        capability: "COST_TO_SERVE_VIEW" },
       // Junto a Viajes y no en Maestros: mantener la ficha de un camión y planificar su día son
       // trabajos distintos que hacen personas distintas.
       { to: "/work-assignments", label: "Días de trabajo", icon: <EventNoteRounded />,

@@ -133,6 +133,10 @@ public enum Capability {
     ACCRUAL_EXPORT(Permission.SETTLEMENT_ACCRUAL_EXPORT),
     ACCRUAL_MANAGE(Permission.SETTLEMENT_ACCRUAL_MANAGE),
 
+    /** Cost to serve (migration V68, ADR-026): the report, and recalculating a trip's allocation. */
+    COST_TO_SERVE_VIEW(Permission.SETTLEMENT_COST_ALLOCATION_READ),
+    COST_ALLOCATION_MANAGE(Permission.SETTLEMENT_COST_ALLOCATION_MANAGE),
+
     /**
      * Payment status (migration V67, ADR-023 section 2): keying a payment, scheduling and holding are
      * one authority; confirming somebody else's payment is another. Reading uses {@link #SETTLEMENT_VIEW}.

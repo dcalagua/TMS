@@ -33,7 +33,12 @@ public record CompanySettings(
          */
         BigDecimal loadFloorFillFactor,
         /** When a freight accrual is born (V65, ADR-023, D-07). Null reads DISPATCHED. */
-        AccrualTrigger accrualTrigger) {
+        AccrualTrigger accrualTrigger,
+        /**
+         * How a trip's cost is split between its orders (V68, ADR-026). Null = the deployment's
+         * {@code tms.finance.cost-allocation.default-basis}.
+         */
+        CostAllocationBasis costAllocationBasis) {
 
     /** ISO 3166-1 alpha-2 of the launch market, and the default of {@code tms.location.country}. */
     public static final String DEFAULT_COUNTRY = "PE";
@@ -44,7 +49,7 @@ public record CompanySettings(
 
     private static final CompanySettings DEFAULTS = new CompanySettings(
             DEFAULT_COUNTRY, DEFAULT_ORDER_NUMBER_PREFIX, DEFAULT_SHIPMENT_NUMBER_PREFIX,
-            DispatchConfirmationMode.MANUAL, null, null, AccrualTrigger.DISPATCHED);
+            DispatchConfirmationMode.MANUAL, null, null, AccrualTrigger.DISPATCHED, null);
 
     /**
      * Blank-tolerant on purpose. The columns behind this are all {@code NOT NULL} with defaults, so
@@ -59,6 +64,14 @@ public record CompanySettings(
                 ? DispatchConfirmationMode.MANUAL
                 : dispatchConfirmationMode;
         accrualTrigger = accrualTrigger == null ? AccrualTrigger.DISPATCHED : accrualTrigger;
+    }
+
+    /** The V65 shape, for callers that predate cost allocation (V68): the basis follows the deployment. */
+    public CompanySettings(String defaultCountry, String orderNumberPrefix, String shipmentNumberPrefix,
+            DispatchConfirmationMode dispatchConfirmationMode, BigDecimal referenceLoadHeightM,
+            BigDecimal loadFloorFillFactor, AccrualTrigger accrualTrigger) {
+        this(defaultCountry, orderNumberPrefix, shipmentNumberPrefix, dispatchConfirmationMode,
+                referenceLoadHeightM, loadFloorFillFactor, accrualTrigger, null);
     }
 
     /** The V62 shape, for callers that predate freight accruals (V65): the trigger reads DISPATCHED. */
@@ -84,13 +97,31 @@ public record CompanySettings(
     /** A copy with another dispatch mode. */
     public CompanySettings withDispatchConfirmationMode(DispatchConfirmationMode mode) {
         return new CompanySettings(defaultCountry, orderNumberPrefix, shipmentNumberPrefix, mode,
-                referenceLoadHeightM, loadFloorFillFactor, accrualTrigger);
+                referenceLoadHeightM, loadFloorFillFactor, accrualTrigger, costAllocationBasis);
     }
 
     /** A copy with another accrual trigger. */
     public CompanySettings withAccrualTrigger(AccrualTrigger trigger) {
         return new CompanySettings(defaultCountry, orderNumberPrefix, shipmentNumberPrefix,
-                dispatchConfirmationMode, referenceLoadHeightM, loadFloorFillFactor, trigger);
+                dispatchConfirmationMode, referenceLoadHeightM, loadFloorFillFactor, trigger, costAllocationBasis);
+    }
+
+    /** A copy with another cost allocation basis (null = the deployment default). */
+    public CompanySettings withCostAllocationBasis(CostAllocationBasis basis) {
+        return new CompanySettings(defaultCountry, orderNumberPrefix, shipmentNumberPrefix,
+                dispatchConfirmationMode, referenceLoadHeightM, loadFloorFillFactor, accrualTrigger, basis);
+    }
+
+    /** Reads a stored basis; null or unknown reads as unset, so the deployment default applies. */
+    public static CostAllocationBasis costAllocationBasisOf(String stored) {
+        if (stored == null || stored.isBlank()) {
+            return null;
+        }
+        try {
+            return CostAllocationBasis.valueOf(stored.trim());
+        } catch (IllegalArgumentException unknown) {
+            return null;
+        }
     }
 
     /** Reads a stored trigger, tolerating an unknown one as the default (D-07) rather than failing. */

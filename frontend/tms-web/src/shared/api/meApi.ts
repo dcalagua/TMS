@@ -76,6 +76,10 @@ export const CAPABILITY = {
   ACCRUAL_EXPORT: "ACCRUAL_EXPORT",
   /** Revertir o cerrar provisiones, provisionar ahora y mantener las cuentas contables. */
   ACCRUAL_MANAGE: "ACCRUAL_MANAGE",
+  /** Costo para servir (V68, ADR-026): el reporte por cliente, destino y ruta. */
+  COST_TO_SERVE_VIEW: "COST_TO_SERVE_VIEW",
+  /** Recalcular el reparto del costo de un viaje (una versión nueva). */
+  COST_ALLOCATION_MANAGE: "COST_ALLOCATION_MANAGE",
   /** Cuentas por pagar (fase 65): programar, retener, liberar y proponer un pago manual. */
   PAYMENT_RECORD: "PAYMENT_RECORD",
   /** Confirmar o rechazar el pago manual que propuso **otra** persona (cuatro ojos). */

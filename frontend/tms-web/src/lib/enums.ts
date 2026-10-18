@@ -273,6 +273,27 @@ export const ENUM_LABELS = {
     HYBRID: "Híbrido: el primero que confirme",
     MANUAL: "Despacho manual (TMS)",
   },
+  /** ADR-026 / D-08: cómo se reparte el costo de un viaje entre sus pedidos. */
+  costAllocationBasis: {
+    WEIGHT: "Por peso (kg)",
+    EFFECTIVE_VOLUME: "Por volumen efectivo (m³)",
+    FLOOR_AREA: "Por piso ocupado (m²)",
+    PALLETS: "Por pallets",
+    STOPS: "Por paradas (y peso dentro de la parada)",
+    EQUAL: "Partes iguales por pedido",
+  },
+  /** ADR-026: de dónde sale el costo que se repartió. */
+  allocationCostSource: {
+    INVOICED: "Facturado",
+    ACTUAL: "Real cerrado",
+    ESTIMATED: "Estimado",
+  },
+  /** ADR-026: por qué se agrupa el reporte de costo para servir. */
+  costToServeGroupBy: {
+    CUSTOMER: "Cliente",
+    DESTINATION: "Destino",
+    ROUTE: "Ruta",
+  },
   /** ADR-023 / D-07: cuándo nace la provisión de flete. */
   accrualTrigger: {
     DISPATCHED: "Al despachar el viaje",

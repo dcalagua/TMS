@@ -79,6 +79,8 @@ class SchemaExposureIntegrationTest {
             // V67: payable payments (ADR-023 section 2). A payment is append-only by grant and by
             // trigger; a person's request is decided, never deleted.
             "carrier_payment", "carrier_payment_request",
+            // V68: cost to serve (ADR-026). The rows are append-only; a run is only ever superseded.
+            "trip_cost_allocation_run", "trip_cost_allocation",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
             "work_assignment", "work_assignment_trip",
@@ -145,6 +147,8 @@ class SchemaExposureIntegrationTest {
             // V67: payable payments (ADR-023 section 2). A payment is append-only by grant and by
             // trigger; a person's request is decided, never deleted.
             "carrier_payment", "carrier_payment_request",
+            // V68: cost to serve (ADR-026). The rows are append-only; a run is only ever superseded.
+            "trip_cost_allocation_run", "trip_cost_allocation",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
             "work_assignment", "work_assignment_trip",

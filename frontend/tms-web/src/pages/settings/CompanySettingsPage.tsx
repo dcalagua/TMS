@@ -9,6 +9,7 @@ import {
   DISPATCH_CONFIRMATION_MODES, fetchCompanyProfile, updateCompanyProfile, type CompanyProfileRequest,
   type DispatchConfirmationMode, type AccrualTrigger, ACCRUAL_TRIGGERS,
 } from "../../shared/api/administrationApi";
+import { COST_ALLOCATION_BASES, type CostAllocationBasis } from "../../shared/api/costToServeApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
@@ -42,11 +43,13 @@ interface CompanyFormValues {
   shipmentNumberPrefix: string;
   dispatchConfirmationMode: DispatchConfirmationMode;
   accrualTrigger: AccrualTrigger;
+  /** "" = la base por defecto de la instalación (peso); no se envía. */
+  costAllocationBasis: CostAllocationBasis | "";
 }
 
 const KNOWN_FIELDS = new Set<keyof CompanyFormValues>([
   "name", "taxIdentifier", "timeZone", "defaultCountry", "orderNumberPrefix", "shipmentNumberPrefix",
-  "dispatchConfirmationMode", "accrualTrigger",
+  "dispatchConfirmationMode", "accrualTrigger", "costAllocationBasis",
 ]);
 
 /** Qué significa cada modo para quien opera, en una frase (ADR-013 §1). */
@@ -88,6 +91,7 @@ export function CompanySettingsPage() {
       name: "", taxIdentifier: "", timeZone: "", defaultCountry: "", orderNumberPrefix: "", shipmentNumberPrefix: "",
       dispatchConfirmationMode: "MANUAL",
       accrualTrigger: "DISPATCHED",
+      costAllocationBasis: "",
     },
   });
 
@@ -106,6 +110,7 @@ export function CompanySettingsPage() {
       // Un backend anterior a V52 no lo manda: es MANUAL, el valor por defecto del servidor.
       dispatchConfirmationMode: profile.settings.dispatchConfirmationMode ?? "MANUAL",
       accrualTrigger: profile.settings.accrualTrigger ?? "DISPATCHED",
+      costAllocationBasis: profile.settings.costAllocationBasis ?? "",
     });
   }, [profile, reset]);
 
@@ -130,6 +135,7 @@ export function CompanySettingsPage() {
       shipmentNumberPrefix: values.shipmentNumberPrefix.trim(),
       dispatchConfirmationMode: values.dispatchConfirmationMode,
       accrualTrigger: values.accrualTrigger,
+      costAllocationBasis: values.costAllocationBasis === "" ? undefined : values.costAllocationBasis,
     };
 
     try {
@@ -307,6 +313,30 @@ export function CompanySettingsPage() {
                 >
                   {ACCRUAL_TRIGGERS.map((trigger) => (
                     <MenuItem key={trigger} value={trigger}>{enumLabel("accrualTrigger", trigger)}</MenuItem>
+                  ))}
+                </TextField>
+              )}
+            />
+          </AppCard>
+
+          <AppCard title={t("Costo para servir")}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {t("Cómo se reparte el costo de cada viaje entre sus pedidos. Un pedido sin la medida de la base no recibe costo: se cuenta. Cambiarla no reescribe repartos anteriores; vale para los próximos cálculos.")}
+            </Typography>
+            <Controller
+              name="costAllocationBasis"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  select size="small" fullWidth label={t("Base de reparto")}
+                  value={field.value} onChange={field.onChange} onBlur={field.onBlur}
+                  slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+                >
+                  {field.value === "" && (
+                    <MenuItem value="">{t("Por defecto de la instalación (peso)")}</MenuItem>
+                  )}
+                  {COST_ALLOCATION_BASES.map((basis) => (
+                    <MenuItem key={basis} value={basis}>{enumLabel("costAllocationBasis", basis)}</MenuItem>
                   ))}
                 </TextField>
               )}
