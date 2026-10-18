@@ -1,0 +1,42 @@
+{
+  "$nota": [
+    "Guía de remisión SRI (comprobante 06) del pedido SO-2026-10040, como la mandaría el ERP de PLAPASA: POST /integration/v1/logistics-documents (docs/integrations/INBOUND_API_V1.md §15). El TMS la RECIBE y la muestra en el pedido, el viaje y el portal del transportista: no la emite, no la firma y no la valida con el SRI.",
+    "Datos ficticios pero bien formados: clave de acceso de 49 dígitos con verificador módulo 11 válido, ambiente 1 (pruebas), RUC del emisor = el de la empresa demo (0999999999001), transportista = TRLIT (0990000034001), placa = CAM-04 (GSD-1357), el camión al que la caja baja re-apila el pedido.",
+    "La clave: 20102026 (fecha) · 06 (guía) · 0999999999001 (RUC) · 1 (pruebas) · 001001 (serie) · 000000123 (secuencial) · 12345678 (código) · 1 (emisión normal) · 1 (verificador).",
+    "orders[].externalSource = MANUAL, el mismo namespace con el que entró el pedido (orders.json). Lo lee scripts/demo/plapasa_tms_demo.py guide y PlapasaDemoSeedIntegrationTest."
+  ],
+  "sourceSystem": "MANUAL",
+  "documentType": "REMISSION_GUIDE",
+  "documentNumber": "001-001-000000123",
+  "issueDate": "2026-10-20",
+  "issuerTaxId": "0999999999001",
+  "status": "AUTORIZADO",
+  "fiscalCountry": "EC",
+  "fiscalDocumentCode": "06",
+  "authorizationNumber": "2010202606099999999900110010010000001231234567811",
+  "transportStartDate": "2026-10-20",
+  "transportEndDate": "2026-10-20",
+  "carrierTaxId": "0990000034001",
+  "carrierName": "Transportes del Litoral S.A. (demo)",
+  "vehiclePlate": "GSD-1357",
+  "originAddress": "Km 14,5 Vía a Daule, Guayaquil",
+  "transferReason": "Venta",
+  "recipients": [
+    {
+      "taxId": "0990000000202",
+      "name": "Ferretería El Constructor Cía. Ltda. (demo)",
+      "destinationAddress": "Av. Quito y Sucre, Guayaquil",
+      "transferReason": "Venta",
+      "relatedDocumentCode": "01",
+      "relatedDocumentNumber": "001-002-000004567",
+      "relatedDocumentDate": "2026-10-19",
+      "items": [
+        { "code": "PLP-1222", "description": "Utility Box Heavy Duty #3 48 l", "quantity": 30, "unit": "UN" },
+        { "code": "PLP-311", "description": "Tacho Americano C/T 72 l", "quantity": 24, "unit": "UN" },
+        { "code": "PLP-700", "description": "Silla Costabela", "quantity": 40, "unit": "UN" },
+        { "code": "PLP-111", "description": "Balde 10 l", "quantity": 60, "unit": "UN" }
+      ]
+    }
+  ],
+  "orders": [ { "externalSource": "MANUAL", "externalReference": "SO-2026-10040" } ]
+}

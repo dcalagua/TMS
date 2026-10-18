@@ -1,7 +1,8 @@
 # Runbook · cargar la demo PLAPASA en TMS QAS
 
 > Pasos exactos para dejar el tenant **PLAPASA (demo)** listo en TMS QAS una vez desplegado el backend
-> con V59–V68. El guion de la demo es [`PLAPASA_TMS_DEMO.md`](PLAPASA_TMS_DEMO.md).
+> con V59–V69 (rama integrada `feature/tms-enterprise-overnight`: re-apilado por vehículo, geometría en
+> pantalla, régimen fiscal de Ecuador y guías de remisión). El guion de la demo es [`PLAPASA_TMS_DEMO.md`](PLAPASA_TMS_DEMO.md).
 >
 > **Nada de esto lo hizo quien escribió este documento**: todo se validó en local
 > (`PlapasaDemoSeedIntegrationTest`, Testcontainers). Cada paso que toca QAS o el EWM compartido
@@ -9,8 +10,8 @@
 > ningún secreto**: donde dice `<…>`, el valor vive en el gestor de secretos del equipo o en el panel
 > del despliegue, nunca en el repositorio ni en un chat.
 
-Orden: **despliegue → Flyway en V68 → cuentas de Auth → seed → fiscal EC → credencial y webhook →
-conector del EWM → perfiles → pedidos → smoke.** Cada paso dice cómo se comprueba antes de seguir.
+Orden: **despliegue → Flyway en V69 → cuentas de Auth → seed → régimen fiscal EC → credencial y webhook →
+conector del EWM → perfiles → pedidos (y guía) → smoke.** Cada paso dice cómo se comprueba antes de seguir.
 
 ---
 
@@ -28,7 +29,7 @@ conector del EWM → perfiles → pedidos → smoke.** Cada paso dice cómo se c
 
 3. Desplegar. El backend corre Flyway al arrancar (perfil `prod`).
 
-## 2 · Comprobar Flyway en V68
+## 2 · Comprobar Flyway en V69
 
 ```bash
 curl -s https://<api-qas>/actuator/health            # "UP"
@@ -39,11 +40,12 @@ curl -s https://<api-qas>/api/v1/system/info          # campo "commit" = el comm
 -- sólo lectura, con la cadena de QAS del gestor de secretos
 SELECT max(version::int) AS latest, count(*) FILTER (WHERE NOT success) AS failed
 FROM tms.flyway_schema_history WHERE version IS NOT NULL;
--- esperado: latest = 68, failed = 0
+-- esperado: latest = 69, failed = 0
 ```
 
-Si `latest` < 68, **parar**: el seed usa columnas de V59–V68 (`company_settings.reference_load_height_m`,
-`cost_allocation_basis`, `rate_card.amount_per_loading_meter`, `material_profile`…).
+Si `latest` < 69, **parar**: el seed y el guion usan V59–V69 (`company_settings.reference_load_height_m`,
+`cost_allocation_basis`, `rate_card.amount_per_loading_meter`, `material_profile`, el régimen fiscal de V66,
+las guías internacionales de V69…).
 
 ## 3 · Crear las cuentas en Supabase Auth del proyecto **TMS** (no el del EWM)
 
@@ -53,6 +55,7 @@ Supabase Studio › Authentication › Users › **Add user** › «Create new u
 |---|---|
 | `admin@plapasa.demo` | Administración de la organización (ve todo, crea credenciales, finanzas) |
 | `planner@plapasa.demo` | Planificación (el que conduce la demo) |
+| `finanzas@plapasa.demo` | COMPANY_ADMIN: aprueba la factura de TRLIT (quien la registra, admin@, no puede: cuatro ojos) |
 | `transportista.trlit@plapasa.demo` | Portal del transportista TRLIT |
 
 Las contraseñas las elige quien crea las cuentas y van al gestor de secretos. **Crear las cuentas
@@ -77,7 +80,7 @@ WHERE c.code = 'QAS-PLAPASA';
 
 SELECT email, auth_user_id IS NOT NULL AS puede_entrar
 FROM tms.app_user WHERE email LIKE '%@plapasa.demo' ORDER BY email;
--- las tres en true
+-- las cuatro en true
 
 SELECT (SELECT count(*) FROM tms.location l   WHERE l.company_id = c.id) AS ubicaciones,   -- 5
        (SELECT count(*) FROM tms.route r      WHERE r.company_id = c.id) AS rutas,         -- 4
@@ -90,28 +93,51 @@ FROM tms.company c WHERE c.code = 'QAS-PLAPASA';
 Y en la aplicación: entrar como `planner@plapasa.demo` → la empresa **PLAPASA (demo)** aparece y
 QAS-LIMA **no** (el planificador sólo tiene membresía en PLAPASA).
 
-## 5 · Configuración fiscal de Ecuador — **después** de que se integre la rama de impuestos
+## 5 · Régimen fiscal de Ecuador
 
-El seed sólo fija el país (`EC`). Las columnas fiscales quedan vacías a propósito y, mientras la rama
-de impuestos internacionales no esté integrada, rigen los valores peruanos del despliegue
-(`tms.finance.pe.*`): **no registrar facturas de transportista de PLAPASA hasta entonces.**
+El seed **no escribe ningún override fiscal**: con `default_country = 'EC'` la empresa ya está en el
+régimen de Ecuador (ADR-027), con los valores de fábrica del despliegue (`tms.finance.tax.ec.*`), que
+alcanzan para la demo. Este paso es **comprobar**, y cambiar sólo si el contador de PLAPASA lo pide.
 
-Cuando la rama esté desplegada, como `admin@plapasa.demo` con la empresa PLAPASA seleccionada, por la
-pantalla o la API que esa rama documente (hoy `GET /api/v1/settlement/fiscal-settings` existe y es de
-sólo lectura):
+**Comprobar** como `admin@plapasa.demo`, empresa PLAPASA: Administración › Empresa › tarjeta
+**«Régimen fiscal»**, o
 
-| Ajuste | Valor para PLAPASA |
+```bash
+curl -s https://<api-qas>/api/v1/settlement/fiscal-settings \
+     -H "Authorization: Bearer <token de admin@plapasa.demo>" -H "X-Company-Id: <id de PLAPASA>"
+```
+
+| Campo | Esperado |
 |---|---|
-| Régimen / país | Ecuador (`EC`) |
-| Moneda de documentos | `USD` |
-| IVA general | 15 % |
-| IVA del servicio de transporte de carga | **0 %** |
-| Retención en la fuente del IR | **1 %**, código **310** (transporte de carga); PLAPASA como agente de retención — confirmar con su contador |
-| Comprobantes SRI | 01 factura · 04 nota de crédito · 05 nota de débito · 07 comprobante de retención · 06 guía de remisión |
-| Plazo de pago por defecto | el de PLAPASA (TRLIT queda en 30 días en su ficha) |
+| `regime` / `country` | `EC` / `EC` |
+| `fiscalCurrency` · `vatLabel` | `USD` · `IVA` |
+| `vatRate` · `freightVatRate` · `allowedVatRates` | 15 · **0** · 0, 5, 15 |
+| `documentKinds` | 01 factura · 04 nota de crédito · 05 nota de débito |
+| `documentNumber.placeholder` · `taxId` | `001-001-000000123` · RUC, 13 dígitos (`EC_RUC`) |
+| `withholdings[0]` | `EC_INCOME_TAX_WITHHOLDING` · código **310** · **1 %** · base `SUBTOTAL` · **activa** |
+| `withholdings[1]` | `EC_VAT_WITHHOLDING` · 70 % · **inactiva** (sólo agentes de retención de IVA designados) |
+| `electronicValidation` | `EXTERNAL_DEPENDENCY` (el SRI no se consulta) |
 
-Comprobar: `GET /api/v1/settlement/fiscal-settings` con `X-Company-Id: <id de PLAPASA>` devuelve esos
-valores y ya no los de Perú.
+**Cambiar** (sólo con el dato del contador; permiso `settlement.tax:manage`, administradores): la tarjeta
+«Régimen fiscal» → «Cambiar régimen», o `PUT /api/v1/settlement/fiscal-settings` — **reemplaza entera**
+la configuración de la empresa; un campo vacío hereda el valor de fábrica. Ejemplo, si PLAPASA fuera
+agente de retención de IVA:
+
+```json
+{
+  "fiscalCountry": "EC",
+  "vatRate": null,
+  "freightVatRate": null,
+  "withholdings": [
+    { "kind": "EC_INCOME_TAX_WITHHOLDING", "enabled": true, "code": "310", "rate": 1.00 },
+    { "kind": "EC_VAT_WITHHOLDING", "enabled": true, "code": null, "rate": 70.00 }
+  ]
+}
+```
+
+Queda auditado (`UPDATE` sobre `COMPANY`, sección `FISCAL_REGIME`). Una factura ya recibida conserva el
+régimen con el que entró. **Ojo:** el 1 % del código 310 está marcado en ADR-027 «a confirmar» por la
+resolución NAC-DGERCGC26-00000009 (vigente desde 2026-03-01).
 
 ## 6 · Credencial de integración del EWM en el TMS
 
@@ -129,6 +155,9 @@ Como `admin@plapasa.demo`, empresa PLAPASA: **Administración › Integraciones 
   | `integration.material:write` | `POST /integration/v1/material-profiles/batch` (perfiles, `TMS_MATP`) |
   | `integration.order:read` | `GET /integration/v1/orders/{n}` y la lista (anulaciones del TMS) |
   | `integration.warehouse-order-event:write` | `POST /integration/v1/warehouse-order-events` (anulaciones del EWM) |
+
+  La credencial del **ERP** es otra (`integration.order:write` + `integration.document:write`): la crea el
+  script del paso 9.
 
 - El secreto (`tmsc_<id>.tmss_<secreto>`) **se muestra una sola vez**: al gestor de secretos.
 - Anotar el **id de la empresa** PLAPASA en el TMS (`GET /api/v1/me` → `companies[]`, o
@@ -219,7 +248,8 @@ python3 scripts/demo/plapasa_tms_demo.py check
 # si la demo no es el 20/10:  ... orders --service-date <fecha del camión, AAAA-MM-DD>
 ```
 
-El script crea una credencial **`ERP PLAPASA (demo) <fecha>`** con `integration.order:write` (o usa
+El script crea una credencial **`ERP PLAPASA (demo) <fecha>`** con `integration.order:write` e
+`integration.document:write` (o usa
 `TMS_ERP_TOKEN` si se exporta una), manda los seis pedidos de `scripts/demo/plapasa/orders.json` en
 un `POST /integration/v1/orders/batch` y lista lo que ocupa cada uno. Esperado:
 
@@ -246,6 +276,20 @@ Una segunda corrida contesta seis `UNCHANGED`. **Revocar** la credencial del ERP
 
 > Si un pedido sale `NOT_READY` con `CUTOFF_MISSED`, su fecha ya pasó: repetir con `--service-date`.
 
+**Guía de remisión (opcional):**
+
+```bash
+... python3 scripts/demo/plapasa_tms_demo.py guide
+# Guía de remisión 001-001-000000123 (SRI 06): CREATED · pedidos enlazados 1 · desconocidos []
+```
+
+Manda `scripts/demo/plapasa/remission_guide.json` por `POST /integration/v1/logistics-documents`
+(`docs/integrations/INBOUND_API_V1.md` §15): comprobante 06, clave de acceso de 49 dígitos con
+verificador válido (ambiente de pruebas), emisor 0999999999001, transportista TRLIT, placa GSD-1357,
+pedido `MANUAL` / `SO-2026-10040`. Se ve en la sección «Documentos» del pedido y del viaje y en el portal
+de TRLIT. Una segunda corrida da `UNCHANGED`. Mandarla después de los pedidos: si el pedido todavía no
+existe, sale en `desconocidos` y se enlaza al reenviarla.
+
 ## 10 · Smoke (sólo lectura)
 
 - [ ] `planner@plapasa.demo` entra; Maestros › Ubicaciones muestra 5 y ninguna `QAS-…`.
@@ -253,6 +297,9 @@ Una segunda corrida contesta seis `UNCHANGED`. **Revocar** la credencial del ERP
 - [ ] Comercial › Tarifarios: `TRLIT-2026-USD` en USD con metro lineal 6,50.
 - [ ] Operación › Planificación › origen GYE-CD, fecha 21/10: las tarjetas de `SO-2026-10045/46` dicen
       0,75 m³ y 0,98 m³ (**no** 9,50 y 10,73). Cerrar sin crear el plan.
+- [ ] Operación › Pedidos: la columna «Ocupa» de `SO-2026-10045` dice 50 pilas y 0,75 m³ frente a 9,50.
+- [ ] Administración › Empresa › «Régimen fiscal»: Ecuador, IVA 15, flete 0, retención IR 310 1 % activa.
+- [ ] `finanzas@plapasa.demo` entra y ve Operación › Auditoría de flete.
 - [ ] EWM › Integraciones › TMS › Conector: credencial y secreto «configurados», última respuesta con hora.
 - [ ] (Opcional, con autorización para crear datos) Ensayar el guion (b)–(e) y cancelar los planes
       después; un viaje despachado no se deshace.
