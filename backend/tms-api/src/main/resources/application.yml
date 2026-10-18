@@ -137,6 +137,19 @@ tms:
       sweep-enabled: ${TMS_ACCRUAL_SWEEP_ENABLED:true}
       sweep-interval: ${TMS_ACCRUAL_SWEEP_INTERVAL:5m}
       lookback: ${TMS_ACCRUAL_SWEEP_LOOKBACK:31d}
+  finance:
+    pe:
+      # Peruvian fiscal defaults (ADR-024 part 2, V66, decision D-06): what a company that has not
+      # set its own value in company_settings gets. Known values in force; verify each percentage
+      # with the customer's accountant. Detraction applies to PEN totals strictly above the
+      # threshold; retention only where no detraction applies.
+      igv-rate: ${TMS_PE_IGV_RATE:18.00}
+      detraction-enabled: ${TMS_PE_DETRACTION_ENABLED:true}
+      detraction-code: ${TMS_PE_DETRACTION_CODE:027}
+      detraction-rate: ${TMS_PE_DETRACTION_RATE:4.00}
+      detraction-threshold-pen: ${TMS_PE_DETRACTION_THRESHOLD_PEN:400.00}
+      retention-agent: ${TMS_PE_RETENTION_AGENT:false}
+      retention-rate: ${TMS_PE_RETENTION_RATE:3.00}
   security:
     jwt:
       # Supabase Auth coordinates. No default: a deployment that does not set these fails at

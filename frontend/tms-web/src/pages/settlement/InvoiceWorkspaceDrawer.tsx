@@ -224,6 +224,75 @@ export function InvoiceWorkspaceDrawer({
             </Alert>
           )}
 
+          {/* --- lo fiscal (V66): tipo SUNAT, CPE, desglose, detracción o retención, notas --- */}
+          {invoice.fiscal && (
+            <DetailSection title={t("Comprobante e impuestos")}>
+              <KeyFacts columns={4} items={[
+                {
+                  label: t("Tipo"),
+                  value: enumLabel("documentType", invoice.fiscal.documentType),
+                  sub: invoice.fiscal.referencedInvoiceNumber
+                    ? t("Corrige la factura {{number}}", { number: invoice.fiscal.referencedInvoiceNumber })
+                    : undefined,
+                },
+                {
+                  label: t("CPE"),
+                  value: invoice.fiscal.series ? `${invoice.fiscal.series}-${invoice.fiscal.correlative}` : null,
+                  sub: invoice.fiscal.issuerRuc ? t("RUC {{ruc}}", { ruc: invoice.fiscal.issuerRuc }) : undefined,
+                },
+                { label: t("Subtotal"), value: amount(invoice.fiscal.subtotalAmount, invoice.currency) },
+                {
+                  label: t("IGV"),
+                  value: amount(invoice.fiscal.igvAmount, invoice.currency),
+                  sub: invoice.fiscal.igvRate !== null ? `${fmtDecimal(invoice.fiscal.igvRate, 2)} %` : undefined,
+                },
+                {
+                  label: t("Detracción"),
+                  value: invoice.fiscal.detractionAmount !== null
+                    ? amount(invoice.fiscal.detractionAmount, invoice.currency) : null,
+                  sub: invoice.fiscal.detractionAmount !== null
+                    ? [
+                      t("Código {{code}} al {{rate}} %", {
+                        code: invoice.fiscal.detractionCode ?? "", rate: fmtDecimal(invoice.fiscal.detractionRate ?? 0, 2),
+                      }),
+                      invoice.fiscal.detractionConstancyNumber
+                        ? t("Constancia {{number}}", { number: invoice.fiscal.detractionConstancyNumber })
+                        : t("Constancia pendiente"),
+                    ].join(" · ")
+                    : undefined,
+                },
+                {
+                  label: t("Retención"),
+                  value: invoice.fiscal.retentionAmount !== null
+                    ? amount(invoice.fiscal.retentionAmount, invoice.currency) : null,
+                  sub: invoice.fiscal.retentionOverrideReason ?? undefined,
+                },
+                {
+                  label: t("Neto con notas"),
+                  value: invoice.fiscal.netAmount !== null ? amount(invoice.fiscal.netAmount, invoice.currency) : null,
+                },
+                {
+                  label: t("Validación SUNAT"),
+                  // Nunca «válido»: TMS no consulta a SUNAT, y lo dice.
+                  value: invoice.fiscal.cpeValidation === "EXTERNAL_DEPENDENCY"
+                    ? t("No consultada (dependencia externa)")
+                    : invoice.fiscal.cpeValidation,
+                },
+              ]} />
+              {invoice.fiscal.notes.length > 0 && (
+                <Box sx={{ mt: 1, display: "grid", gap: 0.5 }}>
+                  {invoice.fiscal.notes.map((note) => (
+                    <Typography key={note.id} variant="body2" sx={{ fontVariantNumeric: "tabular-nums" }}>
+                      {`${enumLabel("documentType", note.documentType)} ${note.invoiceNumber} · ${fmtDate(note.invoiceDate)} · `}
+                      {`${note.documentType === "07" ? "-" : "+"}${fmtDecimal(note.totalAmount, 2)} ${invoice.currency} · `}
+                      {enumLabel("invoiceStatus", note.status)}
+                    </Typography>
+                  ))}
+                </Box>
+              )}
+            </DetailSection>
+          )}
+
           {/* --- la comparación, que es la razón de existir de la pantalla --- */}
           <DetailSection title={t("La comparación")}>
             {invoice.match === null ? (

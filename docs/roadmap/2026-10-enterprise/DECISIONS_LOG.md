@@ -549,3 +549,77 @@
   tuvo TRUNCATE (los privilegios por defecto de V13 son los cuatro verbos DML). Revertir/cerrar pide motivo con
   `promptDialog`.
 - **Commit(s):** el de la fase 55, ciclo 1.
+
+### 2026-10-18 · fase 60 · La comparación y el consumo van por el subtotal; las líneas son netas de IGV
+
+- **Regla/decisión afectada:** ADR-024 parte 2, ítems 2 y 9 (el desglose; «consume por subtotal») y parte 1 (el total
+  de cabecera decide).
+- **Motivo:** la tarifa (V30) cotiza el servicio sin IGV; comparar el total con IGV reportaría toda factura en PEN un
+  18 % por encima. Y el plan pide consumir la provisión por el subtotal.
+- **Camino elegido:** `CarrierInvoice.comparableAmount()` = subtotal si hay desglose, si no el total; lo usan
+  `FreightMatcher` y `NoteMatcher`. Las líneas de un documento con desglose son su valor de venta (el formulario lo dice:
+  «Importe de la línea (sin IGV)»), y la provisión se consume por ellas, como antes. Sin desglose, todo como en V46.
+- **Commit(s):** el de la fase 60, ciclo 1.
+
+### 2026-10-18 · fase 60 · Las notas no mueven la provisión
+
+- **Regla/decisión afectada:** ADR-024 parte 2, ítem 9; ADR-023 §1 (consumo en `approve`).
+- **Motivo:** el asiento del consumo (Debe provisión / Haber cuenta por pagar) es de la factura; una nota corrige la
+  cuenta por pagar contra el gasto. Hacer que una NC «devolviera» saldo exigiría un movimiento de signo que
+  `ck_freight_accrual_entry_sign` no admite y una variación que nadie definió.
+- **Camino elegido:** sólo un `01` consume (`AccrualService.consumeApprovedInvoice`, `sumApprovedLinesForTrip` filtra
+  `document_type`). El neto de la factura (`total - 07 aprobadas + 08 aprobadas`) va en su vista y en su exportación;
+  cada nota se exporta como documento propio con `effectiveSign`.
+- **Commit(s):** el de la fase 60, ciclo 1.
+
+### 2026-10-18 · fase 60 · Número de una nota y duplicados
+
+- **Regla/decisión afectada:** ADR-024 parte 2, ítem 3 («`invoice_number` pasa a ser `series-correlative`»);
+  V64 (duplicado = mismo viaje y cargo en otra factura viva).
+- **Motivo:** una factura y su NC pueden compartir serie (`F001`) con correlativos propios por tipo, y
+  `uq_carrier_invoice_number` rechazaría la segunda; y una NC por el flete de un viaje convertía en «duplicada» a la
+  factura que corrige.
+- **Camino elegido:** el número de una nota es `07-` / `08-` + `serie-correlativo` (como nombra SUNAT sus archivos). Las
+  consultas de duplicados leen sólo líneas de facturas `01`. El correlativo se guarda sin ceros a la izquierda, para
+  que el relleno no esquive `uq_carrier_invoice_cpe`.
+- **Commit(s):** el de la fase 60, ciclo 1.
+
+### 2026-10-18 · fase 60 · Cómo se concilia una nota
+
+- **Regla/decisión afectada:** ADR-024 parte 2, ítem 5 («se concilia contra las líneas de la factura referida»).
+- **Motivo:** comparar una NC de 100 con un viaje de 1450 diría «1350 por debajo»; el ADR no fija la regla.
+- **Camino elegido:** `NoteMatcher` (puro). Cada línea nombra un viaje que la factura cobra (si no `UNMATCHED_TRIP`).
+  NC: su subtotal (o total) no supera lo que queda de la factura (comparable − otras NC vivas + ND aprobadas), si no
+  `TOTAL_AMOUNT`. ND: lo facturado del viaje + la nota contra la cifra del viaje con la tolerancia, si no `LINE_AMOUNT`;
+  sin cifra `MISSING_EXPECTED_COST`/`UNMATCHABLE`. Una nota en otra moneda que su factura se rechaza al recibirla.
+- **Commit(s):** el de la fase 60, ciclo 1.
+
+### 2026-10-18 · fase 60 · La penalidad se acepta como discrepancia `PENALTY`
+
+- **Regla/decisión afectada:** ADR-024 parte 2, ítem 6 («la acepta el aprobador; se lista como ítem propio»).
+- **Motivo:** el flujo de discrepancias ya es exactamente eso (ítem propio, abierto, bloquea la aprobación hasta que una
+  persona decide), y un segundo mecanismo de aceptación sería una regla duplicada.
+- **Camino elegido:** `DiscrepancyType.PENALTY` (y en `ck_freight_discrepancy_type`), una por línea de penalidad, sin
+  esperado; aceptarla audita `PENALTY_ACCEPTED`. La penalidad sigue fuera de la comparación de costo (fase 50).
+- **Commit(s):** el de la fase 60, ciclo 1.
+
+### 2026-10-18 · fase 60 · Detracción y retención sólo en facturas en PEN; cuentas GL a nivel empresa
+
+- **Regla/decisión afectada:** ADR-024 parte 2, ítems 7, 8 y 10.
+- **Motivo:** el umbral está en soles y no hay FX; la detracción de una operación se decide en su factura; un
+  documento abarca viajes de varias rutas.
+- **Camino elegido:** `TaxCalculator` calcula sólo para `01` en PEN. Retención sin umbral propio (una persona la
+  ajusta con motivo, `RETENTION_OVERRIDDEN`). La exportación lleva la cuenta de cada concepto fiscal resuelta a nivel
+  empresa (`GlAccountResolver` sin ruta ni origen); sin mapeo, el campo va vacío.
+- **Commit(s):** el de la fase 60, ciclo 1.
+
+### 2026-10-18 · fase 60 · La configuración fiscal se lee; editarla queda para el ciclo 2
+
+- **Regla/decisión afectada:** D-06 («se configuran por empresa»), plan F-3.
+- **Motivo:** `company_settings` es de `iam`, y su escritura pasa por el perfil de empresa entero
+  (`CompanyProfileRequest`, el UPSERT de `CompanyAdministrationRepository`, su pantalla); entrar ahí con siete campos
+  no cabía en este ciclo con pruebas.
+- **Camino elegido:** V66 crea las columnas (nulas), `FiscalSettingsPort` las lee y `FiscalSettingsResolver` cae a
+  `tms.finance.pe.*`; `GET /settlement/fiscal-settings` las expone resueltas. Ningún valor es fijo en código. Edición
+  desde «Configuración de empresa»: ciclo 2.
+- **Commit(s):** el de la fase 60, ciclo 1.

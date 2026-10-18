@@ -597,15 +597,22 @@ class FreightMatcherTest {
         }
 
         @Test
-        @DisplayName("a penalty is out of every comparison and out of the compared header")
+        @DisplayName("a penalty is out of every comparison and out of the compared header, and listed to accept (V66)")
         void penaltyIsExcluded() {
             UUID penalty = UUID.randomUUID();
             FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("900"),
                     List.of(coded(base, TRIP, "1000", ChargeCode.FREIGHT), coded(penalty, TRIP, "-100", ChargeCode.PENALTY)),
                     Map.of(TRIP, broken(TRIP, null, false)), Tolerance.NONE);
 
-            assertThat(result.status()).isEqualTo(MatchStatus.MATCHED);
+            // No difference against the cost; the only item is the penalty the approver must accept.
             assertThat(result.differenceAmount()).isEqualByComparingTo("0");
+            assertThat(result.status()).isEqualTo(MatchStatus.DISCREPANCY);
+            assertThat(result.discrepancies()).singleElement().satisfies(found -> {
+                assertThat(found.type()).isEqualTo(DiscrepancyType.PENALTY);
+                assertThat(found.lineId()).isEqualTo(penalty);
+                assertThat(found.invoicedAmount()).isEqualByComparingTo("-100");
+                assertThat(found.expectedAmount()).isNull();
+            });
             assertThat(FreightMatcher.lineExpectations(
                     List.of(coded(penalty, TRIP, "-100", ChargeCode.PENALTY)), Map.of(TRIP, broken(TRIP, null, false))))
                     .doesNotContainKey(penalty);

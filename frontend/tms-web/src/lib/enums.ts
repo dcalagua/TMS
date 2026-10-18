@@ -135,6 +135,7 @@ export const ENUM_LABELS = {
     DUPLICATE_INVOICE: "Factura duplicada",
     LINE_AMOUNT: "Importe de línea",
     MISSING_EXPECTED_COST: "Sin coste esperado",
+    PENALTY: "Penalidad a aceptar",
     TOTAL_AMOUNT: "Importe total",
     UNMATCHED_TRIP: "Envío sin identificar",
   },
@@ -156,6 +157,19 @@ export const ENUM_LABELS = {
     TOLL: "Peaje",
     OTHER_ACCESSORIAL: "Otro accesorio",
     PENALTY: "Penalidad",
+  },
+  /** V66: tipo de comprobante SUNAT. */
+  documentType: {
+    "01": "Factura (01)",
+    "07": "Nota de crédito (07)",
+    "08": "Nota de débito (08)",
+  },
+  /** V66: a qué se refiere una penalidad. */
+  penaltyReferenceType: {
+    TRIP_EXCEPTION: "Incidencia del viaje",
+    DELIVERY_FAILED: "Entrega fallida",
+    LATE_ARRIVAL: "Demora",
+    OTHER: "Otra",
   },
   /** Fase 50: contra qué cifra se comparó una factura o una línea. */
   expectedBasis: {

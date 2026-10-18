@@ -3,6 +3,7 @@ package com.ebim.tms.settlement.domain;
 import com.ebim.tms.shared.api.ConflictException;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -78,6 +79,61 @@ public class CarrierInvoice {
 
     @Column(name = "notes")
     private String notes;
+
+    // ------------------------------------------------------------------ V66 (ADR-024 part 2)
+
+    /** 01, 07 or 08. Every pre-V66 row is a factura. */
+    @Convert(converter = DocumentType.CodeConverter.class)
+    @Column(name = "document_type", updatable = false, nullable = false)
+    private DocumentType documentType = DocumentType.INVOICE;
+
+    @Column(name = "series", updatable = false)
+    private String series;
+
+    /** Without leading zeros, so 00000123 and 123 are one document. */
+    @Column(name = "correlative", updatable = false)
+    private String correlative;
+
+    @Column(name = "issuer_ruc", updatable = false)
+    private String issuerRuc;
+
+    /** Valor de venta, net of IGV. Null on a document without breakdown. */
+    @Column(name = "subtotal_amount")
+    private BigDecimal subtotalAmount;
+
+    @Column(name = "igv_rate")
+    private BigDecimal igvRate;
+
+    @Column(name = "igv_amount")
+    private BigDecimal igvAmount;
+
+    /** The invoice a note corrects; null on an invoice. Same company and carrier by composite FK. */
+    @Column(name = "referenced_invoice_id", updatable = false)
+    private UUID referencedInvoiceId;
+
+    @Column(name = "detraction_code")
+    private String detractionCode;
+
+    @Column(name = "detraction_rate")
+    private BigDecimal detractionRate;
+
+    @Column(name = "detraction_amount")
+    private BigDecimal detractionAmount;
+
+    @Column(name = "detraction_constancy_number")
+    private String detractionConstancyNumber;
+
+    @Column(name = "detraction_constancy_date")
+    private LocalDate detractionConstancyDate;
+
+    @Column(name = "retention_rate")
+    private BigDecimal retentionRate;
+
+    @Column(name = "retention_amount")
+    private BigDecimal retentionAmount;
+
+    @Column(name = "retention_override_reason")
+    private String retentionOverrideReason;
 
     @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("lineNumber ASC")
@@ -172,6 +228,97 @@ public class CarrierInvoice {
         this.updatedBy = actorId;
     }
 
+    /**
+     * The SUNAT identity and, for a note, the invoice it corrects (V66). Set once, at receipt; the
+     * columns are not updatable.
+     */
+    public void identifyAs(DocumentType documentType, String series, String correlative, String issuerRuc,
+            UUID referencedInvoiceId) {
+        if (id != null) {
+            throw new IllegalStateException("a document's identity is set when it is received");
+        }
+        if (documentType.isNote() != (referencedInvoiceId != null)) {
+            throw new IllegalArgumentException("a note references an invoice and an invoice references nothing");
+        }
+        this.documentType = documentType;
+        this.series = series;
+        this.correlative = correlative;
+        this.issuerRuc = issuerRuc;
+        this.referencedInvoiceId = referencedInvoiceId;
+    }
+
+    /**
+     * The tax breakdown, all three or none, adding up to the total within one cent
+     * ({@code ck_carrier_invoice_tax_breakdown}).
+     */
+    public void applyBreakdown(BigDecimal subtotalAmount, BigDecimal igvRate, BigDecimal igvAmount) {
+        requireEditable();
+        boolean none = subtotalAmount == null && igvRate == null && igvAmount == null;
+        boolean all = subtotalAmount != null && igvRate != null && igvAmount != null;
+        if (!none && !all) {
+            throw new IllegalArgumentException("a tax breakdown states subtotal, IGV rate and IGV amount together");
+        }
+        if (all && !TaxCalculator.breakdownAddsUp(subtotalAmount, igvAmount, totalAmount)) {
+            throw new IllegalArgumentException("subtotal + IGV must equal the total within "
+                    + TaxCalculator.BREAKDOWN_TOLERANCE);
+        }
+        this.subtotalAmount = subtotalAmount;
+        this.igvRate = igvRate;
+        this.igvAmount = igvAmount;
+    }
+
+    /** What the computation said, replacing whatever was there (exclusive by construction). */
+    public void applyTaxes(TaxCalculator.TaxOutcome outcome) {
+        requireEditable();
+        TaxCalculator.Detraction detraction = outcome.detraction();
+        this.detractionCode = detraction == null ? null : detraction.code();
+        this.detractionRate = detraction == null ? null : detraction.rate();
+        this.detractionAmount = detraction == null ? null : detraction.amount();
+        if (detraction == null) {
+            this.detractionConstancyNumber = null;
+            this.detractionConstancyDate = null;
+        }
+        TaxCalculator.Retention retention = outcome.retention();
+        this.retentionRate = retention == null ? null : retention.rate();
+        this.retentionAmount = retention == null ? null : retention.amount();
+        this.retentionOverrideReason = null;
+    }
+
+    /**
+     * A person replaces the computed retention, with a reason (ADR-024 part 2, item 8: a "buen
+     * contribuyente" is not modelled, so an exempt carrier is set to zero by hand).
+     */
+    public void overrideRetention(BigDecimal amount, String reason) {
+        requireEditable();
+        if (retentionAmount == null) {
+            throw new IllegalArgumentException("no retention applies to this document");
+        }
+        if (amount == null || amount.signum() < 0 || reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("a retention override states a non-negative amount and a reason");
+        }
+        this.retentionAmount = amount;
+        this.retentionOverrideReason = reason.trim();
+    }
+
+    /** The deposit's proof, informed by the ERP or typed by a person; only where a detraction applies. */
+    public void recordDetractionConstancy(String number, LocalDate date) {
+        if (detractionAmount == null) {
+            throw new IllegalArgumentException("no detraction applies to this document");
+        }
+        this.detractionConstancyNumber = number;
+        this.detractionConstancyDate = date;
+    }
+
+    /** +1 or -1: what this document does to what is owed. */
+    public int effectiveSign() {
+        return documentType.effectiveSign();
+    }
+
+    /** What the shipments are compared against: the subtotal when broken down, the total otherwise. */
+    public BigDecimal comparableAmount() {
+        return subtotalAmount != null ? subtotalAmount : totalAmount;
+    }
+
     private void requireEditable() {
         if (!status.isEditable()) {
             throw new ConflictException("An invoice that is " + readable(status)
@@ -225,6 +372,70 @@ public class CarrierInvoice {
 
     public String notes() {
         return notes;
+    }
+
+    public DocumentType documentType() {
+        return documentType;
+    }
+
+    public String series() {
+        return series;
+    }
+
+    public String correlative() {
+        return correlative;
+    }
+
+    public String issuerRuc() {
+        return issuerRuc;
+    }
+
+    public BigDecimal subtotalAmount() {
+        return subtotalAmount;
+    }
+
+    public BigDecimal igvRate() {
+        return igvRate;
+    }
+
+    public BigDecimal igvAmount() {
+        return igvAmount;
+    }
+
+    public UUID referencedInvoiceId() {
+        return referencedInvoiceId;
+    }
+
+    public String detractionCode() {
+        return detractionCode;
+    }
+
+    public BigDecimal detractionRate() {
+        return detractionRate;
+    }
+
+    public BigDecimal detractionAmount() {
+        return detractionAmount;
+    }
+
+    public String detractionConstancyNumber() {
+        return detractionConstancyNumber;
+    }
+
+    public LocalDate detractionConstancyDate() {
+        return detractionConstancyDate;
+    }
+
+    public BigDecimal retentionRate() {
+        return retentionRate;
+    }
+
+    public BigDecimal retentionAmount() {
+        return retentionAmount;
+    }
+
+    public String retentionOverrideReason() {
+        return retentionOverrideReason;
     }
 
     public List<CarrierInvoiceLine> lines() {

@@ -20,6 +20,15 @@ export type MatchStatus = 'MATCHED' | 'DISCREPANCY' | 'UNMATCHABLE'
 export type DiscrepancyType =
   | 'TOTAL_AMOUNT' | 'LINE_AMOUNT' | 'UNMATCHED_TRIP'
   | 'DUPLICATE_INVOICE' | 'CURRENCY_MISMATCH' | 'MISSING_EXPECTED_COST'
+  /** V66: la deducción del cargador; el aprobador la acepta en su propia fila. */
+  | 'PENALTY'
+
+/** Tipo SUNAT (V66): 01 factura, 07 nota de crédito, 08 nota de débito. */
+export const DOCUMENT_TYPES = ['01', '07', '08'] as const
+export type DocumentTypeCode = (typeof DOCUMENT_TYPES)[number]
+
+export const PENALTY_REFERENCE_TYPES = ['TRIP_EXCEPTION', 'DELIVERY_FAILED', 'LATE_ARRIVAL', 'OTHER'] as const
+export type PenaltyReferenceType = (typeof PENALTY_REFERENCE_TYPES)[number]
 
 export type DiscrepancyStatus = 'OPEN' | 'ACCEPTED' | 'REJECTED'
 
@@ -64,6 +73,8 @@ export interface CarrierInvoiceSummaryView {
   expectedAmount: number | null
   differenceAmount: number | null
   openDiscrepancyCount: number
+  /** V66. Ausente en un servidor anterior: se lee como factura. */
+  documentType?: DocumentTypeCode
 }
 
 /** Mirrors `CarrierInvoiceView.LineView`. */
@@ -91,6 +102,65 @@ export interface InvoiceLineView {
   expectedBasis: LineExpectedBasis | null
   actualAmount: number | null
   differenceAmount: number | null
+  penaltyReason?: string | null
+  penaltyReferenceType?: PenaltyReferenceType | null
+  penaltyReferenceId?: string | null
+}
+
+/** Una nota que corrige la factura, tal como la factura la lista (V66). */
+export interface NoteView {
+  id: string
+  documentType: DocumentTypeCode
+  invoiceNumber: string
+  invoiceDate: string
+  totalAmount: number
+  status: InvoiceStatus
+}
+
+/**
+ * La parte fiscal del documento (V66, ADR-024 parte 2). `cpeValidation` es hoy siempre
+ * `EXTERNAL_DEPENDENCY`: nadie consultó a SUNAT, y la pantalla no lo presenta como «válido».
+ */
+export interface FiscalView {
+  documentType: DocumentTypeCode
+  effectiveSign: number
+  series: string | null
+  correlative: string | null
+  issuerRuc: string | null
+  subtotalAmount: number | null
+  igvRate: number | null
+  igvAmount: number | null
+  referencedInvoiceId: string | null
+  referencedInvoiceNumber: string | null
+  netAmount: number | null
+  notes: NoteView[]
+  detractionCode: string | null
+  detractionRate: number | null
+  detractionAmount: number | null
+  detractionConstancyNumber: string | null
+  detractionConstancyDate: string | null
+  retentionRate: number | null
+  retentionAmount: number | null
+  retentionOverrideReason: string | null
+  cpeValidation: 'EXTERNAL_DEPENDENCY' | 'ACCEPTED' | 'NOT_ACCEPTED' | null
+}
+
+/** Las reglas fiscales de la empresa, con los valores por defecto ya resueltos por el servidor. */
+export interface FiscalSettingsView {
+  currency: string
+  igvRate: number
+  detractionEnabled: boolean
+  detractionCode: string
+  detractionRate: number
+  detractionThresholdAmount: number
+  detractionStrictlyAboveThreshold: boolean
+  retentionAgent: boolean
+  retentionRate: number
+  breakdownTolerance: number
+}
+
+export function fetchFiscalSettings(companyId: string, signal?: AbortSignal): Promise<FiscalSettingsView> {
+  return apiRequest<FiscalSettingsView>('/settlement/fiscal-settings', { companyId, signal })
 }
 
 /** Mirrors `CarrierInvoiceView.MatchView`: el veredicto y con qué se comparó. */
@@ -163,11 +233,14 @@ export interface CarrierInvoiceView {
   discrepancies: FreightDiscrepancyView[]
   approvals: SettlementApprovalView[]
   export: PayableExportView | null
+  /** V66. Ausente en un servidor anterior. */
+  fiscal?: FiscalView | null
 }
 
 export interface CarrierInvoiceRequest {
   carrierId: string
-  invoiceNumber: string
+  /** Opcional con serie y correlativo (V66): el servidor lo compone. */
+  invoiceNumber?: string | null
   invoiceDate: string
   currency: string
   totalAmount: number
@@ -180,8 +253,24 @@ export interface CarrierInvoiceRequest {
     description: string
     quantity?: number | null
     unitAmount?: number | null
+    /** Negativo sólo en una línea `PENALTY`, que dice por qué. */
     lineAmount: number
+    penaltyReason?: string | null
+    penaltyReferenceType?: PenaltyReferenceType | null
+    penaltyReferenceId?: string | null
   }[]
+  documentType?: DocumentTypeCode | null
+  series?: string | null
+  correlative?: string | null
+  issuerRuc?: string | null
+  subtotalAmount?: number | null
+  igvRate?: number | null
+  igvAmount?: number | null
+  referencedInvoiceId?: string | null
+  detractionConstancyNumber?: string | null
+  detractionConstancyDate?: string | null
+  retentionOverrideAmount?: number | null
+  retentionOverrideReason?: string | null
 }
 
 export function fetchInvoices(

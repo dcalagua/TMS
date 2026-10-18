@@ -946,3 +946,88 @@ El EWM no se tocó.
 - Los selectores de transportista/origen/ruta del front leen las APIs de maestros; sin esos permisos aparecen vacíos
   (mismo límite que la fase 50).
 - Sin entradas nuevas en `i18n.ts` (las pantallas de liquidación nunca las tuvieron).
+
+## 60 · IGV, CPE, notas de crédito/débito y penalidades (2026-10-18, ciclo 1 de 2 · completa con corte declarado)
+
+Plan `03` F-3, ADR-024 parte 2, D-06. Sólo TMS.
+
+### Qué entró
+
+1. **V66** `V66__peruvian_taxes_cpe_notes_and_penalties.sql`: configuración fiscal por empresa en `company_settings`
+   (siete columnas nulas: una nula = propiedad `tms.finance.pe.*`); en `carrier_invoice` tipo SUNAT (`01`/`07`/`08`,
+   por defecto `01`), serie, correlativo, RUC emisor, desglose subtotal/tasa/IGV (`ck_carrier_invoice_tax_breakdown`,
+   ±0,01), referencia a la factura (FK compuesta mismo transportista, obligatoria sólo en 07/08), detracción (código,
+   %, monto, constancia), retención (+ motivo de ajuste), exclusividad detracción/retención, `uq_carrier_invoice_cpe`;
+   en líneas, motivo y referencia de penalidad y `ck_carrier_invoice_line_sign` (negativo sólo `PENALTY`, con motivo);
+   `PENALTY` en los tipos de discrepancia; cuatro acciones de auditoría. `ck_carrier_invoice_total_nonnegative` se queda:
+   las notas guardan importes positivos y el signo sale del tipo.
+2. **Reglas puras**: `RucValidator` (módulo 11), `CpeNumbering` (serie, correlativo sin ceros a la izquierda),
+   `TaxCalculator` (constantes nombradas: tolerancia 0,01, «estrictamente por encima» del umbral, detracción en soles
+   enteros HALF_UP, retención al céntimo, sólo factura en PEN, exclusivas), `NoteMatcher`, `DocumentType`.
+3. **Servicio**: recepción con validaciones (CPE completo, RUC válido, RUC = el del transportista → 422
+   `issuer-ruc-mismatch`, CPE único → 409, desglose obligatorio en PEN, nota con factura del mismo transportista, no
+   rechazada, misma moneda), cálculo de detracción/retención con `FiscalSettingsResolver`, auditoría
+   `CREDIT_NOTE_RECEIVED`/`DEBIT_NOTE_RECEIVED`/`RETENTION_OVERRIDDEN`. Comparación por **subtotal**; NC/ND por
+   `NoteMatcher`; penalidad como discrepancia `PENALTY` que el aprobador acepta (`PENALTY_ACCEPTED`). Duplicados y consumo
+   de provisión sólo con facturas `01`; la provisión se consume por las líneas netas (= subtotal). Neto de la factura
+   (`total − 07 + 08` aprobadas) en la vista y en la exportación.
+4. **`CpeValidationPort`** con `DisabledCpeValidationAdapter`: siempre `EXTERNAL_DEPENDENCY`, nunca «válido»; la vista
+   lo muestra así.
+5. **Exportación** JSON y CSV con tipo, signo, serie, correlativo, RUC, desglose, detracción, retención, documento
+   referido, neto, motivo de penalidad y las cinco cuentas GL (nivel empresa). Golden CSV actualizado a propósito.
+6. **`GET /settlement/fiscal-settings`** (`settlement.invoice:read`): reglas resueltas para el formulario.
+7. **Front**: `InvoiceFormDrawer` con tipo de documento, factura que corrige (sólo facturas no rechazadas del
+   transportista), serie/correlativo/RUC (dígito verificador en pantalla), desglose con «Calcular IGV y total», vista
+   previa de detracción/retención con las reglas del servidor, penalidad (negativa, motivo, referencia).
+   `InvoiceWorkspaceDrawer`: bloque «Comprobante e impuestos» (CPE, IGV, detracción y constancia, retención, neto con
+   notas, notas enlazadas, «Validación SUNAT: no consultada»). `fiscalRules.ts` sin porcentajes propios.
+
+### Desvíos registrados (`DECISIONS_LOG.md`, +7)
+
+- Comparación y consumo por subtotal; líneas netas de IGV.
+- Las notas no mueven la provisión.
+- Número de una nota `07-`/`08-` + serie-correlativo; duplicados sólo entre facturas; correlativo sin ceros.
+- Regla de conciliación de una nota (`NoteMatcher`).
+- Penalidad aceptada como discrepancia `PENALTY`.
+- Detracción/retención sólo en factura PEN; cuentas GL a nivel empresa.
+- La configuración fiscal se lee; editarla es ciclo 2.
+
+### Archivos
+
+- Migración: `backend/tms-api/src/main/resources/db/migration/V66__peruvian_taxes_cpe_notes_and_penalties.sql`.
+- Nuevos (main): `settlement/domain/{DocumentType, RucValidator, CpeNumbering, TaxCalculator, FiscalRules, NoteMatcher,
+  PenaltyReferenceType}`, `settlement/application/{FiscalSettingsResolver, CpeValidationPort,
+  DisabledCpeValidationAdapter}`, `settlement/api/FiscalSettingsController`, `shared/settings/{FiscalSettings,
+  FiscalSettingsPort}`, `iam/infrastructure/JdbcFiscalSettingsAdapter`.
+- Modificados (main): `CarrierInvoice`, `CarrierInvoiceLine`, `DiscrepancyType`, `FreightMatcher`, `SettlementService`,
+  `AccrualService`, `CarrierInvoiceRepository`, `CarrierInvoiceRequest`, `CarrierInvoiceView`,
+  `CarrierInvoiceSummaryView` (+`documentType`), `PayableExportPort` (+`FiscalDetail`), `Csv/JsonPayableExportAdapter`,
+  `CarrierLookupPort` (+`rucOf`) y `CarrierLookupAdapter`, `ProblemType.ISSUER_RUC_MISMATCH`, `AuditAction`,
+  `application.yml` (`tms.finance.pe.*`).
+- Pruebas: `RucValidatorTest` (20), `TaxCalculatorTest` (20), `NoteMatcherTest` (9), `FiscalSettingsResolverTest` (3),
+  `SettlementApiIntegrationTest` (+7, clase «Peruvian taxes…»), `AccrualApiIntegrationTest` (+1), `FreightMatcherTest`
+  (penalidad → `PENALTY`), `CsvPayableExportAdapterTest` (golden con detalle fiscal y penalidad); los ayudantes de las
+  IT envían desglose con IGV 0 (PEN lo exige).
+- Front: `shared/api/settlementApi.ts`, `pages/settlement/{InvoiceFormDrawer, InvoiceWorkspaceDrawer, fiscalRules}.tsx|ts`,
+  `fiscalRules.test.ts`, `InvoiceFormDrawer.test.tsx` (+4), `lib/enums.ts`.
+- Docs: ADR-024 «Implementation notes - part 2», `PHASE_MAP.md`, `DECISIONS_LOG.md`.
+
+### Pruebas
+
+| Repo | Comando | Resultado |
+|---|---|---|
+| TMS backend | `./mvnw -B test` (completo, Testcontainers) | **2551 corridas, 1 fallo, 0 errores, 2 omitidas** · 4 min 15 s (fase 55: 2491; +60). El único rojo es el conocido `PlatformLifecycleIntegrationTest.versionRules` (fase 00) |
+| TMS backend | nuevas | RUC válidos/inválidos y dígito 10→0 / 11→1; redondeo ±0,01; detracción 399,99 / 400,00 / 400,01 y entera; retención excluida con detracción; NC dentro y por encima del saldo; ND suma y compara; nota sin precio = `UNMATCHABLE`; penalidad negativa sólo `PENALTY`, con motivo, aceptada antes de aprobar; CPE nunca «válido»; 422 RUC ajeno, 409 CPE repetido con ceros; consumo por subtotal y NC sin consumo; golden CSV; `PersistedEnumConstraintTest`, `AuditVocabularyMigrationTest`, `MigrationConventionTest`, `ModuleBoundaryTest` verdes |
+| TMS frontend | `npm run typecheck && npm run lint && npm test` | OK · lint 0 errores · **367/367** en 53 archivos (fase 55: 344; +23) |
+| Migraciones | `git diff` de V1–V65 | intactas; sólo V66 nueva |
+
+El EWM no se tocó.
+
+### Qué quedó fuera (ciclo 2)
+
+- Editar la configuración fiscal desde «Configuración de empresa» (`iam`: perfil, UPSERT, pantalla). Hoy rigen los
+  defaults de `tms.finance.pe.*`; las columnas existen y se leen.
+- Registrar la constancia de detracción o ajustar la retención **después** de recibir el documento (hoy sólo al
+  recibirlo, por API); el mensaje de pago del ERP es de la fase 65.
+- Atajo «Registrar nota» desde el panel de la factura (hoy por el formulario, eligiendo tipo y factura).
+- Sin entradas nuevas en `i18n.ts` (como las fases 50 y 55).

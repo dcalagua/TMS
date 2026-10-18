@@ -17,8 +17,8 @@ import org.springframework.stereotype.Component;
  * line, with the header fields repeated on each</b>: the shape every ERP import and every
  * spreadsheet pivot reads without a second file.
  *
- * <p>The same fields as {@link JsonPayableExportAdapter}, the same reference. When V65/V66 add GL
- * accounts and tax columns, both gain them together.
+ * <p>The same fields as {@link JsonPayableExportAdapter}, the same reference. V66 adds the fiscal
+ * columns and the company-level GL accounts to both, together.
  */
 @Component
 class CsvPayableExportAdapter implements PayableExportPort {
@@ -27,7 +27,14 @@ class CsvPayableExportAdapter implements PayableExportPort {
     static final List<String> HEADER = List.of(
             "reference", "invoiceId", "invoiceNumber", "invoiceDate", "carrierId", "carrierName",
             "currency", "totalAmount", "expectedBasis",
-            "lineNumber", "tripId", "chargeCode", "description", "lineAmount");
+            // V66 (ADR-024 part 2, item 10).
+            "documentType", "effectiveSign", "series", "correlative", "issuerRuc",
+            "subtotalAmount", "igvRate", "igvAmount",
+            "detractionCode", "detractionRate", "detractionAmount", "detractionConstancyNumber",
+            "detractionConstancyDate", "retentionRate", "retentionAmount",
+            "referencedInvoiceId", "referencedInvoiceNumber", "netAmount",
+            "glFreightExpense", "glIgvCredit", "glDetraccionPayable", "glRetencionPayable", "glCarrierPayable",
+            "lineNumber", "tripId", "chargeCode", "description", "lineAmount", "penaltyReason");
 
     @Override
     public PayableDocument render(PayableInvoice invoice) {
@@ -44,11 +51,34 @@ class CsvPayableExportAdapter implements PayableExportPort {
             row.add(invoice.currency());
             row.add(plain(invoice.totalAmount()));
             row.add(invoice.expectedBasis());
+            FiscalDetail fiscal = invoice.fiscal();
+            row.add(fiscal.documentType());
+            row.add(Integer.toString(fiscal.effectiveSign()));
+            row.add(fiscal.series());
+            row.add(fiscal.correlative());
+            row.add(fiscal.issuerRuc());
+            row.add(plain(fiscal.subtotalAmount()));
+            row.add(plain(fiscal.igvRate()));
+            row.add(plain(fiscal.igvAmount()));
+            row.add(fiscal.detractionCode());
+            row.add(plain(fiscal.detractionRate()));
+            row.add(plain(fiscal.detractionAmount()));
+            row.add(fiscal.detractionConstancyNumber());
+            row.add(fiscal.detractionConstancyDate() == null ? null : fiscal.detractionConstancyDate().toString());
+            row.add(plain(fiscal.retentionRate()));
+            row.add(plain(fiscal.retentionAmount()));
+            row.add(fiscal.referencedInvoiceId() == null ? null : fiscal.referencedInvoiceId().toString());
+            row.add(fiscal.referencedInvoiceNumber());
+            row.add(plain(fiscal.netAmount()));
+            for (com.ebim.tms.settlement.domain.GlConcept concept : FiscalDetail.EXPORTED_CONCEPTS) {
+                row.add(fiscal.glAccounts().get(concept));
+            }
             row.add(Integer.toString(line.lineNumber()));
             row.add(line.tripId() == null ? null : line.tripId().toString());
             row.add(line.chargeCode());
             row.add(line.description());
             row.add(plain(line.amount()));
+            row.add(line.penaltyReason());
             rows.add(row);
         }
         return new PayableDocument(reference, PayableExport.Format.CSV, DelimitedTextWriter.text(HEADER, rows));

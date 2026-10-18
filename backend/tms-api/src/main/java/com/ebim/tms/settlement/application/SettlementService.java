@@ -1,6 +1,16 @@
 package com.ebim.tms.settlement.application;
 
 import com.ebim.tms.settlement.domain.CarrierInvoice;
+import com.ebim.tms.settlement.domain.CpeNumbering;
+import com.ebim.tms.settlement.domain.DocumentType;
+import com.ebim.tms.settlement.domain.GlAccountResolver;
+import com.ebim.tms.settlement.domain.GlConcept;
+import com.ebim.tms.settlement.domain.NoteMatcher;
+import com.ebim.tms.settlement.domain.RucValidator;
+import com.ebim.tms.settlement.domain.TaxCalculator;
+import com.ebim.tms.settlement.infrastructure.GlAccountMappingRepository;
+import com.ebim.tms.shared.api.ProblemType;
+import com.ebim.tms.shared.api.ProblemTypedException;
 import com.ebim.tms.settlement.domain.CarrierInvoiceLine;
 import com.ebim.tms.settlement.domain.DiscrepancyType;
 import com.ebim.tms.settlement.domain.FreightDiscrepancy;
@@ -111,6 +121,9 @@ public class SettlementService {
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
     private final AccrualService accrualService;
+    private final FiscalSettingsResolver fiscalSettingsResolver;
+    private final CpeValidationPort cpeValidationPort;
+    private final GlAccountMappingRepository glAccountMappingRepository;
 
     public SettlementService(CarrierInvoiceRepository invoiceRepository, FreightMatchRepository matchRepository,
             FreightDiscrepancyRepository discrepancyRepository, SettlementApprovalRepository approvalRepository,
@@ -118,7 +131,9 @@ public class SettlementService {
             TripCostLookupPort tripCostLookupPort, TripSettlementLookupPort tripSettlementLookupPort,
             CarrierLookupPort carrierLookupPort, List<PayableExportPort> payableExportPorts,
             AuditActorProvider auditActorProvider, AuditRecorder auditRecorder,
-            io.micrometer.core.instrument.MeterRegistry meterRegistry, AccrualService accrualService) {
+            io.micrometer.core.instrument.MeterRegistry meterRegistry, AccrualService accrualService,
+            FiscalSettingsResolver fiscalSettingsResolver, CpeValidationPort cpeValidationPort,
+            GlAccountMappingRepository glAccountMappingRepository) {
         this.invoiceRepository = invoiceRepository;
         this.matchRepository = matchRepository;
         this.discrepancyRepository = discrepancyRepository;
@@ -133,6 +148,9 @@ public class SettlementService {
         this.auditRecorder = auditRecorder;
         this.meterRegistry = meterRegistry;
         this.accrualService = accrualService;
+        this.fiscalSettingsResolver = fiscalSettingsResolver;
+        this.cpeValidationPort = cpeValidationPort;
+        this.glAccountMappingRepository = glAccountMappingRepository;
     }
 
     // ------------------------------------------------------------------ receiving
@@ -142,27 +160,196 @@ public class SettlementService {
         UUID actorId = auditActorProvider.requireAppUserId();
         requireCarrierInScope(scope, request.carrierId());
 
+        String currency = request.currency().toUpperCase(java.util.Locale.ROOT);
+        DocumentType type = documentTypeOf(request);
+        CpeIdentity cpe = cpeIdentityOf(scope, request, type);
+        String invoiceNumber = cpe != null ? cpe.invoiceNumber() : blankToNull(request.invoiceNumber());
+        if (invoiceNumber == null) {
+            throw new InvalidRequestException("A document needs its number, or its series and correlative.");
+        }
+        CarrierInvoice referenced = referencedInvoiceOf(scope, request, type, currency);
+
         // The duplicate guard, checked here so the message names the number, and backed by
         // uq_carrier_invoice_number for the race this check cannot close.
         if (invoiceRepository.existsByCompanyIdAndCarrierIdAndInvoiceNumber(
-                scope.companyId(), request.carrierId(), request.invoiceNumber().trim())) {
-            throw new ConflictException("This carrier has already billed invoice "
-                    + request.invoiceNumber().trim() + ".");
+                scope.companyId(), request.carrierId(), invoiceNumber)) {
+            throw new ConflictException("This carrier has already billed invoice " + invoiceNumber + ".");
         }
 
         requireTripsInScope(scope, request);
 
         CarrierInvoice invoice = new CarrierInvoice(scope.companyId(), request.carrierId(),
-                request.invoiceNumber().trim(), request.invoiceDate(), request.currency().toUpperCase(java.util.Locale.ROOT),
+                invoiceNumber, request.invoiceDate(), currency,
                 request.totalAmount(), blankToNull(request.externalReference()), blankToNull(request.notes()),
                 actorId);
+        invoice.identifyAs(type, cpe == null ? null : cpe.series(), cpe == null ? null : cpe.correlative(),
+                cpe == null ? null : cpe.issuerRuc(), referenced == null ? null : referenced.id());
+        applyFiscalDetail(scope, invoice, request);
         invoice.replaceLines(linesOf(scope, request), actorId);
 
-        CarrierInvoice saved = saveWithDuplicateBackstop(invoice, request.invoiceNumber().trim());
-        auditRecorder.record(scope, AuditAggregateType.CARRIER_INVOICE, saved.id(), AuditAction.INVOICE_RECEIVED,
-                Map.of("invoiceNumber", saved.invoiceNumber(), "totalAmount", saved.totalAmount().toPlainString(),
-                        "currency", saved.currency()));
+        CarrierInvoice saved = saveWithDuplicateBackstop(invoice, invoiceNumber);
+        Map<String, Object> details = new java.util.LinkedHashMap<>();
+        details.put("invoiceNumber", saved.invoiceNumber());
+        details.put("totalAmount", saved.totalAmount().toPlainString());
+        details.put("currency", saved.currency());
+        details.put("documentType", type.code());
+        if (referenced != null) {
+            details.put("referencedInvoiceId", referenced.id().toString());
+            details.put("referencedInvoiceNumber", referenced.invoiceNumber());
+        }
+        AuditAction action = switch (type) {
+            case INVOICE -> AuditAction.INVOICE_RECEIVED;
+            case CREDIT_NOTE -> AuditAction.CREDIT_NOTE_RECEIVED;
+            case DEBIT_NOTE -> AuditAction.DEBIT_NOTE_RECEIVED;
+        };
+        auditRecorder.record(scope, AuditAggregateType.CARRIER_INVOICE, saved.id(), action, details);
+        if (saved.retentionOverrideReason() != null) {
+            auditRecorder.record(scope, AuditAggregateType.CARRIER_INVOICE, saved.id(),
+                    AuditAction.RETENTION_OVERRIDDEN, Map.of("retentionAmount", saved.retentionAmount().toPlainString(),
+                            "reason", saved.retentionOverrideReason()));
+        }
         return toView(scope, saved);
+    }
+
+    // ------------------------------------------------------------------ fiscal detail (V66)
+
+    /** A CPE identity, checked and normalised; null when the document brought none. */
+    record CpeIdentity(String series, String correlative, String issuerRuc, String invoiceNumber) {
+    }
+
+    private static DocumentType documentTypeOf(CarrierInvoiceRequest request) {
+        return request.documentType() == null || request.documentType().isBlank()
+                ? DocumentType.INVOICE
+                : DocumentType.ofCode(request.documentType());
+    }
+
+    /**
+     * The series, correlative and issuer RUC, all three or none (ADR-024 part 2, item 3). The RUC's
+     * check digit is verified here (a typing mistake), and it must be the carrier's own when the
+     * carrier has one (422 {@code issuer-ruc-mismatch}). Unique per issuer, type, series and
+     * correlative; the correlative is stored without leading zeros so the uniqueness cannot be
+     * dodged by padding.
+     */
+    private CpeIdentity cpeIdentityOf(CompanyScope scope, CarrierInvoiceRequest request, DocumentType type) {
+        String series = blankToNull(request.series());
+        String rawCorrelative = blankToNull(request.correlative());
+        String ruc = blankToNull(request.issuerRuc());
+        if (series == null && rawCorrelative == null && ruc == null) {
+            return null;
+        }
+        if (series == null || rawCorrelative == null || ruc == null) {
+            throw new InvalidRequestException("A CPE is identified by the issuer's RUC, a series and a correlative"
+                    + " together.");
+        }
+        series = series.toUpperCase(java.util.Locale.ROOT);
+        if (!CpeNumbering.isValidSeries(series)) {
+            throw new InvalidRequestException("Series " + series + " is not a CPE series (F + 3 characters, E001"
+                    + " or 4 digits).");
+        }
+        String correlative = CpeNumbering.normalizeCorrelative(rawCorrelative);
+        if (correlative == null) {
+            throw new InvalidRequestException("The correlative is 1 to 8 digits and is not zero.");
+        }
+        if (!RucValidator.isValid(ruc)) {
+            throw new InvalidRequestException("RUC " + ruc + " is not valid: its check digit does not match.");
+        }
+        carrierLookupPort.rucOf(request.carrierId(), scope.companyId()).ifPresent(carrierRuc -> {
+            if (!carrierRuc.equals(ruc)) {
+                throw new ProblemTypedException(ProblemType.ISSUER_RUC_MISMATCH, "This document was issued by RUC "
+                        + ruc + " and the carrier's RUC is " + carrierRuc + ".");
+            }
+        });
+        if (invoiceRepository.existsByCompanyIdAndIssuerRucAndDocumentTypeAndSeriesAndCorrelative(
+                scope.companyId(), ruc, type, series, correlative)) {
+            throw new ConflictException("RUC " + ruc + " has already sent document " + type.code() + " "
+                    + series + "-" + correlative + ".");
+        }
+        // A note's number carries its type: F001-123 may be a factura and a credit note at once, and
+        // uq_carrier_invoice_number would otherwise refuse the second (SUNAT's own file names do the same).
+        String number = CpeNumbering.invoiceNumberOf(series, correlative);
+        return new CpeIdentity(series, correlative, ruc, type.isNote() ? type.code() + "-" + number : number);
+    }
+
+    /**
+     * The invoice a note corrects: of this company and carrier (also the composite FK), a factura,
+     * not rejected, in the same currency. An invoice references nothing.
+     */
+    private CarrierInvoice referencedInvoiceOf(CompanyScope scope, CarrierInvoiceRequest request, DocumentType type,
+            String currency) {
+        if (!type.isNote()) {
+            if (request.referencedInvoiceId() != null) {
+                throw new InvalidRequestException("Only a credit or debit note references another invoice.");
+            }
+            return null;
+        }
+        if (request.referencedInvoiceId() == null) {
+            throw new InvalidRequestException("A credit or debit note names the invoice it corrects.");
+        }
+        CarrierInvoice referenced = invoiceRepository
+                .findByIdAndCompanyId(request.referencedInvoiceId(), scope.companyId())
+                .filter(found -> found.carrierId().equals(request.carrierId()))
+                .orElseThrow(() -> new InvalidRequestException(
+                        "The referenced invoice does not exist for this carrier."));
+        if (referenced.documentType() != DocumentType.INVOICE) {
+            throw new InvalidRequestException("A note corrects an invoice, not another note.");
+        }
+        if (referenced.status() == InvoiceStatus.REJECTED) {
+            throw new InvalidRequestException("Invoice " + referenced.invoiceNumber()
+                    + " was rejected: there is nothing to correct.");
+        }
+        if (!referenced.currency().equals(currency)) {
+            throw new InvalidRequestException("Invoice " + referenced.invoiceNumber() + " is in "
+                    + referenced.currency() + "; a note corrects it in the same currency.");
+        }
+        return referenced;
+    }
+
+    /**
+     * Breakdown (required on PEN, ADR-024 part 2, item 2), detraction or retention (computed from the
+     * company's fiscal rules), the detraction constancy and a retention override when given.
+     */
+    private void applyFiscalDetail(CompanyScope scope, CarrierInvoice invoice, CarrierInvoiceRequest request) {
+        boolean anyBreakdown = request.subtotalAmount() != null || request.igvRate() != null
+                || request.igvAmount() != null;
+        if (TaxCalculator.FISCAL_CURRENCY.equals(invoice.currency()) && (request.subtotalAmount() == null
+                || request.igvRate() == null || request.igvAmount() == null)) {
+            throw new InvalidRequestException("A document in PEN states its subtotal, IGV rate and IGV amount.");
+        }
+        if (anyBreakdown) {
+            if (request.subtotalAmount() == null || request.igvRate() == null || request.igvAmount() == null) {
+                throw new InvalidRequestException("A tax breakdown states subtotal, IGV rate and IGV amount together.");
+            }
+            if (!TaxCalculator.breakdownAddsUp(request.subtotalAmount(), request.igvAmount(), request.totalAmount())) {
+                throw new InvalidRequestException("Subtotal " + request.subtotalAmount().toPlainString() + " + IGV "
+                        + request.igvAmount().toPlainString() + " does not equal the total "
+                        + request.totalAmount().toPlainString() + " (rounding tolerance "
+                        + TaxCalculator.BREAKDOWN_TOLERANCE + ").");
+            }
+            if (request.igvRate().compareTo(new BigDecimal("100")) >= 0) {
+                throw new InvalidRequestException("The IGV rate is a percentage below 100.");
+            }
+            invoice.applyBreakdown(money(request.subtotalAmount()), request.igvRate(), money(request.igvAmount()));
+        }
+
+        invoice.applyTaxes(TaxCalculator.compute(fiscalSettingsResolver.rulesOf(scope.companyId()),
+                invoice.documentType(), invoice.currency(), invoice.totalAmount()));
+
+        if (request.detractionConstancyNumber() != null || request.detractionConstancyDate() != null) {
+            if (invoice.detractionAmount() == null) {
+                throw new InvalidRequestException("No detraction applies to this document, so it has no constancy.");
+            }
+            invoice.recordDetractionConstancy(blankToNull(request.detractionConstancyNumber()),
+                    request.detractionConstancyDate());
+        }
+        if (request.retentionOverrideAmount() != null || blankToNull(request.retentionOverrideReason()) != null) {
+            if (invoice.retentionAmount() == null) {
+                throw new InvalidRequestException("No retention applies to this document.");
+            }
+            if (request.retentionOverrideAmount() == null || blankToNull(request.retentionOverrideReason()) == null) {
+                throw new InvalidRequestException("Changing the retention needs the amount and the reason.");
+            }
+            invoice.overrideRetention(money(request.retentionOverrideAmount()), request.retentionOverrideReason());
+        }
     }
 
     /**
@@ -192,9 +379,18 @@ public class SettlementService {
 
     private List<CarrierInvoiceLine> linesOf(CompanyScope scope, CarrierInvoiceRequest request) {
         List<CarrierInvoiceLine> lines = new ArrayList<>();
+        int number = 1;
         for (CarrierInvoiceRequest.LineRequest line : request.lines()) {
-            lines.add(new CarrierInvoiceLine(scope.companyId(), line.tripId(), line.description().trim(),
-                    line.quantity(), line.unitAmount(), line.lineAmount(), line.chargeCode()));
+            try {
+                lines.add(new CarrierInvoiceLine(scope.companyId(), line.tripId(), line.description().trim(),
+                        line.quantity(), line.unitAmount(), line.lineAmount(), line.chargeCode())
+                        .withPenalty(blankToNull(line.penaltyReason()), line.penaltyReferenceType(),
+                                line.penaltyReferenceId()));
+            } catch (IllegalArgumentException refused) {
+                // ck_carrier_invoice_line_sign and its penalty rules, as a sentence naming the line.
+                throw new InvalidRequestException("Line " + number + ": " + refused.getMessage() + ".");
+            }
+            number++;
         }
         return lines;
     }
@@ -225,9 +421,15 @@ public class SettlementService {
                 tripCostLookupPort.findCosts(tripIds, scope.companyId());
 
         Tolerance tolerance = toleranceFor(scope, invoice.carrierId(), invoice.currency());
-        FreightMatchResult result = FreightMatcher.match(invoice.currency(), invoice.totalAmount(),
-                matcherLines(invoice, trips), matcherCosts(trips, costs, invoice.carrierId()), tolerance,
-                billedElsewhere(scope, invoice, tripIds));
+        // The subtotal when the document is broken down (V66): a rate card prices the service, and the
+        // IGV on top of it is fiscal credit, not part of what the shipment cost.
+        FreightMatchResult result = invoice.documentType().isNote()
+                ? NoteMatcher.match(invoice.documentType(), invoice.currency(), invoice.comparableAmount(),
+                        matcherLines(invoice, trips), referencedForMatch(scope, invoice),
+                        matcherCosts(trips, costs, invoice.carrierId()), tolerance)
+                : FreightMatcher.match(invoice.currency(), invoice.comparableAmount(),
+                        matcherLines(invoice, trips), matcherCosts(trips, costs, invoice.carrierId()), tolerance,
+                        billedElsewhere(scope, invoice, tripIds));
 
         persistMatch(scope, invoice, result, tolerance, actorId);
 
@@ -241,6 +443,53 @@ public class SettlementService {
                 Map.of("matchStatus", result.status().name(),
                         "discrepancies", String.valueOf(result.discrepancies().size())));
         return toView(scope, invoice);
+    }
+
+    /**
+     * The invoice a note corrects, as {@link NoteMatcher} needs it: what a credit note may still take
+     * back (the invoice's comparable amount, less every other live credit note, plus approved debit
+     * notes) and what it billed per shipment.
+     */
+    private NoteMatcher.ReferencedInvoice referencedForMatch(CompanyScope scope, CarrierInvoice note) {
+        CarrierInvoice referenced = invoiceRepository.findByIdAndCompanyId(note.referencedInvoiceId(), scope.companyId())
+                .orElseThrow(SettlementService::invoiceNotFound);
+        BigDecimal remaining = referenced.comparableAmount();
+        for (CarrierInvoice other : invoiceRepository.findByCompanyIdAndReferencedInvoiceIdOrderByCreatedAtAsc(
+                scope.companyId(), referenced.id())) {
+            if (other.id().equals(note.id()) || other.status() == InvoiceStatus.REJECTED) {
+                continue;
+            }
+            if (other.documentType() == DocumentType.CREDIT_NOTE) {
+                remaining = remaining.subtract(other.comparableAmount());
+            } else if (AccrualService.CONSUMING_STATUSES.contains(other.status())) {
+                remaining = remaining.add(other.comparableAmount());
+            }
+        }
+        Map<UUID, BigDecimal> billed = new java.util.LinkedHashMap<>();
+        for (CarrierInvoiceLine line : referenced.lines()) {
+            if (line.tripId() != null && line.chargeCode() != com.ebim.tms.settlement.domain.ChargeCode.PENALTY) {
+                billed.merge(line.tripId(), line.lineAmount(), BigDecimal::add);
+            }
+        }
+        return new NoteMatcher.ReferencedInvoice(referenced.invoiceNumber(), referenced.currency(), remaining, billed);
+    }
+
+    /**
+     * What is owed on an invoice once its approved notes are counted (ADR-024 part 2, item 5):
+     * {@code total - approved 07 + approved 08}. Null for a note, which is its own document.
+     */
+    BigDecimal netAmountOf(CompanyScope scope, CarrierInvoice invoice) {
+        if (invoice.documentType().isNote()) {
+            return null;
+        }
+        BigDecimal net = invoice.totalAmount();
+        for (CarrierInvoice note : invoiceRepository.findByCompanyIdAndReferencedInvoiceIdOrderByCreatedAtAsc(
+                scope.companyId(), invoice.id())) {
+            if (AccrualService.CONSUMING_STATUSES.contains(note.status())) {
+                net = net.add(note.totalAmount().multiply(BigDecimal.valueOf(note.effectiveSign())));
+            }
+        }
+        return net;
     }
 
     /**
@@ -486,6 +735,17 @@ public class SettlementService {
                 .filter(found -> found.carrierInvoiceId().equals(invoiceId))
                 .orElseThrow(() -> new ResourceNotFoundException("Difference not found on this invoice."));
         discrepancy.resolve(decision, blankToNull(notes), actorId);
+        if (discrepancy.type() == DiscrepancyType.PENALTY && decision == FreightDiscrepancy.Status.ACCEPTED) {
+            // The approver accepted the shipper's deduction on its own line (ADR-024 part 2, item 6).
+            Map<String, Object> details = new java.util.LinkedHashMap<>();
+            details.put("discrepancyId", discrepancy.id().toString());
+            details.put("amount", String.valueOf(discrepancy.invoicedAmount()));
+            if (discrepancy.invoiceLineId() != null) {
+                details.put("invoiceLineId", discrepancy.invoiceLineId().toString());
+            }
+            auditRecorder.record(scope, AuditAggregateType.CARRIER_INVOICE, invoiceId, AuditAction.PENALTY_ACCEPTED,
+                    details);
+        }
         return FreightDiscrepancyView.of(discrepancyRepository.save(discrepancy));
     }
 
@@ -531,14 +791,19 @@ public class SettlementService {
 
         String carrierName = carrierLookupPort.findAllInCompany(Set.of(invoice.carrierId()), scope.companyId())
                 .values().stream().findFirst().map(reference -> reference.name()).orElse(null);
+        CarrierInvoice referenced = invoice.referencedInvoiceId() == null ? null
+                : invoiceRepository.findByIdAndCompanyId(invoice.referencedInvoiceId(), scope.companyId()).orElse(null);
         PayableExportPort.PayableDocument document = exporterFor(format).render(
                 new PayableExportPort.PayableInvoice(invoice.id(), invoice.invoiceNumber(), invoice.invoiceDate(),
                         invoice.carrierId(), carrierName, invoice.currency(), invoice.totalAmount(),
                         expectedBasisOf(scope, invoice),
                         invoice.lines().stream()
                                 .map(line -> new PayableExportPort.PayableLine(line.lineNumber(), line.tripId(),
-                                        line.description(), line.lineAmount(), line.chargeCode().name()))
-                                .toList()));
+                                        line.description(), line.lineAmount(), line.chargeCode().name(),
+                                        line.penaltyReason()))
+                                .toList(),
+                        PayableExportPort.FiscalDetail.of(invoice, referenced, netAmountOf(scope, invoice),
+                                companyGlAccounts(scope))));
 
         PayableExport export = exportRepository.save(new PayableExport(scope.companyId(), invoice.id(),
                 document.reference(), document.format(), document.payload(), actorId));
@@ -556,6 +821,21 @@ public class SettlementService {
                 .filter(port -> port.format() == wanted)
                 .findFirst()
                 .orElseThrow(() -> new InvalidRequestException("No exporter renders " + wanted + "."));
+    }
+
+    /**
+     * The accounts of the fiscal concepts at company level (ADR-023 mapping, V65): a document spans
+     * shipments of several routes, so the route and origin mappings of the accrual journal do not
+     * pick one here. A concept with no mapping is absent, never invented.
+     */
+    private Map<GlConcept, String> companyGlAccounts(CompanyScope scope) {
+        GlAccountResolver resolver = new GlAccountResolver(
+                glAccountMappingRepository.findByCompanyIdAndActiveTrue(scope.companyId()));
+        Map<GlConcept, String> accounts = new java.util.EnumMap<>(GlConcept.class);
+        for (GlConcept concept : PayableExportPort.FiscalDetail.EXPORTED_CONCEPTS) {
+            resolver.resolve(concept, null, null).ifPresent(mapping -> accounts.put(concept, mapping.accountCode()));
+        }
+        return accounts;
     }
 
     /** What the approved figure was compared against, carried into the export (ADR-024 item 4). */
@@ -646,7 +926,19 @@ public class SettlementService {
         Map<UUID, TripCostLookupPort.TripCostSummary> costs =
                 tripCostLookupPort.findCosts(tripIds, scope.companyId());
 
-        return CarrierInvoiceView.of(invoice, carrierName, match, discrepancies, approvals, export, trips, costs);
+        List<CarrierInvoiceView.NoteView> notes = invoice.documentType().isNote() ? List.of()
+                : invoiceRepository.findByCompanyIdAndReferencedInvoiceIdOrderByCreatedAtAsc(scope.companyId(),
+                        invoice.id()).stream().map(CarrierInvoiceView.NoteView::of).toList();
+        String referencedNumber = invoice.referencedInvoiceId() == null ? null
+                : invoiceRepository.findByIdAndCompanyId(invoice.referencedInvoiceId(), scope.companyId())
+                        .map(CarrierInvoice::invoiceNumber).orElse(null);
+        CpeValidationPort.CpeValidationStatus cpeValidation = invoice.series() == null ? null
+                : cpeValidationPort.validate(invoice.issuerRuc(), invoice.documentType().code(), invoice.series(),
+                        invoice.correlative());
+        CarrierInvoiceView.FiscalView fiscal = CarrierInvoiceView.FiscalView.of(invoice, referencedNumber,
+                netAmountOf(scope, invoice), notes, cpeValidation);
+        return CarrierInvoiceView.of(invoice, carrierName, match, discrepancies, approvals, export, trips, costs,
+                fiscal);
     }
 
     private CarrierInvoice saveWithDuplicateBackstop(CarrierInvoice invoice, String invoiceNumber) {
@@ -656,6 +948,9 @@ public class SettlementService {
             String message = String.valueOf(e.getMostSpecificCause().getMessage());
             if (message.contains("uq_carrier_invoice_number")) {
                 throw new ConflictException("This carrier has already billed invoice " + invoiceNumber + ".");
+            }
+            if (message.contains("uq_carrier_invoice_cpe")) {
+                throw new ConflictException("This issuer has already sent document " + invoiceNumber + ".");
             }
             throw e;
         }

@@ -190,8 +190,10 @@ public final class FreightMatcher {
 
         for (InvoiceLine line : lines) {
             if (line.chargeCode() == ChargeCode.PENALTY) {
-                // A deduction, not a cost: compared with nothing, and taken out of the header.
+                // A deduction, not a cost: compared with nothing, and taken out of the header. Since
+                // V66 it is listed for the approver to accept on its own (ADR-024 part 2, item 6).
                 penalties = penalties.add(line.amount());
+                discrepancies.add(penaltyDiscrepancy(line));
                 continue;
             }
             if (line.tripId() == null) {
@@ -463,6 +465,13 @@ public final class FreightMatcher {
             total = total == null ? cost.actualAmount() : total.add(cost.actualAmount());
         }
         return total;
+    }
+
+    /** The item an approver accepts for one penalty line; shared with {@link NoteMatcher}. */
+    static Discrepancy penaltyDiscrepancy(InvoiceLine line) {
+        return new Discrepancy(DiscrepancyType.PENALTY, null, line.amount(), null,
+                "Line \"" + line.description() + "\" deducts " + line.amount().negate()
+                        + " as a penalty. Accept it before approving the document.", line.lineId());
     }
 
     private static BigDecimal sum(List<InvoiceLine> lines) {

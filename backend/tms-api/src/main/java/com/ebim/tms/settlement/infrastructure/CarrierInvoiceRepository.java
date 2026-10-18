@@ -1,6 +1,7 @@
 package com.ebim.tms.settlement.infrastructure;
 
 import com.ebim.tms.settlement.domain.CarrierInvoice;
+import com.ebim.tms.settlement.domain.DocumentType;
 import com.ebim.tms.settlement.domain.InvoiceStatus;
 import jakarta.persistence.LockModeType;
 import java.util.Collection;
@@ -62,7 +63,7 @@ public interface CarrierInvoiceRepository extends JpaRepository<CarrierInvoice, 
     default List<UUID> findTripIdsBilledOnOtherInvoices(UUID companyId, Collection<UUID> tripIds,
             UUID excludedInvoiceId) {
         return findTripIdsBilledOnOtherInvoices(companyId, tripIds, excludedInvoiceId,
-                InvoiceStatus.REJECTED);
+                InvoiceStatus.REJECTED, DocumentType.INVOICE);
     }
 
     /**
@@ -75,7 +76,7 @@ public interface CarrierInvoiceRepository extends JpaRepository<CarrierInvoice, 
             UUID companyId, Collection<UUID> tripIds, UUID excludedInvoiceId) {
         java.util.Set<com.ebim.tms.settlement.domain.FreightMatcher.TripCharge> charges = new java.util.LinkedHashSet<>();
         for (Object[] row : findTripChargeRowsBilledOnOtherInvoices(companyId, tripIds, excludedInvoiceId,
-                InvoiceStatus.REJECTED)) {
+                InvoiceStatus.REJECTED, DocumentType.INVOICE)) {
             charges.add(new com.ebim.tms.settlement.domain.FreightMatcher.TripCharge((UUID) row[0],
                     (com.ebim.tms.settlement.domain.ChargeCode) row[1]));
         }
@@ -98,10 +99,29 @@ public interface CarrierInvoiceRepository extends JpaRepository<CarrierInvoice, 
                and l.tripId = :tripId
                and i.currency = :currency
                and i.status in :statuses
+               and i.documentType = :invoiceType
              group by i.id, i.invoiceNumber
             """)
     List<Object[]> sumApprovedLinesForTrip(@Param("companyId") UUID companyId, @Param("tripId") UUID tripId,
-            @Param("currency") String currency, @Param("statuses") Collection<InvoiceStatus> statuses);
+            @Param("currency") String currency, @Param("statuses") Collection<InvoiceStatus> statuses,
+            @Param("invoiceType") DocumentType invoiceType);
+
+    /**
+     * The same, for invoices only (V66): a credit or debit note corrects the payable and is booked
+     * against expense by the ERP; it does not draw on the accrual (DECISIONS_LOG, phase 60).
+     */
+    default List<Object[]> sumApprovedLinesForTrip(UUID companyId, UUID tripId, String currency,
+            Collection<InvoiceStatus> statuses) {
+        return sumApprovedLinesForTrip(companyId, tripId, currency, statuses, DocumentType.INVOICE);
+    }
+
+    /** Whether this issuer already sent this CPE (V66, backed by {@code uq_carrier_invoice_cpe}). */
+    boolean existsByCompanyIdAndIssuerRucAndDocumentTypeAndSeriesAndCorrelative(UUID companyId, String issuerRuc,
+            DocumentType documentType, String series, String correlative);
+
+    /** The credit and debit notes that correct one invoice (V66). */
+    List<CarrierInvoice> findByCompanyIdAndReferencedInvoiceIdOrderByCreatedAtAsc(UUID companyId,
+            UUID referencedInvoiceId);
 
     @Query("""
             select distinct l.tripId, l.chargeCode
@@ -111,11 +131,13 @@ public interface CarrierInvoiceRepository extends JpaRepository<CarrierInvoice, 
                and l.tripId in :tripIds
                and i.id <> :excludedInvoiceId
                and i.status <> :excludedStatus
+               and i.documentType = :invoiceType
             """)
     List<Object[]> findTripChargeRowsBilledOnOtherInvoices(@Param("companyId") UUID companyId,
             @Param("tripIds") Collection<UUID> tripIds,
             @Param("excludedInvoiceId") UUID excludedInvoiceId,
-            @Param("excludedStatus") InvoiceStatus excludedStatus);
+            @Param("excludedStatus") InvoiceStatus excludedStatus,
+            @Param("invoiceType") DocumentType invoiceType);
 
     /**
      * The query behind it. {@code REJECTED} arrives as a bound parameter rather than as an enum
@@ -131,11 +153,13 @@ public interface CarrierInvoiceRepository extends JpaRepository<CarrierInvoice, 
                and l.tripId in :tripIds
                and i.id <> :excludedInvoiceId
                and i.status <> :excludedStatus
+               and i.documentType = :invoiceType
             """)
     List<UUID> findTripIdsBilledOnOtherInvoices(@Param("companyId") UUID companyId,
             @Param("tripIds") Collection<UUID> tripIds,
             @Param("excludedInvoiceId") UUID excludedInvoiceId,
-            @Param("excludedStatus") InvoiceStatus excludedStatus);
+            @Param("excludedStatus") InvoiceStatus excludedStatus,
+            @Param("invoiceType") DocumentType invoiceType);
 
     /**
      * Settlement KPIs over a range of invoice dates, per carrier and currency, plus one grand row

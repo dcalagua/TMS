@@ -195,5 +195,13 @@ public enum AuditAction {
     /** The accrual journal of a period was generated for the ERP (V65). */
     ACCRUAL_JOURNAL_EXPORTED,
     /** A GL account mapping was created, changed or retired (V65). */
-    GL_MAPPING_CHANGED
+    GL_MAPPING_CHANGED,
+    /** A carrier's credit note (07) was recorded against one of its invoices (V66, ADR-024). */
+    CREDIT_NOTE_RECEIVED,
+    /** A carrier's debit note (08) was recorded against one of its invoices (V66). */
+    DEBIT_NOTE_RECEIVED,
+    /** The approver accepted a penalty line - the shipper's deduction on the document (V66). */
+    PENALTY_ACCEPTED,
+    /** A person changed the computed retention, with a reason (V66). */
+    RETENTION_OVERRIDDEN
 }

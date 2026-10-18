@@ -50,5 +50,12 @@ public enum DiscrepancyType {
      * <p>Raised as a discrepancy rather than silently skipped, because "we cannot check this line"
      * is something a freight auditor must be told before they approve it.
      */
-    MISSING_EXPECTED_COST
+    MISSING_EXPECTED_COST,
+
+    /**
+     * A penalty line: the shipper's deduction recorded on the carrier's document (V66, ADR-024 part
+     * 2, item 6). Not a difference against the shipment's cost - it is compared with nothing - but
+     * something the approver must accept on its own before the document can be approved.
+     */
+    PENALTY
 }

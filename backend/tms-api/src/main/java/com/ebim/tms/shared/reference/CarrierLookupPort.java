@@ -53,4 +53,12 @@ public interface CarrierLookupPort {
     default Map<UUID, String> externalReferencesInCompany(Set<UUID> ids, UUID companyId) {
         return Map.of();
     }
+
+    /**
+     * The carrier's RUC when its tax id is one ({@code tax_id_type = 'RUC'}, V9), for checking the
+     * issuer of a CPE (V66, ADR-024 part 2, item 3). Empty when it has another tax id or none.
+     */
+    default Optional<String> rucOf(UUID id, UUID companyId) {
+        return Optional.empty();
+    }
 }

@@ -300,6 +300,51 @@ class AccrualApiIntegrationTest {
         }
     }
 
+    // ------------------------------------------------------------------ V66 (phase 60)
+
+    @Nested
+    @DisplayName("IGV and notes (V66)")
+    class Taxes {
+
+        /** A document billing one trip with a fiscal breakdown; returns its id. */
+        private String fiscalDocument(String type, String referenced, String subtotal, String igv, String total,
+                String trip) throws Exception {
+            String body = "{\"carrierId\":\"" + carrierA + "\",\"invoiceNumber\":\"TAX-" + SEQUENCE.incrementAndGet()
+                    + "\",\"invoiceDate\":\"2026-10-05\",\"currency\":\"PEN\",\"totalAmount\":" + total
+                    + ",\"subtotalAmount\":" + subtotal + ",\"igvRate\":18,\"igvAmount\":" + igv
+                    + (type == null ? "" : ",\"documentType\":\"" + type + "\",\"referencedInvoiceId\":\"" + referenced + "\"")
+                    + ",\"lines\":[{\"tripId\":\"" + trip + "\",\"description\":\"Flete\",\"lineAmount\":" + subtotal
+                    + "}]}";
+            String response = mockMvc.perform(asAdmin(post(INVOICES), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isCreated())
+                    .andReturn().getResponse().getContentAsString();
+            return JsonPath.read(response, "$.id");
+        }
+
+        @Test
+        @DisplayName("a factura consumes by its subtotal, net of IGV; an approved credit note consumes nothing")
+        void subtotalAndNotes() throws Exception {
+            String trip = dispatchedTrip(COMPANY_A, carrierA, cardA, "1000.00", OffsetDateTime.now().minusHours(4));
+            accrualSweep.sweepAll();
+            String accrual = accrualOf(trip);
+
+            String invoice = fiscalDocument(null, null, "1000.00", "180.00", "1180.00", trip);
+            approve(invoice, COMPANY_A);
+            // IGV is fiscal credit, not expense: 1000 consumed, not 1180.
+            assertThat(scalar("SELECT status || '/' || consumed_amount FROM tms.freight_accrual WHERE id = '"
+                    + accrual + "'")).isEqualTo("SETTLED/1000.00");
+
+            String credit = fiscalDocument("07", invoice, "100.00", "18.00", "118.00", trip);
+            approve(credit, COMPANY_A);
+            assertThat(scalar("SELECT consumed_amount::text FROM tms.freight_accrual WHERE id = '" + accrual + "'"))
+                    .isEqualTo("1000.00");
+            assertThat(count("SELECT count(*) FROM tms.freight_accrual_entry WHERE carrier_invoice_id = '" + credit
+                    + "'")).isZero();
+            assertBalanceIsTheSumOfItsMovements(accrual);
+        }
+    }
+
     // ------------------------------------------------------------------ the sweep
 
     @Nested
@@ -595,6 +640,8 @@ class AccrualApiIntegrationTest {
                 + ",\"lineAmount\":" + amount + "}";
         String body = "{\"carrierId\":\"" + carrierId + "\",\"invoiceNumber\":\"ACR-" + SEQUENCE.incrementAndGet()
                 + "\",\"invoiceDate\":\"2026-10-05\",\"currency\":\"PEN\",\"totalAmount\":" + amount
+                // V66: a PEN document states its breakdown; IGV-free here so the figures stay as before.
+                + ",\"subtotalAmount\":" + amount + ",\"igvRate\":0,\"igvAmount\":0"
                 + ",\"lines\":[" + line + "]}";
         String response = mockMvc.perform(asAdmin(post(INVOICES), companyId)
                         .contentType(MediaType.APPLICATION_JSON).content(body))

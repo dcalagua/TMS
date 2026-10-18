@@ -69,4 +69,14 @@ class CarrierLookupAdapter implements CarrierLookupPort {
         }
         return byId;
     }
+
+    @Override
+    public Optional<String> rucOf(UUID id, UUID companyId) {
+        return carrierRepository.findByIdInAndCompanyId(Set.of(id), companyId).stream()
+                .filter(carrier -> "RUC".equalsIgnoreCase(carrier.taxIdType()))
+                .map(Carrier::taxIdValue)
+                .filter(value -> value != null && !value.isBlank())
+                .map(String::trim)
+                .findFirst();
+    }
 }

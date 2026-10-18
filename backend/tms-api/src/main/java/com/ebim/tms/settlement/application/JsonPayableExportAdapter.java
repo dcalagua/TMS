@@ -40,10 +40,58 @@ class JsonPayableExportAdapter implements PayableExportPort {
         document.put("totalAmount", invoice.totalAmount().toPlainString());
         // What the approved figure was compared against (V64): ACTUAL, ESTIMATED, MIXED or null.
         document.put("expectedBasis", invoice.expectedBasis());
+        fiscal(document, invoice.fiscal());
         document.put("lines", invoice.lines().stream().map(JsonPayableExportAdapter::line).toList());
 
         return new PayableDocument(referenceFor(invoice), PayableExport.Format.JSON,
                 objectMapper.writeValueAsString(document));
+    }
+
+    /** The V66 fields (ADR-024 part 2, item 10): present with null when unknown, never zero. */
+    private static void fiscal(Map<String, Object> document, FiscalDetail fiscal) {
+        document.put("documentType", fiscal.documentType());
+        document.put("effectiveSign", fiscal.effectiveSign());
+        document.put("series", fiscal.series());
+        document.put("correlative", fiscal.correlative());
+        document.put("issuerRuc", fiscal.issuerRuc());
+        document.put("subtotalAmount", plain(fiscal.subtotalAmount()));
+        document.put("igvRate", plain(fiscal.igvRate()));
+        document.put("igvAmount", plain(fiscal.igvAmount()));
+        Map<String, Object> detraction = null;
+        if (fiscal.detractionAmount() != null) {
+            detraction = new LinkedHashMap<>();
+            detraction.put("code", fiscal.detractionCode());
+            detraction.put("rate", plain(fiscal.detractionRate()));
+            detraction.put("amount", plain(fiscal.detractionAmount()));
+            detraction.put("constancyNumber", fiscal.detractionConstancyNumber());
+            detraction.put("constancyDate",
+                    fiscal.detractionConstancyDate() == null ? null : fiscal.detractionConstancyDate().toString());
+        }
+        document.put("detraction", detraction);
+        Map<String, Object> retention = null;
+        if (fiscal.retentionAmount() != null) {
+            retention = new LinkedHashMap<>();
+            retention.put("rate", plain(fiscal.retentionRate()));
+            retention.put("amount", plain(fiscal.retentionAmount()));
+        }
+        document.put("retention", retention);
+        Map<String, Object> referenced = null;
+        if (fiscal.referencedInvoiceId() != null) {
+            referenced = new LinkedHashMap<>();
+            referenced.put("invoiceId", fiscal.referencedInvoiceId().toString());
+            referenced.put("invoiceNumber", fiscal.referencedInvoiceNumber());
+        }
+        document.put("referencedDocument", referenced);
+        document.put("netAmount", plain(fiscal.netAmount()));
+        Map<String, Object> accounts = new LinkedHashMap<>();
+        for (com.ebim.tms.settlement.domain.GlConcept concept : FiscalDetail.EXPORTED_CONCEPTS) {
+            accounts.put(concept.name(), fiscal.glAccounts().get(concept));
+        }
+        document.put("glAccounts", accounts);
+    }
+
+    private static String plain(java.math.BigDecimal amount) {
+        return amount == null ? null : amount.toPlainString();
     }
 
     private static Map<String, Object> line(PayableLine line) {
@@ -53,6 +101,7 @@ class JsonPayableExportAdapter implements PayableExportPort {
         rendered.put("description", line.description());
         rendered.put("chargeCode", line.chargeCode());
         rendered.put("amount", line.amount().toPlainString());
+        rendered.put("penaltyReason", line.penaltyReason());
         return rendered;
     }
 

@@ -47,7 +47,62 @@ public record CarrierInvoiceView(
         MatchView match,
         List<FreightDiscrepancyView> discrepancies,
         List<ApprovalView> approvals,
-        PayableExportView export) {
+        PayableExportView export,
+        /** The V66 fiscal part: breakdown, CPE identity, notes, detraction, retention. */
+        FiscalView fiscal) {
+
+    /**
+     * What the document says to the tax authority (V66, ADR-024 part 2).
+     *
+     * @param netAmount     an invoice's total less approved credit notes plus approved debit notes;
+     *                      null on a note
+     * @param cpeValidation what SUNAT says of the CPE - always {@code EXTERNAL_DEPENDENCY} today,
+     *                      never "valid" (ADR-024 part 2, item 4); null without a CPE identity
+     */
+    public record FiscalView(
+            String documentType,
+            int effectiveSign,
+            String series,
+            String correlative,
+            String issuerRuc,
+            BigDecimal subtotalAmount,
+            BigDecimal igvRate,
+            BigDecimal igvAmount,
+            UUID referencedInvoiceId,
+            String referencedInvoiceNumber,
+            BigDecimal netAmount,
+            List<NoteView> notes,
+            String detractionCode,
+            BigDecimal detractionRate,
+            BigDecimal detractionAmount,
+            String detractionConstancyNumber,
+            LocalDate detractionConstancyDate,
+            BigDecimal retentionRate,
+            BigDecimal retentionAmount,
+            String retentionOverrideReason,
+            String cpeValidation) {
+
+        public static FiscalView of(CarrierInvoice invoice, String referencedInvoiceNumber, BigDecimal netAmount,
+                List<NoteView> notes, CpeValidationPort.CpeValidationStatus cpeValidation) {
+            return new FiscalView(invoice.documentType().code(), invoice.effectiveSign(), invoice.series(),
+                    invoice.correlative(), invoice.issuerRuc(), invoice.subtotalAmount(), invoice.igvRate(),
+                    invoice.igvAmount(), invoice.referencedInvoiceId(), referencedInvoiceNumber, netAmount,
+                    List.copyOf(notes), invoice.detractionCode(), invoice.detractionRate(),
+                    invoice.detractionAmount(), invoice.detractionConstancyNumber(),
+                    invoice.detractionConstancyDate(), invoice.retentionRate(), invoice.retentionAmount(),
+                    invoice.retentionOverrideReason(), cpeValidation == null ? null : cpeValidation.name());
+        }
+    }
+
+    /** A credit or debit note that corrects this invoice, as the invoice lists it. */
+    public record NoteView(UUID id, String documentType, String invoiceNumber, LocalDate invoiceDate,
+            BigDecimal totalAmount, InvoiceStatus status) {
+
+        public static NoteView of(CarrierInvoice note) {
+            return new NoteView(note.id(), note.documentType().code(), note.invoiceNumber(), note.invoiceDate(),
+                    note.totalAmount(), note.status());
+        }
+    }
 
     /**
      * One billed line beside what TMS knows about the shipment it names.
@@ -76,7 +131,11 @@ public record CarrierInvoiceView(
             BigDecimal expectedAmount,
             ExpectedBasis expectedBasis,
             BigDecimal actualAmount,
-            BigDecimal differenceAmount) {
+            BigDecimal differenceAmount,
+            /** Why the shipper deducts, on a PENALTY line (V66). */
+            String penaltyReason,
+            com.ebim.tms.settlement.domain.PenaltyReferenceType penaltyReferenceType,
+            UUID penaltyReferenceId) {
     }
 
     /**
@@ -108,7 +167,7 @@ public record CarrierInvoiceView(
     public static CarrierInvoiceView of(CarrierInvoice invoice, String carrierName, FreightMatch match,
             List<FreightDiscrepancy> discrepancies, List<SettlementApproval> approvals, PayableExport export,
             Map<UUID, TripSettlementLookupPort.TripSettlementSummary> trips,
-            Map<UUID, TripCostLookupPort.TripCostSummary> costs) {
+            Map<UUID, TripCostLookupPort.TripCostSummary> costs, FiscalView fiscal) {
 
         // The matcher's own per-line split, so the screen shows the figures a match would raise
         // differences from - computed, never stored, and therefore always against today's costs.
@@ -132,7 +191,8 @@ public record CarrierInvoiceView(
                         .map(approval -> new ApprovalView(approval.id(), approval.decision(),
                                 approval.decidedBy(), approval.decidedAt(), approval.comment()))
                         .toList(),
-                export == null ? null : PayableExportView.of(export, true));
+                export == null ? null : PayableExportView.of(export, true),
+                fiscal);
     }
 
     private static LineView toLineView(CarrierInvoiceLine line, UUID invoiceCarrierId,
@@ -154,6 +214,7 @@ public record CarrierInvoiceView(
                 expected == null ? null : expectation.basis(),
                 cost == null ? null : cost.actualAmount(),
                 // Null, not zero: without an expected figure there is no difference to state.
-                expected == null ? null : line.lineAmount().subtract(expected));
+                expected == null ? null : line.lineAmount().subtract(expected),
+                line.penaltyReason(), line.penaltyReferenceType(), line.penaltyReferenceId());
     }
 }

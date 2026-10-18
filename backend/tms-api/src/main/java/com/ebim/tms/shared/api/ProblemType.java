@@ -87,6 +87,15 @@ public enum ProblemType {
             "Dispatch requires the warehouse's confirmation", HttpStatus.CONFLICT),
 
     /**
+     * A carrier's document names an issuer RUC other than the carrier's own (V66, ADR-024 part 2,
+     * item 3). Distinct from {@link #VALIDATION_FAILED} because the payload is well formed: either
+     * the document belongs to another carrier or the carrier's master data is wrong, and a person
+     * has to say which.
+     */
+    ISSUER_RUC_MISMATCH("issuer-ruc-mismatch", "Issuer RUC does not match the carrier",
+            HttpStatus.UNPROCESSABLE_ENTITY),
+
+    /**
      * A capability this deployment has not been configured for was asked of it - today, only
      * proof-of-delivery evidence storage ({@code tms.storage.evidence.mode}).
      *

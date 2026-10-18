@@ -142,6 +142,45 @@ From the code at `a57af24` (`V46__freight_settlement.sql`, `com.ebim.tms.settlem
 11. **Audit.** Actions `CREDIT_NOTE_RECEIVED`, `DEBIT_NOTE_RECEIVED`, `PENALTY_ACCEPTED`,
     `RETENTION_OVERRIDDEN`, `TOLERANCE_POLICY_CHANGED`.
 
+### Implementation notes - part 2 (phase 60, V66)
+
+- `V66__peruvian_taxes_cpe_notes_and_penalties.sql`: the fiscal columns of `company_settings` (all nullable) and of
+  `carrier_invoice` as item 1-8 list them, plus `retention_override_reason`; `ck_carrier_invoice_cpe_complete`
+  (series, correlative and RUC together), `ck_carrier_invoice_detraction`, `ck_carrier_invoice_retention`,
+  `ck_carrier_invoice_detraction_or_retention`, `uq_carrier_invoice_id_company_carrier` (target of the composite FK
+  `fk_carrier_invoice_referenced`), `ck_carrier_invoice_line_sign`, `ck_carrier_invoice_line_penalty_reference(_type)`;
+  `PENALTY` joins `ck_freight_discrepancy_type`; the four audit actions. `ck_carrier_invoice_total_nonnegative`
+  is untouched. No permission and no row is seeded.
+- Defaults: `tms.finance.pe.*` in `application.yml`, resolved by `settlement.application.FiscalSettingsResolver`
+  through `shared.settings.FiscalSettingsPort` (implemented by `iam.infrastructure.JdbcFiscalSettingsAdapter`).
+  `GET /api/v1/settlement/fiscal-settings` (`settlement.invoice:read`) returns them resolved, so the form previews the
+  same figures the server applies and the frontend carries no rate.
+- Pure rules: `RucValidator`, `CpeNumbering` (the correlative is stored **without leading zeros**), `TaxCalculator`
+  (named constants `BREAKDOWN_TOLERANCE`, `DETRACTION_STRICTLY_ABOVE_THRESHOLD`, `DETRACTION_SCALE`/`_ROUNDING`,
+  `RETENTION_SCALE`/`_ROUNDING`; detraction and retention only on an `01` in PEN), `NoteMatcher`.
+- **The comparison uses the subtotal.** A rate card prices the service net of IGV; comparing the gross total would
+  report every PEN invoice 18 % over. Lines of a broken-down document are its valor de venta (net), which is also what
+  the accrual is consumed by (item 9). Without breakdown, the total, as before.
+- A **note's number** is `07-` / `08-` + `series-correlative`: SUNAT lets a factura and its credit note share a series,
+  and `uq_carrier_invoice_number` would refuse the second.
+- **Notes are matched by `NoteMatcher`**: every line names a shipment the referenced invoice bills (else
+  `UNMATCHED_TRIP`); a credit note may take back at most the invoice's comparable amount less the other live credit
+  notes plus the approved debit notes (else `TOTAL_AMOUNT`); a debit note adds to the shipment's billed lines and is
+  compared, with the tolerance, with the shipment's figure (else `LINE_AMOUNT`). Notes are never duplicates of their
+  invoice: the duplicate queries read factura lines only.
+- **Notes do not touch the accrual.** Only an `01` consumes; a note corrects the payable and the ERP books it against
+  expense. The invoice's `netAmount` (`total - approved 07 + approved 08`) is in its view and in its export; each
+  note is exported as its own document with `effectiveSign`.
+- **A penalty is accepted through the discrepancy workflow**: the matcher raises one `PENALTY` discrepancy per
+  penalty line (no expected figure), so the approver accepts it on its own line before approving; accepting it
+  records `PENALTY_ACCEPTED`.
+- The export's GL accounts are the **company-level** mapping of `FREIGHT_EXPENSE`, `IGV_CREDIT`,
+  `DETRACCION_PAYABLE`, `RETENCION_PAYABLE`, `CARRIER_PAYABLE` (a document spans routes; the route/origin mappings stay
+  the accrual journal's). A concept without a mapping is absent.
+- Not in phase 60 cycle 1: editing the fiscal settings from "Configuración de empresa" (the columns exist and are
+  read; today only the defaults apply), recording the detraction constancy or overriding retention after receipt (both
+  are accepted at receipt), a shortcut to issue a note from the invoice workspace.
+
 ## Consequences
 
 - Every V46 invoice remains valid: new columns are nullable or defaulted (`document_type '01'`), and the
