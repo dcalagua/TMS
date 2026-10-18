@@ -294,3 +294,27 @@ ALTER TABLE tms.audit_event ADD CONSTRAINT ck_audit_event_action CHECK (action I
     'PAYMENT_REQUESTED', 'PAYMENT_REQUEST_REJECTED', 'PAYMENT_RECORDED',
     -- V68 (ADR-026).
     'COST_ALLOCATED'));
+
+-- ---------------------------------------------------------------------------
+-- 8. The carrier boundary for the finance internals (ADR-018, V57; post-review fix)
+-- ---------------------------------------------------------------------------
+-- V67 hid the office's settlement workflow from a carrier transaction (match, discrepancies, export,
+-- payment requests). Accruals, their movements, the GL mapping (V65) and the cost-to-serve runs and
+-- lines (this migration) are the same kind of internal figure and were left out: a carrier session
+-- reaching them would see what the shipper accrues and what each customer costs. RESTRICTIVE, so
+-- ANDed with p_tenant_company_scope; an office transaction (NULL tms.current_carrier_id()) is left
+-- alone. Created here, after V65, because V68 is the last finance migration of the phase.
+DO $$
+DECLARE
+    internal text;
+BEGIN
+    FOREACH internal IN ARRAY ARRAY['freight_accrual', 'freight_accrual_entry', 'gl_account_mapping',
+                                    'trip_cost_allocation_run', 'trip_cost_allocation']
+    LOOP
+        EXECUTE format(
+            'CREATE POLICY p_carrier_scope ON tms.%I AS RESTRICTIVE FOR ALL TO tms_app
+                 USING (tms.current_carrier_id() IS NULL)
+                 WITH CHECK (tms.current_carrier_id() IS NULL)', internal);
+    END LOOP;
+END
+$$;

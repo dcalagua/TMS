@@ -404,4 +404,9 @@ the backend never wrote:
 - after creating `anon` and `authenticated` roles (as Supabase would), neither has schema or
   table privileges, and `SET ROLE anon; SELECT ... FROM tms.organization` is refused with
   SQLSTATE `42501`;
-- no application table exists in `public`, where the Data API looks.
+- no application table exists in `public`, where the Data API looks;
+- every settlement and finance table (invoices and their lines, approvals, payments and payment
+  requests, matches, discrepancies, exports, accruals and their movements, GL mappings, cost-to-serve
+  runs and lines) carries the RESTRICTIVE `p_carrier_scope` keyed on `tms.current_carrier_id()`
+  (ADR-018): a carrier session sees its own invoices and payments and none of the office's internal
+  figures (V67, and V68 section 8 for the V65/V68 tables).

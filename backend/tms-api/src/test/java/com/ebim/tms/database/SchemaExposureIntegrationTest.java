@@ -331,6 +331,31 @@ class SchemaExposureIntegrationTest {
                 .isEmpty();
     }
 
+    /**
+     * The carrier portal (ADR-018) runs as {@code tms_app} with {@code tms.current_carrier_id()} set.
+     * Every settlement and finance table carries a RESTRICTIVE {@code p_carrier_scope}: its own
+     * invoices and payments for a carrier, nothing of the office's internals. A finance table added
+     * without one would be readable from a carrier session; this names it.
+     */
+    @Test
+    @DisplayName("every settlement and finance table carries the restrictive carrier policy (ADR-018)")
+    void financeTablesCarryTheCarrierPolicy() throws SQLException {
+        assertThat(strings("""
+                SELECT t.name
+                FROM unnest(ARRAY['carrier_invoice', 'carrier_invoice_line', 'settlement_approval',
+                                  'carrier_payment', 'carrier_payment_request', 'freight_match',
+                                  'freight_discrepancy', 'payable_export', 'freight_accrual',
+                                  'freight_accrual_entry', 'gl_account_mapping', 'trip_cost_allocation_run',
+                                  'trip_cost_allocation']) AS t(name)
+                WHERE NOT EXISTS (SELECT 1 FROM pg_policies p
+                                   WHERE p.schemaname = 'tms' AND p.tablename = t.name
+                                     AND p.policyname = 'p_carrier_scope' AND p.permissive = 'RESTRICTIVE')
+                ORDER BY 1
+                """))
+                .as("a carrier session must not read the office's finance figures")
+                .isEmpty();
+    }
+
     @Test
     @DisplayName("no policy is granted to the Supabase API roles: the Data API stays denied")
     void policiesTargetTheRuntimeRoleOnly() throws SQLException {
