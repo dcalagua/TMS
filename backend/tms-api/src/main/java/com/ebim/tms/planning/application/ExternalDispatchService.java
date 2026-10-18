@@ -307,8 +307,8 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
                 command.integrationClientId(), command.idempotencyKey(), command.correlationId(), command.sourceSystem(),
                 command.dispatchReference(), command.revision(), command.transportReference(), command.loadReference(),
                 command.warehouseCode(), command.actualDispatchAt(), command.carrierCode(), command.carrierName(),
-                command.vehicleLicensePlate(), command.vehicleType(), command.driverName(),
-                command.driverDocumentNumber(), command.sealNumber(), command.transportDocumentNumber(),
+                command.vehicleLicensePlate(), command.vehicleType(), command.vehicleTrailerPlate(),
+                command.driverName(), command.driverDocumentNumber(), command.sealNumber(), command.transportDocumentNumber(),
                 command.totalHandlingUnits(), command.totalWeightKg(), command.totalVolumeM3(), outcome, verification,
                 toJson(discrepancies), command.payloadHash(), command.rawBody(), now);
         try {
@@ -332,7 +332,8 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
                 }
                 dispatchOrders.save(new ExternalDispatchOrder(saved.id(), scope.companyId(), match.orderId(),
                         order.externalSource(), order.externalReference(), order.warehouseOrderNumber(),
-                        order.handlingUnits(), order.weightKg(), order.volumeM3(), order.status(), match.result()));
+                        order.handlingUnits(), order.weightKg(), order.volumeM3(), order.status(), match.result(),
+                        order.stacks(), order.effectiveVolumeM3(), order.loadingMeters(), order.geometryReason()));
             }
             dispatchOrders.flush();
             return saved;

@@ -29,6 +29,9 @@ import java.util.UUID;
  * @param evidenceCount      how many proof-of-delivery artefacts are on file. A count and not
  *                           links - the bytes are served only through an authenticated,
  *                           company-scoped TMS request
+ * @param delivery           plan v1.1 (WAREHOUSE_EXECUTION_V1 §7.2): the same result as one block
+ *                           with the recorded amounts and per-line results, or null until a
+ *                           result is recorded. Additive; the flat fields above are unchanged
  */
 public record ShipmentPlanOrderV1(
         UUID orderId,
@@ -45,5 +48,7 @@ public record ShipmentPlanOrderV1(
         String deliveryNotes,
         int evidenceCount,
         // Additive in v1 (WAREHOUSE_EXECUTION_V1 §3.3); a consumer ignores fields it does not know.
-        Integer stopSequence) {
+        Integer stopSequence,
+        // Additive in v1.1 (WAREHOUSE_EXECUTION_V1 §7.2).
+        ShipmentPlanDeliveryV1 delivery) {
 }

@@ -5,6 +5,7 @@ import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.reference.PublishedShipment;
+import com.ebim.tms.shared.reference.PublishedShipmentDelivery;
 import com.ebim.tms.shared.reference.PublishedShipmentDetail;
 import com.ebim.tms.shared.reference.PublishedShipmentEvent;
 import com.ebim.tms.shared.reference.PublishedShipmentOrder;
@@ -122,6 +123,24 @@ public class IntegrationShipmentService {
         return new ShipmentPlanOrderV1(order.orderId(), order.orderNumber(), order.externalSource(),
                 order.externalReference(), order.destinationCode(), order.weightKg(), order.volumeM3(),
                 order.pallets(), order.deliveryResult(), order.deliveredAt(), order.deliveryReceiverName(),
-                order.deliveryNotes(), order.evidenceCount(), order.stopSequence());
+                order.deliveryNotes(), order.evidenceCount(), order.stopSequence(), toDelivery(order.delivery()));
+    }
+
+    private static ShipmentPlanDeliveryV1 toDelivery(PublishedShipmentDelivery delivery) {
+        if (delivery == null) {
+            return null;
+        }
+        return new ShipmentPlanDeliveryV1(delivery.result(), delivery.deliveredAt(), delivery.receiverName(),
+                delivery.evidenceCount(), toAmounts(delivery.attempted()), toAmounts(delivery.delivered()),
+                toAmounts(delivery.refused()),
+                delivery.lines().stream()
+                        .map(line -> new ShipmentPlanDeliveryV1.Line(line.lineNumber(), line.materialCode(), line.uom(),
+                                line.quantityAttempted(), line.quantityDelivered(), line.quantityRefused()))
+                        .toList());
+    }
+
+    private static ShipmentPlanDeliveryV1.Amounts toAmounts(PublishedShipmentDelivery.Amounts amounts) {
+        return amounts == null ? null
+                : new ShipmentPlanDeliveryV1.Amounts(amounts.weightKg(), amounts.volumeM3(), amounts.pallets());
     }
 }

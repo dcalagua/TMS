@@ -11,7 +11,12 @@ import java.math.BigDecimal;
 import java.util.UUID;
 import org.hibernate.annotations.UuidGenerator;
 
-/** The per-order summary of a dispatch document (V53). Written once with its document, never updated. */
+/**
+ * The per-order summary of a dispatch document (V53). Written once with its document, never updated.
+ *
+ * <p>The geometry columns are contract v1.1 (V60): what the warehouse computed with ADR-022's
+ * footprint rules, null when not said. Stored only; phase 45 compares them with the plan.
+ */
 @Entity
 @Table(name = "external_dispatch_order")
 public class ExternalDispatchOrder {
@@ -55,12 +60,26 @@ public class ExternalDispatchOrder {
     @Column(name = "match_result", nullable = false, updatable = false)
     private ExternalDispatchOrderMatch matchResult;
 
+    @Column(name = "stacks", updatable = false)
+    private Integer stacks;
+
+    @Column(name = "effective_volume_m3", updatable = false)
+    private BigDecimal effectiveVolumeM3;
+
+    @Column(name = "loading_meters", updatable = false)
+    private BigDecimal loadingMeters;
+
+    @Column(name = "geometry_reason", updatable = false)
+    private String geometryReason;
+
     protected ExternalDispatchOrder() {
     }
 
+    @SuppressWarnings("java:S107")
     public ExternalDispatchOrder(UUID externalDispatchId, UUID companyId, UUID orderId, String externalSource,
             String externalReference, String warehouseOrderNumber, Integer handlingUnits, BigDecimal weightKg,
-            BigDecimal volumeM3, String status, ExternalDispatchOrderMatch matchResult) {
+            BigDecimal volumeM3, String status, ExternalDispatchOrderMatch matchResult, Integer stacks,
+            BigDecimal effectiveVolumeM3, BigDecimal loadingMeters, String geometryReason) {
         this.externalDispatchId = externalDispatchId;
         this.companyId = companyId;
         this.orderId = orderId;
@@ -72,6 +91,10 @@ public class ExternalDispatchOrder {
         this.volumeM3 = volumeM3;
         this.status = status;
         this.matchResult = matchResult;
+        this.stacks = stacks;
+        this.effectiveVolumeM3 = effectiveVolumeM3;
+        this.loadingMeters = loadingMeters;
+        this.geometryReason = geometryReason;
     }
 
     public UUID id() {
@@ -120,5 +143,21 @@ public class ExternalDispatchOrder {
 
     public ExternalDispatchOrderMatch matchResult() {
         return matchResult;
+    }
+
+    public Integer stacks() {
+        return stacks;
+    }
+
+    public BigDecimal effectiveVolumeM3() {
+        return effectiveVolumeM3;
+    }
+
+    public BigDecimal loadingMeters() {
+        return loadingMeters;
+    }
+
+    public String geometryReason() {
+        return geometryReason;
     }
 }

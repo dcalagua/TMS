@@ -45,6 +45,7 @@ public class IntegrationWarehouseService {
                 document.carrier() == null ? null : trimmed(document.carrier().name()),
                 document.vehicle() == null ? null : trimmed(document.vehicle().licensePlate()),
                 document.vehicle() == null ? null : trimmed(document.vehicle().type()),
+                document.vehicle() == null ? null : trimmed(document.vehicle().trailerLicensePlate()),
                 document.driver() == null ? null : trimmed(document.driver().name()),
                 document.driver() == null ? null : trimmed(document.driver().documentNumber()),
                 trimmed(document.sealNumber()), trimmed(document.transportDocumentNumber()),
@@ -131,7 +132,8 @@ public class IntegrationWarehouseService {
                         .map(line -> new DispatchConfirmationCommand.Line(line.lineNumber(), trimmed(line.materialCode()),
                                 trimmed(line.lotCode()), line.quantity(), trimmed(line.uom()),
                                 trimmed(line.handlingUnitCode())))
-                        .toList());
+                        .toList(),
+                order.stacks(), order.effectiveVolumeM3(), order.loadingMeters(), trimmed(order.geometryReason()));
     }
 
     private static String trimmed(String value) {

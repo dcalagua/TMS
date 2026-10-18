@@ -18,4 +18,10 @@ public interface OrderReferencePort {
 
     /** The lines of each order in {@code orderIds}, by line number. An order with no lines maps to an empty list. */
     Map<UUID, List<OrderLineSnapshot>> linesOf(Set<UUID> orderIds, UUID companyId);
+
+    /**
+     * The company's order lines among {@code lineIds}, keyed by line id, in one query. A line of
+     * another company, or one that no longer exists, is absent.
+     */
+    Map<UUID, OrderLineSnapshot> linesByIds(Set<UUID> lineIds, UUID companyId);
 }

@@ -93,12 +93,13 @@ public class TripWarehouseQueryService {
                 document.revision(), document.isCurrent(), document.outcome().name(),
                 document.verificationStatus().name(), document.loadReference(), document.warehouseCode(),
                 document.actualDispatchAt(), document.carrierCode(), document.carrierName(),
-                document.vehicleLicensePlate(), document.driverName(), document.driverDocumentNumber(),
+                document.vehicleLicensePlate(), document.vehicleTrailerPlate(), document.driverName(), document.driverDocumentNumber(),
                 document.sealNumber(), document.transportDocumentNumber(), document.totalHandlingUnits(),
                 document.totalWeightKg(), document.totalVolumeM3(), document.receivedAt(),
                 externalDispatchService.fromJson(document.discrepancies()),
                 orders.stream().map(order -> new TripWarehouseView.Order(order.orderId(), order.externalSource(),
                         order.externalReference(), order.warehouseOrderNumber(), order.status(), order.handlingUnits(),
-                        order.weightKg(), order.volumeM3(), order.matchResult().name())).toList());
+                        order.weightKg(), order.volumeM3(), order.matchResult().name(), order.stacks(),
+                        order.effectiveVolumeM3(), order.loadingMeters(), order.geometryReason())).toList());
     }
 }

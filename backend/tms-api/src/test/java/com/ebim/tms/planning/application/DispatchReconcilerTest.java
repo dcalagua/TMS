@@ -52,7 +52,7 @@ class DispatchReconcilerTest {
     private static DispatchConfirmationCommand document(List<DispatchConfirmationCommand.Order> orders, String carrier,
             String plate, String driverName, String driverDocument, String warehouse, OffsetDateTime at, String load) {
         return new DispatchConfirmationCommand(UUID.randomUUID(), null, null, "EWM_EBIM", "SLS-000001", 1, "SH-00000845",
-                load, warehouse, at, carrier, "Transportes SA", plate, "FURGON", driverName, driverDocument, "PRE-1",
+                load, warehouse, at, carrier, "Transportes SA", plate, "FURGON", "C4X-991", driverName, driverDocument, "PRE-1",
                 "T001-1", 3, bd("1180"), bd("4.6"), orders, "{}", "0".repeat(64));
     }
 

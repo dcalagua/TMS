@@ -16,10 +16,13 @@ import com.ebim.tms.shared.reference.CarrierLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.DriverLookupPort;
 import com.ebim.tms.shared.reference.DriverReference;
+import com.ebim.tms.shared.reference.OrderLineSnapshot;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
+import com.ebim.tms.shared.reference.OrderReferencePort;
 import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.PublishedShipment;
+import com.ebim.tms.shared.reference.PublishedShipmentDelivery;
 import com.ebim.tms.shared.reference.PublishedShipmentDetail;
 import com.ebim.tms.shared.reference.PublishedShipmentEvent;
 import com.ebim.tms.shared.reference.PublishedShipmentOrder;
@@ -27,7 +30,10 @@ import com.ebim.tms.shared.reference.PublishedShipmentStop;
 import com.ebim.tms.shared.reference.ShipmentEventQuery;
 import com.ebim.tms.shared.reference.ShipmentPublicationPort;
 import com.ebim.tms.shared.reference.ShipmentPublicationQuery;
+import java.util.Comparator;
+import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -65,10 +71,16 @@ public class ShipmentPublicationAdapter implements ShipmentPublicationPort {
     private final OrderPlanningPort orderPlanningPort;
     private final OriginLookupPort originLookupPort;
     private final DriverLookupPort driverLookupPort;
+    private final OrderDeliveryLineQueries deliveryLines;
+    private final OrderReferencePort orderReferencePort;
 
+    @SuppressWarnings("java:S107")
     public ShipmentPublicationAdapter(TripRepository tripRepository, ShipmentOutboxEventRepository outboxRepository,
             TripViewAssembler assembler, CarrierLookupPort carrierLookupPort, OrderPlanningPort orderPlanningPort,
-            OriginLookupPort originLookupPort, DriverLookupPort driverLookupPort) {
+            OriginLookupPort originLookupPort, DriverLookupPort driverLookupPort,
+            OrderDeliveryLineQueries deliveryLines, OrderReferencePort orderReferencePort) {
+        this.deliveryLines = deliveryLines;
+        this.orderReferencePort = orderReferencePort;
         this.originLookupPort = originLookupPort;
         this.driverLookupPort = driverLookupPort;
         this.tripRepository = tripRepository;
@@ -132,15 +144,50 @@ public class ShipmentPublicationAdapter implements ShipmentPublicationPort {
         Map<UUID, OrderDeliveryView> deliveries = detail.deliveries().stream()
                 .collect(Collectors.toMap(OrderDeliveryView::orderId, delivery -> delivery, (first, second) -> first));
 
+        Map<UUID, List<PublishedShipmentDelivery.Line>> linesByDelivery = deliveryLinesOf(deliveries.values(), companyId);
+
         Map<UUID, Integer> sequenceByDestination = detail.stops().stream()
                 .collect(Collectors.toMap(TripStopView::destinationId, TripStopView::sequence, (first, second) -> first));
         List<PublishedShipmentOrder> publishedOrders = detail.assignments().stream()
-                .map(assignment -> toPublishedOrder(assignment, orders.get(assignment.orderId()),
-                        deliveries.get(assignment.orderId()), sequenceByDestination.get(assignment.destinationId())))
+                .map(assignment -> {
+                    OrderDeliveryView delivery = deliveries.get(assignment.orderId());
+                    return toPublishedOrder(assignment, orders.get(assignment.orderId()), delivery,
+                            sequenceByDestination.get(assignment.destinationId()),
+                            delivery == null ? List.of() : linesByDelivery.getOrDefault(delivery.id(), List.of()));
+                })
                 .toList();
         List<PublishedShipmentStop> stops = detail.stops().stream().map(ShipmentPublicationAdapter::toPublishedStop).toList();
 
         return new PublishedShipmentDetail(header, stops, publishedOrders);
+    }
+
+    /**
+     * The per-line results of a shipment's deliveries (V45), in two batched reads whatever the
+     * number of orders: the delivery lines, then their line numbers and materials from the orders
+     * module. A line the orders module no longer knows keeps its quantities with no number.
+     */
+    private Map<UUID, List<PublishedShipmentDelivery.Line>> deliveryLinesOf(Collection<OrderDeliveryView> deliveries,
+            UUID companyId) {
+        Set<UUID> deliveryIds = deliveries.stream().map(OrderDeliveryView::id).collect(Collectors.toSet());
+        Map<UUID, List<OrderDeliveryLineQueries.DeliveryLineRow>> rows = deliveryLines.linesOf(companyId, deliveryIds);
+        if (rows.isEmpty()) {
+            return Map.of();
+        }
+        Set<UUID> lineIds = rows.values().stream().flatMap(List::stream)
+                .map(OrderDeliveryLineQueries.DeliveryLineRow::orderLineId).collect(Collectors.toSet());
+        Map<UUID, OrderLineSnapshot> orderLines = orderReferencePort.linesByIds(lineIds, companyId);
+        Map<UUID, List<PublishedShipmentDelivery.Line>> byDelivery = new HashMap<>();
+        rows.forEach((deliveryId, lines) -> byDelivery.put(deliveryId, lines.stream()
+                .map(row -> {
+                    OrderLineSnapshot line = orderLines.get(row.orderLineId());
+                    return new PublishedShipmentDelivery.Line(line == null ? null : line.lineNumber(),
+                            line == null ? null : line.materialCode(), row.uom(), row.quantityAttempted(),
+                            row.quantityDelivered(), row.quantityRefused());
+                })
+                .sorted(Comparator.comparing(PublishedShipmentDelivery.Line::lineNumber,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList()));
+        return byDelivery;
     }
 
     private static MasterReference carrierOf(TripView view, Map<UUID, MasterReference> carriers) {
@@ -180,9 +227,10 @@ public class ShipmentPublicationAdapter implements ShipmentPublicationPort {
     /**
      * @param delivery what was handed over, or null when nobody has recorded it yet. The receiver's
      *     identity document is deliberately not published - see {@link PublishedShipmentOrder}
+     * @param lines the delivery's per-line results, empty when recorded per order only
      */
     private static PublishedShipmentOrder toPublishedOrder(TripAssignmentView assignment, PlannableOrder order,
-            OrderDeliveryView delivery, Integer stopSequence) {
+            OrderDeliveryView delivery, Integer stopSequence, List<PublishedShipmentDelivery.Line> lines) {
         return new PublishedShipmentOrder(assignment.orderId(), assignment.orderNumber(),
                 order == null ? null : order.externalSource(), order == null ? null : order.externalReference(),
                 assignment.destinationCode(), assignment.assignedWeightKg(), assignment.assignedVolumeM3(),
@@ -192,7 +240,23 @@ public class ShipmentPublicationAdapter implements ShipmentPublicationPort {
                 delivery == null ? null : delivery.receiverName(),
                 delivery == null ? null : delivery.notes(),
                 delivery == null ? 0 : delivery.evidence().size(),
-                stopSequence);
+                stopSequence,
+                delivery == null ? null : toPublishedDelivery(delivery, lines));
+    }
+
+    /** Plan v1.1's delivery block (WAREHOUSE_EXECUTION_V1 §7.2): amounts null when not recorded, never zero. */
+    private static PublishedShipmentDelivery toPublishedDelivery(OrderDeliveryView delivery,
+            List<PublishedShipmentDelivery.Line> lines) {
+        OrderDeliveryView.DeliveryQuantitiesView quantities = delivery.quantities();
+        return new PublishedShipmentDelivery(delivery.result().name(), delivery.deliveredAt(), delivery.receiverName(),
+                delivery.evidence().size(),
+                quantities == null ? null : PublishedShipmentDelivery.Amounts.ofNullable(quantities.attemptedWeightKg(),
+                        quantities.attemptedVolumeM3(), quantities.attemptedPallets()),
+                quantities == null ? null : PublishedShipmentDelivery.Amounts.ofNullable(quantities.deliveredWeightKg(),
+                        quantities.deliveredVolumeM3(), quantities.deliveredPallets()),
+                quantities == null ? null : PublishedShipmentDelivery.Amounts.ofNullable(quantities.refusedWeightKg(),
+                        quantities.refusedVolumeM3(), quantities.refusedPallets()),
+                lines);
     }
 
     private static PublishedShipmentStop toPublishedStop(TripStopView stop) {

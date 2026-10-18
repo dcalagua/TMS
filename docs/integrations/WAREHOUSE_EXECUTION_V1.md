@@ -397,7 +397,7 @@ TMS                                         WMS (EWM)
 Decision: **ADR-025** (S-1…S-4 accepted, S-5 proposed). Material profile and load geometry: **ADR-022**.
 Everything here is **additive**: same `/integration/v1` path, same authentication, same envelope; a
 partner that speaks v1 keeps working and ignores the new fields. Each message names the overnight-pack
-phase that implements it; until that phase lands, the endpoint answers `404` and the field is absent. 7.1 landed in phase 20 (V59).
+phase that implements it; until that phase lands, the endpoint answers `404` and the field is absent. 7.1 landed in phase 20 (V59); 7.2 (POD part) and 7.3 (stored) landed in phase 30 (V60).
 
 | # | Message | Direction | Endpoint | Scope | Phase |
 |---|---|---|---|---|---|
@@ -575,6 +575,22 @@ reason for a person to open a return, never an automatic one.
 Stops already carry `serviceWindowStart`/`serviceWindowEnd` and orders `weightKg/volumeM3/pallets`
 (v1, §3.3): a WMS should store them as **planned by TMS** and show them next to what it actually loads.
 
+**Implemented (phase 30, V60).** `orders[].delivery` is returned by `GET /integration/v1/shipments/{n}`
+exactly as above, except `geometry`, which stays absent until phase 40. Details of the implementation:
+
+- `delivery` is `null` until a result is recorded; `delivery.result/deliveredAt/receiverName/evidenceCount`
+  carry the same values as the flat v1 fields, which are unchanged.
+- `attempted` / `delivered` / `refused` are `null` when the delivery recorded no amounts (V45). Inside a
+  block, a single measure is `null` when only the others were recorded; nothing is ever defaulted to `0`.
+- `lines[]` is read from `order_delivery_line` (V45), ordered by `lineNumber`; `lineNumber` and
+  `materialCode` come from the order line, `uom` is the unit snapshotted on the delivery line. No TMS API
+  writes per-line results yet, so today `lines` is `[]` unless such rows exist.
+- The plan is assembled with batched reads (the trip's deliveries, then all their lines, then all the
+  referenced order lines), never one query per order.
+- `DELIVERY_RESULT_RECORDED` needed no change: it is already a webhook event type, a subscription can
+  select it, and recording a delivery publishes it to the outbox and fans it out through the same signed
+  webhook v1 (§3.2), with `type` = `DELIVERY_RESULT_RECORDED` and `resource` = the shipment.
+
 ### 7.3 `DISPATCH_CONFIRMED` - v1.1 fields
 
 Additive request fields on `POST /integration/v1/dispatch-confirmations` (§4.1):
@@ -598,6 +614,16 @@ Additive request fields on `POST /integration/v1/dispatch-confirmations` (§4.1)
 
 TMS stores them (phase 30, V60) and, from phase 45, compares them with the plan as `GEOMETRY_VARIANCE`
 (severity `INFO`): **never a 4xx, never a `MISMATCH`**. The response shape is unchanged.
+
+**Implemented (phase 30, V60).** The fields are stored on `tms.external_dispatch.vehicle_trailer_plate`
+and `tms.external_dispatch_order.stacks / effective_volume_m3 / loading_meters / geometry_reason`, all
+nullable; a v1 document keeps them `NULL`. They are shown in the office's trip view
+(`GET /api/v1/planning/trips/{id}/warehouse`: `documents[].vehicleTrailerPlate`,
+`documents[].orders[].stacks / effectiveVolumeM3 / loadingMeters / geometryReason`). Only their shape is
+validated, like every other field (`trailerLicensePlate` ≤ 20 characters, `geometryReason` ≤ 60, numbers
+≥ 0; otherwise `400`). A different trailer, or a trailer carrying the planned plate, never raises
+`VEHICLE_MISMATCH`. A v1 body without them fingerprints exactly as before, so redelivering a document
+stored before V60 is still `UNCHANGED`, not a `409`.
 
 ### 7.4 `ORDER_CANCELLED` (TMS → WMS)
 

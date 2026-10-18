@@ -22,9 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 class OrderReferenceAdapter implements OrderReferencePort {
 
     private final TransportOrderRepository orders;
+    private final TransportOrderLineRepository lines;
 
-    OrderReferenceAdapter(TransportOrderRepository orders) {
+    OrderReferenceAdapter(TransportOrderRepository orders, TransportOrderLineRepository lines) {
         this.orders = orders;
+        this.lines = lines;
     }
 
     @Override
@@ -63,5 +65,19 @@ class OrderReferenceAdapter implements OrderReferencePort {
                     .toList());
         }
         return byOrder;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, OrderLineSnapshot> linesByIds(Set<UUID> lineIds, UUID companyId) {
+        Map<UUID, OrderLineSnapshot> byId = new HashMap<>();
+        if (lineIds.isEmpty()) {
+            return byId;
+        }
+        for (TransportOrderLine line : lines.findInCompany(lineIds, companyId)) {
+            byId.put(line.id(), new OrderLineSnapshot(line.lineNumber(), line.materialCode(), line.quantity(),
+                    line.uom()));
+        }
+        return byId;
     }
 }

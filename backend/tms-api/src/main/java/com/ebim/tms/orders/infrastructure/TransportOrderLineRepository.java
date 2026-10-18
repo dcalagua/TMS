@@ -21,6 +21,15 @@ public interface TransportOrderLineRepository extends JpaRepository<TransportOrd
             + "WHERE l.order.id IN :orderIds GROUP BY l.order.id")
     List<OrderLineCount> countByOrderIds(@Param("orderIds") Collection<UUID> orderIds);
 
+    /**
+     * The lines among {@code lineIds} that belong to an order of {@code companyId}, in one query -
+     * for the published shipment plan's per-line delivery results (WAREHOUSE_EXECUTION_V1 §7.2).
+     * The line has no company of its own; the predicate goes through its order.
+     */
+    @Query("SELECT l FROM TransportOrderLine l WHERE l.id IN :lineIds AND l.order.companyId = :companyId")
+    List<TransportOrderLine> findInCompany(@Param("lineIds") Collection<UUID> lineIds,
+            @Param("companyId") UUID companyId);
+
     interface OrderLineCount {
         UUID getOrderId();
 
