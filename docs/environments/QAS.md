@@ -78,6 +78,11 @@ vehículo, un conductor, un tarifario, tres pedidos con línea y un plan en borr
 Las fechas son literales y no `CURRENT_DATE`: un seed que se mueve con el reloj da entornos
 distintos en cada ejecución, y entonces "en QAS no se ve igual" deja de poder diagnosticarse.
 
+Un segundo tenant de demostración, independiente de éste, se carga con
+`supabase/seeds/plapasa_demo_seed.sql` (organización y empresa `QAS-PLAPASA`, Ecuador): sus pasos
+están en `docs/demo/PLAPASA_TMS_RUNBOOK.md`. Sigue las mismas reglas —prefijo `QAS-`, sin
+contraseñas, personas enlazadas por correo, fechas literales— y no toca nada de `QAS-LIMA`.
+
 ## Los tres entornos
 
 | | LOCAL | QAS | PROD |
