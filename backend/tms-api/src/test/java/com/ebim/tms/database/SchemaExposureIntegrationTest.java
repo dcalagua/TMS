@@ -93,6 +93,8 @@ class SchemaExposureIntegrationTest {
             "order_hold",
             // V55: the documents that travel with orders (ADR-015).
             "logistics_document", "logistics_document_order",
+            // V69: the destinatarios of a guide (ADR-028).
+            "logistics_document_recipient",
             // V57: document delivery tracking (ADR-018).
             "document_delivery", "document_delivery_order", "document_delivery_event",
             "document_delivery_evidence",
@@ -158,6 +160,8 @@ class SchemaExposureIntegrationTest {
             "order_hold",
             // V55: the documents that travel with orders (ADR-015).
             "logistics_document", "logistics_document_order",
+            // V69: the destinatarios of a guide (ADR-028).
+            "logistics_document_recipient",
             // V57: document delivery tracking (ADR-018).
             "document_delivery", "document_delivery_order", "document_delivery_event",
             "document_delivery_evidence",
@@ -432,6 +436,8 @@ class SchemaExposureIntegrationTest {
         // V55: a document is replaced, never deleted; its order links are rewritten whole.
         withheld.put("logistics_document", List.of("DELETE"));
         withheld.put("logistics_document_order", List.of("UPDATE"));
+        // V69: a guide's recipients are rewritten whole on a re-send, like its order links.
+        withheld.put("logistics_document_recipient", List.of("UPDATE"));
         // V57: a tracked document is reported and returned, never removed; its history and
         // evidence are append-only.
         withheld.put("document_delivery", List.of("DELETE"));

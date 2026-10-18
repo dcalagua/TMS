@@ -374,13 +374,18 @@ export const ENUM_LABELS = {
     LOAD_READY: "Carga lista",
     LOADING_STARTED: "Carga iniciada",
   },
-  /** ADR-015: los documentos que viajan con un pedido. */
+  /**
+   * ADR-015: los documentos que viajan con un pedido. ADR-028: `REMISSION_GUIDE` es la guía de
+   * cualquier país; las GRE son sus alias peruanos. La etiqueta por país (SRI 06, SUNAT 09/31) la
+   * arma `logisticsDocumentLabel`, no este diccionario.
+   */
   logisticsDocumentType: {
     DELIVERY_NOTE: "Nota de entrega",
     GRE_REMITENTE: "Guía de remisión remitente",
     GRE_TRANSPORTISTA: "Guía de remisión transportista",
     INVOICE: "Factura",
     OTHER: "Otro documento",
+    REMISSION_GUIDE: "Guía de remisión",
   },
   /**
    * ADR-018: el mismo tipo de documento, con la etiqueta corta del portal y del monitor de entrega.
@@ -392,6 +397,7 @@ export const ENUM_LABELS = {
     GRE_TRANSPORTISTA: "GRE transportista",
     INVOICE: "Factura",
     OTHER: "Otro",
+    REMISSION_GUIDE: "Guía de remisión",
   },
   /** ADR-018 §4: qué pasó con un documento en un viaje. Sin estado parcial. */
   documentDeliveryStatus: {

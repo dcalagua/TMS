@@ -172,6 +172,12 @@ Authoritative documents live under `docs/architecture/`:
 - `ADR-026-cost-to-serve-allocation.md` - a trip's cost allocated to its orders on a configurable
   basis, versioned, reported by customer, destination and route (V68). No margin: there is no sales
   tariff.
+- `ADR-028-logistics-documents-received-international.md` - logistics documents are **received, never
+  issued**: TMS does not generate, sign, send or validate invoices or remission guides with the SRI or
+  SUNAT. The catalogue is international (V69): generic `REMISSION_GUIDE` (GRE_* stay as Peruvian
+  aliases), nullable fiscal columns (country, authority code, clave de acceso, transport dates, carrier,
+  plate, origin) and `logistics_document_recipient`. Only shape is validated (EC: 3-3-9 number,
+  49-digit clave). Amends ADR-015 decision 1. Contract: `docs/integrations/INBOUND_API_V1.md` §15.
 
 Database and security detail lives in `docs/database/DATA_MODEL.md`,
 `docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.
