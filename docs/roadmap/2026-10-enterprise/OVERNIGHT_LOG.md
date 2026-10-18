@@ -173,3 +173,76 @@ No se tocó código Java ni TypeScript; el EWM no se tocó (sin commit EWM en es
   `backend` en su primera corrida hasta que se arregle su arnés (fuera del alcance de 05).
 - `TMS_CONNECTOR_V1.md` §10 (EWM, «endpoints del TMS dan 404») no se tocó: es del repo EWM y la
   fase 05 es sólo TMS.
+
+---
+
+## 10 · Diseño: ADR-022…026, contrato v1.1 y mapa de fases (2026-10-18, ciclo 1)
+
+### Qué entró
+
+Diseño verificado contra el código (TMS `a57af24`, EWM `f1a0e48`): cuatro exploraciones de sólo
+lectura sobre capacidad/geometría, liquidación/finanzas, integración del TMS y conector del EWM;
+cada ADR cita clase, tabla, constraint o línea. **Sin código de producción, sin migraciones.**
+
+1. **ADR-022** perfil físico del material y geometría de carga: `tms.material_profile` (masterdata,
+   dueño EWM), snapshot en la línea (la línea del ERP gana **en bloque**), `LoadGeometryCalculator`
+   puro en `shared.geometry` (PLP-571 = 10 pilas, 0,1503 m³), `planning_volume_m3` en el pedido,
+   piso y alto como dimensiones 4 y 5 de `CapacityLimits`/`CapacityLoad`, resolvedor, ledger V37,
+   snapshot del viaje, motores (`ITEM_TALLER_THAN_VEHICLE`, dimensión que ata), `LOADING_METER`.
+2. **ADR-023** provisión (barrido idempotente, no listener; consumo en la aprobación; append-only por
+   trigger + grants; mapeo contable; cierre) y estado de pago post-`EXPORTED` (ERP informa, cuatro
+   ojos manual, portal «Mis facturas» con RLS restrictiva, webhooks por `business_outbox_event`).
+3. **ADR-024** F-1 (tolerancias con el permiso ya sembrado, `charge_code`, duplicado por viaje+cargo,
+   discrepancias por componente con `invoice_line_id`, base ACTUAL/ESTIMATED dicha, CSV, KPIs) y F-3
+   (IGV, CPE 01/07/08, RUC módulo 11, `CpeValidationPort` deshabilitado, NC/ND positivas con signo por
+   tipo, penalidades negativas sólo `PENALTY`, detracción por umbral, retención excluyente; defaults
+   D-06 por propiedad + columna nula por empresa).
+4. **ADR-025** sync v1.1 (S-1…S-4 aceptadas, **S-5 Proposed** por D-04): `DELIVERY_RESULT_RECORDED` como
+   evento de contrato, `orders[].delivery` (V45) y `geometry` en el plan, remolque y geometría en el SLS,
+   `ORDER_CANCELLED` TMS→EWM (+ `GET /integration/v1/orders…`), `warehouse-order-events` EWM→TMS que
+   sólo **retiene** (hold `INTEGRATION`).
+5. **ADR-026** costo por pedido: corridas versionadas, base configurable, sin reparto inventado, sin margen.
+6. Contrato TMS `WAREHOUSE_EXECUTION_V1.md` §7 «v1.1 (additive)» con cada mensaje (endpoint, scope,
+   idempotencia, JSON de ejemplo y respuestas); se corrigieron las celdas «planned» de §3.1/§3.3.
+7. EWM: `docs/tms-sync/DESIGN.md` (nuevo) y `TMS_CONNECTOR_V1.md` §12 v1.1 + mapa V56–V58; corregida la
+   afirmación «los endpoints del TMS dan 404» (estaba al final de §9, no en §10; nota también en §10).
+8. `PHASE_MAP.md`: fase → clases → migración prevista (TMS V59–V68, EWM V56–V58) → pruebas, con la regla
+   de renumeración y las dependencias.
+9. `DECISIONS_LOG.md`: cinco entradas (división parcial no recalcula, excepción de viaje = hold,
+   NC positivas, prefijo `wms.integration.tms.*`, `external_dispatch`).
+
+### Hallazgos que cambian a las fases siguientes
+
+- `settlement` **no está** en `ModuleBoundaryTest.BUSINESS_MODULES` (la regla lo saltea): la fase 50 lo agrega.
+- No hay CSV, ni escritor de `tolerance_policy`, ni triggers append-only en V46 (sólo grants).
+- `GET /integration/v1/shipments?updatedSince=` **ya existe**; falta el equivalente de pedidos.
+- `trip_exception` exige persona; `order_hold` ya admite `INTEGRATION` en la base (falta la fábrica Java).
+- `shipment_outbox_event.trip_id` es NOT NULL: los webhooks de pedido/factura necesitan otro outbox.
+- `CAPACITY_MODEL.md` está desactualizado sobre asignación parcial desde V37 (lo corrige la fase 40).
+- EWM: el maestro de materiales no escribe outbox; no hay tabla de alertas; `VEHICLE_MISMATCH` lo calcula sólo el TMS.
+
+### Archivos
+
+- TMS: `docs/architecture/ADR-022…ADR-026` (nuevos), `docs/integrations/WAREHOUSE_EXECUTION_V1.md`,
+  `docs/roadmap/2026-10-enterprise/PHASE_MAP.md` (nuevo), `DECISIONS_LOG.md`, este archivo.
+- EWM: `docs/tms-sync/DESIGN.md` (nuevo), `docs/integrations/TMS_CONNECTOR_V1.md`.
+
+### Pruebas
+
+Fase de sólo documentación; se corrieron igual las suites para dejar constancia de que nada cambió.
+
+| Repo | Comando | Resultado |
+|---|---|---|
+| TMS backend | `./mvnw -B test` | **2324 corridas, 1 fallo, 0 errores, 2 omitidas** = línea base; el único rojo es el conocido `PlatformLifecycleIntegrationTest.versionRules` (fase 00), no de esta fase |
+| EWM backend | `./mvnw -B test` | **1658/1658**, BUILD SUCCESS |
+
+Front de los dos repos no se corrió: no se tocó TypeScript ni configuración (sólo Markdown).
+Migraciones: ninguna creada ni tocada (hashes de `MIGRATION_HASHES.txt` intactos por construcción).
+Commit EWM: `ba4df62`.
+
+### Qué quedó fuera
+
+- `CLAUDE.md` del TMS no lista todavía ADR-022…026 (lo hace la fase 90, como decidió la 05).
+- `CLAUDE.md` del EWM: su mapa de migraciones ya omite V46–V53; no se tocó (lo actualizan las fases que
+  crean V56+).
+- S-5 (citas de muelle y ETA) queda sólo como propuesta hasta la decisión D-04.

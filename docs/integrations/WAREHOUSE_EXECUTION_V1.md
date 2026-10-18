@@ -12,6 +12,9 @@
 >   `orders[].stopSequence` are "planned, additive". **They are returned today**
 >   (`ShipmentPlanHeaderV1`, `ShipmentPlanOrderV1`), null when not set.
 >
+> **Phase 10 (same date)** rewrote those two cells to match the code and added §7 "v1.1 (additive)"
+> (ADR-025): material profiles, POD and order events in both directions, reconciliation.
+>
 > Known gaps of v1 on the EWM side (weight/volume/pallets/windows dropped by the parser, POD ignored,
 > plate stored as `trailer_number`, no `updatedSince` pull) are listed in
 > `docs/roadmap/2026-10-enterprise/00_ESTADO_ACTUAL.md` section 3.
@@ -21,8 +24,9 @@ WMS. It covers the transport plan going to the warehouse, and what physically le
 
 | Direction | Status |
 |---|---|
-| **TMS → WMS** (transport plan) | **Available today.** Aliases of existing mechanisms: `OUTBOUND_SHIPMENT_V1.md`, `WEBHOOKS_V1.md`. Three additive fields are planned (§3.3) |
+| **TMS → WMS** (transport plan) | **Available today.** Aliases of existing mechanisms: `OUTBOUND_SHIPMENT_V1.md`, `WEBHOOKS_V1.md`. The additive fields of §3.3 are returned |
 | **WMS → TMS** (dispatch, milestones) | **Implemented** with migrations V52/V53 (ADR-013) |
+| **v1.1** (material profiles, POD, order events both ways, reconciliation) | **Designed** in ADR-025, §7 below; additive; each message says which overnight-pack phase implements it |
 
 Decisions: **ADR-013** (dispatch source and external dispatch) and **ADR-014** (scheduling and
 release). Nothing here asks either product to read the other's tables. No primary key crosses the
@@ -104,7 +108,7 @@ contract does not promise that a trip can be split across loads.** That would be
 | Contract event | TMS event (outbox, webhook) | When | Status |
 |---|---|---|---|
 | `TRANSPORT_PLAN_CONFIRMED` | `SHIPMENT_CONFIRMED` | The planning run is confirmed and the trip is committed | produced today |
-| `TRANSPORT_PLAN_UPDATED` | `SHIPMENT_CHANGED` | The driver changes on a `CONFIRMED` / `READY_FOR_DISPATCH` trip | **reserved since V20; producer planned** |
+| `TRANSPORT_PLAN_UPDATED` | `SHIPMENT_CHANGED` | The driver changes on a `CONFIRMED` / `READY_FOR_DISPATCH` trip | produced today (`TripService.announcePlanChange`) |
 | `TRANSPORT_PLAN_CANCELLED` | `SHIPMENT_CANCELLED` | A committed trip is cancelled | produced today |
 
 **Orders and vehicle of a confirmed trip never change.** A different plan is a
@@ -170,7 +174,7 @@ The fields a WMS needs, and their v1 status:
 | Field | Status |
 |---|---|
 | `shipmentNumber`, `status`, `planningDate`, `originCode`, `plannedDepartureAt`, `carrierCode`, `vehicleCode`, `vehicleLicensePlate`, `version`, `stops[]`, `orders[].orderNumber/externalSource/externalReference/weightKg/volumeM3/pallets` | **Returned today** |
-| `originExternalReference`, `routeCode`, `driver{…}`, `orders[].stopSequence` | **Planned, additive.** They arrive as new fields in v1, and a consumer must ignore unknown fields |
+| `originExternalReference`, `routeCode`, `driver{…}`, `orders[].stopSequence` | **Returned today** (added to v1 additively; null when not set). A consumer must ignore unknown fields |
 
 The WMS maps the plan like this:
 - `shipmentNumber` goes to `external_load_number`;
@@ -383,5 +387,272 @@ TMS                                         WMS (EWM)
 - It sends no invoices or delivery documents. That is a separate ERP contract.
 - It has no split of one trip across loads (§2.3).
 - It does not normalise SKU, lot, serial or handling unit in TMS. They stay in the stored document.
-- It sends no inbound order cancellation to TMS. That is a separate change.
+- It sends no inbound order cancellation to TMS. That is a separate change: v1.1 adds it (§7.5).
 - TMS never reads a WMS API. Everything the WMS knows reaches TMS by the two POSTs in §4.
+
+---
+
+## 7. v1.1 (additive)
+
+Decision: **ADR-025** (S-1…S-4 accepted, S-5 proposed). Material profile and load geometry: **ADR-022**.
+Everything here is **additive**: same `/integration/v1` path, same authentication, same envelope; a
+partner that speaks v1 keeps working and ignores the new fields. Each message names the overnight-pack
+phase that implements it; until that phase lands, the endpoint answers `404` and the field is absent.
+
+| # | Message | Direction | Endpoint | Scope | Phase |
+|---|---|---|---|---|---|
+| 7.1 | `MATERIAL_PROFILE_UPSERT` | WMS → TMS | `PUT /integration/v1/material-profiles/{materialCode}`, `POST …/material-profiles/batch` | `integration.material:write` | 20 |
+| 7.2 | Plan v1.1 + `DELIVERY_RESULT_RECORDED` | TMS → WMS | webhook + `GET /integration/v1/shipments/{n}` | `integration.shipment:read` | 30 (POD), 40 (geometry) |
+| 7.3 | `DISPATCH_CONFIRMED` v1.1 fields | WMS → TMS | `POST /integration/v1/dispatch-confirmations` | `integration.dispatch:write` | 30 (stored), 45 (compared) |
+| 7.4 | `ORDER_CANCELLED` | TMS → WMS | webhook + `GET /integration/v1/orders/{orderNumber}`, `GET /integration/v1/orders?status=CANCELLED&updatedSince=` | `integration.order:read` | 35 |
+| 7.5 | `WAREHOUSE_ORDER_EVENT` | WMS → TMS | `POST /integration/v1/warehouse-order-events` | `integration.warehouse-order-event:write` | 35 |
+| 7.6 | Reconciliation | WMS pulls | `GET /integration/v1/shipments?updatedSince=` (exists), 7.4's order list | as above | 35 (WMS side) |
+
+Headers, versioning and errors are §4's: `Idempotency-Key` (`^[A-Za-z0-9._:-]{8,128}$`) on every
+POST/PUT, `X-Correlation-Id`, RFC 9457 errors, `409` `idempotency-key-reused` when a key is reused with
+another body. Batches answer `200`, or `207` when any item is `INVALID`.
+
+### 7.1 `MATERIAL_PROFILE_UPSERT` - `PUT /integration/v1/material-profiles/{materialCode}`
+
+The warehouse owns the physical profile of a material (D-02); TMS keeps a dated copy and copies it onto
+new order lines (ADR-022 §2). `materialCode` is byte-for-byte the code the ERP puts on the order line
+(URL-encoded in the path; no case folding).
+
+```json
+{
+  "sourceSystem": "EWM_EBIM",
+  "sourceUpdatedAt": "2026-10-18T14:05:12-05:00",
+  "description": "VASO PLP-571 7 OZ",
+  "lengthM": 0.105,
+  "widthM": 0.105,
+  "heightM": 0.175,
+  "unitWeightKg": 0.012,
+  "unitVolumeM3": 0.0019,
+  "stackMode": "NESTABLE",
+  "stackMaxQuantity": 100,
+  "nestIncrementM": 0.012,
+  "maxTopLoadKg": null,
+  "orientationLocked": false
+}
+```
+
+| Field | Rule |
+|---|---|
+| `sourceSystem` | The producer (`^[A-Z0-9_]{2,40}$`), stored |
+| `sourceUpdatedAt` | Required. Older than the stored value → `STALE`, `200`, nothing applied |
+| `lengthM`, `widthM`, `heightM` | Metres, `> 0`. One unit in its loading orientation. **The WMS converts only from a declared unit** (cm, mm); otherwise it sends `null` |
+| `unitWeightKg`, `unitVolumeM3` | `> 0` or `null` (kg and m³ only) |
+| `stackMode` | `NONE`, `STACKABLE`, `NESTABLE`, or `null` (not declared) |
+| `stackMaxQuantity` | Units per stack, integer `> 0`; same meaning as EWM `md_item.stack_max_quantity` |
+| `nestIncrementM` | Required when `NESTABLE`; `> 0`; `null` otherwise |
+| `maxTopLoadKg` | Crush limit of the bottom unit, `> 0` or `null` |
+| `orientationLocked` | Default `false` |
+| absent vs `null` | An **absent** field keeps the stored value; an explicit **`null`** clears it |
+
+**Response** (`201` created, `200` otherwise):
+
+```json
+{ "materialCode": "PLP-571", "outcome": "UPDATED", "version": 4,
+  "sourceUpdatedAt": "2026-10-18T14:05:12-05:00" }
+```
+
+`outcome`: `CREATED`, `UPDATED`, `UNCHANGED` (same content), `STALE`. `400` for a shape error (e.g.
+`NESTABLE` without `nestIncrementM`), `403` without the scope.
+
+**Batch** - `POST /integration/v1/material-profiles/batch`, up to 500 items, each the body above plus
+`materialCode`:
+
+```json
+{ "sourceSystem": "EWM_EBIM",
+  "profiles": [ { "materialCode": "PLP-571", "sourceUpdatedAt": "2026-10-18T14:05:12-05:00",
+                  "lengthM": 0.105, "widthM": 0.105, "heightM": 0.175, "stackMode": "NESTABLE",
+                  "stackMaxQuantity": 100, "nestIncrementM": 0.012 } ] }
+```
+
+```json
+{ "received": 1, "applied": 1, "refused": 0,
+  "results": [ { "index": 0, "materialCode": "PLP-571", "outcome": "CREATED", "message": null } ] }
+```
+
+Item `outcome` adds `INVALID` (with `message`); the batch is not atomic, each item stands alone.
+
+### 7.2 Plan v1.1 and `DELIVERY_RESULT_RECORDED` (TMS → WMS)
+
+**New contract event.** `DELIVERY_RESULT_RECORDED` (same name in TMS and in the contract) joins §3.1:
+a delivery result was recorded or corrected for an order of the trip (ADR-009). The WMS subscribes to it
+like the other three; the body is a trigger and the WMS pulls `GET /integration/v1/shipments/{n}`. **It
+never moves inventory in the WMS**: goods are already out (the 601); a failed or partial delivery is a
+reason for a person to open a return, never an automatic one.
+
+**Additive fields in the plan** (`orders[]`):
+
+```json
+{
+  "orderNumber": "TO-00010011", "externalSource": "SAPB1_PE", "externalReference": "PED-1011",
+  "stopSequence": 1, "weightKg": 420.5, "volumeM3": 1.8, "pallets": 2,
+  "deliveryResult": "PARTIAL", "deliveredAt": "2026-09-28T10:42:00-05:00",
+  "delivery": {
+    "result": "PARTIAL",
+    "deliveredAt": "2026-09-28T10:42:00-05:00",
+    "receiverName": "M. Quispe",
+    "evidenceCount": 2,
+    "attempted": { "weightKg": 420.5, "volumeM3": 1.8, "pallets": 2 },
+    "delivered": { "weightKg": 380.0, "volumeM3": 1.6, "pallets": 2 },
+    "refused":   { "weightKg": 40.5,  "volumeM3": 0.2, "pallets": 0 },
+    "lines": [
+      { "lineNumber": 1, "materialCode": "SKU-100", "uom": "UN",
+        "quantityAttempted": 100, "quantityDelivered": 90, "quantityRefused": 10 }
+    ]
+  },
+  "geometry": { "stacks": 10, "effectiveVolumeM3": 0.1503, "floorAreaM2": 0.1103,
+                "maxStackHeightM": 1.363, "unmeasuredLines": 0 }
+}
+```
+
+| Field | Rule |
+|---|---|
+| `delivery` | `null` until a result is recorded. `result` ∈ `DELIVERED`, `PARTIAL`, `REJECTED`, `FAILED`, `NOT_ATTEMPTED` (V28). The flat v1 fields `deliveryResult`, `deliveredAt`, `deliveryReceiverName`, `deliveryNotes`, `evidenceCount` stay |
+| `delivery.attempted/delivered/refused` | From V45; a block is `null` when not recorded - **never zero for unknown** |
+| `delivery.lines[]` | From `order_delivery_line` (V45); `lineNumber` is the ERP line number. Empty when recorded per order only |
+| evidence | Only the count. No URL, no bytes, no receiver identity document (unchanged rule) |
+| `geometry` | ADR-022, after phase 40; `null` when the order has no measured line |
+
+Stops already carry `serviceWindowStart`/`serviceWindowEnd` and orders `weightKg/volumeM3/pallets`
+(v1, §3.3): a WMS should store them as **planned by TMS** and show them next to what it actually loads.
+
+### 7.3 `DISPATCH_CONFIRMED` - v1.1 fields
+
+Additive request fields on `POST /integration/v1/dispatch-confirmations` (§4.1):
+
+```json
+{
+  "vehicle": { "licensePlate": "B7K-812", "trailerLicensePlate": "C4X-991", "type": "FURGON" },
+  "orders": [
+    { "externalSource": "SAPB1_PE", "externalReference": "PED-1011", "status": "SHIPPED",
+      "handlingUnits": 2, "weightKg": 790.0,
+      "stacks": 10, "effectiveVolumeM3": 0.1503, "loadingMeters": 0.05, "geometryReason": null }
+  ]
+}
+```
+
+| Field | Rule |
+|---|---|
+| `vehicle.licensePlate` | **The tractor / truck plate** (the plan's `vehicleLicensePlate`). `VEHICLE_MISMATCH` compares only this |
+| `vehicle.trailerLicensePlate` | The trailer, when there is one. Stored and shown; TMS has no trailer master and never compares it |
+| `orders[].stacks`, `effectiveVolumeM3`, `loadingMeters` | Computed by the WMS with the same footprint rules (ADR-022 §3). `null` when the profile is incomplete, with `geometryReason` (e.g. `NEST_INCREMENT_MISSING`) |
+
+TMS stores them (phase 30, V60) and, from phase 45, compares them with the plan as `GEOMETRY_VARIANCE`
+(severity `INFO`): **never a 4xx, never a `MISMATCH`**. The response shape is unchanged.
+
+### 7.4 `ORDER_CANCELLED` (TMS → WMS)
+
+TMS cancelled **its transport order** (`POST /api/v1/orders/{id}/cancel`; only possible before the order is
+planned). It is a **signal, not a command** (D-03): cancelling the customer's order belongs to the ERP.
+
+Webhook envelope (§3.2 rules, signature and retries unchanged):
+
+```json
+{
+  "apiVersion": "v1",
+  "id": "5d2c8a10-7e0b-4c55-9d1f-3a2b1c0d9e8f",
+  "type": "ORDER_CANCELLED",
+  "occurredAt": "2026-10-18T09:12:44Z",
+  "companyId": "6b1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
+  "resource": { "type": "order", "id": "1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a5b", "reference": "TO-00010011" }
+}
+```
+
+Pull - `GET /integration/v1/orders/{orderNumber}` (scope `integration.order:read`; `404` for another
+company's or an unknown order):
+
+```json
+{ "orderNumber": "TO-00010011", "externalSource": "SAPB1_PE", "externalReference": "PED-1011",
+  "status": "CANCELLED", "cancelledAt": "2026-10-18T09:12:44Z",
+  "cancelReason": "Cliente anuló la compra", "updatedAt": "2026-10-18T09:12:44Z" }
+```
+
+Reconciliation - `GET /integration/v1/orders?status=CANCELLED&updatedSince=2026-10-18T00:00:00Z&page=0&size=200`
+returns a page of the same objects ordered by `updatedAt, orderNumber`.
+
+**What the WMS does:** finds its order by (`externalSource`, `externalReference`), raises an alert on it
+("TMS anuló el transporte de este pedido") and, only if its order is still open with nothing reserved,
+offers a supervisor the cancel action. It never cancels by itself.
+
+### 7.5 `WAREHOUSE_ORDER_EVENT` - `POST /integration/v1/warehouse-order-events`
+
+The warehouse cancelled its order, or closed it short. TMS **never cancels by itself**: it places a hold
+(ADR-014) and a person decides.
+
+```json
+{
+  "sourceSystem": "EWM_EBIM",
+  "events": [
+    { "eventId": "2b9e7c1d-0a4f-4e3b-9c8d-7f6e5d4c3b2a", "type": "ORDER_CANCELLED",
+      "externalSource": "SAPB1_PE", "externalReference": "PED-1014",
+      "warehouseOrderNumber": "ORR-001-00000009", "warehouseCode": "CD01",
+      "occurredAt": "2026-10-18T08:55:00-05:00", "reason": "Anulado por el ERP (ORR DELETE)" },
+    { "eventId": "6a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "type": "ORDER_SHORT_CLOSED",
+      "externalSource": "SAPB1_PE", "externalReference": "PED-1011",
+      "warehouseOrderNumber": "ORR-001-00000007", "warehouseCode": "CD01",
+      "occurredAt": "2026-10-18T09:30:00-05:00", "reason": "Saldo anulado tras despacho parcial",
+      "lines": [ { "lineNumber": 1, "materialCode": "SKU-100", "uom": "UN",
+                   "requested": 100, "shipped": 97, "cancelled": 3 } ] }
+  ]
+}
+```
+
+| Field | Rule |
+|---|---|
+| `eventId` | The WMS's stable id; dedup key with `sourceSystem` (`DUPLICATE` on repeat) |
+| `type` | `ORDER_CANCELLED` or `ORDER_SHORT_CLOSED` |
+| `externalSource` + `externalReference` | The ERP order key (§2.2) |
+| `lines[]` | Optional; for `ORDER_SHORT_CLOSED`, the quantities per ERP line |
+| batch | 1-200 events |
+
+**Response** (`200`, or `207` when any item is `INVALID`):
+
+```json
+{ "received": 2, "recorded": 2, "refused": 0,
+  "results": [
+    { "index": 0, "eventId": "2b9e7c1d-…", "result": "HOLD_PLACED", "orderNumber": "TO-00010014", "message": null },
+    { "index": 1, "eventId": "6a1b2c3d-…", "result": "NOTED", "orderNumber": "TO-00010011", "message": null } ] }
+```
+
+| `result` | Meaning |
+|---|---|
+| `HOLD_PLACED` | `ORDER_CANCELLED` on an open order: blocking hold `INTEGRATION` / `WAREHOUSE_CANCELLED`. Out of planning; on a committed trip it blocks dispatch and raises the Control Tower advisory `ORDER_HOLD_ON_COMMITTED_TRIP` |
+| `ALREADY_HELD` | An active hold with the same reason code exists |
+| `NOTED` | `ORDER_SHORT_CLOSED`: non-blocking hold `WAREHOUSE_SHORT_CLOSED` with the figures; stops nothing |
+| `ORDER_CLOSED` | The TMS order is delivered or cancelled; recorded only |
+| `UNKNOWN_ORDER` | No TMS order with that key in this company; recorded |
+| `DUPLICATE` | Same `sourceSystem` + `eventId` received before |
+| `INVALID` | The item is malformed (`message` says why) |
+
+### 7.6 Reconciliation (WMS side)
+
+A WMS that wants to repair lost webhooks polls, with its own watermark and **off by default**:
+
+- `GET /integration/v1/shipments?status=CONFIRMED,CANCELLED&updatedSince=<w>` (§3.4, exists);
+- `GET /integration/v1/orders?status=CANCELLED&updatedSince=<w>` (§7.4).
+
+Every item it reads is applied exactly as if its webhook had arrived, so a replay is harmless.
+
+### 7.7 Scopes after v1.1
+
+| Scope | Endpoints |
+|---|---|
+| `integration.shipment:read` | §3 and §7.2 |
+| `integration.dispatch:write` | §4.1 and §7.3 |
+| `integration.warehouse-milestone:write` | §4.2 |
+| `integration.material:write` | §7.1 |
+| `integration.order:read` | §7.4 pull and list |
+| `integration.warehouse-order-event:write` | §7.5 |
+
+Webhook subscription of a warehouse link after v1.1: `SHIPMENT_CONFIRMED`, `SHIPMENT_CHANGED`,
+`SHIPMENT_CANCELLED`, `DELIVERY_RESULT_RECORDED`, `ORDER_CANCELLED`.
+
+### 7.8 Proposed, not implemented: dock appointments and truck ETA (ADR-025 §7, D-04)
+
+The warehouse would own the calendar of its doors; TMS would request a pickup appointment and receive the
+confirmation as a milestone, and send `TRUCK_ETA_UPDATED` from ADR-011's estimate. **Nothing of this exists
+or is promised** until D-04 is decided.
