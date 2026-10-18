@@ -92,3 +92,84 @@ diff <(grep -E '^[0-9a-f]{64}' MIGRATION_HASHES.txt) <(
 
 - No se tocó código en ningún repo. El EWM no tiene commit de esta fase (no hubo cambios).
 - La prueba roja de la línea base queda documentada, sin arreglar.
+
+---
+
+## 05 · Documentación al día y CI (2026-10-18, ciclo 1)
+
+### Qué entró
+
+1. **`docs/architecture/TMS_CURRENT_CAPABILITY_MAP.md`** reconciliado desde el código en `40aad53`
+   (V1–V58), con el estilo «corrección nombrada» (`**CORRECTION (phase 05):**` en cada celda
+   tocada; el texto de JOB 17 queda como registro):
+   - Bloque «What phase 05 corrected» al tope; línea base nueva con los números de la fase 00
+     (2324 corridas / 1 fallo conocido / 2 omitidas; front 308/308 en 46 archivos; lint 0/21) y la
+     de JOB 17 conservada debajo; nota de QAS sin versión de Flyway verificada, sin PRD, sin CI.
+   - *Platform truth*: 14 módulos + `shared`, 992/229 archivos Java, 61 controladores, 144
+     archivos con MUI, Leaflet, tres cadenas de seguridad, filtros de suspensión y acceso comercial.
+   - Fila 16 (settlement): la de JOB 17 tachada y una nueva **IMPLEMENTED (v1, gaps named)** con
+     los huecos leídos del código: `tolerance_policy` sin escritor (siempre `Tolerance.NONE`), 2.ª
+     línea del mismo viaje → `DUPLICATE_INVOICE`, `invoice_line_id` siempre `NULL`
+     (`SettlementService:326`), CSV declarado sin adaptador, y ausentes provisión, pagos,
+     IGV/detracción/CPE, notas de crédito, costo por pedido. Cuatro ojos verificado
+     (`requireDifferentApprover`).
+   - Correcciones en filas 8, 10, 13 (V45 cantidades entregadas, D3), 14 (Leaflet), 17 (V47, D5),
+     19 (12 controladores de integración), 23 (sin KPI de settlement), 25 (`docs/operations/` sí
+     existe).
+   - **Filas nuevas 26–38**: guardia de enums (V44), work assignment (V47), costo de flota propia
+     (V48), provisioning (V51), modo de despacho + despacho externo (V52/V53), programación/
+     liberación/retenciones (V54), documentos logísticos (V55), entitlements (V56), portal del
+     transportista + entrega de documentos (V57), offline + mapa de seguimiento de despachos
+     (ADR-019), almacenamiento de evidencias (ADR-006/020), ciclo de vida del tenant (V58),
+     mínimo privilegio de `tms_app` (V49/V50).
+   - «What must not be re-created» y «Documentation corrected in phase 05» ampliados.
+2. **`CLAUDE.md`**, «Deferred by decision»: la integración EWM sale de la lista (v1 mergeada
+   2026-09-28, PR #13, ADR-013 + `WAREHOUSE_EXECUTION_V1.md`), y «live map tracking» pasa a «live
+   fleet map tracking» con la aclaración de que el mapa Leaflet de envíos despachados (ADR-019) ya
+   existe. Las ADR de las fases 10+ las agrega la fase 90.
+3. **Notas fechadas al tope** (sin reescribir el cuerpo) en
+   `docs/implementation/TMS_EWM_IMPLEMENTATION_REPORT.md` (mergeado; `SHIPMENT_CHANGED` y campos
+   aditivos en `dev`; fase 11 entregada luego por ADR-018/019; pruebas vigentes) y
+   `docs/integrations/WAREHOUSE_EXECUTION_V1.md` (§3.1 `SHIPMENT_CHANGED` existe en
+   `TripService.announcePlanChange`; §3.3 los cuatro campos aditivos ya se devuelven).
+4. **`.github/workflows/ci.yml`** (nuevo): job `backend` (Temurin 21, caché Maven, paso que falla
+   si no hay Docker y pre-descarga `postgis/postgis:17-3.5` — sin él `DockerAvailability` omitiría
+   las pruebas de base y el job saldría verde sin verificar migraciones —, `scripts/backend-test.sh`
+   = `./mvnw -B test`, sube `surefire-reports` si falla) y job `frontend` (Node desde `.nvmrc`,
+   `npm ci`, typecheck, lint, test, build). Disparadores: push a `dev`/`qas`/`main`, PR, manual.
+   `permissions: contents: read`, sin secretos. El build de CI no publica: los gates de publicación
+   (`check-frontend-env.sh`, `assert-frontend-bundle.sh`) siguen en el pipeline de despliegue.
+   **No se activó** (no hay push). Validado con **actionlint 1.7.12** (con shellcheck): sin
+   hallazgos. El job `frontend` se reprodujo localmente paso a paso (abajo).
+
+### Archivos
+
+- `docs/architecture/TMS_CURRENT_CAPABILITY_MAP.md`
+- `CLAUDE.md`
+- `docs/implementation/TMS_EWM_IMPLEMENTATION_REPORT.md`
+- `docs/integrations/WAREHOUSE_EXECUTION_V1.md`
+- `.github/workflows/ci.yml` (nuevo)
+- `docs/roadmap/2026-10-enterprise/OVERNIGHT_LOG.md` (esta sección)
+
+### Pruebas
+
+| Repo | Comando | Resultado |
+|---|---|---|
+| TMS front | `npm run typecheck` | OK (0 errores) |
+| TMS front | `npm run lint` | OK: 0 errores, 21 avisos (= línea base) |
+| TMS front | `npm test` | **308/308** en 46 archivos |
+| TMS front | `npm run build` | OK (aviso de chunk > 500 kB, preexistente) |
+| TMS backend | `./mvnw -B test` | **2324 corridas, 1 fallo, 0 errores, 2 omitidas** = línea base; el único rojo es el conocido `PlatformLifecycleIntegrationTest.versionRules` (fase 00), no de esta fase |
+| CI | `actionlint .github/workflows/ci.yml` | sin hallazgos |
+
+No se tocó código Java ni TypeScript; el EWM no se tocó (sin commit EWM en esta fase).
+
+### Qué quedó fuera
+
+- El workflow no corrió en GitHub (prohibido el push); su primera corrida real dirá si el runner
+  necesita algo más (p. ej. tiempo del job backend).
+- Frontend E2E (Playwright) no entra en el CI: necesita backend y credenciales.
+- La prueba roja conocida (`PlatformLifecycleIntegrationTest.versionRules`) hará fallar el job
+  `backend` en su primera corrida hasta que se arregle su arnés (fuera del alcance de 05).
+- `TMS_CONNECTOR_V1.md` §10 (EWM, «endpoints del TMS dan 404») no se tocó: es del repo EWM y la
+  fase 05 es sólo TMS.

@@ -169,7 +169,17 @@ Read these before changing schema, security or module boundaries. If an implemen
 
 ## Deferred by decision (do not introduce early)
 
-OR-Tools/route optimization, EWM integration, ERP integration, Kafka/microservices/event sourcing, Supabase Realtime, Storage (except evidence, ADR-020), and live map tracking. Add them only when a concrete requirement and an ADR justify them.
+OR-Tools/route optimization, ERP integration, Kafka/microservices/event sourcing, Supabase Realtime, Storage (except evidence, ADR-020), and live fleet map tracking. Add them only when a concrete requirement and an ADR justify them.
+
+EWM integration has left this list: v1 was merged into `dev` on 2026-09-28 (PR #13) under ADR-013
+and `docs/integrations/WAREHOUSE_EXECUTION_V1.md` - signed webhook + plan pull towards the warehouse,
+`dispatch-confirmations` and `warehouse-milestones` back. It stays contract-only: no shared table, no
+foreign key, no warehouse state in `TripStatus`. Extending it needs the contract doc updated, not a
+new ADR, unless a principle of ADR-013 changes.
+
+A map is not live tracking: `/shipment-tracking` (ADR-019) draws on Leaflet the shipments the
+warehouse actually dispatched, with their stops and documents, and the trip screens draw stored
+positions. A live fleet map that follows vehicles in real time is what stays deferred.
 
 GPS/telematics has left this list under ADR-007, and only as far as the ADR goes: TMS owns a
 normalised position contract, its storage and its sampling policy, and ships **no vendor adapter**.

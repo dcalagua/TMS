@@ -1,5 +1,21 @@
 # TMS by EBIM - Warehouse Execution Contract v1 (TMS <-> WMS)
 
+> **Status note - 2026-10-18 (overnight pack phase 05).** This contract is **implemented and
+> merged** on both sides: TMS `feature/tms-ewm-integration-v1` reached `dev` on 2026-09-28 (PR #13,
+> `0553f16`), and the EWM connector was merged on its side the same day (`00_ESTADO_ACTUAL.md` §3). Two statements below are older
+> than the code and are kept as written rather than rewritten:
+>
+> - §3.1 says the `SHIPMENT_CHANGED` producer is "planned". **It exists**:
+>   `TripService.announcePlanChange` publishes it when the driver changes on a `CONFIRMED` /
+>   `READY_FOR_DISPATCH` trip (metadata `change=DRIVER`). It writes no timeline entry, by design.
+> - §3.3 (and the table at the top) says `originExternalReference`, `routeCode`, `driver{…}` and
+>   `orders[].stopSequence` are "planned, additive". **They are returned today**
+>   (`ShipmentPlanHeaderV1`, `ShipmentPlanOrderV1`), null when not set.
+>
+> Known gaps of v1 on the EWM side (weight/volume/pallets/windows dropped by the parser, POD ignored,
+> plate stored as `trailer_number`, no `updatedSince` pull) are listed in
+> `docs/roadmap/2026-10-enterprise/00_ESTADO_ACTUAL.md` section 3.
+
 The public contract between TMS and a warehouse management system: EWM by EBIM, or any third-party
 WMS. It covers the transport plan going to the warehouse, and what physically left coming back.
 
