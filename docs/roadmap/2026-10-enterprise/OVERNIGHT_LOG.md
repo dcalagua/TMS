@@ -859,3 +859,90 @@ El EWM no se tocó.
 - No hay entradas nuevas en `i18n.ts` (las pantallas de liquidación nunca las tuvieron).
 - Campos contables en la exportación (cuentas GL, impuestos) llegan con V65/V66 (fases 55 y 60), en JSON y CSV a la vez.
 - V64 sólo validada con Testcontainers; no aplicada en ninguna base compartida.
+
+## 55 · Provisión de fletes (2026-10-18, ciclo 1 de 2 · completa)
+
+Todo lo pedido entró en el ciclo 1 (plan 03 F-2, ADR-023 §1, D-01/D-07): migración, backend, front, pruebas y documentos.
+
+### Qué entró
+
+1. **V65** `V65__freight_accruals_and_gl_mapping.sql`: `company_settings.accrual_trigger` (`DISPATCHED` por defecto,
+   `DELIVERED`); `freight_accrual` (una por viaje y moneda, totales corrientes, `uq_freight_accrual_trip_currency`);
+   `freight_accrual_entry` (append-only por `tr_freight_accrual_entry_append_only` y por grant `SELECT, INSERT`; signo por
+   tipo; `uq_freight_accrual_entry_source` como idempotencia; motivo obligatorio en manual/reversión);
+   `gl_account_mapping` (concepto, cuenta, centro de costo, ámbito `COMPANY|ORIGIN|ROUTE`, una activa por ámbito);
+   índices parciales de `trip` por salida/entrega; RLS por tenant en las tres; permisos
+   `settlement.accrual:read|export|manage`; acciones `ACCRUAL_*`, `GL_MAPPING_CHANGED`; agregados `FREIGHT_ACCRUAL`,
+   `GL_ACCOUNT_MAPPING`. Sin filas de negocio.
+2. **Nacimiento por barrido, no por listener** (`AccrualSweep` + `AccrualSweepScheduler`, cada 5 min, ventana 31 días):
+   lee hechos confirmados (`actual_departure_at` o `actual_completion_at` según la empresa) por el puerto nuevo
+   `AccruableTripLookupPort` (lo responde `planning`), precio = real cerrado o estimado (`AccrualPricing`), una
+   transacción por viaje, violación única de otro nodo = hecho. Cada empresa corre bajo `SystemJobAuthentication`
+   (conexión `tms_app` con RLS, auditoría firmada `system:accrual-sweep`). Flota propia excluida; sin costo → listado con
+   motivo (`NO_CARRIER`, `NO_TRIP_COST`, `NOT_CALCULABLE`, `PENDING_SWEEP`), nunca una cifra inventada.
+3. **Ajuste** al cerrar el costo real (provisión `OPEN`, `FOR UPDATE SKIP LOCKED`, clave = instante de cierre).
+   **Consumo** en `SettlementService.approve`, misma transacción; una provisión que nace después de la factura aprobada
+   la consume al nacer. **Reversión / cierre de remanente** por una persona con motivo (`POST /accruals/{id}/reverse`).
+4. **Reportes**: `GET /settlement/accruals` (período, transportista, moneda, estado), `/{id}` con movimientos,
+   `/aging?asOf=` (0-30/31-60/61-90/>90 por transportista y moneda, desde los movimientos), `/unaccrued?from=&to=`,
+   `POST /sweep?from=&to=` («provisionar ahora»), `/journal?period=YYYY-MM&format=JSON|CSV` con el mapeo contable y
+   avisos por concepto sin cuenta (`X-Journal-Warnings` en CSV). GL: `/settlement/gl-mappings` (crear, cambiar, retirar).
+5. **Front**: pantalla «Provisiones» (`/settlement/accruals`, menú, `ACCRUAL_VIEW`): pestañas Provisiones (filtros +
+   drawer con movimientos y revertir/cerrar remanente vía `promptDialog`), Antigüedad, Viajes sin provisión (con
+   «Provisionar ahora»), Asientos (vista, CSV, JSON; sólo con `ACCRUAL_EXPORT`), Cuentas contables (drawer).
+   «Configuración de empresa» edita el disparador. Capacidades `ACCRUAL_VIEW|EXPORT|MANAGE`.
+6. **Docs**: ADR-023 «Implementation notes - section 1», `PHASE_MAP.md`, `DECISIONS_LOG.md` (+6).
+
+### Desvíos registrados (`DECISIONS_LOG.md`)
+
+- El barrido trabaja cada empresa con RLS, como máquina (`SystemJobAuthentication`).
+- Ventana del barrido (31 días) y «provisionar ahora» para rangos anteriores.
+- La clave del ajuste es el instante de cierre del costo (`trip_cost` no tiene versión).
+- Una factura aprobada antes de la provisión la consume al nacer.
+- Antigüedad desde los movimientos; el asiento no parte la variación; CSV sin filas de aviso.
+- Sin disparador de TRUNCATE (`MigrationConventionTest`); `promptDialog` es la confirmación con motivo.
+
+### Archivos
+
+- Migración: `backend/tms-api/src/main/resources/db/migration/V65__freight_accruals_and_gl_mapping.sql`.
+- Nuevos (main): `settlement/domain/{FreightAccrual, FreightAccrualEntry, GlAccountMapping, GlAccountResolver,
+  AccrualStatus, AccrualBasis, AccrualEntryType, AccrualSourceType, GlConcept, GlScopeType}`,
+  `settlement/application/{AccrualService, AccrualSweep, AccrualPricing, AccrualJournal, AccrualJournalService,
+  GlAccountMappingService, UnaccruedReason, Accrual*View, AccrualReverseRequest, AccrualSweepResult,
+  GlAccountMapping{Request,View}, UnaccruedTripsView}`, `settlement/infrastructure/{FreightAccrualRepository,
+  FreightAccrualEntryRepository, GlAccountMappingRepository, AccrualReportQueries, AccrualSweepScheduler}`,
+  `settlement/api/{AccrualController, GlAccountMappingController}`, `shared/reference/AccruableTripLookupPort`,
+  `planning/infrastructure/AccruableTripLookupAdapter`, `shared/security/SystemJobAuthentication`,
+  `shared/settings/AccrualTrigger`.
+- Modificados (main): `SettlementService` (consumo), `CarrierInvoiceRepository`, `TripCostLookupPort` (+`closedAt`),
+  `TripCostLookupAdapter`, `CompanySettings` (+`accrualTrigger`), `JdbcCompanySettingsAdapter`,
+  `CompanyAdministration{Service,Repository}`, `CompanyProfileRequest`, `CompanySettingsView`, `AuditAction`,
+  `AuditAggregateType`, `Permission`, `Capability`, `application.yml` (`tms.settlement.accrual.*`).
+- Pruebas: `AccrualApiIntegrationTest` (14), `FreightAccrualTest` (8), `AccrualJournalTest` (4, golden
+  `src/test/resources/settlement/accrual-journal-golden.csv`), `GlAccountResolverTest` (2), `AccrualPricingTest` (2);
+  `SchemaExposureIntegrationTest` y `TenancyConstraintIntegrationTest` (listas y conteos del catálogo: 70 permisos,
+  194 asignaciones); `application-test.yml` apaga el temporizador del barrido.
+- Front: `shared/api/accrualApi.ts`, `pages/settlement/{AccrualsPage, AccrualReportTabs, GlMappingsTab, Money}.tsx`,
+  `AccrualsPage.test.tsx`; `App.tsx`, `lazyRoutes.tsx`, `navConfig.tsx`, `meApi.ts`, `enums.ts`, `statusTones.ts`,
+  `administrationApi.ts`, `CompanySettingsPage.tsx`.
+
+### Pruebas
+
+| Repo | Comando | Resultado |
+|---|---|---|
+| TMS backend | `./mvnw -B test` (completo, Testcontainers) | **2491 corridas, 1 fallo, 0 errores, 2 omitidas** · 4 min 22 s (fase 50: 2461; +30). El único rojo es el conocido `PlatformLifecycleIntegrationTest.versionRules` (fase 00) |
+| TMS backend | nuevas | `AccrualApiIntegrationTest` 14/14 (ciclo completo accrue→adjust→consumo parcial→total con suma de movimientos = saldo; cierre de remanente una sola vez; reversión de abierta sin consumo posterior; factura aprobada antes de la provisión; aprobar dos veces consume una; dos barridos concurrentes = una provisión; doble barrido idempotente; sin costo/no calculable listados y no provisionados, flota propia excluida; fecha contable en zona de la empresa; disparador DELIVERED; UPDATE/DELETE fallan por trigger y por grant con `tms_app`; antigüedad por tramo; asiento JSON/CSV con aviso sin mapeo; mapeos GL con 409 y auditoría; permisos 403 y aislamiento 404); `FreightAccrualTest` 8/8; `AccrualJournalTest` 4/4 (golden byte a byte); `GlAccountResolverTest` 2/2; `AccrualPricingTest` 2/2; `ModuleBoundaryTest`, `TenantScopedRepositoryTest`, `AuditVocabularyMigrationTest`, `CapabilityTest`, `MigrationConventionTest` verdes |
+| TMS frontend | `npm run typecheck && npm run lint && npm test` | OK · lint 0 errores · **344/344** en 52 archivos (fase 50: 338; +6) |
+| Migraciones | `git diff` de V1–V64 | intactas; sólo V65 nueva |
+
+El EWM no se tocó.
+
+### Qué quedó fuera (ciclo 2 / otras fases)
+
+- Consumo neto de IGV: entra con la fase 60 (hoy consume el importe de línea, como dice el ADR).
+- Reversión automática al anular un viaje despachado: hoy imposible (`TripStatus`); el ADR la deja para cuando exista.
+- El barrido no se detiene con el tenant suspendido (ADR-021 cubre escrituras de usuario y socio; la provisión es
+  contabilidad de hechos ya ocurridos).
+- Los selectores de transportista/origen/ruta del front leen las APIs de maestros; sin esos permisos aparecen vacíos
+  (mismo límite que la fase 50).
+- Sin entradas nuevas en `i18n.ts` (las pantallas de liquidación nunca las tuvieron).

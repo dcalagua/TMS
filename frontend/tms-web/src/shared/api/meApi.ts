@@ -70,6 +70,12 @@ export const CAPABILITY = {
   SETTLEMENT_APPROVE: "SETTLEMENT_APPROVE",
   /** Exportar a contabilidad lo aprobado. */
   SETTLEMENT_EXPORT: "SETTLEMENT_EXPORT",
+  /** Provisiones de flete (V65): ver la obligación abierta, su antigüedad y los viajes sin provisión. */
+  ACCRUAL_VIEW: "ACCRUAL_VIEW",
+  /** Exportar el asiento de provisiones de un período para el ERP. */
+  ACCRUAL_EXPORT: "ACCRUAL_EXPORT",
+  /** Revertir o cerrar provisiones, provisionar ahora y mantener las cuentas contables. */
+  ACCRUAL_MANAGE: "ACCRUAL_MANAGE",
 } as const;
 
 /**

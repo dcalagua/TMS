@@ -31,7 +31,9 @@ public record CompanySettings(
          * Share of a vehicle type's floor a load can cover (V62). Null = the deployment's
          * {@code tms.planning.geometry.default-floor-fill-factor}; a vehicle type's own factor wins.
          */
-        BigDecimal loadFloorFillFactor) {
+        BigDecimal loadFloorFillFactor,
+        /** When a freight accrual is born (V65, ADR-023, D-07). Null reads DISPATCHED. */
+        AccrualTrigger accrualTrigger) {
 
     /** ISO 3166-1 alpha-2 of the launch market, and the default of {@code tms.location.country}. */
     public static final String DEFAULT_COUNTRY = "PE";
@@ -42,7 +44,7 @@ public record CompanySettings(
 
     private static final CompanySettings DEFAULTS = new CompanySettings(
             DEFAULT_COUNTRY, DEFAULT_ORDER_NUMBER_PREFIX, DEFAULT_SHIPMENT_NUMBER_PREFIX,
-            DispatchConfirmationMode.MANUAL, null, null);
+            DispatchConfirmationMode.MANUAL, null, null, AccrualTrigger.DISPATCHED);
 
     /**
      * Blank-tolerant on purpose. The columns behind this are all {@code NOT NULL} with defaults, so
@@ -56,12 +58,22 @@ public record CompanySettings(
         dispatchConfirmationMode = dispatchConfirmationMode == null
                 ? DispatchConfirmationMode.MANUAL
                 : dispatchConfirmationMode;
+        accrualTrigger = accrualTrigger == null ? AccrualTrigger.DISPATCHED : accrualTrigger;
+    }
+
+    /** The V62 shape, for callers that predate freight accruals (V65): the trigger reads DISPATCHED. */
+    public CompanySettings(String defaultCountry, String orderNumberPrefix, String shipmentNumberPrefix,
+            DispatchConfirmationMode dispatchConfirmationMode, BigDecimal referenceLoadHeightM,
+            BigDecimal loadFloorFillFactor) {
+        this(defaultCountry, orderNumberPrefix, shipmentNumberPrefix, dispatchConfirmationMode,
+                referenceLoadHeightM, loadFloorFillFactor, AccrualTrigger.DISPATCHED);
     }
 
     /** The V52 shape, for callers that predate load geometry (V62): both geometry values unset. */
     public CompanySettings(String defaultCountry, String orderNumberPrefix, String shipmentNumberPrefix,
             DispatchConfirmationMode dispatchConfirmationMode) {
-        this(defaultCountry, orderNumberPrefix, shipmentNumberPrefix, dispatchConfirmationMode, null, null);
+        this(defaultCountry, orderNumberPrefix, shipmentNumberPrefix, dispatchConfirmationMode, null, null,
+                AccrualTrigger.DISPATCHED);
     }
 
     /** The V34 shape, for callers that predate the dispatch mode (V52): the mode reads MANUAL. */
@@ -72,7 +84,25 @@ public record CompanySettings(
     /** A copy with another dispatch mode. */
     public CompanySettings withDispatchConfirmationMode(DispatchConfirmationMode mode) {
         return new CompanySettings(defaultCountry, orderNumberPrefix, shipmentNumberPrefix, mode,
-                referenceLoadHeightM, loadFloorFillFactor);
+                referenceLoadHeightM, loadFloorFillFactor, accrualTrigger);
+    }
+
+    /** A copy with another accrual trigger. */
+    public CompanySettings withAccrualTrigger(AccrualTrigger trigger) {
+        return new CompanySettings(defaultCountry, orderNumberPrefix, shipmentNumberPrefix,
+                dispatchConfirmationMode, referenceLoadHeightM, loadFloorFillFactor, trigger);
+    }
+
+    /** Reads a stored trigger, tolerating an unknown one as the default (D-07) rather than failing. */
+    public static AccrualTrigger accrualTriggerOf(String stored) {
+        if (stored == null || stored.isBlank()) {
+            return AccrualTrigger.DISPATCHED;
+        }
+        try {
+            return AccrualTrigger.valueOf(stored.trim());
+        } catch (IllegalArgumentException unknown) {
+            return AccrualTrigger.DISPATCHED;
+        }
     }
 
     /** Reads a stored value, tolerating an unknown one as the safe default rather than failing a write. */

@@ -128,6 +128,15 @@ tms:
       # fill factor, when the vehicle type has none either. Overridable per deployment.
       default-reference-height-m: ${TMS_GEOMETRY_REFERENCE_HEIGHT_M:2.40}
       default-floor-fill-factor: ${TMS_GEOMETRY_FLOOR_FILL_FACTOR:0.85}
+  settlement:
+    accrual:
+      # Freight accruals (ADR-023, V65). The sweep reads committed trip facts - departures, or
+      # completions when the company accrues at delivery - and accrues what is missing, then
+      # adjusts open accruals to closed actual costs. `lookback` bounds the automatic pass; older
+      # trips stay listed as unaccrued and can be accrued with POST /settlement/accruals/sweep.
+      sweep-enabled: ${TMS_ACCRUAL_SWEEP_ENABLED:true}
+      sweep-interval: ${TMS_ACCRUAL_SWEEP_INTERVAL:5m}
+      lookback: ${TMS_ACCRUAL_SWEEP_LOOKBACK:31d}
   security:
     jwt:
       # Supabase Auth coordinates. No default: a deployment that does not set these fails at

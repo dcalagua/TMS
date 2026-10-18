@@ -182,5 +182,18 @@ public enum AuditAction {
      * the three, with the operation in the metadata: what an auditor searches for is "who widened
      * the tolerance", whichever button they pressed.
      */
-    TOLERANCE_POLICY_CHANGED
+    TOLERANCE_POLICY_CHANGED,
+
+    /** A freight accrual was born from a dispatched or delivered trip (V65, ADR-023). */
+    ACCRUAL_CREATED,
+    /** The accrued balance moved to the closed actual cost (V65). */
+    ACCRUAL_ADJUSTED,
+    /** An approved invoice consumed the accrual of its trips (V65). */
+    ACCRUAL_CONSUMED,
+    /** A person reversed an accrual or closed its remainder (V65). Always carries the reason. */
+    ACCRUAL_REVERSED,
+    /** The accrual journal of a period was generated for the ERP (V65). */
+    ACCRUAL_JOURNAL_EXPORTED,
+    /** A GL account mapping was created, changed or retired (V65). */
+    GL_MAPPING_CHANGED
 }

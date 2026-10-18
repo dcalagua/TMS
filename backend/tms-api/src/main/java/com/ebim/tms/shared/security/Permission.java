@@ -126,6 +126,13 @@ public enum Permission {
     SETTLEMENT_INVOICE_APPROVE("settlement.invoice:approve"),
     SETTLEMENT_INVOICE_EXPORT("settlement.invoice:export"),
     SETTLEMENT_TOLERANCE_MANAGE("settlement.tolerance:manage"),
+    /**
+     * Freight accruals (V65, ADR-023). Reading the open obligation is for everyone who reads invoices;
+     * exporting it to accounting and reversing it are administrators' authority.
+     */
+    SETTLEMENT_ACCRUAL_READ("settlement.accrual:read"),
+    SETTLEMENT_ACCRUAL_EXPORT("settlement.accrual:export"),
+    SETTLEMENT_ACCRUAL_MANAGE("settlement.accrual:manage"),
 
     /**
      * A driver-and-vehicle pairing's day (migration V47).

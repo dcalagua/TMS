@@ -15,6 +15,7 @@ import {
   RouteRounded,
   Inventory2Rounded,
   TuneRounded,
+  AccountBalanceWalletRounded,
 } from "@mui/icons-material";
 
 /** Una hoja del menú: una pantalla concreta. */
@@ -79,6 +80,7 @@ export const ICON_TINTS: Record<string, string> = {
   "/appointments": "#FFA726",
   "/settlement": "#8D6E63",
   "/settlement/tolerances": "#A1887F",
+  "/settlement/accruals": "#BCAAA4",
   "/work-assignments": "#7E57C2",
   "/masters/locations": "#4FC3F7",
   "/masters/origins": "#4DB6AC",
@@ -161,6 +163,10 @@ export const NAV_SECTIONS: NavSection[] = [
       // Leerla pide lo mismo que leer facturas; cambiarla, `settlement.tolerance:manage`.
       { to: "/settlement/tolerances", label: "Tolerancias", icon: <TuneRounded />,
         capability: "SETTLEMENT_VIEW" },
+      // La obligación entre el servicio y la factura (V65, ADR-023): nace del viaje ejecutado y la
+      // consume la factura aprobada. Su propio permiso - es contabilidad, no auditoría.
+      { to: "/settlement/accruals", label: "Provisiones", icon: <AccountBalanceWalletRounded />,
+        capability: "ACCRUAL_VIEW" },
       // Junto a Viajes y no en Maestros: mantener la ficha de un camión y planificar su día son
       // trabajos distintos que hacen personas distintas.
       { to: "/work-assignments", label: "Días de trabajo", icon: <EventNoteRounded />,

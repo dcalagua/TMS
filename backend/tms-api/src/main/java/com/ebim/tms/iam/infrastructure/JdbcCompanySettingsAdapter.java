@@ -25,7 +25,7 @@ public class JdbcCompanySettingsAdapter implements CompanySettingsPort {
 
     private static final String SETTINGS_SQL = """
             SELECT default_country, order_number_prefix, shipment_number_prefix, dispatch_confirmation_mode,
-                   reference_load_height_m, load_floor_fill_factor
+                   reference_load_height_m, load_floor_fill_factor, accrual_trigger
             FROM tms.company_settings
             WHERE company_id = :companyId
             """;
@@ -52,7 +52,8 @@ public class JdbcCompanySettingsAdapter implements CompanySettingsPort {
                         rs.getString("shipment_number_prefix"),
                         CompanySettings.modeOf(rs.getString("dispatch_confirmation_mode")),
                         rs.getBigDecimal("reference_load_height_m"),
-                        rs.getBigDecimal("load_floor_fill_factor")))
+                        rs.getBigDecimal("load_floor_fill_factor"),
+                        CompanySettings.accrualTriggerOf(rs.getString("accrual_trigger"))))
                 .optional()
                 .orElseGet(CompanySettings::defaults);
     }

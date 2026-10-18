@@ -15,7 +15,14 @@ export interface CompanySettingsView {
    * que es el valor por defecto del servidor.
    */
   dispatchConfirmationMode?: DispatchConfirmationMode
+  /** Cuándo nace la provisión de flete (V65, ADR-023, D-07). Ausente en un backend anterior: `DISPATCHED`. */
+  accrualTrigger?: AccrualTrigger
 }
+
+/** Mirrors `AccrualTrigger` (`shared/settings`): al despachar (por defecto) o al entregar. */
+export type AccrualTrigger = 'DISPATCHED' | 'DELIVERED'
+
+export const ACCRUAL_TRIGGERS: AccrualTrigger[] = ['DISPATCHED', 'DELIVERED']
 
 /**
  * Mirrors the backend's `DispatchConfirmationMode` enum (`shared/settings`).
@@ -65,6 +72,8 @@ export interface CompanyProfileRequest {
   shipmentNumberPrefix: string
   /** Opcional: omitirlo conserva el modo actual en lugar de devolverlo a `MANUAL`. */
   dispatchConfirmationMode?: DispatchConfirmationMode
+  /** Opcional, como el modo: omitirlo conserva el disparador actual. */
+  accrualTrigger?: AccrualTrigger
 }
 
 /** Mirrors the backend's `CompanyCreateRequest`. There is no `organizationId`: the caller's own is used. */

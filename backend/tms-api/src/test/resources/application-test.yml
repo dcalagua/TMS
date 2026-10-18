@@ -48,6 +48,10 @@ tms:
       audiences: authenticated
     cors:
       allowed-origins: http://localhost:5173
+  settlement:
+    accrual:
+      # Tests drive the sweep by calling it; a timer firing mid-test would make them order-dependent.
+      sweep-enabled: false
 
 logging:
   level:

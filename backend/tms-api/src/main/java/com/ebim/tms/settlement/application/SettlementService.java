@@ -110,6 +110,7 @@ public class SettlementService {
     private final List<PayableExportPort> payableExportPorts;
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
+    private final AccrualService accrualService;
 
     public SettlementService(CarrierInvoiceRepository invoiceRepository, FreightMatchRepository matchRepository,
             FreightDiscrepancyRepository discrepancyRepository, SettlementApprovalRepository approvalRepository,
@@ -117,7 +118,7 @@ public class SettlementService {
             TripCostLookupPort tripCostLookupPort, TripSettlementLookupPort tripSettlementLookupPort,
             CarrierLookupPort carrierLookupPort, List<PayableExportPort> payableExportPorts,
             AuditActorProvider auditActorProvider, AuditRecorder auditRecorder,
-            io.micrometer.core.instrument.MeterRegistry meterRegistry) {
+            io.micrometer.core.instrument.MeterRegistry meterRegistry, AccrualService accrualService) {
         this.invoiceRepository = invoiceRepository;
         this.matchRepository = matchRepository;
         this.discrepancyRepository = discrepancyRepository;
@@ -131,6 +132,7 @@ public class SettlementService {
         this.auditActorProvider = auditActorProvider;
         this.auditRecorder = auditRecorder;
         this.meterRegistry = meterRegistry;
+        this.accrualService = accrualService;
     }
 
     // ------------------------------------------------------------------ receiving
@@ -403,6 +405,9 @@ public class SettlementService {
         auditRecorder.record(scope, AuditAggregateType.CARRIER_INVOICE, invoice.id(), AuditAction.INVOICE_APPROVED,
                 Map.of("invoiceNumber", invoice.invoiceNumber(),
                         "totalAmount", invoice.totalAmount().toPlainString()));
+        // The accrual of each billed trip is consumed in this same transaction (V65, ADR-023): an
+        // approval that committed without it would leave an obligation counted twice.
+        accrualService.consumeApprovedInvoice(scope, invoice, actorId);
         return toView(scope, invoice);
     }
 

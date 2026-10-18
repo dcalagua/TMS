@@ -7,7 +7,7 @@ import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
   DISPATCH_CONFIRMATION_MODES, fetchCompanyProfile, updateCompanyProfile, type CompanyProfileRequest,
-  type DispatchConfirmationMode,
+  type DispatchConfirmationMode, type AccrualTrigger, ACCRUAL_TRIGGERS,
 } from "../../shared/api/administrationApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
@@ -41,11 +41,12 @@ interface CompanyFormValues {
   orderNumberPrefix: string;
   shipmentNumberPrefix: string;
   dispatchConfirmationMode: DispatchConfirmationMode;
+  accrualTrigger: AccrualTrigger;
 }
 
 const KNOWN_FIELDS = new Set<keyof CompanyFormValues>([
   "name", "taxIdentifier", "timeZone", "defaultCountry", "orderNumberPrefix", "shipmentNumberPrefix",
-  "dispatchConfirmationMode",
+  "dispatchConfirmationMode", "accrualTrigger",
 ]);
 
 /** Qué significa cada modo para quien opera, en una frase (ADR-013 §1). */
@@ -86,6 +87,7 @@ export function CompanySettingsPage() {
     defaultValues: {
       name: "", taxIdentifier: "", timeZone: "", defaultCountry: "", orderNumberPrefix: "", shipmentNumberPrefix: "",
       dispatchConfirmationMode: "MANUAL",
+      accrualTrigger: "DISPATCHED",
     },
   });
 
@@ -103,6 +105,7 @@ export function CompanySettingsPage() {
       shipmentNumberPrefix: profile.settings.shipmentNumberPrefix,
       // Un backend anterior a V52 no lo manda: es MANUAL, el valor por defecto del servidor.
       dispatchConfirmationMode: profile.settings.dispatchConfirmationMode ?? "MANUAL",
+      accrualTrigger: profile.settings.accrualTrigger ?? "DISPATCHED",
     });
   }, [profile, reset]);
 
@@ -126,6 +129,7 @@ export function CompanySettingsPage() {
       orderNumberPrefix: values.orderNumberPrefix.trim(),
       shipmentNumberPrefix: values.shipmentNumberPrefix.trim(),
       dispatchConfirmationMode: values.dispatchConfirmationMode,
+      accrualTrigger: values.accrualTrigger,
     };
 
     try {
@@ -283,6 +287,26 @@ export function CompanySettingsPage() {
                 >
                   {DISPATCH_CONFIRMATION_MODES.map((mode) => (
                     <MenuItem key={mode} value={mode}>{enumLabel("dispatchConfirmationMode", mode)}</MenuItem>
+                  ))}
+                </TextField>
+              )}
+            />
+          </AppCard>
+
+          <AppCard title={t("Provisión de fletes")}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {t("Cuándo un viaje con transportista pasa a ser una obligación provisionada. Cambiarlo no mueve las provisiones ya creadas; vale para los viajes que se ejecuten desde ahora.")}
+            </Typography>
+            <Controller
+              name="accrualTrigger"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  select size="small" fullWidth label={t("La provisión nace")}
+                  value={field.value} onChange={field.onChange} onBlur={field.onBlur}
+                >
+                  {ACCRUAL_TRIGGERS.map((trigger) => (
+                    <MenuItem key={trigger} value={trigger}>{enumLabel("accrualTrigger", trigger)}</MenuItem>
                   ))}
                 </TextField>
               )}

@@ -1,5 +1,6 @@
 package com.ebim.tms.iam.application;
 
+import com.ebim.tms.shared.settings.AccrualTrigger;
 import com.ebim.tms.shared.settings.DispatchConfirmationMode;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -62,11 +63,22 @@ public record CompanyProfileRequest(
 
         // Optional (V52): a client that predates the setting sends nothing, and nothing then keeps
         // whatever the company already has rather than resetting it to MANUAL behind its back.
-        DispatchConfirmationMode dispatchConfirmationMode) {
+        DispatchConfirmationMode dispatchConfirmationMode,
+
+        // Optional (V65, ADR-023): absent keeps the company's current trigger, like the dispatch mode.
+        AccrualTrigger accrualTrigger) {
+
+    /** The V52 shape, for callers that predate freight accruals. */
+    public CompanyProfileRequest(String name, String taxIdentifier, String timeZone, String defaultCountry,
+            String orderNumberPrefix, String shipmentNumberPrefix,
+            DispatchConfirmationMode dispatchConfirmationMode) {
+        this(name, taxIdentifier, timeZone, defaultCountry, orderNumberPrefix, shipmentNumberPrefix,
+                dispatchConfirmationMode, null);
+    }
 
     /** The V34 shape, for callers that predate the dispatch mode. */
     public CompanyProfileRequest(String name, String taxIdentifier, String timeZone, String defaultCountry,
             String orderNumberPrefix, String shipmentNumberPrefix) {
-        this(name, taxIdentifier, timeZone, defaultCountry, orderNumberPrefix, shipmentNumberPrefix, null);
+        this(name, taxIdentifier, timeZone, defaultCountry, orderNumberPrefix, shipmentNumberPrefix, null, null);
     }
 }

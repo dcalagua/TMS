@@ -123,6 +123,14 @@ public enum Capability {
     SETTLEMENT_EXPORT(Permission.SETTLEMENT_INVOICE_EXPORT),
 
     /**
+     * Freight accruals (migration V65, ADR-023). Apart from the invoice capabilities: reading the
+     * open obligation, handing its journal to accounting and reversing it are three authorities.
+     */
+    ACCRUAL_VIEW(Permission.SETTLEMENT_ACCRUAL_READ),
+    ACCRUAL_EXPORT(Permission.SETTLEMENT_ACCRUAL_EXPORT),
+    ACCRUAL_MANAGE(Permission.SETTLEMENT_ACCRUAL_MANAGE),
+
+    /**
      * Resource scheduling (migration V47). Its own capability rather than folded into the fleet
      * masters: maintaining a truck's record and planning its day are different jobs, done by
      * different people, on different screens.

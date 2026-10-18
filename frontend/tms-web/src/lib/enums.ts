@@ -163,6 +163,49 @@ export const ENUM_LABELS = {
     ESTIMATED: "Contra estimado",
     MIXED: "Mixto",
   },
+  // Provisiones de flete (V65, ADR-023).
+  accrualStatus: {
+    OPEN: "Abierta",
+    PARTIALLY_SETTLED: "Consumida en parte",
+    SETTLED: "Liquidada",
+    REVERSED: "Revertida",
+  },
+  accrualBasis: {
+    ESTIMATED: "Estimado",
+    ACTUAL: "Costo real",
+  },
+  accrualEntryType: {
+    ACCRUE: "Provisión",
+    ADJUST: "Ajuste",
+    CONSUME: "Consumo",
+    REVERSE: "Reversión",
+  },
+  accrualSourceType: {
+    TRIP_DISPATCHED: "Despacho del viaje",
+    TRIP_COMPLETED: "Entrega del viaje",
+    TRIP_COST_ACTUAL: "Cierre del costo real",
+    INVOICE_APPROVED: "Factura aprobada",
+    MANUAL: "Manual",
+  },
+  unaccruedReason: {
+    NO_CARRIER: "Sin transportista",
+    NO_TRIP_COST: "Sin costo del viaje",
+    NOT_CALCULABLE: "Costo no calculable",
+    PENDING_SWEEP: "Pendiente de provisionar",
+  },
+  glConcept: {
+    FREIGHT_EXPENSE: "Gasto de flete",
+    FREIGHT_ACCRUAL: "Provisión de flete",
+    IGV_CREDIT: "IGV crédito fiscal",
+    DETRACCION_PAYABLE: "Detracción por pagar",
+    RETENCION_PAYABLE: "Retención por pagar",
+    CARRIER_PAYABLE: "Cuenta por pagar al transportista",
+  },
+  glScopeType: {
+    COMPANY: "Toda la empresa",
+    ORIGIN: "Origen",
+    ROUTE: "Ruta",
+  },
   /** V42/JOB 12: por qué un envío no puede salir hoy. */
   /**
    * JOB 23: por qué aparece un aviso. Deliberadamente separado de `blockerReason` — un bloqueador
@@ -182,6 +225,11 @@ export const ENUM_LABELS = {
     EXTERNAL_REQUIRED: "Requiere confirmación del almacén (WMS)",
     HYBRID: "Híbrido: el primero que confirme",
     MANUAL: "Despacho manual (TMS)",
+  },
+  /** ADR-023 / D-07: cuándo nace la provisión de flete. */
+  accrualTrigger: {
+    DISPATCHED: "Al despachar el viaje",
+    DELIVERED: "Al entregar (completar) el viaje",
   },
   /** ADR-013 §2: quién movió el envío a "en ruta". */
   dispatchSource: {

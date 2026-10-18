@@ -40,7 +40,8 @@ public class CompanyAdministrationRepository {
                    s.default_country        AS default_country,
                    s.order_number_prefix    AS order_number_prefix,
                    s.shipment_number_prefix AS shipment_number_prefix,
-                   s.dispatch_confirmation_mode AS dispatch_confirmation_mode
+                   s.dispatch_confirmation_mode AS dispatch_confirmation_mode,
+                   s.accrual_trigger        AS accrual_trigger
             FROM tms.company c
             JOIN tms.organization o ON o.id = c.organization_id
             LEFT JOIN tms.company_settings s ON s.company_id = c.id
@@ -64,14 +65,17 @@ public class CompanyAdministrationRepository {
     private static final String UPSERT_SETTINGS_SQL = """
             INSERT INTO tms.company_settings (
                 company_id, default_country,
-                order_number_prefix, shipment_number_prefix, dispatch_confirmation_mode, created_by, updated_by)
+                order_number_prefix, shipment_number_prefix, dispatch_confirmation_mode, accrual_trigger,
+                created_by, updated_by)
             VALUES (:companyId, :defaultCountry,
-                :orderNumberPrefix, :shipmentNumberPrefix, :dispatchConfirmationMode, :actorId, :actorId)
+                :orderNumberPrefix, :shipmentNumberPrefix, :dispatchConfirmationMode, :accrualTrigger,
+                :actorId, :actorId)
             ON CONFLICT (company_id) DO UPDATE
                SET default_country = EXCLUDED.default_country,
                    order_number_prefix = EXCLUDED.order_number_prefix,
                    shipment_number_prefix = EXCLUDED.shipment_number_prefix,
                    dispatch_confirmation_mode = EXCLUDED.dispatch_confirmation_mode,
+                   accrual_trigger = EXCLUDED.accrual_trigger,
                    updated_by = EXCLUDED.updated_by
             """;
 
@@ -142,7 +146,9 @@ public class CompanyAdministrationRepository {
                                 rs.getString("default_country"),
                                 rs.getString("order_number_prefix"),
                                 rs.getString("shipment_number_prefix"),
-                                CompanySettings.modeOf(rs.getString("dispatch_confirmation_mode")))))
+                                CompanySettings.modeOf(rs.getString("dispatch_confirmation_mode")),
+                                null, null,
+                                CompanySettings.accrualTriggerOf(rs.getString("accrual_trigger")))))
                 .optional();
     }
 
@@ -163,6 +169,7 @@ public class CompanyAdministrationRepository {
                 .param("orderNumberPrefix", settings.orderNumberPrefix())
                 .param("shipmentNumberPrefix", settings.shipmentNumberPrefix())
                 .param("dispatchConfirmationMode", settings.dispatchConfirmationMode().name())
+                .param("accrualTrigger", settings.accrualTrigger().name())
                 .param("actorId", actorId)
                 .update();
     }

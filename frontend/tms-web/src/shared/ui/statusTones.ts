@@ -3,6 +3,7 @@ import type {
 } from "../api/planningApi";
 import type { ExpectedBasis, InvoiceStatus, MatchStatus } from "../api/settlementApi";
 import type { DocumentDeliveryStatus } from "../api/documentDeliveriesApi";
+import type { AccrualStatus } from "../api/accrualApi";
 import type { TenderStatus } from "../api/tendersApi";
 import type { StatusTone } from "../../theme";
 
@@ -127,4 +128,12 @@ export const DOCUMENT_DELIVERY_STATUS_TONE: Record<DocumentDeliveryStatus, Statu
   DELIVERED: "done",
   REJECTED: "overdue",
   NOT_DELIVERED: "inProgress",
+};
+
+/** Provisiones de flete (V65): abierta es obligación viva; liquidada y revertida ya no deben nada. */
+export const ACCRUAL_STATUS_TONE: Record<AccrualStatus, StatusTone> = {
+  OPEN: "open",
+  PARTIALLY_SETTLED: "inProgress",
+  SETTLED: "done",
+  REVERSED: "cancelled",
 };

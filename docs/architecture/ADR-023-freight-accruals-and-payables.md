@@ -122,6 +122,47 @@ GL mapping is edited with `settlement.accrual:manage`. Audit: aggregate `FREIGHT
 `GL_MAPPING_CHANGED`. Screen "Provisiones" (list with period/carrier/currency filters, detail with
 movements, export), plus the unaccrued list.
 
+### Implementation notes - section 1 (phase 55, V65)
+
+- `V65__freight_accruals_and_gl_mapping.sql`: `company_settings.accrual_trigger`, `freight_accrual`,
+  `freight_accrual_entry` (append-only by `tr_freight_accrual_entry_append_only` and by grant), `gl_account_mapping`
+  (partial unique index `uq_gl_account_mapping_active_scope`), partial indexes on `trip (company_id,
+  actual_departure_at|actual_completion_at, id)` for the sweep, three permissions, six actions, aggregates
+  `FREIGHT_ACCRUAL` and `GL_ACCOUNT_MAPPING`. No business rows.
+- **Module:** `settlement`, as section 0 says. Trip facts arrive through a new `shared.reference.AccruableTripLookupPort`
+  answered by `planning` (native SQL over `tms.trip` only); costs through `TripCostLookupPort`, whose summary gains
+  `closedAt`. `ModuleBoundaryTest` is green.
+- **The sweep** (`AccrualSweep`, timer `AccrualSweepScheduler`, `tms.settlement.accrual.sweep-enabled|sweep-interval|lookback`,
+  defaults `true`/`5m`/`31d`) asks one cross-tenant question on the owner connection (companies with a trip executed
+  within the lookback, or with an open accrual) and then works **each company under `SystemJobAuthentication`**
+  (`shared.security`): the connections switch to `tms_app` bound to that company, so RLS covers the job, and the audit
+  names the machine actor `system:accrual-sweep`. Each trip is accrued in its own transaction; a concurrent node's
+  unique violation is caught and counted as done. Adjustments claim open accruals `FOR UPDATE SKIP LOCKED`.
+- **Lookback and "accrue now":** the automatic pass reads trips executed within the lookback; older ones stay in the
+  unaccrued report as `PENDING_SWEEP` and a person with `settlement.accrual:manage` runs the same sweep over any range of
+  up to a year with `POST /settlement/accruals/sweep?from=&to=`.
+- **ADJUST key:** `tms.trip_cost` has no version column, so the key is the trip cost's **closing instant**; a reopen
+  clears it, so each close is a distinct key. An equal actual books nothing and only moves `basis` to `ACTUAL`.
+- **Order independence:** an accrual born after an invoice for its trip was approved consumes that invoice on birth
+  (same transaction), so the balance does not depend on which of the two happened first.
+- **Consume** is the sum of the invoice's lines for the trip (phase 60 has not landed: line amount, not subtotal). A
+  `REVERSED` accrual is not consumed. Closing a `PARTIALLY_SETTLED` remainder leaves it `SETTLED`; reversing an `OPEN`
+  one leaves it `REVERSED`.
+- **Aging:** the balance at a date is summed from the movements: the birth is effective on the service date, every later
+  movement at the instant it was booked. Only a positive balance is open; a negative one is a variance.
+- **Journal:** `GET /settlement/accruals/journal?period=YYYY-MM&format=JSON|CSV` (`AccrualJournal`, pure; golden file
+  `src/test/resources/settlement/accrual-journal-golden.csv`). ACCRUE/ADJUST+ debit `FREIGHT_EXPENSE` credit
+  `FREIGHT_ACCRUAL`; ADJUST-/REVERSE the opposite; CONSUME debit `FREIGHT_ACCRUAL` credit `CARRIER_PAYABLE` (consumption
+  above the accrual is not split; the accrual's negative balance is the variance). The CSV carries no warning rows; the
+  `X-Journal-Warnings` header counts them. Every generation is audited against the company id.
+- **GL mappings:** `GET|POST /settlement/gl-mappings`, `PUT /{id}` (account and cost centre only), `POST /{id}/deactivate`;
+  retired, never deleted.
+- **Capabilities:** `ACCRUAL_VIEW|EXPORT|MANAGE`. Screen «Provisiones» (`/settlement/accruals`): list, detail with
+  movements and reverse/close with a reason, aging, unaccrued trips with "accrue now", journal, GL accounts. The company
+  settings screen edits the trigger.
+- **No TRUNCATE trigger:** `MigrationConventionTest` forbids the word in a migration; `tms_app` was never granted it
+  (V13's default privileges are the four DML verbs).
+
 ### 2. Payable payment status (F-4, D-01) - V67
 
 TMS records what the ERP reports. It holds no bank account, produces no bank file and executes nothing.

@@ -82,6 +82,27 @@ public interface CarrierInvoiceRepository extends JpaRepository<CarrierInvoice, 
         return charges;
     }
 
+    /** Invoices by id within a company: the journal names the invoice a consumption came from (V65). */
+    List<CarrierInvoice> findByCompanyIdAndIdIn(UUID companyId, Collection<UUID> ids);
+
+    /**
+     * What already-approved invoices of one currency billed for one trip, per invoice: rows of
+     * (invoice id, invoice number, sum of that trip's lines). Read when an accrual is born after its
+     * invoice was approved (V65), so the order the two happened in does not change the balance.
+     */
+    @Query("""
+            select i.id, i.invoiceNumber, sum(l.lineAmount)
+              from CarrierInvoiceLine l
+              join l.invoice i
+             where l.companyId = :companyId
+               and l.tripId = :tripId
+               and i.currency = :currency
+               and i.status in :statuses
+             group by i.id, i.invoiceNumber
+            """)
+    List<Object[]> sumApprovedLinesForTrip(@Param("companyId") UUID companyId, @Param("tripId") UUID tripId,
+            @Param("currency") String currency, @Param("statuses") Collection<InvoiceStatus> statuses);
+
     @Query("""
             select distinct l.tripId, l.chargeCode
               from CarrierInvoiceLine l

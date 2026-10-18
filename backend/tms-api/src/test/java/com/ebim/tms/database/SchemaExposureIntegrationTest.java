@@ -74,6 +74,8 @@ class SchemaExposureIntegrationTest {
             // deleted is an obligation somebody can make disappear.
             "carrier_invoice", "carrier_invoice_line", "tolerance_policy", "freight_match",
             "freight_discrepancy", "settlement_approval", "payable_export",
+            // V65: freight accruals (ADR-023). The movements are append-only by grant and by trigger.
+            "freight_accrual", "freight_accrual_entry", "gl_account_mapping",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
             "work_assignment", "work_assignment_trip",
@@ -135,6 +137,8 @@ class SchemaExposureIntegrationTest {
             // deleted is an obligation somebody can make disappear.
             "carrier_invoice", "carrier_invoice_line", "tolerance_policy", "freight_match",
             "freight_discrepancy", "settlement_approval", "payable_export",
+            // V65: freight accruals (ADR-023). The movements are append-only by grant and by trigger.
+            "freight_accrual", "freight_accrual_entry", "gl_account_mapping",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
             "work_assignment", "work_assignment_trip",

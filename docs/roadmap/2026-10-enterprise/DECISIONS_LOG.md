@@ -489,3 +489,63 @@
   exportación existente en su formato original (`alreadyExported: true`), pida lo que pida. CSV sin BOM, CRLF,
   RFC 4180 (`DelimitedTextWriter.text`, nuevo, junto al `write` con BOM de los reportes).
 - **Commit(s):** el de la fase 50, ciclo 1.
+
+### 2026-10-18 · fase 55 · El barrido trabaja cada empresa con RLS, como máquina
+
+- **Regla/decisión afectada:** ADR-023 §1 («un job programado»), ADR-005 (RLS por tenant), `AuditRecorder` (exige actor).
+- **Motivo:** un hilo programado no tiene contexto de seguridad: la conexión queda como dueño, sin RLS, y la auditoría
+  lanza por falta de actor. El único job previo (webhooks) no audita.
+- **Camino elegido:** la pregunta entre tenants («qué empresas tienen trabajo») se hace como dueño; el trabajo de cada
+  empresa corre bajo `shared.security.SystemJobAuthentication` (máquina, sin permisos), que convierte la conexión en
+  `tms_app` ligada a esa empresa y firma la auditoría como `system:accrual-sweep`. Se restaura el contexto anterior al
+  terminar.
+- **Commit(s):** el de la fase 55, ciclo 1.
+
+### 2026-10-18 · fase 55 · Ventana del barrido y «provisionar ahora»
+
+- **Regla/decisión afectada:** ADR-023 §1 (el barrido busca viajes ejecutados sin provisión, sin límite).
+- **Motivo:** sin límite, cada pasada recorrería todo el histórico de viajes de cada empresa cada 5 minutos.
+- **Camino elegido:** `tms.settlement.accrual.lookback` (31 días) acota la pasada automática; lo anterior sigue en
+  «Viajes sin provisión» como `PENDING_SWEEP`, y `POST /settlement/accruals/sweep?from=&to=` (permiso
+  `settlement.accrual:manage`, rango ≤ 1 año) corre el mismo barrido para la empresa, firmado por la persona. Nada se
+  pierde: el hecho sigue confirmado en `tms.trip`.
+- **Commit(s):** el de la fase 55, ciclo 1.
+
+### 2026-10-18 · fase 55 · La clave del ajuste es el instante de cierre del costo
+
+- **Regla/decisión afectada:** ADR-023 §1 (`source_key` = `trip_cost.version`).
+- **Motivo:** `tms.trip_cost` no tiene columna de versión.
+- **Camino elegido:** clave = `closed_at` del costo (ISO-8601). Reabrir lo limpia, así que cada cierre es una clave
+  distinta; `TripCostSummary` gana `closedAt`. Un real igual a lo provisionado no asienta nada y sólo pasa la base a
+  `ACTUAL`.
+- **Commit(s):** el de la fase 55, ciclo 1.
+
+### 2026-10-18 · fase 55 · Una factura aprobada antes de la provisión la consume al nacer
+
+- **Regla/decisión afectada:** ADR-023 §1 (el consumo ocurre en `SettlementService.approve`).
+- **Motivo:** si la factura se aprueba antes de que el barrido cree la provisión, ésta nacería `OPEN` y la obligación
+  quedaría contada dos veces.
+- **Camino elegido:** al nacer, la provisión consume en la misma transacción las facturas `APPROVED`/`EXPORTED` de su
+  viaje y moneda (tablas del propio módulo). El orden de los dos hechos no cambia el saldo.
+- **Commit(s):** el de la fase 55, ciclo 1.
+
+### 2026-10-18 · fase 55 · Antigüedad desde los movimientos, asiento sin partir la variación
+
+- **Regla/decisión afectada:** ADR-023 §1 (reportes y exportación; no dice cómo fechar ni cómo asentar el exceso).
+- **Motivo:** una provisión creada tarde («provisionar ahora») tiene su movimiento de nacimiento en otro mes que su
+  servicio; y un consumo por encima de lo provisionado no tiene contrapartida definida.
+- **Camino elegido:** saldo a una fecha = suma de movimientos efectivos (el nacimiento en la fecha de servicio, el resto
+  en el instante en que se asentó); sólo el saldo positivo es «abierto». El consumo se asienta entero Debe
+  `FREIGHT_ACCRUAL` / Haber `CARRIER_PAYABLE`; el saldo negativo de la provisión es la variación visible. El CSV no lleva
+  filas de aviso (es para una máquina): la cabecera `X-Journal-Warnings` las cuenta.
+- **Commit(s):** el de la fase 55, ciclo 1.
+
+### 2026-10-18 · fase 55 · Sin disparador de TRUNCATE; `promptDialog` como confirmación con motivo
+
+- **Regla/decisión afectada:** plan («append-only por trigger»), `CLAUDE.md` (`confirmWithReason` en `lib/ui.tsx`).
+- **Motivo:** `MigrationConventionTest` prohíbe la palabra en una migración; y `confirmWithReason` no existe: la
+  confirmación con motivo de `lib/ui.tsx` se llama `promptDialog`.
+- **Camino elegido:** el trigger cubre UPDATE/DELETE (también para el dueño) y el grant los retira a `tms_app`, que nunca
+  tuvo TRUNCATE (los privilegios por defecto de V13 son los cuatro verbos DML). Revertir/cerrar pide motivo con
+  `promptDialog`.
+- **Commit(s):** el de la fase 55, ciclo 1.

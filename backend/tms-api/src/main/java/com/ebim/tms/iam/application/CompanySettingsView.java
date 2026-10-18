@@ -14,10 +14,12 @@ public record CompanySettingsView(
         String defaultCountry,
         String orderNumberPrefix,
         String shipmentNumberPrefix,
-        String dispatchConfirmationMode) {
+        String dispatchConfirmationMode,
+        String accrualTrigger) {
 
     public static CompanySettingsView from(CompanySettings settings) {
         return new CompanySettingsView(settings.defaultCountry(), settings.orderNumberPrefix(),
-                settings.shipmentNumberPrefix(), settings.dispatchConfirmationMode().name());
+                settings.shipmentNumberPrefix(), settings.dispatchConfirmationMode().name(),
+                settings.accrualTrigger().name());
     }
 }

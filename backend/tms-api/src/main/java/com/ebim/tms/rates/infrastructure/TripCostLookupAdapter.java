@@ -51,7 +51,8 @@ class TripCostLookupAdapter implements TripCostLookupPort {
                     cost.actualAmount(),
                     cost.currency(),
                     cost.isClosed(),
-                    components));
+                    components,
+                    cost.closedAt()));
         }
         return Map.copyOf(byTrip);
     }
