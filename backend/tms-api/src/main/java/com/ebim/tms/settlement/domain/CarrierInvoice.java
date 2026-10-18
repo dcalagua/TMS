@@ -3,7 +3,6 @@ package com.ebim.tms.settlement.domain;
 import com.ebim.tms.shared.api.ConflictException;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -21,6 +20,10 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import com.ebim.tms.settlement.domain.tax.ComputedWithholding;
+import com.ebim.tms.settlement.domain.tax.DocumentKind;
+import com.ebim.tms.settlement.domain.tax.TaxCalculator;
+import com.ebim.tms.settlement.domain.tax.WithholdingKind;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.annotations.UuidGenerator;
@@ -80,60 +83,46 @@ public class CarrierInvoice {
     @Column(name = "notes")
     private String notes;
 
-    // ------------------------------------------------------------------ V66 (ADR-024 part 2)
+    // ------------------------------------------------------------------ V66 (ADR-024 part 2, ADR-027)
 
-    /** 01, 07 or 08. Every pre-V66 row is a factura. */
-    @Convert(converter = DocumentType.CodeConverter.class)
-    @Column(name = "document_type", updatable = false, nullable = false)
-    private DocumentType documentType = DocumentType.INVOICE;
+    /** The regime the document was received under, frozen. Null on pre-V66 rows. */
+    @Column(name = "fiscal_country", updatable = false)
+    private String fiscalCountry;
 
-    @Column(name = "series", updatable = false)
-    private String series;
+    /** Every pre-V66 row is a factura. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "document_kind", updatable = false, nullable = false)
+    private DocumentKind documentKind = DocumentKind.INVOICE;
 
-    /** Without leading zeros, so 00000123 and 123 are one document. */
-    @Column(name = "correlative", updatable = false)
-    private String correlative;
+    /** The country's code for the kind (PE 01/07/08, EC 01/04/05); null where the regime has none. */
+    @Column(name = "fiscal_document_code", updatable = false)
+    private String fiscalDocumentCode;
 
-    @Column(name = "issuer_ruc", updatable = false)
-    private String issuerRuc;
+    /** Normalised by the regime: F001-123, 001-001-000000123. */
+    @Column(name = "fiscal_document_number", updatable = false)
+    private String fiscalDocumentNumber;
 
-    /** Valor de venta, net of IGV. Null on a document without breakdown. */
+    @Column(name = "issuer_tax_id", updatable = false)
+    private String issuerTaxId;
+
+    /** Net of VAT. Null on a document without breakdown. */
     @Column(name = "subtotal_amount")
     private BigDecimal subtotalAmount;
 
-    @Column(name = "igv_rate")
-    private BigDecimal igvRate;
+    @Column(name = "tax_rate")
+    private BigDecimal taxRate;
 
-    @Column(name = "igv_amount")
-    private BigDecimal igvAmount;
+    @Column(name = "tax_amount")
+    private BigDecimal taxAmount;
 
     /** The invoice a note corrects; null on an invoice. Same company and carrier by composite FK. */
     @Column(name = "referenced_invoice_id", updatable = false)
     private UUID referencedInvoiceId;
 
-    @Column(name = "detraction_code")
-    private String detractionCode;
-
-    @Column(name = "detraction_rate")
-    private BigDecimal detractionRate;
-
-    @Column(name = "detraction_amount")
-    private BigDecimal detractionAmount;
-
-    @Column(name = "detraction_constancy_number")
-    private String detractionConstancyNumber;
-
-    @Column(name = "detraction_constancy_date")
-    private LocalDate detractionConstancyDate;
-
-    @Column(name = "retention_rate")
-    private BigDecimal retentionRate;
-
-    @Column(name = "retention_amount")
-    private BigDecimal retentionAmount;
-
-    @Column(name = "retention_override_reason")
-    private String retentionOverrideReason;
+    /** Written with the document; the figures are frozen, the certificates recorded later. */
+    @OneToMany(mappedBy = "invoice", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY)
+    @OrderBy("kind ASC")
+    private List<CarrierInvoiceWithholding> withholdings = new ArrayList<>();
 
     // ------------------------------------------------------------------ V67 (ADR-023 section 2)
 
@@ -248,21 +237,27 @@ public class CarrierInvoice {
     }
 
     /**
-     * The SUNAT identity and, for a note, the invoice it corrects (V66). Set once, at receipt; the
-     * columns are not updatable.
+     * The fiscal identity under the company's regime and, for a note, the invoice it corrects (V66,
+     * ADR-027). Set once, at receipt; the columns are not updatable. {@code fiscalCountry} is set on
+     * every document received from V66 on, with or without a number: it is the regime the figures were
+     * computed under.
      */
-    public void identifyAs(DocumentType documentType, String series, String correlative, String issuerRuc,
-            UUID referencedInvoiceId) {
+    public void identifyAs(String fiscalCountry, DocumentKind documentKind, String fiscalDocumentCode,
+            String fiscalDocumentNumber, String issuerTaxId, UUID referencedInvoiceId) {
         if (id != null) {
             throw new IllegalStateException("a document's identity is set when it is received");
         }
-        if (documentType.isNote() != (referencedInvoiceId != null)) {
+        if (documentKind.isNote() != (referencedInvoiceId != null)) {
             throw new IllegalArgumentException("a note references an invoice and an invoice references nothing");
         }
-        this.documentType = documentType;
-        this.series = series;
-        this.correlative = correlative;
-        this.issuerRuc = issuerRuc;
+        if ((fiscalDocumentNumber == null) != (issuerTaxId == null)) {
+            throw new IllegalArgumentException("a fiscal identity is the number and the issuer together");
+        }
+        this.fiscalCountry = fiscalCountry;
+        this.documentKind = documentKind;
+        this.fiscalDocumentCode = fiscalDocumentCode;
+        this.fiscalDocumentNumber = fiscalDocumentNumber;
+        this.issuerTaxId = issuerTaxId;
         this.referencedInvoiceId = referencedInvoiceId;
     }
 
@@ -270,62 +265,61 @@ public class CarrierInvoice {
      * The tax breakdown, all three or none, adding up to the total within one cent
      * ({@code ck_carrier_invoice_tax_breakdown}).
      */
-    public void applyBreakdown(BigDecimal subtotalAmount, BigDecimal igvRate, BigDecimal igvAmount) {
+    public void applyBreakdown(BigDecimal subtotalAmount, BigDecimal taxRate, BigDecimal taxAmount) {
         requireEditable();
-        boolean none = subtotalAmount == null && igvRate == null && igvAmount == null;
-        boolean all = subtotalAmount != null && igvRate != null && igvAmount != null;
+        boolean none = subtotalAmount == null && taxRate == null && taxAmount == null;
+        boolean all = subtotalAmount != null && taxRate != null && taxAmount != null;
         if (!none && !all) {
-            throw new IllegalArgumentException("a tax breakdown states subtotal, IGV rate and IGV amount together");
+            throw new IllegalArgumentException("a tax breakdown states subtotal, tax rate and tax amount together");
         }
-        if (all && !TaxCalculator.breakdownAddsUp(subtotalAmount, igvAmount, totalAmount)) {
-            throw new IllegalArgumentException("subtotal + IGV must equal the total within "
+        if (all && !TaxCalculator.breakdownAddsUp(subtotalAmount, taxAmount, totalAmount)) {
+            throw new IllegalArgumentException("subtotal + tax must equal the total within "
                     + TaxCalculator.BREAKDOWN_TOLERANCE);
         }
         this.subtotalAmount = subtotalAmount;
-        this.igvRate = igvRate;
-        this.igvAmount = igvAmount;
+        this.taxRate = taxRate;
+        this.taxAmount = taxAmount;
     }
 
-    /** What the computation said, replacing whatever was there (exclusive by construction). */
-    public void applyTaxes(TaxCalculator.TaxOutcome outcome) {
+    /** What the computation said. Only before the document is first saved: the figures are frozen after. */
+    public void applyWithholdings(List<ComputedWithholding> computed) {
         requireEditable();
-        TaxCalculator.Detraction detraction = outcome.detraction();
-        this.detractionCode = detraction == null ? null : detraction.code();
-        this.detractionRate = detraction == null ? null : detraction.rate();
-        this.detractionAmount = detraction == null ? null : detraction.amount();
-        if (detraction == null) {
-            this.detractionConstancyNumber = null;
-            this.detractionConstancyDate = null;
+        if (id != null) {
+            throw new IllegalStateException("a document's withholdings are computed when it is received");
         }
-        TaxCalculator.Retention retention = outcome.retention();
-        this.retentionRate = retention == null ? null : retention.rate();
-        this.retentionAmount = retention == null ? null : retention.amount();
-        this.retentionOverrideReason = null;
+        withholdings.clear();
+        for (ComputedWithholding withholding : computed) {
+            withholdings.add(new CarrierInvoiceWithholding(this, withholding));
+        }
     }
 
     /**
-     * A person replaces the computed retention, with a reason (ADR-024 part 2, item 8: a "buen
-     * contribuyente" is not modelled, so an exempt carrier is set to zero by hand).
+     * A person replaces a computed withholding, with a reason (ADR-024 part 2, item 8; ADR-027): a
+     * carrier exempt from a withholding the rules apply is set to zero by hand. Only where the kind
+     * allows it - Peru's detraction does not.
      */
-    public void overrideRetention(BigDecimal amount, String reason) {
+    public void overrideWithholding(WithholdingKind kind, BigDecimal amount, String reason) {
         requireEditable();
-        if (retentionAmount == null) {
-            throw new IllegalArgumentException("no retention applies to this document");
-        }
-        if (amount == null || amount.signum() < 0 || reason == null || reason.isBlank()) {
-            throw new IllegalArgumentException("a retention override states a non-negative amount and a reason");
-        }
-        this.retentionAmount = amount;
-        this.retentionOverrideReason = reason.trim();
+        withholding(kind)
+                .orElseThrow(() -> new IllegalArgumentException("no " + kind.label() + " applies to this document"))
+                .override(amount, reason);
     }
 
-    /** The deposit's proof, informed by the ERP or typed by a person; only where a detraction applies. */
-    public void recordDetractionConstancy(String number, LocalDate date) {
-        if (detractionAmount == null) {
-            throw new IllegalArgumentException("no detraction applies to this document");
-        }
-        this.detractionConstancyNumber = number;
-        this.detractionConstancyDate = date;
+    /** The deposit's proof, informed by the ERP or typed by a person; only for a withholding the document carries. */
+    public void recordWithholdingCertificate(WithholdingKind kind, String number, java.time.LocalDate date) {
+        withholding(kind)
+                .orElseThrow(() -> new IllegalArgumentException("no " + kind.label() + " applies to this document"))
+                .recordCertificate(number, date);
+    }
+
+    public java.util.Optional<CarrierInvoiceWithholding> withholding(WithholdingKind kind) {
+        return withholdings.stream().filter(withholding -> withholding.kind() == kind).findFirst();
+    }
+
+    /** What the shipper keeps and deposits elsewhere: the sum of the applied withholdings. */
+    public BigDecimal withholdingTotal() {
+        return withholdings.stream().map(CarrierInvoiceWithholding::amount).reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
     // ------------------------------------------------------------------ after the export (V67)
@@ -405,7 +399,7 @@ public class CarrierInvoice {
     }
 
     private void requirePayable() {
-        if (documentType.isNote()) {
+        if (documentKind.isNote()) {
             throw new ConflictException("A credit or debit note adjusts its invoice's balance; it is not paid on its own.");
         }
         if (!status.acceptsPayment()) {
@@ -427,7 +421,7 @@ public class CarrierInvoice {
 
     /** +1 or -1: what this document does to what is owed. */
     public int effectiveSign() {
-        return documentType.effectiveSign();
+        return documentKind.effectiveSign();
     }
 
     /** What the shipments are compared against: the subtotal when broken down, the total otherwise. */
@@ -490,68 +484,44 @@ public class CarrierInvoice {
         return notes;
     }
 
-    public DocumentType documentType() {
-        return documentType;
+    public String fiscalCountry() {
+        return fiscalCountry;
     }
 
-    public String series() {
-        return series;
+    public DocumentKind documentKind() {
+        return documentKind;
     }
 
-    public String correlative() {
-        return correlative;
+    public String fiscalDocumentCode() {
+        return fiscalDocumentCode;
     }
 
-    public String issuerRuc() {
-        return issuerRuc;
+    public String fiscalDocumentNumber() {
+        return fiscalDocumentNumber;
+    }
+
+    public String issuerTaxId() {
+        return issuerTaxId;
     }
 
     public BigDecimal subtotalAmount() {
         return subtotalAmount;
     }
 
-    public BigDecimal igvRate() {
-        return igvRate;
+    public BigDecimal taxRate() {
+        return taxRate;
     }
 
-    public BigDecimal igvAmount() {
-        return igvAmount;
+    public BigDecimal taxAmount() {
+        return taxAmount;
     }
 
     public UUID referencedInvoiceId() {
         return referencedInvoiceId;
     }
 
-    public String detractionCode() {
-        return detractionCode;
-    }
-
-    public BigDecimal detractionRate() {
-        return detractionRate;
-    }
-
-    public BigDecimal detractionAmount() {
-        return detractionAmount;
-    }
-
-    public String detractionConstancyNumber() {
-        return detractionConstancyNumber;
-    }
-
-    public LocalDate detractionConstancyDate() {
-        return detractionConstancyDate;
-    }
-
-    public BigDecimal retentionRate() {
-        return retentionRate;
-    }
-
-    public BigDecimal retentionAmount() {
-        return retentionAmount;
-    }
-
-    public String retentionOverrideReason() {
-        return retentionOverrideReason;
+    public List<CarrierInvoiceWithholding> withholdings() {
+        return List.copyOf(withholdings);
     }
 
     public LocalDate dueDate() {

@@ -47,34 +47,32 @@ class JsonPayableExportAdapter implements PayableExportPort {
                 objectMapper.writeValueAsString(document));
     }
 
-    /** The V66 fields (ADR-024 part 2, item 10): present with null when unknown, never zero. */
+    /** The V66 fields (ADR-024 part 2 item 10, ADR-027): present with null when unknown, never zero. */
     private static void fiscal(Map<String, Object> document, FiscalDetail fiscal) {
-        document.put("documentType", fiscal.documentType());
+        document.put("fiscalCountry", fiscal.fiscalCountry());
+        document.put("documentKind", fiscal.documentKind());
+        document.put("fiscalDocumentCode", fiscal.fiscalDocumentCode());
         document.put("effectiveSign", fiscal.effectiveSign());
-        document.put("series", fiscal.series());
-        document.put("correlative", fiscal.correlative());
-        document.put("issuerRuc", fiscal.issuerRuc());
+        document.put("documentNumber", fiscal.documentNumber());
+        document.put("issuerTaxId", fiscal.issuerTaxId());
         document.put("subtotalAmount", plain(fiscal.subtotalAmount()));
-        document.put("igvRate", plain(fiscal.igvRate()));
-        document.put("igvAmount", plain(fiscal.igvAmount()));
-        Map<String, Object> detraction = null;
-        if (fiscal.detractionAmount() != null) {
-            detraction = new LinkedHashMap<>();
-            detraction.put("code", fiscal.detractionCode());
-            detraction.put("rate", plain(fiscal.detractionRate()));
-            detraction.put("amount", plain(fiscal.detractionAmount()));
-            detraction.put("constancyNumber", fiscal.detractionConstancyNumber());
-            detraction.put("constancyDate",
-                    fiscal.detractionConstancyDate() == null ? null : fiscal.detractionConstancyDate().toString());
-        }
-        document.put("detraction", detraction);
-        Map<String, Object> retention = null;
-        if (fiscal.retentionAmount() != null) {
-            retention = new LinkedHashMap<>();
-            retention.put("rate", plain(fiscal.retentionRate()));
-            retention.put("amount", plain(fiscal.retentionAmount()));
-        }
-        document.put("retention", retention);
+        document.put("taxRate", plain(fiscal.taxRate()));
+        document.put("taxAmount", plain(fiscal.taxAmount()));
+        document.put("withholdings", fiscal.withholdings().stream().map(withholding -> {
+            Map<String, Object> rendered = new LinkedHashMap<>();
+            rendered.put("kind", withholding.kind());
+            rendered.put("code", withholding.code());
+            rendered.put("base", withholding.base());
+            rendered.put("baseAmount", plain(withholding.baseAmount()));
+            rendered.put("rate", plain(withholding.rate()));
+            rendered.put("amount", plain(withholding.amount()));
+            rendered.put("certificateNumber", withholding.certificateNumber());
+            rendered.put("certificateDate",
+                    withholding.certificateDate() == null ? null : withholding.certificateDate().toString());
+            rendered.put("glAccount", withholding.glAccount());
+            return rendered;
+        }).toList());
+        document.put("withholdingTotalAmount", plain(fiscal.withholdingTotalAmount()));
         Map<String, Object> referenced = null;
         if (fiscal.referencedInvoiceId() != null) {
             referenced = new LinkedHashMap<>();

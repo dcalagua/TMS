@@ -1,5 +1,7 @@
 package com.ebim.tms.settlement.domain;
 
+import com.ebim.tms.settlement.domain.tax.DocumentKind;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -32,7 +34,7 @@ class NoteMatcherTest {
     @Test
     @DisplayName("a credit note within what remains of the invoice matches; the expected figure is that remainder")
     void creditWithinRemainder() {
-        FreightMatchResult result = NoteMatcher.match(DocumentType.CREDIT_NOTE, "PEN", new BigDecimal("100.00"),
+        FreightMatchResult result = NoteMatcher.match(DocumentKind.CREDIT_NOTE, "PEN", new BigDecimal("100.00"),
                 List.of(line(TRIP, "100.00", ChargeCode.FREIGHT)), INVOICE, COST_1050, Tolerance.NONE);
 
         assertThat(result.status()).isEqualTo(MatchStatus.MATCHED);
@@ -46,7 +48,7 @@ class NoteMatcherTest {
     void creditAboveRemainder() {
         NoteMatcher.ReferencedInvoice alreadyCredited = new NoteMatcher.ReferencedInvoice("F001-1", "PEN",
                 new BigDecimal("150.00"), Map.of(TRIP, new BigDecimal("1000.00")));
-        FreightMatchResult result = NoteMatcher.match(DocumentType.CREDIT_NOTE, "PEN", new BigDecimal("200.00"),
+        FreightMatchResult result = NoteMatcher.match(DocumentKind.CREDIT_NOTE, "PEN", new BigDecimal("200.00"),
                 List.of(line(TRIP, "200.00", ChargeCode.FREIGHT)), alreadyCredited, COST_1050, Tolerance.NONE);
 
         assertThat(result.status()).isEqualTo(MatchStatus.DISCREPANCY);
@@ -60,7 +62,7 @@ class NoteMatcherTest {
     @Test
     @DisplayName("a note line naming a shipment the invoice does not bill is UNMATCHED_TRIP")
     void foreignShipment() {
-        FreightMatchResult result = NoteMatcher.match(DocumentType.CREDIT_NOTE, "PEN", new BigDecimal("50.00"),
+        FreightMatchResult result = NoteMatcher.match(DocumentKind.CREDIT_NOTE, "PEN", new BigDecimal("50.00"),
                 List.of(line(OTHER_TRIP, "50.00", ChargeCode.FREIGHT)), INVOICE, COST_1050, Tolerance.NONE);
 
         assertThat(result.discrepancies()).extracting(FreightMatchResult.Discrepancy::type)
@@ -71,7 +73,7 @@ class NoteMatcherTest {
     @Test
     @DisplayName("a debit note adds to what the shipment was billed: within the expected figure it matches")
     void debitWithinExpected() {
-        FreightMatchResult result = NoteMatcher.match(DocumentType.DEBIT_NOTE, "PEN", new BigDecimal("50.00"),
+        FreightMatchResult result = NoteMatcher.match(DocumentKind.DEBIT_NOTE, "PEN", new BigDecimal("50.00"),
                 List.of(line(TRIP, "50.00", ChargeCode.WAITING_TIME)), INVOICE, COST_1050, Tolerance.NONE);
 
         assertThat(result.status()).isEqualTo(MatchStatus.MATCHED);
@@ -83,7 +85,7 @@ class NoteMatcherTest {
     @Test
     @DisplayName("a debit note that takes the shipment over its figure is a LINE_AMOUNT discrepancy")
     void debitAboveExpected() {
-        FreightMatchResult result = NoteMatcher.match(DocumentType.DEBIT_NOTE, "PEN", new BigDecimal("120.00"),
+        FreightMatchResult result = NoteMatcher.match(DocumentKind.DEBIT_NOTE, "PEN", new BigDecimal("120.00"),
                 List.of(line(TRIP, "120.00", ChargeCode.WAITING_TIME)), INVOICE, COST_1050, Tolerance.NONE);
 
         assertThat(result.status()).isEqualTo(MatchStatus.DISCREPANCY);
@@ -98,7 +100,7 @@ class NoteMatcherTest {
     @Test
     @DisplayName("a debit note on a shipment nobody priced is UNMATCHABLE, never compared with zero")
     void debitUnpriced() {
-        FreightMatchResult result = NoteMatcher.match(DocumentType.DEBIT_NOTE, "PEN", new BigDecimal("50.00"),
+        FreightMatchResult result = NoteMatcher.match(DocumentKind.DEBIT_NOTE, "PEN", new BigDecimal("50.00"),
                 List.of(line(TRIP, "50.00", ChargeCode.FREIGHT)), INVOICE,
                 Map.of(TRIP, new TripCostSnapshot(TRIP, null, null, null)), Tolerance.NONE);
 
@@ -111,7 +113,7 @@ class NoteMatcherTest {
     @Test
     @DisplayName("a note in another currency than its invoice says so; a penalty on a note is listed to accept")
     void currencyAndPenalty() {
-        FreightMatchResult result = NoteMatcher.match(DocumentType.CREDIT_NOTE, "USD", new BigDecimal("10.00"),
+        FreightMatchResult result = NoteMatcher.match(DocumentKind.CREDIT_NOTE, "USD", new BigDecimal("10.00"),
                 List.of(line(TRIP, "-10.00", ChargeCode.PENALTY)), INVOICE, COST_1050, Tolerance.NONE);
 
         assertThat(result.discrepancies()).extracting(FreightMatchResult.Discrepancy::type)
@@ -121,17 +123,20 @@ class NoteMatcherTest {
     @Test
     @DisplayName("an invoice is not a note")
     void invoiceRefused() {
-        assertThatThrownBy(() -> NoteMatcher.match(DocumentType.INVOICE, "PEN", BigDecimal.ONE, List.of(), INVOICE,
+        assertThatThrownBy(() -> NoteMatcher.match(DocumentKind.INVOICE, "PEN", BigDecimal.ONE, List.of(), INVOICE,
                 Map.of(), Tolerance.NONE)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     @DisplayName("the sign comes from the type: amounts are stored positive")
     void sign() {
-        assertThat(DocumentType.CREDIT_NOTE.effectiveSign()).isEqualTo(-1);
-        assertThat(DocumentType.DEBIT_NOTE.effectiveSign()).isEqualTo(1);
-        assertThat(DocumentType.INVOICE.effectiveSign()).isEqualTo(1);
-        assertThat(DocumentType.ofCode("07")).isEqualTo(DocumentType.CREDIT_NOTE);
-        assertThat(new DocumentType.CodeConverter().convertToDatabaseColumn(DocumentType.DEBIT_NOTE)).isEqualTo("08");
+        assertThat(DocumentKind.CREDIT_NOTE.effectiveSign()).isEqualTo(-1);
+        assertThat(DocumentKind.DEBIT_NOTE.effectiveSign()).isEqualTo(1);
+        assertThat(DocumentKind.INVOICE.effectiveSign()).isEqualTo(1);
+        // The country's code is the regime's, not the kind's (ADR-027).
+        assertThat(com.ebim.tms.settlement.domain.tax.TaxRegimes.forCountry("PE").kindOf("07"))
+                .contains(DocumentKind.CREDIT_NOTE);
+        assertThat(com.ebim.tms.settlement.domain.tax.TaxRegimes.forCountry("EC").kindOf("04"))
+                .contains(DocumentKind.CREDIT_NOTE);
     }
 }

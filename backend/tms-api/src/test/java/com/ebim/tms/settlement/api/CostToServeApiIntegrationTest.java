@@ -425,8 +425,8 @@ class CostToServeApiIntegrationTest {
                 + ",\"lineAmount\":" + amount + "}";
         String body = "{\"carrierId\":\"" + carrierId + "\",\"invoiceNumber\":\"CTS-" + SEQUENCE.incrementAndGet()
                 + "\",\"invoiceDate\":\"2026-10-05\",\"currency\":\"PEN\",\"totalAmount\":" + amount
-                // V66: a PEN document states its breakdown; IGV-free here so the figures stay as before.
-                + ",\"subtotalAmount\":" + amount + ",\"igvRate\":0,\"igvAmount\":0"
+                // V66: a PEN document states its breakdown; VAT-free here so the figures stay as before.
+                + ",\"subtotalAmount\":" + amount + ",\"taxRate\":0,\"taxAmount\":0"
                 + ",\"lines\":[" + line + "]}";
         String response = mockMvc.perform(asAdmin(post(INVOICES), companyId)
                         .contentType(MediaType.APPLICATION_JSON).content(body))

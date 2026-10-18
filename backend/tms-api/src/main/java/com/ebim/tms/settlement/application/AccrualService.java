@@ -5,7 +5,7 @@ import com.ebim.tms.settlement.domain.AccrualEntryType;
 import com.ebim.tms.settlement.domain.AccrualSourceType;
 import com.ebim.tms.settlement.domain.AccrualStatus;
 import com.ebim.tms.settlement.domain.CarrierInvoice;
-import com.ebim.tms.settlement.domain.DocumentType;
+import com.ebim.tms.settlement.domain.tax.DocumentKind;
 import com.ebim.tms.settlement.domain.CarrierInvoiceLine;
 import com.ebim.tms.settlement.domain.FreightAccrual;
 import com.ebim.tms.settlement.domain.FreightAccrualEntry;
@@ -197,19 +197,19 @@ public class AccrualService {
      * Consumes, for each trip the approved invoice bills, the accrual of that trip in the invoice's
      * currency. Runs inside {@code SettlementService.approve}'s transaction. The figure is the line
      * amount: on a document broken down (V66) the lines are its valor de venta, so the accrual is
-     * consumed by the subtotal, net of IGV. Only a factura consumes.
+     * consumed by the subtotal, net of VAT. Only a factura consumes.
      *
      * @return how many accruals were consumed
      */
     @Transactional
     public int consumeApprovedInvoice(CompanyScope scope, CarrierInvoice invoice, UUID actorId) {
-        if (invoice.documentType() != DocumentType.INVOICE) {
+        if (invoice.documentKind() != DocumentKind.INVOICE) {
             // A credit or debit note corrects the payable, and the ERP books it against expense; it
             // does not draw on, or give back to, the accrual the invoice consumed (phase 60).
             return 0;
         }
-        // The lines are the valor de venta, net of IGV, once the document is broken down (V66): the
-        // accrual is consumed by the subtotal, because IGV is fiscal credit and not expense.
+        // The lines are the subtotal, net of VAT, once the document is broken down (V66): the
+        // accrual is consumed by the subtotal, because VAT is fiscal credit and not expense.
         // Sorted by trip id so two approvals touching the same trips lock them in the same order.
         Map<UUID, BigDecimal> byTrip = new TreeMap<>();
         for (CarrierInvoiceLine line : invoice.lines()) {

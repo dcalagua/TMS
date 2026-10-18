@@ -3,9 +3,10 @@ package com.ebim.tms.settlement.application;
 import com.ebim.tms.settlement.domain.CarrierInvoice;
 import com.ebim.tms.settlement.domain.CarrierPayment;
 import com.ebim.tms.settlement.domain.CarrierPaymentRequest;
-import com.ebim.tms.settlement.domain.DocumentType;
+import com.ebim.tms.settlement.domain.tax.DocumentKind;
 import com.ebim.tms.settlement.domain.InvoiceStatus;
 import com.ebim.tms.settlement.domain.PayableBalance;
+import com.ebim.tms.settlement.domain.ReportedWithholding;
 import com.ebim.tms.settlement.domain.PaymentDetail;
 import com.ebim.tms.settlement.domain.PaymentRequestStatus;
 import com.ebim.tms.settlement.infrastructure.CarrierInvoiceRepository;
@@ -98,12 +99,13 @@ public class PayableService implements PayablePaymentIntakePort {
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
     private final Clock clock;
+    private final FiscalSettingsResolver fiscalSettingsResolver;
 
     public PayableService(CarrierInvoiceRepository invoiceRepository, CarrierPaymentRepository paymentRepository,
             CarrierPaymentRequestRepository requestRepository, PayableReportQueries reportQueries,
             SettlementService settlementService, CarrierLookupPort carrierLookupPort,
             BusinessEventPublisher businessEventPublisher, AuditActorProvider auditActorProvider,
-            AuditRecorder auditRecorder, Clock clock) {
+            AuditRecorder auditRecorder, Clock clock, FiscalSettingsResolver fiscalSettingsResolver) {
         this.invoiceRepository = invoiceRepository;
         this.paymentRepository = paymentRepository;
         this.requestRepository = requestRepository;
@@ -114,6 +116,7 @@ public class PayableService implements PayablePaymentIntakePort {
         this.auditActorProvider = auditActorProvider;
         this.auditRecorder = auditRecorder;
         this.clock = clock;
+        this.fiscalSettingsResolver = fiscalSettingsResolver;
     }
 
     // ------------------------------------------------------------------ the ERP reports a payment
@@ -125,8 +128,10 @@ public class PayableService implements PayablePaymentIntakePort {
             throw new IllegalArgumentException("an integration payment names its credential");
         }
         PaymentDetail detail = detailOf(command.paymentReference(), command.paidOn(), command.amount(),
-                command.currency(), command.detractionConstancyNumber(), command.detractionConstancyDate(),
-                command.detractionAmount(), command.retentionAmount());
+                command.currency(), command.withholdings() == null ? List.of() : command.withholdings().stream()
+                        .map(withholding -> new ReportedWithholding(withholdingKindOf(withholding.kind()),
+                                withholding.amount(), withholding.certificateNumber(), withholding.certificateDate()))
+                        .toList());
         CarrierInvoice invoice = lockedInvoice(scope, resolveInvoiceId(scope, command.invoice()));
 
         Optional<CarrierPayment> existing = paymentRepository.findByCompanyIdAndCarrierInvoiceIdAndPaymentReference(
@@ -163,35 +168,41 @@ public class PayableService implements PayablePaymentIntakePort {
      */
     private UUID resolveInvoiceId(CompanyScope scope, InvoiceKey key) {
         if (key == null) {
-            throw new InvalidRequestException("invoice is required: invoiceId, or the CPE (carrierTaxId,"
-                    + " documentType, series, correlative), or carrierCode and invoiceNumber.");
+            throw new InvalidRequestException("invoice is required: invoiceId, or the fiscal document (carrierTaxId,"
+                    + " documentType, documentNumber), or carrierCode and invoiceNumber.");
         }
         boolean byId = key.invoiceId() != null;
-        boolean byCpe = notBlank(key.issuerRuc()) || notBlank(key.series()) || notBlank(key.correlative());
+        boolean byFiscal = notBlank(key.issuerTaxId()) || notBlank(key.documentNumber());
         boolean byNumber = notBlank(key.carrierCode()) || notBlank(key.invoiceNumber());
-        if ((byId ? 1 : 0) + (byCpe ? 1 : 0) + (byNumber ? 1 : 0) != 1) {
-            throw new InvalidRequestException("Name the invoice one way: invoiceId, or the CPE (carrierTaxId,"
-                    + " documentType, series, correlative), or carrierCode and invoiceNumber.");
+        if ((byId ? 1 : 0) + (byFiscal ? 1 : 0) + (byNumber ? 1 : 0) != 1) {
+            throw new InvalidRequestException("Name the invoice one way: invoiceId, or the fiscal document"
+                    + " (carrierTaxId, documentType, documentNumber), or carrierCode and invoiceNumber.");
         }
         Optional<CarrierInvoice> found;
         if (byId) {
             found = invoiceRepository.findByIdAndCompanyId(key.invoiceId(), scope.companyId());
-        } else if (byCpe) {
-            if (!notBlank(key.issuerRuc()) || !notBlank(key.series()) || !notBlank(key.correlative())) {
-                throw new InvalidRequestException("A CPE is named by carrierTaxId, series and correlative together.");
+        } else if (byFiscal) {
+            if (!notBlank(key.issuerTaxId()) || !notBlank(key.documentNumber())) {
+                throw new InvalidRequestException("A fiscal document is named by carrierTaxId and documentNumber"
+                        + " together.");
             }
-            DocumentType type = notBlank(key.documentType()) ? DocumentType.ofCode(key.documentType().trim())
-                    : DocumentType.INVOICE;
-            String correlative = com.ebim.tms.settlement.domain.CpeNumbering.normalizeCorrelative(key.correlative());
-            if (correlative == null) {
-                throw new InvalidRequestException("The correlative is 1 to 8 digits and is not zero.");
-            }
-            found = invoiceRepository.findByCompanyIdAndIssuerRucAndDocumentTypeAndSeriesAndCorrelative(
-                    scope.companyId(), key.issuerRuc().trim(), type, key.series().trim().toUpperCase(Locale.ROOT),
-                    correlative);
+            // The company's regime reads the number and the type, as it did when the document arrived.
+            com.ebim.tms.settlement.domain.tax.TaxRules rules = fiscalSettingsResolver.rulesOf(scope.companyId());
+            com.ebim.tms.settlement.domain.tax.TaxRegime regime = rules.regime();
+            DocumentKind type = notBlank(key.documentType())
+                    ? regime.kindOf(key.documentType()).orElseThrow(() -> new InvalidRequestException(
+                            "documentType " + key.documentType().trim() + " is not a document type of the "
+                                    + rules.country() + " tax regime."))
+                    : DocumentKind.INVOICE;
+            String number = regime.normalizeDocumentNumber(key.documentNumber()).orElseThrow(() ->
+                    new InvalidRequestException("documentNumber " + key.documentNumber().trim() + " is not in the "
+                            + rules.country() + " format: " + regime.documentNumberHint() + "."));
+            found = invoiceRepository.findByCompanyIdAndFiscalCountryAndIssuerTaxIdAndDocumentKindAndFiscalDocumentNumber(
+                    scope.companyId(), rules.country(), key.issuerTaxId().trim().toUpperCase(Locale.ROOT), type,
+                    number);
         } else {
             if (!notBlank(key.carrierCode()) || !notBlank(key.invoiceNumber())) {
-                throw new InvalidRequestException("A document without CPE is named by carrierCode and invoiceNumber"
+                throw new InvalidRequestException("A document without a fiscal identity is named by carrierCode and invoiceNumber"
                         + " together.");
             }
             found = carrierLookupPort.findIdByCode(key.carrierCode(), scope.companyId())
@@ -209,8 +220,10 @@ public class PayableService implements PayablePaymentIntakePort {
     public PayableView requestPayment(CompanyScope scope, UUID invoiceId, PayableRequests.ManualPaymentRequest body) {
         UUID actorId = auditActorProvider.requireAppUserId();
         PaymentDetail detail = detailOf(body.paymentReference(), body.paidOn(), body.amount(), body.currency(),
-                body.detractionConstancyNumber(), body.detractionConstancyDate(), body.detractionAmount(),
-                body.retentionAmount());
+                body.withholdings() == null ? List.of() : body.withholdings().stream()
+                        .map(withholding -> new ReportedWithholding(withholding.kind(), withholding.amount(),
+                                withholding.certificateNumber(), withholding.certificateDate()))
+                        .toList());
         CarrierInvoice invoice = lockedInvoice(scope, invoiceId);
         requireReferenceUnused(scope, invoice, detail.paymentReference());
         if (requestRepository.existsByCompanyIdAndCarrierInvoiceIdAndPaymentReferenceAndStatus(scope.companyId(),
@@ -398,9 +411,9 @@ public class PayableService implements PayablePaymentIntakePort {
 
     /** What is owed on one invoice; also what the carrier portal shows. */
     PayableBalance balanceOf(CompanyScope scope, CarrierInvoice invoice) {
-        BigDecimal net = invoice.documentType().isNote() ? invoice.totalAmount()
+        BigDecimal net = invoice.documentKind().isNote() ? invoice.totalAmount()
                 : settlementService.netAmountOf(scope, invoice);
-        return PayableBalance.of(net, invoice.detractionAmount(), invoice.retentionAmount(), invoice.paidAmount());
+        return PayableBalance.of(net, invoice.withholdingTotal(), invoice.paidAmount());
     }
 
     // ------------------------------------------------------------------ internals
@@ -411,7 +424,7 @@ public class PayableService implements PayablePaymentIntakePort {
      * caller to apply against.
      */
     private PayableBalance requireAdmissible(CompanyScope scope, CarrierInvoice invoice, PaymentDetail detail) {
-        if (invoice.documentType().isNote()) {
+        if (invoice.documentKind().isNote()) {
             throw new ConflictException("Document " + invoice.invoiceNumber() + " is a credit or debit note: it"
                     + " adjusts its invoice's balance and is not paid on its own. Report the payment against the"
                     + " invoice.");
@@ -431,20 +444,22 @@ public class PayableService implements PayablePaymentIntakePort {
             throw new ProblemTypedException(ProblemType.PAYMENT_EXCEEDS_BALANCE, "A payment of "
                     + detail.amount().toPlainString() + " " + detail.currency() + " exceeds the open balance of "
                     + "invoice " + invoice.invoiceNumber() + ", which is " + balance.openBalance().toPlainString()
-                    + " " + invoice.currency() + " (net " + balance.netAmount().toPlainString() + ", detraction "
-                    + amountOrZero(balance.detractionAmount()) + ", retention " + amountOrZero(balance.retentionAmount())
-                    + ", paid " + balance.paidAmount().toPlainString() + ").");
+                    + " " + invoice.currency() + " (net " + balance.netAmount().toPlainString() + ", withheld "
+                    + balance.withholdingAmount().toPlainString() + ", paid " + balance.paidAmount().toPlainString()
+                    + ").");
         }
-        if (detail.detractionConstancyNumber() != null && invoice.detractionAmount() == null) {
-            throw new InvalidRequestException("Invoice " + invoice.invoiceNumber() + " carries no detraction, so"
-                    + " there is no detraction constancy to record.");
+        for (ReportedWithholding withholding : detail.withholdings()) {
+            if (invoice.withholding(withholding.kind()).isEmpty()) {
+                throw new InvalidRequestException("Invoice " + invoice.invoiceNumber() + " carries no "
+                        + withholding.kind().label() + ", so there is none to report with the payment.");
+            }
         }
         return balance;
     }
 
     /**
      * Applies an admitted payment to its invoice, in the transaction that inserted it: the status, the
-     * paid amount, the detraction constancy when the payment brought one, the audit and - when the
+     * paid amount, the certificate of each withholding the payment brought one for, the audit and - when the
      * invoice is now paid - the webhook.
      */
     private void apply(CompanyScope scope, CarrierInvoice invoice, CarrierPayment payment, PayableBalance balance,
@@ -452,8 +467,11 @@ public class PayableService implements PayablePaymentIntakePort {
         boolean wasOnHold = invoice.status() == InvoiceStatus.ON_HOLD;
         String heldBecause = invoice.onHoldReason();
         invoice.applyPayment(payment.amount(), balance.openBalanceAfter(payment.amount()), personId);
-        if (payment.detractionConstancyNumber() != null) {
-            invoice.recordDetractionConstancy(payment.detractionConstancyNumber(), payment.detractionConstancyDate());
+        for (ReportedWithholding withholding : payment.reportedWithholdings()) {
+            if (withholding.certificateNumber() != null) {
+                invoice.recordWithholdingCertificate(withholding.kind(), withholding.certificateNumber(),
+                        withholding.certificateDate());
+            }
         }
         invoiceRepository.save(invoice);
 
@@ -494,11 +512,12 @@ public class PayableService implements PayablePaymentIntakePort {
                 && today.isAfter(invoice.dueDate()) && invoice.status() != InvoiceStatus.PAID
                 ? (int) ChronoUnit.DAYS.between(invoice.dueDate(), today) : null;
         String carrierName = carrierNames(scope, Set.of(invoice.carrierId())).get(invoice.carrierId());
-        return new PayableView(invoice.id(), invoice.invoiceNumber(), invoice.documentType().code(),
+        return new PayableView(invoice.id(), invoice.invoiceNumber(), invoice.documentKind().name(),
+                invoice.fiscalDocumentCode(),
                 invoice.carrierId(), carrierName, invoice.currency(), invoice.status(), invoice.invoiceDate(),
                 invoice.dueDate(), invoice.paymentTermsDays(), invoice.scheduledPaymentDate(), invoice.onHoldReason(),
-                balance.netAmount(), balance.detractionAmount(), invoice.detractionConstancyNumber(),
-                invoice.detractionConstancyDate(), balance.retentionAmount(), balance.payableAmount(),
+                balance.netAmount(), CarrierInvoiceView.WithholdingView.of(invoice), balance.withholdingAmount(),
+                balance.payableAmount(),
                 balance.paidAmount(), balance.openBalance(), daysOverdue, allowedActions(invoice, balance),
                 paymentRepository.findByCompanyIdAndCarrierInvoiceIdOrderByPaidOnAscCreatedAtAsc(scope.companyId(),
                         invoice.id()).stream().map(PayableView.PaymentView::of).toList(),
@@ -508,7 +527,7 @@ public class PayableService implements PayablePaymentIntakePort {
 
     static Set<PayableView.Action> allowedActions(CarrierInvoice invoice, PayableBalance balance) {
         Set<PayableView.Action> actions = EnumSet.noneOf(PayableView.Action.class);
-        if (invoice.documentType().isNote()) {
+        if (invoice.documentKind().isNote()) {
             return actions;
         }
         InvoiceStatus status = invoice.status();
@@ -550,7 +569,7 @@ public class PayableService implements PayablePaymentIntakePort {
 
     /** Normalised and checked once for both channels. Bean Validation has already run on each body. */
     private static PaymentDetail detailOf(String reference, LocalDate paidOn, BigDecimal amount, String currency,
-            String constancyNumber, LocalDate constancyDate, BigDecimal detractionAmount, BigDecimal retentionAmount) {
+            List<ReportedWithholding> withholdings) {
         if (reference == null || reference.isBlank() || reference.trim().length() > 80) {
             throw new InvalidRequestException("paymentReference is 1 to 80 characters.");
         }
@@ -563,17 +582,31 @@ public class PayableService implements PayablePaymentIntakePort {
         if (currency == null || !currency.trim().matches("^[A-Za-z]{3}$")) {
             throw new InvalidRequestException("currency is an ISO-4217 code.");
         }
-        String constancy = constancyNumber == null || constancyNumber.isBlank() ? null : constancyNumber.trim();
-        if (constancy == null && constancyDate != null) {
-            throw new InvalidRequestException("A detraction constancy date needs its number.");
-        }
-        if ((detractionAmount != null && detractionAmount.signum() < 0)
-                || (retentionAmount != null && retentionAmount.signum() < 0)) {
-            throw new InvalidRequestException("Detraction and retention amounts are not negative.");
+        List<ReportedWithholding> normalised = new ArrayList<>();
+        Set<com.ebim.tms.settlement.domain.tax.WithholdingKind> kinds = new java.util.HashSet<>();
+        for (ReportedWithholding withholding : withholdings) {
+            if (withholding.kind() == null) {
+                throw new InvalidRequestException("A reported withholding names its kind.");
+            }
+            if (!kinds.add(withholding.kind())) {
+                throw new InvalidRequestException(withholding.kind() + " is reported twice.");
+            }
+            String certificate = withholding.certificateNumber() == null || withholding.certificateNumber().isBlank()
+                    ? null : withholding.certificateNumber().trim();
+            if (certificate == null && withholding.certificateDate() != null) {
+                throw new InvalidRequestException("A certificate date needs its number.");
+            }
+            if (certificate != null && certificate.length() > 60) {
+                throw new InvalidRequestException("A certificate number is at most 60 characters.");
+            }
+            if (withholding.amount() != null && withholding.amount().signum() < 0) {
+                throw new InvalidRequestException("A withheld amount is not negative.");
+            }
+            normalised.add(new ReportedWithholding(withholding.kind(), SettlementService.money(withholding.amount()),
+                    certificate, withholding.certificateDate()));
         }
         return new PaymentDetail(reference.trim(), paidOn, SettlementService.money(amount),
-                currency.trim().toUpperCase(Locale.ROOT), constancy, constancyDate,
-                SettlementService.money(detractionAmount), SettlementService.money(retentionAmount));
+                currency.trim().toUpperCase(Locale.ROOT), normalised);
     }
 
     private static Map<String, Object> paymentDetails(PaymentDetail detail, Map<String, String> extra) {
@@ -582,8 +615,14 @@ public class PayableService implements PayablePaymentIntakePort {
         details.put("paidOn", detail.paidOn().toString());
         details.put("amount", detail.amount().toPlainString());
         details.put("currency", detail.currency());
-        if (detail.detractionConstancyNumber() != null) {
-            details.put("detractionConstancyNumber", detail.detractionConstancyNumber());
+        if (!detail.withholdings().isEmpty()) {
+            details.put("withholdings", detail.withholdings().stream().map(withholding -> {
+                Map<String, Object> one = new LinkedHashMap<>();
+                one.put("kind", withholding.kind().name());
+                one.put("amount", withholding.amount() == null ? null : withholding.amount().toPlainString());
+                one.put("certificateNumber", withholding.certificateNumber());
+                return one;
+            }).toList());
         }
         details.putAll(extra);
         return details;
@@ -599,8 +638,16 @@ public class PayableService implements PayablePaymentIntakePort {
         return amounts.values().stream().reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add);
     }
 
-    private static String amountOrZero(BigDecimal amount) {
-        return amount == null ? "0.00" : amount.toPlainString();
+    /** A kind as the ERP names it; an unknown one is a 400 naming it. */
+    private static com.ebim.tms.settlement.domain.tax.WithholdingKind withholdingKindOf(String kind) {
+        if (kind == null || kind.isBlank()) {
+            throw new InvalidRequestException("A reported withholding names its kind.");
+        }
+        try {
+            return com.ebim.tms.settlement.domain.tax.WithholdingKind.valueOf(kind.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException unknown) {
+            throw new InvalidRequestException("Unknown withholding kind " + kind.trim() + ".");
+        }
     }
 
     private static boolean notBlank(String value) {

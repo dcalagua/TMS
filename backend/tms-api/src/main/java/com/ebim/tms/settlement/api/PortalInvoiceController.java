@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("${tms.api.base-path}/portal/invoices")
-@Tag(name = "Carrier portal", description = "My carrier's invoices: status, due date, what was paid, detraction")
+@Tag(name = "Carrier portal", description = "My carrier's invoices: status, due date, what was paid, what was withheld")
 public class PortalInvoiceController {
 
     private final PortalInvoiceService portal;
@@ -42,7 +42,7 @@ public class PortalInvoiceController {
 
     @GetMapping("/{invoiceId}")
     @PreAuthorize("hasAuthority('portal.invoice:read')")
-    @Operation(summary = "One of my carrier's invoices: lines, payments, detraction and, if refused, why")
+    @Operation(summary = "One of my carrier's invoices: lines, payments, withholdings and, if refused, why")
     @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
             description = "Id of a company the caller is a member of")
     public PortalInvoiceViews.Detail detail(CompanyScope scope, @PathVariable UUID invoiceId) {

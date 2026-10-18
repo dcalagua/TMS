@@ -1,13 +1,14 @@
 package com.ebim.tms.settlement.application;
 
 import com.ebim.tms.settlement.domain.CarrierInvoice;
-import com.ebim.tms.settlement.domain.CpeNumbering;
-import com.ebim.tms.settlement.domain.DocumentType;
+import com.ebim.tms.settlement.domain.tax.DocumentKind;
 import com.ebim.tms.settlement.domain.GlAccountResolver;
 import com.ebim.tms.settlement.domain.GlConcept;
 import com.ebim.tms.settlement.domain.NoteMatcher;
-import com.ebim.tms.settlement.domain.RucValidator;
-import com.ebim.tms.settlement.domain.TaxCalculator;
+import com.ebim.tms.settlement.domain.tax.TaxCalculator;
+import com.ebim.tms.settlement.domain.tax.TaxRegime;
+import com.ebim.tms.settlement.domain.tax.TaxRules;
+import com.ebim.tms.settlement.domain.CarrierInvoiceWithholding;
 import com.ebim.tms.settlement.infrastructure.GlAccountMappingRepository;
 import com.ebim.tms.shared.api.ProblemType;
 import com.ebim.tms.shared.api.ProblemTypedException;
@@ -122,7 +123,7 @@ public class SettlementService {
     private final AuditRecorder auditRecorder;
     private final AccrualService accrualService;
     private final FiscalSettingsResolver fiscalSettingsResolver;
-    private final CpeValidationPort cpeValidationPort;
+    private final FiscalDocumentValidationPort fiscalDocumentValidationPort;
     private final GlAccountMappingRepository glAccountMappingRepository;
     private final PaymentTermsResolver paymentTermsResolver;
     private final com.ebim.tms.shared.reference.BusinessEventPublisher businessEventPublisher;
@@ -136,7 +137,7 @@ public class SettlementService {
             CarrierLookupPort carrierLookupPort, List<PayableExportPort> payableExportPorts,
             AuditActorProvider auditActorProvider, AuditRecorder auditRecorder,
             io.micrometer.core.instrument.MeterRegistry meterRegistry, AccrualService accrualService,
-            FiscalSettingsResolver fiscalSettingsResolver, CpeValidationPort cpeValidationPort,
+            FiscalSettingsResolver fiscalSettingsResolver, FiscalDocumentValidationPort fiscalDocumentValidationPort,
             GlAccountMappingRepository glAccountMappingRepository, PaymentTermsResolver paymentTermsResolver,
             com.ebim.tms.shared.reference.BusinessEventPublisher businessEventPublisher, java.time.Clock clock,
             CostAllocationService costAllocationService) {
@@ -155,7 +156,7 @@ public class SettlementService {
         this.meterRegistry = meterRegistry;
         this.accrualService = accrualService;
         this.fiscalSettingsResolver = fiscalSettingsResolver;
-        this.cpeValidationPort = cpeValidationPort;
+        this.fiscalDocumentValidationPort = fiscalDocumentValidationPort;
         this.glAccountMappingRepository = glAccountMappingRepository;
         this.paymentTermsResolver = paymentTermsResolver;
         this.businessEventPublisher = businessEventPublisher;
@@ -171,13 +172,16 @@ public class SettlementService {
         requireCarrierInScope(scope, request.carrierId());
 
         String currency = request.currency().toUpperCase(java.util.Locale.ROOT);
-        DocumentType type = documentTypeOf(request);
-        CpeIdentity cpe = cpeIdentityOf(scope, request, type);
-        String invoiceNumber = cpe != null ? cpe.invoiceNumber() : blankToNull(request.invoiceNumber());
+        // The regime the document is received under, frozen on it (ADR-027).
+        TaxRules rules = fiscalSettingsResolver.rulesOf(scope.companyId());
+        DocumentKind kind = documentKindOf(request);
+        FiscalIdentity identity = fiscalIdentityOf(scope, request, kind, rules);
+        String invoiceNumber = identity != null ? identity.invoiceNumber() : blankToNull(request.invoiceNumber());
         if (invoiceNumber == null) {
-            throw new InvalidRequestException("A document needs its number, or its series and correlative.");
+            throw new InvalidRequestException("A document needs its number, or its fiscal number and the issuer's "
+                    + rules.regime().taxIdLabel() + ".");
         }
-        CarrierInvoice referenced = referencedInvoiceOf(scope, request, type, currency);
+        CarrierInvoice referenced = referencedInvoiceOf(scope, request, kind, currency);
 
         // The duplicate guard, checked here so the message names the number, and backed by
         // uq_carrier_invoice_number for the race this check cannot close.
@@ -192,9 +196,10 @@ public class SettlementService {
                 invoiceNumber, request.invoiceDate(), currency,
                 request.totalAmount(), blankToNull(request.externalReference()), blankToNull(request.notes()),
                 actorId);
-        invoice.identifyAs(type, cpe == null ? null : cpe.series(), cpe == null ? null : cpe.correlative(),
-                cpe == null ? null : cpe.issuerRuc(), referenced == null ? null : referenced.id());
-        applyFiscalDetail(scope, invoice, request);
+        invoice.identifyAs(rules.country(), kind, rules.regime().documentCode(kind).orElse(null),
+                identity == null ? null : identity.documentNumber(), identity == null ? null : identity.issuerTaxId(),
+                referenced == null ? null : referenced.id());
+        applyFiscalDetail(invoice, request, rules);
         invoice.replaceLines(linesOf(scope, request), actorId);
 
         CarrierInvoice saved = saveWithDuplicateBackstop(invoice, invoiceNumber);
@@ -202,91 +207,99 @@ public class SettlementService {
         details.put("invoiceNumber", saved.invoiceNumber());
         details.put("totalAmount", saved.totalAmount().toPlainString());
         details.put("currency", saved.currency());
-        details.put("documentType", type.code());
+        details.put("fiscalCountry", saved.fiscalCountry());
+        details.put("documentKind", kind.name());
+        if (saved.fiscalDocumentCode() != null) {
+            details.put("fiscalDocumentCode", saved.fiscalDocumentCode());
+        }
         if (referenced != null) {
             details.put("referencedInvoiceId", referenced.id().toString());
             details.put("referencedInvoiceNumber", referenced.invoiceNumber());
         }
-        AuditAction action = switch (type) {
+        AuditAction action = switch (kind) {
             case INVOICE -> AuditAction.INVOICE_RECEIVED;
             case CREDIT_NOTE -> AuditAction.CREDIT_NOTE_RECEIVED;
             case DEBIT_NOTE -> AuditAction.DEBIT_NOTE_RECEIVED;
         };
         auditRecorder.record(scope, AuditAggregateType.CARRIER_INVOICE, saved.id(), action, details);
-        if (saved.retentionOverrideReason() != null) {
-            auditRecorder.record(scope, AuditAggregateType.CARRIER_INVOICE, saved.id(),
-                    AuditAction.RETENTION_OVERRIDDEN, Map.of("retentionAmount", saved.retentionAmount().toPlainString(),
-                            "reason", saved.retentionOverrideReason()));
+        for (CarrierInvoiceWithholding withholding : saved.withholdings()) {
+            if (withholding.overrideReason() != null) {
+                // RETENTION_OVERRIDDEN is any withholding overridden: "retención" in both regimes (ADR-027).
+                Map<String, Object> override = new java.util.LinkedHashMap<>();
+                override.put("kind", withholding.kind().name());
+                override.put("computedAmount", withholding.computedAmount().toPlainString());
+                override.put("amount", withholding.amount().toPlainString());
+                override.put("reason", withholding.overrideReason());
+                auditRecorder.record(scope, AuditAggregateType.CARRIER_INVOICE, saved.id(),
+                        AuditAction.RETENTION_OVERRIDDEN, override);
+            }
         }
         return toView(scope, saved);
     }
 
-    // ------------------------------------------------------------------ fiscal detail (V66)
+    // ------------------------------------------------------------------ fiscal detail (V66, ADR-027)
 
-    /** A CPE identity, checked and normalised; null when the document brought none. */
-    record CpeIdentity(String series, String correlative, String issuerRuc, String invoiceNumber) {
+    /** A fiscal identity, checked and normalised by the regime; null when the document brought none. */
+    record FiscalIdentity(String documentNumber, String issuerTaxId, String invoiceNumber) {
     }
 
-    private static DocumentType documentTypeOf(CarrierInvoiceRequest request) {
-        return request.documentType() == null || request.documentType().isBlank()
-                ? DocumentType.INVOICE
-                : DocumentType.ofCode(request.documentType());
+    private static DocumentKind documentKindOf(CarrierInvoiceRequest request) {
+        return request.documentKind() == null ? DocumentKind.INVOICE : request.documentKind();
     }
 
     /**
-     * The series, correlative and issuer RUC, all three or none (ADR-024 part 2, item 3). The RUC's
-     * check digit is verified here (a typing mistake), and it must be the carrier's own when the
-     * carrier has one (422 {@code issuer-ruc-mismatch}). Unique per issuer, type, series and
-     * correlative; the correlative is stored without leading zeros so the uniqueness cannot be
-     * dodged by padding.
+     * The fiscal number and the issuer's tax id, both or neither (ADR-027). The number is checked and
+     * normalised by the regime (Peru {@code F001-123}, Ecuador {@code 001-001-000000123}); the tax id's
+     * check digit is verified (a typing mistake), and it must be the carrier's own when the carrier has
+     * one of the regime's type (422 {@code issuer-tax-id-mismatch}). Unique per issuer, kind and number.
      */
-    private CpeIdentity cpeIdentityOf(CompanyScope scope, CarrierInvoiceRequest request, DocumentType type) {
-        String series = blankToNull(request.series());
-        String rawCorrelative = blankToNull(request.correlative());
-        String ruc = blankToNull(request.issuerRuc());
-        if (series == null && rawCorrelative == null && ruc == null) {
+    private FiscalIdentity fiscalIdentityOf(CompanyScope scope, CarrierInvoiceRequest request, DocumentKind kind,
+            TaxRules rules) {
+        TaxRegime regime = rules.regime();
+        String rawNumber = blankToNull(request.documentNumber());
+        String taxId = blankToNull(request.issuerTaxId());
+        if (rawNumber == null && taxId == null) {
             return null;
         }
-        if (series == null || rawCorrelative == null || ruc == null) {
-            throw new InvalidRequestException("A CPE is identified by the issuer's RUC, a series and a correlative"
-                    + " together.");
+        if (rawNumber == null || taxId == null) {
+            throw new InvalidRequestException("A fiscal document is identified by its number and the issuer's "
+                    + regime.taxIdLabel() + " together.");
         }
-        series = series.toUpperCase(java.util.Locale.ROOT);
-        if (!CpeNumbering.isValidSeries(series)) {
-            throw new InvalidRequestException("Series " + series + " is not a CPE series (F + 3 characters, E001"
-                    + " or 4 digits).");
+        String number = regime.normalizeDocumentNumber(rawNumber).orElseThrow(() -> new InvalidRequestException(
+                "Document number " + rawNumber + " is not in the " + rules.country() + " format: "
+                        + regime.documentNumberHint() + "."));
+        taxId = taxId.toUpperCase(java.util.Locale.ROOT);
+        if (!regime.taxIdRule().isValid(taxId)) {
+            throw new InvalidRequestException(regime.taxIdLabel() + " " + taxId + " is not valid ("
+                    + regime.taxIdHint() + ").");
         }
-        String correlative = CpeNumbering.normalizeCorrelative(rawCorrelative);
-        if (correlative == null) {
-            throw new InvalidRequestException("The correlative is 1 to 8 digits and is not zero.");
+        String issuer = taxId;
+        carrierLookupPort.taxIdOf(request.carrierId(), scope.companyId(), regime.carrierTaxIdTypes())
+                .ifPresent(carrierTaxId -> {
+                    if (!carrierTaxId.equalsIgnoreCase(issuer)) {
+                        throw new ProblemTypedException(ProblemType.ISSUER_TAX_ID_MISMATCH, "This document was issued"
+                                + " by " + regime.taxIdLabel() + " " + issuer + " and the carrier's "
+                                + regime.taxIdLabel() + " is " + carrierTaxId + ".");
+                    }
+                });
+        if (invoiceRepository.existsByCompanyIdAndFiscalCountryAndIssuerTaxIdAndDocumentKindAndFiscalDocumentNumber(
+                scope.companyId(), rules.country(), issuer, kind, number)) {
+            throw new ConflictException(regime.taxIdLabel() + " " + issuer + " has already sent "
+                    + kind.label().toLowerCase(java.util.Locale.ROOT) + " " + number + ".");
         }
-        if (!RucValidator.isValid(ruc)) {
-            throw new InvalidRequestException("RUC " + ruc + " is not valid: its check digit does not match.");
-        }
-        carrierLookupPort.rucOf(request.carrierId(), scope.companyId()).ifPresent(carrierRuc -> {
-            if (!carrierRuc.equals(ruc)) {
-                throw new ProblemTypedException(ProblemType.ISSUER_RUC_MISMATCH, "This document was issued by RUC "
-                        + ruc + " and the carrier's RUC is " + carrierRuc + ".");
-            }
-        });
-        if (invoiceRepository.existsByCompanyIdAndIssuerRucAndDocumentTypeAndSeriesAndCorrelative(
-                scope.companyId(), ruc, type, series, correlative)) {
-            throw new ConflictException("RUC " + ruc + " has already sent document " + type.code() + " "
-                    + series + "-" + correlative + ".");
-        }
-        // A note's number carries its type: F001-123 may be a factura and a credit note at once, and
-        // uq_carrier_invoice_number would otherwise refuse the second (SUNAT's own file names do the same).
-        String number = CpeNumbering.invoiceNumberOf(series, correlative);
-        return new CpeIdentity(series, correlative, ruc, type.isNote() ? type.code() + "-" + number : number);
+        // A note's number carries its code: F001-123 may be a factura and a credit note at once, and
+        // uq_carrier_invoice_number would otherwise refuse the second.
+        String prefix = kind.isNote() ? regime.documentCode(kind).orElse(kind.name()) + "-" : "";
+        return new FiscalIdentity(number, issuer, prefix + number);
     }
 
     /**
      * The invoice a note corrects: of this company and carrier (also the composite FK), a factura,
      * not rejected, in the same currency. An invoice references nothing.
      */
-    private CarrierInvoice referencedInvoiceOf(CompanyScope scope, CarrierInvoiceRequest request, DocumentType type,
+    private CarrierInvoice referencedInvoiceOf(CompanyScope scope, CarrierInvoiceRequest request, DocumentKind kind,
             String currency) {
-        if (!type.isNote()) {
+        if (!kind.isNote()) {
             if (request.referencedInvoiceId() != null) {
                 throw new InvalidRequestException("Only a credit or debit note references another invoice.");
             }
@@ -300,7 +313,7 @@ public class SettlementService {
                 .filter(found -> found.carrierId().equals(request.carrierId()))
                 .orElseThrow(() -> new InvalidRequestException(
                         "The referenced invoice does not exist for this carrier."));
-        if (referenced.documentType() != DocumentType.INVOICE) {
+        if (referenced.documentKind() != DocumentKind.INVOICE) {
             throw new InvalidRequestException("A note corrects an invoice, not another note.");
         }
         if (referenced.status() == InvoiceStatus.REJECTED) {
@@ -315,51 +328,82 @@ public class SettlementService {
     }
 
     /**
-     * Breakdown (required on PEN, ADR-024 part 2, item 2), detraction or retention (computed from the
-     * company's fiscal rules), the detraction constancy and a retention override when given.
+     * Breakdown (required in the regime's fiscal currency), the stated VAT rate against the rates the
+     * regime allows, the withholdings computed from the company's rules, and the certificates and
+     * overrides the document brought (ADR-027).
      */
-    private void applyFiscalDetail(CompanyScope scope, CarrierInvoice invoice, CarrierInvoiceRequest request) {
-        boolean anyBreakdown = request.subtotalAmount() != null || request.igvRate() != null
-                || request.igvAmount() != null;
-        if (TaxCalculator.FISCAL_CURRENCY.equals(invoice.currency()) && (request.subtotalAmount() == null
-                || request.igvRate() == null || request.igvAmount() == null)) {
-            throw new InvalidRequestException("A document in PEN states its subtotal, IGV rate and IGV amount.");
+    private void applyFiscalDetail(CarrierInvoice invoice, CarrierInvoiceRequest request, TaxRules rules) {
+        TaxRegime regime = rules.regime();
+        String vat = regime.vatLabel();
+        boolean anyBreakdown = request.subtotalAmount() != null || request.taxRate() != null
+                || request.taxAmount() != null;
+        if (regime.breakdownRequired(invoice.currency()) && (request.subtotalAmount() == null
+                || request.taxRate() == null || request.taxAmount() == null)) {
+            throw new InvalidRequestException("A document in " + invoice.currency() + " states its subtotal, "
+                    + vat + " rate and " + vat + " amount.");
         }
         if (anyBreakdown) {
-            if (request.subtotalAmount() == null || request.igvRate() == null || request.igvAmount() == null) {
-                throw new InvalidRequestException("A tax breakdown states subtotal, IGV rate and IGV amount together.");
+            if (request.subtotalAmount() == null || request.taxRate() == null || request.taxAmount() == null) {
+                throw new InvalidRequestException("A tax breakdown states subtotal, " + vat + " rate and " + vat
+                        + " amount together.");
             }
-            if (!TaxCalculator.breakdownAddsUp(request.subtotalAmount(), request.igvAmount(), request.totalAmount())) {
-                throw new InvalidRequestException("Subtotal " + request.subtotalAmount().toPlainString() + " + IGV "
-                        + request.igvAmount().toPlainString() + " does not equal the total "
+            if (!TaxCalculator.breakdownAddsUp(request.subtotalAmount(), request.taxAmount(), request.totalAmount())) {
+                throw new InvalidRequestException("Subtotal " + request.subtotalAmount().toPlainString() + " + " + vat
+                        + " " + request.taxAmount().toPlainString() + " does not equal the total "
                         + request.totalAmount().toPlainString() + " (rounding tolerance "
                         + TaxCalculator.BREAKDOWN_TOLERANCE + ").");
             }
-            if (request.igvRate().compareTo(new BigDecimal("100")) >= 0) {
-                throw new InvalidRequestException("The IGV rate is a percentage below 100.");
+            if (!rules.allowsVatRate(request.taxRate())) {
+                throw new InvalidRequestException("The " + vat + " rate " + request.taxRate().toPlainString()
+                        + "% is not one the " + rules.country() + " regime allows"
+                        + (rules.allowedVatRates().isEmpty() ? " (0 to below 100)."
+                                : " (" + rules.allowedVatRates().stream().sorted()
+                                        .map(BigDecimal::toPlainString).collect(Collectors.joining(", ")) + ")."));
             }
-            invoice.applyBreakdown(money(request.subtotalAmount()), request.igvRate(), money(request.igvAmount()));
+            invoice.applyBreakdown(money(request.subtotalAmount()), request.taxRate(), money(request.taxAmount()));
         }
 
-        invoice.applyTaxes(TaxCalculator.compute(fiscalSettingsResolver.rulesOf(scope.companyId()),
-                invoice.documentType(), invoice.currency(), invoice.totalAmount()));
+        invoice.applyWithholdings(TaxCalculator.compute(rules, invoice.documentKind(), invoice.currency(),
+                invoice.subtotalAmount(), invoice.taxAmount(), invoice.totalAmount()));
 
-        if (request.detractionConstancyNumber() != null || request.detractionConstancyDate() != null) {
-            if (invoice.detractionAmount() == null) {
-                throw new InvalidRequestException("No detraction applies to this document, so it has no constancy.");
+        for (CarrierInvoiceRequest.WithholdingCertificate certificate : listOf(request.withholdingCertificates())) {
+            if (invoice.withholding(certificate.kind()).isEmpty()) {
+                throw new InvalidRequestException("No " + certificate.kind().label()
+                        + " applies to this document, so it has no certificate.");
             }
-            invoice.recordDetractionConstancy(blankToNull(request.detractionConstancyNumber()),
-                    request.detractionConstancyDate());
+            invoice.recordWithholdingCertificate(certificate.kind(), blankToNull(certificate.certificateNumber()),
+                    certificate.certificateDate());
         }
-        if (request.retentionOverrideAmount() != null || blankToNull(request.retentionOverrideReason()) != null) {
-            if (invoice.retentionAmount() == null) {
-                throw new InvalidRequestException("No retention applies to this document.");
+        Set<com.ebim.tms.settlement.domain.tax.WithholdingKind> overridden = new java.util.HashSet<>();
+        for (CarrierInvoiceRequest.WithholdingOverride override : listOf(request.withholdingOverrides())) {
+            if (!overridden.add(override.kind())) {
+                throw new InvalidRequestException(override.kind().label() + " is overridden twice.");
             }
-            if (request.retentionOverrideAmount() == null || blankToNull(request.retentionOverrideReason()) == null) {
-                throw new InvalidRequestException("Changing the retention needs the amount and the reason.");
+            if (invoice.withholding(override.kind()).isEmpty()) {
+                throw new InvalidRequestException("No " + override.kind().label() + " applies to this document.");
             }
-            invoice.overrideRetention(money(request.retentionOverrideAmount()), request.retentionOverrideReason());
+            if (!override.kind().overridable()) {
+                throw new InvalidRequestException(override.kind().label() + " is the law's and cannot be changed by"
+                        + " hand.");
+            }
+            if (override.amount() == null || blankToNull(override.reason()) == null) {
+                throw new InvalidRequestException("Changing " + override.kind().label()
+                        + " needs the amount and the reason.");
+            }
+            try {
+                invoice.overrideWithholding(override.kind(), money(override.amount()), override.reason());
+            } catch (IllegalArgumentException refused) {
+                throw new InvalidRequestException(capitalised(refused.getMessage()) + ".");
+            }
         }
+    }
+
+    private static <T> List<T> listOf(List<T> values) {
+        return values == null ? List.of() : values;
+    }
+
+    private static String capitalised(String message) {
+        return message == null || message.isEmpty() ? "" : Character.toUpperCase(message.charAt(0)) + message.substring(1);
     }
 
     /**
@@ -432,9 +476,9 @@ public class SettlementService {
 
         Tolerance tolerance = toleranceFor(scope, invoice.carrierId(), invoice.currency());
         // The subtotal when the document is broken down (V66): a rate card prices the service, and the
-        // IGV on top of it is fiscal credit, not part of what the shipment cost.
-        FreightMatchResult result = invoice.documentType().isNote()
-                ? NoteMatcher.match(invoice.documentType(), invoice.currency(), invoice.comparableAmount(),
+        // VAT on top of it is fiscal credit, not part of what the shipment cost.
+        FreightMatchResult result = invoice.documentKind().isNote()
+                ? NoteMatcher.match(invoice.documentKind(), invoice.currency(), invoice.comparableAmount(),
                         matcherLines(invoice, trips), referencedForMatch(scope, invoice),
                         matcherCosts(trips, costs, invoice.carrierId()), tolerance)
                 : FreightMatcher.match(invoice.currency(), invoice.comparableAmount(),
@@ -469,7 +513,7 @@ public class SettlementService {
             if (other.id().equals(note.id()) || other.status() == InvoiceStatus.REJECTED) {
                 continue;
             }
-            if (other.documentType() == DocumentType.CREDIT_NOTE) {
+            if (other.documentKind() == DocumentKind.CREDIT_NOTE) {
                 remaining = remaining.subtract(other.comparableAmount());
             } else if (AccrualService.CONSUMING_STATUSES.contains(other.status())) {
                 remaining = remaining.add(other.comparableAmount());
@@ -489,7 +533,7 @@ public class SettlementService {
      * {@code total - approved 07 + approved 08}. Null for a note, which is its own document.
      */
     BigDecimal netAmountOf(CompanyScope scope, CarrierInvoice invoice) {
-        if (invoice.documentType().isNote()) {
+        if (invoice.documentKind().isNote()) {
             return null;
         }
         BigDecimal net = invoice.totalAmount();
@@ -658,7 +702,7 @@ public class SettlementService {
         invoice.transitionTo(InvoiceStatus.APPROVED, actorId);
         // V67 (ADR-023 section 2): the due date is frozen now, under the terms in force now. A note is
         // not paid on its own, so it has none.
-        if (!invoice.documentType().isNote()) {
+        if (!invoice.documentKind().isNote()) {
             invoice.fixDueDate(paymentTermsResolver.termsDaysFor(scope.companyId(), invoice.carrierId()));
         }
 
@@ -857,14 +901,13 @@ public class SettlementService {
      * shipments of several routes, so the route and origin mappings of the accrual journal do not
      * pick one here. A concept with no mapping is absent, never invented.
      */
-    private Map<GlConcept, String> companyGlAccounts(CompanyScope scope) {
+    private java.util.function.BiFunction<GlConcept, com.ebim.tms.settlement.domain.tax.WithholdingKind, String>
+            companyGlAccounts(CompanyScope scope) {
         GlAccountResolver resolver = new GlAccountResolver(
                 glAccountMappingRepository.findByCompanyIdAndActiveTrue(scope.companyId()));
-        Map<GlConcept, String> accounts = new java.util.EnumMap<>(GlConcept.class);
-        for (GlConcept concept : PayableExportPort.FiscalDetail.EXPORTED_CONCEPTS) {
-            resolver.resolve(concept, null, null).ifPresent(mapping -> accounts.put(concept, mapping.accountCode()));
-        }
-        return accounts;
+        return (concept, kind) -> resolver.resolve(concept, kind, null, null)
+                .map(com.ebim.tms.settlement.domain.GlAccountMapping::accountCode)
+                .orElse(null);
     }
 
     /** What the approved figure was compared against, carried into the export (ADR-024 item 4). */
@@ -955,17 +998,18 @@ public class SettlementService {
         Map<UUID, TripCostLookupPort.TripCostSummary> costs =
                 tripCostLookupPort.findCosts(tripIds, scope.companyId());
 
-        List<CarrierInvoiceView.NoteView> notes = invoice.documentType().isNote() ? List.of()
+        List<CarrierInvoiceView.NoteView> notes = invoice.documentKind().isNote() ? List.of()
                 : invoiceRepository.findByCompanyIdAndReferencedInvoiceIdOrderByCreatedAtAsc(scope.companyId(),
                         invoice.id()).stream().map(CarrierInvoiceView.NoteView::of).toList();
         String referencedNumber = invoice.referencedInvoiceId() == null ? null
                 : invoiceRepository.findByIdAndCompanyId(invoice.referencedInvoiceId(), scope.companyId())
                         .map(CarrierInvoice::invoiceNumber).orElse(null);
-        CpeValidationPort.CpeValidationStatus cpeValidation = invoice.series() == null ? null
-                : cpeValidationPort.validate(invoice.issuerRuc(), invoice.documentType().code(), invoice.series(),
-                        invoice.correlative());
+        FiscalDocumentValidationPort.FiscalDocumentValidationStatus validation =
+                invoice.fiscalDocumentNumber() == null ? null
+                        : fiscalDocumentValidationPort.validate(invoice.fiscalCountry(), invoice.issuerTaxId(),
+                                invoice.fiscalDocumentCode(), invoice.fiscalDocumentNumber());
         CarrierInvoiceView.FiscalView fiscal = CarrierInvoiceView.FiscalView.of(invoice, referencedNumber,
-                netAmountOf(scope, invoice), notes, cpeValidation);
+                netAmountOf(scope, invoice), notes, validation);
         return CarrierInvoiceView.of(invoice, carrierName, match, discrepancies, approvals, export, trips, costs,
                 fiscal);
     }
@@ -978,7 +1022,7 @@ public class SettlementService {
             if (message.contains("uq_carrier_invoice_number")) {
                 throw new ConflictException("This carrier has already billed invoice " + invoiceNumber + ".");
             }
-            if (message.contains("uq_carrier_invoice_cpe")) {
+            if (message.contains("uq_carrier_invoice_fiscal_document")) {
                 throw new ConflictException("This issuer has already sent document " + invoiceNumber + ".");
             }
             throw e;

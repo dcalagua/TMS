@@ -5,7 +5,7 @@ package com.ebim.tms.settlement.domain;
  */
 public enum AllocationCostSource {
 
-    /** What the carrier's approved documents billed for the trip, net of IGV (ADR-024). */
+    /** What the carrier's approved documents billed for the trip, net of VAT (ADR-024, ADR-027). */
     INVOICED,
 
     /** The closed actual cost (V30). */

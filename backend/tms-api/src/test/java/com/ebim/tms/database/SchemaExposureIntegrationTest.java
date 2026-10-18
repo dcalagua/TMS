@@ -79,6 +79,9 @@ class SchemaExposureIntegrationTest {
             // V67: payable payments (ADR-023 section 2). A payment is append-only by grant and by
             // trigger; a person's request is decided, never deleted.
             "carrier_payment", "carrier_payment_request",
+            // V66: the withholdings of a document (ADR-027) - figures frozen by trigger, never deleted -
+            // and a company's per-kind tax overrides, replaced whole by a PUT.
+            "carrier_invoice_withholding", "company_tax_withholding_setting",
             // V68: cost to serve (ADR-026). The rows are append-only; a run is only ever superseded.
             "trip_cost_allocation_run", "trip_cost_allocation",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
@@ -147,6 +150,9 @@ class SchemaExposureIntegrationTest {
             // V67: payable payments (ADR-023 section 2). A payment is append-only by grant and by
             // trigger; a person's request is decided, never deleted.
             "carrier_payment", "carrier_payment_request",
+            // V66: the withholdings of a document (ADR-027) - figures frozen by trigger, never deleted -
+            // and a company's per-kind tax overrides, replaced whole by a PUT.
+            "carrier_invoice_withholding", "company_tax_withholding_setting",
             // V68: cost to serve (ADR-026). The rows are append-only; a run is only ever superseded.
             "trip_cost_allocation_run", "trip_cost_allocation",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
@@ -387,6 +393,8 @@ class SchemaExposureIntegrationTest {
         withheld.put("webhook_delivery_attempt", List.of("UPDATE", "DELETE"));
         withheld.put("settlement_approval", List.of("UPDATE", "DELETE"));
         withheld.put("payable_export", List.of("UPDATE", "DELETE"));
+        // V66: a withholding is written with its document; only its certificate is updated (ADR-027).
+        withheld.put("carrier_invoice_withholding", List.of("DELETE"));
         // A measurement is superseded, not corrected; the feed is trimmed, so DELETE stays (V29).
         withheld.put("tracking_position", List.of("UPDATE"));
         // Corrected in place, never removed (V28, V32, V34, V35, V40, V41, V45).

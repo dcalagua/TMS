@@ -16,7 +16,7 @@ import java.util.UUID;
  * One invoice as a payable (V67, ADR-023 section 2): what is owed, when, what was paid and what is
  * waiting for a second person. TMS records payments; it makes none (D-01).
  *
- * @param payableAmount  net, less detraction and retention: what the carrier itself is paid
+ * @param payableAmount  net, less the withholdings: what the carrier itself is paid
  * @param openBalance    payable less paid
  * @param daysOverdue    days past the due date while something is still owed; null otherwise
  * @param allowedActions what a person may do now, so the screen renders what the server allows
@@ -24,7 +24,8 @@ import java.util.UUID;
 public record PayableView(
         UUID invoiceId,
         String invoiceNumber,
-        String documentType,
+        String documentKind,
+        String fiscalDocumentCode,
         UUID carrierId,
         String carrierName,
         String currency,
@@ -35,10 +36,9 @@ public record PayableView(
         LocalDate scheduledPaymentDate,
         String onHoldReason,
         BigDecimal netAmount,
-        BigDecimal detractionAmount,
-        String detractionConstancyNumber,
-        LocalDate detractionConstancyDate,
-        BigDecimal retentionAmount,
+        /** One per kind (ADR-027): Peru's detraction or retention, Ecuador's income-tax and VAT withholdings. */
+        List<CarrierInvoiceView.WithholdingView> withholdings,
+        BigDecimal withholdingTotalAmount,
         BigDecimal payableAmount,
         BigDecimal paidAmount,
         BigDecimal openBalance,
@@ -51,28 +51,25 @@ public record PayableView(
     public enum Action { SCHEDULE, HOLD, RELEASE, REQUEST_PAYMENT }
 
     public record PaymentView(UUID id, String paymentReference, LocalDate paidOn, BigDecimal amount, String currency,
-            String detractionConstancyNumber, LocalDate detractionConstancyDate, BigDecimal detractionAmount,
-            BigDecimal retentionAmount, PaymentSource source, UUID recordedBy, UUID confirmedBy,
-            OffsetDateTime createdAt) {
+            List<com.ebim.tms.settlement.domain.ReportedWithholding> withholdings, PaymentSource source,
+            UUID recordedBy, UUID confirmedBy, OffsetDateTime createdAt) {
 
         static PaymentView of(CarrierPayment payment) {
             return new PaymentView(payment.id(), payment.paymentReference(), payment.paidOn(), payment.amount(),
-                    payment.currency(), payment.detractionConstancyNumber(), payment.detractionConstancyDate(),
-                    payment.detractionAmount(), payment.retentionAmount(), payment.source(), payment.recordedBy(),
+                    payment.currency(), payment.reportedWithholdings(), payment.source(), payment.recordedBy(),
                     payment.confirmedBy(), payment.createdAt());
         }
     }
 
     public record PaymentRequestView(UUID id, String paymentReference, LocalDate paidOn, BigDecimal amount,
-            String currency, String detractionConstancyNumber, LocalDate detractionConstancyDate,
-            BigDecimal detractionAmount, BigDecimal retentionAmount, PaymentRequestStatus status, UUID requestedBy,
+            String currency, List<com.ebim.tms.settlement.domain.ReportedWithholding> withholdings,
+            PaymentRequestStatus status, UUID requestedBy,
             OffsetDateTime requestedAt, UUID decidedBy, OffsetDateTime decidedAt, String decisionComment) {
 
         static PaymentRequestView of(CarrierPaymentRequest request) {
             var detail = request.detail();
             return new PaymentRequestView(request.id(), detail.paymentReference(), detail.paidOn(), detail.amount(),
-                    detail.currency(), detail.detractionConstancyNumber(), detail.detractionConstancyDate(),
-                    detail.detractionAmount(), detail.retentionAmount(), request.status(), request.requestedBy(),
+                    detail.currency(), detail.withholdings(), request.status(), request.requestedBy(),
                     request.requestedAt(), request.decidedBy(), request.decidedAt(), request.decisionComment());
         }
     }

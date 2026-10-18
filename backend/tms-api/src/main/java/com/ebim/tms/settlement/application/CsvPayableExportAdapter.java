@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
  * spreadsheet pivot reads without a second file.
  *
  * <p>The same fields as {@link JsonPayableExportAdapter}, the same reference. V66 adds the fiscal
- * columns and the company-level GL accounts to both, together.
+ * columns and the company-level GL accounts to both, together; ADR-027 made them country-neutral.
  */
 @Component
 class CsvPayableExportAdapter implements PayableExportPort {
@@ -27,14 +27,21 @@ class CsvPayableExportAdapter implements PayableExportPort {
     static final List<String> HEADER = List.of(
             "reference", "invoiceId", "invoiceNumber", "invoiceDate", "carrierId", "carrierName",
             "currency", "totalAmount", "expectedBasis",
-            // V66 (ADR-024 part 2, item 10).
-            "documentType", "effectiveSign", "series", "correlative", "issuerRuc",
-            "subtotalAmount", "igvRate", "igvAmount",
-            "detractionCode", "detractionRate", "detractionAmount", "detractionConstancyNumber",
-            "detractionConstancyDate", "retentionRate", "retentionAmount",
+            // V66 (ADR-024 part 2, item 10; country-neutral since ADR-027).
+            "fiscalCountry", "documentKind", "fiscalDocumentCode", "effectiveSign", "documentNumber", "issuerTaxId",
+            "subtotalAmount", "taxRate", "taxAmount", "withholdings", "withholdingTotalAmount",
             "referencedInvoiceId", "referencedInvoiceNumber", "netAmount",
-            "glFreightExpense", "glIgvCredit", "glDetraccionPayable", "glRetencionPayable", "glCarrierPayable",
+            "glFreightExpense", "glVatCredit", "glWithholdingPayable", "glCarrierPayable",
             "lineNumber", "tripId", "chargeCode", "description", "lineAmount", "penaltyReason");
+
+    /**
+     * How the withholdings - a list, one per kind - fit one cell (ADR-027): entries separated by
+     * {@code ;}, fields by {@code |}, in this order. Empty when the document carries none. A list in a
+     * cell rather than one column group per kind, because the kinds are the regime's and grow with
+     * every country; the JSON export carries the same as an array.
+     */
+    static final List<String> WITHHOLDING_FIELDS = List.of("kind", "code", "base", "baseAmount", "rate", "amount",
+            "certificateNumber", "certificateDate", "glAccount");
 
     @Override
     public PayableDocument render(PayableInvoice invoice) {
@@ -52,21 +59,17 @@ class CsvPayableExportAdapter implements PayableExportPort {
             row.add(plain(invoice.totalAmount()));
             row.add(invoice.expectedBasis());
             FiscalDetail fiscal = invoice.fiscal();
-            row.add(fiscal.documentType());
+            row.add(fiscal.fiscalCountry());
+            row.add(fiscal.documentKind());
+            row.add(fiscal.fiscalDocumentCode());
             row.add(Integer.toString(fiscal.effectiveSign()));
-            row.add(fiscal.series());
-            row.add(fiscal.correlative());
-            row.add(fiscal.issuerRuc());
+            row.add(fiscal.documentNumber());
+            row.add(fiscal.issuerTaxId());
             row.add(plain(fiscal.subtotalAmount()));
-            row.add(plain(fiscal.igvRate()));
-            row.add(plain(fiscal.igvAmount()));
-            row.add(fiscal.detractionCode());
-            row.add(plain(fiscal.detractionRate()));
-            row.add(plain(fiscal.detractionAmount()));
-            row.add(fiscal.detractionConstancyNumber());
-            row.add(fiscal.detractionConstancyDate() == null ? null : fiscal.detractionConstancyDate().toString());
-            row.add(plain(fiscal.retentionRate()));
-            row.add(plain(fiscal.retentionAmount()));
+            row.add(plain(fiscal.taxRate()));
+            row.add(plain(fiscal.taxAmount()));
+            row.add(withholdings(fiscal.withholdings()));
+            row.add(plain(fiscal.withholdingTotalAmount()));
             row.add(fiscal.referencedInvoiceId() == null ? null : fiscal.referencedInvoiceId().toString());
             row.add(fiscal.referencedInvoiceNumber());
             row.add(plain(fiscal.netAmount()));
@@ -82,6 +85,24 @@ class CsvPayableExportAdapter implements PayableExportPort {
             rows.add(row);
         }
         return new PayableDocument(reference, PayableExport.Format.CSV, DelimitedTextWriter.text(HEADER, rows));
+    }
+
+    private static String withholdings(List<WithholdingDetail> withholdings) {
+        if (withholdings.isEmpty()) {
+            return null;
+        }
+        return withholdings.stream()
+                .map(withholding -> String.join("|",
+                        orEmpty(withholding.kind()), orEmpty(withholding.code()), orEmpty(withholding.base()),
+                        orEmpty(plain(withholding.baseAmount())), orEmpty(plain(withholding.rate())),
+                        orEmpty(plain(withholding.amount())), orEmpty(withholding.certificateNumber()),
+                        withholding.certificateDate() == null ? "" : withholding.certificateDate().toString(),
+                        orEmpty(withholding.glAccount())))
+                .collect(java.util.stream.Collectors.joining(";"));
+    }
+
+    private static String orEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     @Override

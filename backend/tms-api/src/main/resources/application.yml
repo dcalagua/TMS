@@ -152,18 +152,53 @@ tms:
       sweep-enabled: ${TMS_COST_ALLOCATION_SWEEP_ENABLED:true}
       sweep-interval: ${TMS_COST_ALLOCATION_SWEEP_INTERVAL:10m}
       lookback: ${TMS_COST_ALLOCATION_SWEEP_LOOKBACK:62d}
-    pe:
-      # Peruvian fiscal defaults (ADR-024 part 2, V66, decision D-06): what a company that has not
-      # set its own value in company_settings gets. Known values in force; verify each percentage
-      # with the customer's accountant. Detraction applies to PEN totals strictly above the
-      # threshold; retention only where no detraction applies.
-      igv-rate: ${TMS_PE_IGV_RATE:18.00}
-      detraction-enabled: ${TMS_PE_DETRACTION_ENABLED:true}
-      detraction-code: ${TMS_PE_DETRACTION_CODE:027}
-      detraction-rate: ${TMS_PE_DETRACTION_RATE:4.00}
-      detraction-threshold-pen: ${TMS_PE_DETRACTION_THRESHOLD_PEN:400.00}
-      retention-agent: ${TMS_PE_RETENTION_AGENT:false}
-      retention-rate: ${TMS_PE_RETENTION_RATE:3.00}
+    tax:
+      # Tax regimes per country (ADR-027, V66, decision D-06): what a company that has not set its own
+      # value (company_settings.fiscal_country / vat_rate / freight_vat_rate and
+      # company_tax_withholding_setting) gets. The regime is selected by the company's fiscal country
+      # (null = default_country): PE and EC have their own, any other country gets `generic`.
+      # TMS RECEIVES carrier documents and checks their shape; it issues, signs or sends nothing to a
+      # tax authority. Every rate below is a default to VERIFY WITH THE CUSTOMER'S ACCOUNTANT.
+      pe:
+        # Peru. The TMS_PE_* names are the ones phase 60 used (backward compatible).
+        vat-rate: ${TMS_PE_IGV_RATE:18.00}
+        freight-vat-rate: ${TMS_PE_FREIGHT_IGV_RATE:18.00}
+        allowed-vat-rates: ${TMS_PE_ALLOWED_IGV_RATES:18.00,0.00}
+        withholdings:
+          # SPOT annex code 027 (transport of goods), 4%, on PEN totals STRICTLY above S/ 400, whole soles.
+          detraction:
+            enabled: ${TMS_PE_DETRACTION_ENABLED:true}
+            code: ${TMS_PE_DETRACTION_CODE:027}
+            rate: ${TMS_PE_DETRACTION_RATE:4.00}
+            threshold-amount: ${TMS_PE_DETRACTION_THRESHOLD_PEN:400.00}
+          # Only where the company is a retention agent, and never where detraction applies.
+          retention:
+            enabled: ${TMS_PE_RETENTION_AGENT:false}
+            rate: ${TMS_PE_RETENTION_RATE:3.00}
+      ec:
+        # Ecuador. IVA 15% general since 2024-04-01; domestic land freight is 0% (LRTI art. 56), so a
+        # freight document is previewed at 0%. Allowed rates: 0, 5 and 15.
+        vat-rate: ${TMS_EC_IVA_RATE:15.00}
+        freight-vat-rate: ${TMS_EC_FREIGHT_IVA_RATE:0.00}
+        allowed-vat-rates: ${TMS_EC_ALLOWED_IVA_RATES:0.00,5.00,15.00}
+        withholdings:
+          # Retención en la fuente de IR, code 310 (transport of goods), 1% of the subtotal. SRI
+          # Resolution NAC-DGERCGC26-00000009 (in force 2026-03-01) replaced the table: CONFIRM the 1%.
+          income-tax:
+            enabled: ${TMS_EC_IR_WITHHOLDING_ENABLED:true}
+            code: ${TMS_EC_IR_WITHHOLDING_CODE:310}
+            rate: ${TMS_EC_IR_WITHHOLDING_RATE:1.00}
+          # Retención de IVA, 70% of the VAT for services (30/70/100 per NAC-DGERCGC20-00000061), only
+          # where the company is a VAT-withholding agent. Off by default; yields nothing on VAT 0%.
+          vat:
+            enabled: ${TMS_EC_IVA_WITHHOLDING_ENABLED:false}
+            rate: ${TMS_EC_IVA_WITHHOLDING_RATE:70.00}
+      generic:
+        # Any other country: no currency enforced, no withholdings, any VAT rate 0 <= r < 100 unless a
+        # list is given. No general rate is assumed: a company sets its own vat_rate to get a preview.
+        vat-rate: ${TMS_GENERIC_VAT_RATE:}
+        freight-vat-rate: ${TMS_GENERIC_FREIGHT_VAT_RATE:}
+        allowed-vat-rates: ${TMS_GENERIC_ALLOWED_VAT_RATES:}
   security:
     jwt:
       # Supabase Auth coordinates. No default: a deployment that does not set these fails at

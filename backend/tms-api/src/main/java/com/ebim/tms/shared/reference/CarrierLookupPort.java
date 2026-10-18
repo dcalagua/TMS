@@ -55,10 +55,11 @@ public interface CarrierLookupPort {
     }
 
     /**
-     * The carrier's RUC when its tax id is one ({@code tax_id_type = 'RUC'}, V9), for checking the
-     * issuer of a CPE (V66, ADR-024 part 2, item 3). Empty when it has another tax id or none.
+     * The carrier's tax id when its type is one of {@code taxIdTypes} (compared ignoring case, V9),
+     * for checking the issuer of a fiscal document (V66, ADR-027): a regime names which identifier
+     * type is its fiscal one (Peru and Ecuador: {@code RUC}). Empty when it has another type or none.
      */
-    default Optional<String> rucOf(UUID id, UUID companyId) {
+    default Optional<String> taxIdOf(UUID id, UUID companyId, Set<String> taxIdTypes) {
         return Optional.empty();
     }
 
