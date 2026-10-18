@@ -1022,6 +1022,95 @@ class PlanningApiIntegrationTest {
                 .cause().hasMessageContaining("ck_transport_order_not_over_allocated");
     }
 
+    @Test
+    @DisplayName("V62 re-stacking: crates stored as stacks of eight (2.40 m) fit a 2.20 m vehicle as stacks of seven")
+    void restackedForTheVehicleHeight() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String vehicleType = vehicleType("LOW220", "3000", "10", 10);
+        dimensions(vehicleType, "6.00", "2.40", "2.20", "0.850");
+        String vehicle = vehicleOfType("LOW220", vehicleType);
+        String trip = newTrip(run, vehicle);
+        // 16 crates of 0.60 x 0.40 x 0.30 m: two stacks of eight at the reference height of 2.40 m.
+        String order = order(COMPANY_A, originA, destinationA1, date, "160", "1.152", "0", "READY_FOR_PLANNING");
+        crateLine(order, 16);
+        measured(order, "1.1520", "0.48", "2.400", "0.300");
+
+        long version = versionOf(assign(trip, order)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.capacity.height.used").value(2.100))
+                .andExpect(jsonPath("$.trip.capacity.floor.used").value(0.72))
+                .andExpect(jsonPath("$.trip.capacity.withinCapacity").value(true)));
+
+        // The ledger keeps the order's own figures; only the vehicle's view of them is re-stacked.
+        assertThat(orderStatus(order)).isEqualTo("PLANNED");
+        assertThat(allocated(order, "floor_area_m2")).isEqualTo("0.4800");
+        mockMvc.perform(asAdmin(get(TRIPS + "/" + trip + "/capacity"), COMPANY_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.height.used").value(2.100))
+                .andExpect(jsonPath("$.withinCapacity").value(true));
+
+        mockMvc.perform(asAdmin(put(TRIPS + "/" + trip + "/vehicle"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"vehicleId":"%s","plannedDepartureAt":"%s","version":%d}
+                                """.formatted(vehicle, departure(date), version)))
+                .andExpect(status().isOk());
+        confirm(run).andExpect(status().isOk());
+
+        // A vehicle lower than one crate refuses it as a unit, however it is re-stacked.
+        execute("UPDATE tms.vehicle_type SET height_m = 0.25 WHERE id = '" + vehicleType + "'");
+        LocalDate later = nextDate();
+        Run second = newRun(later);
+        String lowTrip = newTrip(second, vehicleOfType("LOW025", vehicleType));
+        String other = order(COMPANY_A, originA, destinationA1, later, "160", "1.152", "0", "READY_FOR_PLANNING");
+        crateLine(other, 16);
+        measured(other, "1.1520", "0.48", "2.400", "0.300");
+        assign(lowTrip, other)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("ITEM_TALLER_THAN_VEHICLE")));
+    }
+
+    @Test
+    @DisplayName("V62: a split that omits the floor takes it in proportion, and the remainder completes the order")
+    void splitWithoutFloorConverges() throws Exception {
+        LocalDate date = nextDate();
+        Run run = newRun(date);
+        String vehicleType = vehicleType("SPLITD", "3000", "10", 10);
+        dimensions(vehicleType, "6.00", "2.40", "2.40", "0.850");
+        String first = newTrip(run, vehicleOfType("SPLITD1", vehicleType));
+        String second = newTrip(run, vehicleOfType("SPLITD2", vehicleType));
+        String order = order(COMPANY_A, originA, destinationA1, date, "100", "2", "0", "READY_FOR_PLANNING");
+        measured(order, "2", "8", "1.200", "0.300");
+
+        mockMvc.perform(asAdmin(post(TRIPS + "/" + first + "/assignments"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"orderId\":\"" + order + "\",\"weightKg\":60,\"volumeM3\":1}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.capacity.floor.used").value(4.8));
+        assertThat(allocated(order, "floor_area_m2")).isEqualTo("4.8000");
+        assertThat(orderStatus(order)).isEqualTo("READY_FOR_PLANNING");
+
+        mockMvc.perform(asAdmin(post(TRIPS + "/" + second + "/assignments"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"orderId\":\"" + order + "\",\"weightKg\":40,\"volumeM3\":1}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trip.capacity.floor.used").value(3.2));
+        assertThat(allocated(order, "floor_area_m2")).isEqualTo("8.0000");
+        assertThat(orderStatus(order)).isEqualTo("PLANNED");
+    }
+
+    /** Sixteen 0.60 x 0.40 x 0.30 m stackable crates on one line, as the order service writes them at 2.40 m. */
+    private static void crateLine(String orderId, int quantity) {
+        execute("INSERT INTO tms.transport_order_line (order_id, line_number, material_code, material_description,"
+                + " quantity, uom, unit_weight_kg, unit_volume_m3, line_weight_kg, line_volume_m3, unit_length_m,"
+                + " unit_width_m, unit_height_m, stack_mode, orientation_locked, physical_source, geometry_status,"
+                + " stacks, stack_height_m, effective_volume_m3, floor_area_m2) VALUES ('" + orderId + "', 1, 'CRATE',"
+                + " 'Crate', " + quantity + ", 'UN', 10, 0.072, " + (quantity * 10) + ", "
+                + new java.math.BigDecimal("0.072").multiply(java.math.BigDecimal.valueOf(quantity)).toPlainString()
+                + ", 0.60, 0.40, 0.30, 'STACKABLE', false, 'ORDER_LINE', 'MEASURED', 2, 2.400, 1.1520, 0.4800)");
+    }
+
     /** Gives a vehicle type a load space (V9 columns) and, optionally, its own floor fill factor (V62). */
     private static void dimensions(String vehicleTypeId, String lengthM, String widthM, String heightM,
             String fillFactor) {

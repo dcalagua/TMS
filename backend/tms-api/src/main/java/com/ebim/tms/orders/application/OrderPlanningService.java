@@ -2,6 +2,7 @@ package com.ebim.tms.orders.application;
 
 import com.ebim.tms.orders.domain.OrderStatus;
 import com.ebim.tms.orders.domain.TransportOrder;
+import com.ebim.tms.orders.domain.TransportOrderLine;
 import com.ebim.tms.orders.infrastructure.OrderHoldRepository;
 import com.ebim.tms.orders.infrastructure.OrderSchedulingSpecifications;
 import com.ebim.tms.orders.infrastructure.TransportOrderRepository;
@@ -11,16 +12,19 @@ import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.geometry.GeometryLine;
 import com.ebim.tms.shared.reference.OrderAllocation;
 import com.ebim.tms.shared.reference.OrderAmounts;
 import com.ebim.tms.shared.reference.OrderBacklogTotals;
 import com.ebim.tms.shared.reference.OrderFulfillmentStatus;
+import com.ebim.tms.shared.reference.OrderGeometryProfile;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.PlannableOrderQuery;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
@@ -105,6 +109,28 @@ public class OrderPlanningService implements OrderPlanningPort {
         }
         for (TransportOrder order : transportOrderRepository.findByIdInAndCompanyId(ids, companyId)) {
             byId.put(order.id(), toPlannable(order));
+        }
+        return byId;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, OrderGeometryProfile> geometryProfilesOf(Collection<UUID> orderIds, UUID companyId) {
+        Map<UUID, OrderGeometryProfile> byId = new HashMap<>();
+        if (orderIds.isEmpty()) {
+            return byId;
+        }
+        for (TransportOrder order : transportOrderRepository.findWithMeasuredLines(orderIds, companyId)) {
+            if (order.geometryReferenceHeightM() == null) {
+                continue; // Measured with no height recorded: nothing to re-stack from.
+            }
+            List<GeometryLine> lines = order.lines().stream()
+                    .sorted(Comparator.comparingInt(TransportOrderLine::lineNumber))
+                    .map(line -> new GeometryLine(line.quantity(), line.uom(), line.unitWeightKg(),
+                            line.physicalBlock(), line.lineVolumeM3()))
+                    .toList();
+            byId.put(order.id(), new OrderGeometryProfile(order.id(), order.geometryReferenceHeightM(),
+                    order.totalVolumeM3(), order.planningVolumeM3(), order.floorAreaM2(), lines));
         }
         return byId;
     }

@@ -31,7 +31,9 @@ import org.springframework.stereotype.Component;
  *       determinism, not for the business: with it, the same input always plans the same way.</li>
  *   <li><b>Take the biggest vehicle still free</b> and fill it while every dimension fits. The
  *       fleet arrives sorted heaviest-first, so this is first-fit-decreasing on the vehicle side:
- *       big trucks get used, and what is left over is small enough for what is left.</li>
+ *       big trucks get used, and what is left over is small enough for what is left. An order the
+ *       next vehicle refuses on its own tries the remaining ones before it is reported - heaviest is
+ *       not tallest - and every check re-stacks the order for the vehicle's height (ADR-022).</li>
  *   <li><b>Never split an order.</b> V1 assigns whole orders (see {@code AssignOrderRequest}), so
  *       an order that exceeds the largest vehicle offered can only be reported, not planned.</li>
  * </ol>
@@ -71,7 +73,9 @@ public class HeuristicPlanningEngine implements PlanningEngine {
         List<UnplannedOrder> unplanned = new ArrayList<>();
 
         // The fleet is consumed left to right: sorted heaviest-first by the port, and never
-        // reused, so one vehicle cannot end up on two trips of the same proposal.
+        // reused, so one vehicle cannot end up on two trips of the same proposal. A copy, because a
+        // vehicle further down that takes an order the next one refuses is moved up (see below).
+        List<VehicleCapacityReference> fleet = new ArrayList<>(input.vehicles());
         int nextVehicle = 0;
 
         for (Map.Entry<UUID, List<PlannableOrder>> group : groupByCorridor(input.orders(), corridors).entrySet()) {
@@ -80,9 +84,7 @@ public class HeuristicPlanningEngine implements PlanningEngine {
 
             List<PlannableOrder> open = new ArrayList<>();
             CapacityLoad load = CapacityLoad.EMPTY;
-            CapacityLimits limits = nextVehicle < input.vehicles().size()
-                    ? CapacityLimits.of(input.vehicles().get(nextVehicle))
-                    : null;
+            CapacityLimits limits = nextVehicle < fleet.size() ? CapacityLimits.of(fleet.get(nextVehicle)) : null;
 
             for (PlannableOrder order : ordersInGroup) {
                 if (tallerThanEveryVehicle(order, input.vehicles())) {
@@ -90,7 +92,7 @@ public class HeuristicPlanningEngine implements PlanningEngine {
                             UnplannedReason.ITEM_TALLER_THAN_VEHICLE));
                     continue;
                 }
-                if (exceedsEveryVehicle(order, input.vehicles())) {
+                if (exceedsEveryVehicle(order, input)) {
                     // Reported before any packing attempt: retrying it against every vehicle in
                     // turn would empty the fleet to reach the same conclusion.
                     unplanned.add(new UnplannedOrder(order.id(), order.orderNumber(),
@@ -103,37 +105,40 @@ public class HeuristicPlanningEngine implements PlanningEngine {
                     continue;
                 }
 
-                CapacityLoad candidate = load.plus(CapacityLoad.of(order));
+                // Re-stacked for this vehicle's height (ADR-022 section 5), like every other check.
+                CapacityLoad candidate = load.plus(input.loadOn(order, order.ordered(), limits));
                 if (limits.accommodates(candidate)) {
                     open.add(order);
                     load = candidate;
                     continue;
                 }
 
-                // Full. Close what is open and try this order again on the next vehicle. An empty
-                // open trip here would mean the order does not fit this vehicle but does fit a
-                // smaller one later, which cannot happen with a heaviest-first fleet - so closing
-                // an empty trip is impossible rather than merely unlikely.
+                // Full. Close what is open and try this order again on a fresh vehicle.
                 if (!open.isEmpty()) {
-                    trips.add(toTrip(input.vehicles().get(nextVehicle).id(), routeId, open, corridors, limits.bindingDimension(load)));
+                    trips.add(toTrip(fleet.get(nextVehicle).id(), routeId, open, corridors, limits.bindingDimension(load)));
                     nextVehicle++;
                     open = new ArrayList<>();
                     load = CapacityLoad.EMPTY;
-                    limits = nextVehicle < input.vehicles().size()
-                            ? CapacityLimits.of(input.vehicles().get(nextVehicle))
-                            : null;
                 }
-                if (limits != null && limits.accommodates(CapacityLoad.of(order))) {
-                    open.add(order);
-                    load = CapacityLoad.of(order);
-                } else {
+                // Heaviest-first is per weight, not per dimension: a lower or narrower vehicle next in
+                // line may refuse what one further down takes. So the order tries every remaining
+                // vehicle, and the first that takes it is moved up to the next position - the ones it
+                // skipped stay, in order, for the orders after it.
+                int fitting = firstTaking(fleet, nextVehicle, order, input);
+                if (fitting < 0) {
+                    limits = nextVehicle < fleet.size() ? CapacityLimits.of(fleet.get(nextVehicle)) : null;
                     unplanned.add(new UnplannedOrder(order.id(), order.orderNumber(),
                             UnplannedReason.NO_VEHICLE_AVAILABLE));
+                    continue;
                 }
+                fleet.add(nextVehicle, fleet.remove(fitting));
+                limits = CapacityLimits.of(fleet.get(nextVehicle));
+                open.add(order);
+                load = input.loadOn(order, order.ordered(), limits);
             }
 
             if (!open.isEmpty()) {
-                trips.add(toTrip(input.vehicles().get(nextVehicle).id(), routeId, open, corridors, limits.bindingDimension(load)));
+                trips.add(toTrip(fleet.get(nextVehicle).id(), routeId, open, corridors, limits.bindingDimension(load)));
                 nextVehicle++;
             }
         }
@@ -200,9 +205,25 @@ public class HeuristicPlanningEngine implements PlanningEngine {
                 && vehicles.stream().noneMatch(vehicle -> CapacityLimits.of(vehicle).admitsUnitHeight(order.maxUnitHeightM()));
     }
 
-    private static boolean exceedsEveryVehicle(PlannableOrder order, List<VehicleCapacityReference> vehicles) {
-        CapacityLoad alone = CapacityLoad.of(order);
-        return vehicles.stream().noneMatch(vehicle -> CapacityLimits.of(vehicle).accommodates(alone));
+    private static boolean exceedsEveryVehicle(PlannableOrder order, PlanningInput input) {
+        return input.vehicles().stream().noneMatch(vehicle -> takes(vehicle, order, input));
+    }
+
+    /** The first vehicle from {@code from} on that takes the order on its own, or -1. */
+    private static int firstTaking(List<VehicleCapacityReference> fleet, int from, PlannableOrder order,
+            PlanningInput input) {
+        for (int i = from; i < fleet.size(); i++) {
+            if (takes(fleet.get(i), order, input)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean takes(VehicleCapacityReference vehicle, PlannableOrder order, PlanningInput input) {
+        CapacityLimits limits = CapacityLimits.of(vehicle);
+        return limits.admitsUnitHeight(order.maxUnitHeightM())
+                && limits.accommodates(input.loadOn(order, order.ordered(), limits));
     }
 
     /** Stops are the distinct destinations of the trip's orders, in the order the orders were loaded. */

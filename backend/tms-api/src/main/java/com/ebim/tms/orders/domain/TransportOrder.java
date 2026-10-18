@@ -16,8 +16,7 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
-import com.ebim.tms.shared.geometry.LineGeometry;
-import com.ebim.tms.shared.geometry.LoadGeometryCalculator;
+import com.ebim.tms.shared.geometry.OrderGeometry;
 import com.ebim.tms.shared.reference.OrderAllocation;
 import com.ebim.tms.shared.reference.OrderAmounts;
 import java.util.List;
@@ -395,18 +394,6 @@ public class TransportOrder {
      */
     public void applyLines(List<OrderLineInput> inputs, DeclaredTotals declared, BigDecimal referenceHeightM,
             UUID actorId) {
-        lines.clear();
-        int lineNumber = 1;
-        List<LineGeometry> geometries = new ArrayList<>();
-        for (OrderLineInput input : inputs) {
-            LineGeometry geometry = input.physical() == null
-                    ? null
-                    : LoadGeometryCalculator.compute(input.quantity(), input.uom(), input.unitWeightKg(),
-                            input.physical(), referenceHeightM);
-            geometries.add(geometry);
-            lines.add(new TransportOrderLine(this, lineNumber++, input, geometry, actorId));
-        }
-
         DeclaredTotals safeDeclared = declared == null ? DeclaredTotals.none() : declared;
         this.declaredWeightKg = safeDeclared.weightKg();
         this.declaredVolumeM3 = safeDeclared.volumeM3();
@@ -417,57 +404,24 @@ public class TransportOrder {
         this.totalVolumeM3 = totals.volumeM3();
         this.totalPallets = totals.pallets();
         this.totalsSource = totals.source();
-        applyGeometry(inputs, geometries, referenceHeightM);
-        this.updatedBy = actorId;
-    }
 
-    /**
-     * The order's geometry from its lines' (ADR-022 section 4). Floor sums; heights take the
-     * maximum; lines without figures are counted (never estimated) once any line has a block.
-     *
-     * <p>The planning volume: with no measured line it is the total, whatever its source. When the
-     * lines speak about volume, it is their sum with each measured line's effective volume in place
-     * of its naive one. When the volume was <em>declared</em> (no line carries one), the declaration
-     * covers lines nobody measured, so it is kept - unless every line was measured, and then the sum
-     * of what they really occupy is the better answer.
-     */
-    private void applyGeometry(List<OrderLineInput> inputs, List<LineGeometry> geometries, BigDecimal referenceHeightM) {
-        BigDecimal effective = BigDecimal.ZERO;
-        BigDecimal naiveOfTheRest = BigDecimal.ZERO;
-        boolean linesSpeakVolume = false;
-        BigDecimal floor = BigDecimal.ZERO;
-        BigDecimal tallestStack = null;
-        BigDecimal tallestUnit = null;
-        int unmeasured = 0;
-        boolean anyBlock = false;
+        // The order's geometry from its lines' (ADR-022 section 4), at the reference height: the
+        // ledger's figures. Planning re-stacks the same lines for each vehicle with the same
+        // arithmetic (OrderGeometry), so the two can never disagree about a formula.
+        OrderGeometry geometry = OrderGeometry.of(inputs.stream().map(OrderLineInput::geometryLine).toList(),
+                totalVolumeM3, referenceHeightM);
+        lines.clear();
+        int lineNumber = 1;
         for (int i = 0; i < inputs.size(); i++) {
-            LineGeometry geometry = geometries.get(i);
-            BigDecimal naive = inputs.get(i).lineVolumeM3();
-            linesSpeakVolume |= naive != null;
-            anyBlock |= geometry != null;
-            if (geometry == null || !geometry.hasFigures()) {
-                unmeasured++;
-                naiveOfTheRest = naiveOfTheRest.add(naive == null ? BigDecimal.ZERO : naive);
-                continue;
-            }
-            effective = effective.add(geometry.effectiveVolumeM3());
-            floor = floor.add(geometry.floorAreaM2());
-            tallestStack = tallestStack == null ? geometry.stackHeightM() : tallestStack.max(geometry.stackHeightM());
-            tallestUnit = tallestUnit == null ? geometry.unitHeightM() : tallestUnit.max(geometry.unitHeightM());
+            lines.add(new TransportOrderLine(this, lineNumber++, inputs.get(i), geometry.lines().get(i), actorId));
         }
-        boolean anyMeasured = tallestStack != null;
-        if (!anyMeasured) {
-            this.planningVolumeM3 = totalVolumeM3;
-        } else if (linesSpeakVolume || unmeasured == 0) {
-            this.planningVolumeM3 = effective.add(naiveOfTheRest);
-        } else {
-            this.planningVolumeM3 = totalVolumeM3;
-        }
-        this.floorAreaM2 = floor;
-        this.maxStackHeightM = tallestStack;
-        this.maxUnitHeightM = tallestUnit;
-        this.geometryUnmeasuredLines = anyBlock ? unmeasured : 0;
-        this.geometryReferenceHeightM = anyBlock ? referenceHeightM : null;
+        this.planningVolumeM3 = geometry.planningVolumeM3();
+        this.floorAreaM2 = geometry.floorAreaM2();
+        this.maxStackHeightM = geometry.maxStackHeightM();
+        this.maxUnitHeightM = geometry.maxUnitHeightM();
+        this.geometryUnmeasuredLines = geometry.unmeasuredLines();
+        this.geometryReferenceHeightM = geometry.anyBlock() ? referenceHeightM : null;
+        this.updatedBy = actorId;
     }
 
     /** Legality of this transition is {@code OrderService.markReadyForPlanning}'s concern, not this entity's. */

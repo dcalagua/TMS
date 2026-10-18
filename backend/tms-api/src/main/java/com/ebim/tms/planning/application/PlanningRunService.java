@@ -271,11 +271,12 @@ public class PlanningRunService {
                 .orElseThrow(() -> new ConflictException(
                         label + " is assigned a vehicle that is no longer active and available."));
 
-        CapacityLoad load = assignments.currentLoad(trip.id());
+        CapacityLimits limits = CapacityLimits.of(vehicle);
+        CapacityLoad load = assignments.currentLoad(trip.id(), scope.companyId(), limits);
         if (load.orderCount() == 0) {
             throw new ConflictException(label + " has no orders assigned.");
         }
-        capacityService.requireWithinCapacity(label + " cannot be confirmed", CapacityLimits.of(vehicle), load);
+        capacityService.requireWithinCapacity(label + " cannot be confirmed", limits, load);
         requireOrdersStillFitRun(scope, run, trip, label);
 
         // Idempotent, and the reason a confirmed trip's stop list always matches its assignments:

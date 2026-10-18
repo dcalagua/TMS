@@ -1,5 +1,6 @@
 package com.ebim.tms.orders.domain;
 
+import com.ebim.tms.shared.geometry.GeometryLine;
 import com.ebim.tms.shared.geometry.PhysicalBlock;
 import java.math.BigDecimal;
 
@@ -70,6 +71,11 @@ public record OrderLineInput(
     /** {@code quantity * unitWeightKg}, or {@code null} when the unit weight is unknown. */
     public BigDecimal lineWeightKg() {
         return unitWeightKg == null ? null : quantity.multiply(unitWeightKg);
+    }
+
+    /** What load geometry reads of this line ({@code OrderGeometry}). */
+    public GeometryLine geometryLine() {
+        return new GeometryLine(quantity, uom, unitWeightKg, physical, lineVolumeM3());
     }
 
     /** {@code quantity * unitVolumeM3}, or {@code null} when the unit volume is unknown. */

@@ -293,6 +293,22 @@ recorded in `docs/roadmap/2026-10-enterprise/DECISIONS_LOG.md`:
 - Fulfilment compares deliveries with the order without the floor (`OrderAmounts.withoutGeometry`).
 - UI (section 10) is cycle 2.
 
+## Implementation notes (post-review fixes, 2026-10-18)
+
+- **Re-stacking per vehicle is implemented**, without `OrderGeometryPort`: `OrderPlanningPort`
+  gains `geometryProfilesOf(orderIds, companyId)` (orders with a measured line, lines fetched in one
+  query) and `planning.application.VehicleLoads` re-stacks with the same `shared.geometry.OrderGeometry`
+  `TransportOrder.applyLines` uses. Applied to every vehicle with a height, lower *or* taller than the
+  reference (a taller one takes the same goods on less floor). The ledger keeps the reference figures;
+  only the vehicle's view of them changes. Slices are re-stacked in proportion to their floor share.
+- **Partial slices: an omitted `floorAreaM2` is derived**, no longer zero - the pending floor in the
+  largest proportion the stated measures take of theirs (`AssignOrderRequest.amountsAgainst`). With
+  zero, the floor stayed pending and a split order never reached `PLANNED`.
+- The calculator checks a unit taller than `H` right after the three measures, so
+  `ITEM_TALLER_THAN_VEHICLE` wins over an incomplete crush limit or stack mode; non-positive measures
+  are missing, bounds are capped at the line's units before they become a long, a count beyond an
+  `int` is `QUANTITY_OUT_OF_RANGE`, and figures are rounded up so a tiny unit never rounds to zero.
+
 ## Implementation notes (phase 45 cycle 1, 2026-10-18)
 
 Sections 8 and 9 are implemented with **V63** (`V63__rate_loading_meter.sql`); `docs/domain/RATE_ENGINE_V2.md`
