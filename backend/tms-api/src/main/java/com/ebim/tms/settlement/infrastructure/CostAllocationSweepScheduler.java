@@ -17,7 +17,7 @@ public class CostAllocationSweepScheduler {
     private final boolean enabled;
 
     public CostAllocationSweepScheduler(CostAllocationSweep sweep,
-            @Value("${tms.finance.cost-allocation.sweep-enabled:true}") boolean enabled) {
+            @Value("${tms.finance.cost-allocation.sweep-enabled:false}") boolean enabled) {
         this.sweep = sweep;
         this.enabled = enabled;
     }

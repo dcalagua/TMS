@@ -22,7 +22,7 @@ public class AccrualSweepScheduler {
     private final boolean enabled;
 
     public AccrualSweepScheduler(AccrualSweep sweep,
-            @Value("${tms.settlement.accrual.sweep-enabled:true}") boolean enabled) {
+            @Value("${tms.settlement.accrual.sweep-enabled:false}") boolean enabled) {
         this.sweep = sweep;
         this.enabled = enabled;
     }

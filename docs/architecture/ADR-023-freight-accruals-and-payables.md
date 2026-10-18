@@ -133,11 +133,18 @@ movements, export), plus the unaccrued list.
   answered by `planning` (native SQL over `tms.trip` only); costs through `TripCostLookupPort`, whose summary gains
   `closedAt`. `ModuleBoundaryTest` is green.
 - **The sweep** (`AccrualSweep`, timer `AccrualSweepScheduler`, `tms.settlement.accrual.sweep-enabled|sweep-interval|lookback`,
-  defaults `true`/`5m`/`31d`) asks one cross-tenant question on the owner connection (companies with a trip executed
+  defaults `false`/`5m`/`31d` - off since the post-review fixes of 2026-10-18, because the first pass books a month
+  of accruals; turned on per deployment with `TMS_ACCRUAL_SWEEP_ENABLED=true`, see `.env.example`) asks one cross-tenant question on the owner connection (companies with a trip executed
   within the lookback, or with an open accrual) and then works **each company under `SystemJobAuthentication`**
   (`shared.security`): the connections switch to `tms_app` bound to that company, so RLS covers the job, and the audit
   names the machine actor `system:accrual-sweep`. Each trip is accrued in its own transaction; a concurrent node's
-  unique violation is caught and counted as done. Adjustments claim open accruals `FOR UPDATE SKIP LOCKED`.
+  unique violation is caught and counted as done, and any other failure of one trip is logged and counted
+  (`failed`) without stopping the company's pass. Adjustments claim open accruals `FOR UPDATE SKIP LOCKED`. A company
+  whose organization is suspended (ADR-021) is skipped, like an inactive one.
+- **Birth vs approval (post-review fix):** the accrual's birth and every approval that consumes it take
+  `pg_advisory_xact_lock` on the trip first (`FreightAccrualRepository.lockTripForAccrual`). Without it, an invoice
+  approved while the sweep was inserting the accrual saw no accrual, the sweep saw no approved invoice, and the accrual
+  stayed `OPEN` for ever.
 - **Lookback and "accrue now":** the automatic pass reads trips executed within the lookback; older ones stay in the
   unaccrued report as `PENDING_SWEEP` and a person with `settlement.accrual:manage` runs the same sweep over any range of
   up to a year with `POST /settlement/accruals/sweep?from=&to=`.

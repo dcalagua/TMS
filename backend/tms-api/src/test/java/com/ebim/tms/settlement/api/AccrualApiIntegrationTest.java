@@ -13,6 +13,9 @@ import com.ebim.tms.database.DockerAvailability;
 import com.ebim.tms.database.PostgresTestDatabase;
 import com.ebim.tms.settlement.application.AccrualSweep;
 import com.ebim.tms.shared.api.ApiHeaders;
+import com.ebim.tms.shared.security.CompanyScope;
+import com.ebim.tms.shared.security.CompanyScopeLoader;
+import com.ebim.tms.shared.security.SystemJobAuthentication;
 import com.ebim.tms.shared.security.TestJwts;
 import com.jayway.jsonpath.JsonPath;
 import java.math.BigDecimal;
@@ -30,6 +33,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -49,6 +53,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
@@ -100,6 +106,12 @@ class AccrualApiIntegrationTest {
 
     @Autowired
     private AccrualSweep accrualSweep;
+
+    @Autowired
+    private CompanyScopeLoader companyScopeLoader;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     private String adminToken;
     private String plannerToken;
@@ -282,6 +294,58 @@ class AccrualApiIntegrationTest {
             String accrual = accrualOf(trip);
             assertThat(scalar("SELECT status || '/' || consumed_amount FROM tms.freight_accrual WHERE id = '"
                     + accrual + "'")).isEqualTo("SETTLED/900.00");
+            assertBalanceIsTheSumOfItsMovements(accrual);
+        }
+
+        @Test
+        @DisplayName("an invoice approved while the sweep is creating the accrual waits for it and consumes it")
+        void approvalRacingTheAccrualBirth() throws Exception {
+            String trip = dispatchedTrip(COMPANY_A, carrierA, cardA, "800.00", OffsetDateTime.now().minusHours(1));
+            String invoice = invoice(COMPANY_A, carrierA, trip, null, "800.00");
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + invoice + "/match"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("MATCHED"));
+            CompanyScope scope = companyScopeLoader.loadActiveCompanyScope(COMPANY_A).orElseThrow();
+            LocalDate today = LocalDate.now(LIMA);
+            TransactionTemplate sweepTransaction = new TransactionTemplate(transactionManager);
+            CountDownLatch accrued = new CountDownLatch(1);
+            CountDownLatch release = new CountDownLatch(1);
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try {
+                // The sweep creates the accrual and holds its transaction open, uncommitted.
+                Future<?> sweep = pool.submit(() -> SystemJobAuthentication.runAs(scope, AccrualSweep.ACTOR_LABEL,
+                        () -> sweepTransaction.execute(status -> {
+                            accrualSweep.sweepRange(scope, today.minusDays(1), today.plusDays(1), null);
+                            accrued.countDown();
+                            try {
+                                release.await(30, TimeUnit.SECONDS);
+                            } catch (InterruptedException interrupted) {
+                                Thread.currentThread().interrupt();
+                            }
+                            return null;
+                        })));
+                assertThat(accrued.await(30, TimeUnit.SECONDS)).isTrue();
+
+                // Under READ COMMITTED the approval cannot see that accrual, and the sweep already looked
+                // for approved invoices: without the trip lock, both commit and the accrual stays OPEN.
+                Future<?> approval = pool.submit(() -> {
+                    mockMvc.perform(asChecker(post(INVOICES + "/" + invoice + "/approve"), COMPANY_A)
+                                    .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                            .andExpect(status().isOk());
+                    return null;
+                });
+                Thread.sleep(1500);
+                assertThat(approval.isDone()).as("the approval waits for the accrual being born").isFalse();
+                release.countDown();
+                sweep.get(30, TimeUnit.SECONDS);
+                approval.get(30, TimeUnit.SECONDS);
+            } finally {
+                release.countDown();
+                pool.shutdownNow();
+            }
+            String accrual = accrualOf(trip);
+            assertThat(scalar("SELECT status || '/' || consumed_amount FROM tms.freight_accrual WHERE id = '"
+                    + accrual + "'")).isEqualTo("SETTLED/800.00");
             assertBalanceIsTheSumOfItsMovements(accrual);
         }
 

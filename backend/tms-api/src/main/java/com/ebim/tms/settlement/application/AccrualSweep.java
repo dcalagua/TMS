@@ -9,6 +9,7 @@ import com.ebim.tms.shared.reference.TripCostLookupPort.TripCostSummary;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.security.CompanyScopeLoader;
 import com.ebim.tms.shared.security.SystemJobAuthentication;
+import com.ebim.tms.shared.security.TenantOperationGate;
 import com.ebim.tms.shared.settings.AccrualTrigger;
 import com.ebim.tms.shared.settings.CompanySettingsPort;
 import java.time.Clock;
@@ -24,6 +25,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -75,12 +77,15 @@ public class AccrualSweep {
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
     private final Duration lookback;
+    private final ObjectProvider<TenantOperationGate> operationGate;
 
     public AccrualSweep(AccruableTripLookupPort tripLookupPort, TripCostLookupPort tripCostLookupPort,
             FreightAccrualRepository accrualRepository, AccrualService accrualService,
             CompanySettingsPort companySettingsPort, CompanyScopeLoader companyScopeLoader,
             PlatformTransactionManager transactionManager, Clock clock,
-            @Value("${tms.settlement.accrual.lookback:31d}") Duration lookback) {
+            @Value("${tms.settlement.accrual.lookback:31d}") Duration lookback,
+            ObjectProvider<TenantOperationGate> operationGate) {
+        this.operationGate = operationGate;
         this.tripLookupPort = tripLookupPort;
         this.tripCostLookupPort = tripCostLookupPort;
         this.accrualRepository = accrualRepository;
@@ -94,7 +99,9 @@ public class AccrualSweep {
 
     /**
      * The scheduled pass: every company with a trip executed within the lookback, or with an open
-     * accrual to adjust. A company that fails is logged and the pass moves on.
+     * accrual to adjust. A company that fails is logged and the pass moves on. An inactive company is
+     * not swept, and neither is one whose organization MasterAdmin has suspended (ADR-021): a
+     * suspension stops every write of the tenant, and a machine writing on its behalf is no exception.
      */
     public AccrualSweepResult sweepAll() {
         OffsetDateTime now = OffsetDateTime.now(clock);
@@ -109,7 +116,8 @@ public class AccrualSweep {
             }
             try {
                 total = total.plus(SystemJobAuthentication.runAs(scope.get(), ACTOR_LABEL,
-                        () -> sweepCompany(scope.get(), since, now.plusSeconds(1), null)));
+                        () -> suspended(scope.get()) ? AccrualSweepResult.NONE
+                                : sweepCompany(scope.get(), since, now.plusSeconds(1), null)));
             } catch (RuntimeException failure) {
                 log.error("The accrual sweep failed for company {}; the next pass retries it", companyId, failure);
             }
@@ -132,6 +140,7 @@ public class AccrualSweep {
         AccrualTrigger trigger = companySettingsPort.settingsOf(scope.companyId()).accrualTrigger();
         int created = 0;
         int unaccrued = 0;
+        int failed = 0;
         AccruableTrip after = null;
         while (true) {
             List<AccruableTrip> page = tripLookupPort.findExecuted(scope.companyId(), trigger, from, to, after, PAGE);
@@ -150,8 +159,16 @@ public class AccrualSweep {
                 }
                 AccrualPricing pricing = AccrualPricing.of(trip, costs.get(trip.tripId()));
                 if (pricing instanceof AccrualPricing.Priced priced) {
-                    if (accrueOne(scope, trigger, trip, priced, actorId)) {
-                        created++;
+                    // One trip that throws must not abort the company's pass: it is logged, counted
+                    // and retried on the next pass, and the others go on.
+                    try {
+                        if (accrueOne(scope, trigger, trip, priced, actorId)) {
+                            created++;
+                        }
+                    } catch (RuntimeException failure) {
+                        failed++;
+                        log.warn("The accrual of trip {} of company {} failed; the next pass retries it",
+                                trip.tripId(), scope.companyId(), failure);
                     }
                 } else if (pricing instanceof AccrualPricing.Unpriced) {
                     unaccrued++;
@@ -162,7 +179,17 @@ public class AccrualSweep {
             }
         }
         int adjusted = adjustOpen(scope);
-        return new AccrualSweepResult(created, adjusted, 0, unaccrued);
+        return new AccrualSweepResult(created, adjusted, 0, unaccrued, failed);
+    }
+
+    /** Whether MasterAdmin has suspended the company's organization; asked on the company's own connection. */
+    private boolean suspended(CompanyScope scope) {
+        TenantOperationGate gate = operationGate.getIfAvailable();
+        if (gate == null || gate.currentSuspension(scope).isEmpty()) {
+            return false;
+        }
+        log.debug("Accrual sweep skipped for suspended company {}", scope.companyId());
+        return true;
     }
 
     private boolean accrueOne(CompanyScope scope, AccrualTrigger trigger, AccruableTrip trip,
