@@ -90,7 +90,7 @@ export function LogisticsDocumentsTable({ documents, showOrder }: {
                   <TableCell sx={cellSx}>{recipient ? `${recipient}${more}` : "-"}</TableCell>
                   <TableCell sx={cellSx}>{transport || "-"}</TableCell>
                   <TableCell sx={cellSx} align="right">
-                    {document.amount === null ? "-" : fmtMoney(document.amount, document.currency ?? "PEN")}
+                    {document.amount === null ? "-" : fmtMoney(document.amount, document.currency)}
                   </TableCell>
                   <TableCell sx={cellSx}>{document.externalStatus ?? "-"}</TableCell>
                 </TableRow>

@@ -1115,12 +1115,17 @@ queue until the next poll noticed it was gone.
 5. Poll interval is agreed. There is no webhook - V1 stops at the transactional outbox, for the
    reasons `docs/integrations/OUTBOUND_SHIPMENT_V1.md` sets out.
 
-## 14. Payable payments (migration V67, ADR-023 section 2)
+## 14. Payable payments (migrations V66/V67, ADR-023 section 2, ADR-027)
 
 The ERP tells TMS what it paid against a carrier invoice that TMS exported (`POST /settlement/invoices/{id}/export`).
 **TMS records the payment and moves no money** (decision D-01): it has no bank account, produces no bank file and
 executes nothing. A person can record the same thing by hand, with a second person confirming (four eyes); both channels
 end in one append-only row of `tms.carrier_payment`.
+
+The fiscal vocabulary is the **company's tax regime** (ADR-027), selected by its fiscal country: Peru (SUNAT codes,
+`F001-123`, 11-digit RUC, detraction or retention), Ecuador (SRI codes, `001-001-000000123`, 13-digit RUC, income-tax and
+VAT withholdings) or the generic regime of any other country (free-text number and tax id, no withholdings). TMS
+**receives** carrier documents and checks their shape; it issues, signs or sends nothing to a tax authority.
 
 ### 14.1 `POST /integration/v1/payable-payments`
 
@@ -1129,6 +1134,8 @@ end in one append-only row of `tms.carrier_payment`.
   is `409`.
 - The payment is attributed to the credential (`carrier_payment.source = INTEGRATION`, `recorded_by_client`), never to a
   person. The company is the credential's.
+
+Peru (a factura with detraction, paid net; the detraction's constancy recorded with the payment):
 
 ```http
 POST /integration/v1/payable-payments
@@ -1140,15 +1147,36 @@ Content-Type: application/json
   "invoice": {
     "carrierTaxId": "20600000011",
     "documentType": "01",
-    "series": "F001",
-    "correlative": "000123"
+    "documentNumber": "F001-000123"
   },
   "paymentReference": "SAP-PAY-2026-11-0042",
   "paidOn": "2026-11-10",
   "amount": 560.00,
   "currency": "PEN",
-  "detraction": { "constancyNumber": "DET-889120", "constancyDate": "2026-11-09", "amount": 40.00 },
-  "retentionAmount": null,
+  "withholdings": [
+    { "kind": "PE_DETRACTION", "amount": 40.00, "certificateNumber": "DET-889120", "certificateDate": "2026-11-09" }
+  ],
+  "sourceSystem": "SAP"
+}
+```
+
+Ecuador (a factura at VAT 0% with the income-tax withholding, paid net; the comprobante de retención recorded):
+
+```json
+{
+  "invoice": {
+    "carrierTaxId": "0990004196001",
+    "documentType": "01",
+    "documentNumber": "001-001-000000123"
+  },
+  "paymentReference": "ERP-PAY-2026-11-0007",
+  "paidOn": "2026-11-10",
+  "amount": 990.00,
+  "currency": "USD",
+  "withholdings": [
+    { "kind": "EC_INCOME_TAX_WITHHOLDING", "amount": 10.00,
+      "certificateNumber": "001-001-000000045", "certificateDate": "2026-10-16" }
+  ],
   "sourceSystem": "SAP"
 }
 ```
@@ -1172,19 +1200,23 @@ Content-Type: application/json
 | Key | Fields | Use |
 |---|---|---|
 | TMS id | `invoiceId` | The export payload carries it (`invoiceId`) |
-| CPE | `carrierTaxId` (issuer RUC), `documentType` (`01` default), `series`, `correlative` | Leading zeros of the correlative are ignored |
-| Pre-CPE | `carrierCode`, `invoiceNumber` | A document received without series and correlative |
+| Fiscal document | `carrierTaxId` (issuer tax id, up to 20 characters: Peru 11, Ecuador 13), `documentType` (the country's code - Peru `01`/`07`/`08`, Ecuador `01`/`04`/`05` - or the kind `INVOICE`/`CREDIT_NOTE`/`DEBIT_NOTE`; `INVOICE` by default), `documentNumber` (in the regime's format) | Read by the company's current regime and normalised as at receipt: `F001-000123` is `F001-123`, `001-001-123` is `001-001-000000123` |
+| No fiscal identity | `carrierCode`, `invoiceNumber` | A document received without a fiscal number |
 
 **The open balance** a payment is checked against:
 
 ```
-net     = total - approved credit notes (07) + approved debit notes (08)
-payable = net - detraction - retention        (deposited elsewhere, not paid to the carrier)
+net     = total - approved credit notes + approved debit notes
+payable = net - sum of the document's withholdings    (deposited with the tax authority, not paid to the carrier)
 open    = payable - payments already recorded
 ```
 
-`amount` is what the carrier was paid. `detraction` is the deposit's proof: when the invoice carries a detraction, its
-constancy number and date are stored on the invoice too; on an invoice without detraction it is a `400`.
+`amount` is what the carrier was paid. `withholdings` is informative - the balance is computed from the document's own
+withholdings, which TMS computed at receipt - and carries their proof: for each kind the document carries, its
+`certificateNumber` and `certificateDate` (Peru's detraction constancy, Ecuador's comprobante de retención) are stored on
+the document's withholding. A kind the document does not carry is a `400`. Kinds: `PE_DETRACTION`, `PE_RETENTION`,
+`EC_INCOME_TAX_WITHHOLDING`, `EC_VAT_WITHHOLDING`. The report is kept whole on the payment
+(`carrier_payment.reported_withholdings`).
 
 ### 14.2 Outcomes
 
@@ -1192,11 +1224,11 @@ constancy number and date are stored on the invoice too; on an invoice without d
 |---|---|
 | `201` `RECORDED` | The payment was recorded; `status` is `PARTIALLY_PAID` or `PAID` |
 | `200` `DUPLICATE` | The same `paymentReference` for this invoice, with the same date, amount and currency: nothing new is recorded and the first `paymentId` is returned |
-| `400` | Validation (amount not positive, more than two decimals, two invoice keys, a constancy on an invoice without detraction) |
+| `400` | Validation (amount not positive, more than two decimals, two invoice keys, a document number not in the regime's format, a `documentType` the regime does not have, an unknown withholding kind or one the document does not carry, a certificate date without its number) |
 | `403` | The credential lacks `integration.payable-payment:write` |
 | `404` | No invoice of this company matches the key |
 | `409` | The invoice is not exported yet; the document is a credit/debit note (a note adjusts its invoice and is not paid); the `paymentReference` was already used with other figures |
-| `422` `payment-exceeds-balance` | `amount` is above the open balance; `detail` states net, detraction, retention, paid and open. A `PAID` invoice has an open balance of zero |
+| `422` `payment-exceeds-balance` | `amount` is above the open balance; `detail` states net, withheld, paid and open. A `PAID` invoice has an open balance of zero |
 | `422` `payment-currency-mismatch` | `currency` is not the invoice's. TMS converts no currency |
 
 A `4xx` is recorded in the inbox as `REJECTED` with its own status; it is the ERP's to correct and resending the same
@@ -1212,7 +1244,9 @@ as `PAYABLE_HOLD_RELEASED` with the hold's reason). `PAID` is terminal. Webhooks
 ### 14.4 Not in this contract
 
 Bank files, payment execution, bank accounts, a general ledger, FX, reversing a payment (the ERP issues another document;
-`tms.carrier_payment` is append-only by grant and by trigger).
+`tms.carrier_payment` is append-only by grant and by trigger), and anything with the tax authority: TMS does not issue,
+sign or send electronic documents or withholding certificates to SUNAT or the SRI, and does not validate a received one
+online (`electronicValidation` is `EXTERNAL_DEPENDENCY`, never "valid").
 
 ## 15. Logistics documents (migrations V55 and V69, ADR-015, ADR-028)
 

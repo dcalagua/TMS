@@ -223,8 +223,8 @@ class SettlementApiIntegrationTest {
                 : "{\"tripId\":\"" + tripId + "\",\"description\":\"Linehaul\",\"lineAmount\":" + lineAmount + "}";
         return "{\"carrierId\":\"" + carrierId + "\",\"invoiceNumber\":\"" + number
                 + "\",\"invoiceDate\":\"2026-04-05\",\"currency\":\"PEN\",\"totalAmount\":" + total
-                // V66: a PEN document states its breakdown; IGV-free here so the figures stay as before.
-                + ",\"subtotalAmount\":" + total + ",\"igvRate\":0,\"igvAmount\":0"
+                // V66: a PEN document states its breakdown; VAT-free here so the figures stay as before.
+                + ",\"subtotalAmount\":" + total + ",\"taxRate\":0,\"taxAmount\":0"
                 + ",\"lines\":[" + line + "]}";
     }
 
@@ -705,8 +705,8 @@ class SettlementApiIntegrationTest {
         }
         return "{\"carrierId\":\"" + carrierA + "\",\"invoiceNumber\":\"" + number
                 + "\",\"invoiceDate\":\"2026-04-05\",\"currency\":\"PEN\",\"totalAmount\":" + total
-                // V66: a PEN document states its breakdown; IGV-free here so the figures stay as before.
-                + ",\"subtotalAmount\":" + total + ",\"igvRate\":0,\"igvAmount\":0"
+                // V66: a PEN document states its breakdown; VAT-free here so the figures stay as before.
+                + ",\"subtotalAmount\":" + total + ",\"taxRate\":0,\"taxAmount\":0"
                 + ",\"lines\":[" + rendered + "]}";
     }
 
@@ -1023,29 +1023,29 @@ class SettlementApiIntegrationTest {
 
     // --- phase 60 · V66 · ADR-024 part 2 ---------------------------------------------
 
-    /** carrierA's RUC, made valid for the CPE tests (the fixture's is a hash, not a check digit). */
+    /** carrierA's RUC, made valid for the fiscal tests (the fixture's is a hash, not a check digit). */
     private static final String CARRIER_RUC = "20100070970";
 
     /**
-     * A document with its fiscal part: {@code (type, series, correlative, ruc, subtotal, igvRate, igv,
+     * A document with its fiscal part: {@code (kind, documentNumber, taxId, subtotal, taxRate, tax,
      * total, referencedId)} and the lines as JSON objects.
      */
-    private String fiscalBody(String type, String series, String correlative, String ruc, String subtotal,
-            String igvRate, String igv, String total, String referencedId, String... lines) {
+    private String fiscalBody(String kind, String documentNumber, String taxId, String subtotal,
+            String taxRate, String tax, String total, String referencedId, String... lines) {
         StringBuilder body = new StringBuilder("{\"carrierId\":\"" + carrierA + "\",\"invoiceDate\":\"2026-10-15\""
                 + ",\"currency\":\"PEN\",\"totalAmount\":" + total);
-        if (type != null) {
-            body.append(",\"documentType\":\"").append(type).append('"');
+        if (kind != null) {
+            body.append(",\"documentKind\":\"").append(kind).append('"');
         }
-        if (series != null) {
-            body.append(",\"series\":\"").append(series).append("\",\"correlative\":\"").append(correlative)
-                    .append("\",\"issuerRuc\":\"").append(ruc).append('"');
+        if (documentNumber != null) {
+            body.append(",\"documentNumber\":\"").append(documentNumber).append("\",\"issuerTaxId\":\"")
+                    .append(taxId).append('"');
         } else {
             body.append(",\"invoiceNumber\":\"").append(nextNumber("FIS")).append('"');
         }
         if (subtotal != null) {
-            body.append(",\"subtotalAmount\":").append(subtotal).append(",\"igvRate\":").append(igvRate)
-                    .append(",\"igvAmount\":").append(igv);
+            body.append(",\"subtotalAmount\":").append(subtotal).append(",\"taxRate\":").append(taxRate)
+                    .append(",\"taxAmount\":").append(tax);
         }
         if (referencedId != null) {
             body.append(",\"referencedInvoiceId\":\"").append(referencedId).append('"');
@@ -1077,7 +1077,7 @@ class SettlementApiIntegrationTest {
 
     /** A factura F001 for tripA: subtotal 1450 (the estimate) + IGV 18 % = 1711.00. */
     private String approvedCpeInvoice() throws Exception {
-        String id = JsonPath.read(postInvoice(fiscalBody(null, "F001", String.valueOf(SEQUENCE.incrementAndGet()),
+        String id = JsonPath.read(postInvoice(fiscalBody(null, "F001-" + SEQUENCE.incrementAndGet(),
                 CARRIER_RUC, "1450.00", "18.00", "261.00", "1711.00", null, freightLine("1450.00"))), "$.id");
         mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/match"), COMPANY_A))
                 .andExpect(jsonPath("$.status").value("MATCHED"));
@@ -1086,7 +1086,7 @@ class SettlementApiIntegrationTest {
     }
 
     @Nested
-    @DisplayName("Peruvian taxes, CPE, notes and penalties (V66)")
+    @DisplayName("Peruvian taxes, fiscal documents, notes and penalties (V66, ADR-027)")
     class PeruvianTaxes {
 
         @BeforeEach
@@ -1096,24 +1096,29 @@ class SettlementApiIntegrationTest {
         }
 
         @Test
-        @DisplayName("a CPE factura is numbered from its series, computes its detraction and is compared by subtotal")
+        @DisplayName("a Peruvian factura is numbered series-correlative, computes its detraction and is compared by subtotal")
         void cpeInvoice() throws Exception {
             int correlative = SEQUENCE.incrementAndGet();
-            String body = fiscalBody(null, "F001", "000" + correlative, CARRIER_RUC, "1450.00", "18.00", "261.00",
+            String body = fiscalBody(null, "F001-000" + correlative, CARRIER_RUC, "1450.00", "18.00", "261.00",
                     "1711.00", null, freightLine("1450.00"));
             String response = mockMvc.perform(asAdmin(post(INVOICES), COMPANY_A)
                             .contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.invoiceNumber").value("F001-" + correlative))
-                    .andExpect(jsonPath("$.fiscal.documentType").value("01"))
-                    .andExpect(jsonPath("$.fiscal.correlative").value(String.valueOf(correlative)))
+                    .andExpect(jsonPath("$.fiscal.fiscalCountry").value("PE"))
+                    .andExpect(jsonPath("$.fiscal.vatLabel").value("IGV"))
+                    .andExpect(jsonPath("$.fiscal.documentKind").value("INVOICE"))
+                    .andExpect(jsonPath("$.fiscal.fiscalDocumentCode").value("01"))
+                    .andExpect(jsonPath("$.fiscal.documentNumber").value("F001-" + correlative))
                     .andExpect(jsonPath("$.fiscal.subtotalAmount").value(1450.00))
-                    // 1711.00 x 4 % = 68.44, deposited in whole soles: 68.
-                    .andExpect(jsonPath("$.fiscal.detractionCode").value("027"))
-                    .andExpect(jsonPath("$.fiscal.detractionAmount").value(68.00))
-                    .andExpect(jsonPath("$.fiscal.retentionAmount").doesNotExist())
-                    // Never "valid": nobody asked SUNAT.
-                    .andExpect(jsonPath("$.fiscal.cpeValidation").value("EXTERNAL_DEPENDENCY"))
+                    // 1711.00 x 4 % = 68.44, deposited in whole soles: 68. No retention beside it.
+                    .andExpect(jsonPath("$.fiscal.withholdings.length()").value(1))
+                    .andExpect(jsonPath("$.fiscal.withholdings[0].kind").value("PE_DETRACTION"))
+                    .andExpect(jsonPath("$.fiscal.withholdings[0].code").value("027"))
+                    .andExpect(jsonPath("$.fiscal.withholdings[0].amount").value(68.00))
+                    .andExpect(jsonPath("$.fiscal.withholdingTotalAmount").value(68.00))
+                    // Never "valid": nobody asked the tax authority.
+                    .andExpect(jsonPath("$.fiscal.electronicValidation").value("EXTERNAL_DEPENDENCY"))
                     .andReturn().getResponse().getContentAsString();
             String id = JsonPath.read(response, "$.id");
 
@@ -1133,34 +1138,47 @@ class SettlementApiIntegrationTest {
         void fiscalSettings() throws Exception {
             mockMvc.perform(asAdmin(get("/api/v1/settlement/fiscal-settings"), COMPANY_A))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.igvRate").value(18.00))
-                    .andExpect(jsonPath("$.detractionCode").value("027"))
-                    .andExpect(jsonPath("$.detractionRate").value(4.00))
-                    .andExpect(jsonPath("$.detractionThresholdAmount").value(400.00))
-                    .andExpect(jsonPath("$.detractionStrictlyAboveThreshold").value(true))
-                    .andExpect(jsonPath("$.retentionAgent").value(false));
+                    .andExpect(jsonPath("$.regime").value("PE"))
+                    .andExpect(jsonPath("$.fiscalCurrency").value("PEN"))
+                    .andExpect(jsonPath("$.vatLabel").value("IGV"))
+                    .andExpect(jsonPath("$.vatRate").value(18.00))
+                    .andExpect(jsonPath("$.documentKinds[1].code").value("07"))
+                    .andExpect(jsonPath("$.taxId.rule").value("PE_RUC"))
+                    .andExpect(jsonPath("$.withholdings[0].kind").value("PE_DETRACTION"))
+                    .andExpect(jsonPath("$.withholdings[0].code").value("027"))
+                    .andExpect(jsonPath("$.withholdings[0].rate").value(4.00))
+                    .andExpect(jsonPath("$.withholdings[0].thresholdAmount").value(400.00))
+                    .andExpect(jsonPath("$.withholdings[0].strictlyAboveThreshold").value(true))
+                    .andExpect(jsonPath("$.withholdings[1].kind").value("PE_RETENTION"))
+                    .andExpect(jsonPath("$.withholdings[1].enabled").value(false));
         }
 
         @Test
         @DisplayName("a wrong check digit, another carrier's RUC, a missing or broken breakdown are refused")
         void refusals() throws Exception {
             String series = String.valueOf(SEQUENCE.incrementAndGet());
-            assertThat(postStatus(fiscalBody(null, "F001", series, "20100070971", "1450.00", "18.00", "261.00",
+            assertThat(postStatus(fiscalBody(null, "F001-" + series, "20100070971", "1450.00", "18.00", "261.00",
                     "1711.00", null, freightLine("1450.00")))).isEqualTo(400);
 
             mockMvc.perform(asAdmin(post(INVOICES), COMPANY_A).contentType(MediaType.APPLICATION_JSON)
-                            .content(fiscalBody(null, "F001", series, "20131312955", "1450.00", "18.00", "261.00",
+                            .content(fiscalBody(null, "F001-" + series, "20131312955", "1450.00", "18.00", "261.00",
                                     "1711.00", null, freightLine("1450.00"))))
                     .andExpect(status().isUnprocessableEntity())
-                    .andExpect(jsonPath("$.type").value(org.hamcrest.Matchers.endsWith("issuer-ruc-mismatch")));
+                    .andExpect(jsonPath("$.type").value(org.hamcrest.Matchers.endsWith("issuer-tax-id-mismatch")));
 
             // PEN without breakdown, and a breakdown two cents off.
-            assertThat(postStatus(fiscalBody(null, null, null, null, null, null, null, "1711.00", null,
+            assertThat(postStatus(fiscalBody(null, null, null, null, null, null, "1711.00", null,
                     freightLine("1450.00")))).isEqualTo(400);
-            assertThat(postStatus(fiscalBody(null, null, null, null, "1450.00", "18.00", "261.00", "1711.02", null,
+            assertThat(postStatus(fiscalBody(null, null, null, "1450.00", "18.00", "261.00", "1711.02", null,
                     freightLine("1450.00")))).isEqualTo(400);
+            // An IGV rate the Peruvian regime does not allow (18 or 0 by default).
+            assertThat(postStatus(fiscalBody(null, null, null, "1450.00", "10.00", "145.00", "1595.00", null,
+                    freightLine("1450.00")))).isEqualTo(400);
+            // A Peruvian number in the Ecuadorian format.
+            assertThat(postStatus(fiscalBody(null, "001-001-000000123", CARRIER_RUC, "1450.00", "18.00", "261.00",
+                    "1711.00", null, freightLine("1450.00")))).isEqualTo(400);
             // ...but one cent of rounding is accepted.
-            assertThat(postStatus(fiscalBody(null, null, null, null, "1450.00", "18.00", "261.00", "1711.01", null,
+            assertThat(postStatus(fiscalBody(null, null, null, "1450.00", "18.00", "261.00", "1711.01", null,
                     freightLine("1450.00")))).isEqualTo(201);
         }
 
@@ -1168,15 +1186,15 @@ class SettlementApiIntegrationTest {
         @DisplayName("a credit note matches against its invoice, is approved and reduces the invoice's net")
         void creditNote() throws Exception {
             String invoice = approvedCpeInvoice();
-            String note = JsonPath.read(postInvoice(fiscalBody("07", "FC01", String.valueOf(SEQUENCE.incrementAndGet()),
+            String note = JsonPath.read(postInvoice(fiscalBody("CREDIT_NOTE", "FC01-" + SEQUENCE.incrementAndGet(),
                     CARRIER_RUC, "100.00", "18.00", "18.00", "118.00", invoice, freightLine("100.00"))), "$.id");
 
             mockMvc.perform(asAdmin(get(INVOICES + "/" + note), COMPANY_A))
                     .andExpect(jsonPath("$.invoiceNumber").value(org.hamcrest.Matchers.startsWith("07-FC01-")))
                     .andExpect(jsonPath("$.fiscal.effectiveSign").value(-1))
                     .andExpect(jsonPath("$.fiscal.referencedInvoiceId").value(invoice))
-                    // A note decides no detraction of its own.
-                    .andExpect(jsonPath("$.fiscal.detractionAmount").doesNotExist());
+                    // A note decides no withholding of its own.
+                    .andExpect(jsonPath("$.fiscal.withholdings.length()").value(0));
 
             mockMvc.perform(asAdmin(post(INVOICES + "/" + note + "/match"), COMPANY_A))
                     .andExpect(status().isOk())
@@ -1186,7 +1204,8 @@ class SettlementApiIntegrationTest {
 
             mockMvc.perform(asAdmin(get(INVOICES + "/" + invoice), COMPANY_A))
                     .andExpect(jsonPath("$.fiscal.netAmount").value(1593.00))
-                    .andExpect(jsonPath("$.fiscal.notes[0].documentType").value("07"))
+                    .andExpect(jsonPath("$.fiscal.notes[0].documentKind").value("CREDIT_NOTE"))
+                    .andExpect(jsonPath("$.fiscal.notes[0].fiscalDocumentCode").value("07"))
                     .andExpect(jsonPath("$.fiscal.notes[0].status").value("APPROVED"));
 
             // The original is still not a duplicate of its own correction.
@@ -1196,23 +1215,23 @@ class SettlementApiIntegrationTest {
             mockMvc.perform(asAdmin(post(INVOICES + "/" + note + "/export"), COMPANY_A))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.payload").value(org.hamcrest.Matchers.containsString("\"effectiveSign\":-1")))
-                    .andExpect(jsonPath("$.payload").value(org.hamcrest.Matchers.containsString("\"documentType\":\"07\"")));
+                    .andExpect(jsonPath("$.payload").value(org.hamcrest.Matchers.containsString("\"fiscalDocumentCode\":\"07\"")));
         }
 
         @Test
         @DisplayName("a credit note above what remains of the invoice is a discrepancy; a note needs its invoice")
         void creditAboveRemainder() throws Exception {
             String invoice = approvedCpeInvoice();
-            String note = JsonPath.read(postInvoice(fiscalBody("07", "FC01", String.valueOf(SEQUENCE.incrementAndGet()),
+            String note = JsonPath.read(postInvoice(fiscalBody("CREDIT_NOTE", "FC01-" + SEQUENCE.incrementAndGet(),
                     CARRIER_RUC, "2000.00", "18.00", "360.00", "2360.00", invoice, freightLine("2000.00"))), "$.id");
             mockMvc.perform(asAdmin(post(INVOICES + "/" + note + "/match"), COMPANY_A))
                     .andExpect(jsonPath("$.status").value("DISCREPANCY"))
                     .andExpect(jsonPath("$.discrepancies[0].type").value("TOTAL_AMOUNT"))
                     .andExpect(jsonPath("$.discrepancies[0].expectedAmount").value(1450.00));
 
-            assertThat(postStatus(fiscalBody("07", null, null, null, "10.00", "18.00", "1.80", "11.80", null,
+            assertThat(postStatus(fiscalBody("CREDIT_NOTE", null, null, "10.00", "18.00", "1.80", "11.80", null,
                     freightLine("10.00")))).isEqualTo(400);
-            assertThat(postStatus(fiscalBody(null, null, null, null, "10.00", "18.00", "1.80", "11.80", invoice,
+            assertThat(postStatus(fiscalBody(null, null, null, "10.00", "18.00", "1.80", "11.80", invoice,
                     freightLine("10.00")))).isEqualTo(400);
         }
 
@@ -1220,7 +1239,7 @@ class SettlementApiIntegrationTest {
         @DisplayName("a debit note adds to the shipment and is compared with its figure")
         void debitNote() throws Exception {
             String invoice = approvedCpeInvoice();
-            String note = JsonPath.read(postInvoice(fiscalBody("08", "FD01", String.valueOf(SEQUENCE.incrementAndGet()),
+            String note = JsonPath.read(postInvoice(fiscalBody("DEBIT_NOTE", "FD01-" + SEQUENCE.incrementAndGet(),
                     CARRIER_RUC, "500.00", "18.00", "90.00", "590.00", invoice, freightLine("500.00"))), "$.id");
             mockMvc.perform(asAdmin(post(INVOICES + "/" + note + "/match"), COMPANY_A))
                     .andExpect(jsonPath("$.status").value("DISCREPANCY"))
@@ -1234,15 +1253,15 @@ class SettlementApiIntegrationTest {
             String penalty = "{\"tripId\":\"" + tripA + "\",\"description\":\"Demora\",\"chargeCode\":\"PENALTY\""
                     + ",\"lineAmount\":-50.00,\"penaltyReason\":\"Llegó 3 h tarde\",\"penaltyReferenceType\":\"LATE_ARRIVAL\"}";
             // Positive penalty, negative freight, penalty without reason: all refused.
-            assertThat(postStatus(fiscalBody(null, null, null, null, "1500.00", "18.00", "270.00", "1770.00", null,
+            assertThat(postStatus(fiscalBody(null, null, null, "1500.00", "18.00", "270.00", "1770.00", null,
                     freightLine("1450.00"), penalty.replace("-50.00", "50.00")))).isEqualTo(400);
-            assertThat(postStatus(fiscalBody(null, null, null, null, "1400.00", "18.00", "252.00", "1652.00", null,
+            assertThat(postStatus(fiscalBody(null, null, null, "1400.00", "18.00", "252.00", "1652.00", null,
                     freightLine("-1450.00")))).isEqualTo(400);
-            assertThat(postStatus(fiscalBody(null, null, null, null, "1400.00", "18.00", "252.00", "1652.00", null,
+            assertThat(postStatus(fiscalBody(null, null, null, "1400.00", "18.00", "252.00", "1652.00", null,
                     freightLine("1450.00"), penalty.replace(",\"penaltyReason\":\"Llegó 3 h tarde\"", ""))))
                     .isEqualTo(400);
 
-            String id = JsonPath.read(postInvoice(fiscalBody(null, null, null, null, "1400.00", "18.00", "252.00",
+            String id = JsonPath.read(postInvoice(fiscalBody(null, null, null, "1400.00", "18.00", "252.00",
                     "1652.00", null, freightLine("1450.00"), penalty)), "$.id");
             String matched = mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/match"), COMPANY_A))
                     .andExpect(jsonPath("$.status").value("DISCREPANCY"))

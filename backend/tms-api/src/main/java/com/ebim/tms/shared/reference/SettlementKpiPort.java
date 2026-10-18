@@ -84,7 +84,7 @@ public interface SettlementKpiPort {
      *                            accruals served up to the end of the range
      * @param accrualsBilled      accruals served in the range that an approved invoice consumed
      * @param accruedAmount       what those accruals provisioned
-     * @param invoicedAmount      what the authorised documents billed for the same trips (net of IGV)
+     * @param invoicedAmount      what the authorised documents billed for the same trips (net of VAT)
      * @param varianceAmount      invoiced - accrued: positive when the carrier billed more than provisioned
      * @param allocatedCost       cost allocated to orders served in the range (current runs)
      * @param allocatedWeightKg   the kilograms that cost was spread over

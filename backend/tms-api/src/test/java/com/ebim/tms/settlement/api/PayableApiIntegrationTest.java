@@ -243,7 +243,7 @@ class PayableApiIntegrationTest {
     class Integration {
 
         @Test
-        @DisplayName("partial then full: by CPE and by carrier code + number; detraction off the balance; PAYABLE_PAID")
+        @DisplayName("partial then full: by fiscal number and by carrier code + number; detraction off the balance; PAYABLE_PAID")
         void partialThenPaid() throws Exception {
             String subscription = subscribe("PAYABLE_PAID");
             String cpe = "F001-" + SEQUENCE.incrementAndGet();
@@ -251,13 +251,16 @@ class PayableApiIntegrationTest {
             // 1000 in PEN above S/ 400: the 4 % detraction (40) is deposited elsewhere, so 960 is owed.
             mockMvc.perform(asAdmin(get(PAYABLES + "/" + invoice), COMPANY_A)).andExpect(status().isOk())
                     .andExpect(jsonPath("$.status").value("EXPORTED"))
-                    .andExpect(jsonPath("$.detractionAmount").value(40.00))
+                    .andExpect(jsonPath("$.withholdings[0].kind").value("PE_DETRACTION"))
+                    .andExpect(jsonPath("$.withholdings[0].amount").value(40.00))
+                    .andExpect(jsonPath("$.withholdingTotalAmount").value(40.00))
                     .andExpect(jsonPath("$.payableAmount").value(960.00))
                     .andExpect(jsonPath("$.openBalance").value(960.00));
 
             String[] cpeParts = cpe.split("-");
+            // The ERP pads the correlative; the regime normalises it to the stored number.
             payment(erpToken, "K-" + UUID.randomUUID(), "{\"invoice\":{\"carrierTaxId\":\"" + carrierOneRuc
-                    + "\",\"documentType\":\"01\",\"series\":\"" + cpeParts[0] + "\",\"correlative\":\"000"
+                    + "\",\"documentType\":\"01\",\"documentNumber\":\"" + cpeParts[0] + "-000"
                     + cpeParts[1] + "\"},\"paymentReference\":\"TRX-1\",\"paidOn\":\"2026-11-01\",\"amount\":400.00,"
                     + "\"currency\":\"PEN\",\"sourceSystem\":\"SAP\"}")
                     .andExpect(status().isCreated())
@@ -269,14 +272,18 @@ class PayableApiIntegrationTest {
             String number = scalar("SELECT invoice_number FROM tms.carrier_invoice WHERE id = '" + invoice + "'");
             payment(erpToken, "K-" + UUID.randomUUID(), "{\"invoice\":{\"carrierCode\":\"pay-c1\",\"invoiceNumber\":\""
                     + number + "\"},\"paymentReference\":\"TRX-2\",\"paidOn\":\"2026-11-10\",\"amount\":560.00,"
-                    + "\"currency\":\"pen\",\"detraction\":{\"constancyNumber\":\"DET-889\",\"constancyDate\":"
-                    + "\"2026-11-09\",\"amount\":40.00}}")
+                    + "\"currency\":\"pen\",\"withholdings\":[{\"kind\":\"PE_DETRACTION\",\"certificateNumber\":"
+                    + "\"DET-889\",\"certificateDate\":\"2026-11-09\",\"amount\":40.00}]}")
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.status").value("PAID"))
                     .andExpect(jsonPath("$.openBalance").value(0.00));
 
-            assertThat(scalar("SELECT status || '/' || paid_amount || '/' || detraction_constancy_number"
-                    + " FROM tms.carrier_invoice WHERE id = '" + invoice + "'")).isEqualTo("PAID/960.00/DET-889");
+            assertThat(scalar("SELECT i.status || '/' || i.paid_amount || '/' || w.certificate_number"
+                    + " FROM tms.carrier_invoice i JOIN tms.carrier_invoice_withholding w ON w.carrier_invoice_id = i.id"
+                    + " WHERE i.id = '" + invoice + "'")).isEqualTo("PAID/960.00/DET-889");
+            // The report is kept whole on the payment.
+            assertThat(scalar("SELECT reported_withholdings FROM tms.carrier_payment WHERE carrier_invoice_id = '"
+                    + invoice + "' AND payment_reference = 'TRX-2'")).contains("PE_DETRACTION").contains("DET-889");
             // The payments are the truth, and the running total agrees with them.
             assertThat(scalar("SELECT sum(amount) FROM tms.carrier_payment WHERE carrier_invoice_id = '" + invoice
                     + "'")).isEqualTo("960.00");
@@ -373,7 +380,7 @@ class PayableApiIntegrationTest {
         void noteIsNotPaid() throws Exception {
             String invoice = exported(COMPANY_A, carrierTwo, cardTwo, "300.00", "2026-10-05", null);
             String note = receive(COMPANY_A, carrierTwo, null, "50.00", "2026-10-06", null,
-                    ",\"documentType\":\"07\",\"referencedInvoiceId\":\"" + invoice + "\"");
+                    ",\"documentKind\":\"CREDIT_NOTE\",\"referencedInvoiceId\":\"" + invoice + "\"");
             approve(note, COMPANY_A);
             mockMvc.perform(asAdmin(post(INVOICES + "/" + note + "/export"), COMPANY_A)).andExpect(status().isOk());
 
@@ -564,7 +571,7 @@ class PayableApiIntegrationTest {
     class Portal {
 
         @Test
-        @DisplayName("a carrier sees its own invoices with status, due date, paid and detraction - and no audit")
+        @DisplayName("a carrier sees its own invoices with status, due date, paid and withholdings - and no audit")
         void ownInvoices() throws Exception {
             String mine = exported(COMPANY_A, carrierOne, cardOne, "1000.00", "2026-10-05", null);
             payment(erpToken, null, paymentBody(mine, "PORTAL-1", "500.00", "PEN")).andExpect(status().isCreated());
@@ -581,7 +588,9 @@ class PayableApiIntegrationTest {
                     .andExpect(jsonPath("$.status").value("PARTIALLY_PAID"))
                     .andExpect(jsonPath("$.dueDate").value("2026-11-19"))
                     .andExpect(jsonPath("$.paidAmount").value(500.00))
-                    .andExpect(jsonPath("$.detractionAmount").value(40.00))
+                    .andExpect(jsonPath("$.withholdings[0].kind").value("PE_DETRACTION"))
+                    .andExpect(jsonPath("$.withholdingTotalAmount").value(40.00))
+                    .andExpect(jsonPath("$.vatLabel").value("IGV"))
                     .andExpect(jsonPath("$.openBalance").value(460.00))
                     .andExpect(jsonPath("$.payments[0].paymentReference").value("PORTAL-1"))
                     .andExpect(jsonPath("$.lines[0].lineAmount").value(1000.00))
@@ -696,19 +705,19 @@ class PayableApiIntegrationTest {
         return invoice;
     }
 
-    /** Receives a PEN document billing one trip (or none), IGV-free so the figures stay round. */
+    /** Receives a PEN document billing one trip (or none), VAT-free so the figures stay round. */
     private String receive(UUID companyId, String carrierId, String trip, String amount, String invoiceDate,
             String cpe, String extra) throws Exception {
         String line = "{" + (trip == null ? "" : "\"tripId\":\"" + trip + "\",") + "\"description\":\"Freight\","
                 + "\"lineAmount\":" + amount + "}";
         String identity = cpe == null
                 ? "\"invoiceNumber\":\"PAY-" + SEQUENCE.incrementAndGet() + "\""
-                : "\"series\":\"" + cpe.split("-")[0] + "\",\"correlative\":\"" + cpe.split("-")[1]
-                        + "\",\"issuerRuc\":\"" + scalar("SELECT tax_id_value FROM tms.carrier WHERE id = '"
+                : "\"documentNumber\":\"" + cpe
+                        + "\",\"issuerTaxId\":\"" + scalar("SELECT tax_id_value FROM tms.carrier WHERE id = '"
                         + carrierId + "'") + "\"";
         String body = "{\"carrierId\":\"" + carrierId + "\"," + identity + ",\"invoiceDate\":\"" + invoiceDate
                 + "\",\"currency\":\"PEN\",\"totalAmount\":" + amount + ",\"subtotalAmount\":" + amount
-                + ",\"igvRate\":0,\"igvAmount\":0" + extra + ",\"lines\":[" + line + "]}";
+                + ",\"taxRate\":0,\"taxAmount\":0" + extra + ",\"lines\":[" + line + "]}";
         String response = mockMvc.perform(asAdmin(post(INVOICES), companyId)
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())
@@ -749,7 +758,7 @@ class PayableApiIntegrationTest {
         return JsonPath.read(response, "$.subscription.id");
     }
 
-    /** A valid RUC: the ten digits given and the module-11 check digit (V66's {@code RucValidator}). */
+    /** A valid RUC: the ten digits given and the module-11 check digit ({@code shared.tax.PeruRuc}). */
     private static String validRuc(String firstTen) {
         int[] weights = {5, 4, 3, 2, 7, 6, 5, 4, 3, 2};
         int sum = 0;

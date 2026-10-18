@@ -87,17 +87,17 @@ public enum ProblemType {
             "Dispatch requires the warehouse's confirmation", HttpStatus.CONFLICT),
 
     /**
-     * A carrier's document names an issuer RUC other than the carrier's own (V66, ADR-024 part 2,
-     * item 3). Distinct from {@link #VALIDATION_FAILED} because the payload is well formed: either
-     * the document belongs to another carrier or the carrier's master data is wrong, and a person
-     * has to say which.
+     * A carrier's document names an issuer tax id other than the carrier's own (V66, ADR-024 part 2
+     * item 3, ADR-027). Distinct from {@link #VALIDATION_FAILED} because the payload is well formed:
+     * either the document belongs to another carrier or the carrier's master data is wrong, and a
+     * person has to say which.
      */
-    ISSUER_RUC_MISMATCH("issuer-ruc-mismatch", "Issuer RUC does not match the carrier",
+    ISSUER_TAX_ID_MISMATCH("issuer-tax-id-mismatch", "Issuer tax id does not match the carrier",
             HttpStatus.UNPROCESSABLE_ENTITY),
 
     /**
      * A reported payment is larger than what is still owed on the invoice (V67, ADR-023 section 2):
-     * total, minus credit notes, plus debit notes, minus detraction and retention, minus what was
+     * total, minus credit notes, plus debit notes, minus the withholdings, minus what was
      * already paid. Well formed, and refused on its merits: either the payment is against the wrong
      * invoice or a note TMS has not seen exists, and a person has to say which.
      */

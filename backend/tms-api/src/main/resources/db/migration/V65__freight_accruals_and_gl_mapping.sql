@@ -181,6 +181,11 @@ CREATE TABLE tms.gl_account_mapping (
     id                uuid        NOT NULL DEFAULT gen_random_uuid(),
     company_id        uuid        NOT NULL,
     concept           text        NOT NULL,
+    -- Which withholding a WITHHOLDING_PAYABLE row books (ADR-027): PE_DETRACTION, EC_VAT_WITHHOLDING...
+    -- Null on every other concept, and on a WITHHOLDING_PAYABLE row that books every kind without its
+    -- own mapping. The kinds are com.ebim.tms.settlement.domain.tax.WithholdingKind; a country added
+    -- later restates the list, like every vocabulary CHECK of this schema.
+    withholding_kind  text,
     account_code      text        NOT NULL,
     cost_center_code  text,
     scope_type        text        NOT NULL DEFAULT 'COMPANY',
@@ -201,9 +206,16 @@ CREATE TABLE tms.gl_account_mapping (
     CONSTRAINT fk_gl_account_mapping_updated_by FOREIGN KEY (updated_by)
         REFERENCES tms.app_user (id) ON DELETE RESTRICT,
 
+    -- Country-neutral (ADR-027): the VAT credit, whatever the country calls it (IGV, IVA), and one
+    -- withholding concept qualified by its kind rather than one concept per country's tax.
     CONSTRAINT ck_gl_account_mapping_concept CHECK (concept IN (
-        'FREIGHT_EXPENSE', 'FREIGHT_ACCRUAL', 'IGV_CREDIT', 'DETRACCION_PAYABLE', 'RETENCION_PAYABLE',
-        'CARRIER_PAYABLE')),
+        'FREIGHT_EXPENSE', 'FREIGHT_ACCRUAL', 'VAT_CREDIT', 'WITHHOLDING_PAYABLE', 'CARRIER_PAYABLE')),
+    CONSTRAINT ck_gl_account_mapping_withholding_kind CHECK (
+        withholding_kind IS NULL OR withholding_kind IN (
+            'PE_DETRACTION', 'PE_RETENTION', 'EC_INCOME_TAX_WITHHOLDING', 'EC_VAT_WITHHOLDING')),
+    -- Only the withholding concept is qualified by a kind.
+    CONSTRAINT ck_gl_account_mapping_withholding_concept CHECK (
+        withholding_kind IS NULL OR concept = 'WITHHOLDING_PAYABLE'),
     CONSTRAINT ck_gl_account_mapping_account CHECK (
         btrim(account_code) <> '' AND length(account_code) <= 40),
     CONSTRAINT ck_gl_account_mapping_cost_center CHECK (
@@ -213,10 +225,11 @@ CREATE TABLE tms.gl_account_mapping (
         (scope_type = 'COMPANY') = (scope_id IS NULL))
 );
 
--- One active mapping per (company, concept, scope). A COMPANY row has a null scope_id, so the index
--- reads it through a constant: two NULLs are distinct to a plain UNIQUE.
+-- One active mapping per (company, concept, withholding kind, scope). A COMPANY row has a null
+-- scope_id and most rows a null withholding_kind, so the index reads both through a constant: two
+-- NULLs are distinct to a plain UNIQUE.
 CREATE UNIQUE INDEX uq_gl_account_mapping_active_scope
-    ON tms.gl_account_mapping (company_id, concept, scope_type,
+    ON tms.gl_account_mapping (company_id, concept, coalesce(withholding_kind, ''), scope_type,
         coalesce(scope_id, '00000000-0000-0000-0000-000000000000'::uuid))
     WHERE active;
 
@@ -225,6 +238,9 @@ CREATE INDEX ix_gl_account_mapping_company ON tms.gl_account_mapping (company_id
 COMMENT ON TABLE tms.gl_account_mapping IS
     'Account each accounting concept is booked to in the ERP (V65, ADR-023). Most specific scope wins '
     '(ROUTE > ORIGIN > COMPANY). No mapping = the export warns; TMS never invents an account.';
+COMMENT ON COLUMN tms.gl_account_mapping.withholding_kind IS
+    'The withholding a WITHHOLDING_PAYABLE mapping books (ADR-027); null = every kind without its own '
+    'mapping. Null on every other concept.';
 
 -- ---------------------------------------------------------------------------
 -- 4b. What the sweep reads

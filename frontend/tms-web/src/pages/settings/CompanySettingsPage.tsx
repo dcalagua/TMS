@@ -21,6 +21,8 @@ import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { CompanyCreateDrawer } from "./CompanyCreateDrawer";
 import { LoadGeometrySettingsCard } from "./LoadGeometrySettingsCard";
+import { FiscalRegimeCard } from "./FiscalRegimeCard";
+import { CAPABILITY } from "../../shared/api/meApi";
 
 const FORM_ID = "company-profile-form";
 
@@ -72,7 +74,10 @@ const DISPATCH_MODE_HELP: Record<DispatchConfirmationMode, string> = {
  * navegador antes de mandarla.
  */
 export function CompanySettingsPage() {
-  const { selected, refetch: refetchCompanies } = useCompany();
+  const { selected, refetch: refetchCompanies, hasCapability } = useCompany();
+  // ADR-027: el régimen fiscal lo ve quien lee facturas y lo edita quien gestiona el régimen.
+  const canManageTax = hasCapability(CAPABILITY.TAX_REGIME_MANAGE);
+  const canSeeTax = canManageTax || hasCapability(CAPABILITY.SETTLEMENT_VIEW);
   const companyId = selected?.id ?? "";
   const queryClient = useQueryClient();
   const [formError, setFormError] = useState<string | null>(null);
@@ -217,7 +222,7 @@ export function CompanySettingsPage() {
               />
               <Box sx={grid2}>
                 <TextField
-                  label={t("RUC")} size="small" fullWidth
+                  label={t("Identificación fiscal")} size="small" fullWidth
                   error={Boolean(errors.taxIdentifier)} helperText={errors.taxIdentifier?.message}
                   {...register("taxIdentifier")}
                 />
@@ -347,6 +352,13 @@ export function CompanySettingsPage() {
           <LoadGeometrySettingsCard companyId={companyId} />
         </Box>
       </Box>
+
+      {/* Fuera del formulario de la empresa: se guarda aparte, con su propio permiso. */}
+      {canSeeTax && (
+        <Box sx={{ mt: 3 }}>
+          <FiscalRegimeCard companyId={companyId} canManage={canManageTax} />
+        </Box>
+      )}
 
       {showCreate && (
         <CompanyCreateDrawer

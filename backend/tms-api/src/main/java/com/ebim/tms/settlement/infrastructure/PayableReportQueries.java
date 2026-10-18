@@ -12,10 +12,10 @@ import org.springframework.stereotype.Repository;
  * sums over every open invoice of a company and a page of entities would be the wrong tool.
  *
  * <p>The open balance is {@code PayableBalance}'s formula, written once more here: total, minus the
- * approved credit notes, plus the approved debit notes, minus detraction and retention, minus what was
+ * approved credit notes, plus the approved debit notes, minus the withholdings (ADR-027), minus what was
  * paid. The integration test checks that the report and {@code GET /settlement/payables/{id}} agree on
  * the same invoice, so the two copies cannot drift unnoticed. Only invoices
- * ({@code 01}) are payables; a note adjusts its invoice. Only a positive balance is owed.
+ * ({@code INVOICE}) are payables; a note adjusts its invoice. Only a positive balance is owed.
  *
  * <p>Carrier names are not joined here: {@code tms.carrier} is {@code fleet}'s, and the caller resolves
  * them through {@code CarrierLookupPort}.
@@ -33,15 +33,16 @@ public class PayableReportQueries {
                        i.total_amount
                          - COALESCE((SELECT sum(n.total_amount) FROM tms.carrier_invoice n
                                       WHERE n.company_id = i.company_id AND n.referenced_invoice_id = i.id
-                                        AND n.document_type = '07' AND n.status IN %1$s), 0)
+                                        AND n.document_kind = 'CREDIT_NOTE' AND n.status IN %1$s), 0)
                          + COALESCE((SELECT sum(n.total_amount) FROM tms.carrier_invoice n
                                       WHERE n.company_id = i.company_id AND n.referenced_invoice_id = i.id
-                                        AND n.document_type = '08' AND n.status IN %1$s), 0)
-                         - COALESCE(i.detraction_amount, 0)
-                         - COALESCE(i.retention_amount, 0) AS payable_amount
+                                        AND n.document_kind = 'DEBIT_NOTE' AND n.status IN %1$s), 0)
+                         - COALESCE((SELECT sum(w.amount) FROM tms.carrier_invoice_withholding w
+                                      WHERE w.company_id = i.company_id AND w.carrier_invoice_id = i.id), 0)
+                           AS payable_amount
                   FROM tms.carrier_invoice i
                  WHERE i.company_id = :companyId
-                   AND i.document_type = '01'
+                   AND i.document_kind = 'INVOICE'
                    AND i.status IN ('APPROVED', 'EXPORTED', 'SCHEDULED', 'PARTIALLY_PAID', 'ON_HOLD')
             ), owed AS (
                 SELECT p.*, p.payable_amount - p.paid_amount AS open_balance

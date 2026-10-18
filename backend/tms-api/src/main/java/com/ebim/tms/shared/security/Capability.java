@@ -138,6 +138,12 @@ public enum Capability {
     COST_ALLOCATION_MANAGE(Permission.SETTLEMENT_COST_ALLOCATION_MANAGE),
 
     /**
+     * The company's fiscal regime (migration V66, ADR-027): editing its fiscal country, VAT rates and
+     * withholdings. Reading the resolved regime uses {@link #SETTLEMENT_VIEW}.
+     */
+    TAX_REGIME_MANAGE(Permission.SETTLEMENT_TAX_MANAGE),
+
+    /**
      * Payment status (migration V67, ADR-023 section 2): keying a payment, scheduling and holding are
      * one authority; confirming somebody else's payment is another. Reading uses {@link #SETTLEMENT_VIEW}.
      */

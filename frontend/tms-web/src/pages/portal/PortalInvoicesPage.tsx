@@ -108,7 +108,7 @@ function PortalInvoiceCard({ invoice, onOpen }: { invoice: PortalInvoiceSummary;
               {invoice.invoiceNumber}
             </Typography>
             <Typography color="text.secondary" sx={{ fontSize: 14, mt: 0.25 }}>
-              {enumLabel("documentType", invoice.documentType)} · {fmtDate(invoice.invoiceDate)}
+              {invoice.fiscalDocumentCode ? `${enumLabel("documentKind", invoice.documentKind)} (${invoice.fiscalDocumentCode})` : enumLabel("documentKind", invoice.documentKind)} · {fmtDate(invoice.invoiceDate)}
             </Typography>
           </Box>
           <StatusChip size="medium" label={enumLabel("portalInvoiceStatus", invoice.status)}
@@ -127,10 +127,9 @@ function PortalInvoiceCard({ invoice, onOpen }: { invoice: PortalInvoiceSummary;
             <EventRounded sx={{ fontSize: 18, color: "text.secondary" }} />
             {invoice.dueDate ? t("Vence {{date}}", { date: fmtDate(invoice.dueDate) }) : t("Sin vencimiento")}
           </Typography>
-          {invoice.detractionAmount !== null && (
+          {invoice.withholdingTotalAmount !== null && invoice.withholdingTotalAmount !== undefined && (
             <Typography color="text.secondary" sx={{ fontSize: 14, ml: "auto" }}>
-              {t("Detracción {{amount}}", { amount: portalMoney(invoice.detractionAmount, invoice.currency) })}
-              {invoice.detractionConstancyNumber ? ` · ${t("Constancia {{number}}", { number: invoice.detractionConstancyNumber })}` : ""}
+              {t("Retenciones {{amount}}", { amount: portalMoney(invoice.withholdingTotalAmount, invoice.currency) })}
             </Typography>
           )}
         </Box>

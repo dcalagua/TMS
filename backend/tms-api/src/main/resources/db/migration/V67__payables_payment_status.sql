@@ -77,7 +77,7 @@ ALTER TABLE tms.carrier_invoice ADD CONSTRAINT ck_carrier_invoice_on_hold_reason
            AND (on_hold_reason IS NULL OR (btrim(on_hold_reason) <> '' AND length(on_hold_reason) <= 500)));
 -- A credit or debit note adjusts its invoice's balance and is never paid on its own.
 ALTER TABLE tms.carrier_invoice ADD CONSTRAINT ck_carrier_invoice_payment_only_on_invoice
-    CHECK (document_type = '01'
+    CHECK (document_kind = 'INVOICE'
            OR (status NOT IN ('SCHEDULED', 'PARTIALLY_PAID', 'PAID', 'ON_HOLD') AND paid_amount = 0));
 -- Nothing is paid before the export.
 ALTER TABLE tms.carrier_invoice ADD CONSTRAINT ck_carrier_invoice_paid_after_export
@@ -106,15 +106,17 @@ CREATE TABLE tms.carrier_payment (
     -- The ERP's own reference (a transfer, a batch, a cheque number), byte for byte.
     payment_reference            text          NOT NULL,
     paid_on                      date          NOT NULL,
-    -- Paid to the carrier. The detraction and the retention are deposited elsewhere and are not part
-    -- of it; they are recorded beside it for the constancy and the reconciliation.
+    -- Paid to the carrier. The withholdings (Peru's detraction or retention, Ecuador's income-tax and
+    -- VAT withholdings...) are deposited elsewhere and are not part of it.
     amount                       numeric(14,2) NOT NULL,
     -- Must be the invoice's: TMS invents no exchange rate.
     currency                     char(3)       NOT NULL,
-    detraction_constancy_number  text,
-    detraction_constancy_date    date,
-    detraction_amount            numeric(14,2),
-    retention_amount             numeric(14,2),
+    -- The withholdings as the ERP or the person reported them with this payment, kept whole:
+    -- [{"kind", "amount", "certificateNumber", "certificateDate"}] (ADR-027). Informative - the
+    -- balance is computed from the document's own withholdings - and the certificate of each is
+    -- recorded on tms.carrier_invoice_withholding. A snapshot of a report, not a ledger: never summed
+    -- and never queried into, so text holding JSON - the reason V18, V35 and V53 chose text.
+    reported_withholdings        text          NOT NULL DEFAULT '[]',
     source                       text          NOT NULL,
     -- The ERP's credential, when the ERP reported it.
     recorded_by_client           uuid,
@@ -144,11 +146,7 @@ CREATE TABLE tms.carrier_payment (
         btrim(payment_reference) <> '' AND length(payment_reference) <= 80),
     CONSTRAINT ck_carrier_payment_amount CHECK (amount > 0),
     CONSTRAINT ck_carrier_payment_currency CHECK (currency ~ '^[A-Z]{3}$'),
-    CONSTRAINT ck_carrier_payment_detraction CHECK (
-        (detraction_amount IS NULL OR detraction_amount >= 0)
-        AND (detraction_constancy_number IS NULL
-             OR (btrim(detraction_constancy_number) <> '' AND length(detraction_constancy_number) <= 40))),
-    CONSTRAINT ck_carrier_payment_retention CHECK (retention_amount IS NULL OR retention_amount >= 0),
+    CONSTRAINT ck_carrier_payment_reported_withholdings CHECK (jsonb_typeof(reported_withholdings::jsonb) = 'array'),
     CONSTRAINT ck_carrier_payment_source CHECK (source IN ('INTEGRATION', 'OPERATOR')),
     -- A machine or two people, never one person alone and never a mixture.
     CONSTRAINT ck_carrier_payment_attribution CHECK (
@@ -197,10 +195,8 @@ CREATE TABLE tms.carrier_payment_request (
     paid_on                      date          NOT NULL,
     amount                       numeric(14,2) NOT NULL,
     currency                     char(3)       NOT NULL,
-    detraction_constancy_number  text,
-    detraction_constancy_date    date,
-    detraction_amount            numeric(14,2),
-    retention_amount             numeric(14,2),
+    -- Same shape as tms.carrier_payment.reported_withholdings, copied to the payment on confirmation.
+    reported_withholdings        text          NOT NULL DEFAULT '[]',
     status                       text          NOT NULL DEFAULT 'PENDING',
     requested_by                 uuid          NOT NULL,
     requested_at                 timestamptz   NOT NULL DEFAULT now(),
@@ -230,11 +226,8 @@ CREATE TABLE tms.carrier_payment_request (
         btrim(payment_reference) <> '' AND length(payment_reference) <= 80),
     CONSTRAINT ck_carrier_payment_request_amount CHECK (amount > 0),
     CONSTRAINT ck_carrier_payment_request_currency CHECK (currency ~ '^[A-Z]{3}$'),
-    CONSTRAINT ck_carrier_payment_request_detraction CHECK (
-        (detraction_amount IS NULL OR detraction_amount >= 0)
-        AND (detraction_constancy_number IS NULL
-             OR (btrim(detraction_constancy_number) <> '' AND length(detraction_constancy_number) <= 40))),
-    CONSTRAINT ck_carrier_payment_request_retention CHECK (retention_amount IS NULL OR retention_amount >= 0),
+    CONSTRAINT ck_carrier_payment_request_reported_withholdings CHECK (
+        jsonb_typeof(reported_withholdings::jsonb) = 'array'),
     CONSTRAINT ck_carrier_payment_request_status CHECK (status IN ('PENDING', 'CONFIRMED', 'REJECTED')),
     -- Decided means somebody else decided, when, and - for a refusal - why; confirmed names the payment.
     CONSTRAINT ck_carrier_payment_request_decision CHECK (
@@ -299,7 +292,7 @@ DO $$
 DECLARE
     child text;
 BEGIN
-    FOREACH child IN ARRAY ARRAY['carrier_invoice_line', 'settlement_approval']
+    FOREACH child IN ARRAY ARRAY['carrier_invoice_line', 'carrier_invoice_withholding', 'settlement_approval']
     LOOP
         EXECUTE format(
             'CREATE POLICY p_carrier_scope ON tms.%I AS RESTRICTIVE FOR ALL TO tms_app

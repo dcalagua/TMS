@@ -3,6 +3,7 @@ package com.ebim.tms.settlement.application;
 import com.ebim.tms.settlement.domain.CarrierInvoice;
 import com.ebim.tms.settlement.domain.GlConcept;
 import com.ebim.tms.settlement.domain.PayableExport;
+import com.ebim.tms.settlement.domain.tax.WithholdingKind;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -74,31 +75,31 @@ public interface PayableExportPort {
     }
 
     /**
-     * The fiscal part of the obligation (V66, ADR-024 part 2, item 10). Every field may be null: a
-     * pre-V66 document has none of it, and an absent figure is never sent as zero.
+     * The fiscal part of the obligation (V66, ADR-024 part 2 item 10, ADR-027). Every field may be
+     * null: a pre-V66 document has none of it, and an absent figure is never sent as zero.
      *
-     * @param effectiveSign    +1, or -1 for a credit note: what the document does to what is owed
-     * @param netAmount        an invoice's total less its approved credit notes plus its approved
-     *                         debit notes, at the moment of export; null on a note
-     * @param glAccounts       the company-level account of each {@link #EXPORTED_CONCEPTS} concept
-     *                         that has one (ADR-023); a missing one is absent, never invented
+     * @param fiscalCountry  the regime the document was received under
+     * @param effectiveSign  +1, or -1 for a credit note: what the document does to what is owed
+     * @param withholdings   what the shipper keeps and deposits with the tax authority, one per kind
+     * @param withholdingTotalAmount their sum; null on a document received before V66
+     * @param netAmount      an invoice's total less its approved credit notes plus its approved debit
+     *                       notes, at the moment of export; null on a note
+     * @param glAccounts     the company-level account of each {@link #EXPORTED_CONCEPTS} concept that
+     *                       has one (ADR-023); {@code WITHHOLDING_PAYABLE} is the mapping for every
+     *                       kind - each withholding carries its own account. Missing = absent
      */
     record FiscalDetail(
-            String documentType,
+            String fiscalCountry,
+            String documentKind,
+            String fiscalDocumentCode,
             int effectiveSign,
-            String series,
-            String correlative,
-            String issuerRuc,
+            String documentNumber,
+            String issuerTaxId,
             BigDecimal subtotalAmount,
-            BigDecimal igvRate,
-            BigDecimal igvAmount,
-            String detractionCode,
-            BigDecimal detractionRate,
-            BigDecimal detractionAmount,
-            String detractionConstancyNumber,
-            LocalDate detractionConstancyDate,
-            BigDecimal retentionRate,
-            BigDecimal retentionAmount,
+            BigDecimal taxRate,
+            BigDecimal taxAmount,
+            List<WithholdingDetail> withholdings,
+            BigDecimal withholdingTotalAmount,
             UUID referencedInvoiceId,
             String referencedInvoiceNumber,
             BigDecimal netAmount,
@@ -106,25 +107,51 @@ public interface PayableExportPort {
 
         /** The concepts a payable is booked to, in export order. */
         public static final List<GlConcept> EXPORTED_CONCEPTS = List.of(GlConcept.FREIGHT_EXPENSE,
-                GlConcept.IGV_CREDIT, GlConcept.DETRACCION_PAYABLE, GlConcept.RETENCION_PAYABLE,
-                GlConcept.CARRIER_PAYABLE);
+                GlConcept.VAT_CREDIT, GlConcept.WITHHOLDING_PAYABLE, GlConcept.CARRIER_PAYABLE);
 
-        public static final FiscalDetail NONE = new FiscalDetail("01", 1, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, java.util.Map.of());
+        public static final FiscalDetail NONE = new FiscalDetail(null, "INVOICE", null, 1, null, null, null, null,
+                null, List.of(), null, null, null, null, java.util.Map.of());
 
         public FiscalDetail {
+            withholdings = withholdings == null ? List.of() : List.copyOf(withholdings);
             glAccounts = glAccounts == null ? java.util.Map.of() : java.util.Map.copyOf(glAccounts);
         }
 
+        /**
+         * @param accountOf the company-level account of a concept, and of a withholding kind under
+         *                  {@code WITHHOLDING_PAYABLE}; null when none is mapped
+         */
         public static FiscalDetail of(CarrierInvoice invoice, CarrierInvoice referenced, BigDecimal netAmount,
-                java.util.Map<GlConcept, String> glAccounts) {
-            return new FiscalDetail(invoice.documentType().code(), invoice.effectiveSign(), invoice.series(),
-                    invoice.correlative(), invoice.issuerRuc(), invoice.subtotalAmount(), invoice.igvRate(),
-                    invoice.igvAmount(), invoice.detractionCode(), invoice.detractionRate(),
-                    invoice.detractionAmount(), invoice.detractionConstancyNumber(),
-                    invoice.detractionConstancyDate(), invoice.retentionRate(), invoice.retentionAmount(),
+                java.util.function.BiFunction<GlConcept, WithholdingKind, String> accountOf) {
+            java.util.Map<GlConcept, String> accounts = new java.util.EnumMap<>(GlConcept.class);
+            for (GlConcept concept : EXPORTED_CONCEPTS) {
+                String account = accountOf.apply(concept, null);
+                if (account != null) {
+                    accounts.put(concept, account);
+                }
+            }
+            List<WithholdingDetail> withholdings = invoice.withholdings().stream()
+                    .map(withholding -> new WithholdingDetail(withholding.kind().name(), withholding.code(),
+                            withholding.base().name(), withholding.baseAmount(), withholding.rate(),
+                            withholding.amount(), withholding.certificateNumber(), withholding.certificateDate(),
+                            accountOf.apply(GlConcept.WITHHOLDING_PAYABLE, withholding.kind())))
+                    .toList();
+            return new FiscalDetail(invoice.fiscalCountry(), invoice.documentKind().name(),
+                    invoice.fiscalDocumentCode(), invoice.effectiveSign(), invoice.fiscalDocumentNumber(),
+                    invoice.issuerTaxId(), invoice.subtotalAmount(), invoice.taxRate(), invoice.taxAmount(),
+                    withholdings, invoice.fiscalCountry() == null && withholdings.isEmpty() ? null
+                            : invoice.withholdingTotal(),
                     invoice.referencedInvoiceId(), referenced == null ? null : referenced.invoiceNumber(),
-                    netAmount, glAccounts);
+                    netAmount, accounts);
         }
+    }
+
+    /**
+     * One withholding as it is handed to accounting (ADR-027).
+     *
+     * @param glAccount the account of its kind, else of every kind; null when none is mapped
+     */
+    record WithholdingDetail(String kind, String code, String base, BigDecimal baseAmount, BigDecimal rate,
+            BigDecimal amount, String certificateNumber, LocalDate certificateDate, String glAccount) {
     }
 }

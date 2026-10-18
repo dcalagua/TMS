@@ -63,7 +63,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <h2>Which cost</h2>
  *
  * <p>In order of preference: what the carrier's authorised documents billed for the trip (net of
- * IGV, ADR-024), else the closed actual, else the estimate. A trip with none of the three is not
+ * VAT, ADR-024/ADR-027), else the closed actual, else the estimate. A trip with none of the three is not
  * allocated - an allocation of nothing would be a report of zero cost, which is the invented figure
  * ADR-026 forbids. The run says which figure it split.
  *

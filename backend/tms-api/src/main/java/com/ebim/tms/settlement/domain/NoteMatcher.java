@@ -1,6 +1,7 @@
 package com.ebim.tms.settlement.domain;
 
 import com.ebim.tms.settlement.domain.FreightMatchResult.Discrepancy;
+import com.ebim.tms.settlement.domain.tax.DocumentKind;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -48,7 +49,7 @@ public final class NoteMatcher {
         }
     }
 
-    public static FreightMatchResult match(DocumentType type, String currency, BigDecimal noteComparable,
+    public static FreightMatchResult match(DocumentKind type, String currency, BigDecimal noteComparable,
             List<FreightMatcher.InvoiceLine> lines, ReferencedInvoice referenced,
             Map<UUID, FreightMatcher.TripCostSnapshot> costsByTrip, Tolerance tolerance) {
         if (!type.isNote()) {
@@ -81,7 +82,7 @@ public final class NoteMatcher {
             noteByTrip.merge(line.tripId(), line.amount(), BigDecimal::add);
         }
 
-        if (type == DocumentType.CREDIT_NOTE) {
+        if (type == DocumentKind.CREDIT_NOTE) {
             BigDecimal remaining = referenced.remainingComparable();
             BigDecimal difference = noteComparable.subtract(remaining);
             if (noteComparable.compareTo(remaining) > 0) {

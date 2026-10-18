@@ -1,5 +1,5 @@
 import { apiRequest } from './httpClient'
-import type { DocumentTypeCode, InvoiceStatus } from './settlementApi'
+import type { DocumentKind, InvoiceStatus, ReportedWithholding, WithholdingView } from './settlementApi'
 
 //
 // Cuentas por pagar (fase 65): el estado de pago de cada factura aprobada y exportada. TMS no
@@ -25,10 +25,8 @@ export interface PaymentView {
   paidOn: string
   amount: number
   currency: string
-  detractionConstancyNumber: string | null
-  detractionConstancyDate: string | null
-  detractionAmount: number | null
-  retentionAmount: number | null
+  /** Lo depositado o retenido aparte, con su comprobante, tal como lo informó el pago. */
+  withholdings: ReportedWithholding[]
   source: PaymentSource
   recordedBy: string | null
   confirmedBy: string | null
@@ -42,10 +40,7 @@ export interface PaymentRequestView {
   paidOn: string
   amount: number
   currency: string
-  detractionConstancyNumber: string | null
-  detractionConstancyDate: string | null
-  detractionAmount: number | null
-  retentionAmount: number | null
+  withholdings: ReportedWithholding[]
   status: PaymentRequestStatus
   requestedBy: string
   requestedAt: string
@@ -56,12 +51,13 @@ export interface PaymentRequestView {
 
 /**
  * Mirrors `PayableView`. `openBalance` es lo que queda por pagar de `payableAmount` (neto menos
- * detracción y retención). `daysOverdue` null = no vencida o sin vencimiento.
+ * todas las retenciones, ADR-027). `daysOverdue` null = no vencida o sin vencimiento.
  */
 export interface PayableView {
   invoiceId: string
   invoiceNumber: string
-  documentType: DocumentTypeCode
+  documentKind: DocumentKind
+  fiscalDocumentCode: string | null
   carrierId: string
   carrierName: string | null
   currency: string
@@ -72,10 +68,8 @@ export interface PayableView {
   scheduledPaymentDate: string | null
   onHoldReason: string | null
   netAmount: number
-  detractionAmount: number | null
-  detractionConstancyNumber: string | null
-  detractionConstancyDate: string | null
-  retentionAmount: number | null
+  withholdings: WithholdingView[]
+  withholdingTotalAmount: number | null
   payableAmount: number
   paidAmount: number
   openBalance: number
@@ -91,10 +85,8 @@ export interface PaymentRequestInput {
   paidOn: string
   amount: number
   currency: string
-  detractionConstancyNumber?: string | null
-  detractionConstancyDate?: string | null
-  detractionAmount?: number | null
-  retentionAmount?: number | null
+  /** Sólo retenciones que la factura lleva; su comprobante queda en la factura al confirmar. */
+  withholdings?: ReportedWithholding[]
 }
 
 /** Una solicitud pendiente en la bandeja de quien confirma. */

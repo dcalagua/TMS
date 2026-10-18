@@ -151,6 +151,13 @@ public enum Permission {
     SETTLEMENT_COST_ALLOCATION_MANAGE("settlement.cost_allocation:manage"),
 
     /**
+     * Editing the company's fiscal regime (migration V66, ADR-027): its fiscal country, VAT rates and
+     * withholdings. Reading the resolved regime is {@link #SETTLEMENT_INVOICE_READ}, so every invoice
+     * form can preview with it; changing what is withheld from every carrier is an administrator's.
+     */
+    SETTLEMENT_TAX_MANAGE("settlement.tax:manage"),
+
+    /**
      * A driver-and-vehicle pairing's day (migration V47).
      *
      * <p>Under {@code fleet} rather than {@code planning} because the thing being scheduled is a

@@ -28,10 +28,19 @@ public final class PayableRequests {
             @NotNull LocalDate paidOn,
             @NotNull @DecimalMin(value = "0.01") @Digits(integer = 12, fraction = 2) BigDecimal amount,
             @NotBlank @Pattern(regexp = "^[A-Za-z]{3}$") String currency,
-            @Size(max = 40) String detractionConstancyNumber,
-            LocalDate detractionConstancyDate,
-            @DecimalMin(value = "0.00") @Digits(integer = 12, fraction = 2) BigDecimal detractionAmount,
-            @DecimalMin(value = "0.00") @Digits(integer = 12, fraction = 2) BigDecimal retentionAmount) {
+            /** What was withheld and deposited, with its certificate (ADR-027); informative. */
+            @jakarta.validation.Valid java.util.List<ReportedWithholdingRequest> withholdings) {
+    }
+
+    /**
+     * One withholding reported with a payment: its kind must be one the invoice carries. The amount is
+     * informative and may be absent when only the certificate is being recorded.
+     */
+    public record ReportedWithholdingRequest(
+            @jakarta.validation.constraints.NotNull com.ebim.tms.settlement.domain.tax.WithholdingKind kind,
+            @DecimalMin(value = "0.00") @Digits(integer = 12, fraction = 2) BigDecimal amount,
+            @Size(max = 60) String certificateNumber,
+            LocalDate certificateDate) {
     }
 
     public record DecisionRequest(@NotBlank @Size(max = 500) String comment) {

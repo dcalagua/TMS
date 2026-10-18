@@ -48,7 +48,7 @@ public record CarrierInvoiceView(
         List<FreightDiscrepancyView> discrepancies,
         List<ApprovalView> approvals,
         PayableExportView export,
-        /** The V66 fiscal part: breakdown, CPE identity, notes, detraction, retention. */
+        /** The V66 fiscal part: breakdown, fiscal identity, notes, withholdings (ADR-027). */
         FiscalView fiscal,
         /** V67 (ADR-023 section 2): frozen at approval; null before it and on pre-V67 approvals. */
         LocalDate dueDate,
@@ -57,55 +57,76 @@ public record CarrierInvoiceView(
         LocalDate scheduledPaymentDate) {
 
     /**
-     * What the document says to the tax authority (V66, ADR-024 part 2).
+     * The fiscal part of the document, under the regime it was received with (V66, ADR-024 part 2,
+     * ADR-027). TMS received this document and checked its shape; it issued nothing.
      *
-     * @param netAmount     an invoice's total less approved credit notes plus approved debit notes;
-     *                      null on a note
-     * @param cpeValidation what SUNAT says of the CPE - always {@code EXTERNAL_DEPENDENCY} today,
-     *                      never "valid" (ADR-024 part 2, item 4); null without a CPE identity
+     * @param netAmount            an invoice's total less approved credit notes plus approved debit
+     *                             notes; null on a note
+     * @param electronicValidation what the tax authority says of the document - always
+     *                             {@code EXTERNAL_DEPENDENCY} today, never "valid" (ADR-024 part 2,
+     *                             item 4); null without a fiscal identity
      */
     public record FiscalView(
-            String documentType,
+            String fiscalCountry,
+            String regime,
+            String vatLabel,
+            String documentKind,
+            String fiscalDocumentCode,
             int effectiveSign,
-            String series,
-            String correlative,
-            String issuerRuc,
+            String documentNumber,
+            String issuerTaxId,
             BigDecimal subtotalAmount,
-            BigDecimal igvRate,
-            BigDecimal igvAmount,
+            BigDecimal taxRate,
+            BigDecimal taxAmount,
             UUID referencedInvoiceId,
             String referencedInvoiceNumber,
             BigDecimal netAmount,
             List<NoteView> notes,
-            String detractionCode,
-            BigDecimal detractionRate,
-            BigDecimal detractionAmount,
-            String detractionConstancyNumber,
-            LocalDate detractionConstancyDate,
-            BigDecimal retentionRate,
-            BigDecimal retentionAmount,
-            String retentionOverrideReason,
-            String cpeValidation) {
+            List<WithholdingView> withholdings,
+            BigDecimal withholdingTotalAmount,
+            String electronicValidation) {
 
         public static FiscalView of(CarrierInvoice invoice, String referencedInvoiceNumber, BigDecimal netAmount,
-                List<NoteView> notes, CpeValidationPort.CpeValidationStatus cpeValidation) {
-            return new FiscalView(invoice.documentType().code(), invoice.effectiveSign(), invoice.series(),
-                    invoice.correlative(), invoice.issuerRuc(), invoice.subtotalAmount(), invoice.igvRate(),
-                    invoice.igvAmount(), invoice.referencedInvoiceId(), referencedInvoiceNumber, netAmount,
-                    List.copyOf(notes), invoice.detractionCode(), invoice.detractionRate(),
-                    invoice.detractionAmount(), invoice.detractionConstancyNumber(),
-                    invoice.detractionConstancyDate(), invoice.retentionRate(), invoice.retentionAmount(),
-                    invoice.retentionOverrideReason(), cpeValidation == null ? null : cpeValidation.name());
+                List<NoteView> notes, FiscalDocumentValidationPort.FiscalDocumentValidationStatus validation) {
+            com.ebim.tms.settlement.domain.tax.TaxRegime regime = invoice.fiscalCountry() == null ? null
+                    : com.ebim.tms.settlement.domain.tax.TaxRegimes.forCountry(invoice.fiscalCountry());
+            return new FiscalView(invoice.fiscalCountry(), regime == null ? null : regime.code().name(),
+                    regime == null ? null : regime.vatLabel(), invoice.documentKind().name(),
+                    invoice.fiscalDocumentCode(), invoice.effectiveSign(), invoice.fiscalDocumentNumber(),
+                    invoice.issuerTaxId(), invoice.subtotalAmount(), invoice.taxRate(), invoice.taxAmount(),
+                    invoice.referencedInvoiceId(), referencedInvoiceNumber, netAmount, List.copyOf(notes),
+                    WithholdingView.of(invoice), invoice.withholdingTotal(),
+                    validation == null ? null : validation.name());
+        }
+    }
+
+    /**
+     * One withholding of the document (ADR-027): what TMS computed, what applies, and its certificate.
+     *
+     * @param computedAmount what the rules called for; differs from {@code amount} only with an override
+     */
+    public record WithholdingView(String kind, String label, String code, String base, BigDecimal baseAmount,
+            BigDecimal rate, BigDecimal computedAmount, BigDecimal amount, String overrideReason,
+            String certificateNumber, LocalDate certificateDate) {
+
+        public static List<WithholdingView> of(CarrierInvoice invoice) {
+            return invoice.withholdings().stream()
+                    .map(withholding -> new WithholdingView(withholding.kind().name(), withholding.kind().label(),
+                            withholding.code(), withholding.base().name(), withholding.baseAmount(),
+                            withholding.rate(), withholding.computedAmount(), withholding.amount(),
+                            withholding.overrideReason(), withholding.certificateNumber(),
+                            withholding.certificateDate()))
+                    .toList();
         }
     }
 
     /** A credit or debit note that corrects this invoice, as the invoice lists it. */
-    public record NoteView(UUID id, String documentType, String invoiceNumber, LocalDate invoiceDate,
-            BigDecimal totalAmount, InvoiceStatus status) {
+    public record NoteView(UUID id, String documentKind, String fiscalDocumentCode, String invoiceNumber,
+            LocalDate invoiceDate, BigDecimal totalAmount, InvoiceStatus status) {
 
         public static NoteView of(CarrierInvoice note) {
-            return new NoteView(note.id(), note.documentType().code(), note.invoiceNumber(), note.invoiceDate(),
-                    note.totalAmount(), note.status());
+            return new NoteView(note.id(), note.documentKind().name(), note.fiscalDocumentCode(),
+                    note.invoiceNumber(), note.invoiceDate(), note.totalAmount(), note.status());
         }
     }
 

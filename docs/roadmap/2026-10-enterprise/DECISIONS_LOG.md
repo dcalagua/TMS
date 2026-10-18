@@ -839,3 +839,67 @@
   `PortalDocumentView` para copiar la clave en un control.
 - **Commit(s):** `feat(api)` y `feat(web)` de la rama `tms/remission-guide-intl`.
 
+### 2026-10-18 · fase 60b · El régimen fiscal es del país de la empresa; Perú, Ecuador y genérico
+
+- **Regla/decisión afectada:** ADR-024 parte 2 (Perú fijo en código y esquema), D-06 («los valores por defecto son
+  configuración»), D-01. Nueva **ADR-027**.
+- **Motivo:** el primer cliente (PLAPASA, Guayaquil, USD) tributa en Ecuador: IVA 15 % con flete terrestre 0 % (LRTI
+  art. 56), comprobantes SRI 01/04/05 numerados `001-001-000000123`, RUC de 13 dígitos y **dos** retenciones posibles en
+  un documento. El modelo de dos ranuras peruanas no podía representarlo.
+- **Camino elegido:** `settlement.domain.tax` con un `TaxRegime` por país (`pe`, `ec`, `generic`) elegido por
+  `company_settings.fiscal_country` (nulo = `default_country`); retenciones como lista (`carrier_invoice_withholding`);
+  cada número en `tms.finance.tax.<país>.*` y sobrescribible por empresa (`company_tax_withholding_setting`, tabla y no
+  columnas porque la lista crece con cada país). El comportamiento peruano no cambia. V65-V67 se reescribieron en el
+  lugar (nunca aplicadas); V62 y V68 intactas; sin número nuevo.
+- **Commit(s):** los de la rama `tms/tax-intl`.
+
+### 2026-10-18 · fase 60b · El TMS recibe documentos; no emite nada al SRI ni a SUNAT
+
+- **Regla/decisión afectada:** alcance (aclaración vinculante del dueño del negocio).
+- **Motivo:** la facturación electrónica queda fuera del TMS; la factura del transportista y sus datos SRI/SUNAT sólo se
+  **reciben** (pantalla o integración) y se validan en forma.
+- **Camino elegido:** `FiscalDocumentValidationPort` (antes `CpeValidationPort`) sigue deshabilitado y responde
+  `EXTERNAL_DEPENDENCY`, nunca «válido»; ningún texto ni contrato habla de emitir.
+- **Commit(s):** los de la rama `tms/tax-intl`.
+
+### 2026-10-18 · fase 60b · Valores por defecto de Ecuador: todos «verificar con el contador»
+
+- **Regla/decisión afectada:** D-06.
+- **Motivo:** IVA 15 % desde 2024-04-01; flete 0 %; retención en la fuente de IR código 310 al 1 % del subtotal
+  (la Resolución SRI NAC-DGERCGC26-00000009, vigente desde 2026-03-01, reemplazó la tabla: el 1 % debe confirmarse);
+  retención de IVA 70 % para servicios (NAC-DGERCGC20-00000061: 30/70/100), apagada por defecto porque sólo la aplica
+  un agente de retención de IVA designado.
+- **Camino elegido:** esos valores en `tms.finance.tax.ec.*` con variables de entorno; IR encendida, IVA apagada; un
+  transportista exento (RIMPE negocio popular) se pone en cero a mano con motivo (`RETENTION_OVERRIDDEN` con el tipo).
+- **Commit(s):** los de la rama `tms/tax-intl`.
+
+### 2026-10-18 · fase 60b · Editar el régimen: permiso propio, auditoría como UPDATE de COMPANY
+
+- **Regla/decisión afectada:** «La configuración fiscal se lee; editarla queda para el ciclo 2» (fase 60).
+- **Motivo:** el régimen decide qué se retiene a todos los transportistas; V68 (de otra pista) reescribe el vocabulario
+  de auditoría después de V66, así que una acción nueva declarada en V66 quedaría borrada por V68.
+- **Camino elegido:** `PUT /settlement/fiscal-settings` con `settlement.tax:manage` (sembrado en V66, administradores;
+  capacidad `TAX_REGIME_MANAGE`), reemplazo completo, auditado como `UPDATE` sobre `COMPANY` con `section =
+  FISCAL_REGIME` y ambas versiones. La escritura va por `FiscalSettingsPort` al adaptador de `iam` (única escritura de
+  un puerto de configuración). Una acción propia `FISCAL_REGIME_CHANGED` queda para quien tenga la próxima migración.
+- **Commit(s):** los de la rama `tms/tax-intl`.
+
+### 2026-10-18 · fase 60b · Líneas negativas anteriores a V66: el CHECK es NOT VALID
+
+- **Regla/decisión afectada:** hallazgo de revisión sobre `ck_carrier_invoice_line_sign` (V66).
+- **Motivo:** V46 admitía líneas negativas (un descuento como línea propia); el CHECK abortaba la migración en una base
+  con una de ellas.
+- **Camino elegido:** `NOT VALID`: las filas existentes quedan como están, las nuevas se validan. Una línea negativa es
+  la deducción del cargador (`PENALTY`); el descuento del transportista no es una línea negativa porque los comprobantes
+  electrónicos de Perú y Ecuador lo llevan como atributo de la línea y la imprimen neta. Sin código `DISCOUNT`.
+- **Commit(s):** los de la rama `tms/tax-intl`.
+
+### 2026-10-18 · fase 60b · Retenciones del pago como informe; el certificado va a la retención del documento
+
+- **Regla/decisión afectada:** ADR-023 §2 (las columnas `detraction_*`/`retention_amount` del pago, V67).
+- **Motivo:** el saldo sale de las retenciones del documento; lo que el ERP informa con el pago es la prueba del
+  depósito y su cifra informativa, y la lista varía por país.
+- **Camino elegido:** `carrier_payment.reported_withholdings` (JSON en texto, como V18/V35/V53, CHECK de arreglo) en el
+  pago y en la solicitud de cuatro ojos; el número y la fecha del certificado se graban en `carrier_invoice_withholding`.
+  Un tipo que el documento no lleva es 400. CSV: la lista en una celda (`;` entre retenciones, `|` entre campos).
+- **Commit(s):** los de la rama `tms/tax-intl`.

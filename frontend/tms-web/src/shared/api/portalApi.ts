@@ -2,6 +2,7 @@ import { apiDownload, apiRequest, apiUpload, type DownloadedFile } from './httpC
 import type {
   DocumentDeliveryReason, DocumentDeliveryStatus, DocumentEvidenceType,
 } from './documentDeliveriesApi'
+import type { DocumentKind, ReportedWithholding, WithholdingView } from './settlementApi'
 
 //
 // El portal de transportistas (ADR-018 §6). Lo usa un usuario con membresía de transportista y
@@ -159,11 +160,11 @@ export function downloadPortalEvidence(
     { companyId, signal })
 }
 
-// --- Mis facturas (fase 65) ----------------------------------------------------------------
+// --- Mis facturas (fase 65, ADR-027) -------------------------------------------------------
 //
 // Lo que el transportista ve de sus facturas: un estado simplificado (no ve la auditoría por
-// dentro), el vencimiento, lo pagado y la constancia de detracción. Sin copia en el teléfono: una
-// factura no se reporta desde la calle, así que sin señal la pantalla sólo lo dice.
+// dentro), el vencimiento, lo pagado y las retenciones con su comprobante. Sin copia en el
+// teléfono: una factura no se reporta desde la calle, así que sin señal la pantalla sólo lo dice.
 
 /** El estado que ve el transportista, no el `InvoiceStatus` de la oficina. */
 export const PORTAL_INVOICE_STATUSES = [
@@ -174,7 +175,9 @@ export type PortalInvoiceStatus = (typeof PORTAL_INVOICE_STATUSES)[number]
 export interface PortalInvoiceSummary {
   id: string
   invoiceNumber: string
-  documentType: string
+  documentKind: DocumentKind
+  /** El código del país (01, 04…); null en el régimen genérico. */
+  fiscalDocumentCode: string | null
   invoiceDate: string
   currency: string
   totalAmount: number
@@ -183,8 +186,8 @@ export interface PortalInvoiceSummary {
   paidAmount: number
   /** Null mientras la factura no está aprobada: aún no hay un saldo que pagar. */
   openBalance: number | null
-  detractionAmount: number | null
-  detractionConstancyNumber: string | null
+  /** Lo que el cargador retiene o deposita aparte; null = ninguna retención. */
+  withholdingTotalAmount: number | null
 }
 
 export interface PortalInvoiceLine {
@@ -198,15 +201,14 @@ export interface PortalInvoicePayment {
   paymentReference: string
   paidOn: string
   amount: number
-  detractionConstancyNumber: string | null
-  detractionConstancyDate: string | null
-  detractionAmount: number | null
-  retentionAmount: number | null
+  withholdings: ReportedWithholding[]
 }
 
 export interface PortalInvoiceDetail extends PortalInvoiceSummary {
+  /** El nombre del impuesto del régimen con que se recibió (IGV, IVA…). */
+  vatLabel: string | null
+  withholdings: WithholdingView[]
   netAmount: number | null
-  retentionAmount: number | null
   payableAmount: number | null
   rejectionReason: string | null
   lines: PortalInvoiceLine[]

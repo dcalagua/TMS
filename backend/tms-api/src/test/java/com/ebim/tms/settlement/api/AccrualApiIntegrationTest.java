@@ -375,8 +375,8 @@ class AccrualApiIntegrationTest {
                 String trip) throws Exception {
             String body = "{\"carrierId\":\"" + carrierA + "\",\"invoiceNumber\":\"TAX-" + SEQUENCE.incrementAndGet()
                     + "\",\"invoiceDate\":\"2026-10-05\",\"currency\":\"PEN\",\"totalAmount\":" + total
-                    + ",\"subtotalAmount\":" + subtotal + ",\"igvRate\":18,\"igvAmount\":" + igv
-                    + (type == null ? "" : ",\"documentType\":\"" + type + "\",\"referencedInvoiceId\":\"" + referenced + "\"")
+                    + ",\"subtotalAmount\":" + subtotal + ",\"taxRate\":18,\"taxAmount\":" + igv
+                    + (type == null ? "" : ",\"documentKind\":\"" + type + "\",\"referencedInvoiceId\":\"" + referenced + "\"")
                     + ",\"lines\":[{\"tripId\":\"" + trip + "\",\"description\":\"Flete\",\"lineAmount\":" + subtotal
                     + "}]}";
             String response = mockMvc.perform(asAdmin(post(INVOICES), COMPANY_A)
@@ -399,7 +399,7 @@ class AccrualApiIntegrationTest {
             assertThat(scalar("SELECT status || '/' || consumed_amount FROM tms.freight_accrual WHERE id = '"
                     + accrual + "'")).isEqualTo("SETTLED/1000.00");
 
-            String credit = fiscalDocument("07", invoice, "100.00", "18.00", "118.00", trip);
+            String credit = fiscalDocument("CREDIT_NOTE", invoice, "100.00", "18.00", "118.00", trip);
             approve(credit, COMPANY_A);
             assertThat(scalar("SELECT consumed_amount::text FROM tms.freight_accrual WHERE id = '" + accrual + "'"))
                     .isEqualTo("1000.00");
@@ -704,8 +704,8 @@ class AccrualApiIntegrationTest {
                 + ",\"lineAmount\":" + amount + "}";
         String body = "{\"carrierId\":\"" + carrierId + "\",\"invoiceNumber\":\"ACR-" + SEQUENCE.incrementAndGet()
                 + "\",\"invoiceDate\":\"2026-10-05\",\"currency\":\"PEN\",\"totalAmount\":" + amount
-                // V66: a PEN document states its breakdown; IGV-free here so the figures stay as before.
-                + ",\"subtotalAmount\":" + amount + ",\"igvRate\":0,\"igvAmount\":0"
+                // V66: a PEN document states its breakdown; VAT-free here so the figures stay as before.
+                + ",\"subtotalAmount\":" + amount + ",\"taxRate\":0,\"taxAmount\":0"
                 + ",\"lines\":[" + line + "]}";
         String response = mockMvc.perform(asAdmin(post(INVOICES), companyId)
                         .contentType(MediaType.APPLICATION_JSON).content(body))
