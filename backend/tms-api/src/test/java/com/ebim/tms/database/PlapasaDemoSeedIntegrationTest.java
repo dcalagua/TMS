@@ -78,6 +78,7 @@ class PlapasaDemoSeedIntegrationTest {
     private static final Path FALLBACK = ROOT.resolve("supabase/seeds/plapasa_demo_material_profiles_fallback.sql");
     private static final Path QAS_SEED = ROOT.resolve("supabase/seeds/qas_seed.sql");
     private static final Path ORDERS = ROOT.resolve("scripts/demo/plapasa/orders.json");
+    private static final Path GUIDE = ROOT.resolve("scripts/demo/plapasa/remission_guide.json");
 
     private static final UUID ADMIN_AUTH = UUID.fromString("5a5a0000-0000-4000-8000-0000000000a1");
     private static final UUID PLANNER_AUTH = UUID.fromString("5a5a0000-0000-4000-8000-0000000000b2");
@@ -131,7 +132,7 @@ class PlapasaDemoSeedIntegrationTest {
             execute(read(FALLBACK));
         }
         companyId = value("SELECT id FROM tms.company WHERE code = 'QAS-PLAPASA'");
-        erpToken = credential("ERP PLAPASA (prueba)", "integration.order:write");
+        erpToken = credential("ERP PLAPASA (prueba)", "integration.order:write", "integration.document:write");
         ewmToken = credential("EWM PLAPASA (prueba)", "integration.shipment:read", "integration.dispatch:write",
                 "integration.warehouse-milestone:write", "integration.material:write", "integration.order:read",
                 "integration.warehouse-order-event:write");
@@ -272,11 +273,11 @@ class PlapasaDemoSeedIntegrationTest {
 
         // Stackable crates: 8 per stack at the 2.40 m reference height (the profile allows 10).
         assertThat(lineGeometry("SO-2026-10034", "PLP-1601")).isEqualTo("MEASURED|25|2.320|10.6575|4.5938|10.6600");
-        assertThat(orderGeometry("SO-2026-10034")).isEqualTo("25.8200|25.8126|11.8455|2.320|0");
+        assertThat(orderGeometry("SO-2026-10034")).isEqualTo("25.8200|25.8127|11.8456|2.320|0");
 
         // The hardware order: 40 chairs nest 25 to a stack (2.35 m), the utility boxes stack 6 high.
         // Declared 20.76 m3, occupies 4.58 m3: the chairs alone drop from 13.43 m3 to 1.51 m3.
-        assertThat(orderGeometry("SO-2026-10040")).isEqualTo("20.7570|4.5831|2.3318|2.350|0");
+        assertThat(orderGeometry("SO-2026-10040")).isEqualTo("20.7570|4.5834|2.3319|2.350|0");
         assertThat(lineGeometry("SO-2026-10040", "PLP-700")).isEqualTo("MEASURED|2|2.350|1.5125|0.7378|13.4280");
 
         // What the warehouse does not declare is counted, never estimated (EWM rule 199).
@@ -316,33 +317,43 @@ class PlapasaDemoSeedIntegrationTest {
 
     @Test
     @Order(7)
-    @DisplayName("7. 25 nested chairs make a 2.35 m stack: the 2.20 m low box refuses it by height only; the 2.40 m van takes it")
-    void tooTallForTheLowBox() throws Exception {
+    @DisplayName("7. re-stacking per vehicle: the 2.20 m low box takes the hardware order with 22 chairs a stack,"
+            + " and refuses the crates only because, re-stacked lower, they need more floor than it has")
+    void reStackingOnTheLowBox() throws Exception {
         runTodayId = createRun("2026-10-20");
         hardwareTripId = createTrip(runTodayId, "CAM-04", "2026-10-20T10:00:00-05:00");
-        String refusal = assign(hardwareTripId, "SO-2026-10040")
+
+        // The crates: 8 a stack (2.32 m) at the reference height; re-stacked for 2.20 m they are 7, 7 and 6
+        // a stack and need 13.09 m2 of floor against the box's 12.24. Refused for the floor, not the height.
+        String refusal = assign(hardwareTripId, "SO-2026-10034")
                 .andExpect(status().isConflict())
                 .andReturn().getResponse().getContentAsString();
-        assertThat(refusal).contains("stack height 2.35 m exceeds the capacity of 2.2 m").doesNotContain("floor area")
-                .doesNotContain("volume");
+        assertThat(refusal).contains("floor area 13.093 m2 exceeds the capacity of 12.24 m2")
+                .doesNotContain("stack height");
 
-        // The planner changes the truck on the same trip, and the order goes in.
-        mockMvc.perform(asPlanner(put("/api/v1/planning/trips/" + hardwareTripId + "/vehicle"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"vehicleId\":\"" + vehicleId("CAM-02") + "\",\"plannedDepartureAt\":"
-                                + "\"2026-10-20T10:00:00-05:00\",\"version\":"
-                                + value("SELECT version FROM tms.trip WHERE id = '" + hardwareTripId + "'") + "}"))
-                .andExpect(status().isOk());
+        // The hardware order: 25 nested chairs make 2.35 m at the reference height; the low box re-stacks
+        // them 22 a stack (2.17 m) and takes the order. Same two stacks, so the same floor.
         assign(hardwareTripId, "SO-2026-10040").andExpect(status().isOk());
+        mockMvc.perform(asPlanner(get("/api/v1/planning/trips/" + hardwareTripId + "/capacity")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.withinCapacity").value(true))
+                .andExpect(jsonPath("$.height.used").value(2.17))
+                .andExpect(jsonPath("$.height.limit").value(2.2))
+                .andExpect(jsonPath("$.floor.used").value(2.3319))
+                .andExpect(jsonPath("$.floor.limit").value(12.24))
+                .andExpect(jsonPath("$.volume.used").value(4.5834))
+                .andExpect(jsonPath("$.bindingDimension").value("HEIGHT"));
 
         agroTripId = createTrip(runTodayId, "CAM-01", "2026-10-20T10:30:00-05:00");
         assign(agroTripId, "SO-2026-10034").andExpect(status().isOk());
         mockMvc.perform(asPlanner(get("/api/v1/planning/trips/" + agroTripId + "/capacity")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.withinCapacity").value(true))
-                .andExpect(jsonPath("$.floor.used").value(11.8455))
+                .andExpect(jsonPath("$.floor.used").value(11.8456))
                 .andExpect(jsonPath("$.floor.limit").value(12.648))
-                .andExpect(jsonPath("$.height.used").value(2.32));
+                .andExpect(jsonPath("$.height.used").value(2.32))
+                .andExpect(jsonPath("$.volume.used").value(25.8127))
+                .andExpect(jsonPath("$.bindingDimension").value("HEIGHT"));
     }
 
     @Test
@@ -367,11 +378,12 @@ class PlapasaDemoSeedIntegrationTest {
                 .andExpect(jsonPath("$.shipment.originExternalReference").value("GYE-CD"))
                 .andExpect(jsonPath("$.shipment.routeCode").value("RUTA-GYE-SUR"))
                 .andExpect(jsonPath("$.shipment.carrierCode").value("TRLIT"))
-                .andExpect(jsonPath("$.shipment.vehicleLicensePlate").value("GBC-5678"))
+                .andExpect(jsonPath("$.shipment.vehicleLicensePlate").value("GSD-1357"))
                 .andExpect(jsonPath("$.orders[0].externalSource").value("MANUAL"))
                 .andExpect(jsonPath("$.orders[0].externalReference").value("SO-2026-10040"))
                 .andExpect(jsonPath("$.orders[0].weightKg").value(285.8))
-                .andExpect(jsonPath("$.orders[0].volumeM3").value(4.5831))
+                .andExpect(jsonPath("$.shipment.vehicleTypeCode").value("FURGON-5T-BAJO"))
+                .andExpect(jsonPath("$.orders[0].volumeM3").value(4.5834))
                 .andExpect(jsonPath("$.stops[0].serviceWindowStart").value("08:00:00"))
                 .andExpect(jsonPath("$.stops[0].locationCode").value("CLI-FER-01"));
     }
@@ -385,7 +397,7 @@ class PlapasaDemoSeedIntegrationTest {
                  "transportReference": "%s", "loadReference": "CRG-000004", "warehouseCode": "GYE-CD",
                  "actualDispatchAt": "2026-10-20T09:00:00-05:00",
                  "carrier": {"code": "TRLIT", "name": "Transportes del Litoral S.A. (demo)"},
-                 "vehicle": {"licensePlate": "GBC-5678", "type": "FURGON 5T"},
+                 "vehicle": {"licensePlate": "GSD-1357", "type": "FURGON 5T CAJA BAJA"},
                  "driver": {"name": "Conductor Demo Dos", "documentNumber": "0920000015"},
                  "sealNumber": "PREC-000790",
                  "orders": [{"externalSource": "MANUAL", "externalReference": "SO-2026-10040",
@@ -417,7 +429,7 @@ class PlapasaDemoSeedIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         assertThat((String) JsonPath.read(response, "$.currency")).isEqualTo("USD");
         assertThat((String) JsonPath.read(response, "$.rateCardCode")).isEqualTo("TRLIT-2026-USD");
-        // 45.00 per trip + 0.85/km over the estimated 19.2 km (16.30) + 6.50 per loading metre: 2.3318 m2
+        // 45.00 per trip + 0.85/km over the estimated 19.2 km (16.30) + 6.50 per loading metre: 2.3319 m2
         // of floor over a 2.40 m x 0.85 load width = 1.14 loading metres (7.43). Total 68.73.
         assertThat(response).contains("\"component\":\"LOADING_METERS\",\"status\":\"APPLIED\"")
                 .contains("\"quantitySource\":\"EFFECTIVE_GEOMETRY\"");
@@ -425,7 +437,7 @@ class PlapasaDemoSeedIntegrationTest {
         String agro = mockMvc.perform(asPlanner(post("/api/v1/rates/trips/" + agroTripId + "/cost/estimate")))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        // Babahoyo: 45.00 + 76.1 km (64.69) + 11.8455 m2 / (2.40 x 0.85) = 5.81 loading metres (37.75).
+        // Babahoyo: 45.00 + 76.1 km (64.69) + 11.8456 m2 / (2.40 x 0.85) = 5.81 loading metres (37.75).
         assertThat(JsonPath.<Double>read(agro, "$.estimatedAmount")).isEqualTo(147.44);
     }
 
@@ -447,6 +459,31 @@ class PlapasaDemoSeedIntegrationTest {
                 .andExpect(jsonPath("$.externalSource").value("MANUAL"))
                 .andExpect(jsonPath("$.externalReference").value("SO-2026-10041"))
                 .andExpect(jsonPath("$.cancelReason").value("El cliente pospuso la compra (demo)"));
+    }
+
+    @Test
+    @Order(13)
+    @DisplayName("13. the ERP's SRI remission guide (06) links to the hardware order and shows on its trip")
+    void remissionGuide() throws Exception {
+        ObjectNode guide = (ObjectNode) JSON.readTree(Files.readString(GUIDE, StandardCharsets.UTF_8));
+        guide.remove("$nota");
+        String body = JSON.writeValueAsString(guide);
+        mockMvc.perform(post("/integration/v1/logistics-documents")
+                        .header("Authorization", "Bearer " + erpToken)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.outcome").value("CREATED"))
+                .andExpect(jsonPath("$.linkedOrders").value(1))
+                .andExpect(jsonPath("$.unknownOrders.length()").value(0));
+        mockMvc.perform(post("/integration/v1/logistics-documents")
+                        .header("Authorization", "Bearer " + erpToken)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outcome").value("UNCHANGED"));
+        String documents = mockMvc.perform(asPlanner(get("/api/v1/planning/trips/" + hardwareTripId + "/documents")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(documents).contains("001-001-000000123").contains("REMISSION_GUIDE");
     }
 
     @Test

@@ -18,12 +18,13 @@ rewrite it, and the script says so per order instead of failing).
     SUPABASE_ANON_KEY=...  DEMO_PASSWORD=...  python3 scripts/demo/plapasa_tms_demo.py check
     ... python3 scripts/demo/plapasa_tms_demo.py orders
     ... python3 scripts/demo/plapasa_tms_demo.py orders --service-date 2026-10-21   # the demo moved a day
+    ... python3 scripts/demo/plapasa_tms_demo.py guide    # optional: the SRI remission guide (06) of SO-2026-10040
 
 Authentication for the person (to read, and to create the ERP credential), one of:
     TMS_ADMIN_TOKEN            a bearer token for admin@plapasa.demo
     DEMO_PASSWORD + SUPABASE_ANON_KEY [+ SUPABASE_URL, default http://127.0.0.1:54321]
                                signs in as TMS_DEMO_EMAIL (default admin@plapasa.demo)
-The ERP credential (scope integration.order:write), one of:
+The ERP credential (scopes integration.order:write and integration.document:write), one of:
     TMS_ERP_TOKEN              an existing one (tmsc_<id>.tmss_<secret>)
     (absent)                   the script creates «ERP PLAPASA (demo) <stamp>» and keeps its secret in
                                memory for this run only - it is never printed. Revoke it afterwards in
@@ -43,6 +44,7 @@ import urllib.request
 API = os.environ.get("TMS_API_URL", "http://localhost:8080").rstrip("/")
 COMPANY_CODE = os.environ.get("TMS_COMPANY_CODE", "QAS-PLAPASA")
 ORDERS_FILE = pathlib.Path(__file__).resolve().parent / "plapasa" / "orders.json"
+GUIDE_FILE = pathlib.Path(__file__).resolve().parent / "plapasa" / "remission_guide.json"
 
 # The materials whose profile makes the demo's point. Without them the cups count 1.90 m3 per 1,000 again.
 KEY_PROFILES = {"PLP-571": "NESTABLE", "PLP-111": "NESTABLE", "PLP-N105": "NESTABLE", "PLP-1601": "STACKABLE",
@@ -146,21 +148,40 @@ def check(token, company):
     return missing
 
 
+def erp_token(token, company):
+    erp = os.environ.get("TMS_ERP_TOKEN")
+    if erp:
+        return erp
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d%H%M%S")
+    created = call("POST", "/api/v1/integration-clients", token, company=company, body={
+        "name": f"ERP PLAPASA (demo) {stamp}",
+        "description": "scripts/demo/plapasa_tms_demo.py - revocar al terminar",
+        "scopes": ["integration.order:write", "integration.document:write"]})
+    print(f"\nCredencial del ERP creada: {created['clientId']} (secreto sólo en memoria; "
+          f"exportar TMS_ERP_TOKEN para reutilizar una)")
+    return created["bearerToken"]
+
+
+def send_guide(token, company):
+    guide = json.loads(GUIDE_FILE.read_text(encoding="utf-8"))
+    guide.pop("$nota", None)
+    source = os.environ.get("TMS_SOURCE_SYSTEM")
+    if source:
+        guide["sourceSystem"] = source
+        for order in guide["orders"]:
+            order["externalSource"] = source
+    result = call("POST", "/integration/v1/logistics-documents", erp_token(token, company), body=guide)
+    print(f"Guía de remisión {guide['documentNumber']} (SRI 06): {result['outcome']} · pedidos enlazados "
+          f"{result['linkedOrders']} · desconocidos {result.get('unknownOrders') or []}")
+
+
 def send_orders(token, company, service_date, allow_missing):
     missing = check(token, company)
     if missing and not allow_missing:
         sys.exit("\nFaltan perfiles: los pedidos entrarían sin geometría y no se pueden volver a copiar "
                  "después. Reenviarlos desde el EWM (o el respaldo SQL) y repetir; --allow-missing-profiles "
                  "para seguir igual.")
-    erp = os.environ.get("TMS_ERP_TOKEN")
-    if not erp:
-        stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d%H%M%S")
-        created = call("POST", "/api/v1/integration-clients", token, company=company, body={
-            "name": f"ERP PLAPASA (demo) {stamp}",
-            "description": "scripts/demo/plapasa_tms_demo.py - revocar al terminar",
-            "scopes": ["integration.order:write"]})
-        erp = created["bearerToken"]
-        print(f"\nCredencial del ERP creada: {created['clientId']} (secreto sólo en memoria)")
+    erp = erp_token(token, company)
     orders = load_orders(service_date)
     result = call("POST", "/integration/v1/orders/batch", erp, body={"orders": orders}, expect=(200, 207))
     print(f"\nERP -> TMS: {result['submitted']} pedidos, {result['succeeded']} bien, {result['failed']} rechazados")
@@ -181,8 +202,9 @@ def send_orders(token, company, service_date, allow_missing):
 
 def main():
     parser = argparse.ArgumentParser(description="PLAPASA demo orders into TMS (disposable environments only).")
-    parser.add_argument("command", nargs="?", default="check", choices=["check", "orders"],
-                        help="check (read only, default) or orders (send the ERP's orders)")
+    parser.add_argument("command", nargs="?", default="check", choices=["check", "orders", "guide"],
+                        help="check (read only, default), orders (send the ERP's orders) or guide "
+                             "(send the SRI remission guide of SO-2026-10040)")
     parser.add_argument("--service-date", help="re-base the dated orders: the date of SO-2026-10040 "
                                                "(default 2026-10-20; the cup campaign goes the day after)")
     parser.add_argument("--allow-missing-profiles", action="store_true")
@@ -192,6 +214,9 @@ def main():
     if arguments.command == "check":
         missing = check(token, company)
         sys.exit(1 if missing else 0)
+    if arguments.command == "guide":
+        send_guide(token, company)
+        return
     send_orders(token, company, arguments.service_date, arguments.allow_missing_profiles)
 
 
