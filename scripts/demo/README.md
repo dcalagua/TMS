@@ -73,6 +73,7 @@ psql "$DB" -v ON_ERROR_STOP=1 -f supabase/seeds/plapasa_demo_seed.sql           
 psql "$DB" -v ON_ERROR_STOP=1 -f supabase/seeds/plapasa_demo_material_profiles_fallback.sql
 python3 scripts/demo/plapasa_tms_demo.py check     # sólo lectura: ¿están los perfiles?
 python3 scripts/demo/plapasa_tms_demo.py orders    # los pedidos del ERP (scripts/demo/plapasa/orders.json)
+python3 scripts/demo/plapasa_tms_demo.py guide     # opcional: la guía de remisión SRI 06 de SO-2026-10040
 ```
 
 El seed no crea pedidos a propósito: entran por `POST /integration/v1/orders/batch`, que es donde se les
@@ -82,4 +83,5 @@ copia el perfil y se les calcula la huella. Lo valida `PlapasaDemoSeedIntegratio
 |---|---|---|
 | admin@plapasa.demo | toda la organización QAS-PLAPASA | ORGANIZATION_ADMIN |
 | planner@plapasa.demo | QAS-PLAPASA | PLANNER |
+| finanzas@plapasa.demo | QAS-PLAPASA | COMPANY_ADMIN (aprueba facturas: cuatro ojos) |
 | transportista.trlit@plapasa.demo | QAS-PLAPASA (TRLIT) | CARRIER_OPERATOR |

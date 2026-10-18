@@ -28,15 +28,17 @@
 --     (`scripts/demo/plapasa_tms_demo.py`), porque al escribir una línea el backend le copia el
 --     perfil físico del material y le calcula la huella (pilas, volumen efectivo, piso, alto -
 --     ADR-022, `OrderLinePhysicalResolver` + `TransportOrder.applyLines`). Un INSERT aquí dejaría
---     el pedido sin geometría: 1.000 vasos volverían a contar 1,93 m³, que es justo lo que la demo
+--     el pedido sin geometría: 1.000 vasos volverían a contar 1,90 m³, que es justo lo que la demo
 --     viene a desmentir.
 --   * Perfiles de material. Los escribe el EWM (D-02, interfaz TMS_MATP). Si el enlace con el EWM
 --     no está vivo el día de la demo, existe un respaldo aparte y explícito:
 --     `plapasa_demo_material_profiles_fallback.sql`.
---   * Configuración fiscal. La rama de impuestos internacionales (régimen Ecuador: IVA 15 %, flete
---     0 %, retención IR 1 % código 310, USD, códigos SRI) todavía no está integrada. Aquí sólo se fija
---     el país `EC`; los porcentajes se cargan por API/pantalla después (`docs/demo/PLAPASA_TMS_RUNBOOK.md`
---     paso 5). Las columnas fiscales de V66 quedan NULL a propósito.
+--   * Configuración fiscal. Con `default_country = 'EC'` la empresa ya está en el régimen de Ecuador
+--     (ADR-027): IVA, USD, comprobantes SRI 01/04/05, RUC de 13 dígitos, flete al 0 % y la retención del
+--     IR 1 % código 310 encendida; la retención de IVA (70 %) apagada. Son los valores del despliegue
+--     (`tms.finance.tax.ec.*`) y alcanzan para la demo, así que el seed NO escribe ningún override
+--     fiscal: si PLAPASA necesita otros, van por `PUT /api/v1/settlement/fiscal-settings` o la tarjeta
+--     «Régimen fiscal» de Administración › Empresa (runbook, paso 5).
 --   * Credenciales de integración y suscripciones de webhook. Su secreto se genera en el servidor y
 --     se muestra una sola vez: se crean por la API (runbook, paso 6), nunca en un fichero.
 --
@@ -74,7 +76,7 @@ ON CONFLICT (organization_id, code) DO NOTHING;
 
 -- Configuración de la empresa. Se REAFIRMA en cada corrida: es lo que hace que la demo cuente los
 -- números del guion (`docs/demo/PLAPASA_TMS_DEMO.md`).
---   default_country 'EC'          el país de la empresa. Los impuestos NO: ver la cabecera.
+--   default_country 'EC'          el país, y con él el régimen fiscal de Ecuador (ver la cabecera).
 --   prefijos OT- / VJ-            «orden de transporte», «viaje». Los números SH-/TO- del QAS
 --                                 peruano no se confunden con los de esta empresa.
 --   dispatch_confirmation_mode    HYBRID: el despacho del almacén (SLS) despacha el viaje, y una
@@ -112,6 +114,7 @@ INSERT INTO tms.app_user (email, full_name)
 VALUES
     ('admin@plapasa.demo',               'Administración PLAPASA (demo)'),
     ('planner@plapasa.demo',             'Planificación de transporte PLAPASA (demo)'),
+    ('finanzas@plapasa.demo',            'Finanzas PLAPASA (demo)'),
     ('transportista.trlit@plapasa.demo', 'Despacho Transportes del Litoral (demo)')
 ON CONFLICT (email) DO NOTHING;
 
@@ -133,13 +136,15 @@ CROSS JOIN tms.organization o
 WHERE u.email = 'admin@plapasa.demo' AND o.code = 'QAS-PLAPASA'
 ON CONFLICT DO NOTHING;
 
--- Planificación: de la empresa.
+-- Planificación y finanzas: de la empresa. Finanzas es COMPANY_ADMIN porque aprobar una factura de
+-- flete es de un administrador, y no del que la registró (cuatro ojos, SettlementService): en la
+-- demo admin@ recibe la factura de TRLIT y finanzas@ la aprueba.
 INSERT INTO tms.membership (app_user_id, organization_id, company_id)
 SELECT u.id, c.organization_id, c.id
 FROM tms.app_user u
 JOIN tms.company c ON c.code = 'QAS-PLAPASA'
 JOIN tms.organization o ON o.id = c.organization_id AND o.code = 'QAS-PLAPASA'
-WHERE u.email = 'planner@plapasa.demo'
+WHERE u.email IN ('planner@plapasa.demo', 'finanzas@plapasa.demo')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO tms.membership_role (membership_id, role_id)
@@ -150,8 +155,9 @@ JOIN tms.organization o ON o.id = m.organization_id AND o.code = 'QAS-PLAPASA'
 JOIN tms.role r ON r.code = CASE u.email
         WHEN 'admin@plapasa.demo'   THEN 'ORGANIZATION_ADMIN'
         WHEN 'planner@plapasa.demo' THEN 'PLANNER'
+        WHEN 'finanzas@plapasa.demo' THEN 'COMPANY_ADMIN'
     END
-WHERE u.email IN ('admin@plapasa.demo', 'planner@plapasa.demo')
+WHERE u.email IN ('admin@plapasa.demo', 'planner@plapasa.demo', 'finanzas@plapasa.demo')
   AND m.carrier_id IS NULL
 ON CONFLICT DO NOTHING;
 
@@ -308,8 +314,10 @@ ON CONFLICT (company_id, code) DO NOTHING;
 -- aprovecha mejor que una caja corta con rueda de auxilio adentro.
 --   NHR-35          camioneta tipo NHR, la «van» de la demo: 4,30 x 2,00 x 2,00 = 17,2 m³
 --   FURGON-5T       el furgón de 5 t del EWM (CAM-02): 6,0 x 2,4 x 2,4
---   FURGON-5T-BAJO  la MISMA caja con techo BAJO (2,20 m), para mostrar una pila que no entra de
---                   alto: mismo piso que el FURGON-5T, así que cuando rechaza lo hace SÓLO por altura
+--   FURGON-5T-BAJO  la MISMA caja con techo BAJO (2,20 m), para mostrar el RE-APILADO por vehículo:
+--                   el TMS baja las pilas a 2,20 m (25 sillas encajadas -> 22, 2,17 m) y, con el mismo
+--                   piso que el FURGON-5T, lo que rechaza lo rechaza por la causa real (las gavetas
+--                   re-apiladas más bajas piden 13,09 m² de piso y la caja tiene 12,24)
 --   CAMION-10T      el camión de 10 t (el EWM lo rotula «CAMION 10T»): 6,2 x 2,4 x 2,4
 --   TRAILER-12M     semirremolque de 12 m, sin vehículo dado de alta: está para cotizar
 INSERT INTO tms.vehicle_type (company_id, code, name, max_weight_kg, max_volume_m3, max_pallets, length_m,

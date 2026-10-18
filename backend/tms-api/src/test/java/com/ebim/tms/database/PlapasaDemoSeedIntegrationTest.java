@@ -82,6 +82,7 @@ class PlapasaDemoSeedIntegrationTest {
 
     private static final UUID ADMIN_AUTH = UUID.fromString("5a5a0000-0000-4000-8000-0000000000a1");
     private static final UUID PLANNER_AUTH = UUID.fromString("5a5a0000-0000-4000-8000-0000000000b2");
+    private static final UUID FINANCE_AUTH = UUID.fromString("5a5a0000-0000-4000-8000-0000000000c3");
 
     /** 2026-10-20 09:00 in Guayaquil: the morning the orders of the first run are dispatched. */
     private static final Instant NOW = Instant.parse("2026-10-20T14:00:00Z");
@@ -124,8 +125,8 @@ class PlapasaDemoSeedIntegrationTest {
                 CREATE SCHEMA auth;
                 CREATE TABLE auth.users (id uuid PRIMARY KEY, email text NOT NULL);
                 INSERT INTO auth.users (id, email) VALUES
-                    ('%s', 'admin@plapasa.demo'), ('%s', 'planner@plapasa.demo');
-                """.formatted(ADMIN_AUTH, PLANNER_AUTH));
+                    ('%s', 'admin@plapasa.demo'), ('%s', 'planner@plapasa.demo'), ('%s', 'finanzas@plapasa.demo');
+                """.formatted(ADMIN_AUTH, PLANNER_AUTH, FINANCE_AUTH));
         execute(read(QAS_SEED));
         for (int run = 0; run < 2; run++) {
             execute(read(SEED));
@@ -153,10 +154,11 @@ class PlapasaDemoSeedIntegrationTest {
                 + " s.cost_allocation_basis, s.order_number_prefix, s.shipment_number_prefix)"
                 + " FROM tms.company c JOIN tms.company_settings s ON s.company_id = c.id WHERE c.code = 'QAS-PLAPASA'"))
                 .isEqualTo("PLAPASA (demo)|America/Guayaquil|0999999999001|EC|HYBRID|2.40|0.850|EFFECTIVE_VOLUME|OT-|VJ-");
-        // Taxes are not this seed's business (the international tax branch configures them).
+        // No fiscal override: default_country EC is what puts the company in Ecuador's regime (ADR-027).
         assertThat(value("SELECT count(*) FROM tms.company_settings s JOIN tms.company c ON c.id = s.company_id"
-                + " WHERE c.code = 'QAS-PLAPASA' AND (s.igv_rate IS NOT NULL OR s.detraction_enabled IS NOT NULL"
-                + " OR s.retention_agent IS NOT NULL)")).isEqualTo("0");
+                + " WHERE c.code = 'QAS-PLAPASA' AND (s.fiscal_country IS NOT NULL OR s.vat_rate IS NOT NULL"
+                + " OR s.freight_vat_rate IS NOT NULL)")).isEqualTo("0");
+        assertThat(countIn("company_tax_withholding_setting")).isZero();
 
         assertThat(countIn("location")).isEqualTo(5);
         assertThat(countIn("zone")).isEqualTo(3);
@@ -176,12 +178,14 @@ class PlapasaDemoSeedIntegrationTest {
         // People: linked by email when the account exists, null (cannot sign in yet) when not.
         assertThat(value("SELECT string_agg(email || '=' || (auth_user_id IS NOT NULL), ',' ORDER BY email)"
                 + " FROM tms.app_user WHERE email LIKE '%@plapasa.demo'"))
-                .isEqualTo("admin@plapasa.demo=true,planner@plapasa.demo=true,transportista.trlit@plapasa.demo=false");
+                .isEqualTo("admin@plapasa.demo=true,finanzas@plapasa.demo=true,planner@plapasa.demo=true,"
+                        + "transportista.trlit@plapasa.demo=false");
         assertThat(value("SELECT string_agg(u.email || ':' || r.code || ':' || coalesce(ca.code, '-'), ','"
                 + " ORDER BY u.email) FROM tms.membership m JOIN tms.app_user u ON u.id = m.app_user_id"
                 + " JOIN tms.membership_role mr ON mr.membership_id = m.id JOIN tms.role r ON r.id = mr.role_id"
                 + " LEFT JOIN tms.carrier ca ON ca.id = m.carrier_id WHERE u.email LIKE '%@plapasa.demo'"))
-                .isEqualTo("admin@plapasa.demo:ORGANIZATION_ADMIN:-,planner@plapasa.demo:PLANNER:-,"
+                .isEqualTo("admin@plapasa.demo:ORGANIZATION_ADMIN:-,finanzas@plapasa.demo:COMPANY_ADMIN:-,"
+                        + "planner@plapasa.demo:PLANNER:-,"
                         + "transportista.trlit@plapasa.demo:CARRIER_OPERATOR:TRLIT");
     }
 
@@ -487,6 +491,71 @@ class PlapasaDemoSeedIntegrationTest {
     }
 
     @Test
+    @Order(14)
+    @DisplayName("14. Ecuador by default: TRLIT's USD invoice at IVA 0% on freight, IR 1% code 310, payable net of it")
+    void carrierInvoiceInEcuador() throws Exception {
+        // No fiscal override in the seed: default_country EC is the whole configuration.
+        mockMvc.perform(asAdmin(get("/api/v1/settlement/fiscal-settings")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.regime").value("EC"))
+                .andExpect(jsonPath("$.fiscalCurrency").value("USD"))
+                .andExpect(jsonPath("$.vatLabel").value("IVA"))
+                .andExpect(jsonPath("$.vatRate").value(15.00))
+                .andExpect(jsonPath("$.freightVatRate").value(0.00))
+                .andExpect(jsonPath("$.withholdings[0].rate").value(1.00))
+                .andExpect(jsonPath("$.withholdings[1].kind").value("EC_VAT_WITHHOLDING"))
+                .andExpect(jsonPath("$.withholdings[1].enabled").value(false))
+                .andExpect(jsonPath("$.withholdings[0].kind").value("EC_INCOME_TAX_WITHHOLDING"))
+                .andExpect(jsonPath("$.withholdings[0].code").value("310"))
+                .andExpect(jsonPath("$.withholdings[0].enabled").value(true));
+
+        String carrier = value("SELECT id FROM tms.carrier WHERE company_id = '" + companyId + "' AND code = 'TRLIT'");
+        String body = """
+                {"carrierId": "%s", "documentNumber": "001-001-789", "issuerTaxId": "0990000034001",
+                 "invoiceDate": "2026-10-20", "currency": "USD",
+                 "subtotalAmount": 68.73, "taxRate": 0, "taxAmount": 0.00, "totalAmount": 68.73,
+                 "lines": [{"tripId": "%s", "description": "Flete GYE-CD -> Ferretería El Constructor (VJ)",
+                            "lineAmount": 68.73}]}
+                """.formatted(carrier, hardwareTripId);
+        String received = mockMvc.perform(asAdmin(post("/api/v1/settlement/invoices"))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.invoiceNumber").value("001-001-000000789"))
+                .andExpect(jsonPath("$.fiscal.fiscalCountry").value("EC"))
+                .andExpect(jsonPath("$.fiscal.fiscalDocumentCode").value("01"))
+                .andExpect(jsonPath("$.fiscal.taxRate").value(0.00))
+                .andExpect(jsonPath("$.fiscal.withholdings.length()").value(1))
+                .andExpect(jsonPath("$.fiscal.withholdings[0].code").value("310"))
+                .andExpect(jsonPath("$.fiscal.withholdings[0].baseAmount").value(68.73))
+                .andExpect(jsonPath("$.fiscal.withholdings[0].amount").value(0.69))
+                .andExpect(jsonPath("$.fiscal.electronicValidation").value("EXTERNAL_DEPENDENCY"))
+                .andReturn().getResponse().getContentAsString();
+        String invoice = JsonPath.read(received, "$.id");
+
+        mockMvc.perform(asAdmin(post("/api/v1/settlement/invoices/" + invoice + "/match")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("MATCHED"));
+        // Four eyes: whoever recorded it cannot approve it; finanzas@ can.
+        assertThat(mockMvc.perform(asAdmin(post("/api/v1/settlement/invoices/" + invoice + "/approve"))
+                .contentType(MediaType.APPLICATION_JSON).content("{}")).andReturn().getResponse().getStatus())
+                .isEqualTo(409);
+        mockMvc.perform(post("/api/v1/settlement/invoices/" + invoice + "/approve")
+                        .header("Authorization", "Bearer " + TestJwts.validFor(FINANCE_AUTH))
+                        .header(ApiHeaders.COMPANY_ID, companyId)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("APPROVED"));
+        mockMvc.perform(asAdmin(post("/api/v1/settlement/invoices/" + invoice + "/export")))
+                .andExpect(status().isOk());
+        mockMvc.perform(asAdmin(get("/api/v1/settlement/payables/" + invoice)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.netAmount").value(68.73))
+                .andExpect(jsonPath("$.withholdingTotalAmount").value(0.69))
+                .andExpect(jsonPath("$.payableAmount").value(68.04))
+                .andExpect(jsonPath("$.openBalance").value(68.04));
+    }
+
+    @Test
     @Order(10)
     @DisplayName("10. the seed carries no credential, and its fallback says what it is")
     void noSecretsInTheSeeds() {
@@ -574,6 +643,11 @@ class PlapasaDemoSeedIntegrationTest {
 
     private static String runVersion(String runId) {
         return value("SELECT version FROM tms.planning_run WHERE id = '" + runId + "'");
+    }
+
+    private static MockHttpServletRequestBuilder asAdmin(MockHttpServletRequestBuilder request) {
+        return request.header("Authorization", "Bearer " + TestJwts.validFor(ADMIN_AUTH))
+                .header(ApiHeaders.COMPANY_ID, companyId);
     }
 
     private static MockHttpServletRequestBuilder asPlanner(MockHttpServletRequestBuilder request) {
