@@ -2,6 +2,9 @@
 
 **Status:** Accepted for the model and read-only ingestion (V55). Document **delivery tracking**
 (section 5) was decided and implemented by ADR-018 / V57 on 2026-10-12.
+**Amended by:** ADR-028 / V69 (2026-10-18): the catalogue is international - generic
+`REMISSION_GUIDE`, GRE_* kept as Peruvian aliases, fiscal fields and recipients. Decision 1 below
+describes V55 as it shipped.
 **Date:** 2026-09-27
 **Constrained by:** ADR-003 (company scope), ADR-005 (tenant RLS), ADR-006 (evidence storage),
 ADR-009 (order execution lifecycle), `docs/domain/SPLIT_ORDER_EXECUTION.md`

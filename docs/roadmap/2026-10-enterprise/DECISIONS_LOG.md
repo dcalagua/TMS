@@ -773,3 +773,23 @@
   precisión completa y lee `result`/`shipment_number`. s10 nuevo (perfil de material) con un material propio para no
   cambiar la capacidad de SKU-100 en los demás escenarios.
 - **Commit(s):** el de la fase 80, ciclo 1.
+
+### 2026-10-18 · guía de remisión internacional · Los documentos se reciben, nunca se emiten (ADR-028, V69)
+
+- **Regla/decisión afectada:** ADR-015 decisión 1 (catálogo sólo Perú). Decisión de producto del dueño del negocio:
+  el TMS no genera, firma, envía ni valida documentos electrónicos; factura y guía las emite el ERP / proveedor de
+  facturación del cliente y el TMS sólo recibe sus datos.
+- **Motivo:** PLAPASA (Ecuador) mueve mercadería con la guía de remisión SRI 06 y el catálogo de V55 no tenía ni el
+  tipo genérico ni la clave de acceso, las fechas de traslado, el transportista, la placa ni los destinatarios.
+- **Camino elegido:** V69 aditiva. `REMISSION_GUIDE` en `ck_logistics_document_type` (recreado, una copia);
+  `GRE_REMITENTE`/`GRE_TRANSPORTISTA` quedan como alias de `REMISSION_GUIDE + PE + SUNAT 09/31`, sin backfill ni
+  renombre (`ck_logistics_document_gre_is_peru` impide otra bandera). Diez columnas anulables en
+  `logistics_document`; `logistics_document_recipient` (RLS de tenant + restrictiva de transportista, sin UPDATE,
+  reescrita entera) con las líneas en `jsonb` porque son sólo de lectura. Validación de **forma** únicamente y sólo
+  con `fiscalCountry = EC`: número 3-3-9 en un comprobante SRI, clave de 49 dígitos, RUC emisor de 13; un código
+  contradictorio (guía EC con `01`) es 400, nunca se corrige. Sin dígito mod-11 (punto abierto). Mismo endpoint,
+  mismo scope; campos nuevos `NON_NULL` para que la huella de un cuerpo v1 no cambie (`LogisticsDocumentV1HashTest`).
+  Sin FK al viaje (ADR-015 §2 sigue): placa y transportista se muestran, no se comparan. Portal: `fiscal` en
+  `PortalDocumentView` para copiar la clave en un control.
+- **Commit(s):** `feat(api)` y `feat(web)` de la rama `tms/remission-guide-intl`.
+

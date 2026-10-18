@@ -113,6 +113,7 @@ A credential holds one or more scopes, and at least one is required:
 | `integration.warehouse-order-event:write` | `POST /integration/v1/warehouse-order-events` (V61, `WAREHOUSE_EXECUTION_V1.md` §7.5) |
 | `integration.tracking:write` | `POST /integration/v1/tracking/positions` - see [§12](#12-vehicle-positions-migration-v29) |
 | `integration.tender:respond` | `GET /integration/v1/tenders`, `POST /integration/v1/tenders/{shipmentNumber}/response` - see [§13](#13-carrier-tendering-migration-v31) |
+| `integration.document:write` | `POST /integration/v1/logistics-documents` (V55, V69) - see [§15](#15-logistics-documents-migrations-v55-and-v69-adr-015-adr-028) |
 
 `integration.tender:respond` is the one scope that is **not sufficient on its own**: the credential
 holding it must also be bound to a carrier (`carrierId`, §2.4). Read and write are one scope rather
@@ -1212,3 +1213,137 @@ as `PAYABLE_HOLD_RELEASED` with the hold's reason). `PAID` is terminal. Webhooks
 
 Bank files, payment execution, bank accounts, a general ledger, FX, reversing a payment (the ERP issues another document;
 `tms.carrier_payment` is append-only by grant and by trigger).
+
+## 15. Logistics documents (migrations V55 and V69, ADR-015, ADR-028)
+
+The invoices, delivery notes and remission guides the customer's ERP issued for its orders. **TMS
+receives them and shows them; it never issues, signs, sends or validates a document with a tax
+authority** (no SRI or SUNAT emission, no XML, no status query). The document an authority accepted is
+the ERP's; TMS keeps its data, links it to orders many to many and shows it on the order, the trip
+and the carrier portal. Nothing here moves an order, a trip or a delivery.
+
+### 15.1 `POST /integration/v1/logistics-documents`
+
+- Scope **`integration.document:write`**, operation `LOGISTICS_DOCUMENT_UPSERT`.
+- Identity: (`sourceSystem`, `documentType`, `documentNumber`). The same identity again is an
+  upsert: `201 CREATED`, `200 UPDATED` (content or links changed), `200 UNCHANGED`.
+- `Idempotency-Key` optional, semantics of §4.2: the same key with the same payload replays the first
+  response; with another payload it is `409`.
+- Orders are matched exactly by (`externalSource`, `externalReference`). An order not yet known is
+  reported in `unknownOrders` and linked by a later re-send. The trip is derived through the orders:
+  a guide shows on every trip that carries one of its orders.
+
+| Field | Type | Notes |
+|---|---|---|
+| `sourceSystem` | string, required | ERP namespace, `^[A-Z0-9_]{2,40}$` |
+| `documentType` | required | `INVOICE`, `DELIVERY_NOTE`, `REMISSION_GUIDE`, `GRE_REMITENTE`, `GRE_TRANSPORTISTA`, `OTHER` |
+| `documentNumber` | string ≤ 60, required | As issued. With `fiscalCountry=EC` see 15.2 |
+| `issueDate` | date | |
+| `issuerTaxId`, `recipientTaxId` | string ≤ 20 | The issuer's RUC (EC: 13 digits) |
+| `recipientName` | string ≤ 200 | Single-recipient documents; a guide uses `recipients` |
+| `amount`, `currency` | decimal ≥ 0, ISO 4217 | Informational; both or neither |
+| `status` | string ≤ 40 | The ERP's own reading (`AUTORIZADO`, `ISSUED`...). Stored, **never interpreted** |
+| `orders[]` | 1-500, required | `{externalSource, externalReference}` |
+| **V69 (all optional)** | | |
+| `fiscalCountry` | ISO 3166-1 alpha-2 | `EC`, `PE`, ... in upper case |
+| `fiscalDocumentCode` | `^[0-9A-Z]{1,4}$` | The authority's class code: `06` SRI guía de remisión, `01` factura; `09` / `31` SUNAT GRE |
+| `authorizationNumber` | ≤ 64, no spaces | SRI clave de acceso (EC: exactly 49 digits), SUNAT reference |
+| `transportStartDate`, `transportEndDate` | date | End not before start |
+| `carrierTaxId` ≤ 20, `carrierName` ≤ 300, `vehiclePlate` ≤ 20 | string | As printed on the guide; **not** compared with the trip |
+| `originAddress`, `transferReason` | string ≤ 300 | Dirección de partida, motivo de traslado |
+| `recipients[]` | ≤ 500 | Destinatarios, in order; replaced whole on a re-send |
+| `recipients[].taxId` ≤ 20, `.name` ≤ 300, `.destinationAddress` ≤ 300, `.transferReason` ≤ 300 | string | |
+| `recipients[].destinationEstablishmentCode` ≤ 10, `.route` ≤ 300 | string | SRI `codEstabDestino`, `ruta` |
+| `recipients[].relatedDocumentCode` (1-4), `.relatedDocumentNumber` ≤ 60, `.relatedDocumentAuthorizationNumber` ≤ 64, `.relatedDocumentDate` | | The supporting sales document (`codDocSustento`, `numDocSustento`...) |
+| `recipients[].items[]` ≤ 500 | `{code ≤ 40, additionalCode ≤ 40, description ≤ 300 (required), quantity ≥ 0, unit ≤ 20}` | Display-only, never reconciled with the order lines |
+
+A body without the V69 fields is the same v1 document it always was: the new fields are omitted
+from the request fingerprint when absent, so an `Idempotency-Key` stored before V69 still replays.
+
+### 15.2 Catalogue and shape rules
+
+| `documentType` | Country | Authority code | Shown as |
+|---|---|---|---|
+| `REMISSION_GUIDE` | `EC` | `06` | Guía de remisión (SRI 06) |
+| `GRE_REMITENTE` | `PE` (implied) | `09` | GRE remitente (SUNAT 09) |
+| `GRE_TRANSPORTISTA` | `PE` (implied) | `31` | GRE transportista (SUNAT 31) |
+| `REMISSION_GUIDE` | `PE` | `09` / `31` | GRE remitente / transportista |
+| `REMISSION_GUIDE` | other / none | as sent | Guía de remisión (XX) |
+
+`GRE_*` are SUNAT's: they stay valid without a country and are refused with any country but `PE`.
+A code that contradicts the table (an Ecuadorian guide labelled `01`) is `400`, never corrected.
+
+Only **shape** is validated, and only where the country is declared. With `fiscalCountry = EC`:
+
+- `documentNumber` of an SRI comprobante (`REMISSION_GUIDE`, or any type with a `fiscalDocumentCode`)
+  is `establecimiento-puntoEmision-secuencial`: `^\d{3}-\d{3}-\d{9}$`;
+- `authorizationNumber`, when present, is exactly 49 digits;
+- `issuerTaxId`, when present, is 13 digits.
+
+The clave's mod-11 digit is not verified, nothing is checked against the SRI, and Peru's numbers stay
+"never parsed". A violation is `400 malformed-request` naming every problem, recorded `REJECTED` in the
+inbox; the database refuses the same rows (V69 CHECKs).
+
+### 15.3 Example: an Ecuadorian guía de remisión (PLAPASA, demo data)
+
+All numbers below are **fake but well formed** (the clave has a valid mod-11 digit and environment
+`1` = pruebas). Do not reuse them as real documents.
+
+```http
+POST /integration/v1/logistics-documents
+Authorization: Bearer tms_ic_<clientId>.<secret>
+Idempotency-Key: plapasa-gr-001-001-000000123
+Content-Type: application/json
+
+{
+  "sourceSystem": "SAP_EC",
+  "documentType": "REMISSION_GUIDE",
+  "documentNumber": "001-001-000000123",
+  "issueDate": "2026-10-15",
+  "issuerTaxId": "0992999999001",
+  "status": "AUTORIZADO",
+  "fiscalCountry": "EC",
+  "fiscalDocumentCode": "06",
+  "authorizationNumber": "1510202606099299999900110010010000001231234567819",
+  "transportStartDate": "2026-10-15",
+  "transportEndDate": "2026-10-16",
+  "carrierTaxId": "0991111111001",
+  "carrierName": "TRLIT Transportes del Litoral (demo)",
+  "vehiclePlate": "GBC-5678",
+  "originAddress": "Km 14,5 Vía a Daule, Guayaquil",
+  "transferReason": "Venta",
+  "recipients": [
+    {
+      "taxId": "0990000000001",
+      "name": "Ferretería El Constructor",
+      "destinationAddress": "Av. Juan Tanca Marengo Km 2, Guayaquil",
+      "transferReason": "Venta",
+      "relatedDocumentCode": "01",
+      "relatedDocumentNumber": "001-002-000004567",
+      "relatedDocumentDate": "2026-10-14",
+      "items": [
+        { "code": "PVC-110-3", "description": "Tubo PVC 110 mm x 3 m", "quantity": 120, "unit": "UND" },
+        { "code": "CDO-110", "description": "Codo PVC 110 mm 90°", "quantity": 40, "unit": "UND" }
+      ]
+    }
+  ],
+  "orders": [ { "externalSource": "SAP_EC", "externalReference": "SO-2026-10040" } ]
+}
+```
+
+```json
+201 Created
+{ "id": "5d8e1c2a-...", "outcome": "CREATED", "linkedOrders": 1, "unknownOrders": [] }
+```
+
+The clave de acceso decomposes as `15102026` (date) · `06` (comprobante) · `0992999999001` (RUC) ·
+`1` (pruebas) · `001001` (serie) · `000000123` (secuencial) · `12345678` (código numérico) · `1`
+(emisión normal) · `9` (mod-11). TMS stores it whole and never splits it.
+
+### 15.4 Reading them back
+
+`GET /api/v1/orders/{orderId}/documents` (`orders.order:read`) and
+`GET /api/v1/planning/trips/{tripId}/documents` return each document with `issuerTaxId`,
+`recipientTaxId`, a `fiscal` object (the V69 fields, null when absent) and `recipients[]`. The carrier
+portal's trip view carries `fiscal` (`fiscalCountry`, `fiscalDocumentCode`, `authorizationNumber`) on
+each document, under the carrier boundary of ADR-018.
