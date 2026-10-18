@@ -1239,3 +1239,32 @@ tocó (sigue en `fb76b4c`).
 - No se re-corrieron las suites tras los cambios de esta fase que no son Java/TypeScript (arnés Python y Markdown); la
   suite del TMS se corrió completa después del arreglo de la prueba.
 - Ciclo 2 de la fase: libre para lo que el supervisor decida; nada de esta fase lo necesita.
+
+## 90 · Informe de la mañana (2026-10-19, ciclo 1 de 2)
+
+### Qué entró
+
+1. **`MORNING_REPORT.md`** (esta carpeta): tabla de las 16 fases (todas DONE, ninguna BLOCKED), qué puede hacer hoy el
+   producto con el caso PLAPASA, migraciones TMS V59-V68 y EWM V56-V58 **no aplicadas** con su orden, pruebas antes y
+   después, decisiones D-01…D-09 + las del log que fijan negocio, pendientes para Dennis, pasos humanos en orden y
+   riesgos.
+2. **Hallazgos nuevos de esta fase** (en el informe, §5-§7):
+   - D-09 ya no requiere rebase: `origin/dev` del EWM contiene `f1a0e48` (PR #44, `a69d0f9`).
+   - R-1: los barridos de provisión (31 días) y de costo para servir (62 días) vienen encendidos por defecto; el
+     primer despliegue debería arrancar con `TMS_ACCRUAL_SWEEP_ENABLED=false` y `TMS_COST_ALLOCATION_SWEEP_ENABLED=false`.
+   - Ninguna rama remota conocida (según el último fetch local) tiene migraciones TMS V59-V69 ni EWM V56-V59: sin
+     choque de números a la vista.
+   - El `CLAUDE.md` del TMS nombra `confirmWithReason`; la función real es `promptDialog` (deuda de docs, no se tocó).
+3. **`CLAUDE.md`**: TMS ya tenía ADR-022…026 (fase 80) y el EWM ya tenía V56-V58 en su mapa (fases 25-35); no hubo que
+   cambiarlos.
+4. **EWM**: `docs/tms-sync/DESPLIEGUE.md` (lote V54→V58, mecanismo oficial, TMS primero, re-guardar el conector,
+   reenvío de perfiles, reconciliación apagada) y un enlace desde `DESIGN.md`.
+
+### Pruebas
+
+Sólo Markdown en los dos repos: no se re-corrieron suites. Los números del informe son los de la fase 80
+(`CERTIFICATION.md`).
+
+### Qué quedó fuera
+
+- Nada de la fase. El ciclo 2 no hace falta.
