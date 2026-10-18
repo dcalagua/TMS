@@ -555,6 +555,23 @@ class WarehouseExecutionApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("v1.1: geometry beyond the columns' bounds is a 400 naming the field, not a retry-409")
+    void dispatchV11GeometryOutOfBounds() throws Exception {
+        mode("HYBRID");
+        Shipment shipment = readyShipment("100");
+        dispatch(documentV11(shipment, "SLS-" + SEQUENCE.incrementAndGet(), shipment.plate, "C4X-991",
+                "\"stacks\":10,\"effectiveVolumeM3\":0.1503,\"loadingMeters\":99999999,\"geometryReason\":null"))
+                .andExpect(status().isBadRequest())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .string(org.hamcrest.Matchers.containsString("loadingMeters")));
+        dispatch(documentV11(shipment, "SLS-" + SEQUENCE.incrementAndGet(), shipment.plate, "C4X-991",
+                "\"stacks\":10,\"effectiveVolumeM3\":123456789012,\"loadingMeters\":0.05,\"geometryReason\":null"))
+                .andExpect(status().isBadRequest())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .string(org.hamcrest.Matchers.containsString("effectiveVolumeM3")));
+    }
+
+    @Test
     @DisplayName("v1.1: VEHICLE_MISMATCH compares only licensePlate, even when the trailer carries the planned plate")
     void dispatchV11VehicleMismatchOnTractorOnly() throws Exception {
         mode("HYBRID");

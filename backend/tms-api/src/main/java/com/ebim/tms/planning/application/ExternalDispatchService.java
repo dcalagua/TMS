@@ -370,6 +370,13 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
             dispatchOrders.flush();
             return saved;
         } catch (DataIntegrityViolationException raced) {
+            String constraint = String.valueOf(raced.getMostSpecificCause().getMessage());
+            if (!constraint.contains("uq_external_dispatch_revision") && !constraint.contains("uq_external_dispatch_current")) {
+                // Not a race: the database refused a value of this document, and it will refuse it
+                // on every retry. Said as invalid, so the sender fixes the document instead of looping.
+                throw new InvalidRequestException("Dispatch " + command.dispatchReference() + " revision "
+                        + command.revision() + " could not be stored: a value is outside what TMS can record.");
+            }
             // The same document delivered twice at the same instant: the loser is told to retry, and
             // its retry is answered UNCHANGED from the winner's row.
             throw new ConflictException("Dispatch " + command.dispatchReference() + " revision " + command.revision()

@@ -2,6 +2,7 @@ package com.ebim.tms.integration.application;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -70,9 +71,18 @@ public record DispatchConfirmationV1(
 
     public record Totals(
             @PositiveOrZero(message = "cannot be negative") Integer handlingUnits,
-            @PositiveOrZero(message = "cannot be negative") BigDecimal weightKg,
-            @PositiveOrZero(message = "cannot be negative") BigDecimal volumeM3) {
+            @PositiveOrZero(message = "cannot be negative")
+            @DecimalMax(value = MAX_WEIGHT_KG, message = "must be at most " + MAX_WEIGHT_KG) BigDecimal weightKg,
+            @PositiveOrZero(message = "cannot be negative")
+            @DecimalMax(value = MAX_VOLUME_M3, message = "must be at most " + MAX_VOLUME_M3) BigDecimal volumeM3) {
     }
+
+    // The columns' own bounds (V53 numeric(14,3) and (14,4), V60 numeric(10,3)): a figure beyond them
+    // is refused here with a 400 naming the field, instead of reaching the database and coming back
+    // as a "retry the delivery" 409 that no retry can ever clear.
+    static final String MAX_WEIGHT_KG = "99999999999.999";
+    static final String MAX_VOLUME_M3 = "9999999999.9999";
+    static final String MAX_LOADING_METERS = "9999999.999";
 
     /** An order, keyed by its ERP namespace and reference - byte for byte, never normalised. */
     public record Order(
@@ -84,17 +94,22 @@ public record DispatchConfirmationV1(
             @Size(max = 80, message = "must be at most 80 characters") String warehouseOrderNumber,
             @Size(max = 40, message = "must be at most 40 characters") String status,
             @PositiveOrZero(message = "cannot be negative") Integer handlingUnits,
-            @PositiveOrZero(message = "cannot be negative") BigDecimal weightKg,
-            @PositiveOrZero(message = "cannot be negative") BigDecimal volumeM3,
+            @PositiveOrZero(message = "cannot be negative")
+            @DecimalMax(value = MAX_WEIGHT_KG, message = "must be at most " + MAX_WEIGHT_KG) BigDecimal weightKg,
+            @PositiveOrZero(message = "cannot be negative")
+            @DecimalMax(value = MAX_VOLUME_M3, message = "must be at most " + MAX_VOLUME_M3) BigDecimal volumeM3,
             @Size(max = 5000, message = "must have at most 5000 lines") List<@Valid @NotNull Line> lines,
             // v1.1 (§7.3): the geometry the warehouse computed with ADR-022's footprint rules. Null
             // when it could not, with geometryReason saying why. Stored, not compared (phase 45).
             @JsonInclude(JsonInclude.Include.NON_NULL)
             @PositiveOrZero(message = "cannot be negative") Integer stacks,
             @JsonInclude(JsonInclude.Include.NON_NULL)
-            @PositiveOrZero(message = "cannot be negative") BigDecimal effectiveVolumeM3,
+            @PositiveOrZero(message = "cannot be negative")
+            @DecimalMax(value = MAX_VOLUME_M3, message = "must be at most " + MAX_VOLUME_M3) BigDecimal effectiveVolumeM3,
             @JsonInclude(JsonInclude.Include.NON_NULL)
-            @PositiveOrZero(message = "cannot be negative") BigDecimal loadingMeters,
+            @PositiveOrZero(message = "cannot be negative")
+            @DecimalMax(value = MAX_LOADING_METERS, message = "must be at most " + MAX_LOADING_METERS)
+            BigDecimal loadingMeters,
             @JsonInclude(JsonInclude.Include.NON_NULL)
             @Size(max = 60, message = "must be at most 60 characters") String geometryReason) {
     }

@@ -13,10 +13,12 @@ import com.ebim.tms.shared.reference.MaterialProfileIntakePort;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -59,6 +61,12 @@ public class MaterialProfileIntakeService implements MaterialProfileIntakePort {
     private final MaterialProfileRepository repository;
     private final AuditRecorder auditRecorder;
 
+    /** numeric(10,3) and numeric(10,4) (V59). */
+    private static final BigDecimal MAX_UNIT_WEIGHT_KG = new BigDecimal("9999999.999");
+    private static final BigDecimal MAX_UNIT_VOLUME_M3 = new BigDecimal("999999.9999");
+
+    private static final Pattern CONSTRAINT_NAME = Pattern.compile("constraint \"([a-z0-9_]+)\"");
+
     public MaterialProfileIntakeService(MaterialProfileRepository repository, AuditRecorder auditRecorder) {
         this.repository = repository;
         this.auditRecorder = auditRecorder;
@@ -77,7 +85,12 @@ public class MaterialProfileIntakeService implements MaterialProfileIntakePort {
         }
 
         MaterialProfile.Content content = merge(command, existing.map(MaterialProfile::content).orElse(null));
-        List<String> violations = content.block().violations();
+        List<String> violations = new ArrayList<>(content.block().violations());
+        // The unit figures obey V59's CHECKs too (positive, numeric(10,3) and numeric(10,4)). Refused
+        // here with a sentence: left to the database they became a constraint violation that save()
+        // reported as a concurrent write, and the sender retried a payload that can never be stored.
+        unitFigure(violations, "unitWeightKg", content.unitWeightKg(), MAX_UNIT_WEIGHT_KG, 3);
+        unitFigure(violations, "unitVolumeM3", content.unitVolumeM3(), MAX_UNIT_VOLUME_M3, 4);
         if (!violations.isEmpty()) {
             throw new InvalidRequestException("The material profile '" + materialCode + "' is not valid: "
                     + String.join("; ", violations) + ".");
@@ -170,13 +183,42 @@ public class MaterialProfileIntakeService implements MaterialProfileIntakePort {
         return value == null ? null : value.setScale(scale, RoundingMode.HALF_UP);
     }
 
+    private static void unitFigure(List<String> found, String field, BigDecimal value, BigDecimal max, int scale) {
+        if (value != null && (value.signum() <= 0 || value.compareTo(max) > 0)) {
+            found.add(field + " must be greater than zero and at most " + max.toPlainString() + " (" + scale
+                    + " decimals)");
+        }
+    }
+
+    /**
+     * Only a real race is a conflict: another delivery updated the row (optimistic lock) or inserted the
+     * same material first ({@code uq_material_profile_code}). Any other constraint is a payload the
+     * database refuses and will go on refusing, so it is invalid - a "send it again" would loop.
+     */
     private MaterialProfile save(MaterialProfile profile, String materialCode) {
         try {
             return repository.saveAndFlush(profile);
-        } catch (ObjectOptimisticLockingFailureException | DataIntegrityViolationException raced) {
-            throw new ConflictException("The material profile '" + materialCode
-                    + "' was written concurrently by another delivery. Send it again.");
+        } catch (ObjectOptimisticLockingFailureException raced) {
+            throw concurrentWrite(materialCode);
+        } catch (DataIntegrityViolationException refused) {
+            String message = String.valueOf(refused.getMostSpecificCause().getMessage());
+            if (message.contains("uq_material_profile_code")) {
+                throw concurrentWrite(materialCode);
+            }
+            throw new InvalidRequestException("The material profile '" + materialCode
+                    + "' is not valid: the database refused it (" + constraintOf(message) + ").");
         }
+    }
+
+    private static ConflictException concurrentWrite(String materialCode) {
+        return new ConflictException("The material profile '" + materialCode
+                + "' was written concurrently by another delivery. Send it again.");
+    }
+
+    /** The constraint a PostgreSQL message names, never the row values it may quote. */
+    private static String constraintOf(String message) {
+        Matcher constraint = CONSTRAINT_NAME.matcher(message);
+        return constraint.find() ? constraint.group(1) : "constraint violation";
     }
 
     private void audit(CompanyScope scope, MaterialProfile profile, AuditAction action) {
