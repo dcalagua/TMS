@@ -115,6 +115,33 @@ describe("la factura abierta", () => {
     expect(within(block).getByText(/500 PEN/)).toBeInTheDocument();
   });
 
+  it("una factura de Ecuador habla de IVA, del código del SRI y de la retención del IR (ADR-027)", async () => {
+    served = {
+      ...INVOICE, currency: "USD", totalAmount: 1250,
+      fiscal: {
+        fiscalCountry: "EC", regime: "EC", vatLabel: "IVA", documentKind: "INVOICE", fiscalDocumentCode: "01",
+        effectiveSign: 1, documentNumber: "001-001-000000123", issuerTaxId: "0990004196001",
+        subtotalAmount: 1250, taxRate: 0, taxAmount: 0, referencedInvoiceId: null, referencedInvoiceNumber: null,
+        netAmount: 1250, notes: [],
+        withholdings: [{
+          kind: "EC_INCOME_TAX_WITHHOLDING", label: "Retención en la fuente (IR)", code: "310", base: "SUBTOTAL",
+          baseAmount: 1250, rate: 1, computedAmount: 12.5, amount: 12.5, overrideReason: null,
+          certificateNumber: null, certificateDate: null,
+        }],
+        withholdingTotalAmount: 12.5, electronicValidation: "EXTERNAL_DEPENDENCY",
+      },
+    };
+    renderDrawer();
+
+    expect(await screen.findByText("Factura (01)")).toBeInTheDocument();
+    expect(screen.getByText("001-001-000000123")).toBeInTheDocument();
+    expect(screen.getByText("IVA")).toBeInTheDocument();
+    expect(screen.getByText("Retención en la fuente (IR)")).toBeInTheDocument();
+    expect(screen.getByText(/Código 310 al 1 %/)).toBeInTheDocument();
+    expect(screen.getByText("No disponible (dependencia externa)")).toBeInTheDocument();
+    expect(screen.queryByText(/IGV|SUNAT/)).not.toBeInTheDocument();
+  });
+
   it("exporta en el formato elegido", async () => {
     const user = userEvent.setup();
     renderDrawer();

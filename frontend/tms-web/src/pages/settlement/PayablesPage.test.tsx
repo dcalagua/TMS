@@ -59,11 +59,19 @@ const AGING: PayableAgingView = {
   ],
 };
 const PAYABLE: PayableView = {
-  invoiceId: "inv-1", invoiceNumber: "F001-100", documentType: "01", carrierId: "car-1",
+  invoiceId: "inv-1", invoiceNumber: "F001-100", documentKind: "INVOICE", fiscalDocumentCode: "01", carrierId: "car-1",
   carrierName: "Transportes Andinos SAC", currency: "PEN", status: "EXPORTED", invoiceDate: "2026-09-01",
   dueDate: "2026-10-01", paymentTermsDays: 30, scheduledPaymentDate: null, onHoldReason: null,
-  netAmount: 1300, detractionAmount: 52, detractionConstancyNumber: null, detractionConstancyDate: null,
-  retentionAmount: 68, payableAmount: 1180, paidAmount: 0, openBalance: 1180, daysOverdue: 17,
+  netAmount: 1300,
+  // Una lista de retenciones (ADR-027): aquí una detracción y una retención, cada una con su comprobante.
+  withholdings: [
+    { kind: "PE_DETRACTION", label: "Detracción (SPOT)", code: "027", base: "TOTAL", baseAmount: 1300, rate: 4,
+      computedAmount: 52, amount: 52, overrideReason: null, certificateNumber: null, certificateDate: null },
+    { kind: "PE_RETENTION", label: "Retención del IGV", code: null, base: "TOTAL", baseAmount: 1300, rate: 3,
+      computedAmount: 39, amount: 68, overrideReason: "Ajuste", certificateNumber: "R-1", certificateDate: null },
+  ],
+  withholdingTotalAmount: 120,
+  payableAmount: 1180, paidAmount: 0, openBalance: 1180, daysOverdue: 17,
   allowedActions: ["SCHEDULE", "HOLD", "REQUEST_PAYMENT"],
   payments: [],
   requests: [],
@@ -138,7 +146,7 @@ async function openDrawer() {
   renderPage();
   await user.click(await screen.findByText("F001-100"));
   const drawer = await screen.findByRole("dialog");
-  await within(drawer).findByText("Constancia pendiente");
+  await within(drawer).findByText("Comprobante pendiente");
   return { user, drawer };
 }
 
@@ -219,9 +227,9 @@ describe("la pantalla de cuentas por pagar", () => {
     const amount = within(form).getByRole("spinbutton", { name: /^Monto\s*\*?$/ });
     await user.clear(amount);
     await user.type(amount, "1000");
-    await user.type(within(form).getByRole("textbox", { name: /Constancia de detracción/ }), "CD-123");
-    fireEvent.change(within(form).getByLabelText(/Fecha de constancia/), { target: { value: "2026-10-16" } });
-    await user.type(within(form).getByRole("spinbutton", { name: /Monto de detracción/ }), "52");
+    await user.type(within(form).getByRole("textbox", { name: /Detracción \(SPOT\): comprobante/ }), "CD-123");
+    fireEvent.change(within(form).getByLabelText(/Detracción \(SPOT\): fecha del comprobante/), { target: { value: "2026-10-16" } });
+    await user.type(within(form).getByRole("spinbutton", { name: /Detracción \(SPOT\): monto/ }), "52");
     await user.click(within(form).getByRole("button", { name: "Enviar a confirmar" }));
 
     await waitFor(() => expect(calls("/settlement/payables/inv-1/payment-requests", "POST")).toHaveLength(1));
@@ -231,10 +239,7 @@ describe("la pantalla de cuentas por pagar", () => {
       paidOn: "2026-10-16",
       amount: 1000,
       currency: "PEN",
-      detractionConstancyNumber: "CD-123",
-      detractionConstancyDate: "2026-10-16",
-      detractionAmount: 52,
-      retentionAmount: null,
+      withholdings: [{ kind: "PE_DETRACTION", amount: 52, certificateNumber: "CD-123", certificateDate: "2026-10-16" }],
     });
   });
 

@@ -86,6 +86,8 @@ export const CAPABILITY = {
   PAYMENT_CONFIRM: "PAYMENT_CONFIRM",
   /** Portal: «Mis facturas» del transportista (`portal.invoice:read`). */
   CARRIER_INVOICES: "CARRIER_INVOICES",
+  /** ADR-027: editar el régimen fiscal de la empresa (`settlement.tax:manage`). Leerlo es `SETTLEMENT_VIEW`. */
+  TAX_REGIME_MANAGE: "TAX_REGIME_MANAGE",
 } as const;
 
 /**

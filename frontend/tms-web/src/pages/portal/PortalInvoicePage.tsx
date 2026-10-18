@@ -69,7 +69,7 @@ export function PortalInvoicePage() {
             </Typography>
             {invoice && (
               <Typography color="text.secondary" sx={{ fontSize: 14, fontWeight: 600 }}>
-                {enumLabel("documentType", invoice.documentType)} · {fmtDate(invoice.invoiceDate)}
+                {invoice.fiscalDocumentCode ? `${enumLabel("documentKind", invoice.documentKind)} (${invoice.fiscalDocumentCode})` : enumLabel("documentKind", invoice.documentKind)} · {fmtDate(invoice.invoiceDate)}
               </Typography>
             )}
           </Box>
@@ -107,17 +107,16 @@ export function PortalInvoicePage() {
             <Row label={t("Vencimiento")}>{invoice.dueDate ? fmtDate(invoice.dueDate) : t("Sin vencimiento")}</Row>
             <Row label={t("Total")}>{portalMoney(invoice.totalAmount, invoice.currency)}</Row>
             {invoice.netAmount !== null && <Row label={t("Neto con notas")}>{portalMoney(invoice.netAmount, invoice.currency)}</Row>}
-            {invoice.detractionAmount !== null && (
-              <Row label={t("Detracción")}>
-                {portalMoney(invoice.detractionAmount, invoice.currency)}
+            {(invoice.withholdings ?? []).map((withholding) => (
+              <Row key={withholding.kind} label={withholding.label ?? enumLabel("withholdingKind", withholding.kind)}>
+                {portalMoney(withholding.amount, invoice.currency)}
                 <Typography component="span" color="text.secondary" sx={{ display: "block", fontSize: 13 }}>
-                  {invoice.detractionConstancyNumber
-                    ? t("Constancia {{number}}", { number: invoice.detractionConstancyNumber })
-                    : t("Constancia pendiente")}
+                  {withholding.certificateNumber
+                    ? t("Comprobante {{number}}", { number: withholding.certificateNumber })
+                    : t("Comprobante pendiente")}
                 </Typography>
               </Row>
-            )}
-            {invoice.retentionAmount !== null && <Row label={t("Retención")}>{portalMoney(invoice.retentionAmount, invoice.currency)}</Row>}
+            ))}
             {invoice.payableAmount !== null && <Row label={t("A pagar")} strong>{portalMoney(invoice.payableAmount, invoice.currency)}</Row>}
             <Row label={t("Pagado")}>{portalMoney(invoice.paidAmount, invoice.currency)}</Row>
             <Row label={t("Saldo")} strong>{portalMoney(invoice.openBalance, invoice.currency)}</Row>
@@ -140,18 +139,14 @@ export function PortalInvoicePage() {
                     <Typography color="text.secondary" sx={{ fontSize: 14 }}>
                       {t("Referencia {{ref}}", { ref: payment.paymentReference })}
                     </Typography>
-                    {payment.detractionConstancyNumber && (
-                      <Typography color="text.secondary" sx={{ fontSize: 14 }}>
-                        {t("Constancia {{number}}", { number: payment.detractionConstancyNumber })}
-                        {payment.detractionConstancyDate ? ` · ${fmtDate(payment.detractionConstancyDate)}` : ""}
-                        {payment.detractionAmount !== null ? ` · ${portalMoney(payment.detractionAmount, invoice.currency)}` : ""}
+                    {(payment.withholdings ?? []).map((withholding) => (
+                      <Typography key={withholding.kind} color="text.secondary" sx={{ fontSize: 14 }}>
+                        {enumLabel("withholdingKind", withholding.kind)}
+                        {withholding.amount !== null ? ` · ${portalMoney(withholding.amount, invoice.currency)}` : ""}
+                        {withholding.certificateNumber ? ` · ${t("Comprobante {{number}}", { number: withholding.certificateNumber })}` : ""}
+                        {withholding.certificateDate ? ` · ${fmtDate(withholding.certificateDate)}` : ""}
                       </Typography>
-                    )}
-                    {payment.retentionAmount !== null && (
-                      <Typography color="text.secondary" sx={{ fontSize: 14 }}>
-                        {t("Retención {{amount}}", { amount: portalMoney(payment.retentionAmount, invoice.currency) })}
-                      </Typography>
-                    )}
+                    ))}
                   </Card>
                 ))}
               </Box>

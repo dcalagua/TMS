@@ -8,11 +8,14 @@ import type { ApiError } from "../../shared/api/httpClient";
 import { fetchCarriers } from "../../shared/api/carriersApi";
 import { fetchTrips } from "../../shared/api/planningApi";
 import {
-  CHARGE_CODES, DOCUMENT_TYPES, PENALTY_REFERENCE_TYPES, fetchFiscalSettings, fetchInvoices, receiveInvoice,
-  type CarrierInvoiceRequest, type CarrierInvoiceView, type ChargeCode, type DocumentTypeCode,
-  type PenaltyReferenceType,
+  CHARGE_CODES, DOCUMENT_KINDS, PENALTY_REFERENCE_TYPES, fetchFiscalSettings, fetchInvoices, receiveInvoice,
+  type CarrierInvoiceRequest, type CarrierInvoiceView, type ChargeCode, type DocumentKind,
+  type PenaltyReferenceType, type TaxRegimeView,
 } from "../../shared/api/settlementApi";
-import { breakdownAddsUp, igvOf, isValidRuc, previewTaxes } from "./fiscalRules";
+import {
+  breakdownAddsUp, documentCodeOf, isAllowedVatRate, isValidDocumentNumber, isValidTaxId, previewVatRate,
+  previewWithholdings, requiresBreakdown as breakdownRequiredFor, taxOf, type WithholdingPreview,
+} from "./fiscalRules";
 import {
   FormDateInput, FormDrawer, FormRow, FormSection, LookupField, type LookupOption,
 } from "../../shared/ui/components";
@@ -46,15 +49,14 @@ interface InvoiceFormValues {
   externalReference: string;
   notes: string;
   lines: LineValues[];
-  // V66 (ADR-024 parte 2).
-  documentType: DocumentTypeCode;
+  // ADR-027: lo fiscal, en el vocabulario del régimen de la empresa.
+  documentKind: DocumentKind;
   referencedInvoiceId: string;
-  series: string;
-  correlative: string;
-  issuerRuc: string;
+  documentNumber: string;
+  issuerTaxId: string;
   subtotalAmount: string;
-  igvRate: string;
-  igvAmount: string;
+  taxRate: string;
+  taxAmount: string;
 }
 
 const EMPTY_LINE: LineValues = {
@@ -64,12 +66,12 @@ const EMPTY_LINE: LineValues = {
 
 const KNOWN_FIELDS = new Set<string>([
   "carrierId", "invoiceNumber", "invoiceDate", "currency", "totalAmount", "externalReference", "notes",
-  "documentType", "referencedInvoiceId", "series", "correlative", "issuerRuc", "subtotalAmount", "igvRate",
-  "igvAmount",
+  "documentKind", "referencedInvoiceId", "documentNumber", "issuerTaxId", "subtotalAmount", "taxRate",
+  "taxAmount",
 ]);
 
-const SERIES_PATTERN = /^(F[A-Z0-9]{3}|E001|[0-9]{4})$/;
-const CORRELATIVE_PATTERN = /^[0-9]{1,8}$/;
+/** Sin régimen todavía (o sin permiso para leerlo): el impuesto se llama por su nombre genérico. */
+const FALLBACK_VAT_LABEL = "IVA/VAT";
 
 const toNumber = (value: string): number | null => (value.trim() === "" ? null : Number(value));
 
@@ -80,6 +82,33 @@ function numeric(value: string, { negative = false } = {}): true | string {
   if (!Number.isFinite(parsed)) return t("Introduce un número válido");
   if (!negative && parsed < 0) return t("No puede ser negativo");
   return true;
+}
+
+/** Lo que el servidor calculará, dicho en una frase por retención. */
+function previewSentences(preview: WithholdingPreview, regime: TaxRegimeView, currency: string): string[] {
+  if (preview.status === "none") {
+    if (preview.reason === "note") return [t("Una nota no calcula retenciones propias.")];
+    if (preview.reason === "no-rules") return [t("El régimen fiscal de la empresa no calcula retenciones.")];
+    return regime.fiscalCurrency
+      ? [t("Las retenciones sólo se calculan en {{currency}}.", { currency: regime.fiscalCurrency })]
+      : [t("El régimen fiscal de la empresa no calcula retenciones.")];
+  }
+  const sentences = preview.items.map((item) => t("{{label}}{{code}} al {{rate}} %: {{amount}} {{currency}} (se calcula, no se paga).", {
+    label: item.label,
+    code: item.code ? ` ${item.code}` : "",
+    rate: fmtDecimal(item.rate, 2),
+    amount: fmtDecimal(item.amount, 2),
+    currency,
+  }));
+  for (const skip of preview.skipped) {
+    if (skip.reason === "below-threshold" && skip.rule.thresholdAmount !== null) {
+      sentences.push(t("Sin {{label}}: el total no supera {{threshold}} {{currency}}.", {
+        label: skip.rule.label, threshold: fmtDecimal(skip.rule.thresholdAmount, 2), currency,
+      }));
+    }
+  }
+  if (sentences.length === 0) sentences.push(t("No aplica ninguna retención a este documento."));
+  return sentences;
 }
 
 interface InvoiceFormDrawerProps {
@@ -102,12 +131,12 @@ interface InvoiceFormDrawerProps {
  * distintos se suman; la misma combinación viaje + cargo dos veces es un duplicado, y se avisa
  * aquí antes de que lo diga el servidor.
  *
- * <h2>Lo fiscal (V66)</h2>
- * Tipo SUNAT (factura, nota de crédito o de débito, que enlaza la factura que corrige), serie,
- * correlativo y RUC emisor (con su dígito verificador), y el desglose subtotal + IGV = total, que
- * es obligatorio en PEN. Las líneas van **sin IGV**: lo que se compara con el costo del viaje es el
- * subtotal. La detracción o la retención se calculan con las reglas de la empresa que devuelve el
- * servidor; la pantalla no trae ningún porcentaje propio.
+ * <h2>Lo fiscal (ADR-027)</h2>
+ * Todo sale del régimen fiscal de la empresa que devuelve el servidor (Perú, Ecuador o genérico):
+ * el nombre del impuesto, las clases de comprobante con su código del país, el formato del número,
+ * la identificación del emisor y su regla, las tasas admitidas y las retenciones. La pantalla no
+ * trae ninguna tasa, código ni moneda propia. Las líneas van **sin impuesto**: lo que se compara con
+ * el costo del viaje es el subtotal.
  */
 export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDrawerProps) {
   const [formError, setFormError] = useState<string | null>(null);
@@ -117,7 +146,7 @@ export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDr
     queryFn: ({ signal }) => fetchCarriers({ companyId, size: 200, active: true, sort: "businessName,asc", signal }),
   });
 
-  const fiscalQuery = useQuery({
+  const regimeQuery = useQuery({
     queryKey: ["fiscal-settings", companyId],
     queryFn: ({ signal }) => fetchFiscalSettings(companyId, signal),
   });
@@ -130,37 +159,43 @@ export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDr
       carrierId: "",
       invoiceNumber: "",
       invoiceDate: today(),
-      currency: "PEN",
+      currency: "",
       totalAmount: "",
       externalReference: "",
       notes: "",
       lines: [{ ...EMPTY_LINE }],
-      documentType: "01",
+      documentKind: "INVOICE",
       referencedInvoiceId: "",
-      series: "",
-      correlative: "",
-      issuerRuc: "",
+      documentNumber: "",
+      issuerTaxId: "",
       subtotalAmount: "",
-      igvRate: "",
-      igvAmount: "",
+      taxRate: "",
+      taxAmount: "",
     },
   });
 
-  // La tasa de IGV de la empresa, en cuanto llega, si nadie escribió otra.
-  const fiscal = fiscalQuery.data;
+  // La moneda fiscal y la tasa de flete del régimen, en cuanto llegan, si nadie escribió otras.
+  const regime = regimeQuery.data;
   useEffect(() => {
-    if (fiscal && getValues("igvRate") === "") setValue("igvRate", String(fiscal.igvRate));
-  }, [fiscal, getValues, setValue]);
+    if (!regime) return;
+    if (getValues("currency") === "" && regime.fiscalCurrency) setValue("currency", regime.fiscalCurrency);
+    const rate = previewVatRate(regime);
+    if (getValues("taxRate") === "" && rate !== null) setValue("taxRate", String(rate));
+  }, [regime, getValues, setValue]);
 
   const { fields, append, remove } = useFieldArray({ control, name: "lines" });
   const carrierId = useWatch({ control, name: "carrierId" });
   const currency = useWatch({ control, name: "currency" });
   const lines = useWatch({ control, name: "lines" });
-  const documentType = useWatch({ control, name: "documentType" });
-  const series = useWatch({ control, name: "series" });
+  const documentKind = useWatch({ control, name: "documentKind" });
+  const documentNumber = useWatch({ control, name: "documentNumber" });
   const totalAmount = useWatch({ control, name: "totalAmount" });
-  const isNote = documentType !== "01";
-  const requiresBreakdown = (currency ?? "").trim().toUpperCase() === (fiscal?.currency ?? "PEN");
+  const subtotalAmount = useWatch({ control, name: "subtotalAmount" });
+  const taxAmount = useWatch({ control, name: "taxAmount" });
+  const isNote = documentKind !== "INVOICE";
+  const requiresBreakdown = breakdownRequiredFor(regime, currency ?? "");
+  const vatLabel = regime?.vatLabel ?? FALLBACK_VAT_LABEL;
+  const taxIdLabel = regime?.taxId.label ?? t("Identificación fiscal");
 
   // Las facturas de este transportista que una nota puede corregir: no notas, no rechazadas.
   const referencedQuery = useQuery({
@@ -169,21 +204,23 @@ export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDr
     queryFn: ({ signal }) => fetchInvoices(companyId, { carrierId, size: 100 }, signal),
   });
   const referenceable = (referencedQuery.data?.content ?? [])
-    .filter((invoice) => (invoice.documentType ?? "01") === "01" && invoice.status !== "REJECTED");
+    .filter((invoice) => (invoice.documentKind ?? "INVOICE") === "INVOICE" && invoice.status !== "REJECTED");
 
   const total = Number(totalAmount);
-  const taxPreview = fiscal && totalAmount?.trim() !== "" && Number.isFinite(total)
-    ? previewTaxes(fiscal, documentType, currency ?? "", total)
+  const withholdingPreview = regime && totalAmount?.trim() !== "" && Number.isFinite(total)
+    ? previewWithholdings(regime, documentKind, currency ?? "", {
+      subtotal: toNumber(subtotalAmount ?? ""), tax: toNumber(taxAmount ?? ""), total,
+    })
     : null;
 
-  /** Llena el IGV con la tasa y el total con subtotal + IGV. */
+  /** Llena el impuesto con la tasa y el total con subtotal + impuesto. */
   function computeBreakdown() {
     const subtotal = Number(getValues("subtotalAmount"));
-    const rate = Number(getValues("igvRate"));
+    const rate = Number(getValues("taxRate"));
     if (!Number.isFinite(subtotal) || !Number.isFinite(rate) || getValues("subtotalAmount").trim() === "") return;
-    const igv = igvOf(subtotal, rate);
-    setValue("igvAmount", igv.toFixed(2), { shouldDirty: true, shouldValidate: true });
-    setValue("totalAmount", (subtotal + igv).toFixed(2), { shouldDirty: true, shouldValidate: true });
+    const tax = taxOf(subtotal, rate);
+    setValue("taxAmount", tax.toFixed(2), { shouldDirty: true, shouldValidate: true });
+    setValue("totalAmount", (subtotal + tax).toFixed(2), { shouldDirty: true, shouldValidate: true });
   }
 
   // Ayuda, no regla: la suma de las líneas al lado del total que se va a comparar.
@@ -218,7 +255,7 @@ export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDr
 
   async function onSubmit(values: InvoiceFormValues) {
     setFormError(null);
-    const hasCpe = values.series.trim() !== "";
+    const hasFiscalIdentity = values.documentNumber.trim() !== "";
     const hasBreakdown = values.subtotalAmount.trim() !== "";
     const request: CarrierInvoiceRequest = {
       carrierId: values.carrierId,
@@ -239,17 +276,16 @@ export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDr
           ? { penaltyReason: line.penaltyReason.trim(), penaltyReferenceType: line.penaltyReferenceType || null }
           : {}),
       })),
-      documentType: values.documentType,
+      documentKind: values.documentKind,
       ...(isNote ? { referencedInvoiceId: values.referencedInvoiceId } : {}),
-      ...(hasCpe ? {
-        series: values.series.trim().toUpperCase(),
-        correlative: values.correlative.trim(),
-        issuerRuc: values.issuerRuc.trim(),
+      ...(hasFiscalIdentity ? {
+        documentNumber: values.documentNumber.trim().toUpperCase(),
+        issuerTaxId: values.issuerTaxId.trim(),
       } : {}),
       ...(hasBreakdown ? {
         subtotalAmount: Number(values.subtotalAmount),
-        igvRate: Number(values.igvRate),
-        igvAmount: Number(values.igvAmount),
+        taxRate: Number(values.taxRate),
+        taxAmount: Number(values.taxAmount),
       } : {}),
     };
 
@@ -282,21 +318,31 @@ export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDr
     >
       <Box component="form" id={FORM_ID} onSubmit={(event) => void handleSubmit(onSubmit)(event)} noValidate>
         {formError && <Alert severity="error" sx={{ mb: 1 }}>{formError}</Alert>}
+        {regimeQuery.isError && (
+          <Alert severity="warning" variant="outlined" sx={{ mb: 1 }}>
+            {t("No se pudo cargar el régimen fiscal de la empresa: el servidor validará los impuestos al guardar.")}
+          </Alert>
+        )}
 
         <FormSection title={t("Cabecera")} help={t("Quién factura, con qué número y por cuánto. El total de la cabecera es lo que se compara.")}>
           <FormRow>
             <Controller
               control={control}
-              name="documentType"
+              name="documentKind"
               render={({ field }) => (
                 <TextField
-                  select label={t("Tipo de documento")} size="small" fullWidth
-                  value={field.value} onChange={(e) => field.onChange(e.target.value as DocumentTypeCode)}
+                  select label={t("Tipo de comprobante")} size="small" fullWidth
+                  value={field.value} onChange={(e) => field.onChange(e.target.value as DocumentKind)}
                   helperText={isNote ? t("Una nota corrige una factura del mismo transportista; sus importes van en positivo.") : undefined}
                 >
-                  {DOCUMENT_TYPES.map((code) => (
-                    <MenuItem key={code} value={code}>{enumLabel("documentType", code)}</MenuItem>
-                  ))}
+                  {DOCUMENT_KINDS.map((kind) => {
+                    const code = documentCodeOf(regime, kind);
+                    return (
+                      <MenuItem key={kind} value={kind}>
+                        {code ? `${enumLabel("documentKind", kind)} (${code})` : enumLabel("documentKind", kind)}
+                      </MenuItem>
+                    );
+                  })}
                 </TextField>
               )}
             />
@@ -324,36 +370,38 @@ export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDr
               />
             ) : <Box />}
           </FormRow>
-          <FormRow cols={3}>
+          <FormRow>
             <TextField
-              label={t("Serie")} size="small" fullWidth placeholder="F001"
-              error={Boolean(errors.series)} helperText={errors.series?.message ?? t("CPE: serie, correlativo y RUC juntos.")}
-              {...register("series", {
+              label={t("Número del comprobante")} size="small" fullWidth
+              placeholder={regime?.documentNumber.placeholder ?? undefined}
+              error={Boolean(errors.documentNumber)}
+              helperText={errors.documentNumber?.message
+                ?? regime?.documentNumber.hint
+                ?? t("El número fiscal y la identificación del emisor van juntos.")}
+              {...register("documentNumber", {
                 validate: (value, all) => {
-                  const any = [value, all.correlative, all.issuerRuc].some((part) => part.trim() !== "");
-                  if (!any) return true;
-                  if (value.trim() === "") return t("Serie, correlativo y RUC van juntos.");
-                  return SERIES_PATTERN.test(value.trim().toUpperCase()) || t("F + 3 caracteres, E001 o 4 dígitos.");
+                  if (value.trim() === "" && all.issuerTaxId.trim() === "") return true;
+                  if (value.trim() === "") return t("El número del comprobante y la identificación del emisor van juntos.");
+                  if (!regime || isValidDocumentNumber(regime, value)) return true;
+                  return regime.documentNumber.placeholder
+                    ? t("No tiene el formato del país, p. ej. {{example}}.", { example: regime.documentNumber.placeholder })
+                    : t("No tiene el formato del país.");
                 },
               })}
             />
             <TextField
-              label={t("Correlativo")} size="small" fullWidth
-              error={Boolean(errors.correlative)} helperText={errors.correlative?.message}
-              {...register("correlative", {
+              label={t("{{label}} emisor", { label: taxIdLabel })} size="small" fullWidth
+              error={Boolean(errors.issuerTaxId)} helperText={errors.issuerTaxId?.message ?? regime?.taxId.hint ?? undefined}
+              {...register("issuerTaxId", {
                 validate: (value, all) => {
-                  if (all.series.trim() === "" && value.trim() === "") return true;
-                  return (CORRELATIVE_PATTERN.test(value.trim()) && Number(value) > 0) || t("De 1 a 8 dígitos, no cero.");
-                },
-              })}
-            />
-            <TextField
-              label={t("RUC emisor")} size="small" fullWidth
-              error={Boolean(errors.issuerRuc)} helperText={errors.issuerRuc?.message}
-              {...register("issuerRuc", {
-                validate: (value, all) => {
-                  if (all.series.trim() === "" && value.trim() === "") return true;
-                  return isValidRuc(value.trim()) || t("RUC no válido: el dígito verificador no coincide.");
+                  if (all.documentNumber.trim() === "" && value.trim() === "") return true;
+                  if (value.trim() === "") return t("El número del comprobante y la identificación del emisor van juntos.");
+                  if (!isValidTaxId(regime?.taxId.rule ?? "FREE_TEXT", value)) {
+                    return regime?.taxId.rule === "FREE_TEXT" || !regime
+                      ? t("Identificación fiscal no válida.")
+                      : t("{{label}} no válido: el dígito verificador no coincide.", { label: taxIdLabel });
+                  }
+                  return true;
                 },
               })}
             />
@@ -379,12 +427,12 @@ export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDr
               )}
             />
             <TextField
-              label={t("Número de factura")} required={series.trim() === ""} size="small" fullWidth
+              label={t("Número de factura")} required={documentNumber.trim() === ""} size="small" fullWidth
               error={Boolean(errors.invoiceNumber)}
               helperText={errors.invoiceNumber?.message
-                ?? (series.trim() !== "" ? t("Con serie y correlativo se compone solo.") : undefined)}
+                ?? (documentNumber.trim() !== "" ? t("Con el número del comprobante se compone solo.") : undefined)}
               {...register("invoiceNumber", {
-                validate: (value, all) => all.series.trim() !== "" || value.trim() !== "" || t("Este campo es obligatorio"),
+                validate: (value, all) => all.documentNumber.trim() !== "" || value.trim() !== "" || t("Este campo es obligatorio"),
                 maxLength: { value: 60, message: t("No puede superar los {{count}} caracteres", { count: 60 }) },
               })}
             />
@@ -397,11 +445,11 @@ export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDr
               error={Boolean(errors.invoiceDate)} helperText={errors.invoiceDate?.message}
             />
             <TextField
-              label={t("Moneda")} required size="small" fullWidth placeholder="PEN"
+              label={t("Moneda")} required size="small" fullWidth placeholder={regime?.fiscalCurrency ?? "USD"}
               error={Boolean(errors.currency)} helperText={errors.currency?.message}
               {...register("currency", {
                 required: t("Este campo es obligatorio"),
-                pattern: { value: CURRENCY_PATTERN, message: t("Tres letras, p. ej. PEN") },
+                pattern: { value: CURRENCY_PATTERN, message: t("Tres letras, código ISO 4217 (p. ej. USD).") },
               })}
             />
             <TextField
@@ -412,10 +460,10 @@ export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDr
                 validate: (value, all) => {
                   const valid = numeric(value);
                   if (valid !== true) return valid;
-                  if (all.subtotalAmount.trim() === "" || all.igvAmount.trim() === "") return true;
-                  return breakdownAddsUp(Number(all.subtotalAmount), Number(all.igvAmount), Number(value),
-                    fiscal?.breakdownTolerance ?? 0.01)
-                    || t("Subtotal + IGV no coincide con el total.");
+                  if (all.subtotalAmount.trim() === "" || all.taxAmount.trim() === "") return true;
+                  return breakdownAddsUp(Number(all.subtotalAmount), Number(all.taxAmount), Number(value),
+                    regime?.breakdownTolerance ?? 0.01)
+                    || t("Subtotal + {{vat}} no coincide con el total.", { vat: vatLabel });
                 },
               })}
             />
@@ -440,62 +488,69 @@ export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDr
 
         <FormSection
           title={t("Impuestos")}
-          help={t("Subtotal sin IGV, tasa e IGV; obligatorio en PEN. La detracción o la retención las calcula el servidor con las reglas de la empresa.")}
+          help={requiresBreakdown
+            ? t("Subtotal sin {{vat}}, tasa e importe; obligatorio en {{currency}}. Las retenciones las calcula el servidor con las reglas de la empresa.", {
+              vat: vatLabel, currency: regime?.fiscalCurrency ?? "",
+            })
+            : t("Subtotal sin {{vat}}, tasa e importe, juntos o ninguno. Las retenciones las calcula el servidor con las reglas de la empresa.", { vat: vatLabel })}
           actions={
-            <Button size="small" onClick={computeBreakdown}>{t("Calcular IGV y total")}</Button>
+            <Button size="small" onClick={computeBreakdown}>{t("Calcular {{vat}} y total", { vat: vatLabel })}</Button>
           }
         >
           <FormRow cols={3}>
             <TextField
-              label={t("Subtotal (sin IGV)")} required={requiresBreakdown} size="small" fullWidth type="number"
+              label={t("Subtotal (sin {{vat}})", { vat: vatLabel })} required={requiresBreakdown} size="small" fullWidth type="number"
               error={Boolean(errors.subtotalAmount)} helperText={errors.subtotalAmount?.message}
               {...register("subtotalAmount", {
                 validate: (value, all) => {
                   const valid = numeric(value);
                   if (valid !== true) return valid;
-                  const anyPart = [value, all.igvAmount].some((part) => part.trim() !== "");
-                  if (requiresBreakdown && value.trim() === "") return t("En PEN el documento indica su desglose.");
-                  return !anyPart || (value.trim() !== "" && all.igvAmount.trim() !== "")
-                    || t("Subtotal, tasa e IGV van juntos.");
+                  const anyPart = [value, all.taxAmount].some((part) => part.trim() !== "");
+                  if (requiresBreakdown && value.trim() === "") {
+                    return t("En {{currency}} el documento indica su desglose.", { currency: regime?.fiscalCurrency ?? "" });
+                  }
+                  return !anyPart || (value.trim() !== "" && all.taxAmount.trim() !== "")
+                    || t("Subtotal, tasa e impuesto van juntos.");
                 },
               })}
             />
             <TextField
-              label={t("Tasa IGV (%)")} size="small" fullWidth type="number"
-              error={Boolean(errors.igvRate)} helperText={errors.igvRate?.message}
-              {...register("igvRate", { validate: (value) => numeric(value) })}
+              label={t("Tasa {{vat}} (%)", { vat: vatLabel })} size="small" fullWidth type="number"
+              error={Boolean(errors.taxRate)}
+              helperText={errors.taxRate?.message
+                ?? (regime && regime.allowedVatRates.length > 0
+                  ? t("Tasas admitidas: {{rates}} %", { rates: regime.allowedVatRates.map((rate) => fmtDecimal(rate, 2)).join(", ") })
+                  : undefined)}
+              {...register("taxRate", {
+                validate: (value, all) => {
+                  const valid = numeric(value);
+                  if (valid !== true) return valid;
+                  if (value.trim() === "" || all.subtotalAmount.trim() === "" || !regime) return true;
+                  return isAllowedVatRate(regime, Number(value))
+                    || t("Tasa no admitida por el régimen fiscal: {{rates}} %.", {
+                      rates: regime.allowedVatRates.map((rate) => fmtDecimal(rate, 2)).join(", "),
+                    });
+                },
+              })}
             />
             <TextField
-              label={t("IGV")} required={requiresBreakdown} size="small" fullWidth type="number"
-              error={Boolean(errors.igvAmount)} helperText={errors.igvAmount?.message}
-              {...register("igvAmount", {
+              label={vatLabel} required={requiresBreakdown} size="small" fullWidth type="number"
+              error={Boolean(errors.taxAmount)} helperText={errors.taxAmount?.message}
+              {...register("taxAmount", {
                 validate: (value) => {
                   const valid = numeric(value);
                   if (valid !== true) return valid;
-                  return !requiresBreakdown || value.trim() !== "" || t("En PEN el documento indica su desglose.");
+                  return !requiresBreakdown || value.trim() !== ""
+                    || t("En {{currency}} el documento indica su desglose.", { currency: regime?.fiscalCurrency ?? "" });
                 },
               })}
             />
           </FormRow>
-          {taxPreview && (
+          {regime && withholdingPreview && (
             <Alert severity="info" variant="outlined" sx={{ py: 0 }}>
-              {taxPreview.kind === "detraction"
-                ? t("Detracción {{code}} al {{rate}} %: {{amount}} PEN (se calcula, no se paga).", {
-                  code: taxPreview.code, rate: fmtDecimal(taxPreview.rate, 2), amount: fmtDecimal(taxPreview.amount, 2),
-                })
-                : taxPreview.kind === "retention"
-                  ? t("Retención al {{rate}} %: {{amount}} PEN.", {
-                    rate: fmtDecimal(taxPreview.rate, 2), amount: fmtDecimal(taxPreview.amount, 2),
-                  })
-                  : taxPreview.reason === "below-threshold"
-                    ? t("Sin detracción: el total no supera {{threshold}} PEN.", {
-                      threshold: fmtDecimal(fiscal?.detractionThresholdAmount ?? 0, 2),
-                    })
-                    : taxPreview.reason === "note"
-                      ? t("Una nota no calcula detracción propia.")
-                      : taxPreview.reason === "currency"
-                        ? t("Detracción y retención sólo se calculan en PEN.")
-                        : t("La empresa no calcula detracción.")}
+              {previewSentences(withholdingPreview, regime, (currency ?? "").toUpperCase()).map((sentence) => (
+                <Box key={sentence}>{sentence}</Box>
+              ))}
             </Alert>
           )}
         </FormSection>
@@ -608,7 +663,7 @@ export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDr
                       })}
                     />
                     <TextField
-                      label={t("Importe de la línea (sin IGV)")} required size="small" fullWidth type="number"
+                      label={t("Importe de la línea (sin {{vat}})", { vat: vatLabel })} required size="small" fullWidth type="number"
                       error={Boolean(lineErrors?.lineAmount)} helperText={lineErrors?.lineAmount?.message}
                       {...register(`lines.${index}.lineAmount`, {
                         required: t("Este campo es obligatorio"),

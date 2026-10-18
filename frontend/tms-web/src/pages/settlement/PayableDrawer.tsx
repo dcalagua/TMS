@@ -13,6 +13,7 @@ import {
   schedulePayable,
   type PayableView, type PaymentRequestInput, type PaymentRequestView,
 } from "../../shared/api/payablesApi";
+import type { ReportedWithholding, WithholdingKind, WithholdingView } from "../../shared/api/settlementApi";
 import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError, describePaymentError } from "../../shared/api/problemMessages";
 import { DetailSection, FormDrawer, KeyFacts, StatusChip } from "../../shared/ui/components";
@@ -31,9 +32,30 @@ function today(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
-/** Un importe que puede no existir: el guion es la respuesta honesta, no un cero. */
-function optionalMoney(value: number | null, currency: string) {
-  return value === null ? null : <Money value={value} currency={currency} />;
+/** El nombre de una retención: el oficial del país (servidor), o el del catálogo. */
+function withholdingName(withholding: { kind: WithholdingKind; label?: string | null }): string {
+  return withholding.label ?? enumLabel("withholdingKind", withholding.kind);
+}
+
+/** Lo informado de cada retención de un pago, en una línea por retención. */
+function ReportedWithholdings({ withholdings, currency }: { withholdings: ReportedWithholding[]; currency: string }) {
+  if (withholdings.length === 0) return <>—</>;
+  return (
+    <>
+      {withholdings.map((withholding) => (
+        <Typography key={withholding.kind} variant="body2" sx={{ display: "block", fontVariantNumeric: "tabular-nums" }}>
+          {`${enumLabel("withholdingKind", withholding.kind)}: `}
+          {withholding.amount === null ? "—" : `${fmtDecimal(withholding.amount, 2)} ${currency}`}
+          {withholding.certificateNumber && (
+            <Typography component="span" variant="caption" color="text.secondary">
+              {` · ${t("Comprobante {{number}}", { number: withholding.certificateNumber })}`}
+              {withholding.certificateDate ? ` · ${fmtDate(withholding.certificateDate)}` : ""}
+            </Typography>
+          )}
+        </Typography>
+      ))}
+    </>
+  );
 }
 
 /** Quién: el id de usuario tal cual. Un pago de la integración no tiene persona: lo dice su origen. */
@@ -205,19 +227,22 @@ export function PayableDrawer({ companyId, invoiceId, onClose, onChanged }: Paya
             },
             { label: t("Pago programado"), value: payable.scheduledPaymentDate ? fmtDate(payable.scheduledPaymentDate) : null },
             { label: t("Fecha de factura"), value: fmtDate(payable.invoiceDate) },
-            { label: t("Tipo"), value: enumLabel("documentType", payable.documentType) },
-            { label: t("Neto"), value: <Money value={payable.netAmount} currency={payable.currency} /> },
             {
-              label: t("Detracción"),
-              value: optionalMoney(payable.detractionAmount, payable.currency),
-              sub: payable.detractionAmount === null ? undefined
-                : payable.detractionConstancyNumber
-                  ? [t("Constancia {{number}}", { number: payable.detractionConstancyNumber }),
-                    payable.detractionConstancyDate ? fmtDate(payable.detractionConstancyDate) : null]
-                    .filter(Boolean).join(" · ")
-                  : t("Constancia pendiente"),
+              label: t("Tipo"),
+              value: payable.fiscalDocumentCode
+                ? `${enumLabel("documentKind", payable.documentKind)} (${payable.fiscalDocumentCode})`
+                : enumLabel("documentKind", payable.documentKind),
             },
-            { label: t("Retención"), value: optionalMoney(payable.retentionAmount, payable.currency) },
+            { label: t("Neto"), value: <Money value={payable.netAmount} currency={payable.currency} /> },
+            ...payable.withholdings.map((withholding: WithholdingView) => ({
+              label: withholdingName(withholding),
+              value: <Money value={withholding.amount} currency={payable.currency} />,
+              sub: withholding.certificateNumber
+                ? [t("Comprobante {{number}}", { number: withholding.certificateNumber }),
+                  withholding.certificateDate ? fmtDate(withholding.certificateDate) : null]
+                  .filter(Boolean).join(" · ")
+                : t("Comprobante pendiente"),
+            })),
             { label: t("A pagar"), value: <Money value={payable.payableAmount} currency={payable.currency} strong /> },
             { label: t("Pagado"), value: <Money value={payable.paidAmount} currency={payable.currency} /> },
             { label: t("Saldo"), value: <Money value={payable.openBalance} currency={payable.currency} strong /> },
@@ -259,8 +284,7 @@ export function PayableDrawer({ companyId, invoiceId, onClose, onChanged }: Paya
                       <TableCell>{t("Fecha")}</TableCell>
                       <TableCell>{t("Referencia")}</TableCell>
                       <TableCell align="right">{t("Monto")}</TableCell>
-                      <TableCell>{t("Detracción")}</TableCell>
-                      <TableCell align="right">{t("Retención")}</TableCell>
+                      <TableCell>{t("Retenciones fiscales")}</TableCell>
                       <TableCell>{t("Origen")}</TableCell>
                     </TableRow>
                   </TableHead>
@@ -271,16 +295,7 @@ export function PayableDrawer({ companyId, invoiceId, onClose, onChanged }: Paya
                         <TableCell>{payment.paymentReference}</TableCell>
                         <TableCell align="right"><Money value={payment.amount} currency={payment.currency} /></TableCell>
                         <TableCell>
-                          {payment.detractionAmount === null ? "—" : `${fmtDecimal(payment.detractionAmount, 2)} ${payment.currency}`}
-                          {payment.detractionConstancyNumber && (
-                            <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                              {t("Constancia {{number}}", { number: payment.detractionConstancyNumber })}
-                              {payment.detractionConstancyDate ? ` · ${fmtDate(payment.detractionConstancyDate)}` : ""}
-                            </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell align="right">
-                          {payment.retentionAmount === null ? "—" : <Money value={payment.retentionAmount} currency={payment.currency} />}
+                          <ReportedWithholdings withholdings={payment.withholdings ?? []} currency={payment.currency} />
                         </TableCell>
                         <TableCell>
                           {enumLabel("paymentSource", payment.source)}
@@ -393,15 +408,21 @@ function ScheduleForm({ initial, busy, onCancel, onSubmit }: {
   );
 }
 
+interface WithholdingInput {
+  amount: string;
+  certificateNumber: string;
+  certificateDate: string;
+}
+
 interface PaymentFormValues {
   paymentReference: string;
   paidOn: string;
   amount: string;
-  detractionConstancyNumber: string;
-  detractionConstancyDate: string;
-  detractionAmount: string;
-  retentionAmount: string;
+  /** Una entrada por retención que la factura lleva; vacía = no se informó. */
+  withholdings: Partial<Record<WithholdingKind, WithholdingInput>>;
 }
+
+const EMPTY_WITHHOLDING: WithholdingInput = { amount: "", certificateNumber: "", certificateDate: "" };
 
 /** Un número opcional del formulario: vacío es «no aplica», nunca cero. */
 function optionalNumber(value: string): number | null {
@@ -411,6 +432,8 @@ function optionalNumber(value: string): number | null {
 /**
  * El «hacedor» de un pago manual con cuatro ojos: transcribe lo que el ERP pagó. No paga - queda
  * como solicitud hasta que otra persona la confirme. La moneda es la de la factura y no se elige.
+ * Sólo se ofrecen las retenciones que la factura lleva (la detracción en Perú, el IR o el IVA en
+ * Ecuador): su comprobante queda en la factura cuando el pago se confirma.
  */
 export function PaymentRequestForm({ payable, onCancel, onSubmit }: {
   payable: PayableView; onCancel: () => void; onSubmit: (input: PaymentRequestInput) => Promise<void>;
@@ -419,18 +442,22 @@ export function PaymentRequestForm({ payable, onCancel, onSubmit }: {
     paymentReference: "",
     paidOn: today(),
     amount: payable.openBalance > 0 ? String(payable.openBalance) : "",
-    detractionConstancyNumber: "",
-    detractionConstancyDate: "",
-    detractionAmount: "",
-    retentionAmount: "",
+    withholdings: {},
   });
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const change = (next: Partial<PaymentFormValues>) => setValues((current) => ({ ...current, ...next }));
+  const changeWithholding = (kind: WithholdingKind, next: Partial<WithholdingInput>) =>
+    setValues((current) => ({
+      ...current,
+      withholdings: { ...current.withholdings, [kind]: { ...EMPTY_WITHHOLDING, ...current.withholdings[kind], ...next } },
+    }));
 
   const amount = Number(values.amount);
-  const optionalInvalid = [values.detractionAmount, values.retentionAmount]
-    .some((value) => value.trim() !== "" && !(Number(value) >= 0));
+  const entered = payable.withholdings
+    .map((withholding) => ({ kind: withholding.kind, input: values.withholdings[withholding.kind] ?? EMPTY_WITHHOLDING }))
+    .filter(({ input }) => input.amount.trim() !== "" || input.certificateNumber.trim() !== "" || input.certificateDate !== "");
+  const optionalInvalid = entered.some(({ input }) => input.amount.trim() !== "" && !(Number(input.amount) >= 0));
   const valid = values.paymentReference.trim() !== "" && values.paidOn !== ""
     && values.amount.trim() !== "" && Number.isFinite(amount) && amount > 0 && !optionalInvalid;
 
@@ -445,10 +472,12 @@ export function PaymentRequestForm({ payable, onCancel, onSubmit }: {
         paidOn: values.paidOn,
         amount,
         currency: payable.currency,
-        detractionConstancyNumber: values.detractionConstancyNumber.trim() || null,
-        detractionConstancyDate: values.detractionConstancyDate || null,
-        detractionAmount: optionalNumber(values.detractionAmount),
-        retentionAmount: optionalNumber(values.retentionAmount),
+        withholdings: entered.map(({ kind, input }) => ({
+          kind,
+          amount: optionalNumber(input.amount),
+          certificateNumber: input.certificateNumber.trim() || null,
+          certificateDate: input.certificateDate || null,
+        })),
       });
     } catch (error) {
       // El servidor dice la cifra exacta: el saldo que se excede, la moneda que no casa.
@@ -477,14 +506,25 @@ export function PaymentRequestForm({ payable, onCancel, onSubmit }: {
             slotProps={{ htmlInput: { min: 0, step: "0.01" } }} />
           <TextField size="small" label={t("Moneda")} value={payable.currency}
             helperText={t("La de la factura")} slotProps={{ input: { readOnly: true } }} />
-          <TextField size="small" label={t("Constancia de detracción nº")} value={values.detractionConstancyNumber}
-            onChange={(e) => change({ detractionConstancyNumber: e.target.value })} slotProps={{ htmlInput: { maxLength: 40 } }} />
-          <TextField size="small" type="date" label={t("Fecha de constancia")} value={values.detractionConstancyDate}
-            onChange={(e) => change({ detractionConstancyDate: e.target.value })} slotProps={{ inputLabel: { shrink: true } }} />
-          <TextField size="small" type="number" label={t("Monto de detracción")} value={values.detractionAmount}
-            onChange={(e) => change({ detractionAmount: e.target.value })} slotProps={{ htmlInput: { min: 0, step: "0.01" } }} />
-          <TextField size="small" type="number" label={t("Retención")} value={values.retentionAmount}
-            onChange={(e) => change({ retentionAmount: e.target.value })} slotProps={{ htmlInput: { min: 0, step: "0.01" } }} />
+          {payable.withholdings.map((withholding) => {
+            const input = values.withholdings[withholding.kind] ?? EMPTY_WITHHOLDING;
+            const name = withholdingName(withholding);
+            return (
+              <Box key={withholding.kind} sx={{ display: "contents" }}>
+                <TextField size="small" type="number" label={t("{{name}}: monto", { name })} value={input.amount}
+                  onChange={(e) => changeWithholding(withholding.kind, { amount: e.target.value })}
+                  helperText={t("En la factura: {{amount}} {{currency}}", { amount: fmtDecimal(withholding.amount, 2), currency: payable.currency })}
+                  slotProps={{ htmlInput: { min: 0, step: "0.01" } }} />
+                <TextField size="small" label={t("{{name}}: comprobante nº", { name })} value={input.certificateNumber}
+                  onChange={(e) => changeWithholding(withholding.kind, { certificateNumber: e.target.value })}
+                  slotProps={{ htmlInput: { maxLength: 40 } }} />
+                <TextField size="small" type="date" label={t("{{name}}: fecha del comprobante", { name })} value={input.certificateDate}
+                  onChange={(e) => changeWithholding(withholding.kind, { certificateDate: e.target.value })}
+                  slotProps={{ inputLabel: { shrink: true } }} />
+                <Box />
+              </Box>
+            );
+          })}
         </Box>
         <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end" }}>
           <Button onClick={onCancel} disabled={submitting}>{t("Cancelar")}</Button>
