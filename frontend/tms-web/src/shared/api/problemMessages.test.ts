@@ -4,6 +4,7 @@ import {
   describeApiError,
   describeImportError,
   describePlanningError,
+  describePlanningRefusal,
   isAuthProblem,
   isCompanyScopeStale,
   isTenantSuspended,
@@ -119,5 +120,25 @@ describe("familias que sí muestran el detail del backend", () => {
     const message = describePlanningError(problem(401, "unauthenticated", "JWT expired at ..."));
 
     expect(message).not.toContain("JWT");
+  });
+});
+
+describe("describePlanningRefusal", () => {
+  it("dice en castellano el rechazo de capacidad, con sus cifras", () => {
+    const error = problem(409, "conflict",
+      "Order TO-00000007 does not fit trip 2: floor area 3.5 m2 exceeds the capacity of 3.06 m2.");
+    expect(describePlanningRefusal(error)).toBe(
+      "El pedido TO-00000007 no cabe en el viaje 2. El piso ocupado (3,5 m²) supera el piso útil del vehículo (3,06 m²).",
+    );
+  });
+
+  it("cae al detail tal cual cuando no es un rechazo de capacidad", () => {
+    const error = problem(409, "conflict", "This trip was changed by someone else since it was loaded. Reload and try again.");
+    expect(describePlanningRefusal(error)).toBe(describePlanningError(error));
+  });
+
+  it("no lee el detail de un código que no es de conflicto", () => {
+    const error = problem(403, "access-denied", "Order X does not fit trip 1: weight 2 kg exceeds the capacity of 1 kg.");
+    expect(describePlanningRefusal(error)).toBe(describeApiError(error));
   });
 });

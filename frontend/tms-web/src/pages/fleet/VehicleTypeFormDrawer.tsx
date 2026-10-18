@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Controller, useForm, useWatch, type Validate } from "react-hook-form";
 import {
@@ -13,9 +14,17 @@ import {
 import { ActiveBadge, FormDrawer, FormMeta, FormRow, FormSection } from "../../shared/ui/components";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
-import { fmtDateTime } from "../../lib/locale";
+import { fmtAreaM2, fmtDateTime, fmtDecimal, fmtMetres } from "../../lib/locale";
+import { fetchCompanyLoadGeometry } from "../../shared/api/administrationApi";
+import { usableFloorAreaM2 } from "../../shared/geometry/loadGeometry";
 
 const FORM_ID = "vehicle-type-form";
+
+function numberOrNull(value: string): number | null {
+  if (value.trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
 
 const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
 
@@ -28,6 +37,8 @@ interface VehicleTypeFormValues {
   lengthM: string;
   widthM: string;
   heightM: string;
+  /** 0 < x ≤ 1, vacío = el de la empresa (V62). */
+  loadFloorFillFactor: string;
   bodyType: VehicleBodyType | "";
   temperatureControlled: boolean;
   minTemperatureCelsius: string;
@@ -43,7 +54,7 @@ interface VehicleTypeFormDrawerProps {
 }
 
 const KNOWN_FIELDS = new Set<keyof VehicleTypeFormValues>([
-  "code", "name", "maxWeightKg", "maxVolumeM3", "maxPallets", "lengthM", "widthM", "heightM", "bodyType",
+  "code", "name", "maxWeightKg", "maxVolumeM3", "maxPallets", "lengthM", "widthM", "heightM", "loadFloorFillFactor", "bodyType",
   "temperatureControlled", "minTemperatureCelsius", "maxTemperatureCelsius", "axles",
 ]);
 
@@ -74,6 +85,7 @@ export function VehicleTypeFormDrawer({ companyId, vehicleType, onClose, onSaved
       lengthM: vehicleType?.lengthM?.toString() ?? "",
       widthM: vehicleType?.widthM?.toString() ?? "",
       heightM: vehicleType?.heightM?.toString() ?? "",
+      loadFloorFillFactor: vehicleType?.loadFloorFillFactor?.toString() ?? "",
       bodyType: vehicleType?.bodyType ?? "",
       temperatureControlled: vehicleType?.temperatureControlled ?? false,
       minTemperatureCelsius: vehicleType?.minTemperatureCelsius?.toString() ?? "",
@@ -83,6 +95,26 @@ export function VehicleTypeFormDrawer({ companyId, vehicleType, onClose, onSaved
   });
 
   const temperatureControlled = useWatch({ control, name: "temperatureControlled" });
+  const [lengthM, widthM, heightM, fillFactor] = useWatch({
+    control, name: ["lengthM", "widthM", "heightM", "loadFloorFillFactor"],
+  });
+  // El factor por defecto de la empresa, para decir qué rige con el campo vacío. Si la cuenta no
+  // puede leer la configuración de la empresa, el texto lo dice sin cifra.
+  const companyGeometry = useQuery({
+    queryKey: ["company-load-geometry", companyId],
+    queryFn: ({ signal }) => fetchCompanyLoadGeometry(companyId, signal),
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
+  const effectiveFactor = fillFactor.trim() !== "" ? Number(fillFactor) : companyGeometry.data?.floorFillFactor;
+  const usableFloor = usableFloorAreaM2(numberOrNull(lengthM), numberOrNull(widthM), effectiveFactor);
+
+  const fillFactorRule: Validate<string, VehicleTypeFormValues> = (value) => {
+    if (value.trim() === "") return true;
+    const parsed = Number(value);
+    if (Number.isNaN(parsed)) return t("Debe ser un número");
+    return (parsed > 0 && parsed <= 1) || t("Debe ser mayor que 0 y como máximo 1");
+  };
 
   const positive: Validate<string, VehicleTypeFormValues> = (value) => {
     const parsed = Number(value);
@@ -122,6 +154,8 @@ export function VehicleTypeFormDrawer({ companyId, vehicleType, onClose, onSaved
       lengthM: values.lengthM.trim() === "" ? null : Number(values.lengthM),
       widthM: values.widthM.trim() === "" ? null : Number(values.widthM),
       heightM: values.heightM.trim() === "" ? null : Number(values.heightM),
+      // Se envía siempre, también vacío: un PUT que omite el campo lo borra en el backend.
+      loadFloorFillFactor: values.loadFloorFillFactor.trim() === "" ? null : Number(values.loadFloorFillFactor),
       bodyType: values.bodyType || null,
       temperatureControlled: values.temperatureControlled,
       minTemperatureCelsius: values.minTemperatureCelsius.trim() === "" ? null : Number(values.minTemperatureCelsius),
@@ -209,7 +243,10 @@ export function VehicleTypeFormDrawer({ companyId, vehicleType, onClose, onSaved
           </FormRow>
         </FormSection>
 
-        <FormSection title={t("Dimensiones")} help={t("Medidas útiles de la caja. Opcionales.")}>
+        <FormSection
+          title={t("Dimensiones")}
+          help={t("Medidas útiles de la caja. Opcionales: sin largo y ancho el piso no limita; sin alto, la altura de las pilas tampoco.")}
+        >
           <FormRow cols={3}>
             <TextField
               label={t("Largo (m)")} size="small" fullWidth type="number"
@@ -226,6 +263,29 @@ export function VehicleTypeFormDrawer({ companyId, vehicleType, onClose, onSaved
               error={Boolean(errors.heightM)} helperText={errors.heightM?.message}
               {...register("heightM", { validate: optionalPositive })}
             />
+          </FormRow>
+          <FormRow cols={3}>
+            <TextField
+              label={t("Factor de llenado de piso")} size="small" fullWidth type="number"
+              slotProps={{ htmlInput: { min: 0, max: 1, step: "0.01" } }}
+              error={Boolean(errors.loadFloorFillFactor)}
+              helperText={errors.loadFloorFillFactor?.message ?? (companyGeometry.data
+                ? t("Vacío: el de la empresa ({{factor}})", { factor: fmtDecimal(companyGeometry.data.floorFillFactor) })
+                : t("Vacío: el de la empresa"))}
+              {...register("loadFloorFillFactor", { validate: fillFactorRule })}
+            />
+            <Box sx={{ gridColumn: { sm: "span 2" }, alignSelf: "center" }}>
+              <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+                {usableFloor === null
+                  ? t("Piso útil: sin límite (falta largo o ancho)")
+                  : t("Piso útil: {{area}}", { area: fmtAreaM2(usableFloor) })}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: "tabular-nums" }}>
+                {numberOrNull(heightM) === null
+                  ? t("Alto útil: sin límite (falta el alto)")
+                  : t("Alto útil para las pilas: {{height}}", { height: fmtMetres(Number(heightM)) })}
+              </Typography>
+            </Box>
           </FormRow>
         </FormSection>
 

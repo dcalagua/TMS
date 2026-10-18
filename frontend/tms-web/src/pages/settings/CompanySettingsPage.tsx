@@ -20,6 +20,7 @@ import { confirmDialog, notifySuccess } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { CompanyCreateDrawer } from "./CompanyCreateDrawer";
+import { LoadGeometrySettingsCard } from "./LoadGeometrySettingsCard";
 
 const FORM_ID = "company-profile-form";
 
@@ -342,6 +343,8 @@ export function CompanySettingsPage() {
               )}
             />
           </AppCard>
+
+          <LoadGeometrySettingsCard companyId={companyId} />
         </Box>
       </Box>
 

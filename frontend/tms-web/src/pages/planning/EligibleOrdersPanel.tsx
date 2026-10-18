@@ -12,7 +12,8 @@ import {
   assignOrderToTrip, fetchEligibleOrders,
   type EligibleOrderView, type PlanningRunView, type TripDetailView, type TripView,
 } from "../../shared/api/planningApi";
-import { describePlanningError } from "../../shared/api/problemMessages";
+import { describePlanningError, describePlanningRefusal } from "../../shared/api/problemMessages";
+import { OccupancyCell } from "../../shared/geometry/Occupancy";
 import {
   EmptyState, ErrorState, FilterMenuChip, FilterOptionList, LoadingState, Pagination,
 } from "../../shared/ui/components";
@@ -104,7 +105,7 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
    */
   async function assignPart(
     order: EligibleOrderView, tripId: string,
-    amounts: { weightKg: number; volumeM3: number; pallets: number },
+    amounts: { weightKg: number; volumeM3: number; pallets: number; floorAreaM2?: number },
   ) {
     setAssigningOrderId(order.id);
     try {
@@ -119,7 +120,7 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
       refreshEligible();
       onAssigned(detail);
     } catch (error) {
-      notifyError(t("No se pudo repartir el pedido"), describePlanningError(error as ApiError));
+      notifyError(t("No se pudo repartir el pedido"), describePlanningRefusal(error as ApiError));
     } finally {
       setAssigningOrderId(null);
     }
@@ -139,9 +140,10 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
       refreshEligible();
       onAssigned(detail);
     } catch (error) {
-      // El rechazo de capacidad lo escribe el backend nombrando cada dimensión que no cupo, así
-      // que aquí se muestra literal: `describePlanningError` es exactamente para esto.
-      notifyError(t("No se pudo asignar el pedido"), describePlanningError(error as ApiError));
+      // El rechazo de capacidad lo escribe el backend nombrando cada dimensión que no cupo (las
+      // cinco desde V62) o la unidad más alta que el vehículo; `describePlanningRefusal` lo dice en
+      // castellano con sus cifras y, si no reconoce la frase, la muestra tal cual.
+      notifyError(t("No se pudo asignar el pedido"), describePlanningRefusal(error as ApiError));
     } finally {
       setAssigningOrderId(null);
     }
@@ -240,6 +242,18 @@ export function EligibleOrdersPanel({ companyId, run, trips, canManage, onAssign
                   {fmtWeightKg(order.pendingWeightKg)} · {fmtVolumeM3(order.pendingVolumeM3)} · {fmtDecimal(order.pendingPallets)} {t("pal.")}
                   {window && ` · ${window}`}
                 </Typography>
+                {/* V62: lo que ocupa por geometría (pilas, piso, alto, efectivo frente a declarado). */}
+                {order.maxStackHeightM != null || (order.floorAreaM2 ?? 0) > 0 ? (
+                  <OccupancyCell
+                    dense
+                    geometry={{
+                      planningVolumeM3: order.planningVolumeM3,
+                      floorAreaM2: order.floorAreaM2,
+                      maxStackHeightM: order.maxStackHeightM,
+                    }}
+                    declaredVolumeM3={order.totalVolumeM3}
+                  />
+                ) : null}
                 {order.partiallyAllocated && (
                   // Parte ya viaja en otro camión. Se dice explícitamente y se muestra el total
                   // debajo: sin esto la fila de arriba parece el pedido entero y un planificador

@@ -3,7 +3,7 @@ import { Alert, Box, Button, MenuItem, TextField, Typography } from "@mui/materi
 import { CallSplitRounded } from "@mui/icons-material";
 import { ContextCard, FormDrawer, StatusChip } from "../../shared/ui/components";
 import type { EligibleOrderView, TripView } from "../../shared/api/planningApi";
-import { fmtDate, fmtDecimal, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
+import { fmtAreaM2, fmtDate, fmtDecimal, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
 import { t } from "../../lib/i18n";
 
 interface SplitAssignDrawerProps {
@@ -12,7 +12,7 @@ interface SplitAssignDrawerProps {
   trips: TripView[];
   submitting: boolean;
   onClose: () => void;
-  onSubmit: (tripId: string, amounts: { weightKg: number; volumeM3: number; pallets: number }) => void;
+  onSubmit: (tripId: string, amounts: { weightKg: number; volumeM3: number; pallets: number; floorAreaM2?: number }) => void;
 }
 
 /**
@@ -27,6 +27,11 @@ interface SplitAssignDrawerProps {
  * Después de un primer reparto lo que se puede asignar es el resto, no el pedido. Prellenar el
  * total sería ofrecer por defecto la única cifra que el backend va a rechazar.
  *
+ * <h2>El piso (V62, ADR-022 §5)</h2>
+ * Un tramo no se puede volver a apilar —TMS reparte por cifras, no por cantidades de línea—, así
+ * que quien reparte declara también los m² de piso del tramo, prellenados con lo pendiente. Solo se
+ * pide cuando el pedido tiene piso medido: sin él, la cifra es cero y no hay nada que decidir.
+ *
  * La validación de aquí es cortesía: quien decide es
  * `ck_transport_order_not_over_allocated`, y el servicio rechaza antes con una frase legible.
  */
@@ -35,6 +40,7 @@ export function SplitAssignDrawer({ open, order, trips, submitting, onClose, onS
   const [weightKg, setWeightKg] = useState("");
   const [volumeM3, setVolumeM3] = useState("");
   const [pallets, setPallets] = useState("");
+  const [floorAreaM2, setFloorAreaM2] = useState("");
   const [touched, setTouched] = useState(false);
 
   // Reinicia al abrir sobre otro pedido: los valores por defecto son los pendientes de *este*.
@@ -45,23 +51,31 @@ export function SplitAssignDrawer({ open, order, trips, submitting, onClose, onS
     setWeightKg(String(order.pendingWeightKg ?? 0));
     setVolumeM3(String(order.pendingVolumeM3 ?? 0));
     setPallets(String(order.pendingPallets ?? 0));
+    setFloorAreaM2(String(order.pendingFloorAreaM2 ?? 0));
     setTouched(false);
   }
 
   if (!order) return null;
 
+  // El piso sólo existe para un pedido con líneas medidas; sin él no se pide ni se envía.
+  const pendingFloor = Number(order.pendingFloorAreaM2 ?? 0);
+  const hasFloor = pendingFloor > 0;
+  const floor = hasFloor ? Number(floorAreaM2) : 0;
   const parsed = {
     weightKg: Number(weightKg),
     volumeM3: Number(volumeM3),
     pallets: Number(pallets),
+    ...(hasFloor ? { floorAreaM2: floor } : {}),
   };
-  const anyNaN = Number.isNaN(parsed.weightKg) || Number.isNaN(parsed.volumeM3) || Number.isNaN(parsed.pallets);
-  const anyNegative = parsed.weightKg < 0 || parsed.volumeM3 < 0 || parsed.pallets < 0;
-  const allZero = parsed.weightKg === 0 && parsed.volumeM3 === 0 && parsed.pallets === 0;
+  const anyNaN = Number.isNaN(parsed.weightKg) || Number.isNaN(parsed.volumeM3) || Number.isNaN(parsed.pallets)
+    || Number.isNaN(floor);
+  const anyNegative = parsed.weightKg < 0 || parsed.volumeM3 < 0 || parsed.pallets < 0 || floor < 0;
+  const allZero = parsed.weightKg === 0 && parsed.volumeM3 === 0 && parsed.pallets === 0 && floor === 0;
   const overPending =
     parsed.weightKg > order.pendingWeightKg
     || parsed.volumeM3 > order.pendingVolumeM3
-    || parsed.pallets > order.pendingPallets;
+    || parsed.pallets > order.pendingPallets
+    || floor > pendingFloor;
   const invalid = anyNaN || anyNegative || allZero || overPending || tripId === "";
 
   return (
@@ -109,6 +123,7 @@ export function SplitAssignDrawer({ open, order, trips, submitting, onClose, onS
           <Typography variant="body2" sx={{ fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>
             {fmtWeightKg(order.pendingWeightKg)} · {fmtVolumeM3(order.pendingVolumeM3)} ·{" "}
             {fmtDecimal(order.pendingPallets)} {t("pallets")}
+            {hasFloor && ` · ${fmtAreaM2(pendingFloor)} ${t("de piso")}`}
           </Typography>
         </Box>
 
@@ -139,6 +154,14 @@ export function SplitAssignDrawer({ open, order, trips, submitting, onClose, onS
           onChange={(e) => { setPallets(e.target.value); setTouched(true); }}
           slotProps={{ htmlInput: { min: 0, max: order.pendingPallets, step: "0.01" } }}
         />
+        {hasFloor && (
+          <TextField
+            size="small" type="number" label={t("Piso (m²)")} value={floorAreaM2}
+            onChange={(e) => { setFloorAreaM2(e.target.value); setTouched(true); }}
+            helperText={t("El tramo no se reapila: indica el piso que ocupa en este viaje.")}
+            slotProps={{ htmlInput: { min: 0, max: pendingFloor, step: "0.0001" } }}
+          />
+        )}
 
         {overPending && (
           <Alert severity="warning" variant="outlined">

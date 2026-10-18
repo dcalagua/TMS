@@ -678,6 +678,14 @@ export const ENUM_LABELS = {
     CANCELLED: "Detenida",
     EXHAUSTED: "Agotada",
   },
+  /** `TripCapacityView.bindingDimension` (V62): la dimensión que llena el camión. */
+  capacityDimension: {
+    FLOOR: "Piso",
+    HEIGHT: "Alto",
+    PALLETS: "Pallets",
+    VOLUME: "Volumen",
+    WEIGHT: "Peso",
+  },
   stackMode: {
     NESTABLE: "Anidable",
     NONE: "Sin apilar",
