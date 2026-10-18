@@ -8,6 +8,8 @@ import java.util.UUID;
 public record GlAccountMappingView(
         UUID id,
         String concept,
+        /** ADR-027: the withholding a WITHHOLDING_PAYABLE mapping books; null = every kind. */
+        String withholdingKind,
         String scopeType,
         UUID scopeId,
         String scopeName,
@@ -17,7 +19,8 @@ public record GlAccountMappingView(
         OffsetDateTime updatedAt) {
 
     public static GlAccountMappingView of(GlAccountMapping mapping, String scopeName) {
-        return new GlAccountMappingView(mapping.id(), mapping.concept().name(), mapping.scopeType().name(),
+        return new GlAccountMappingView(mapping.id(), mapping.concept().name(),
+                mapping.withholdingKind() == null ? null : mapping.withholdingKind().name(), mapping.scopeType().name(),
                 mapping.scopeId(), scopeName, mapping.accountCode(), mapping.costCenterCode(), mapping.active(),
                 mapping.updatedAt());
     }

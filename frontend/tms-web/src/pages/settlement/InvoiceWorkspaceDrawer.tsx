@@ -247,74 +247,78 @@ export function InvoiceWorkspaceDrawer({
             </DetailSection>
           )}
 
-          {/* --- lo fiscal (V66): tipo SUNAT, CPE, desglose, detracción o retención, notas --- */}
-          {invoice.fiscal && (
-            <DetailSection title={t("Comprobante e impuestos")}>
-              <KeyFacts columns={4} items={[
-                {
-                  label: t("Tipo"),
-                  value: enumLabel("documentType", invoice.fiscal.documentType),
-                  sub: invoice.fiscal.referencedInvoiceNumber
-                    ? t("Corrige la factura {{number}}", { number: invoice.fiscal.referencedInvoiceNumber })
-                    : undefined,
-                },
-                {
-                  label: t("CPE"),
-                  value: invoice.fiscal.series ? `${invoice.fiscal.series}-${invoice.fiscal.correlative}` : null,
-                  sub: invoice.fiscal.issuerRuc ? t("RUC {{ruc}}", { ruc: invoice.fiscal.issuerRuc }) : undefined,
-                },
-                { label: t("Subtotal"), value: amount(invoice.fiscal.subtotalAmount, invoice.currency) },
-                {
-                  label: t("IGV"),
-                  value: amount(invoice.fiscal.igvAmount, invoice.currency),
-                  sub: invoice.fiscal.igvRate !== null ? `${fmtDecimal(invoice.fiscal.igvRate, 2)} %` : undefined,
-                },
-                {
-                  label: t("Detracción"),
-                  value: invoice.fiscal.detractionAmount !== null
-                    ? amount(invoice.fiscal.detractionAmount, invoice.currency) : null,
-                  sub: invoice.fiscal.detractionAmount !== null
-                    ? [
-                      t("Código {{code}} al {{rate}} %", {
-                        code: invoice.fiscal.detractionCode ?? "", rate: fmtDecimal(invoice.fiscal.detractionRate ?? 0, 2),
-                      }),
-                      invoice.fiscal.detractionConstancyNumber
-                        ? t("Constancia {{number}}", { number: invoice.fiscal.detractionConstancyNumber })
-                        : t("Constancia pendiente"),
-                    ].join(" · ")
-                    : undefined,
-                },
-                {
-                  label: t("Retención"),
-                  value: invoice.fiscal.retentionAmount !== null
-                    ? amount(invoice.fiscal.retentionAmount, invoice.currency) : null,
-                  sub: invoice.fiscal.retentionOverrideReason ?? undefined,
-                },
-                {
-                  label: t("Neto con notas"),
-                  value: invoice.fiscal.netAmount !== null ? amount(invoice.fiscal.netAmount, invoice.currency) : null,
-                },
-                {
-                  label: t("Validación SUNAT"),
-                  // Nunca «válido»: TMS no consulta a SUNAT, y lo dice.
-                  value: invoice.fiscal.cpeValidation === "EXTERNAL_DEPENDENCY"
-                    ? t("No consultada (dependencia externa)")
-                    : invoice.fiscal.cpeValidation,
-                },
-              ]} />
-              {invoice.fiscal.notes.length > 0 && (
-                <Box sx={{ mt: 1, display: "grid", gap: 0.5 }}>
-                  {invoice.fiscal.notes.map((note) => (
-                    <Typography key={note.id} variant="body2" sx={{ fontVariantNumeric: "tabular-nums" }}>
-                      {`${enumLabel("documentType", note.documentType)} ${note.invoiceNumber} · ${fmtDate(note.invoiceDate)} · `}
-                      {`${note.documentType === "07" ? "-" : "+"}${fmtDecimal(note.totalAmount, 2)} ${invoice.currency} · `}
-                      {enumLabel("invoiceStatus", note.status)}
-                    </Typography>
-                  ))}
-                </Box>
-              )}
-            </DetailSection>
-          )}
+          {/* --- lo fiscal (ADR-027): comprobante, desglose, retenciones y notas, en el vocabulario del régimen --- */}
+          {invoice.fiscal && (() => {
+            const fiscal = invoice.fiscal;
+            const vat = fiscal.vatLabel ?? t("Impuesto");
+            const kindLabel = enumLabel("documentKind", fiscal.documentKind);
+            return (
+              <DetailSection title={t("Comprobante e impuestos")}>
+                <KeyFacts columns={4} items={[
+                  {
+                    label: t("Tipo"),
+                    value: fiscal.fiscalDocumentCode ? `${kindLabel} (${fiscal.fiscalDocumentCode})` : kindLabel,
+                    sub: fiscal.referencedInvoiceNumber
+                      ? t("Corrige la factura {{number}}", { number: fiscal.referencedInvoiceNumber })
+                      : fiscal.fiscalCountry ? t("Régimen {{country}}", { country: fiscal.fiscalCountry }) : undefined,
+                  },
+                  {
+                    label: t("Comprobante"),
+                    value: fiscal.documentNumber,
+                    sub: fiscal.issuerTaxId ? t("Emisor {{taxId}}", { taxId: fiscal.issuerTaxId }) : undefined,
+                  },
+                  { label: t("Subtotal"), value: amount(fiscal.subtotalAmount, invoice.currency) },
+                  {
+                    label: vat,
+                    value: amount(fiscal.taxAmount, invoice.currency),
+                    sub: fiscal.taxRate !== null ? `${fmtDecimal(fiscal.taxRate, 2)} %` : undefined,
+                  },
+                  ...fiscal.withholdings.map((withholding) => ({
+                    label: withholding.label ?? enumLabel("withholdingKind", withholding.kind),
+                    value: amount(withholding.amount, invoice.currency),
+                    sub: [
+                      withholding.rate !== null
+                        ? (withholding.code
+                          ? t("Código {{code}} al {{rate}} %", { code: withholding.code, rate: fmtDecimal(withholding.rate, 2) })
+                          : t("Al {{rate}} %", { rate: fmtDecimal(withholding.rate, 2) }))
+                        : null,
+                      withholding.overrideReason
+                        ? t("Cambiada: {{reason}}", { reason: withholding.overrideReason })
+                        : null,
+                      withholding.certificateNumber
+                        ? t("Comprobante {{number}}", { number: withholding.certificateNumber })
+                        : t("Comprobante pendiente"),
+                    ].filter(Boolean).join(" · "),
+                  })),
+                  {
+                    label: t("Neto con notas"),
+                    value: fiscal.netAmount !== null ? amount(fiscal.netAmount, invoice.currency) : null,
+                  },
+                  {
+                    label: t("Validación electrónica"),
+                    // Nunca «válido»: TMS no consulta a la autoridad tributaria, y lo dice.
+                    value: fiscal.electronicValidation === "EXTERNAL_DEPENDENCY"
+                      ? t("No disponible (dependencia externa)")
+                      : fiscal.electronicValidation,
+                  },
+                ]} />
+                {fiscal.withholdings.length === 0 && (
+                  <Typography variant="caption" color="text.secondary">{t("Sin retenciones en este documento.")}</Typography>
+                )}
+                {fiscal.notes.length > 0 && (
+                  <Box sx={{ mt: 1, display: "grid", gap: 0.5 }}>
+                    {fiscal.notes.map((note) => (
+                      <Typography key={note.id} variant="body2" sx={{ fontVariantNumeric: "tabular-nums" }}>
+                        {`${enumLabel("documentKind", note.documentKind)} ${note.invoiceNumber} · ${fmtDate(note.invoiceDate)} · `}
+                        {`${note.documentKind === "CREDIT_NOTE" ? "-" : "+"}${fmtDecimal(note.totalAmount, 2)} ${invoice.currency} · `}
+                        {enumLabel("invoiceStatus", note.status)}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
+              </DetailSection>
+            );
+          })()}
 
           {/* --- la comparación, que es la razón de existir de la pantalla --- */}
           <DetailSection title={t("La comparación")}>

@@ -19,16 +19,16 @@ public class IntegrationPayablePaymentService {
 
     public IntegrationOutcome<PayablePaymentResultV1> record(IntegrationPrincipal principal, PayablePaymentV1 payment) {
         PayablePaymentV1.InvoiceRef ref = payment.invoice();
-        PayablePaymentV1.Detraction detraction = payment.detraction();
         PayablePaymentIntakePort.Result result = intake.record(principal.companyScope(),
                 new PayablePaymentIntakePort.Command(principal.id(),
                         new PayablePaymentIntakePort.InvoiceKey(ref.invoiceId(), ref.carrierTaxId(), ref.documentType(),
-                                ref.series(), ref.correlative(), ref.carrierCode(), ref.invoiceNumber()),
+                                ref.documentNumber(), ref.carrierCode(), ref.invoiceNumber()),
                         payment.paymentReference(), payment.paidOn(), payment.amount(), payment.currency(),
-                        detraction == null ? null : detraction.constancyNumber(),
-                        detraction == null ? null : detraction.constancyDate(),
-                        detraction == null ? null : detraction.amount(),
-                        payment.retentionAmount()));
+                        payment.withholdings() == null ? java.util.List.of() : payment.withholdings().stream()
+                                .map(withholding -> new PayablePaymentIntakePort.Withholding(withholding.kind(),
+                                        withholding.amount(), withholding.certificateNumber(),
+                                        withholding.certificateDate()))
+                                .toList()));
         PayablePaymentResultV1 body = new PayablePaymentResultV1(result.invoiceId(), result.invoiceNumber(),
                 result.paymentId(), result.outcome().name(), result.status(), result.paidAmount(),
                 result.openBalance(), result.dueDate());

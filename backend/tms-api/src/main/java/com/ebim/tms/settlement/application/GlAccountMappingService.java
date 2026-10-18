@@ -66,13 +66,18 @@ public class GlAccountMappingService {
             throw new InvalidRequestException("A COMPANY mapping names no scopeId; ORIGIN and ROUTE name one.");
         }
         requireScopeInCompany(scope, scopeType, request.scopeId());
-        GlAccountMapping mapping = new GlAccountMapping(scope.companyId(), request.concept(), scopeType,
+        if (request.withholdingKind() != null && request.concept() != com.ebim.tms.settlement.domain.GlConcept.WITHHOLDING_PAYABLE) {
+            throw new InvalidRequestException("Only a WITHHOLDING_PAYABLE mapping names a withholding kind.");
+        }
+        GlAccountMapping mapping = new GlAccountMapping(scope.companyId(), request.concept(), request.withholdingKind(),
+                scopeType,
                 request.scopeId(), request.accountCode().trim(), blankToNull(request.costCenterCode()), actorId);
         try {
             mapping = repository.saveAndFlush(mapping);
         } catch (DataIntegrityViolationException e) {
             if (String.valueOf(e.getMostSpecificCause().getMessage()).contains("uq_gl_account_mapping_active_scope")) {
                 throw new ConflictException("There is already an active " + request.concept()
+                        + (request.withholdingKind() == null ? "" : " (" + request.withholdingKind() + ")")
                         + " mapping for this scope. Change it, or retire it first.");
             }
             throw e;
@@ -89,6 +94,7 @@ public class GlAccountMappingService {
             throw new ConflictException("A retired mapping is not changed; create a new one.");
         }
         if (request.concept() != mapping.concept()
+                || request.withholdingKind() != mapping.withholdingKind()
                 || (request.scopeType() != null && request.scopeType() != mapping.scopeType())
                 || !Objects.equals(request.scopeId(), mapping.scopeId())) {
             throw new InvalidRequestException("The concept and scope of a mapping do not change; create a new one.");
@@ -133,6 +139,9 @@ public class GlAccountMappingService {
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("change", change);
         metadata.put("concept", mapping.concept().name());
+        if (mapping.withholdingKind() != null) {
+            metadata.put("withholdingKind", mapping.withholdingKind().name());
+        }
         metadata.put("scopeType", mapping.scopeType().name());
         metadata.put("accountCode", mapping.accountCode());
         if (mapping.costCenterCode() != null) {

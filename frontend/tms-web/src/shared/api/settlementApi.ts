@@ -28,9 +28,25 @@ export type DiscrepancyType =
   /** V66: la deducción del cargador; el aprobador la acepta en su propia fila. */
   | 'PENALTY'
 
-/** Tipo SUNAT (V66): 01 factura, 07 nota de crédito, 08 nota de débito. */
-export const DOCUMENT_TYPES = ['01', '07', '08'] as const
-export type DocumentTypeCode = (typeof DOCUMENT_TYPES)[number]
+/**
+ * La clase interna del comprobante (ADR-027). El código que le pone cada país (01/07/08 en Perú,
+ * 01/04/05 en Ecuador, ninguno en el régimen genérico) llega en `TaxRegimeView.documentKinds`.
+ */
+export const DOCUMENT_KINDS = ['INVOICE', 'CREDIT_NOTE', 'DEBIT_NOTE'] as const
+export type DocumentKind = (typeof DOCUMENT_KINDS)[number]
+
+/** El régimen fiscal con que la empresa calcula sus impuestos (ADR-027). */
+export type TaxRegimeCode = 'PE' | 'EC' | 'GENERIC'
+
+export const WITHHOLDING_KINDS = [
+  'PE_DETRACTION', 'PE_RETENTION', 'EC_INCOME_TAX_WITHHOLDING', 'EC_VAT_WITHHOLDING',
+] as const
+export type WithholdingKind = (typeof WITHHOLDING_KINDS)[number]
+
+/** A qué se aplica la tasa de una retención. */
+export type WithholdingBase = 'TOTAL' | 'SUBTOTAL' | 'VAT'
+
+export type TaxIdRule = 'PE_RUC' | 'EC_RUC' | 'FREE_TEXT'
 
 export const PENALTY_REFERENCE_TYPES = ['TRIP_EXCEPTION', 'DELIVERY_FAILED', 'LATE_ARRIVAL', 'OTHER'] as const
 export type PenaltyReferenceType = (typeof PENALTY_REFERENCE_TYPES)[number]
@@ -78,8 +94,10 @@ export interface CarrierInvoiceSummaryView {
   expectedAmount: number | null
   differenceAmount: number | null
   openDiscrepancyCount: number
-  /** V66. Ausente en un servidor anterior: se lee como factura. */
-  documentType?: DocumentTypeCode
+  /** ADR-027. Ausente en un servidor anterior: se lee como factura. */
+  documentKind?: DocumentKind
+  /** El código del país (01, 04…); null en el régimen genérico. */
+  fiscalDocumentCode?: string | null
   /** Fase 65. Ausentes en un servidor anterior; null = sin vencimiento calculable. */
   dueDate?: string | null
   paidAmount?: number
@@ -116,10 +134,11 @@ export interface InvoiceLineView {
   penaltyReferenceId?: string | null
 }
 
-/** Una nota que corrige la factura, tal como la factura la lista (V66). */
+/** Una nota que corrige la factura, tal como la factura la lista. */
 export interface NoteView {
   id: string
-  documentType: DocumentTypeCode
+  documentKind: DocumentKind
+  fiscalDocumentCode: string | null
   invoiceNumber: string
   invoiceDate: string
   totalAmount: number
@@ -127,49 +146,146 @@ export interface NoteView {
 }
 
 /**
- * La parte fiscal del documento (V66, ADR-024 parte 2). `cpeValidation` es hoy siempre
- * `EXTERNAL_DEPENDENCY`: nadie consultó a SUNAT, y la pantalla no lo presenta como «válido».
+ * Una retención del documento (ADR-027): la detracción o la retención del IGV en Perú, la retención
+ * en la fuente o la de IVA en Ecuador. TMS la calcula y la informa; no la paga.
+ */
+export interface WithholdingView {
+  kind: WithholdingKind
+  /** El nombre oficial del país, del servidor. */
+  label?: string | null
+  code: string | null
+  base: WithholdingBase | null
+  baseAmount: number | null
+  rate: number | null
+  /** Lo que calculó TMS. Null en un servidor que no lo informa (portal). */
+  computedAmount?: number | null
+  amount: number
+  /** Por qué alguien cambió lo calculado. */
+  overrideReason?: string | null
+  /** Constancia de depósito o comprobante de retención. */
+  certificateNumber: string | null
+  certificateDate: string | null
+}
+
+/** Una retención tal como la informó un pago: lo depositado o retenido y su comprobante. */
+export interface ReportedWithholding {
+  kind: WithholdingKind
+  amount: number | null
+  certificateNumber: string | null
+  certificateDate: string | null
+}
+
+/**
+ * La parte fiscal del documento (ADR-027). `electronicValidation` es hoy siempre
+ * `EXTERNAL_DEPENDENCY`: nadie consultó a la autoridad tributaria, y la pantalla no lo presenta
+ * como «válido».
  */
 export interface FiscalView {
-  documentType: DocumentTypeCode
+  /** El país del régimen con que se recibió: congelado, aunque la empresa cambie después. */
+  fiscalCountry: string | null
+  regime: TaxRegimeCode | null
+  vatLabel: string | null
+  documentKind: DocumentKind
+  fiscalDocumentCode: string | null
   effectiveSign: number
-  series: string | null
-  correlative: string | null
-  issuerRuc: string | null
+  documentNumber: string | null
+  issuerTaxId: string | null
   subtotalAmount: number | null
-  igvRate: number | null
-  igvAmount: number | null
+  taxRate: number | null
+  taxAmount: number | null
   referencedInvoiceId: string | null
   referencedInvoiceNumber: string | null
   netAmount: number | null
   notes: NoteView[]
-  detractionCode: string | null
-  detractionRate: number | null
-  detractionAmount: number | null
-  detractionConstancyNumber: string | null
-  detractionConstancyDate: string | null
-  retentionRate: number | null
-  retentionAmount: number | null
-  retentionOverrideReason: string | null
-  cpeValidation: 'EXTERNAL_DEPENDENCY' | 'ACCEPTED' | 'NOT_ACCEPTED' | null
+  withholdings: WithholdingView[]
+  withholdingTotalAmount: number | null
+  electronicValidation: 'EXTERNAL_DEPENDENCY' | 'ACCEPTED' | 'NOT_ACCEPTED' | null
 }
 
-/** Las reglas fiscales de la empresa, con los valores por defecto ya resueltos por el servidor. */
-export interface FiscalSettingsView {
-  currency: string
-  igvRate: number
-  detractionEnabled: boolean
-  detractionCode: string
-  detractionRate: number
-  detractionThresholdAmount: number
-  detractionStrictlyAboveThreshold: boolean
-  retentionAgent: boolean
-  retentionRate: number
+export interface DocumentKindOption {
+  kind: DocumentKind
+  /** El código del país; null en el régimen genérico. */
+  code: string | null
+  label: string
+}
+
+/** Una retención del régimen, con lo que la empresa haya cambiado ya resuelto. */
+export interface WithholdingRuleView {
+  kind: WithholdingKind
+  label: string
+  enabled: boolean
+  code: string | null
+  rate: number | null
+  base: WithholdingBase
+  /** Sólo aplica si el TOTAL supera este importe. Null = sin umbral. */
+  thresholdAmount: number | null
+  strictlyAboveThreshold: boolean
+  /** Decimales del redondeo HALF_UP (0 = unidades enteras, como la detracción). */
+  scale: number
+  overridable: boolean
+  /** No aplica si ya aplicó alguna de éstas (la retención del IGV no va con detracción). */
+  requiresNoOther: WithholdingKind[]
+}
+
+export interface StoredWithholdingSetting {
+  kind: WithholdingKind
+  enabled: boolean | null
+  code: string | null
+  rate: number | null
+  thresholdAmount: number | null
+}
+
+/** Lo que la empresa guardó; null = hereda el valor por defecto. */
+export interface StoredFiscalSettings {
+  fiscalCountry: string | null
+  vatRate: number | null
+  freightVatRate: number | null
+  withholdings: StoredWithholdingSetting[]
+}
+
+/**
+ * El régimen fiscal de la empresa, con los valores por defecto ya resueltos por el servidor
+ * (ADR-027). La pantalla no trae ninguna tasa, código ni formato propio: todo sale de aquí.
+ */
+export interface TaxRegimeView {
+  regime: TaxRegimeCode
+  country: string
+  /** Null en el régimen genérico: ninguna moneda se impone. */
+  fiscalCurrency: string | null
+  vatLabel: string
+  vatRate: number | null
+  /** La tasa con que se adelanta un flete (Ecuador 0 %, Perú 18 %). */
+  freightVatRate: number | null
+  /** Una tasa declarada debe ser una de éstas; vacío = cualquiera entre 0 y 100. */
+  allowedVatRates: number[]
+  breakdownRequired: boolean
   breakdownTolerance: number
+  documentKinds: DocumentKindOption[]
+  documentNumber: { pattern: string | null; placeholder: string | null; hint: string | null }
+  taxId: { label: string; rule: TaxIdRule; length: number | null; pattern: string | null; hint: string | null }
+  electronicValidation: string | null
+  withholdings: WithholdingRuleView[]
+  stored: StoredFiscalSettings
+  defaultCountry: string | null
 }
 
-export function fetchFiscalSettings(companyId: string, signal?: AbortSignal): Promise<FiscalSettingsView> {
-  return apiRequest<FiscalSettingsView>('/settlement/fiscal-settings', { companyId, signal })
+/** Compatibilidad de nombre: el régimen es la configuración fiscal. */
+export type FiscalSettingsView = TaxRegimeView
+
+export function fetchFiscalSettings(companyId: string, signal?: AbortSignal): Promise<TaxRegimeView> {
+  return apiRequest<TaxRegimeView>('/settlement/fiscal-settings', { companyId, signal })
+}
+
+/** Reemplaza lo guardado por la empresa (`settlement.tax:manage`); los null heredan. */
+export interface FiscalSettingsUpdateRequest {
+  fiscalCountry: string | null
+  vatRate: number | null
+  freightVatRate: number | null
+  withholdings: StoredWithholdingSetting[]
+}
+
+export function updateFiscalSettings(companyId: string, request: FiscalSettingsUpdateRequest): Promise<TaxRegimeView> {
+  return apiRequest<TaxRegimeView>('/settlement/fiscal-settings', { method: 'PUT', companyId, body: request })
 }
 
 /** Mirrors `CarrierInvoiceView.MatchView`: el veredicto y con qué se comparó. */
@@ -242,7 +358,7 @@ export interface CarrierInvoiceView {
   discrepancies: FreightDiscrepancyView[]
   approvals: SettlementApprovalView[]
   export: PayableExportView | null
-  /** V66. Ausente en un servidor anterior. */
+  /** La parte fiscal (ADR-027). Ausente en un servidor anterior. */
   fiscal?: FiscalView | null
   /** Fase 65: el estado de pago, tal como el ERP lo informó. Ausentes en un servidor anterior. */
   dueDate?: string | null
@@ -252,7 +368,7 @@ export interface CarrierInvoiceView {
 
 export interface CarrierInvoiceRequest {
   carrierId: string
-  /** Opcional con serie y correlativo (V66): el servidor lo compone. */
+  /** Opcional con el número fiscal (ADR-027): el servidor lo compone. */
   invoiceNumber?: string | null
   invoiceDate: string
   currency: string
@@ -272,18 +388,16 @@ export interface CarrierInvoiceRequest {
     penaltyReferenceType?: PenaltyReferenceType | null
     penaltyReferenceId?: string | null
   }[]
-  documentType?: DocumentTypeCode | null
-  series?: string | null
-  correlative?: string | null
-  issuerRuc?: string | null
+  documentKind?: DocumentKind | null
+  /** El número fiscal en el formato del régimen; con `issuerTaxId`, o ninguno. */
+  documentNumber?: string | null
+  issuerTaxId?: string | null
   subtotalAmount?: number | null
-  igvRate?: number | null
-  igvAmount?: number | null
+  taxRate?: number | null
+  taxAmount?: number | null
   referencedInvoiceId?: string | null
-  detractionConstancyNumber?: string | null
-  detractionConstancyDate?: string | null
-  retentionOverrideAmount?: number | null
-  retentionOverrideReason?: string | null
+  withholdingCertificates?: { kind: WithholdingKind; certificateNumber: string; certificateDate?: string | null }[]
+  withholdingOverrides?: { kind: WithholdingKind; amount: number; reason: string }[]
 }
 
 export function fetchInvoices(
@@ -367,7 +481,7 @@ export interface TolerancePolicyView {
   carrierName: string | null
   absoluteAmount: number | null
   percentage: number | null
-  /** Obligatoria cuando hay importe absoluto: 5 PEN y 5 USD no son la misma tolerancia. */
+  /** Obligatoria cuando hay importe absoluto: 5 USD y 5 EUR no son la misma tolerancia. */
   currency: string | null
   active: boolean
   updatedAt: string

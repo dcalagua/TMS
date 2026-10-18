@@ -51,10 +51,11 @@ public class PortalInvoiceService {
                 .map(invoice -> {
                     PayableBalance balance = owed(scope, invoice);
                     return new PortalInvoiceViews.Summary(invoice.id(), invoice.invoiceNumber(),
-                            invoice.documentType().code(), invoice.invoiceDate(), invoice.currency(),
-                            invoice.totalAmount(), PortalInvoiceViews.PortalInvoiceStatus.of(invoice.status()),
-                            invoice.dueDate(), invoice.paidAmount(), balance == null ? null : balance.openBalance(),
-                            invoice.detractionAmount(), invoice.detractionConstancyNumber());
+                            invoice.documentKind().name(), invoice.fiscalDocumentCode(), invoice.invoiceDate(),
+                            invoice.currency(), invoice.totalAmount(),
+                            PortalInvoiceViews.PortalInvoiceStatus.of(invoice.status()), invoice.dueDate(),
+                            invoice.paidAmount(), balance == null ? null : balance.openBalance(),
+                            invoice.withholdings().isEmpty() ? null : invoice.withholdingTotal());
                 })
                 .toList();
     }
@@ -73,12 +74,14 @@ public class PortalInvoiceService {
                         .reduce((first, second) -> second)
                         .map(SettlementApproval::comment)
                         .orElse(null);
-        return new PortalInvoiceViews.Detail(invoice.id(), invoice.invoiceNumber(), invoice.documentType().code(),
-                invoice.invoiceDate(), invoice.currency(), invoice.totalAmount(),
-                PortalInvoiceViews.PortalInvoiceStatus.of(invoice.status()), invoice.dueDate(), invoice.paidAmount(),
-                balance == null ? null : balance.openBalance(), invoice.detractionAmount(),
-                invoice.detractionConstancyNumber(), invoice.detractionConstancyDate(),
-                balance == null ? null : balance.netAmount(), invoice.retentionAmount(),
+        String vatLabel = invoice.fiscalCountry() == null ? null
+                : com.ebim.tms.settlement.domain.tax.TaxRegimes.forCountry(invoice.fiscalCountry()).vatLabel();
+        return new PortalInvoiceViews.Detail(invoice.id(), invoice.invoiceNumber(), invoice.documentKind().name(),
+                invoice.fiscalDocumentCode(), vatLabel, invoice.invoiceDate(), invoice.currency(),
+                invoice.totalAmount(), PortalInvoiceViews.PortalInvoiceStatus.of(invoice.status()), invoice.dueDate(),
+                invoice.paidAmount(), balance == null ? null : balance.openBalance(),
+                CarrierInvoiceView.WithholdingView.of(invoice), invoice.withholdingTotal(),
+                balance == null ? null : balance.netAmount(),
                 balance == null ? null : balance.payableAmount(), rejectionReason,
                 invoice.lines().stream()
                         .map(line -> new PortalInvoiceViews.Line(line.lineNumber(), line.description(),
@@ -87,15 +90,13 @@ public class PortalInvoiceService {
                 paymentRepository.findByCompanyIdAndCarrierInvoiceIdOrderByPaidOnAscCreatedAtAsc(scope.companyId(),
                                 invoice.id()).stream()
                         .map(payment -> new PortalInvoiceViews.Payment(payment.paymentReference(), payment.paidOn(),
-                                payment.amount(), payment.detractionConstancyNumber(),
-                                payment.detractionConstancyDate(), payment.detractionAmount(),
-                                payment.retentionAmount()))
+                                payment.amount(), payment.reportedWithholdings()))
                         .toList());
     }
 
     /** What is owed on an authorised invoice; nothing to say about a note, or before the approval. */
     private PayableBalance owed(CompanyScope scope, CarrierInvoice invoice) {
-        if (invoice.documentType().isNote() || !InvoiceStatus.AUTHORISED.contains(invoice.status())) {
+        if (invoice.documentKind().isNote() || !InvoiceStatus.AUTHORISED.contains(invoice.status())) {
             return null;
         }
         return payableService.balanceOf(scope, invoice);

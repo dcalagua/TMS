@@ -1,19 +1,18 @@
-package com.ebim.tms.settlement.domain;
+package com.ebim.tms.shared.tax;
 
 /**
- * The SUNAT check digit of a RUC (ADR-024 part 2, item 3).
+ * The SUNAT check digit of a Peruvian RUC (ADR-024 part 2, item 3; ADR-027).
  *
  * <p>Eleven digits, prefixed {@code 10} (person), {@code 15}/{@code 17} (special) or {@code 20}
  * (company). The last digit is {@code 11 - (sum mod 11)} over the first ten with weights
  * {@code 5,4,3,2,7,6,5,4,3,2}, where 10 reads 0 and 11 reads 1. A pure function: what it refuses is a
- * typing mistake, never whether the taxpayer exists or is active - that question needs SUNAT, and
- * {@code CpeValidationPort} says so.
+ * typing mistake, never whether the taxpayer exists or is active.
  */
-public final class RucValidator {
+public final class PeruRuc {
 
     private static final int[] WEIGHTS = {5, 4, 3, 2, 7, 6, 5, 4, 3, 2};
 
-    private RucValidator() {
+    private PeruRuc() {
     }
 
     public static boolean isValid(String ruc) {

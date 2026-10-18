@@ -176,7 +176,7 @@ export function TripTenderCard({ companyId, tripId, carrierName, offerable, canM
                   <Box sx={{ flex: 1 }} />
                   {tender.offeredAmount !== null && (
                     <Typography variant="body2" sx={{ fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>
-                      {fmtMoney(tender.offeredAmount, tender.currency ?? "PEN")}
+                      {fmtMoney(tender.offeredAmount, tender.currency)}
                     </Typography>
                   )}
                 </Box>

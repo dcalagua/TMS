@@ -8,6 +8,7 @@ import {
   type GlAccountMappingView, type GlConcept, type GlScopeType,
 } from "../../shared/api/accrualApi";
 import { fetchOrigins } from "../../shared/api/originsApi";
+import { WITHHOLDING_KINDS, fetchFiscalSettings, type WithholdingKind } from "../../shared/api/settlementApi";
 import { fetchRoutes } from "../../shared/api/routesApi";
 import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
@@ -65,7 +66,20 @@ export function GlMappingsTab({ companyId }: { companyId: string }) {
   }
 
   const columns: DataTableColumn<GlAccountMappingView>[] = [
-    { key: "concept", header: t("Concepto"), render: (row) => enumLabel("glConcept", row.concept) },
+    {
+      key: "concept",
+      header: t("Concepto"),
+      render: (row) => (
+        <Box>
+          <Typography variant="body2">{enumLabel("glConcept", row.concept)}</Typography>
+          {row.concept === "WITHHOLDING_PAYABLE" && (
+            <Typography variant="caption" color="text.secondary">
+              {row.withholdingKind ? enumLabel("withholdingKind", row.withholdingKind) : t("Toda retención sin cuenta propia")}
+            </Typography>
+          )}
+        </Box>
+      ),
+    },
     {
       key: "scope",
       header: t("Ámbito"),
@@ -153,12 +167,23 @@ interface GlMappingFormDrawerProps {
 export function GlMappingFormDrawer({ companyId, mapping, onClose, onSaved }: GlMappingFormDrawerProps) {
   const editing = mapping !== null;
   const [concept, setConcept] = useState<GlConcept>(mapping?.concept ?? "FREIGHT_EXPENSE");
+  const [withholdingKind, setWithholdingKind] = useState<WithholdingKind | "">(mapping?.withholdingKind ?? "");
   const [scopeType, setScopeType] = useState<GlScopeType>(mapping?.scopeType ?? "COMPANY");
   const [scopeId, setScopeId] = useState(mapping?.scopeId ?? "");
   const [accountCode, setAccountCode] = useState(mapping?.accountCode ?? "");
   const [costCenterCode, setCostCenterCode] = useState(mapping?.costCenterCode ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Las retenciones del régimen de la empresa; sin él (o sin permiso), todas las que conoce el producto.
+  const regimeQuery = useQuery({
+    queryKey: ["fiscal-settings", companyId],
+    queryFn: ({ signal }) => fetchFiscalSettings(companyId, signal),
+    enabled: !editing && concept === "WITHHOLDING_PAYABLE",
+    retry: false,
+  });
+  const regimeKinds = regimeQuery.data?.withholdings.map((rule) => rule.kind);
+  const withholdingKinds: readonly WithholdingKind[] = regimeKinds && regimeKinds.length > 0 ? regimeKinds : WITHHOLDING_KINDS;
 
   const originsQuery = useQuery({
     queryKey: ["origins-lookup", companyId],
@@ -185,6 +210,7 @@ export function GlMappingFormDrawer({ companyId, mapping, onClose, onSaved }: Gl
     setError(null);
     const request = {
       concept,
+      withholdingKind: concept === "WITHHOLDING_PAYABLE" && withholdingKind !== "" ? withholdingKind : null,
       scopeType,
       scopeId: scopeType === "COMPANY" ? null : scopeId,
       accountCode: accountCode.trim(),
@@ -226,6 +252,16 @@ export function GlMappingFormDrawer({ companyId, mapping, onClose, onSaved }: Gl
           onChange={(e) => setConcept(e.target.value as GlConcept)}>
           {GL_CONCEPTS.map((value) => <MenuItem key={value} value={value}>{enumLabel("glConcept", value)}</MenuItem>)}
         </TextField>
+        {concept === "WITHHOLDING_PAYABLE" && (
+          <TextField select label={t("Clase de retención")} value={withholdingKind} disabled={editing}
+            onChange={(e) => setWithholdingKind(e.target.value as WithholdingKind | "")}
+            helperText={t("Una cuenta por clase de retención, o una para todas las que no tengan la suya.")}>
+            <MenuItem value="">{t("Todas las retenciones")}</MenuItem>
+            {withholdingKinds.map((kind) => (
+              <MenuItem key={kind} value={kind}>{enumLabel("withholdingKind", kind)}</MenuItem>
+            ))}
+          </TextField>
+        )}
         <TextField select label={t("Ámbito")} value={scopeType} disabled={editing}
           onChange={(e) => { setScopeType(e.target.value as GlScopeType); setScopeId(""); }}>
           {(["COMPANY", "ORIGIN", "ROUTE"] as const).map((value) => (

@@ -163,11 +163,33 @@ export const ENUM_LABELS = {
     OTHER_ACCESSORIAL: "Otro accesorio",
     PENALTY: "Penalidad",
   },
-  /** V66: tipo de comprobante SUNAT. */
-  documentType: {
-    "01": "Factura (01)",
-    "07": "Nota de crédito (07)",
-    "08": "Nota de débito (08)",
+  /**
+   * ADR-027: la clase interna del comprobante. El código del país (01/07/08 en Perú, 01/04/05 en
+   * Ecuador) lo trae el régimen fiscal del servidor; aquí sólo la palabra.
+   */
+  documentKind: {
+    INVOICE: "Factura",
+    CREDIT_NOTE: "Nota de crédito",
+    DEBIT_NOTE: "Nota de débito",
+  },
+  /** ADR-027: las retenciones que conoce el producto, por país. */
+  withholdingKind: {
+    PE_DETRACTION: "Detracción (SPOT)",
+    PE_RETENTION: "Retención del IGV",
+    EC_INCOME_TAX_WITHHOLDING: "Retención en la fuente (IR)",
+    EC_VAT_WITHHOLDING: "Retención de IVA",
+  },
+  /** ADR-027: a qué se aplica la tasa de una retención. */
+  withholdingBase: {
+    TOTAL: "Total",
+    SUBTOTAL: "Subtotal",
+    VAT: "Impuesto",
+  },
+  /** ADR-027: el régimen fiscal de la empresa. */
+  taxRegime: {
+    PE: "Perú",
+    EC: "Ecuador",
+    GENERIC: "Genérico",
   },
   /** V66: a qué se refiere una penalidad. */
   penaltyReferenceType: {
@@ -215,9 +237,8 @@ export const ENUM_LABELS = {
   glConcept: {
     FREIGHT_EXPENSE: "Gasto de flete",
     FREIGHT_ACCRUAL: "Provisión de flete",
-    IGV_CREDIT: "IGV crédito fiscal",
-    DETRACCION_PAYABLE: "Detracción por pagar",
-    RETENCION_PAYABLE: "Retención por pagar",
+    VAT_CREDIT: "Impuesto (crédito fiscal)",
+    WITHHOLDING_PAYABLE: "Retención por pagar",
     CARRIER_PAYABLE: "Cuenta por pagar al transportista",
   },
   glScopeType: {

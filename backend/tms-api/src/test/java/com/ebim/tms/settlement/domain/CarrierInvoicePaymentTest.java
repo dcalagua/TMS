@@ -99,7 +99,7 @@ class CarrierInvoicePaymentTest {
     void fourEyes() {
         CarrierInvoice invoice = exported();
         CarrierPaymentRequest request = new CarrierPaymentRequest(invoice, new PaymentDetail("TRX", LocalDate.of(2026,
-                11, 1), new BigDecimal("10.00"), "PEN", null, null, null, null), PERSON);
+                11, 1), new BigDecimal("10.00"), "PEN", null), PERSON);
         assertThatThrownBy(() -> request.confirm(PERSON, UUID.randomUUID())).isInstanceOf(ConflictException.class);
         assertThatThrownBy(() -> CarrierPayment.confirmed(request, invoice, PERSON))
                 .isInstanceOf(IllegalArgumentException.class);

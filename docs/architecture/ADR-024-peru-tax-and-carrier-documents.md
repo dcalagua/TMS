@@ -1,6 +1,9 @@
 # ADR-024 - Carrier documents: settlement hardening, Peruvian taxes (IGV, SPOT, retention), CPE, credit and debit notes, penalties
 
-- Status: Accepted (design; implementation in overnight-pack phases 50 and 60)
+- Status: Accepted (design; implementation in overnight-pack phases 50 and 60). **Part 2 is superseded in part by
+  ADR-027** (tax regimes per country): where the two conflict - column, code and concept names, `series`/`correlative`,
+  the detraction and retention slots, `tms.finance.pe.*`, `CpeValidationPort`, `issuer-ruc-mismatch` - ADR-027 governs.
+  The Peruvian **behaviour** described here is unchanged and is now the Peruvian regime.
 - Date: 2026-10-18
 - Relates to: V46 (freight settlement), ADR-023 (accruals and payables), plan `03_FINANZAS_FLETES.md`
   F-1 and F-3, decision D-06 (Peruvian defaults, **configurable per company, never fixed in code**;

@@ -92,7 +92,7 @@ export function ActualCostDrawer({ companyId, tripId, cost, onClose, onSaved }: 
         sx={{ display: "grid", gap: 2 }}>
         <ContextCard
           title={cost.estimatedAmount !== null
-            ? t("Estimado: {{amount}}", { amount: fmtMoney(cost.estimatedAmount, cost.currency ?? "PEN") })
+            ? t("Estimado: {{amount}}", { amount: fmtMoney(cost.estimatedAmount, cost.currency) })
             : t("Este viaje no tiene estimado.")}
           status={cost.closed
             ? <StatusChip label={t("Cerrado")} tone="done" />

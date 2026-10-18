@@ -169,7 +169,7 @@ export function TenderWaterfallCard({ companyId, tripId, canManage }: TenderWate
                           quedó al final de la lista y no al principio. */}
                       {candidate.quotedAmount === null
                         ? <Chip size="small" variant="outlined" label={t("Sin tarifa")} />
-                        : fmtMoney(candidate.quotedAmount, candidate.quotedCurrency ?? "PEN")}
+                        : fmtMoney(candidate.quotedAmount, candidate.quotedCurrency)}
                     </TableCell>
                     <TableCell>
                       <StatusChip

@@ -164,7 +164,8 @@ Authoritative documents live under `docs/architecture/`:
   paid and moves no money (D-01).
 - `ADR-024-peru-tax-and-carrier-documents.md` - settlement hardening (charge codes, match basis,
   tolerances, V64) and Peruvian taxes: IGV breakdown, SPOT detraction, retention, CPE numbering,
-  credit/debit notes and penalties (V66); percentages are company configuration, never code.
+  credit/debit notes and penalties (V66); percentages are company configuration, never code. Part 2
+  superseded in part by ADR-027.
 - `ADR-025-warehouse-sync-v1-1.md` - warehouse contract v1.1: material profiles, plan and POD to the
   warehouse, order cancellation both ways (each side holds or alerts, neither cancels by itself),
   reconciliation. Section 7 (dock appointments) is only proposed. Contract:
@@ -172,6 +173,12 @@ Authoritative documents live under `docs/architecture/`:
 - `ADR-026-cost-to-serve-allocation.md` - a trip's cost allocated to its orders on a configurable
   basis, versioned, reported by customer, destination and route (V68). No margin: there is no sales
   tariff.
+- `ADR-027-tax-regimes-per-country.md` - taxes of received carrier documents by the company's fiscal
+  country (`company_settings.fiscal_country`, else `default_country`): Peru, Ecuador and a generic
+  regime for any other country. VAT, document codes, number format, tax-id check and withholdings as a
+  list (`carrier_invoice_withholding`); every rate is `tms.finance.tax.<country>.*` overridable per
+  company (`settlement.tax:manage`). TMS receives and checks shape; it issues nothing to SRI/SUNAT.
+  Supersedes ADR-024 part 2 where they conflict (V65-V67 rewritten in place).
 - `ADR-028-logistics-documents-received-international.md` - logistics documents are **received, never
   issued**: TMS does not generate, sign, send or validate invoices or remission guides with the SRI or
   SUNAT. The catalogue is international (V69): generic `REMISSION_GUIDE` (GRE_* stay as Peruvian

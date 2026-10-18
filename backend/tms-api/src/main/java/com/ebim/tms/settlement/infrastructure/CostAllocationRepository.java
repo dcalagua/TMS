@@ -199,7 +199,7 @@ public class CostAllocationRepository {
 
     /**
      * What the carrier's authorised documents billed for the trip, by currency: the sum of their lines
-     * for it - net of IGV once a document is broken down (ADR-024), credit notes subtracting and debit
+     * for it - net of VAT once a document is broken down (ADR-024), credit notes subtracting and debit
      * notes adding. Empty when no authorised document bills the trip.
      */
     public Map<String, BigDecimal> invoicedByCurrency(UUID companyId, UUID tripId) {

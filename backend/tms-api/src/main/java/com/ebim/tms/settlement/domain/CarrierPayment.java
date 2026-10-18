@@ -55,17 +55,10 @@ public class CarrierPayment {
     @Column(name = "currency", updatable = false, nullable = false, length = 3)
     private String currency;
 
-    @Column(name = "detraction_constancy_number", updatable = false)
-    private String detractionConstancyNumber;
-
-    @Column(name = "detraction_constancy_date", updatable = false)
-    private LocalDate detractionConstancyDate;
-
-    @Column(name = "detraction_amount", updatable = false, precision = 14, scale = 2)
-    private BigDecimal detractionAmount;
-
-    @Column(name = "retention_amount", updatable = false, precision = 14, scale = 2)
-    private BigDecimal retentionAmount;
+    /** The withholdings as reported with the payment (ADR-027); informative. */
+    @jakarta.persistence.Convert(converter = ReportedWithholdingsConverter.class)
+    @Column(name = "reported_withholdings", updatable = false, nullable = false)
+    private java.util.List<ReportedWithholding> reportedWithholdings = java.util.List.of();
 
     @Enumerated(EnumType.STRING)
     @Column(name = "source", updatable = false, nullable = false)
@@ -98,10 +91,7 @@ public class CarrierPayment {
         this.paidOn = detail.paidOn();
         this.amount = detail.amount();
         this.currency = detail.currency();
-        this.detractionConstancyNumber = detail.detractionConstancyNumber();
-        this.detractionConstancyDate = detail.detractionConstancyDate();
-        this.detractionAmount = detail.detractionAmount();
-        this.retentionAmount = detail.retentionAmount();
+        this.reportedWithholdings = detail.withholdings();
         this.source = source;
     }
 
@@ -125,8 +115,7 @@ public class CarrierPayment {
     }
 
     public PaymentDetail detail() {
-        return new PaymentDetail(paymentReference, paidOn, amount, currency, detractionConstancyNumber,
-                detractionConstancyDate, detractionAmount, retentionAmount);
+        return new PaymentDetail(paymentReference, paidOn, amount, currency, reportedWithholdings);
     }
 
     public UUID id() {
@@ -161,20 +150,8 @@ public class CarrierPayment {
         return currency;
     }
 
-    public String detractionConstancyNumber() {
-        return detractionConstancyNumber;
-    }
-
-    public LocalDate detractionConstancyDate() {
-        return detractionConstancyDate;
-    }
-
-    public BigDecimal detractionAmount() {
-        return detractionAmount;
-    }
-
-    public BigDecimal retentionAmount() {
-        return retentionAmount;
+    public java.util.List<ReportedWithholding> reportedWithholdings() {
+        return reportedWithholdings;
     }
 
     public PaymentSource source() {

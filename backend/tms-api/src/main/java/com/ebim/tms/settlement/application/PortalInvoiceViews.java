@@ -8,7 +8,7 @@ import java.util.UUID;
 
 /**
  * "Mis facturas" in the carrier portal (V67, ADR-023 section 2): what a carrier may know about its own
- * documents - the status, the due date, what was paid and the detraction - and nothing of the audit
+ * documents - the status, the due date, what was paid and what was withheld - and nothing of the audit
  * behind them. No expected cost, no difference, no tolerance, no internal note, no hold reason.
  */
 public final class PortalInvoiceViews {
@@ -36,25 +36,29 @@ public final class PortalInvoiceViews {
         }
     }
 
-    /** @param openBalance null while in review or rejected: nothing is owed until somebody authorised it */
-    public record Summary(UUID id, String invoiceNumber, String documentType, LocalDate invoiceDate, String currency,
-            BigDecimal totalAmount, PortalInvoiceStatus status, LocalDate dueDate, BigDecimal paidAmount,
-            BigDecimal openBalance, BigDecimal detractionAmount, String detractionConstancyNumber) {
+    /**
+     * @param openBalance            null while in review or rejected: nothing is owed until somebody
+     *                               authorised it
+     * @param withholdingTotalAmount what the shipper withholds and deposits elsewhere; null when nothing
+     */
+    public record Summary(UUID id, String invoiceNumber, String documentKind, String fiscalDocumentCode,
+            LocalDate invoiceDate, String currency, BigDecimal totalAmount, PortalInvoiceStatus status,
+            LocalDate dueDate, BigDecimal paidAmount, BigDecimal openBalance, BigDecimal withholdingTotalAmount) {
     }
 
     /** @param rejectionReason what the office said when it refused the document: the carrier has to answer it */
-    public record Detail(UUID id, String invoiceNumber, String documentType, LocalDate invoiceDate, String currency,
-            BigDecimal totalAmount, PortalInvoiceStatus status, LocalDate dueDate, BigDecimal paidAmount,
-            BigDecimal openBalance, BigDecimal detractionAmount, String detractionConstancyNumber,
-            LocalDate detractionConstancyDate, BigDecimal netAmount, BigDecimal retentionAmount,
-            BigDecimal payableAmount, String rejectionReason, List<Line> lines, List<Payment> payments) {
+    public record Detail(UUID id, String invoiceNumber, String documentKind, String fiscalDocumentCode,
+            String vatLabel, LocalDate invoiceDate, String currency, BigDecimal totalAmount,
+            PortalInvoiceStatus status, LocalDate dueDate, BigDecimal paidAmount, BigDecimal openBalance,
+            List<CarrierInvoiceView.WithholdingView> withholdings, BigDecimal withholdingTotalAmount,
+            BigDecimal netAmount, BigDecimal payableAmount, String rejectionReason, List<Line> lines,
+            List<Payment> payments) {
     }
 
     public record Line(int lineNumber, String description, BigDecimal lineAmount, String chargeCode) {
     }
 
     public record Payment(String paymentReference, LocalDate paidOn, BigDecimal amount,
-            String detractionConstancyNumber, LocalDate detractionConstancyDate, BigDecimal detractionAmount,
-            BigDecimal retentionAmount) {
+            List<com.ebim.tms.settlement.domain.ReportedWithholding> withholdings) {
     }
 }

@@ -1,5 +1,6 @@
 import { apiDownload, apiRequest, type DownloadedFile } from './httpClient'
 import type { PageResponse } from './pageResponse'
+import type { WithholdingKind } from './settlementApi'
 
 //
 // Provisiones de flete (migración V65, ADR-023 §1): la obligación con el transportista entre el
@@ -16,10 +17,12 @@ export type AccrualBasis = 'ESTIMATED' | 'ACTUAL'
 export type AccrualEntryType = 'ACCRUE' | 'ADJUST' | 'CONSUME' | 'REVERSE'
 export type UnaccruedReason = 'NO_CARRIER' | 'NO_TRIP_COST' | 'NOT_CALCULABLE' | 'PENDING_SWEEP'
 
-/** Mirrors `GlConcept`. */
+/**
+ * Mirrors `GlConcept` (ADR-027: sin conceptos de un país). `WITHHOLDING_PAYABLE` lleva además la
+ * clase de retención: una cuenta para la detracción y otra para la retención, o una para todas.
+ */
 export const GL_CONCEPTS = [
-  'FREIGHT_EXPENSE', 'FREIGHT_ACCRUAL', 'CARRIER_PAYABLE', 'IGV_CREDIT', 'DETRACCION_PAYABLE',
-  'RETENCION_PAYABLE',
+  'FREIGHT_EXPENSE', 'FREIGHT_ACCRUAL', 'CARRIER_PAYABLE', 'VAT_CREDIT', 'WITHHOLDING_PAYABLE',
 ] as const
 export type GlConcept = (typeof GL_CONCEPTS)[number]
 export type GlScopeType = 'COMPANY' | 'ORIGIN' | 'ROUTE'
@@ -136,6 +139,8 @@ export interface AccrualSweepResult {
 export interface GlAccountMappingView {
   id: string
   concept: GlConcept
+  /** Sólo en `WITHHOLDING_PAYABLE`; null = toda retención sin cuenta propia. */
+  withholdingKind?: WithholdingKind | null
   scopeType: GlScopeType
   scopeId: string | null
   scopeName: string | null
@@ -147,6 +152,7 @@ export interface GlAccountMappingView {
 
 export interface GlAccountMappingRequest {
   concept: GlConcept
+  withholdingKind?: WithholdingKind | null
   scopeType?: GlScopeType
   scopeId?: string | null
   accountCode: string

@@ -35,6 +35,14 @@ public class GlAccountMapping {
     @Column(name = "concept", updatable = false, nullable = false)
     private GlConcept concept;
 
+    /**
+     * The withholding a {@link GlConcept#WITHHOLDING_PAYABLE} mapping books (ADR-027); null = every
+     * kind without its own mapping, and always null on another concept.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "withholding_kind", updatable = false)
+    private com.ebim.tms.settlement.domain.tax.WithholdingKind withholdingKind;
+
     @Column(name = "account_code", nullable = false)
     private String accountCode;
 
@@ -75,6 +83,17 @@ public class GlAccountMapping {
 
     public GlAccountMapping(UUID companyId, GlConcept concept, GlScopeType scopeType, UUID scopeId,
             String accountCode, String costCenterCode, UUID actorId) {
+        this(companyId, concept, null, scopeType, scopeId, accountCode, costCenterCode, actorId);
+    }
+
+    public GlAccountMapping(UUID companyId, GlConcept concept,
+            com.ebim.tms.settlement.domain.tax.WithholdingKind withholdingKind, GlScopeType scopeType, UUID scopeId,
+            String accountCode, String costCenterCode, UUID actorId) {
+        if (withholdingKind != null && concept != GlConcept.WITHHOLDING_PAYABLE) {
+            // Mirrors ck_gl_account_mapping_withholding_kind.
+            throw new IllegalArgumentException("only a WITHHOLDING_PAYABLE mapping names a withholding kind");
+        }
+        this.withholdingKind = withholdingKind;
         if ((scopeType == GlScopeType.COMPANY) != (scopeId == null)) {
             // Mirrors ck_gl_account_mapping_scope_id.
             throw new IllegalArgumentException("a COMPANY mapping names no scope; ORIGIN and ROUTE name one");
@@ -117,6 +136,10 @@ public class GlAccountMapping {
 
     public GlConcept concept() {
         return concept;
+    }
+
+    public com.ebim.tms.settlement.domain.tax.WithholdingKind withholdingKind() {
+        return withholdingKind;
     }
 
     public String accountCode() {

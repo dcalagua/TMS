@@ -13,6 +13,8 @@ import java.util.UUID;
  */
 public record GlAccountMappingRequest(
         @NotNull(message = "is required") GlConcept concept,
+        /** Only on {@code WITHHOLDING_PAYABLE} (ADR-027): the kind it books; null = every kind. */
+        com.ebim.tms.settlement.domain.tax.WithholdingKind withholdingKind,
         GlScopeType scopeType,
         UUID scopeId,
         @NotBlank(message = "is required") @Size(max = 40, message = "must be at most 40 characters")
