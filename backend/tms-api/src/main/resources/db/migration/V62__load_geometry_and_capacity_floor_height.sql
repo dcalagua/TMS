@@ -66,7 +66,12 @@ ALTER TABLE tms.transport_order
     ADD COLUMN allocated_floor_area_m2     numeric(12,4) NOT NULL DEFAULT 0;
 
 -- Every order predating V62 has no measured line, so what capacity counts is what it always did.
+-- The updated_at trigger is held off for the statement (the V52 pattern): stamping every order
+-- "updated now" would push all of them back through the order feed (V61, ?updatedSince=), which is
+-- ordered by updated_at, for a change that is not a change to the order.
+ALTER TABLE tms.transport_order DISABLE TRIGGER tr_transport_order_set_updated_at;
 UPDATE tms.transport_order SET planning_volume_m3 = total_volume_m3;
+ALTER TABLE tms.transport_order ENABLE TRIGGER tr_transport_order_set_updated_at;
 
 -- A writer that predates V62 (a fixture, a script) names no planning volume: it is the total, the
 -- same rule as the backfill. The application always writes it explicitly. A BEFORE trigger runs

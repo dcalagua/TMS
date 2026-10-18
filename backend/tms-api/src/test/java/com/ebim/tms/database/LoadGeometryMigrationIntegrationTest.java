@@ -40,9 +40,9 @@ class LoadGeometryMigrationIntegrationTest {
         destination = id("INSERT INTO tms.location (company_id, code, name) VALUES ('" + company
                 + "', 'V62-ST', 'Store') RETURNING id");
         orderBeforeV62 = id("INSERT INTO tms.transport_order (company_id, order_number, origin_id, destination_id,"
-                + " service_date, status, total_weight_kg, total_volume_m3, total_pallets, allocated_volume_m3)"
-                + " VALUES ('" + company + "', 'TO-V62-OLD', '" + origin + "', '" + destination + "', '2026-10-19',"
-                + " 'READY_FOR_PLANNING', 100, 5, 2, 2) RETURNING id");
+                + " service_date, status, total_weight_kg, total_volume_m3, total_pallets, allocated_volume_m3,"
+                + " updated_at) VALUES ('" + company + "', 'TO-V62-OLD', '" + origin + "', '" + destination
+                + "', '2026-10-19', 'READY_FOR_PLANNING', 100, 5, 2, 2, '2026-01-02T03:04:05Z') RETURNING id");
 
         PostgresTestDatabase.flyway(jdbcUrl).migrate();
     }
@@ -53,6 +53,15 @@ class LoadGeometryMigrationIntegrationTest {
         assertThat(value("SELECT concat_ws('|', planning_volume_m3, floor_area_m2, allocated_floor_area_m2,"
                 + " coalesce(max_stack_height_m::text, '-'), geometry_unmeasured_lines) FROM tms.transport_order"
                 + " WHERE id = '" + orderBeforeV62 + "'")).isEqualTo("5.0000|0.0000|0.0000|-|0");
+    }
+
+    @Test
+    @DisplayName("the backfill does not touch updated_at, so the order feed (?updatedSince=) does not replay every order")
+    void backfillKeepsTheFeedWatermark() throws SQLException {
+        assertThat(value("SELECT (updated_at = '2026-01-02T03:04:05Z'::timestamptz)::text FROM tms.transport_order"
+                + " WHERE id = '" + orderBeforeV62 + "'")).isEqualTo("true");
+        assertThat(value("SELECT tgenabled::text FROM pg_trigger WHERE tgname = 'tr_transport_order_set_updated_at'"))
+                .as("the trigger is enabled again").isEqualTo("O");
     }
 
     @Test
