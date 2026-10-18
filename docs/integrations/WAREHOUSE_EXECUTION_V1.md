@@ -625,6 +625,17 @@ validated, like every other field (`trailerLicensePlate` ≤ 20 characters, `geo
 `VEHICLE_MISMATCH`. A v1 body without them fingerprints exactly as before, so redelivering a document
 stored before V60 is still `UNCHANGED`, not a `409`.
 
+**EWM emitter (phase 30, EWM V57).** `licensePlate` is the tractor the plan named (`vehicle_plate`);
+`trailerLicensePlate` is what the dock typed (`trailer_number`), and `null` for a load created before
+V57 (whose only plate was stored as the trailer and is sent as `licensePlate`, as in v1). `stacks` and
+`effectiveVolumeM3` are sent only when **every** material of the order has a complete profile, a
+counted base unit and dimensions convertible to metres; otherwise both are `null` with
+`geometryReason` (`STACK_MODE_NOT_DECLARED`, `PROFILE_INCOMPLETE`, `NEST_INCREMENT_MISSING`,
+`DIMENSION_UOM_NOT_DECLARED`, `DIMENSION_UOM_NOT_CONVERTIBLE`, `UOM_NOT_COUNTABLE`,
+`QUANTITY_NOT_IN_BASE_UOM`, `QUANTITY_NOT_WHOLE`, `STACK_LIMIT_NOT_DECLARED`, `MAX_TOP_LOAD_UOM_DIFFERS`,
+`UNIT_WEIGHT_MISSING`). The WMS has no vehicle dimensions, so it stacks without a height cap (`k` from
+the per-stack maximum or the top load) and **`loadingMeters` is always `null`** from the EWM.
+
 ### 7.4 `ORDER_CANCELLED` (TMS → WMS)
 
 TMS cancelled **its transport order** (`POST /api/v1/orders/{id}/cancel`; only possible before the order is
