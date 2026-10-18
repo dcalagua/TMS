@@ -186,6 +186,35 @@ class CarrierDocumentDeliveryIntegrationTest {
     }
 
     @Test
+    @DisplayName("ADR-028: the carrier sees an Ecuadorian guide's clave de acceso, under its own RLS")
+    void ecuadorianGuideOnThePortal() throws Exception {
+        Shipment shipment = confirmedShipment(carrierA);
+        String clave = "1510202606099299999900110010010000001231234567819";
+        mockMvc.perform(post("/integration/v1/logistics-documents")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + erpToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sourceSystem\":\"SAP_EC\",\"documentType\":\"REMISSION_GUIDE\","
+                                + "\"documentNumber\":\"001-001-" + String.format("%09d", SEQUENCE.incrementAndGet())
+                                + "\",\"fiscalCountry\":\"EC\",\"fiscalDocumentCode\":\"06\","
+                                + "\"authorizationNumber\":\"" + clave + "\",\"vehiclePlate\":\"GBC-5678\","
+                                + "\"recipients\":[{\"name\":\"Ferreteria El Constructor\"}],"
+                                + "\"orders\":[{\"externalSource\":\"SAPB1_PE\",\"externalReference\":\""
+                                + shipment.orderReference + "\"}]}"))
+                .andExpect(status().isCreated());
+        documents(shipment, "INVOICE", "F001-" + SEQUENCE.incrementAndGet());
+        dispatch(shipment);
+
+        asCarrier(CARRIER_A_AUTH, get(PORTAL + "/" + shipment.tripId)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.stops[0].documents[?(@.documentType == 'REMISSION_GUIDE')].fiscal.fiscalCountry")
+                        .value("EC"))
+                .andExpect(jsonPath("$.stops[0].documents[?(@.documentType == 'REMISSION_GUIDE')].fiscal.authorizationNumber")
+                        .value(clave))
+                // A document received without any fiscal field carries none.
+                .andExpect(jsonPath("$.stops[0].documents[?(@.documentType == 'INVOICE')].fiscal.authorizationNumber")
+                        .isEmpty());
+    }
+
+    @Test
     @DisplayName("another carrier, the office API and the database itself keep a carrier user to their own trips")
     void carrierBoundary() throws Exception {
         Shipment shipment = confirmedShipment(carrierA);
