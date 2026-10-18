@@ -35,6 +35,9 @@ export const FrequenciesPage = lazy(() =>
   import("../pages/masters/FrequenciesPage").then((m) => ({ default: m.FrequenciesPage })));
 export const RoutesPage = lazy(() =>
   import("../pages/masters/RoutesPage").then((m) => ({ default: m.RoutesPage })));
+// Solo lectura: el almacén (EWM) es el dueño de los perfiles y TMS los recibe por integración.
+export const MaterialProfilesPage = lazy(() =>
+  import("../pages/masters/MaterialProfilesPage").then((m) => ({ default: m.MaterialProfilesPage })));
 
 export const CarriersPage = lazy(() =>
   import("../pages/fleet/CarriersPage").then((m) => ({ default: m.CarriersPage })));

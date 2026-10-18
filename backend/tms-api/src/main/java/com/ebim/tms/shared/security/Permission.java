@@ -43,6 +43,12 @@ public enum Permission {
     MASTERDATA_ROUTE_READ("masterdata.route:read"),
     MASTERDATA_ROUTE_MANAGE("masterdata.route:manage"),
 
+    /**
+     * The warehouse-owned physical profile of a material (migration V59, ADR-022). Read only: the
+     * one write path is the integration API, so there is no manage permission to grant.
+     */
+    MASTERDATA_MATERIAL_PROFILE_READ("masterdata.material_profile:read"),
+
     FLEET_CARRIER_READ("fleet.carrier:read"),
     FLEET_CARRIER_MANAGE("fleet.carrier:manage"),
     FLEET_VEHICLE_TYPE_READ("fleet.vehicle_type:read"),

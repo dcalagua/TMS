@@ -4,7 +4,10 @@ import com.ebim.tms.orders.domain.OrderPriority;
 import com.ebim.tms.orders.domain.OrderStatus;
 import com.ebim.tms.orders.domain.TotalsSource;
 import com.ebim.tms.orders.domain.TransportOrder;
+import com.ebim.tms.orders.domain.PhysicalSource;
 import com.ebim.tms.orders.domain.TransportOrderLine;
+import com.ebim.tms.shared.geometry.PhysicalBlock;
+import com.ebim.tms.shared.geometry.StackMode;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderFulfillmentStatus;
 import java.math.BigDecimal;
@@ -99,12 +102,32 @@ public record OrderDetailView(
             BigDecimal unitVolumeM3,
             BigDecimal lineWeightKg,
             BigDecimal lineVolumeM3,
-            BigDecimal palletQuantity) {
+            BigDecimal palletQuantity,
+            BigDecimal lengthM,
+            BigDecimal widthM,
+            BigDecimal heightM,
+            StackMode stackMode,
+            Integer stackMaxQuantity,
+            BigDecimal nestIncrementM,
+            BigDecimal maxTopLoadKg,
+            Boolean orientationLocked,
+            PhysicalSource physicalSource,
+            Long materialProfileVersion) {
 
+        /**
+         * The physical snapshot (V59) travels with the line, so an editor that sends the line back
+         * can keep it, and a reader can tell an ERP block from a profile copy.
+         */
         static OrderLineView from(TransportOrderLine line) {
+            PhysicalBlock block = line.physicalBlock();
             return new OrderLineView(line.id(), line.lineNumber(), line.materialCode(), line.materialDescription(),
                     line.quantity(), line.uom(), line.unitWeightKg(), line.unitVolumeM3(), line.lineWeightKg(),
-                    line.lineVolumeM3(), line.palletQuantity());
+                    line.lineVolumeM3(), line.palletQuantity(),
+                    block == null ? null : block.lengthM(), block == null ? null : block.widthM(),
+                    block == null ? null : block.heightM(), block == null ? null : block.stackMode(),
+                    block == null ? null : block.stackMaxQuantity(), block == null ? null : block.nestIncrementM(),
+                    block == null ? null : block.maxTopLoadKg(), block == null ? null : block.orientationLocked(),
+                    line.physicalSource(), line.materialProfileVersion());
         }
     }
 }

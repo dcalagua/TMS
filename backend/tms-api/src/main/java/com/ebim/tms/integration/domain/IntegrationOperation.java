@@ -38,7 +38,10 @@ public enum IntegrationOperation {
     DISPATCH_CONFIRMATION("dispatch.confirmation", IntegrationScope.DISPATCH_WRITE),
     WAREHOUSE_MILESTONE_BATCH("warehouse-milestone.batch", IntegrationScope.WAREHOUSE_MILESTONE_WRITE),
 
-    LOGISTICS_DOCUMENT_UPSERT("logistics-document.upsert", IntegrationScope.DOCUMENT_WRITE);
+    LOGISTICS_DOCUMENT_UPSERT("logistics-document.upsert", IntegrationScope.DOCUMENT_WRITE),
+
+    MATERIAL_PROFILE_UPSERT("material-profile.upsert", IntegrationScope.MATERIAL_WRITE),
+    MATERIAL_PROFILE_BATCH("material-profile.batch", IntegrationScope.MATERIAL_WRITE);
 
     private final String code;
     private final IntegrationScope requiredScope;

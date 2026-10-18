@@ -246,3 +246,97 @@ Commit EWM: `ba4df62`.
 - `CLAUDE.md` del EWM: su mapa de migraciones ya omite V46–V53; no se tocó (lo actualizan las fases que
   crean V56+).
 - S-5 (citas de muelle y ETA) queda sólo como propuesta hasta la decisión D-04.
+
+---
+
+## 20 · Perfil físico del material (2026-10-18, ciclo 1)
+
+### Qué entró
+
+1. **V59** `V59__material_profile_and_line_snapshot.sql`: `tms.material_profile` (único por company +
+   `material_code`, CHECKs de medidas > 0, `NESTABLE` ⇔ `nest_increment_m`, `stack_max_quantity > 0`,
+   `source_system` con patrón; RLS `p_tenant_company_scope`, `SELECT/INSERT/UPDATE` a `tms_app`, sin DELETE);
+   10 columnas de snapshot anulables en `transport_order_line` (bloque físico + `physical_source` +
+   `material_profile_version`, con CHECKs del perfil, uno de una sola columna para el vocabulario y la
+   coherencia origen ⇔ bloque ⇔ versión); scope `integration.material:write`; permiso
+   `masterdata.material_profile:read` (ORGANIZATION_ADMIN, COMPANY_ADMIN, PLANNER, VIEWER); acciones
+   `MATERIAL_PROFILE_CREATED/UPDATED` y agregado `MATERIAL_PROFILE`. No siembra filas de negocio.
+2. **API de integración** `PUT /integration/v1/material-profiles/{materialCode}` y `POST …/batch` (≤ 500):
+   `IntegrationMaterialProfileController` (lee el JSON como árbol para distinguir ausente de `null`),
+   `IntegrationMaterialProfileService`, puerto `shared.reference.MaterialProfileIntakePort` implementado por
+   `masterdata.application.MaterialProfileIntakeService` (STALE por `sourceUpdatedAt`, merge ausente
+   conserva / `null` vacía, validación del resultado, `UNCHANGED` no escribe, auditoría con la credencial).
+   `Idempotency-Key` por `IntegrationRequestExecutor` (misma clave + otro cuerpo = 409).
+3. **Lectura humana** `GET /api/v1/masterdata/material-profiles` (búsqueda por código o descripción,
+   paginado) y `/{id}`; `MaterialProfileService`, `MaterialProfileView`.
+4. **Snapshot en la línea**: `orders.application.OrderLinePhysicalResolver`, única implementación de la
+   regla de copia, usada por `OrderService` (formulario y API de órdenes; la intake de integración pasa por
+   ahí) y `OrderImportService` (una consulta de perfiles por archivo). El bloque del ERP gana en bloque
+   (D-02); en una edición la línea conserva su bloque; si no, se copia el perfil con su versión; peso y
+   volumen unitarios sólo si la línea los omite, el pedido no declara ese total y la unidad es un conteo.
+   `OrderRequest.OrderLineRequest`, `OrderUpsertRequest.LineRequest` y `OrderIntakeCommand.Line` aceptan los
+   8 campos físicos opcionales; `OrderDetailView.OrderLineView` los devuelve con `physicalSource` y versión.
+   La intake compara las líneas *efectivas* para seguir respondiendo `UNCHANGED` a un reenvío idéntico.
+5. `shared.geometry` nace con `PhysicalBlock` (reglas compartidas), `StackMode`, `UnitsOfMeasure`.
+6. **Front** «Perfiles de material» (`/masters/material-profiles`), sólo lectura, MUI: lista con búsqueda y
+   paginado, drawer de detalle (origen, «Actualizado en origen», «Sincronizado»), aviso de que el dueño es el
+   EWM; entrada de menú bajo Maestros con permiso fino (`NavLeaf.permission` + `leafAllowed()` compartido por
+   menú y buscador, porque `MASTER_DATA_VIEW` no implica este permiso); la pantalla también lo comprueba.
+7. Docs: `docs/domain/MATERIAL_PROFILE_V1.md` (nuevo), contrato `WAREHOUSE_EXECUTION_V1.md` §7.1
+   (implementado, semántica de conteos, ejemplo con `Idempotency-Key`, §7.1.1 campos físicos en la línea del
+   pedido), fila 39 del mapa de capacidades, nota de implementación en ADR-022, `PHASE_MAP.md` (migración real),
+   `DECISIONS_LOG.md` (4 entradas).
+
+### Desvíos registrados (`DECISIONS_LOG.md`)
+
+- Permiso `masterdata.material_profile:read` (el CHECK del catálogo no admite guion en el recurso).
+- Relleno de peso/volumen unitario sólo sin total declarado y con unidad de conteo (ninguna carga válida
+  antes de V59 deja de serlo).
+- Conservación del bloque en ediciones (las líneas se recrean en cada edición).
+- Cualquiera de los 7 campos físicos hace ganar al bloque del ERP (no sólo L/A/H/modo).
+
+### Archivos
+
+- Migración: `backend/tms-api/src/main/resources/db/migration/V59__material_profile_and_line_snapshot.sql`.
+- Nuevos (main): `masterdata/{domain/MaterialProfile, application/MaterialProfile{Service,IntakeService,View,Filter},
+  infrastructure/MaterialProfile{Repository,Specifications,LookupAdapter}, api/MaterialProfileController}`;
+  `integration/{api/IntegrationMaterialProfileController, application/IntegrationMaterialProfileService,
+  MaterialProfile{V1,Delivery,BatchDelivery,ResultV1,BatchResultV1}}`; `orders/{application/OrderLinePhysicalResolver,
+  domain/PhysicalSource}`; `shared/geometry/{PhysicalBlock,StackMode,UnitsOfMeasure}`;
+  `shared/reference/MaterialProfile{IntakePort,LookupPort,Snapshot}`.
+- Modificados (main): `OrderLineInput`, `TransportOrderLine`, `OrderRequest`, `OrderDetailView`, `OrderService`,
+  `OrderIntakeService`, `OrderImportService`, `OrderUpsertRequest`, `OrderIntakeCommand`, `IntegrationScope`,
+  `IntegrationOperation`, `Permission`, `Capability`, `AuditAction`, `AuditAggregateType`.
+- Pruebas nuevas: `MaterialProfileApiIntegrationTest` (8), `OrderLineMaterialSnapshotIntegrationTest` (5),
+  `OrderLinePhysicalResolverTest` (6), `PhysicalBlockTest` (6), `MaterialProfilesPage.test.tsx` (6).
+- Pruebas ajustadas (listas/conteos exactos del esquema, cableado): `SchemaExposureIntegrationTest`
+  (tabla nueva, sin DELETE), `TenancyConstraintIntegrationTest` (67 permisos, 186 asignaciones),
+  `CrossTenantAttackTest` (importa el resolvedor y simula el puerto de perfiles).
+- Front: `shared/api/materialProfilesApi.ts`, `pages/masters/{MaterialProfilesPage,MaterialProfileDrawer}.tsx`,
+  `pages/masters/materialProfiles.ts`, `lib/i18n.materialProfiles.ts`; modificados `App.tsx`,
+  `app/lazyRoutes.tsx`, `shared/ui/{navConfig,AppLayout,NavSearch}.tsx`, `lib/enums.ts`, `lib/i18n.ts`.
+- Docs: los del punto 7.
+
+### Pruebas
+
+| Repo | Comando | Resultado |
+|---|---|---|
+| TMS backend | `./mvnw -B test` (suite completa, Testcontainers) | **2349 corridas, 1 fallo, 0 errores, 2 omitidas** · 3 min 36 s. El único rojo es el conocido `PlatformLifecycleIntegrationTest.versionRules` (fase 00), no de esta fase. +25 pruebas nuevas respecto de la línea base (2324) |
+| TMS backend | `-Dtest=` de lo nuevo y lo ajustado | `MaterialProfileApiIntegrationTest` 8/8 (CREATED/UNCHANGED, ausente conserva / `null` vacía, STALE, 400 de forma, idempotencia + 409, 403 sin scope, aislamiento de tenant en escritura y lectura, batch 207), `OrderLineMaterialSnapshotIntegrationTest` 5/5 (perfil copiado con versión, bloque del ERP gana en bloque, perfil posterior no reescribe ni en reenvío `UNCHANGED` ni en edición desde el formulario, sin relleno con total declarado ni con `KG`, 400 bloque inválido), `OrderLinePhysicalResolverTest` 6/6, `PhysicalBlockTest` 6/6, `ModuleBoundaryTest` 4/4, `AuditVocabularyMigrationTest` 2/2, `CapabilityTest` 6/6, `PersistedEnumConstraintTest`, `SchemaExposureIntegrationTest` 11/11, `TenancyConstraintIntegrationTest` 10/10, `CrossTenantAttackTest` 15/15 |
+| TMS front | `npm run typecheck` | OK (0 errores) |
+| TMS front | `npm run lint` | OK: 0 errores, 21 avisos (= línea base) |
+| TMS front | `npm test` | **314/314** en 47 archivos (+6 en `MaterialProfilesPage.test.tsx`) |
+| Migraciones | hashes V1–V58 contra `MIGRATION_HASHES.txt` | intactos |
+
+El EWM no se tocó (sin commit EWM en esta fase).
+
+### Qué quedó fuera
+
+- No se calcula geometría (pilas, volumen efectivo, piso, alto): es la fase 40 (V62) y lee estas columnas.
+- La plantilla de importación masiva no tiene columnas físicas: las líneas importadas sólo reciben la copia
+  del perfil; la vista previa de la importación no muestra los pesos unitarios que completa el perfil.
+- El formulario de pedido no edita ni muestra el bloque físico (el detalle de la API ya lo devuelve; la UI
+  «Ocupa: …» es ADR-022 §10, fase 40). Una edición desde el formulario conserva el bloque por posición y material.
+- Un `materialCode` con `/` no puede ir por el PUT (el servidor rechaza `%2F` en la ruta): debe ir por el
+  batch. Anotado para la fase 25 (emisor EWM) y en `MATERIAL_PROFILE_V1.md` §3.
+- No hay re-aplicación de perfiles a pedidos abiertos (acción explícita futura, ADR-022 §2.4).

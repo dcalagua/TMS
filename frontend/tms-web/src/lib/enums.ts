@@ -509,6 +509,11 @@ export const ENUM_LABELS = {
     CANCELLED: "Detenida",
     EXHAUSTED: "Agotada",
   },
+  stackMode: {
+    NESTABLE: "Anidable",
+    NONE: "Sin apilar",
+    STACKABLE: "Apilable",
+  },
   vehicleBodyType: {
     CONTAINER: "Portacontenedor",
     CURTAIN_SIDER: "Cortina lateral",

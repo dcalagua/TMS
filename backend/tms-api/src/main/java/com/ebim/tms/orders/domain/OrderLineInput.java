@@ -1,5 +1,6 @@
 package com.ebim.tms.orders.domain;
 
+import com.ebim.tms.shared.geometry.PhysicalBlock;
 import java.math.BigDecimal;
 
 /**
@@ -14,6 +15,11 @@ import java.math.BigDecimal;
  * line's contribution is derived. {@link TransportOrderLine#applyInput} persists what they
  * return and {@link OrderTotals} sums it, so the header snapshot and the line rows can never
  * disagree about the formula.
+ *
+ * @param physical       the unit's physical block (V59), or {@code null} when the line has none
+ * @param physicalSource where {@code physical} came from; {@code null} exactly when it is
+ * @param materialProfileVersion the copied profile version when the source is
+ *     {@link PhysicalSource#PROFILE}; {@code null} otherwise
  */
 public record OrderLineInput(
         String materialCode,
@@ -22,7 +28,44 @@ public record OrderLineInput(
         String uom,
         BigDecimal unitWeightKg,
         BigDecimal unitVolumeM3,
-        BigDecimal palletQuantity) {
+        BigDecimal palletQuantity,
+        PhysicalBlock physical,
+        PhysicalSource physicalSource,
+        Long materialProfileVersion) {
+
+    public OrderLineInput {
+        if (physical != null && physical.isEmpty()) {
+            physical = null;
+        }
+        if (physical == null) {
+            physicalSource = null;
+            materialProfileVersion = null;
+        } else if (physicalSource == null) {
+            throw new IllegalArgumentException("a physical block needs a source");
+        }
+        if (physicalSource != PhysicalSource.PROFILE) {
+            materialProfileVersion = null;
+        }
+    }
+
+    /** A line without a physical block - every path before V59, and the bulk import today. */
+    public OrderLineInput(String materialCode, String materialDescription, BigDecimal quantity, String uom,
+            BigDecimal unitWeightKg, BigDecimal unitVolumeM3, BigDecimal palletQuantity) {
+        this(materialCode, materialDescription, quantity, uom, unitWeightKg, unitVolumeM3, palletQuantity, null, null,
+                null);
+    }
+
+    /** The same line with another physical block. */
+    public OrderLineInput withPhysical(PhysicalBlock block, PhysicalSource source, Long profileVersion) {
+        return new OrderLineInput(materialCode, materialDescription, quantity, uom, unitWeightKg, unitVolumeM3,
+                palletQuantity, block, source, profileVersion);
+    }
+
+    /** The same line with other unit figures. */
+    public OrderLineInput withUnitFigures(BigDecimal weightKg, BigDecimal volumeM3) {
+        return new OrderLineInput(materialCode, materialDescription, quantity, uom, weightKg, volumeM3, palletQuantity,
+                physical, physicalSource, materialProfileVersion);
+    }
 
     /** {@code quantity * unitWeightKg}, or {@code null} when the unit weight is unknown. */
     public BigDecimal lineWeightKg() {

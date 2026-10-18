@@ -11,6 +11,7 @@
 import { EN_SHIPMENT_TRACKING } from "./i18n.shipmentTracking";
 import { EN_PORTAL_OFFLINE } from "./i18n.portalOffline";
 import { EN_TENANT_LIFECYCLE } from "./i18n.tenantLifecycle";
+import { EN_MATERIAL_PROFILES } from "./i18n.materialProfiles";
 
 const EN_CHROME: Record<string, string> = {
   "Citas de muelle": "Dock appointments",
@@ -2382,7 +2383,7 @@ const EN_DOCUMENT_DELIVERY: Record<string, string> = {
   "Reporte del transportista": "Carrier report", "Cargo recibido en oficina": "Signed copy returned to the office",
 };
 
-const EN: Record<string, string> = { ...EN_CHROME, ...EN_DATA, ...EN_APP, ...EN_SCHEDULING, ...EN_DOCUMENT_DELIVERY, ...EN_SHIPMENT_TRACKING, ...EN_PORTAL_OFFLINE, ...EN_TENANT_LIFECYCLE };
+const EN: Record<string, string> = { ...EN_CHROME, ...EN_DATA, ...EN_APP, ...EN_SCHEDULING, ...EN_DOCUMENT_DELIVERY, ...EN_SHIPMENT_TRACKING, ...EN_PORTAL_OFFLINE, ...EN_TENANT_LIFECYCLE, ...EN_MATERIAL_PROFILES };
 
 export type Lang = "es" | "en";
 

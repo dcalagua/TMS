@@ -75,7 +75,13 @@ public enum IntegrationScope {
     WAREHOUSE_MILESTONE_WRITE("integration.warehouse-milestone:write"),
 
     /** Record the documents an ERP issued for orders - invoice, delivery note, GRE (V55, ADR-015). */
-    DOCUMENT_WRITE("integration.document:write");
+    DOCUMENT_WRITE("integration.document:write"),
+
+    /**
+     * Write the physical profile of materials (migration V59, ADR-022): what a warehouse measured.
+     * Write-only, like {@link #DISPATCH_WRITE}; the profile is master data the warehouse owns.
+     */
+    MATERIAL_WRITE("integration.material:write");
 
     private static final Map<String, IntegrationScope> BY_CODE = Arrays.stream(values())
             .collect(Collectors.toUnmodifiableMap(IntegrationScope::code, Function.identity()));

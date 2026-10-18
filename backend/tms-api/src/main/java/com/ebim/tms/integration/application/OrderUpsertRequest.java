@@ -48,7 +48,14 @@ public record OrderUpsertRequest(
         lines = lines == null ? List.of() : List.copyOf(lines);
     }
 
-    /** One requested line. Optional in full: a header-only order with declared totals is valid. */
+    /**
+     * One requested line. Optional in full: a header-only order with declared totals is valid.
+     *
+     * <p>The physical fields are contract v1.1 (ADR-022 section 2, additive): metres, kilograms and
+     * the stack mode code. Sending any of them makes the line's block win over the warehouse
+     * profile as a whole for this line (D-02); sending none copies the profile, and a v1 caller
+     * behaves exactly as before.
+     */
     public record LineRequest(
             @NotBlank @Size(max = 64) String materialCode,
             @NotBlank @Size(max = 200) String materialDescription,
@@ -56,11 +63,20 @@ public record OrderUpsertRequest(
             @NotBlank @Size(max = 16) String uom,
             BigDecimal unitWeightKg,
             BigDecimal unitVolumeM3,
-            BigDecimal palletQuantity) {
+            BigDecimal palletQuantity,
+            BigDecimal lengthM,
+            BigDecimal widthM,
+            BigDecimal heightM,
+            @Size(max = 20) String stackMode,
+            Integer stackMaxQuantity,
+            BigDecimal nestIncrementM,
+            BigDecimal maxTopLoadKg,
+            Boolean orientationLocked) {
 
         OrderIntakeCommand.Line toCommandLine() {
             return new OrderIntakeCommand.Line(materialCode, materialDescription, quantity, uom, unitWeightKg,
-                    unitVolumeM3, palletQuantity);
+                    unitVolumeM3, palletQuantity, lengthM, widthM, heightM, stackMode, stackMaxQuantity,
+                    nestIncrementM, maxTopLoadKg, orientationLocked);
         }
     }
 

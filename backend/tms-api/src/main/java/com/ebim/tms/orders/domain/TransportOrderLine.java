@@ -1,7 +1,11 @@
 package com.ebim.tms.orders.domain;
 
+import com.ebim.tms.shared.geometry.PhysicalBlock;
+import com.ebim.tms.shared.geometry.StackMode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
@@ -68,6 +72,40 @@ public class TransportOrderLine {
 
     @Column(name = "pallet_quantity", precision = 10, scale = 2)
     private BigDecimal palletQuantity;
+
+    // The physical snapshot (V59, ADR-022 section 2): copied when the line is written, never
+    // rewritten by a later profile change. All null when the line has no block.
+    @Column(name = "unit_length_m", precision = 8, scale = 4)
+    private BigDecimal unitLengthM;
+
+    @Column(name = "unit_width_m", precision = 8, scale = 4)
+    private BigDecimal unitWidthM;
+
+    @Column(name = "unit_height_m", precision = 8, scale = 4)
+    private BigDecimal unitHeightM;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "stack_mode")
+    private StackMode stackMode;
+
+    @Column(name = "stack_max_quantity")
+    private Integer stackMaxQuantity;
+
+    @Column(name = "nest_increment_m", precision = 8, scale = 4)
+    private BigDecimal nestIncrementM;
+
+    @Column(name = "max_top_load_kg", precision = 12, scale = 3)
+    private BigDecimal maxTopLoadKg;
+
+    @Column(name = "orientation_locked")
+    private Boolean orientationLocked;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "physical_source")
+    private PhysicalSource physicalSource;
+
+    @Column(name = "material_profile_version")
+    private Long materialProfileVersion;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false, nullable = false)
@@ -138,6 +176,23 @@ public class TransportOrderLine {
         return palletQuantity;
     }
 
+    /** The unit's physical block, or {@code null} when the line has none. */
+    public PhysicalBlock physicalBlock() {
+        if (physicalSource == null) {
+            return null;
+        }
+        return new PhysicalBlock(unitLengthM, unitWidthM, unitHeightM, stackMode, stackMaxQuantity, nestIncrementM,
+                maxTopLoadKg, Boolean.TRUE.equals(orientationLocked));
+    }
+
+    public PhysicalSource physicalSource() {
+        return physicalSource;
+    }
+
+    public Long materialProfileVersion() {
+        return materialProfileVersion;
+    }
+
     /**
      * Persists the line, deriving {@code lineWeightKg}/{@code lineVolumeM3} through
      * {@link OrderLineInput#lineWeightKg()}/{@link OrderLineInput#lineVolumeM3()} - the same
@@ -154,6 +209,17 @@ public class TransportOrderLine {
         this.lineWeightKg = input.lineWeightKg();
         this.lineVolumeM3 = input.lineVolumeM3();
         this.palletQuantity = input.palletQuantity();
+        PhysicalBlock block = input.physical();
+        this.unitLengthM = block == null ? null : block.lengthM();
+        this.unitWidthM = block == null ? null : block.widthM();
+        this.unitHeightM = block == null ? null : block.heightM();
+        this.stackMode = block == null ? null : block.stackMode();
+        this.stackMaxQuantity = block == null ? null : block.stackMaxQuantity();
+        this.nestIncrementM = block == null ? null : block.nestIncrementM();
+        this.maxTopLoadKg = block == null ? null : block.maxTopLoadKg();
+        this.orientationLocked = block == null ? null : block.orientationLocked();
+        this.physicalSource = input.physicalSource();
+        this.materialProfileVersion = input.materialProfileVersion();
         this.updatedBy = actorId;
     }
 }

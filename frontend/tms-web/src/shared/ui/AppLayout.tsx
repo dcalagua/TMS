@@ -20,7 +20,7 @@ import { CompanySelector } from "./CompanySelector";
 import { NavSearch } from "./NavSearch";
 import { NotificationsMenu } from "./NotificationsMenu";
 import { TenantSuspendedBanner } from "./TenantSuspendedBanner";
-import { NAV_SECTIONS, OVERVIEW_NAV, leafOf, sectionOf, type NavLeaf } from "./navConfig";
+import { NAV_SECTIONS, OVERVIEW_NAV, leafAllowed, leafOf, sectionOf, type NavLeaf } from "./navConfig";
 
 const DRAWER_WIDTH = 256;
 const RAIL_WIDTH = 72;
@@ -52,7 +52,7 @@ export function AppLayout() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const { mode, toggle: toggleMode, themeKey, brandAccent } = useColorMode();
-  const { hasCapability, status, selected, profile } = useCompany();
+  const { hasCapability, hasPermission, status, selected, profile } = useCompany();
 
   // Marco premium: oscuro siempre, tintado por el tema.
   const shellTheme = getTheme("dark", themeKey, brandAccent ?? undefined);
@@ -85,10 +85,12 @@ export function AppLayout() {
   const allowed = (capability?: string) =>
     capability === undefined || (status === "ready" && hasCapability(capability));
 
-  const overview = OVERVIEW_NAV.filter((leaf) => allowed(leaf.capability));
+  const access = { ready: status === "ready", hasCapability, hasPermission };
+
+  const overview = OVERVIEW_NAV.filter((leaf) => leafAllowed(leaf, access));
   const sections = NAV_SECTIONS
     .filter((section) => allowed(section.capability))
-    .map((section) => ({ ...section, items: section.items.filter((item) => allowed(item.capability)) }))
+    .map((section) => ({ ...section, items: section.items.filter((item) => leafAllowed(item, access)) }))
     .filter((section) => section.items.length > 0);
 
   // Migas: sección › pantalla, en una sola línea. `leafOf` casa por prefijo, así que

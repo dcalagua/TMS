@@ -171,5 +171,9 @@ public enum AuditAction {
     INVOICE_MATCHED,
     INVOICE_APPROVED,
     INVOICE_REJECTED,
-    INVOICE_EXPORTED
+    INVOICE_EXPORTED,
+
+    /** A warehouse-owned material profile arrived for the first time or changed (V59, ADR-022). */
+    MATERIAL_PROFILE_CREATED,
+    MATERIAL_PROFILE_UPDATED
 }

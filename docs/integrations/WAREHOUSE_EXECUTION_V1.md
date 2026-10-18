@@ -397,7 +397,7 @@ TMS                                         WMS (EWM)
 Decision: **ADR-025** (S-1…S-4 accepted, S-5 proposed). Material profile and load geometry: **ADR-022**.
 Everything here is **additive**: same `/integration/v1` path, same authentication, same envelope; a
 partner that speaks v1 keeps working and ignores the new fields. Each message names the overnight-pack
-phase that implements it; until that phase lands, the endpoint answers `404` and the field is absent.
+phase that implements it; until that phase lands, the endpoint answers `404` and the field is absent. 7.1 landed in phase 20 (V59).
 
 | # | Message | Direction | Endpoint | Scope | Phase |
 |---|---|---|---|---|---|
@@ -475,6 +475,50 @@ new order lines (ADR-022 §2). `materialCode` is byte-for-byte the code the ERP 
 ```
 
 Item `outcome` adds `INVALID` (with `message`); the batch is not atomic, each item stands alone.
+
+**Implemented (phase 20, V59, 2026-10-18).** Details fixed by the implementation
+(`docs/domain/MATERIAL_PROFILE_V1.md`):
+
+- `applied` counts `CREATED` + `UPDATED`; `refused` counts `INVALID`; `UNCHANGED` and `STALE` are neither.
+  A batch item may carry its own `sourceSystem`; otherwise the batch's applies.
+- `UNCHANGED` writes nothing, not even a newer `sourceUpdatedAt`; `version` moves only on a real change.
+- Validation applies to the merged result: a PUT naming only `stackMode: NESTABLE` is `400` when the stored
+  copy has no `nestIncrementM`. Codes are exact (`stackable` is `400`).
+- A body that also names `materialCode` must name the path's code.
+
+Example (PUT with an idempotency key):
+
+```
+PUT /integration/v1/material-profiles/PLP-571
+Authorization: Bearer tmsc_<id>.tmss_<secret>
+Idempotency-Key: ewm-matp-PLP-571-20261018T140512
+Content-Type: application/json
+
+{ "sourceSystem": "EWM_EBIM", "sourceUpdatedAt": "2026-10-18T14:05:12-05:00",
+  "lengthM": 0.105, "widthM": 0.105, "heightM": 0.175, "stackMode": "NESTABLE",
+  "stackMaxQuantity": 100, "nestIncrementM": 0.012 }
+
+201 { "materialCode": "PLP-571", "outcome": "CREATED", "version": 0,
+      "sourceUpdatedAt": "2026-10-18T19:05:12Z" }
+```
+
+The same key with another body answers `409` `idempotency-key-reused`; the same key and body replays the
+first answer.
+
+#### 7.1.1 Physical fields on the order line (ERP -> TMS, `POST /integration/v1/orders[/batch]`)
+
+Additive to `OrderUpsertRequest.lines[]`: `lengthM`, `widthM`, `heightM`, `stackMode`, `stackMaxQuantity`,
+`nestIncrementM`, `maxTopLoadKg`, `orientationLocked`, with the profile's rules. When a line names any of
+the first seven, **its block wins over the warehouse profile as a whole** for that line (D-02); when it
+names none, the profile is copied onto the line with its version. Unit weight and volume are filled from
+the profile only when the line omits them and the order declares no total for that measure. A later
+profile change does not rewrite the order's lines, and a redelivery of the same order stays `UNCHANGED`.
+
+```json
+{ "materialCode": "PLP-1601", "materialDescription": "BALDE 20 L", "quantity": 240, "uom": "UN",
+  "heightM": 0.29, "lengthM": 0.32, "widthM": 0.32, "stackMode": "NESTABLE", "nestIncrementM": 0.03,
+  "stackMaxQuantity": 40 }
+```
 
 ### 7.2 Plan v1.1 and `DELIVERY_RESULT_RECORDED` (TMS → WMS)
 

@@ -28,7 +28,8 @@ public enum Capability {
             Permission.MASTERDATA_ZONE_READ,
             Permission.MASTERDATA_DESTINATION_READ,
             Permission.MASTERDATA_FREQUENCY_READ,
-            Permission.MASTERDATA_ROUTE_READ),
+            Permission.MASTERDATA_ROUTE_READ,
+            Permission.MASTERDATA_MATERIAL_PROFILE_READ),
     MASTER_DATA_MANAGE(
             Permission.MASTERDATA_LOCATION_MANAGE,
             Permission.MASTERDATA_ORIGIN_MANAGE,

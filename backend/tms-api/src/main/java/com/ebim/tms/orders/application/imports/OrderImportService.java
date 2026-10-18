@@ -1,5 +1,6 @@
 package com.ebim.tms.orders.application.imports;
 
+import com.ebim.tms.orders.application.OrderLinePhysicalResolver;
 import com.ebim.tms.orders.domain.OrderImportBatch;
 import com.ebim.tms.orders.domain.OrderNumbers;
 import com.ebim.tms.orders.domain.OrderTotals;
@@ -13,6 +14,7 @@ import com.ebim.tms.shared.audit.AuditAggregateType;
 import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
+import com.ebim.tms.shared.reference.MaterialProfileSnapshot;
 import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.settings.CompanySettingsPort;
@@ -68,11 +70,14 @@ public class OrderImportService {
     private final CompanySettingsPort companySettingsPort;
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
+    private final OrderLinePhysicalResolver physicalResolver;
 
     public OrderImportService(OrderImportParser parser, TransportOrderRepository transportOrderRepository,
             OrderImportBatchRepository orderImportBatchRepository, OriginLookupPort originLookupPort,
             DestinationLookupPort destinationLookupPort, CompanySettingsPort companySettingsPort,
-            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder) {
+            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder,
+            OrderLinePhysicalResolver physicalResolver) {
+        this.physicalResolver = physicalResolver;
         this.parser = parser;
         this.transportOrderRepository = transportOrderRepository;
         this.orderImportBatchRepository = orderImportBatchRepository;
@@ -190,6 +195,10 @@ public class OrderImportService {
         String prefix = companySettingsPort.settingsOf(scope.companyId()).orderNumberPrefix();
         List<TransportOrder> orders = new ArrayList<>(candidates.size());
         Map<String, String> numbersByReference = new LinkedHashMap<>();
+        // The warehouse profiles of every material in the file, in one query: the copy rule
+        // (ADR-022 section 2) applies to imported lines as to any other.
+        Map<String, MaterialProfileSnapshot> profiles = physicalResolver.profilesFor(scope.companyId(),
+                candidates.stream().flatMap(candidate -> candidate.lines().stream()).toList());
 
         for (int index = 0; index < candidates.size(); index++) {
             OrderImportCandidate candidate = candidates.get(index);
@@ -198,7 +207,8 @@ public class OrderImportService {
                     candidate.externalReference(), candidate.origin().id(), candidate.destination().id(),
                     candidate.customerName(), candidate.customerReference(), candidate.serviceDate(),
                     candidate.priority(), candidate.windowStart(), candidate.windowEnd(), actorId);
-            order.applyLines(candidate.lines(), candidate.declaredTotals(), actorId);
+            order.applyLines(physicalResolver.resolve(candidate.lines(), candidate.declaredTotals(), List.of(),
+                    profiles), candidate.declaredTotals(), actorId);
             orders.add(order);
             numbersByReference.put(candidate.externalReference(), orderNumber);
         }

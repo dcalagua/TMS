@@ -17,7 +17,7 @@ import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { PortalLayout } from "./pages/portal/PortalLayout";
 import {
   AuditPage, CarriersPage, CompanySettingsPage, ControlTowerPage, DestinationsPage, DriversPage,
-  FrequenciesPage, IntegrationsPage, LocationsPage, OrdersPage, OriginsPage, PlanningBoardPage,
+  FrequenciesPage, IntegrationsPage, LocationsPage, MaterialProfilesPage, OrdersPage, OriginsPage, PlanningBoardPage,
   AppointmentsPage,
   SettlementPage,
   OwnFleetCostProfilesPage,
@@ -83,6 +83,9 @@ export default function App() {
                     <Route path="masters/zones" element={<ZonesPage />} />
                     <Route path="masters/frequencies" element={<FrequenciesPage />} />
                     <Route path="masters/routes" element={<RoutesPage />} />
+                    {/* Solo lectura y tras `masterdata.material_profile:read`, que la propia
+                        pantalla comprueba: la capability del grupo Maestros no lo implica. */}
+                    <Route path="masters/material-profiles" element={<MaterialProfilesPage />} />
 
                     <Route path="fleet/carriers" element={<CarriersPage />} />
                     <Route path="fleet/vehicle-types" element={<VehicleTypesPage />} />

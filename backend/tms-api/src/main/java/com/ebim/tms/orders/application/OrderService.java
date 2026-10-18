@@ -6,6 +6,7 @@ import com.ebim.tms.orders.domain.OrderLineInput;
 import com.ebim.tms.orders.domain.OrderNumbers;
 import com.ebim.tms.orders.domain.OrderStatus;
 import com.ebim.tms.orders.domain.OrderTotals;
+import com.ebim.tms.orders.domain.PhysicalSource;
 import com.ebim.tms.orders.domain.SchedulingAssessment;
 import com.ebim.tms.orders.domain.SchedulingReason;
 import com.ebim.tms.orders.domain.TransportOrder;
@@ -21,6 +22,7 @@ import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.audit.AuditAggregateType;
 import com.ebim.tms.shared.audit.AuditRecorder;
+import com.ebim.tms.shared.geometry.PhysicalBlock;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderFulfillmentPort;
@@ -70,13 +72,16 @@ public class OrderService {
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
     private final OrderSchedulingService orderSchedulingService;
+    private final OrderLinePhysicalResolver physicalResolver;
 
     public OrderService(TransportOrderRepository transportOrderRepository,
             TransportOrderLineRepository transportOrderLineRepository, OriginLookupPort originLookupPort,
             DestinationLookupPort destinationLookupPort, OrderFulfillmentPort orderFulfillmentPort,
             CompanySettingsPort companySettingsPort, AuditActorProvider auditActorProvider,
-            AuditRecorder auditRecorder, OrderSchedulingService orderSchedulingService) {
+            AuditRecorder auditRecorder, OrderSchedulingService orderSchedulingService,
+            OrderLinePhysicalResolver physicalResolver) {
         this.orderSchedulingService = orderSchedulingService;
+        this.physicalResolver = physicalResolver;
         this.transportOrderRepository = transportOrderRepository;
         this.transportOrderLineRepository = transportOrderLineRepository;
         this.originLookupPort = originLookupPort;
@@ -133,8 +138,9 @@ public class OrderService {
             throw duplicateExternalReference(externalSource, externalReference);
         }
 
-        List<OrderLineInput> lines = toLineInputs(request.lines());
         DeclaredTotals declared = toDeclaredTotals(request);
+        List<OrderLineInput> lines = physicalResolver.resolve(scope.companyId(), toLineInputs(request.lines()),
+                declared, List.of());
         requireConsistentTotals(lines, declared);
 
         UUID actorId = auditActorProvider.writerAppUserId();
@@ -167,8 +173,9 @@ public class OrderService {
             throw duplicateExternalReference(externalSource, externalReference);
         }
 
-        List<OrderLineInput> lines = toLineInputs(request.lines());
         DeclaredTotals declared = toDeclaredTotals(request);
+        List<OrderLineInput> lines = physicalResolver.resolve(scope.companyId(), toLineInputs(request.lines()),
+                declared, order.lines());
         requireConsistentTotals(lines, declared);
 
         UUID actorId = auditActorProvider.writerAppUserId();
@@ -180,6 +187,19 @@ public class OrderService {
         auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.UPDATE,
                 Map.of("orderNumber", saved.orderNumber()));
         return OrderDetailView.from(saved, origin, destination, fulfillmentOf(scope, saved.id()));
+    }
+
+    /**
+     * The lines {@link #update} would write for {@code request} on order {@code id}: the request's
+     * lines after the physical copy rule ({@link OrderLinePhysicalResolver}). The integration intake
+     * compares these, not the raw request, with the stored lines - otherwise a redelivery that omits
+     * a unit weight the profile filled in would read as a change on every send.
+     */
+    @Transactional(readOnly = true)
+    public List<OrderLineInput> effectiveLines(CompanyScope scope, UUID id, OrderRequest request) {
+        TransportOrder order = find(scope, id);
+        return physicalResolver.resolve(scope.companyId(), toLineInputs(request.lines()), toDeclaredTotals(request),
+                order.lines());
     }
 
     /**
@@ -494,12 +514,22 @@ public class OrderService {
         return value.stripTrailingZeros().toPlainString();
     }
 
+    /**
+     * The lines as sent. A physical field on a line makes it carry its own block, marked
+     * {@link PhysicalSource#ORDER_LINE}; {@link OrderLinePhysicalResolver} decides the rest.
+     */
     private static List<OrderLineInput> toLineInputs(List<OrderRequest.OrderLineRequest> lines) {
         return lines.stream()
                 .map(line -> new OrderLineInput(line.materialCode().trim(), line.materialDescription().trim(),
                         line.quantity(), line.uom().trim().toUpperCase(Locale.ROOT), line.unitWeightKg(),
-                        line.unitVolumeM3(), line.palletQuantity()))
+                        line.unitVolumeM3(), line.palletQuantity(), sentBlock(line), PhysicalSource.ORDER_LINE, null))
                 .toList();
+    }
+
+    private static PhysicalBlock sentBlock(OrderRequest.OrderLineRequest line) {
+        return new PhysicalBlock(line.lengthM(), line.widthM(), line.heightM(), line.stackMode(),
+                line.stackMaxQuantity(), line.nestIncrementM(), line.maxTopLoadKg(),
+                Boolean.TRUE.equals(line.orientationLocked()));
     }
 
     /**

@@ -4,7 +4,7 @@ import {
   Autocomplete, Box, InputAdornment, TextField, Typography,
 } from "@mui/material";
 import { SearchRounded } from "@mui/icons-material";
-import { ALL_NAV_LEAVES, ICON_TINTS, DEFAULT_TINT, NAV_SECTIONS, type NavLeaf } from "./navConfig";
+import { ALL_NAV_LEAVES, ICON_TINTS, DEFAULT_TINT, NAV_SECTIONS, leafAllowed, type NavLeaf } from "./navConfig";
 import { useCompany } from "../company/CompanyContext";
 import { t } from "../../lib/i18n";
 import { R } from "../../theme";
@@ -26,21 +26,18 @@ const SECTION_OF: Record<string, string> = Object.fromEntries(
  */
 export function NavSearch() {
   const navigate = useNavigate();
-  const { hasCapability, status } = useCompany();
+  const { hasCapability, hasPermission, status } = useCompany();
   const [value, setValue] = useState("");
 
   const options = useMemo(() => {
-    const visible = (leaf: NavLeaf) => {
-      // Antes de que `/me` responda no se sabe nada: mejor no ofrecer nada que ofrecer de más.
-      if (leaf.capability === undefined) return true;
-      return status === "ready" && hasCapability(leaf.capability);
-    };
+    // Antes de que `/me` responda no se sabe nada: mejor no ofrecer nada que ofrecer de más.
+    const access = { ready: status === "ready", hasCapability, hasPermission };
     return ALL_NAV_LEAVES.filter((leaf) => {
       const section = NAV_SECTIONS.find((s) => s.items.includes(leaf));
       if (section?.capability && !(status === "ready" && hasCapability(section.capability))) return false;
-      return visible(leaf);
+      return leafAllowed(leaf, access);
     });
-  }, [hasCapability, status]);
+  }, [hasCapability, hasPermission, status]);
 
   return (
     <Autocomplete<NavLeaf, false, false, false>

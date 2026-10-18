@@ -13,6 +13,7 @@ import {
   EventRepeatRounded,
   FactCheckRounded,
   RouteRounded,
+  Inventory2Rounded,
 } from "@mui/icons-material";
 
 /** Una hoja del menú: una pantalla concreta. */
@@ -28,6 +29,24 @@ export interface NavLeaf {
    * comprobarlo en cada llamada.
    */
   capability?: string;
+  /**
+   * Permiso fino (`modulo.recurso:accion`) que además tiene que tener la empresa activa. Para la
+   * hoja cuyo permiso no está implicado por la capability de su grupo: MASTER_DATA_VIEW se
+   * concede con cualquier lectura de maestros, y eso no basta para abrir los perfiles de material.
+   * Igual que la capability, esconder es solo UX.
+   */
+  permission?: string;
+}
+
+/** ¿Se ofrece esta hoja? Antes de que `/me` responda no se sabe nada y no se ofrece nada que
+ * dependa de un permiso. Compartido por el menú, el buscador y las migas para que no diverjan. */
+export function leafAllowed(
+  leaf: NavLeaf,
+  access: { ready: boolean; hasCapability: (c: string) => boolean; hasPermission: (p: string) => boolean },
+): boolean {
+  if (leaf.capability !== undefined && !(access.ready && access.hasCapability(leaf.capability))) return false;
+  if (leaf.permission !== undefined && !(access.ready && access.hasPermission(leaf.permission))) return false;
+  return true;
 }
 
 export interface NavSection {
@@ -65,6 +84,7 @@ export const ICON_TINTS: Record<string, string> = {
   "/masters/zones": "#9CCC65",
   "/masters/frequencies": "#26C6DA",
   "/masters/routes": "#FFB74D",
+  "/masters/material-profiles": "#A1887F",
   "/fleet/carriers": "#7986CB",
   "/fleet/vehicle-types": "#B0BEC5",
   "/fleet/vehicles": "#42A5F5",
@@ -156,6 +176,10 @@ export const NAV_SECTIONS: NavSection[] = [
       { to: "/masters/zones", label: "Zonas", icon: <CropFreeRounded /> },
       { to: "/masters/frequencies", label: "Frecuencias", icon: <CalendarViewWeekRounded /> },
       { to: "/masters/routes", label: "Rutas", icon: <AltRouteRounded /> },
+      // El último: lo mantiene el almacén (EWM) y aquí solo se consulta. Lleva su propio permiso
+      // porque MASTER_DATA_VIEW se concede con cualquier lectura de maestros.
+      { to: "/masters/material-profiles", label: "Perfiles de material", icon: <Inventory2Rounded />,
+        permission: "masterdata.material_profile:read" },
     ],
   },
   {

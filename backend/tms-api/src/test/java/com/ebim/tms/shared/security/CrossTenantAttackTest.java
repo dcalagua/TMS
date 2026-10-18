@@ -96,6 +96,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
     ApiExceptionHandler.class,
     WebConfig.class,
     OrderService.class,
+    com.ebim.tms.orders.application.OrderLinePhysicalResolver.class,
     SecurityTestConfiguration.class
 })
 @EnableConfigurationProperties(TmsSecurityProperties.class)
@@ -134,6 +135,9 @@ class CrossTenantAttackTest {
     // ADR-014: the release gate's read model, behind OrderService like the rest.
     @MockitoBean
     private com.ebim.tms.orders.application.OrderSchedulingService orderSchedulingService;
+    // ADR-022: the material profiles the line copy rule reads; empty here.
+    @MockitoBean
+    private com.ebim.tms.shared.reference.MaterialProfileLookupPort materialProfileLookupPort;
 
     // A second module, to show the property is the chain's and not one service's habit.
     @MockitoBean

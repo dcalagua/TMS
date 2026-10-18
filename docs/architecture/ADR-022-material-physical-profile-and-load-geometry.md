@@ -259,3 +259,17 @@ count. Planning board (`TripCard` `MiniCapacity`) and trip drawer (`CapacityBar`
 - `CAPACITY_MODEL.md` becomes v2 (five dimensions) and its stale statements on partial assignment
   (whole orders only; "an order id and nothing else") are corrected in the same phase (40).
 - One more port read per planning candidate set (batched by order ids), acceptable at 10k orders/day.
+
+## Implementation notes (phase 20, 2026-10-18)
+
+Sections 1-2 are implemented with **V59**; `docs/domain/MATERIAL_PROFILE_V1.md` describes the result.
+Four refinements, recorded in `docs/roadmap/2026-10-enterprise/DECISIONS_LOG.md`:
+
+- The permission is `masterdata.material_profile:read`: the permission catalogue's
+  `ck_permission_resource_shape` does not allow a hyphen in the resource.
+- Unit weight/volume are filled from the profile only when the order declares no total for that measure
+  and the line's unit is a count, so no payload valid before V59 becomes invalid.
+- On an edit, a line at the same position naming the same material keeps its stored block (lines are
+  rewritten as a set), which is what makes rule 4 hold for edits and redeliveries.
+- Any of the seven physical fields makes the ERP's block win (still as a whole), not only L/W/H/mode.
+

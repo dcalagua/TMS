@@ -1,5 +1,6 @@
 package com.ebim.tms.orders.application;
 
+import com.ebim.tms.orders.domain.OrderLineInput;
 import com.ebim.tms.orders.domain.OrderPriority;
 import com.ebim.tms.orders.domain.OrderStatus;
 import com.ebim.tms.orders.domain.SchedulingReason;
@@ -7,6 +8,8 @@ import com.ebim.tms.orders.domain.TransportOrder;
 import com.ebim.tms.orders.infrastructure.TransportOrderRepository;
 import com.ebim.tms.shared.api.ConflictException;
 import com.ebim.tms.shared.api.InvalidRequestException;
+import com.ebim.tms.shared.geometry.PhysicalBlock;
+import com.ebim.tms.shared.geometry.StackMode;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.IntakeOutcome;
 import com.ebim.tms.shared.reference.MasterReference;
@@ -85,7 +88,7 @@ public class OrderIntakeService implements OrderIntakePort {
                 current.version());
         validate(request);
 
-        if (matches(current, request)) {
+        if (matches(current, request, orderService.effectiveLines(scope, order.id(), request))) {
             // A pure redelivery. Returning UNCHANGED rather than rewriting keeps the version and
             // updated_at stable, which matters when a partner replays a week of traffic after an
             // outage: an "update" that changes nothing should not look like one to anybody
@@ -157,7 +160,24 @@ public class OrderIntakeService implements OrderIntakePort {
                 trimmed(line.uom()),
                 line.unitWeightKg(),
                 line.unitVolumeM3(),
-                line.palletQuantity());
+                line.palletQuantity(),
+                line.lengthM(),
+                line.widthM(),
+                line.heightM(),
+                parseStackMode(line.stackMode()),
+                line.stackMaxQuantity(),
+                line.nestIncrementM(),
+                line.maxTopLoadKg(),
+                line.orientationLocked());
+    }
+
+    /** Exact code, no case folding - the contract's vocabulary is upper case. */
+    private static StackMode parseStackMode(String code) {
+        if (code == null) {
+            return null;
+        }
+        return StackMode.fromCode(code.trim()).orElseThrow(() -> new InvalidRequestException(
+                "stackMode '" + code + "' is not one of " + StackMode.codes() + "."));
     }
 
     /**
@@ -165,7 +185,7 @@ public class OrderIntakeService implements OrderIntakePort {
      * and the lines in order, because line order is the order the sender gave them in and is what
      * {@code lineNumber} records.
      */
-    private static boolean matches(OrderDetailView current, OrderRequest request) {
+    private static boolean matches(OrderDetailView current, OrderRequest request, List<OrderLineInput> effective) {
         boolean headerMatches = Objects.equals(current.originId(), request.originId())
                 && Objects.equals(current.destinationId(), request.destinationId())
                 && Objects.equals(blankToNull(current.customerName()), blankToNull(request.customerName()))
@@ -181,21 +201,47 @@ public class OrderIntakeService implements OrderIntakePort {
             return false;
         }
 
+        // The effective lines, not the requested ones: what the copy rule (ADR-022 section 2) would
+        // write is what must already be stored for the delivery to change nothing.
         for (int index = 0; index < request.lines().size(); index++) {
             OrderDetailView.OrderLineView persisted = current.lines().get(index);
             OrderRequest.OrderLineRequest requested = request.lines().get(index);
+            OrderLineInput resolved = effective.get(index);
             boolean lineMatches = Objects.equals(persisted.materialCode(), requested.materialCode())
                     && Objects.equals(persisted.materialDescription(), requested.materialDescription())
                     && numbersEqual(persisted.quantity(), requested.quantity())
                     && Objects.equals(persisted.uom(), requested.uom())
-                    && numbersEqual(persisted.unitWeightKg(), requested.unitWeightKg())
-                    && numbersEqual(persisted.unitVolumeM3(), requested.unitVolumeM3())
-                    && numbersEqual(persisted.palletQuantity(), requested.palletQuantity());
+                    && numbersEqual(persisted.unitWeightKg(), resolved.unitWeightKg())
+                    && numbersEqual(persisted.unitVolumeM3(), resolved.unitVolumeM3())
+                    && numbersEqual(persisted.palletQuantity(), requested.palletQuantity())
+                    && physicalMatches(persisted, resolved);
             if (!lineMatches) {
                 return false;
             }
         }
         return true;
+    }
+
+    private static boolean physicalMatches(OrderDetailView.OrderLineView persisted, OrderLineInput resolved) {
+        PhysicalBlock block = resolved.physical();
+        if (block == null) {
+            return persisted.physicalSource() == null;
+        }
+        return persisted.physicalSource() == resolved.physicalSource()
+                && Objects.equals(persisted.materialProfileVersion(), resolved.materialProfileVersion())
+                && sameMeasure(persisted.lengthM(), block.lengthM())
+                && sameMeasure(persisted.widthM(), block.widthM())
+                && sameMeasure(persisted.heightM(), block.heightM())
+                && persisted.stackMode() == block.stackMode()
+                && Objects.equals(persisted.stackMaxQuantity(), block.stackMaxQuantity())
+                && sameMeasure(persisted.nestIncrementM(), block.nestIncrementM())
+                && sameMeasure(persisted.maxTopLoadKg(), block.maxTopLoadKg())
+                && Boolean.valueOf(block.orientationLocked()).equals(persisted.orientationLocked());
+    }
+
+    /** Unlike {@link #numbersEqual}, an absent measure is not zero: it is not declared. */
+    private static boolean sameMeasure(BigDecimal persisted, BigDecimal requested) {
+        return persisted == null ? requested == null : requested != null && persisted.compareTo(requested) == 0;
     }
 
     /** {@code compareTo}, not {@code equals}: 1.50 kg and 1.5 kg are the same weight. */

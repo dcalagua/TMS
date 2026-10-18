@@ -76,5 +76,8 @@ public enum AuditAggregateType {
     CARRIER_INVOICE,
 
     /** What running one of our own trucks is modelled to cost (V48, JOB 22). */
-    OWN_FLEET_COST_PROFILE
+    OWN_FLEET_COST_PROFILE,
+
+    /** {@code tms.material_profile} (V59, ADR-022). */
+    MATERIAL_PROFILE
 }
