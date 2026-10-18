@@ -112,7 +112,7 @@ public class OrderService {
         Set<UUID> destinationIds = orders.stream().map(TransportOrder::destinationId).collect(Collectors.toSet());
         Map<UUID, MasterReference> origins = originLookupPort.findAllInCompany(originIds, scope.companyId());
         Map<UUID, MasterReference> destinations = destinationLookupPort.findAllInCompany(destinationIds, scope.companyId());
-        Map<UUID, Long> lineCounts = loadLineCounts(orders);
+        Map<UUID, TransportOrderLineRepository.OrderLineCount> lineCounts = loadLineCounts(orders);
         // One call for the whole page, like the two lookups above it. What happened to the goods
         // is planning's to answer (OrderFulfillmentPort), and it is a second dimension beside
         // `status`, never a replacement for it - see OrderFulfillmentStatus.
@@ -121,7 +121,7 @@ public class OrderService {
 
         List<OrderView> content = orders.stream()
                 .map(order -> OrderView.from(order, origins.get(order.originId()), destinations.get(order.destinationId()),
-                        lineCounts.getOrDefault(order.id(), 0L),
+                        lineCountOf(lineCounts.get(order.id())), stacksOf(lineCounts.get(order.id())),
                         fulfillment.getOrDefault(order.id(), OrderFulfillmentStatus.PENDING)))
                 .toList();
         return new PageResponse<>(content, pageQuery.pageNumber(), pageQuery.pageSize(), page.getTotalElements());
@@ -556,16 +556,24 @@ public class OrderService {
     }
 
     /** One batched {@code GROUP BY} query for the whole page, never one COUNT per order row. */
-    private Map<UUID, Long> loadLineCounts(List<TransportOrder> orders) {
-        Map<UUID, Long> counts = new HashMap<>();
+    private Map<UUID, TransportOrderLineRepository.OrderLineCount> loadLineCounts(List<TransportOrder> orders) {
+        Map<UUID, TransportOrderLineRepository.OrderLineCount> counts = new HashMap<>();
         if (orders.isEmpty()) {
             return counts;
         }
         Set<UUID> orderIds = orders.stream().map(TransportOrder::id).collect(Collectors.toSet());
         for (TransportOrderLineRepository.OrderLineCount count : transportOrderLineRepository.countByOrderIds(orderIds)) {
-            counts.put(count.getOrderId(), count.getLineCount());
+            counts.put(count.getOrderId(), count);
         }
         return counts;
+    }
+
+    private static long lineCountOf(TransportOrderLineRepository.OrderLineCount count) {
+        return count == null ? 0L : count.getLineCount();
+    }
+
+    private static Integer stacksOf(TransportOrderLineRepository.OrderLineCount count) {
+        return count == null || count.getStacks() == null ? null : count.getStacks().intValue();
     }
 
     /**

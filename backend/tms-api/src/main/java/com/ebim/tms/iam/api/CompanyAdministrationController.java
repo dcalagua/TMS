@@ -2,6 +2,8 @@ package com.ebim.tms.iam.api;
 
 import com.ebim.tms.iam.application.CompanyAdministrationService;
 import com.ebim.tms.iam.application.CompanyCreateRequest;
+import com.ebim.tms.iam.application.CompanyLoadGeometryQuery;
+import com.ebim.tms.iam.application.CompanyLoadGeometryView;
 import com.ebim.tms.iam.application.CompanyProfileRequest;
 import com.ebim.tms.iam.application.CompanyProfileView;
 import com.ebim.tms.shared.security.CompanyScope;
@@ -42,9 +44,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class CompanyAdministrationController {
 
     private final CompanyAdministrationService companyAdministrationService;
+    private final CompanyLoadGeometryQuery companyLoadGeometryQuery;
 
-    public CompanyAdministrationController(CompanyAdministrationService companyAdministrationService) {
+    public CompanyAdministrationController(CompanyAdministrationService companyAdministrationService,
+            CompanyLoadGeometryQuery companyLoadGeometryQuery) {
         this.companyAdministrationService = companyAdministrationService;
+        this.companyLoadGeometryQuery = companyLoadGeometryQuery;
     }
 
     @GetMapping("/current")
@@ -54,6 +59,19 @@ public class CompanyAdministrationController {
             description = "Id of a company the caller is a member of")
     public CompanyProfileView current(CompanyScope scope) {
         return companyAdministrationService.current(scope);
+    }
+
+    /**
+     * The reference height and floor fill factor load geometry uses for this company (V62, ADR-022),
+     * with where each comes from. Read-only: no request writes these columns yet.
+     */
+    @GetMapping("/current/load-geometry")
+    @PreAuthorize("hasAuthority('iam.company:read')")
+    @Operation(summary = "The reference load height and floor fill factor in force for the selected company")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public CompanyLoadGeometryView loadGeometry(CompanyScope scope) {
+        return companyLoadGeometryQuery.current(scope);
     }
 
     @PutMapping("/current")

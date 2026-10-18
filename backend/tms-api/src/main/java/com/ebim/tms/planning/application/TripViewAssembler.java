@@ -455,7 +455,7 @@ public class TripViewAssembler {
                 order == null ? null : order.priority(), order == null ? null : order.requestedWindowStart(),
                 order == null ? null : order.requestedWindowEnd(), assignment.assignedWeightKg(),
                 assignment.assignedVolumeM3(), assignment.assignedPallets(), assignment.wholeOrder(),
-                assignment.assignedAt());
+                assignment.assignedAt(), assignment.assignedFloorAreaM2(), assignment.assignedStackHeightM());
     }
 
     /**
