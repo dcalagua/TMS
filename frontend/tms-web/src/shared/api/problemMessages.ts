@@ -1,4 +1,5 @@
 import { t } from "../../lib/i18n";
+import { describeCapacityRefusal } from "../geometry/loadGeometry";
 import { isAuthFailureResponse, type ApiError, type ProblemCode } from "./httpClient";
 
 /**
@@ -73,6 +74,20 @@ export function describePlanningError(error: ApiError): string {
     return error.problem.detail;
   }
   return describeApiError(error);
+}
+
+/**
+ * {@link describePlanningError}, con los rechazos de capacidad dichos en castellano: el backend
+ * nombra cada dimensión que no cupo (peso, volumen, pallets, piso, alto) y la unidad más alta que el
+ * vehículo (`ITEM_TALLER_THAN_VEHICLE`) en una frase técnica en inglés; aquí se reescriben con sus
+ * cifras. Si la frase no tiene esa forma se muestra el `detail` tal cual, como siempre.
+ */
+export function describePlanningRefusal(error: ApiError): string {
+  if (error.code === "conflict") {
+    const refusal = describeCapacityRefusal(error.problem?.detail);
+    if (refusal) return refusal;
+  }
+  return describePlanningError(error);
 }
 
 /**

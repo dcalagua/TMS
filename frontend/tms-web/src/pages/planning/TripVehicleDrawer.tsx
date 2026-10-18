@@ -6,7 +6,7 @@ import { CheckRounded, LocalShippingRounded } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchVehicles } from "../../shared/api/vehiclesApi";
 import { updateTripVehicle, type TripDetailView, type TripView } from "../../shared/api/planningApi";
-import { describePlanningError } from "../../shared/api/problemMessages";
+import { describePlanningRefusal } from "../../shared/api/problemMessages";
 import { ContextCard, FormDateInput, FormDrawer, StatusChip } from "../../shared/ui/components";
 import { TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
 import { enumLabel } from "../../lib/enums";
@@ -82,7 +82,7 @@ export function TripVehicleDrawer({ companyId, trip, onClose, onSaved }: TripVeh
       notifySuccess(t("Vehículo asignado"));
       onSaved(next);
     } catch (error) {
-      setFormError(describePlanningError(error as ApiError));
+      setFormError(describePlanningRefusal(error as ApiError));
     }
   }
 

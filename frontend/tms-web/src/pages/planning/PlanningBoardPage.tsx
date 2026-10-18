@@ -11,7 +11,7 @@ import type { ApiError } from "../../shared/api/httpClient";
 import {
   cancelPlanningRun, confirmPlanningRun, fetchEligibleOrders, fetchPlanningRun,
 } from "../../shared/api/planningApi";
-import { describeApiError, describePlanningError } from "../../shared/api/problemMessages";
+import { describeApiError, describePlanningError, describePlanningRefusal } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
   EmptyState, ErrorState, LoadingState, PageHeader, StatusChip,
@@ -107,7 +107,7 @@ export function PlanningBoardPage() {
       notifySuccess(t("Plan confirmado"), run.planNumber);
       refreshBoard();
     } catch (error) {
-      notifyError(t("No se pudo confirmar el plan"), describePlanningError(error as ApiError));
+      notifyError(t("No se pudo confirmar el plan"), describePlanningRefusal(error as ApiError));
     }
   }
 

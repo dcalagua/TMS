@@ -137,6 +137,8 @@ const ENGINE_COPY = {
  */
 const REASON_COPY = {
   EXCEEDS_LARGEST_VEHICLE: "Excede la capacidad de cualquier unidad disponible. Divide el pedido o incorpora una unidad mayor.",
+  // V62: dividir no ayuda ni reapilar tampoco — una sola unidad no entra de alto en ningún camión.
+  ITEM_TALLER_THAN_VEHICLE: "Una unidad es más alta que cualquier vehículo disponible. Hace falta un vehículo más alto: repartir el pedido no lo resuelve.",
   NO_VEHICLE_AVAILABLE: "No quedó capacidad disponible en la flota de esta fecha.",
   NO_FLEET: "No hay unidades disponibles para esta fecha.",
   TAKEN_WHILE_PLANNING: "Otro planificador asignó este pedido mientras se escribía el plan. Recarga el tablero.",
@@ -186,6 +188,15 @@ function AutoPlanBody({ plan }: { plan: AutoPlanView }) {
               {plan.kpis.palletUtilizationPercent !== null && (
                 <Chip size="small" variant="outlined"
                   label={t("Pallets {{p}}%", { p: plan.kpis.palletUtilizationPercent })} />
+              )}
+              {/* V62: piso y alto, sólo cuando algún vehículo declara esas medidas (null = no se sabe). */}
+              {plan.kpis.floorUtilizationPercent != null && (
+                <Chip size="small" variant="outlined"
+                  label={t("Piso {{p}}%", { p: plan.kpis.floorUtilizationPercent })} />
+              )}
+              {plan.kpis.heightUtilizationPercent != null && (
+                <Chip size="small" variant="outlined"
+                  label={t("Alto {{p}}%", { p: plan.kpis.heightUtilizationPercent })} />
               )}
               {plan.kpis.distanceEstimated && (
                 <Chip size="small" color="warning" variant="outlined" label={t("Distancias estimadas")} />
