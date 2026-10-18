@@ -773,3 +773,49 @@
   precisión completa y lee `result`/`shipment_number`. s10 nuevo (perfil de material) con un material propio para no
   cambiar la capacidad de SKU-100 en los demás escenarios.
 - **Commit(s):** el de la fase 80, ciclo 1.
+
+### 2026-10-18 · post-review fixes · Re-apilar por vehículo sin tocar el ledger
+
+- **Regla/decisión afectada:** ADR-022 §5 («re-stacking per vehicle», diferido en la fase 40) y la decisión de la
+  fase 40 de que un tramo parcial «omitido = 0» en el piso.
+- **Motivo:** la revisión independiente encontró que la geometría se calculaba una vez contra la altura de referencia
+  (2,40 m) y después se comparaba con la altura de cada vehículo: un furgón de 2,20 m rechazaba cajas de 0,30 m guardadas
+  como pilas de 8, cuando pilas de 7 entran. Y un tramo parcial sin `floorAreaM2` dejaba el piso pendiente para siempre,
+  así que el pedido nunca llegaba a `PLANNED`.
+- **Camino elegido:** el ledger (V37/V62) sigue en cifras de la altura de referencia - no cambia el CHECK ni el
+  esquema. Sólo la *vista del vehículo* se re-apila: `planning.application.VehicleLoads` toma el perfil de las líneas
+  (`OrderPlanningPort.geometryProfilesOf`, una consulta por conjunto, sólo pedidos con línea medida) y lo recalcula con
+  el mismo `shared.geometry.OrderGeometry` que usa `TransportOrder.applyLines`, aplicando la diferencia en la proporción
+  del piso del tramo. Rige en asignación manual, mover, cambio de vehículo, confirmación de corrida, los dos motores, las
+  vistas de capacidad y los insumos de tarifa. Sin `OrderGeometryPort` nuevo: el puerto de planificación ya existía. Un
+  `floorAreaM2` omitido en un tramo se deriva (la mayor proporción de lo declarado sobre lo pendiente). Sólo una unidad
+  más alta que el vehículo (la base de un anidable incluida) es `ITEM_TALLER_THAN_VEHICLE`.
+- **Commit(s):** `1f99fb3`.
+
+### 2026-10-18 · post-review fixes · Barridos de finanzas apagados de fábrica
+
+- **Regla/decisión afectada:** R-1 del informe de la mañana (los barridos venían encendidos) y ADR-021 (un inquilino
+  suspendido no escribe).
+- **Motivo:** el primer pase provisiona 31 días y reparte 62 días de viajes de todas las empresas activas, y los dos
+  barridos ignoraban la suspensión operativa.
+- **Camino elegido:** `TMS_ACCRUAL_SWEEP_ENABLED` y `TMS_COST_ALLOCATION_SWEEP_ENABLED` por defecto `false` (yml y
+  valor por defecto del planificador); se encienden por despliegue (`.env.example`, ADR-023, ADR-026). Los dos omiten
+  la empresa cuya organización está suspendida (`TenantOperationGate`, en la conexión de esa empresa). Un viaje que
+  falla se registra y cuenta (`failed`) sin cortar el pase. El nacimiento de la provisión y la aprobación que la consume
+  toman `pg_advisory_xact_lock` sobre el viaje (READ COMMITTED dejaba la provisión `OPEN` para siempre). La
+  re-asignación de costo para servir de una aprobación corre después del commit, una transacción por viaje, con un
+  reintento ante conflicto: un reparto concurrente ya no hace fallar la aprobación con 409. `SettlementService`,
+  `PayableService` y el código fiscal no se tocaron (otro agente los reescribe).
+- **Commit(s):** `0570462`.
+
+### 2026-10-18 · post-review fixes · Lo que no se hizo, dicho
+
+- **`orders[].geometry` en el plan hacia el almacén (§7.2):** no se emite. El contrato lo define por pedido, pero el
+  plan publica *tramos* asignados y, desde este lote, la geometría depende de la altura del vehículo del viaje: hay que
+  decidir en el contrato si se publica la del pedido entero a la altura de referencia, la del tramo re-apilada para el
+  vehículo, o ambas. Es una decisión de contrato, no un arreglo pequeño.
+- **Comparación de geometría del despacho (`GEOMETRY_VARIANCE`)** sigue comparando con las cifras de referencia; si el
+  EWM apila contra la altura real del vehículo, la tolerancia del 5 % puede marcar diferencias informativas. Sigue
+  siendo `INFO`, nunca un rechazo.
+- **Pagos por confirmar:** la API devuelve sólo el id de quien registró el pago; la columna dice «Tú» para el usuario
+  y el id para los demás. Mostrar el nombre exige cambiar `PayableService`, fuera del alcance de este lote.

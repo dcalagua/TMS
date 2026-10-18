@@ -1268,3 +1268,30 @@ Sólo Markdown en los dos repos: no se re-corrieron suites. Los números del inf
 ### Qué quedó fuera
 
 - Nada de la fase. El ciclo 2 no hace falta.
+
+## Post-review fixes 2026-10-18
+
+Diez hallazgos de una revisión independiente, verificados uno por uno antes de tocar nada; todos resultaron ciertos.
+Un commit por grupo; V62 y V68 editadas en su lugar (no aplicadas en ningún lado); V65-V67, el código fiscal,
+`SettlementService` y `PayableService` sin tocar.
+
+| # | Hallazgo | Estado | Commit |
+|---|---|---|---|
+| 1 | Altura de pila calculada una vez a 2,40 m y comparada con cada vehículo | **Arreglado**: re-apilado por vehículo (`VehicleLoads` + `OrderGeometry` compartido + `OrderPlanningPort.geometryProfilesOf`) en asignación, mover, cambio de vehículo, confirmación, los dos motores, vistas de capacidad y tarifas; guardas del calculador | `1f99fb3` |
+| 2 | Barridos de provisión y costo encendidos por defecto; no omitían suspendidos | **Arreglado**: `false` por defecto, omiten suspendidos (ADR-021) e inactivos, documentado cómo encenderlos | `0570462` |
+| 3 | Provisión `OPEN` para siempre si la aprobación coincide con su nacimiento | **Arreglado**: `pg_advisory_xact_lock` por viaje en los dos caminos; IT que falla sin el lock (`OPEN/0.00`) | `0570462` |
+| 4 | Tramo parcial sin `floorAreaM2` = piso cero, el pedido nunca `PLANNED` | **Arreglado**: piso derivado en proporción; IT de convergencia | `1f99fb3` |
+| 5 | El backfill de V62 reescribía `updated_at` de todos los pedidos | **Arreglado**: disparador apagado durante el `UPDATE` (patrón V52) | `0474894` |
+| 6 | Perfil de material: cifras unitarias sin validar → 409 eterno | **Arreglado**: validadas; sólo bloqueo optimista y `uq_material_profile_code` son conflicto | `6022e06` |
+| 7 | Evento de pedido del almacén: cualquier violación = `DUPLICATE`; geometría del despacho sin cotas | **Arreglado**: sólo `uq_warehouse_order_event` es `DUPLICATE`; `@DecimalMax` y 400 en vez de 409 | `6022e06` |
+| 8 | Accruals, GL y costo para servir sin `p_carrier_scope` | **Arreglado** al final de V68; `SchemaExposureIntegrationTest` lo exige | `21f0a6f` |
+| 9 | Reparto dentro de la aprobación (409), un viaje aborta el pase, heurística sólo prueba el siguiente vehículo | **Arreglado**: después del commit con un reintento; aislamiento por viaje con conteo `failed`; los dos motores prueban los vehículos restantes | `0570462`, `1f99fb3` |
+| 10 | Front: «Provisionar ahora» sin confirmar, `settlement` ausente rompe Reportes, Confirmar en pagos propios | **Arreglado**; `CLAUDE.md` nombra `promptDialog` en vez de `confirmWithReason`. La API sólo da el id de quien pidió el pago: se muestra «Tú» o el id | `55e1c4d` |
+
+
+**Pruebas.** Backend `./mvnw -B test`: 2613 → **2638 corridas, 0 fallos, 0 errores**, 2 omitidas por diseño.
+Front `npm test`: 394 → **397/397** (58 archivos); `typecheck` OK; `lint` 0 errores y los mismos 21 avisos.
+
+**Queda fuera, dicho** (ver `DECISIONS_LOG.md`): el plan hacia el almacén sigue sin `orders[].geometry` (decisión de
+contrato: pedido entero a la altura de referencia o tramo re-apilado para el vehículo); `GEOMETRY_VARIANCE` compara
+contra cifras de referencia; el nombre de quien pidió un pago necesita cambiar `PayableService`.
