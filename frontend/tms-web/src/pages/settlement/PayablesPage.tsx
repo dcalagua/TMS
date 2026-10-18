@@ -48,7 +48,7 @@ function today(): string {
  * convierte.
  */
 export function PayablesPage() {
-  const { selected, hasCapability } = useCompany();
+  const { selected, hasCapability, profile } = useCompany();
   const companyId = selected?.id ?? "";
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>("due");
@@ -79,6 +79,7 @@ export function PayablesPage() {
         <PendingTab
           companyId={companyId} onOpen={setOpenId} onChanged={changed}
           canConfirm={hasCapability(CAPABILITY.PAYMENT_CONFIRM)}
+          currentUserId={profile?.id ?? null}
         />
       )}
 
@@ -266,9 +267,12 @@ function AgingTab({ companyId }: { companyId: string }) {
  * Los pagos manuales que esperan a la segunda persona. Confirmar los aplica; el servidor rechaza
  * que los confirme quien los registró, y ese mensaje se muestra tal cual.
  */
-function PendingTab({ companyId, canConfirm, onOpen, onChanged }: {
-  companyId: string; canConfirm: boolean; onOpen: (invoiceId: string) => void; onChanged: () => void;
+function PendingTab({ companyId, canConfirm, currentUserId, onOpen, onChanged }: {
+  companyId: string; canConfirm: boolean; currentUserId: string | null;
+  onOpen: (invoiceId: string) => void; onChanged: () => void;
 }) {
+  // The server refuses that whoever recorded a payment confirms it; the button is not offered for it.
+  const isMine = (row: PendingPaymentRequestRow) => currentUserId !== null && row.requestedBy === currentUserId;
   const [busy, setBusy] = useState(false);
   const pendingQuery = useQuery({
     queryKey: [PAYABLES_KEY, "pending", companyId],
@@ -330,7 +334,8 @@ function PendingTab({ companyId, canConfirm, onOpen, onChanged }: {
       header: t("Solicitó"),
       render: (row) => (
         <Box>
-          <Typography variant="body2">{row.requestedBy}</Typography>
+          {/* The API sends the requester's id, not a name: "Tú" when it is the viewer, the id otherwise. */}
+          <Typography variant="body2">{isMine(row) ? t("Tú") : row.requestedBy}</Typography>
           <Typography variant="caption" color="text.secondary">{fmtDateTime(row.requestedAt)}</Typography>
         </Box>
       ),
@@ -340,11 +345,15 @@ function PendingTab({ companyId, canConfirm, onOpen, onChanged }: {
       header: "",
       actions: true,
       render: (row: PendingPaymentRequestRow) => (
-        <Box sx={{ display: "flex", gap: 0.5, justifyContent: "flex-end" }}>
-          <Button size="small" color="success" startIcon={<CheckRounded />} disabled={busy}
-            onClick={() => void confirm(row)}>
-            {t("Confirmar")}
-          </Button>
+        <Box sx={{ display: "flex", gap: 0.5, justifyContent: "flex-end", alignItems: "center" }}>
+          {isMine(row) ? (
+            <Typography variant="caption" color="text.secondary">{t("Lo confirma otra persona")}</Typography>
+          ) : (
+            <Button size="small" color="success" startIcon={<CheckRounded />} disabled={busy}
+              onClick={() => void confirm(row)}>
+              {t("Confirmar")}
+            </Button>
+          )}
           <Button size="small" color="error" startIcon={<CloseRounded />} disabled={busy}
             onClick={() => void reject(row)}>
             {t("Rechazar")}

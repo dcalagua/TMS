@@ -11,7 +11,7 @@ import { saveDownloadedFile, type ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { DataTable, StatusChip, type DataTableColumn } from "../../shared/ui/components";
 import { useCompany } from "../../shared/company/CompanyContext";
-import { notifyError, notifySuccess } from "../../lib/ui";
+import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDate, fmtDateTime } from "../../lib/locale";
@@ -87,6 +87,17 @@ export function UnaccruedTripsTab({ companyId }: { companyId: string }) {
   });
 
   async function sweep() {
+    // Books journal entries for every unaccrued executed trip in the range: asked once, with the range.
+    const confirmed = await confirmDialog({
+      title: t("¿Provisionar los viajes del rango?"),
+      text: t("Se crearán provisiones (asientos contables) para los viajes ejecutados del {{from}} al {{to}} que aún no tienen. Las provisiones no se borran: se revierten.", {
+        from: fmtDate(from), to: fmtDate(to),
+      }),
+      confirmLabel: t("Provisionar"),
+    });
+    if (!confirmed) {
+      return;
+    }
     setBusy(true);
     try {
       const result = await sweepAccruals(companyId, from, to);
@@ -96,6 +107,10 @@ export function UnaccruedTripsTab({ companyId }: { companyId: string }) {
           created: result.created, adjusted: result.adjusted, unaccrued: result.unaccrued,
         }),
       );
+      if ((result.failed ?? 0) > 0) {
+        notifyError(t("Algunos viajes no se pudieron provisionar"),
+          t("{{failed}} viajes fallaron y se reintentarán en el próximo barrido.", { failed: result.failed ?? 0 }));
+      }
       await unaccruedQuery.refetch();
     } catch (error) {
       notifyError(t("No se pudo provisionar"), describeApiError(error as ApiError));

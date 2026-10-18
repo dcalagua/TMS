@@ -162,6 +162,20 @@ describe("ReportsPage", () => {
     expect(within(card).getByText(/no disponible/i)).toBeInTheDocument();
   });
 
+  it("sin el campo settlement en la respuesta no se cae: la liquidación dice 'no disponible'", async () => {
+    const withoutSettlement: Record<string, unknown> = { ...KPI_REPORT_FIXTURE };
+    delete withoutSettlement.settlement;
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify(withoutSettlement), {
+      status: 200, headers: { "content-type": "application/json" },
+    }));
+
+    renderPage();
+
+    expect(await screen.findByText("Liquidación de fletes")).toBeInTheDocument();
+    const card = screen.getByText("Auditoría de facturas de transportista").closest(".MuiCard-root") as HTMLElement;
+    expect(within(card).getByText(/no disponible/i)).toBeInTheDocument();
+  });
+
   it("muestra la copy del código de problema, no el detail del backend, cuando falla", async () => {
     fetchMock.mockImplementation(
       async () =>

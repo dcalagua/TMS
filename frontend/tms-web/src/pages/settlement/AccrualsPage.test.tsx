@@ -23,9 +23,11 @@ vi.mock("../../shared/company/CompanyContext", () => ({
 }));
 
 const promptDialog = vi.fn(async () => "Servicio no facturable" as string | null);
+const confirmDialog = vi.fn(async () => true);
 vi.mock("../../lib/ui", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../lib/ui")>()),
   promptDialog: (...args: unknown[]) => promptDialog(...(args as [])),
+  confirmDialog: (...args: unknown[]) => confirmDialog(...(args as [])),
   notifySuccess: vi.fn(),
   notifyError: vi.fn(),
 }));
@@ -69,8 +71,13 @@ let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   capabilities = ["ACCRUAL_VIEW", "ACCRUAL_EXPORT", "ACCRUAL_MANAGE"];
   promptDialog.mockClear();
+  confirmDialog.mockClear();
   fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
     const url = new URL(input);
+    if (url.pathname.endsWith("/settlement/accruals/sweep") && init?.method === "POST") {
+      return json({ created: 2, adjusted: 0, consumed: 0, unaccrued: 1, failed: 0 });
+    }
+    if (url.pathname.endsWith("/settlement/accruals/unaccrued")) return json({ rows: [], truncated: false });
     if (url.pathname.endsWith("/settlement/accruals/acr-1/reverse") && init?.method === "POST") {
       return json({ ...DETAIL, summary: { ...OPEN, status: "REVERSED", reversedAmount: 1450, balance: 0 } });
     }
@@ -182,5 +189,20 @@ describe("la pantalla de provisiones", () => {
     const journal = new URL(calls("/settlement/accruals/journal")[0][0] as string);
     expect(journal.searchParams.get("format")).toBe("JSON");
     expect(journal.searchParams.get("period")).toMatch(/^\d{4}-\d{2}$/);
+  });
+
+  it("«Provisionar ahora» pide confirmación; descartarla no barre nada", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("tab", { name: "Viajes sin provisión" }));
+
+    confirmDialog.mockResolvedValueOnce(false);
+    await user.click(await screen.findByRole("button", { name: "Provisionar ahora" }));
+    expect(confirmDialog).toHaveBeenCalledTimes(1);
+    expect(calls("/settlement/accruals/sweep", "POST")).toHaveLength(0);
+
+    await user.click(screen.getByRole("button", { name: "Provisionar ahora" }));
+    expect(confirmDialog).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(calls("/settlement/accruals/sweep", "POST")).toHaveLength(1));
   });
 });

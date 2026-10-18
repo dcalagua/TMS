@@ -77,7 +77,9 @@ export function ReportsPage() {
   }
 
   const report = reportQuery.data;
-  const { shipments, service, exceptions, utilization, orders, tenders, cost, settlement, daily } = report;
+  const { shipments, service, exceptions, utilization, orders, tenders, cost, daily } = report;
+  // Absent (an older backend, or a field the JSON left out) is treated like null: no section, no crash.
+  const settlement = report.settlement ?? null;
   const finance = report.finance ?? null;
 
   /** Un porcentaje del backend, o una raya. Nunca un cero inventado. */

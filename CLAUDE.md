@@ -51,7 +51,7 @@ Never print secrets or read real `.env` secret files. Use `.env.example` with pl
 ## Frontend style
 
 Use MUI as the visual base (ADR-008). Route confirmations and critical feedback through
-`confirmDialog` / `confirmWithReason` in `src/lib/ui.tsx` - screens never build their own.
+`confirmDialog` / `promptDialog` (the confirmation with a reason) in `src/lib/ui.tsx` - screens never build their own.
 Build reusable enterprise components and responsive dense screens; prefer drawers and side
 panels over large modals. Do not reintroduce Bootstrap, SweetAlert2, Tailwind or Ant because a
 historical report mentions them.

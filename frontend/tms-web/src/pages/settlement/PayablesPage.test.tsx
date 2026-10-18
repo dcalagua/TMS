@@ -17,9 +17,11 @@ import type {
 
 let capabilities: string[] = ["SETTLEMENT_VIEW", "PAYMENT_RECORD", "PAYMENT_CONFIRM"];
 
+let profile: { id: string; email: string; fullName: string } | null = null;
 vi.mock("../../shared/company/CompanyContext", () => ({
   useCompany: () => ({
     selected: { id: "company-1", code: "DEMO-LIMA", name: "Demo Lima" },
+    profile,
     hasCapability: (c: string) => capabilities.includes(c),
     hasPermission: () => true,
   }),
@@ -90,6 +92,7 @@ let requestResponse: () => Response;
 
 beforeEach(() => {
   capabilities = ["SETTLEMENT_VIEW", "PAYMENT_RECORD", "PAYMENT_CONFIRM"];
+  profile = null;
   confirmDialog.mockClear();
   promptDialog.mockClear();
   notifyError.mockClear();
@@ -281,5 +284,18 @@ describe("la pantalla de cuentas por pagar", () => {
 
     expect(screen.queryByRole("button", { name: "Confirmar" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Rechazar" })).not.toBeInTheDocument();
+  });
+
+  it("quien registró el pago no ve el botón de confirmarlo, y la columna dice 'Tú'", async () => {
+    profile = { id: "11111111-aaaa-4bbb-8ccc-000000000001", email: "me@example.invalid", fullName: "Me" };
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("tab", { name: "Pagos por confirmar" }));
+    await screen.findByText("TRX-555");
+
+    expect(screen.queryByRole("button", { name: "Confirmar" })).not.toBeInTheDocument();
+    expect(screen.getByText("Lo confirma otra persona")).toBeInTheDocument();
+    expect(screen.getByText("Tú")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rechazar" })).toBeInTheDocument();
   });
 });
