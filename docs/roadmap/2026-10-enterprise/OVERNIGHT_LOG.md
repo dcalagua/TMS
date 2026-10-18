@@ -554,3 +554,61 @@ ciclo 1 sin rehacerlo: lo que faltaba era la lectura y las pantallas.
 - V57 del EWM y V60 del TMS siguen **sin aplicar** en las bases compartidas (validadas sólo con
   Testcontainers, como manda el pack).
 
+
+## 35 · Anulaciones de pedido, reconciliación y consola del conector (2026-10-18, ciclo 1 de 2)
+
+Commits: TMS `e46fefe` (código) + el de documentación de la fase; EWM `fb76b4c`. D-03 respetada en los dos lados:
+ninguna señal del otro sistema anula nada.
+
+### Qué entró
+
+**TMS (V61 `V61__order_cancellation_sync.sql`)**
+1. `tms.business_outbox_event` (outbox de hechos que no son de un viaje) y `tms.warehouse_order_event` (recepción);
+   RLS `p_tenant_company_scope`, sólo `SELECT, INSERT`; índice `ix_transport_order_company_status_updated`;
+   `ORDER_CANCELLED` en `ck_webhook_subscription_event_type`; scopes `integration.order:read` e
+   `integration.warehouse-order-event:write`. Sin filas de negocio, sin acción de auditoría nueva (DECISIONS_LOG).
+2. TMS → almacén: `OrderService.cancel` publica `ORDER_CANCELLED` en la misma transacción
+   (`shared.reference.BusinessEventPublisher` → `integration.BusinessEventOutboxAdapter` → fan-out de V35; sobre
+   `resource.type = "order"`, `reference` = número de pedido). Lectura `GET /integration/v1/orders/{orderNumber}` y feed
+   `GET /integration/v1/orders?status=&updatedSince=` (por defecto `CANCELLED`, paginado por `updatedAt, id`).
+3. Almacén → TMS: `POST /integration/v1/warehouse-order-events` (operación `WAREHOUSE_ORDER_EVENT_BATCH`,
+   `Idempotency-Key`, ≤ 200). `ORDER_CANCELLED` → retención bloqueante `INTEGRATION`/`WAREHOUSE_CANCELLED`
+   (`OrderHold.byIntegration`, `OrderHoldPort.placeFromIntegration`, misma fila bloqueada que la del operador, auditoría
+   `ORDER_HOLD_PLACED` con `source=INTEGRATION`); `ORDER_SHORT_CLOSED` → no bloqueante `WAREHOUSE_SHORT_CLOSED` con las
+   cifras. `ALREADY_HELD`, `ORDER_CLOSED`, `UNKNOWN_ORDER`, `DUPLICATE`, `INVALID` (207). En viaje comprometido: bloquea
+   el despacho y levanta `ORDER_HOLD_ON_COMMITTED_TRIP` (en vez de una excepción del viaje, DECISIONS_LOG fase 10).
+4. Front: la retención del almacén se ve «Puesta por integración» con su código rotulado (`holdReasonCode`).
+5. E2E: `s11` (POD vuelve al EWM) y `s12` (anulación en las dos direcciones) en `scripts/e2e/tms-ewm/lib/scenarios.py`;
+   la credencial del harness gana los scopes v1.1 y la suscripción los eventos v1.1 (`ensure_v11_link`). **No corridos**
+   (los corre la fase 80). s10 no existe (era de 20/25; DECISIONS_LOG).
+6. Docs: `WAREHOUSE_EXECUTION_V1.md` §7.4-7.5 (notas de implementación), `WEBHOOKS_V1.md`, `INBOUND_API_V1.md`,
+   `TMS_CURRENT_CAPABILITY_MAP.md` fila 40, `PHASE_MAP.md`, `DECISIONS_LOG.md` (+5 TMS).
+
+**EWM (V58 `V58__tms_order_cancellation_and_reconciliation.sql`)**
+1. `ORDER_CANCELLED` del TMS → lee el pedido, una alerta `TMS_TRANSPORT_CANCELLED` en el pedido (nunca anula);
+   «Anular» sólo `OPEN` sin reservas ni asignaciones activas (`/api/v1/outbound-orders/{id}/tms-alerts[/cancel-order]`,
+   por `CancelOutboundOrderUseCase`), alerta en el detalle del pedido.
+2. `TMS_ORDCX`: reglas A/B/F → `ORDER_CANCELLED`; E con `PARTIALLY_SHIPPED` → `ORDER_SHORT_CLOSED` con líneas; C/D/E
+   rechazadas y pedidos sin clave del ERP no salen. Destino `TMS_ORDER_EVENTS`; sin destino espera (regla 91).
+3. Reconciliación apagada de fábrica por dos llaves (propiedad + columna del conector), «Reconciliar ahora».
+4. Consola **Integraciones › TMS** (`admin/integraciones/tms`, `INTEGRATION_VIEW`, `TruckIcon`, 5 pestañas).
+5. Docs EWM: DESIGN §4.5, `TMS_CONNECTOR_V1.md` §6.1-6.2, `CURRENT_CAPABILITIES.md`, mapa V58 en `CLAUDE.md`.
+   Desvíos en `DECISIONS_LOG.md` (+5 EWM).
+
+### Pruebas
+
+| Repo | Comando | Resultado |
+|---|---|---|
+| TMS backend | `./mvnw -B test` (completo, Testcontainers) | **2367 corridas, 1 fallo, 0 errores, 2 omitidas** (fase 30: 2354). El fallo es el de la línea base `PlatformLifecycleIntegrationTest.versionRules` |
+| TMS backend | nuevas | `OrderCancellationSyncIntegrationTest` 9 (hold bloqueante + DUPLICATE, ALREADY_HELD + NOTED, UNKNOWN_ORDER + ORDER_CLOSED, 207, Idempotency-Key 409, tenant + 403, viaje comprometido bloquea despacho y Torre de Control, cancelación → outbox + webhook + lectura, reglas de lectura), `WarehouseOrderEventRulesTest` 3, `WebhookEventTypeTest` +1. Ajustadas: `SchemaExposureIntegrationTest` (tablas V61), `IntegrationApiTenancyTest`, `CrossTenantAttackTest` (beans nuevos). `ModuleBoundaryTest`, `AuditVocabularyMigrationTest`, `PersistedEnumConstraintTest` verdes |
+| TMS frontend | `npm run typecheck && npm run lint && npm test` | OK · lint 0 errores (avisos previos) · **317/317** (+2 `enums.test.ts`) |
+| EWM backend | `./mvnw -B clean verify` | unitarias **1728/1728** (fase 30: 1720) · IT **1704/1704** (1693) |
+| EWM frontend | `npm run typecheck` · `npm run test` | OK · **1476/1476** (125 archivos) |
+| EWM | `auditar-alcance-de-almacen.py --gaps` | GAP 0 (88 controladores, 457 endpoints) |
+| Migraciones | TMS V1–V58 contra `MIGRATION_HASHES.txt` / `git diff` | intactas |
+
+### Qué quedó fuera (ciclo 2)
+
+- EWM: IT de un cierre corto real (regla E con despacho parcial); hoy lo cubre el golden del formateador.
+- E2E s11/s12 sin ejecutar (fase 80); s10 sin escribir.
+- V61 del TMS y V58 del EWM sólo validadas con Testcontainers; no aplicadas en ninguna base compartida.

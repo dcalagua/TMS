@@ -246,3 +246,95 @@
   cargas con número externo. Lo real sale de los bultos activos del pedido, sólo kg y m³ (sinónimos de
   código, no conversión); lo demás se cuenta (reglas 77/199).
 - **Commit(s):** el de la fase 30 ciclo 2 (repo EWM).
+
+
+### 2026-10-18 · fase 35 · `cancelledAt` sin columna en `transport_order`
+
+- **Regla/decisión afectada:** contrato §7.4 (`GET /integration/v1/orders/{orderNumber}` devuelve `cancelledAt`).
+- **Motivo:** `tms.transport_order` no tiene fecha de anulación (V10 guarda `cancel_reason` y nada más), y
+  agregarla exigía un backfill de las anuladas desde `updated_at`, que es el mismo dato.
+- **Camino elegido:** `cancelledAt` = `updated_at` cuando el estado es `CANCELLED` (una orden anulada no se
+  edita, ni se planifica, ni pasa a otro estado: nada toca la fila después), `null` en cualquier otro estado.
+  Dicho en el contrato §7.4 (notas de implementación). Si algún día una anulada se pudiera tocar, toca
+  agregar la columna.
+- **Commit(s):** el de la fase 35 (TMS).
+
+### 2026-10-18 · fase 35 · `warehouse_order_event` sin `UPDATE(outcome)`
+
+- **Regla/decisión afectada:** ADR-025 §4 («`SELECT, INSERT, UPDATE(outcome)` only»).
+- **Motivo:** el resultado se decide antes de escribir la fila, en la misma transacción que la retención;
+  no hay nada que actualizar después.
+- **Camino elegido:** `SELECT, INSERT` (como `warehouse_milestone`, V53). Cada evento es su propia
+  transacción (`WarehouseOrderEventRecorder`); un repetido concurrente pierde en `uq_warehouse_order_event`,
+  su retención se revierte con él y responde `DUPLICATE`. Menos privilegio que el diseño.
+- **Commit(s):** el de la fase 35 (TMS).
+
+### 2026-10-18 · fase 35 · Tablas nuevas sin acción de auditoría nueva
+
+- **Regla/decisión afectada:** reglas del pack §4 («toda tabla nueva del TMS: … acciones de auditoría»).
+- **Motivo:** las dos tablas de V61 son registros de hechos (outbox y recepción), no agregados que una
+  persona edite. Lo que cambia en el negocio ya tiene acción: la anulación es `CANCEL` (V10) y la
+  retención es `ORDER_HOLD_PLACED` (V54), ahora con `source=INTEGRATION` y la credencial en el detalle.
+- **Camino elegido:** sin acción nueva (ADR-025 §4 dice lo mismo); `AuditVocabularyMigrationTest` sin cambios.
+- **Commit(s):** el de la fase 35 (TMS).
+
+### 2026-10-18 · fase 35 · El feed de pedidos por defecto es `CANCELLED`
+
+- **Regla/decisión afectada:** ADR-025 §4 / contrato §7.4 (`GET /integration/v1/orders?status=&updatedSince=` no
+  decía qué pasa sin `status`).
+- **Motivo:** el feed existe para la reconciliación de anulaciones; devolver todos los pedidos a un almacén que
+  se olvidó el filtro sería el caso caro.
+- **Camino elegido:** sin `status` = `CANCELLED`, igual que el de viajes es `CONFIRMED`; acepta cualquier estado
+  de `OrderStatus` (paridad fijada por `WarehouseOrderEventRulesTest`); uno desconocido es `400`.
+- **Commit(s):** el de la fase 35 (TMS).
+
+### 2026-10-18 · fase 35 · Escenario E2E s10
+
+- **Regla/decisión afectada:** prompt de la fase 35 («s11 POD si la fase 30 terminó, s12 anulación») y plan 01 §4
+  (s10 perfil de material).
+- **Motivo:** s10 era de las fases 20/25 y no se escribió; no es de esta fase.
+- **Camino elegido:** esta fase agrega s11 y s12 (y el enlace v1.1: scopes de la credencial y eventos de la
+  suscripción); s10 queda para la fase 80 o para quien retome 20/25. No se corrieron (> 20 min; los corre la 80).
+- **Commit(s):** el de la fase 35 (TMS).
+
+### 2026-10-18 · fase 35 (EWM) · Primera pasada de la reconciliación
+
+- **Regla/decisión afectada:** DESIGN §4.3 (no decía desde dónde arranca un conector sin marca).
+- **Motivo:** sin tope, encenderla aplicaría todo el histórico del TMS y crearía cargas para viajes de hace meses.
+- **Camino elegido:** la primera pasada mira 24 h atrás (`wms.integration.tms.reconciliation.initial-lookback=PT24H`)
+  y como mucho 50 páginas de 200 por listado y pasada; la marca avanza sólo tras aplicar una página entera.
+- **Commit(s):** EWM `fb76b4c`.
+
+### 2026-10-18 · fase 35 (EWM) · Consola sin «Reenviar perfiles»
+
+- **Regla/decisión afectada:** DESIGN §4.4 (botones de la consola).
+- **Motivo:** la consola es de sólo lectura salvo «Reconciliar ahora»; el reenvío y la edición del conector siguen por API.
+  Un formulario que cambia el endpoint de producción desde el navegador merece su fase.
+- **Camino elegido:** sólo «Reconciliar ahora» (`POST /api/v1/admin/integrations/tms/reconcile`, permiso MANAGE).
+- **Commit(s):** EWM `fb76b4c`.
+
+### 2026-10-18 · fase 35 (EWM) · Una alerta por pedido del TMS, abierta o resuelta
+
+- **Regla/decisión afectada:** DESIGN §4.1 («una abierta por pedido y código»).
+- **Motivo:** con sólo el índice de alerta abierta, una alerta resuelta volvería a aparecer en la siguiente reconciliación.
+- **Camino elegido:** el índice parcial `ux_tmsexc_pedido_abierta` más un control en el servicio: la alerta se levanta una
+  vez por pedido del TMS (`ALERT_ALREADY_RAISED` en adelante).
+- **Commit(s):** EWM `fb76b4c`.
+
+### 2026-10-18 · fase 35 (EWM) · «Sin reserva» y dónde viven los endpoints de alertas
+
+- **Regla/decisión afectada:** plan S-3 («sólo si está `OPEN` sin reserva»), `ArchitectureTest` del EWM.
+- **Motivo:** el conector no puede depender de `inventory` ni el módulo de pedidos conocer al conector.
+- **Camino elegido:** «sin reserva» = ninguna reserva ni asignación `ACTIVE`/`PARTIAL`, leída con un `SELECT` propio
+  (`TmsOrderCommitmentLookup`); los endpoints `/api/v1/outbound-orders/{id}/tms-alerts[/cancel-order]` viven en el paquete
+  `integration.tms`, guardia contra el almacén del pedido; la anulación pasa por `CancelOutboundOrderUseCase` (origen MANUAL)
+  y el POST vuelve a comprobar la condición.
+- **Commit(s):** EWM `fb76b4c`.
+
+### 2026-10-18 · fase 35 (EWM) · Número del pedido del TMS en columnas de viaje
+
+- **Regla/decisión afectada:** V50 del EWM (`intg_tms_exception.shipment_number`, `intg_tms_webhook_event.shipment_number`).
+- **Motivo:** el aviso `ORDER_CANCELLED` nombra un pedido, no un viaje; agregar otra columna no aportaba.
+- **Camino elegido:** esas columnas guardan la referencia del aviso (el número de pedido del TMS) en estos casos; dicho en
+  `TMS_CONNECTOR_V1.md` §6.2.
+- **Commit(s):** EWM `fb76b4c`.
