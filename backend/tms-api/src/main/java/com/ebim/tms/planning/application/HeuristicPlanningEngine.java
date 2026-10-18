@@ -85,6 +85,11 @@ public class HeuristicPlanningEngine implements PlanningEngine {
                     : null;
 
             for (PlannableOrder order : ordersInGroup) {
+                if (tallerThanEveryVehicle(order, input.vehicles())) {
+                    unplanned.add(new UnplannedOrder(order.id(), order.orderNumber(),
+                            UnplannedReason.ITEM_TALLER_THAN_VEHICLE));
+                    continue;
+                }
                 if (exceedsEveryVehicle(order, input.vehicles())) {
                     // Reported before any packing attempt: retrying it against every vehicle in
                     // turn would empty the fleet to reach the same conclusion.
@@ -110,7 +115,7 @@ public class HeuristicPlanningEngine implements PlanningEngine {
                 // smaller one later, which cannot happen with a heaviest-first fleet - so closing
                 // an empty trip is impossible rather than merely unlikely.
                 if (!open.isEmpty()) {
-                    trips.add(toTrip(input.vehicles().get(nextVehicle).id(), routeId, open, corridors));
+                    trips.add(toTrip(input.vehicles().get(nextVehicle).id(), routeId, open, corridors, limits.bindingDimension(load)));
                     nextVehicle++;
                     open = new ArrayList<>();
                     load = CapacityLoad.EMPTY;
@@ -128,7 +133,7 @@ public class HeuristicPlanningEngine implements PlanningEngine {
             }
 
             if (!open.isEmpty()) {
-                trips.add(toTrip(input.vehicles().get(nextVehicle).id(), routeId, open, corridors));
+                trips.add(toTrip(input.vehicles().get(nextVehicle).id(), routeId, open, corridors, limits.bindingDimension(load)));
                 nextVehicle++;
             }
         }
@@ -189,14 +194,20 @@ public class HeuristicPlanningEngine implements PlanningEngine {
      * vehicle rather than only the first, because "biggest" is per dimension: the heaviest truck
      * is not necessarily the roomiest one.
      */
+    /** One unit of the order is taller than every vehicle offered (ADR-022): no split or re-stack helps. */
+    private static boolean tallerThanEveryVehicle(PlannableOrder order, List<VehicleCapacityReference> vehicles) {
+        return order.maxUnitHeightM() != null
+                && vehicles.stream().noneMatch(vehicle -> CapacityLimits.of(vehicle).admitsUnitHeight(order.maxUnitHeightM()));
+    }
+
     private static boolean exceedsEveryVehicle(PlannableOrder order, List<VehicleCapacityReference> vehicles) {
         CapacityLoad alone = CapacityLoad.of(order);
         return vehicles.stream().noneMatch(vehicle -> CapacityLimits.of(vehicle).accommodates(alone));
     }
 
     /** Stops are the distinct destinations of the trip's orders, in the order the orders were loaded. */
-    private static ProposedTrip toTrip(
-            UUID vehicleId, UUID routeId, List<PlannableOrder> orders, Corridors corridors) {
+    private static ProposedTrip toTrip(UUID vehicleId, UUID routeId, List<PlannableOrder> orders, Corridors corridors,
+            String bindingDimension) {
         Set<UUID> stops = new LinkedHashSet<>();
         orders.forEach(order -> stops.add(order.destinationId()));
         List<UUID> stopOrder = new ArrayList<>(stops);
@@ -205,7 +216,8 @@ public class HeuristicPlanningEngine implements PlanningEngine {
             // which sequence these places are normally served.
             stopOrder.sort(Comparator.comparingInt(stop -> corridors.positionOf(routeId, stop)));
         }
-        return new ProposedTrip(vehicleId, routeId, orders.stream().map(PlannableOrder::id).toList(), stopOrder);
+        return new ProposedTrip(vehicleId, routeId, orders.stream().map(PlannableOrder::id).toList(), stopOrder,
+                bindingDimension);
     }
 
     private static List<UnplannedOrder> unplannedAll(List<PlannableOrder> orders, UnplannedReason reason) {

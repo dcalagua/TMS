@@ -283,7 +283,8 @@ public class PlanningRunService {
         // asserts that the resulting stops cover exactly the destinations the assignments deliver
         // to, so a confirmed shipment cannot be missing one.
         assignments.refreshStops(trip, scope.companyId(), actorId);
-        trip.confirm(vehicle.maxWeightKg(), vehicle.maxVolumeM3(), vehicle.maxPallets(), actorId);
+        trip.confirm(vehicle.maxWeightKg(), vehicle.maxVolumeM3(), vehicle.maxPallets(), CapacityLimits.floorOf(vehicle),
+                vehicle.heightM(), vehicle.widthM(), actorId);
         tripRepository.saveAndFlush(trip);
 
         // Written in THIS transaction, not after commit - the whole point of a transactional

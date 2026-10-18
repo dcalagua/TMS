@@ -273,3 +273,22 @@ Four refinements, recorded in `docs/roadmap/2026-10-enterprise/DECISIONS_LOG.md`
   rewritten as a set), which is what makes rule 4 hold for edits and redeliveries.
 - Any of the seven physical fields makes the ERP's block win (still as a whole), not only L/W/H/mode.
 
+
+## Implementation notes (phase 40 cycle 1, 2026-10-18)
+
+Sections 3, 4, 5 (except re-stacking), 6 and 7 are implemented with **V62**;
+`docs/domain/LOAD_GEOMETRY_V1.md` describes the result and `CAPACITY_MODEL.md` is v2. Refinements,
+recorded in `docs/roadmap/2026-10-enterprise/DECISIONS_LOG.md`:
+
+- **Re-stacking per vehicle is deferred to cycle 2.** Orders are stacked against the reference `H`;
+  a vehicle lower than the stacks is refused on height (conservative), one lower than a unit as
+  `ITEM_TALLER_THAN_VEHICLE`. The order stores `max_unit_height_m` to tell the two apart without
+  reading lines. `OrderGeometryPort` does not exist yet.
+- When the volume was only *declared*, the planning volume keeps the declaration unless every line
+  was measured (adding effective volumes to a declaration that already covers them would count twice).
+- `planning_volume_m3` is NOT NULL through a `BEFORE INSERT` trigger that copies `total_volume_m3`
+  when a writer names none (the backfill's rule), not through a DEFAULT.
+- Stack heights are `numeric(9,3)` on the line, the order and the ledger: V59 accepts unit heights a
+  `numeric(6,3)` could not hold.
+- Fulfilment compares deliveries with the order without the floor (`OrderAmounts.withoutGeometry`).
+- UI (section 10) is cycle 2.

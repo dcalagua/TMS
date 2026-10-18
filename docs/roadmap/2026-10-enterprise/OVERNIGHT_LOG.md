@@ -612,3 +612,91 @@ ninguna señal del otro sistema anula nada.
 - EWM: IT de un cierre corto real (regla E con despacho parcial); hoy lo cubre el golden del formateador.
 - E2E s11/s12 sin ejecutar (fase 80); s10 sin escribir.
 - V61 del TMS y V58 del EWM sólo validadas con Testcontainers; no aplicadas en ninguna base compartida.
+
+---
+
+## 40 · Geometría de carga: apilables y anidables (2026-10-18, ciclo 1 de 2 · corte declarado)
+
+Corte del ciclo 1: **todo el backend** (calculador, V62, pedido, capacidad de cinco dimensiones, ledger, snapshot,
+motores, KPIs, tipo de vehículo) con sus pruebas y documentos. Quedan para el ciclo 2 el **front** y el
+**re-apilado por vehículo** (ver «Qué quedó fuera»). Nada a medias: lo que entró está probado y es coherente solo.
+
+### Qué entró
+
+1. **`shared.geometry.LoadGeometryCalculator`** (puro) + `LineGeometry` + `GeometryStatus`: pilas, alto de pila (última
+   exacta), volumen efectivo, piso, metros lineales, giro (`fitsAcross`). `MEASURED` / `UNMEASURED` con motivo (nada se
+   estima, regla 199) / `DOES_NOT_FIT` (`ITEM_TALLER_THAN_VEHICLE`, descrita como una unidad por pila). PLP-571 fijo:
+   10 pilas de 1,363 m, 0,1503 m³, 0,1103 m².
+2. **V62** `V62__load_geometry_and_capacity_floor_height.sql`: geometría de la línea (6 columnas + 4 CHECKs); en el pedido
+   `planning_volume_m3` (backfill = total; NOT NULL con disparador `tr_transport_order_default_planning_volume`),
+   `floor_area_m2`, `max_stack_height_m`, `max_unit_height_m`, `geometry_unmeasured_lines`, `geometry_reference_height_m`,
+   `allocated_floor_area_m2`; `ck_transport_order_not_over_allocated` reescrito (volumen contra planificación, piso contra
+   piso); ledger `assigned_floor_area_m2/assigned_stack_height_m` con su CHECK reescrito; snapshot del viaje
+   `snapshot_max_floor_area_m2/_stack_height_m/_load_width_m` y `ck_trip_draft_has_no_snapshot` reescrito
+   (`ck_trip_confirmed_is_complete` intacto); `vehicle_type.load_floor_fill_factor`;
+   `company_settings.reference_load_height_m/load_floor_fill_factor`. Sin tablas, permisos, scopes ni filas nuevas.
+3. **Pedido**: `TransportOrder.applyLines(…, H, …)` calcula cada línea y los totales de geometría;
+   `LoadGeometrySettings` resuelve `H` y el factor (empresa, si no `tms.planning.geometry.*` en `application.yml`: 2,40 /
+   0,85). `OrderService` (formulario, API e intake) e importación lo usan. `GET /orders/{id}` devuelve `geometry` y la
+   geometría de cada línea.
+4. **Capacidad**: `OrderAmounts` (+piso, +alto que toma el máximo), `PlannableOrder` (+volumen de planificación, piso,
+   alturas; `totalVolumeM3` sigue ingenuo), `CapacityLoad`/`CapacityLimits` de cinco dimensiones (`accommodates`,
+   `bindingDimension`, `admitsUnitHeight`), `TripCapacityView.floor/height/bindingDimension`, mensajes de rechazo con
+   «floor area» y «stack height», `ITEM_TALLER_THAN_VEHICLE` al asignar/mover, `AssignOrderRequest.floorAreaM2` (omitido =
+   0; el tramo lleva el alto del pedido), `Trip.confirm` congela piso/alto/ancho.
+5. **Flota**: `EffectiveCapacity` y `VehicleCapacityReference` llevan L/A/H y factor resuelto (tipo → empresa →
+   propiedad); `VehicleTypeRequest/View` con `loadFloorFillFactor` (0 < x ≤ 1).
+6. **Motores**: `HEURISTIC_V1` y `PLANNING_V2` agregan `ITEM_TALLER_THAN_VEHICLE` y `bindingDimension` por viaje
+   propuesto; `PlanningKpis` + `floorUtilizationPercent`, `heightUtilizationPercent` (V2).
+7. Entregas: el cumplimiento compara sin el piso (`OrderAmounts.withoutGeometry`).
+8. Docs: `docs/domain/LOAD_GEOMETRY_V1.md` (nuevo), `CAPACITY_MODEL.md` v2, notas de implementación en ADR-022, fila 41
+   del mapa de capacidades (y fila 39 al día), `PHASE_MAP.md`, `DECISIONS_LOG.md` (+5).
+
+### Desvíos registrados (`DECISIONS_LOG.md`)
+
+- Re-apilado por vehículo diferido al ciclo 2 (rechazo conservador por altura de pila; `max_unit_height_m` nuevo).
+- Volumen de planificación cuando el volumen sólo se declaró.
+- `planning_volume_m3` NOT NULL con disparador en vez de DEFAULT.
+- Alturas de pila `numeric(9,3)`.
+- La entrega se compara sin el piso.
+
+### Archivos
+
+- Migración: `backend/tms-api/src/main/resources/db/migration/V62__load_geometry_and_capacity_floor_height.sql`.
+- Nuevos (main): `shared/geometry/{LoadGeometryCalculator,LineGeometry,GeometryStatus}`, `shared/settings/LoadGeometrySettings`.
+- Modificados (main): `orders` (`TransportOrder`, `TransportOrderLine`, `OrderService`, `OrderImportService`,
+  `OrderPlanningService`, `OrderDetailView`); `planning` (`CapacityLimits`, `CapacityLoad`, `PlanningCapacityService`,
+  `TripCapacityView`, `AssignOrderRequest`, `TripService`, `PlanningRunService`, `AutoPlanningService`,
+  `HeuristicPlanningEngine`, `PlanningEngineV2`, `PlanningKpis`, `PlanningProposal`, `Trip`, `TripOrderAssignment`,
+  `TripOrderAssignmentRepository`, `OrderFulfillmentAdapter`); `fleet` (`EffectiveCapacity`, `EffectiveCapacityResolver`,
+  `VehicleLookupService`, `VehicleType`, `VehicleTypeRequest/View/Service`); `shared` (`OrderAmounts`, `PlannableOrder`,
+  `VehicleCapacityReference`, `CompanySettings`); `iam/JdbcCompanySettingsAdapter`; `application.yml`.
+- Pruebas nuevas: `LoadGeometryCalculatorTest` (18: tabla STACKABLE, NESTABLE PLP-571, NONE, última pila incompleta,
+  aplastamiento, máximo declarado, sin H, `h > H`, 8 casos sin medir incluido uom no contable, giro bloqueado, metros
+  lineales), `LoadGeometryCapacityTest` (7), `LoadGeometryPlanningEnginesTest` (6: los dos motores; anidables 2 → 1
+  furgón, `ITEM_TALLER_THAN_VEHICLE`, piso que ata), `LoadGeometryMigrationIntegrationTest` (4: backfill, guard
+  reescrito, disparador, CHECKs), `PlanningApiIntegrationTest` +3 (ledger + snapshot, rechazos por altura, split con
+  piso), `OrderLineMaterialSnapshotIntegrationTest` +2 (PLP-571 desde el perfil; sin medir cuenta).
+- Prueba ajustada: `CrossTenantAttackTest` (importa `LoadGeometrySettings` en su contexto recortado).
+
+### Pruebas
+
+| Repo | Comando | Resultado |
+|---|---|---|
+| TMS backend | `./mvnw -B test` (completo, Testcontainers) | **2407 corridas, 1 fallo, 0 errores, 2 omitidas** · 4 min 03 s (fase 35: 2367; +40). El único rojo es el conocido `PlatformLifecycleIntegrationTest.versionRules` (fase 00) |
+| TMS backend | `-Dtest=` de lo nuevo y lo afectado | calculador 18/18, capacidad 7/7, motores 6/6, migración 4/4, `PlanningApiIntegrationTest` 72/72, `OrderLineMaterialSnapshotIntegrationTest` 7/7, `CrossTenantAttackTest` 15/15, `ModuleBoundaryTest` 4/4, `SchemaExposureIntegrationTest` 11/11 |
+| TMS front | — | no se tocó en este ciclo |
+| Migraciones | hashes V1–V58 contra `MIGRATION_HASHES.txt`; V59–V61 sin diff | intactos |
+
+El EWM no se tocó.
+
+### Qué quedó fuera (ciclo 2)
+
+- **Front**: «Ocupa: N pilas · m³ efectivos · m² · alto» en el formulario de pedido; barras de piso y alto en
+  `TripCard`/`TripDetailDrawer` (`CapacityBar`); `SplitAssignDrawer` con piso precargado; L/A/H y factor en
+  `VehicleTypeFormDrawer`; tipos en `planningApi.ts`. La API ya devuelve todo lo necesario.
+- **Re-apilado por vehículo** (`OrderGeometryPort.restack`): hoy un vehículo más bajo que las pilas del pedido se rechaza
+  por altura aunque pilas más bajas entrarían. Requiere decidir qué guarda el ledger (DECISIONS_LOG).
+- Edición de `reference_load_height_m`/`load_floor_fill_factor` en la pantalla de configuración de empresa (hoy por SQL
+  o por la propiedad); `EligibleOrderView` sin piso pendiente.
+- El plan del TMS hacia el almacén (`orders[].geometry`) y la tarifa por metro lineal son de la fase 45.

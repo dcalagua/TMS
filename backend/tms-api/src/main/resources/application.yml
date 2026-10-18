@@ -121,6 +121,13 @@ tms:
     # stay absent, so "did not record its revision" stays distinguishable from "is the wrong
     # revision".
     commit: ${TMS_RELEASE_COMMIT:}
+  planning:
+    geometry:
+      # Load geometry by footprint (ADR-022, V62). Used only when the company has not set its own
+      # value in company_settings (reference_load_height_m, load_floor_fill_factor) and, for the
+      # fill factor, when the vehicle type has none either. Overridable per deployment.
+      default-reference-height-m: ${TMS_GEOMETRY_REFERENCE_HEIGHT_M:2.40}
+      default-floor-fill-factor: ${TMS_GEOMETRY_FLOOR_FILL_FACTOR:0.85}
   security:
     jwt:
       # Supabase Auth coordinates. No default: a deployment that does not set these fails at

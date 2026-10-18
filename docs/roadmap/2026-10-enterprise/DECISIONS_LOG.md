@@ -338,3 +338,57 @@
 - **Camino elegido:** esas columnas guardan la referencia del aviso (el número de pedido del TMS) en estos casos; dicho en
   `TMS_CONNECTOR_V1.md` §6.2.
 - **Commit(s):** EWM `fb76b4c`.
+
+### 2026-10-18 · fase 40 · Re-apilado por vehículo diferido al ciclo 2
+
+- **Regla/decisión afectada:** ADR-022 §5 («si el vehículo es más bajo que el `H` de referencia, se recalcula con el `H`
+  del vehículo antes de decidir») y `OrderGeometryPort.restack`.
+- **Motivo:** el ledger de V37 guarda lo asignado por pedido; un re-apilado más bajo produce **más** pilas, más piso y
+  más volumen efectivo que lo que el pedido tiene, y `ck_transport_order_not_over_allocated` lo rechazaría. Decidir qué
+  guarda el ledger en ese caso (lo re-apilado o lo de referencia) necesita su propio diseño, y los motores son puros
+  (habría que entregarles la geometría por altura de vehículo).
+- **Camino elegido (ciclo 1):** el pedido se apila contra el `H` de referencia. Un vehículo más bajo que las pilas se
+  rechaza por **altura de pila** (conservador: nunca acepta lo que no entra) y uno más bajo que una unidad se rechaza como
+  `ITEM_TALLER_THAN_VEHICLE`. Para distinguir las dos sin leer líneas, el pedido guarda `max_unit_height_m` (columna no
+  prevista en el ADR). El re-apilado queda para el ciclo 2.
+- **Commit(s):** el de la fase 40, ciclo 1.
+
+### 2026-10-18 · fase 40 · Volumen de planificación cuando el volumen sólo se declaró
+
+- **Regla/decisión afectada:** ADR-022 §4 («SUM(efectivo de las medidas) + SUM(ingenuo del resto)»).
+- **Motivo:** si ninguna línea trae volumen unitario, el total del pedido es el **declarado** (V17) y cubre también las
+  líneas sin medir; sumar el efectivo de las medidas encima lo contaría dos veces.
+- **Camino elegido:** sin línea medida → total. Si las líneas traen volumen → la regla del ADR. Si el volumen sólo se
+  declaró → la declaración, salvo que **todas** las líneas estén medidas (entonces la suma de efectivos).
+  `OrderTotals` no cambia; la regla vive en `TransportOrder.applyGeometry`.
+- **Commit(s):** el de la fase 40, ciclo 1.
+
+### 2026-10-18 · fase 40 · `planning_volume_m3` NOT NULL con disparador en vez de DEFAULT
+
+- **Regla/decisión afectada:** ADR-022 §4 (`planning_volume_m3 NOT NULL`, backfill = total).
+- **Motivo:** muchos escritores existentes (pruebas, guiones) insertan `transport_order` sin nombrar la columna; un DEFAULT
+  0 mentiría (y rompería el guard del ledger para lo que ya estuviera asignado) y no hay DEFAULT que valga «el total».
+- **Camino elegido:** `BEFORE INSERT` `tr_transport_order_default_planning_volume` copia `total_volume_m3` cuando viene
+  nulo (la misma regla del backfill); la aplicación siempre la escribe explícita. Función con `search_path` fijo y sin
+  EXECUTE para PUBLIC (forma de V51).
+- **Commit(s):** el de la fase 40, ciclo 1.
+
+### 2026-10-18 · fase 40 · Alturas de pila en `numeric(9,3)`
+
+- **Regla/decisión afectada:** ADR-022 §4 y §6 (`max_stack_height_m numeric(6,3)`, `assigned_stack_height_m numeric(6,3)`).
+- **Motivo:** V59 admite alturas unitarias de hasta 9999,9999 m y una unidad más alta que `H` se describe como una pila de
+  una unidad: `numeric(6,3)` (máx. 999,999) podría desbordar con datos que V59 ya acepta.
+- **Camino elegido:** `numeric(9,3)` en la línea, el pedido y el ledger; el snapshot del viaje (que copia el alto del tipo
+  de vehículo, `numeric(6,2)`) se queda en `numeric(6,3)`.
+- **Commit(s):** el de la fase 40, ciclo 1.
+
+### 2026-10-18 · fase 40 · La entrega se compara sin el piso
+
+- **Regla/decisión afectada:** `OrderAmounts` (V37) gana `floorAreaM2` y entra en `covers/exceeds`.
+- **Motivo:** una entrega se registra en peso, volumen y pallets; comparada con el pedido completo (que ahora tiene piso)
+  nunca lo «cubriría» y el pedido no pasaría a `DELIVERED`.
+- **Camino elegido:** `OrderAmounts.withoutGeometry()` en `OrderFulfillmentAdapter`; el resto de la regla de entrega no
+  cambia. Nota: el volumen del pedido contra el que se compara es ahora el de planificación (lo asignado). La pantalla
+  de entrega no pide volumen (manda 0), así que no cambia nada para ella; un integrador que reporte el volumen ingenuo
+  de un pedido medido recibiría `409` por exceder lo pedido - dicho en `LOAD_GEOMETRY_V1.md`.
+- **Commit(s):** el de la fase 40, ciclo 1.

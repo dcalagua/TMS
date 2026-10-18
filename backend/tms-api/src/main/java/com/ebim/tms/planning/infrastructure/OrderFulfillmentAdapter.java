@@ -128,7 +128,7 @@ public class OrderFulfillmentAdapter implements OrderFulfillmentPort {
             // Nothing arrived. Which kind of nothing is the outcome's answer, not the amount's.
             return translate(latestResult);
         }
-        return delivered.covers(OrderAmounts.wholeOf(demand))
+        return delivered.covers(OrderAmounts.wholeOf(demand).withoutGeometry())
                 ? OrderFulfillmentStatus.DELIVERED
                 : OrderFulfillmentStatus.PARTIALLY_DELIVERED;
     }

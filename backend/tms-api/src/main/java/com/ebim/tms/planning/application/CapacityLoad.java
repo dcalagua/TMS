@@ -13,16 +13,37 @@ import java.math.BigDecimal;
  * <p>Never null in any dimension: an order with unknown weight contributes zero, because
  * "unknown" and "none" are indistinguishable at the point a truck is loaded, and a null here
  * would silently disable a limit.
+ *
+ * <p>Since V62 (ADR-022 section 5) two more dimensions: {@code floorAreaM2}, summed like the other
+ * three, and {@code maxStackHeightM}, which is <b>not</b> summed - a load is as tall as its tallest
+ * stack, so {@link #plus} takes the maximum. A load with nothing measured has zero floor and a
+ * height of zero, which no real height limit refuses.
  */
-public record CapacityLoad(BigDecimal weightKg, BigDecimal volumeM3, BigDecimal pallets, long orderCount) {
+public record CapacityLoad(BigDecimal weightKg, BigDecimal volumeM3, BigDecimal pallets, BigDecimal floorAreaM2,
+        BigDecimal maxStackHeightM, long orderCount) {
 
-    public static final CapacityLoad EMPTY =
-            new CapacityLoad(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, 0);
+    public static final CapacityLoad EMPTY = new CapacityLoad(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+            BigDecimal.ZERO, BigDecimal.ZERO, 0);
 
-    /** The load one whole order adds, treating an unknown weight/volume/pallet count as zero. */
+    public CapacityLoad {
+        weightKg = zeroIfNull(weightKg);
+        volumeM3 = zeroIfNull(volumeM3);
+        pallets = zeroIfNull(pallets);
+        floorAreaM2 = zeroIfNull(floorAreaM2);
+        maxStackHeightM = zeroIfNull(maxStackHeightM);
+    }
+
+    /** The pre-V62 shape: nothing measured, so no floor and no height. */
+    public CapacityLoad(BigDecimal weightKg, BigDecimal volumeM3, BigDecimal pallets, long orderCount) {
+        this(weightKg, volumeM3, pallets, BigDecimal.ZERO, BigDecimal.ZERO, orderCount);
+    }
+
+    /**
+     * The load one whole order adds, treating an unknown measure as zero. The volume is the order's
+     * planning volume (V62), which is its declared total until a line is measured.
+     */
     public static CapacityLoad of(PlannableOrder order) {
-        return new CapacityLoad(zeroIfNull(order.totalWeightKg()), zeroIfNull(order.totalVolumeM3()),
-                zeroIfNull(order.totalPallets()), 1);
+        return of(order.ordered());
     }
 
     /**
@@ -32,7 +53,8 @@ public record CapacityLoad(BigDecimal weightKg, BigDecimal volumeM3, BigDecimal 
      * meaningless.
      */
     public static CapacityLoad of(OrderAmounts amounts) {
-        return new CapacityLoad(amounts.weightKg(), amounts.volumeM3(), amounts.pallets(), 1);
+        return new CapacityLoad(amounts.weightKg(), amounts.volumeM3(), amounts.pallets(), amounts.floorAreaM2(),
+                amounts.maxStackHeightM(), 1);
     }
 
     /** The database's grouped answer for one trip, mapped straight through. */
@@ -40,13 +62,14 @@ public record CapacityLoad(BigDecimal weightKg, BigDecimal volumeM3, BigDecimal 
         if (load == null) {
             return EMPTY;
         }
-        return new CapacityLoad(zeroIfNull(load.getWeightKg()), zeroIfNull(load.getVolumeM3()),
-                zeroIfNull(load.getPallets()), load.getOrderCount());
+        return new CapacityLoad(load.getWeightKg(), load.getVolumeM3(), load.getPallets(), load.getFloorAreaM2(),
+                load.getMaxStackHeightM(), load.getOrderCount());
     }
 
     public CapacityLoad plus(CapacityLoad other) {
         return new CapacityLoad(weightKg.add(other.weightKg), volumeM3.add(other.volumeM3),
-                pallets.add(other.pallets), orderCount + other.orderCount);
+                pallets.add(other.pallets), floorAreaM2.add(other.floorAreaM2),
+                maxStackHeightM.max(other.maxStackHeightM), orderCount + other.orderCount);
     }
 
     private static BigDecimal zeroIfNull(BigDecimal value) {

@@ -38,13 +38,19 @@ public class PlanningCapacityService {
 
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
+
     public TripCapacityView summarize(UUID tripId, CapacitySource source, CapacityLimits limits, CapacityLoad load) {
         CapacityDimension weight = dimension(load.weightKg(), limits.maxWeightKg());
         CapacityDimension volume = dimension(load.volumeM3(), limits.maxVolumeM3());
         CapacityDimension pallets = dimension(load.pallets(), limits.maxPallets());
-        boolean within = !weight.exceeded() && !volume.exceeded() && !pallets.exceeded();
-        return new TripCapacityView(tripId, source, load.orderCount(), weight, volume, pallets, within);
+        CapacityDimension floor = dimension(load.floorAreaM2(), limits.maxFloorAreaM2());
+        CapacityDimension height = dimension(load.maxStackHeightM(), limits.maxStackHeightM());
+        boolean within = !weight.exceeded() && !volume.exceeded() && !pallets.exceeded() && !floor.exceeded()
+                && !height.exceeded();
+        return new TripCapacityView(tripId, source, load.orderCount(), weight, volume, pallets, floor, height, within,
+                limits.bindingDimension(load));
     }
+
 
     /**
      * Refuses a load that does not fit, naming every dimension that failed rather than only the
@@ -65,6 +71,8 @@ public class PlanningCapacityService {
         addFailure(failures, "weight", load.weightKg(), limits.maxWeightKg(), "kg");
         addFailure(failures, "volume", load.volumeM3(), limits.maxVolumeM3(), "m3");
         addFailure(failures, "pallets", load.pallets(), limits.maxPallets(), "pallets");
+        addFailure(failures, "floor area", load.floorAreaM2(), limits.maxFloorAreaM2(), "m2");
+        addFailure(failures, "stack height", load.maxStackHeightM(), limits.maxStackHeightM(), "m");
         if (!failures.isEmpty()) {
             throw new ConflictException(what + ": " + String.join("; ", failures) + ".");
         }

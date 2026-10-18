@@ -1,5 +1,7 @@
 package com.ebim.tms.orders.domain;
 
+import com.ebim.tms.shared.geometry.GeometryStatus;
+import com.ebim.tms.shared.geometry.LineGeometry;
 import com.ebim.tms.shared.geometry.PhysicalBlock;
 import com.ebim.tms.shared.geometry.StackMode;
 import jakarta.persistence.Column;
@@ -107,6 +109,27 @@ public class TransportOrderLine {
     @Column(name = "material_profile_version")
     private Long materialProfileVersion;
 
+    // Load geometry (V62, ADR-022 section 3): computed from the block when the line is written,
+    // against the order's reference height. Never client-supplied.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "geometry_status")
+    private GeometryStatus geometryStatus;
+
+    @Column(name = "geometry_reason")
+    private String geometryReason;
+
+    @Column(name = "stacks")
+    private Integer stacks;
+
+    @Column(name = "stack_height_m", precision = 9, scale = 3)
+    private BigDecimal stackHeightM;
+
+    @Column(name = "effective_volume_m3", precision = 14, scale = 4)
+    private BigDecimal effectiveVolumeM3;
+
+    @Column(name = "floor_area_m2", precision = 12, scale = 4)
+    private BigDecimal floorAreaM2;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false, nullable = false)
     private OffsetDateTime createdAt;
@@ -125,11 +148,53 @@ public class TransportOrderLine {
         // JPA
     }
 
-    TransportOrderLine(TransportOrder order, int lineNumber, OrderLineInput input, UUID actorId) {
+    TransportOrderLine(TransportOrder order, int lineNumber, OrderLineInput input, LineGeometry geometry,
+            UUID actorId) {
         this.order = order;
         this.lineNumber = lineNumber;
         this.createdBy = actorId;
         applyInput(input, actorId);
+        applyGeometry(geometry);
+    }
+
+    /**
+     * Stores what {@link com.ebim.tms.shared.geometry.LoadGeometryCalculator} said about this line.
+     * A line with no block has no status at all, rather than {@code UNMEASURED/NO_PHYSICAL_BLOCK}:
+     * there was nothing to measure, which is not the same as a block that could not be used.
+     */
+    private void applyGeometry(LineGeometry geometry) {
+        boolean noBlock = geometry == null || physicalSource == null;
+        this.geometryStatus = noBlock ? null : geometry.status();
+        this.geometryReason = noBlock ? null : geometry.reason();
+        boolean figures = !noBlock && geometry.hasFigures();
+        this.stacks = figures ? geometry.stacks() : null;
+        this.stackHeightM = figures ? geometry.stackHeightM() : null;
+        this.effectiveVolumeM3 = figures ? geometry.effectiveVolumeM3() : null;
+        this.floorAreaM2 = figures ? geometry.floorAreaM2() : null;
+    }
+
+    public GeometryStatus geometryStatus() {
+        return geometryStatus;
+    }
+
+    public String geometryReason() {
+        return geometryReason;
+    }
+
+    public Integer stacks() {
+        return stacks;
+    }
+
+    public BigDecimal stackHeightM() {
+        return stackHeightM;
+    }
+
+    public BigDecimal effectiveVolumeM3() {
+        return effectiveVolumeM3;
+    }
+
+    public BigDecimal floorAreaM2() {
+        return floorAreaM2;
     }
 
     public UUID id() {

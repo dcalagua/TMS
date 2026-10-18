@@ -52,11 +52,21 @@ public record PlanningProposal(String engine, List<ProposedTrip> trips, List<Unp
      *                   behind. Carried anyway because it is what makes a preview readable
      */
     public record ProposedTrip(
-            UUID vehicleId, UUID routeId, List<UUID> orderIds, List<UUID> stopLocationIds) {
+            UUID vehicleId, UUID routeId, List<UUID> orderIds, List<UUID> stopLocationIds,
+            /**
+             * The dimension closest to its limit on this trip ({@code WEIGHT|VOLUME|FLOOR|HEIGHT|PALLETS},
+             * ADR-022 section 7), or null when the vehicle declares no limit with a percentage.
+             */
+            String bindingDimension) {
 
         public ProposedTrip {
             orderIds = List.copyOf(orderIds);
             stopLocationIds = List.copyOf(stopLocationIds);
+        }
+
+        /** The pre-V62 shape: no binding dimension reported. */
+        public ProposedTrip(UUID vehicleId, UUID routeId, List<UUID> orderIds, List<UUID> stopLocationIds) {
+            this(vehicleId, routeId, orderIds, stopLocationIds, null);
         }
     }
 
@@ -73,6 +83,12 @@ public record PlanningProposal(String engine, List<ProposedTrip> trips, List<Unp
 
         /** Larger than the largest vehicle offered, in at least one dimension. Splitting is the fix. */
         EXCEEDS_LARGEST_VEHICLE,
+
+        /**
+         * One unit of the order is taller than every vehicle offered (V62, ADR-022 section 7).
+         * Splitting does not help and neither does re-stacking: the fix is a taller vehicle.
+         */
+        ITEM_TALLER_THAN_VEHICLE,
 
         /** Would fit something, but every vehicle was already loaded or already booked elsewhere. */
         NO_VEHICLE_AVAILABLE,

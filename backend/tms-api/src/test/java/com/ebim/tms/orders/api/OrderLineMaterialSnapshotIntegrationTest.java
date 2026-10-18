@@ -183,6 +183,47 @@ class OrderLineMaterialSnapshotIntegrationTest {
     }
 
     @Test
+    @DisplayName("V62: PLP-571 from the profile is 10 stacks of 1.363 m, 0.1503 m3 effective against 1.93 m3 declared")
+    void lineGeometryIsComputed() throws Exception {
+        String material = "PLP-571-GEO-" + UUID.randomUUID();
+        profile(material, "2026-10-18T10:00:00Z", "0.175").andExpect(status().isCreated());
+        String reference = "PED-" + UUID.randomUUID();
+
+        order(reference, line(material, "UN", ", \"unitVolumeM3\": 0.0019294")).andExpect(status().isCreated());
+
+        assertThat(value("SELECT concat_ws('|', l.geometry_status, l.stacks, l.stack_height_m, l.effective_volume_m3,"
+                + " l.floor_area_m2, l.line_volume_m3) FROM tms.transport_order_line l JOIN tms.transport_order o"
+                + " ON o.id = l.order_id WHERE o.external_reference = '" + reference + "'"))
+                .isEqualTo("MEASURED|10|1.363|0.1503|0.1103|1.9294");
+        assertThat(value("SELECT concat_ws('|', total_volume_m3, planning_volume_m3, floor_area_m2, max_stack_height_m,"
+                + " max_unit_height_m, geometry_unmeasured_lines, geometry_reference_height_m)"
+                + " FROM tms.transport_order WHERE external_reference = '" + reference + "'"))
+                .isEqualTo("1.9294|0.1503|0.1103|1.363|0.175|0|2.40");
+    }
+
+    @Test
+    @DisplayName("V62: a block that cannot be measured is counted and keeps the declared volume; no block, no count")
+    void unmeasuredLinesAreCounted() throws Exception {
+        String reference = "PED-" + UUID.randomUUID();
+        order(reference, line("CAJA-" + UUID.randomUUID(), "UN",
+                ", \"unitVolumeM3\": 0.01, \"heightM\": 0.3, \"stackMode\": \"STACKABLE\"")).andExpect(status().isCreated());
+
+        assertThat(value("SELECT concat_ws('|', l.geometry_status, l.geometry_reason) FROM tms.transport_order_line l"
+                + " JOIN tms.transport_order o ON o.id = l.order_id WHERE o.external_reference = '" + reference + "'"))
+                .isEqualTo("UNMEASURED|MISSING_LENGTH");
+        assertThat(value("SELECT concat_ws('|', total_volume_m3, planning_volume_m3, floor_area_m2,"
+                + " coalesce(max_stack_height_m::text, '-'), geometry_unmeasured_lines) FROM tms.transport_order"
+                + " WHERE external_reference = '" + reference + "'")).isEqualTo("10.0000|10.0000|0.0000|-|1");
+
+        String plain = "PED-" + UUID.randomUUID();
+        order(plain, line("SINPERFIL-" + UUID.randomUUID(), "UN", ", \"unitVolumeM3\": 0.01"))
+                .andExpect(status().isCreated());
+        assertThat(value("SELECT concat_ws('|', coalesce(l.geometry_status, '-'), o.planning_volume_m3,"
+                + " o.geometry_unmeasured_lines) FROM tms.transport_order_line l JOIN tms.transport_order o"
+                + " ON o.id = l.order_id WHERE o.external_reference = '" + plain + "'")).isEqualTo("-|10.0000|0");
+    }
+
+    @Test
     @DisplayName("an invalid line block is 400: NESTABLE without nestIncrementM")
     void invalidLineBlockIs400() throws Exception {
         order("PED-" + UUID.randomUUID(), line("ANY-" + UUID.randomUUID(), "UN",

@@ -78,6 +78,8 @@ public interface TripOrderAssignmentRepository extends JpaRepository<TripOrderAs
     @Query("SELECT COALESCE(SUM(a.assignedWeightKg), 0) AS weightKg, "
             + "COALESCE(SUM(a.assignedVolumeM3), 0) AS volumeM3, "
             + "COALESCE(SUM(a.assignedPallets), 0) AS pallets, "
+            + "COALESCE(SUM(a.assignedFloorAreaM2), 0) AS floorAreaM2, "
+            + "MAX(a.assignedStackHeightM) AS maxStackHeightM, "
             + "COUNT(a) AS orderCount "
             + "FROM TripOrderAssignment a WHERE a.tripId = :tripId AND a.status = :status")
     TripLoad loadByTripId(@Param("tripId") UUID tripId, @Param("status") AssignmentStatus status);
@@ -87,6 +89,8 @@ public interface TripOrderAssignmentRepository extends JpaRepository<TripOrderAs
             + "COALESCE(SUM(a.assignedWeightKg), 0) AS weightKg, "
             + "COALESCE(SUM(a.assignedVolumeM3), 0) AS volumeM3, "
             + "COALESCE(SUM(a.assignedPallets), 0) AS pallets, "
+            + "COALESCE(SUM(a.assignedFloorAreaM2), 0) AS floorAreaM2, "
+            + "MAX(a.assignedStackHeightM) AS maxStackHeightM, "
             + "COUNT(a) AS orderCount "
             + "FROM TripOrderAssignment a WHERE a.tripId IN :tripIds AND a.status = :status GROUP BY a.tripId")
     List<TripLoadRow> loadByTripIds(
@@ -105,6 +109,12 @@ public interface TripOrderAssignmentRepository extends JpaRepository<TripOrderAs
         BigDecimal getVolumeM3();
 
         BigDecimal getPallets();
+
+        /** Square metres of floor (V62); zero when nothing on the trip was measured. */
+        BigDecimal getFloorAreaM2();
+
+        /** The tallest stack on the trip (V62) - a MAX, never a sum; null when none was measured. */
+        BigDecimal getMaxStackHeightM();
 
         long getOrderCount();
     }

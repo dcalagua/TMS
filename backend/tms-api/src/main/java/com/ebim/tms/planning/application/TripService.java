@@ -299,20 +299,24 @@ public class TripService {
         // the order that is still unplanned (migration V37). Reading the pending figure here rather
         // than the order's totals is what makes "assign the rest of it" work after a first split.
         OrderAllocation before = allocationOf(order, scope.companyId());
-        OrderAmounts amounts = request.isPartial() ? request.amounts() : before.pending();
+        // A slice is still made of the order's stacks, so it carries the order's tallest one (V62).
+        OrderAmounts amounts = request.isPartial()
+                ? request.amounts().withMaxStackHeight(order.maxStackHeightM())
+                : before.pending();
         if (before.isFullyAllocated()) {
             throw new ConflictException("Order " + order.orderNumber()
                     + " is already fully assigned to trips.");
         }
         if (request.isPartial() && amounts.isZero()) {
             throw new InvalidRequestException(
-                    "A partial assignment must ask for at least one of weight, volume or pallets.");
+                    "A partial assignment must ask for at least one of weight, volume, pallets or floor area.");
         }
 
+        CapacityLimits limits = liveLimits(trip, scope.companyId());
+        requireUnitsFit(order, trip, limits);
         CapacityLoad load = assignments.currentLoad(trip.id()).plus(CapacityLoad.of(amounts));
         capacityService.requireWithinCapacity(
-                "Order " + order.orderNumber() + " does not fit trip " + trip.tripNumber(),
-                liveLimits(trip, scope.companyId()), load);
+                "Order " + order.orderNumber() + " does not fit trip " + trip.tripNumber(), limits, load);
 
         UUID actorId = auditActorProvider.requireAppUserId();
         // The ledger first: it takes the order's row lock and is what refuses an over-allocation,
@@ -383,10 +387,11 @@ public class TripService {
         OrderAmounts moving = assignment.assigned();
         requireNotAlreadyOnThisTrip(target, order);
 
+        CapacityLimits targetLimits = liveLimits(target, scope.companyId());
+        requireUnitsFit(order, target, targetLimits);
         CapacityLoad targetLoad = assignments.currentLoad(target.id()).plus(CapacityLoad.of(moving));
         capacityService.requireWithinCapacity(
-                "Order " + order.orderNumber() + " does not fit trip " + target.tripNumber(),
-                liveLimits(target, scope.companyId()), targetLoad);
+                "Order " + order.orderNumber() + " does not fit trip " + target.tripNumber(), targetLimits, targetLoad);
 
         UUID actorId = auditActorProvider.requireAppUserId();
         // The order's ledger is deliberately untouched: a move takes the same amount off one trip
@@ -785,6 +790,19 @@ public class TripService {
      * built on, so the planner sees a coherent board. Whether that vehicle may still run the trip
      * is re-checked at confirmation, where it belongs.
      */
+    /**
+     * A unit taller than the vehicle can never go on it, however the order is split or re-stacked
+     * (ADR-022, {@code ITEM_TALLER_THAN_VEHICLE}) - said as such rather than as a stack height.
+     */
+    private static void requireUnitsFit(PlannableOrder order, Trip trip, CapacityLimits limits) {
+        if (!limits.admitsUnitHeight(order.maxUnitHeightM())) {
+            throw new ConflictException("Order " + order.orderNumber() + " does not fit trip " + trip.tripNumber()
+                    + ": ITEM_TALLER_THAN_VEHICLE - a unit " + order.maxUnitHeightM().stripTrailingZeros().toPlainString()
+                    + " m tall exceeds the vehicle height of "
+                    + limits.maxStackHeightM().stripTrailingZeros().toPlainString() + " m.");
+        }
+    }
+
     private CapacityLimits liveLimits(Trip trip, UUID companyId) {
         if (trip.vehicleId() == null) {
             return CapacityLimits.unlimited();

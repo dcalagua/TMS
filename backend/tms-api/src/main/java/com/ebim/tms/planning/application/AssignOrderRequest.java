@@ -26,16 +26,27 @@ public record AssignOrderRequest(
         @NotNull(message = "is required") UUID orderId,
         @DecimalMin(value = "0", message = "cannot be negative") BigDecimal weightKg,
         @DecimalMin(value = "0", message = "cannot be negative") BigDecimal volumeM3,
-        @DecimalMin(value = "0", message = "cannot be negative") BigDecimal pallets) {
+        @DecimalMin(value = "0", message = "cannot be negative") BigDecimal pallets,
+        /**
+         * Square metres of floor the slice takes (V62, ADR-022 section 5): the same rule as the other
+         * three - omitted is zero. TMS splits by typed amounts, not by line quantities, so a slice's
+         * geometry cannot be recomputed; the planner states it (the board prefills the pending floor).
+         */
+        @DecimalMin(value = "0", message = "cannot be negative") BigDecimal floorAreaM2) {
 
     /** The single-argument shape every pre-V37 caller used: assign whatever is left of the order. */
     public AssignOrderRequest(UUID orderId) {
-        this(orderId, null, null, null);
+        this(orderId, null, null, null, null);
+    }
+
+    /** The V37 shape: three amounts, no floor. */
+    public AssignOrderRequest(UUID orderId, BigDecimal weightKg, BigDecimal volumeM3, BigDecimal pallets) {
+        this(orderId, weightKg, volumeM3, pallets, null);
     }
 
     /** Whether the caller asked for a specific slice rather than the remainder. */
     public boolean isPartial() {
-        return weightKg != null || volumeM3 != null || pallets != null;
+        return weightKg != null || volumeM3 != null || pallets != null || floorAreaM2 != null;
     }
 
     /**
@@ -44,6 +55,6 @@ public record AssignOrderRequest(
      * loading the order's whole weight onto that truck would be the opposite of what was typed.
      */
     public OrderAmounts amounts() {
-        return new OrderAmounts(weightKg, volumeM3, pallets);
+        return new OrderAmounts(weightKg, volumeM3, pallets, floorAreaM2, null);
     }
 }

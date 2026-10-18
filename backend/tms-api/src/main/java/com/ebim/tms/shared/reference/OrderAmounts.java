@@ -18,11 +18,20 @@ import java.math.BigDecimal;
  * invoiced against and a vehicle is loaded against, and the scales are the columns' own -
  * weight 3dp, volume 4dp, pallets 2dp.
  *
- * <p>Null is normalised to zero on construction. An order whose weight is simply not known
+ * <p><b>Floor and height (V62, ADR-022 section 4).</b> {@code floorAreaM2} is a fourth summable
+ * measure - square metres of vehicle floor the stacks cover - and obeys every rule the other three
+ * do. {@code maxStackHeightM} is <em>not</em> a quantity: a load is as tall as its tallest stack,
+ * so {@link #plus} takes the maximum and it never takes part in {@link #exceeds}, {@link #covers},
+ * {@link #isZero} or {@link #isNegative}. {@code volumeM3} is the <em>planning</em> volume
+ * (effective where a line was measured), so V37's ordered / allocated / pending arithmetic keeps one
+ * meaning for every measure.
+ *
+ * <p>Null is normalised to zero on construction (the height stays null: unknown, not zero). An order whose weight is simply not known
  * contributes nothing to a weight limit, which is a different statement from "the order is
  * invalid" and is the one V10 chose when it defaulted the totals to zero.
  */
-public record OrderAmounts(BigDecimal weightKg, BigDecimal volumeM3, BigDecimal pallets) {
+public record OrderAmounts(BigDecimal weightKg, BigDecimal volumeM3, BigDecimal pallets, BigDecimal floorAreaM2,
+        BigDecimal maxStackHeightM) {
 
     public static final OrderAmounts NONE =
             new OrderAmounts(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
@@ -31,31 +40,53 @@ public record OrderAmounts(BigDecimal weightKg, BigDecimal volumeM3, BigDecimal 
         weightKg = zeroIfNull(weightKg);
         volumeM3 = zeroIfNull(volumeM3);
         pallets = zeroIfNull(pallets);
+        floorAreaM2 = zeroIfNull(floorAreaM2);
+    }
+
+    /** The three measures of V37, with no floor and no height - every amount that predates V62. */
+    public OrderAmounts(BigDecimal weightKg, BigDecimal volumeM3, BigDecimal pallets) {
+        this(weightKg, volumeM3, pallets, BigDecimal.ZERO, null);
     }
 
     /** Everything the order asks for - the ceiling every allocation is measured against. */
     public static OrderAmounts wholeOf(PlannableOrder order) {
-        return new OrderAmounts(order.totalWeightKg(), order.totalVolumeM3(), order.totalPallets());
+        return order.ordered();
+    }
+
+    /**
+     * Only weight, volume and pallets. What a delivery is recorded in (a driver reports kilograms
+     * and pallets, never square metres of floor), so the delivery paths compare against this.
+     */
+    public OrderAmounts withoutGeometry() {
+        return new OrderAmounts(weightKg, volumeM3, pallets);
     }
 
     public OrderAmounts plus(OrderAmounts other) {
         return new OrderAmounts(weightKg.add(other.weightKg), volumeM3.add(other.volumeM3),
-                pallets.add(other.pallets));
+                pallets.add(other.pallets), floorAreaM2.add(other.floorAreaM2),
+                taller(maxStackHeightM, other.maxStackHeightM));
     }
 
+    /** Subtracts the measures; the height stays this one's - a slice is still made of the same stacks. */
     public OrderAmounts minus(OrderAmounts other) {
         return new OrderAmounts(weightKg.subtract(other.weightKg), volumeM3.subtract(other.volumeM3),
-                pallets.subtract(other.pallets));
+                pallets.subtract(other.pallets), floorAreaM2.subtract(other.floorAreaM2), maxStackHeightM);
+    }
+
+    /** The same measures carrying another stack height. */
+    public OrderAmounts withMaxStackHeight(BigDecimal heightM) {
+        return new OrderAmounts(weightKg, volumeM3, pallets, floorAreaM2, heightM);
     }
 
     /** Nothing at all - the state of an order nobody has put on a trip. */
     public boolean isZero() {
-        return weightKg.signum() == 0 && volumeM3.signum() == 0 && pallets.signum() == 0;
+        return weightKg.signum() == 0 && volumeM3.signum() == 0 && pallets.signum() == 0
+                && floorAreaM2.signum() == 0;
     }
 
     /** At least one measure is below zero. Never a legal allocation. */
     public boolean isNegative() {
-        return weightKg.signum() < 0 || volumeM3.signum() < 0 || pallets.signum() < 0;
+        return weightKg.signum() < 0 || volumeM3.signum() < 0 || pallets.signum() < 0 || floorAreaM2.signum() < 0;
     }
 
     /**
@@ -68,20 +99,32 @@ public record OrderAmounts(BigDecimal weightKg, BigDecimal volumeM3, BigDecimal 
     public boolean exceeds(OrderAmounts ceiling) {
         return weightKg.compareTo(ceiling.weightKg) > 0
                 || volumeM3.compareTo(ceiling.volumeM3) > 0
-                || pallets.compareTo(ceiling.pallets) > 0;
+                || pallets.compareTo(ceiling.pallets) > 0
+                || floorAreaM2.compareTo(ceiling.floorAreaM2) > 0;
     }
 
     /**
      * Whether this is the whole of {@code total} in every measure.
      *
-     * <p>An order with nothing known - all three measures zero - is fully allocated by an
+     * <p>An order with nothing known - all measures zero - is fully allocated by an
      * allocation of nothing, which is what keeps V1's behaviour intact: assigning such an order has
      * always made it {@code PLANNED}, and it must go on doing so.
      */
     public boolean covers(OrderAmounts total) {
         return weightKg.compareTo(total.weightKg) >= 0
                 && volumeM3.compareTo(total.volumeM3) >= 0
-                && pallets.compareTo(total.pallets) >= 0;
+                && pallets.compareTo(total.pallets) >= 0
+                && floorAreaM2.compareTo(total.floorAreaM2) >= 0;
+    }
+
+    private static BigDecimal taller(BigDecimal a, BigDecimal b) {
+        if (a == null) {
+            return b;
+        }
+        if (b == null) {
+            return a;
+        }
+        return a.max(b);
     }
 
     private static BigDecimal zeroIfNull(BigDecimal value) {

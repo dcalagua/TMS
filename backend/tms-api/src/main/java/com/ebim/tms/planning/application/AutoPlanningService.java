@@ -193,7 +193,7 @@ public class AutoPlanningService {
                 continue;
             }
             applied.add(new ProposedTrip(proposed.vehicleId(), proposed.routeId(), accepted,
-                    trip.stops().stream().map(TripStopView::destinationId).toList()));
+                    trip.stops().stream().map(TripStopView::destinationId).toList(), proposed.bindingDimension()));
             created.add(trip);
         }
 

@@ -31,6 +31,7 @@ import com.ebim.tms.shared.reference.OrderFulfillmentStatus;
 import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.settings.CompanySettingsPort;
+import com.ebim.tms.shared.settings.LoadGeometrySettings;
 import java.math.BigDecimal;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
@@ -76,14 +77,17 @@ public class OrderService {
     private final OrderSchedulingService orderSchedulingService;
     private final OrderLinePhysicalResolver physicalResolver;
     private final BusinessEventPublisher businessEvents;
+    private final LoadGeometrySettings geometrySettings;
 
     public OrderService(TransportOrderRepository transportOrderRepository,
             TransportOrderLineRepository transportOrderLineRepository, OriginLookupPort originLookupPort,
             DestinationLookupPort destinationLookupPort, OrderFulfillmentPort orderFulfillmentPort,
             CompanySettingsPort companySettingsPort, AuditActorProvider auditActorProvider,
             AuditRecorder auditRecorder, OrderSchedulingService orderSchedulingService,
-            OrderLinePhysicalResolver physicalResolver, BusinessEventPublisher businessEvents) {
+            OrderLinePhysicalResolver physicalResolver, BusinessEventPublisher businessEvents,
+            LoadGeometrySettings geometrySettings) {
         this.businessEvents = businessEvents;
+        this.geometrySettings = geometrySettings;
         this.orderSchedulingService = orderSchedulingService;
         this.physicalResolver = physicalResolver;
         this.transportOrderRepository = transportOrderRepository;
@@ -152,7 +156,7 @@ public class OrderService {
                 request.originId(), request.destinationId(), blankToNull(request.customerName()),
                 blankToNull(request.customerReference()), request.serviceDate(), request.priority(),
                 request.requestedWindowStart(), request.requestedWindowEnd(), actorId);
-        order.applyLines(lines, declared, actorId);
+        order.applyLines(lines, declared, geometrySettings.referenceHeightOf(scope.companyId()), actorId);
         TransportOrder saved = saveOrConflict(order);
         auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.CREATE,
                 Map.of("orderNumber", saved.orderNumber()));
@@ -186,7 +190,7 @@ public class OrderService {
         order.applyChanges(externalSource, externalReference, request.originId(), request.destinationId(),
                 blankToNull(request.customerName()), blankToNull(request.customerReference()), request.serviceDate(),
                 request.priority(), request.requestedWindowStart(), request.requestedWindowEnd(), actorId);
-        order.applyLines(lines, declared, actorId);
+        order.applyLines(lines, declared, geometrySettings.referenceHeightOf(scope.companyId()), actorId);
         TransportOrder saved = saveOrConflict(order);
         auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.UPDATE,
                 Map.of("orderNumber", saved.orderNumber()));

@@ -48,11 +48,34 @@ public record PlannableOrder(
          * loading rather than fetched beside it: the pending column is on every row of the
          * eligible-orders list, and a second lookup per row is the N+1 this record exists to avoid.
          */
-        OrderAmounts allocated) {
+        OrderAmounts allocated,
+        /**
+         * What capacity counts as the order's volume (V62, ADR-022 section 4): effective where a line
+         * was measured, naive elsewhere. {@code totalVolumeM3} stays the declared figure every screen
+         * and the warehouse plan already show. Null (a caller predating V62) reads as the total.
+         */
+        BigDecimal planningVolumeM3,
+        /** Square metres of floor the measured lines' stacks cover; zero when nothing was measured. */
+        BigDecimal floorAreaM2,
+        /** The tallest stack, or null when no line was measured. */
+        BigDecimal maxStackHeightM,
+        /** The tallest single unit, or null: a vehicle lower than it can never take the order. */
+        BigDecimal maxUnitHeightM) {
 
-    /** Everything the customer asked for. */
+    /** The pre-V62 shape: no geometry, so capacity counts the declared volume, as it always did. */
+    public PlannableOrder(UUID id, String orderNumber, UUID originId, UUID destinationId, String customerName,
+            String customerReference, LocalDate serviceDate, String priority, LocalTime requestedWindowStart,
+            LocalTime requestedWindowEnd, BigDecimal totalWeightKg, BigDecimal totalVolumeM3, BigDecimal totalPallets,
+            String externalSource, String externalReference, OrderAmounts allocated) {
+        this(id, orderNumber, originId, destinationId, customerName, customerReference, serviceDate, priority,
+                requestedWindowStart, requestedWindowEnd, totalWeightKg, totalVolumeM3, totalPallets, externalSource,
+                externalReference, allocated, null, null, null, null);
+    }
+
+    /** Everything the customer asked for, in the measures capacity counts (planning volume, floor, height). */
     public OrderAmounts ordered() {
-        return new OrderAmounts(totalWeightKg, totalVolumeM3, totalPallets);
+        return new OrderAmounts(totalWeightKg, planningVolumeM3 == null ? totalVolumeM3 : planningVolumeM3,
+                totalPallets, floorAreaM2, maxStackHeightM);
     }
 
     /** What a planner may still place on a truck. Zero for an order that is wholly assigned. */

@@ -74,6 +74,12 @@ public class TripOrderAssignment {
     @Column(name = "assigned_pallets", updatable = false, nullable = false, precision = 12, scale = 2)
     private BigDecimal assignedPallets;
 
+    @Column(name = "assigned_floor_area_m2", updatable = false, nullable = false, precision = 12, scale = 4)
+    private BigDecimal assignedFloorAreaM2 = BigDecimal.ZERO;
+
+    @Column(name = "assigned_stack_height_m", updatable = false, precision = 9, scale = 3)
+    private BigDecimal assignedStackHeightM;
+
     @Column(name = "assigned_at", updatable = false, nullable = false)
     private OffsetDateTime assignedAt;
 
@@ -120,6 +126,8 @@ public class TripOrderAssignment {
         this.assignedWeightKg = assigned.weightKg();
         this.assignedVolumeM3 = assigned.volumeM3();
         this.assignedPallets = assigned.pallets();
+        this.assignedFloorAreaM2 = assigned.floorAreaM2();
+        this.assignedStackHeightM = assigned.maxStackHeightM();
         this.assignedAt = OffsetDateTime.now();
         this.assignedBy = actorId;
         this.createdBy = actorId;
@@ -144,7 +152,8 @@ public class TripOrderAssignment {
 
     /** What this row carries, as one value - the amount released when it is closed (V37). */
     public OrderAmounts assigned() {
-        return new OrderAmounts(assignedWeightKg, assignedVolumeM3, assignedPallets);
+        return new OrderAmounts(assignedWeightKg, assignedVolumeM3, assignedPallets, assignedFloorAreaM2,
+                assignedStackHeightM);
     }
 
     public boolean wholeOrder() {
@@ -169,6 +178,14 @@ public class TripOrderAssignment {
 
     public BigDecimal assignedPallets() {
         return assignedPallets;
+    }
+
+    public BigDecimal assignedFloorAreaM2() {
+        return assignedFloorAreaM2;
+    }
+
+    public BigDecimal assignedStackHeightM() {
+        return assignedStackHeightM;
     }
 
     public OffsetDateTime assignedAt() {

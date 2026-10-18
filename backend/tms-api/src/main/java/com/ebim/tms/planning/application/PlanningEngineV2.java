@@ -121,6 +121,11 @@ public class PlanningEngineV2 implements PlanningEngine {
             TripBuilder open = null;
 
             for (PlannableOrder order : ordersInGroup) {
+                if (tallerThanEveryVehicle(order, input.vehicles())) {
+                    unplanned.add(new UnplannedOrder(order.id(), order.orderNumber(),
+                            UnplannedReason.ITEM_TALLER_THAN_VEHICLE));
+                    continue;
+                }
                 if (exceedsEveryVehicle(order, input.vehicles())) {
                     unplanned.add(new UnplannedOrder(order.id(), order.orderNumber(),
                             UnplannedReason.EXCEEDS_LARGEST_VEHICLE));
@@ -179,7 +184,8 @@ public class PlanningEngineV2 implements PlanningEngine {
     private static void closeTrip(TripBuilder open, PlanningInput input, List<ProposedTrip> trips,
             Map<UUID, TripPlan> plansByTrip) {
         TripPlan plan = open.finish(input);
-        trips.add(new ProposedTrip(open.vehicle.id(), open.routeId, plan.orderIds(), plan.stopIds()));
+        trips.add(new ProposedTrip(open.vehicle.id(), open.routeId, plan.orderIds(), plan.stopIds(),
+                open.limits.bindingDimension(open.load)));
         plansByTrip.put(open.vehicle.id(), plan);
     }
 
@@ -330,6 +336,8 @@ public class PlanningEngineV2 implements PlanningEngine {
             List<BigDecimal> weightPercents = new ArrayList<>();
             List<BigDecimal> volumePercents = new ArrayList<>();
             List<BigDecimal> palletPercents = new ArrayList<>();
+            List<BigDecimal> floorPercents = new ArrayList<>();
+            List<BigDecimal> heightPercents = new ArrayList<>();
 
             for (ProposedTrip trip : trips) {
                 distinctVehicles.add(trip.vehicleId());
@@ -351,6 +359,8 @@ public class PlanningEngineV2 implements PlanningEngine {
                     weightPercents.add(percent(load.weightKg(), vehicle.maxWeightKg()));
                     volumePercents.add(percent(load.volumeM3(), vehicle.maxVolumeM3()));
                     palletPercents.add(percent(load.pallets(), palletsOf(vehicle)));
+                    floorPercents.add(percent(load.floorAreaM2(), CapacityLimits.floorOf(vehicle)));
+                    heightPercents.add(percent(load.maxStackHeightM(), vehicle.heightM()));
                 }
             }
 
@@ -367,7 +377,10 @@ public class PlanningEngineV2 implements PlanningEngine {
                     PlanningKpis.averagePercent(palletPercents),
                     input.travel().anyEstimated(),
                     // Never computed here - see the class comment. JOB 06 owns proposal pricing.
-                    null);
+                    null,
+                    ProposalPricing.NOT_ASKED,
+                    PlanningKpis.averagePercent(floorPercents),
+                    PlanningKpis.averagePercent(heightPercents));
         }
 
         /**
@@ -470,6 +483,12 @@ public class PlanningEngineV2 implements PlanningEngine {
     }
 
     /** True when no vehicle could take this order's outstanding part on its own. */
+    /** One unit of the order is taller than every vehicle offered (ADR-022): no split or re-stack helps. */
+    private static boolean tallerThanEveryVehicle(PlannableOrder order, List<VehicleCapacityReference> vehicles) {
+        return order.maxUnitHeightM() != null && !vehicles.isEmpty()
+                && vehicles.stream().noneMatch(vehicle -> CapacityLimits.of(vehicle).admitsUnitHeight(order.maxUnitHeightM()));
+    }
+
     private static boolean exceedsEveryVehicle(PlannableOrder order, List<VehicleCapacityReference> vehicles) {
         CapacityLoad alone = CapacityLoad.of(order.pending());
         return vehicles.stream().noneMatch(vehicle -> CapacityLimits.of(vehicle).accommodates(alone));

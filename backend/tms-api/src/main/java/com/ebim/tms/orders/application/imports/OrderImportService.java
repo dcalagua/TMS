@@ -17,7 +17,9 @@ import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.MaterialProfileSnapshot;
 import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
+import com.ebim.tms.shared.settings.CompanySettings;
 import com.ebim.tms.shared.settings.CompanySettingsPort;
+import com.ebim.tms.shared.settings.LoadGeometrySettings;
 import java.math.BigDecimal;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -71,13 +73,15 @@ public class OrderImportService {
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
     private final OrderLinePhysicalResolver physicalResolver;
+    private final LoadGeometrySettings geometrySettings;
 
     public OrderImportService(OrderImportParser parser, TransportOrderRepository transportOrderRepository,
             OrderImportBatchRepository orderImportBatchRepository, OriginLookupPort originLookupPort,
             DestinationLookupPort destinationLookupPort, CompanySettingsPort companySettingsPort,
             AuditActorProvider auditActorProvider, AuditRecorder auditRecorder,
-            OrderLinePhysicalResolver physicalResolver) {
+            OrderLinePhysicalResolver physicalResolver, LoadGeometrySettings geometrySettings) {
         this.physicalResolver = physicalResolver;
+        this.geometrySettings = geometrySettings;
         this.parser = parser;
         this.transportOrderRepository = transportOrderRepository;
         this.orderImportBatchRepository = orderImportBatchRepository;
@@ -192,7 +196,9 @@ public class OrderImportService {
         List<Long> sequenceValues = transportOrderRepository.nextOrderNumberValues(candidates.size());
         // Resolved once for the whole file, not once per row: the prefix is a property of the
         // company, and a file cannot straddle two of them.
-        String prefix = companySettingsPort.settingsOf(scope.companyId()).orderNumberPrefix();
+        CompanySettings settings = companySettingsPort.settingsOf(scope.companyId());
+        String prefix = settings.orderNumberPrefix();
+        BigDecimal referenceHeightM = geometrySettings.referenceHeight(settings);
         List<TransportOrder> orders = new ArrayList<>(candidates.size());
         Map<String, String> numbersByReference = new LinkedHashMap<>();
         // The warehouse profiles of every material in the file, in one query: the copy rule
@@ -208,7 +214,7 @@ public class OrderImportService {
                     candidate.customerName(), candidate.customerReference(), candidate.serviceDate(),
                     candidate.priority(), candidate.windowStart(), candidate.windowEnd(), actorId);
             order.applyLines(physicalResolver.resolve(candidate.lines(), candidate.declaredTotals(), List.of(),
-                    profiles), candidate.declaredTotals(), actorId);
+                    profiles), candidate.declaredTotals(), referenceHeightM, actorId);
             orders.add(order);
             numbersByReference.put(candidate.externalReference(), orderNumber);
         }

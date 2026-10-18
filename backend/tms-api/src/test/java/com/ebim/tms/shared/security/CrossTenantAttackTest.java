@@ -97,6 +97,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
     WebConfig.class,
     OrderService.class,
     com.ebim.tms.orders.application.OrderLinePhysicalResolver.class,
+    com.ebim.tms.shared.settings.LoadGeometrySettings.class,
     SecurityTestConfiguration.class
 })
 @EnableConfigurationProperties(TmsSecurityProperties.class)

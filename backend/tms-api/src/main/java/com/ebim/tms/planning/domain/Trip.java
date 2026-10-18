@@ -137,6 +137,17 @@ public class Trip {
     @Column(name = "snapshot_max_pallets")
     private Integer snapshotMaxPallets;
 
+    // V62 (ADR-022 section 6): the load space frozen with the rest. Null = the vehicle type had no
+    // such dimension, which stays "unlimited" after confirmation exactly as before it.
+    @Column(name = "snapshot_max_floor_area_m2", precision = 10, scale = 3)
+    private BigDecimal snapshotMaxFloorAreaM2;
+
+    @Column(name = "snapshot_max_stack_height_m", precision = 6, scale = 3)
+    private BigDecimal snapshotMaxStackHeightM;
+
+    @Column(name = "snapshot_load_width_m", precision = 6, scale = 3)
+    private BigDecimal snapshotLoadWidthM;
+
     @Column(name = "capacity_snapshot_at")
     private OffsetDateTime capacitySnapshotAt;
 
@@ -322,6 +333,18 @@ public class Trip {
         return snapshotMaxPallets;
     }
 
+    public BigDecimal snapshotMaxFloorAreaM2() {
+        return snapshotMaxFloorAreaM2;
+    }
+
+    public BigDecimal snapshotMaxStackHeightM() {
+        return snapshotMaxStackHeightM;
+    }
+
+    public BigDecimal snapshotLoadWidthM() {
+        return snapshotLoadWidthM;
+    }
+
     public OffsetDateTime capacitySnapshotAt() {
         return capacitySnapshotAt;
     }
@@ -466,7 +489,16 @@ public class Trip {
      * {@code PlanningRunService.confirm}'s concern.
      */
     public void confirm(BigDecimal maxWeightKg, BigDecimal maxVolumeM3, Integer maxPallets, UUID actorId) {
+        confirm(maxWeightKg, maxVolumeM3, maxPallets, null, null, null, actorId);
+    }
+
+    /** The same, freezing the load space too (V62): floor area, height and width; each may be null. */
+    public void confirm(BigDecimal maxWeightKg, BigDecimal maxVolumeM3, Integer maxPallets, BigDecimal maxFloorAreaM2,
+            BigDecimal maxStackHeightM, BigDecimal loadWidthM, UUID actorId) {
         requireTransitionTo(TripStatus.CONFIRMED);
+        this.snapshotMaxFloorAreaM2 = maxFloorAreaM2;
+        this.snapshotMaxStackHeightM = maxStackHeightM;
+        this.snapshotLoadWidthM = loadWidthM;
         this.status = TripStatus.CONFIRMED;
         this.snapshotMaxWeightKg = maxWeightKg;
         this.snapshotMaxVolumeM3 = maxVolumeM3;

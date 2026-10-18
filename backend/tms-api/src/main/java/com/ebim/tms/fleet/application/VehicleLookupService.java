@@ -9,6 +9,8 @@ import com.ebim.tms.fleet.infrastructure.VehicleRepository;
 import com.ebim.tms.fleet.infrastructure.VehicleTypeRepository;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
+import com.ebim.tms.shared.settings.LoadGeometrySettings;
+import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -42,9 +44,12 @@ public class VehicleLookupService implements VehicleLookupPort {
     private final VehicleTypeRepository vehicleTypeRepository;
     private final CarrierRepository carrierRepository;
     private final EffectiveCapacityResolver effectiveCapacityResolver;
+    private final LoadGeometrySettings geometrySettings;
 
     public VehicleLookupService(VehicleRepository vehicleRepository, VehicleTypeRepository vehicleTypeRepository,
-            CarrierRepository carrierRepository, EffectiveCapacityResolver effectiveCapacityResolver) {
+            CarrierRepository carrierRepository, EffectiveCapacityResolver effectiveCapacityResolver,
+            LoadGeometrySettings geometrySettings) {
+        this.geometrySettings = geometrySettings;
         this.vehicleRepository = vehicleRepository;
         this.vehicleTypeRepository = vehicleTypeRepository;
         this.carrierRepository = carrierRepository;
@@ -57,7 +62,8 @@ public class VehicleLookupService implements VehicleLookupPort {
         return vehicleRepository.findByIdAndCompanyId(vehicleId, companyId)
                 .filter(Vehicle::active)
                 .filter(vehicle -> vehicle.availabilityStatus() == VehicleAvailabilityStatus.AVAILABLE)
-                .map(vehicle -> toReference(vehicle, requireType(vehicle, companyId), carrierName(vehicle, companyId)));
+                .map(vehicle -> toReference(vehicle, requireType(vehicle, companyId), carrierName(vehicle, companyId),
+                        geometrySettings.floorFillFactorOf(companyId)));
     }
 
     /**
@@ -102,6 +108,7 @@ public class VehicleLookupService implements VehicleLookupPort {
     /** Resolves a batch of vehicles into references: three queries for the batch, never three per row. */
     private Map<UUID, VehicleCapacityReference> toReferences(List<Vehicle> vehicles, UUID companyId) {
         Map<UUID, VehicleCapacityReference> byId = new HashMap<>();
+        BigDecimal companyFillFactor = geometrySettings.floorFillFactorOf(companyId);
         Map<UUID, VehicleType> types = vehicleTypeRepository
                 .findByIdInAndCompanyId(vehicles.stream().map(Vehicle::vehicleTypeId).collect(Collectors.toSet()),
                         companyId).stream()
@@ -121,7 +128,7 @@ public class VehicleLookupService implements VehicleLookupPort {
                 continue;
             }
             byId.put(vehicle.id(), toReference(vehicle, type,
-                    vehicle.carrierId() == null ? null : carrierNames.get(vehicle.carrierId())));
+                    vehicle.carrierId() == null ? null : carrierNames.get(vehicle.carrierId()), companyFillFactor));
         }
         return byId;
     }
@@ -141,10 +148,12 @@ public class VehicleLookupService implements VehicleLookupPort {
                 .orElse(null);
     }
 
-    private VehicleCapacityReference toReference(Vehicle vehicle, VehicleType type, String carrierName) {
-        EffectiveCapacity capacity = effectiveCapacityResolver.resolve(vehicle, type);
+    private VehicleCapacityReference toReference(Vehicle vehicle, VehicleType type, String carrierName,
+            BigDecimal companyFillFactor) {
+        EffectiveCapacity capacity = effectiveCapacityResolver.resolve(vehicle, type, companyFillFactor);
         return new VehicleCapacityReference(vehicle.id(), vehicle.code(), vehicle.licensePlate(), vehicle.carrierId(),
                 carrierName, type.id(), type.code(), capacity.maxWeightKg(), capacity.maxVolumeM3(),
-                capacity.maxPallets(), vehicle.active(), vehicle.availabilityStatus().name());
+                capacity.maxPallets(), vehicle.active(), vehicle.availabilityStatus().name(), capacity.lengthM(),
+                capacity.widthM(), capacity.heightM(), capacity.floorFillFactor());
     }
 }
