@@ -57,3 +57,29 @@ Los archivos SQL se pueden volver a ejecutar. El script crea viajes nuevos en ca
 | transportista.trsa@demo.local | DEMO-LIMA (TRSA) y DEMO-AREQUIPA (TRSA) | CARRIER_OPERATOR |
 | transportista.trsb@demo.local | DEMO-LIMA (TRSB) | CARRIER_OPERATOR |
 | transportista.traq@demo.local | DEMO-AREQUIPA (TRAQ) | CARRIER_OPERATOR |
+
+---
+
+# Demo PLAPASA (Ecuador): `QAS-PLAPASA`
+
+Otro tenant, aparte de Lima y Arequipa: la organización y la empresa `QAS-PLAPASA` («PLAPASA (demo)»,
+país EC, USD, America/Guayaquil), con los mismos códigos que el EWM de la demo de PLAPASA (GYE-CD,
+CLI-*, TRLIT, CAM-01/02). Guion: `docs/demo/PLAPASA_TMS_DEMO.md`. Carga en QAS paso a paso:
+`docs/demo/PLAPASA_TMS_RUNBOOK.md`.
+
+```sh
+psql "$DB" -v ON_ERROR_STOP=1 -f supabase/seeds/plapasa_demo_seed.sql                       # tenant, maestros, flota, tarifa
+# perfiles de material: los manda el EWM («Reenviar perfiles al TMS»); SÓLO si ese enlace no está:
+psql "$DB" -v ON_ERROR_STOP=1 -f supabase/seeds/plapasa_demo_material_profiles_fallback.sql
+python3 scripts/demo/plapasa_tms_demo.py check     # sólo lectura: ¿están los perfiles?
+python3 scripts/demo/plapasa_tms_demo.py orders    # los pedidos del ERP (scripts/demo/plapasa/orders.json)
+```
+
+El seed no crea pedidos a propósito: entran por `POST /integration/v1/orders/batch`, que es donde se les
+copia el perfil y se les calcula la huella. Lo valida `PlapasaDemoSeedIntegrationTest`.
+
+| Usuario | Empresa | Rol |
+|---|---|---|
+| admin@plapasa.demo | toda la organización QAS-PLAPASA | ORGANIZATION_ADMIN |
+| planner@plapasa.demo | QAS-PLAPASA | PLANNER |
+| transportista.trlit@plapasa.demo | QAS-PLAPASA (TRLIT) | CARRIER_OPERATOR |

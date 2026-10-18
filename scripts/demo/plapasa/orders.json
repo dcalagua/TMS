@@ -1,0 +1,107 @@
+{
+  "$nota": [
+    "Pedidos de la demo PLAPASA tal como los manda el ERP al TMS: POST /integration/v1/orders/batch.",
+    "Los lee scripts/demo/plapasa_tms_demo.py y los lee PlapasaDemoSeedIntegrationTest: una sola fuente.",
+    "externalSource = 'MANUAL' a propósito: es el source_system con el que el EWM de la demo tiene estos pedidos (scripts/plapasa-seed.mjs del EWM los crea por la API sin sourceSystem, y OutboundOrderService.origen() lo deja en MANUAL). El plan del TMS y el despacho del EWM se encuentran por (externalSource, externalReference) BYTE A BYTE; con otro valor, el EWM no reconoce los pedidos del plan. Comprobarlo antes de la demo (runbook, paso 7).",
+    "externalReference = el N° del cliente del EWM (out_order.external_order_number), igual al pie de la letra.",
+    "Las líneas van en el MISMO orden que en el EWM: el despacho compara por lineNumber.",
+    "Ninguna línea trae bloque físico (largo, ancho, alto, modo de apilado...) ni volumen unitario: la geometría y el volumen los pone el perfil del material que manda el EWM (D-02). Sólo traen el peso unitario, que el ERP conoce y el almacén no publica: SUPUESTO de demo, a reemplazar por el maestro de PLAPASA. (No mandar el volumen con más de 4 decimales: la línea lo guarda con 4 y una reentrega se leería como cambio - punto abierto del informe.)",
+    "Fechas literales. 2026-10-20 es el día de los pedidos que bajan al EWM; 2026-10-21, el de la campaña de vasos que sólo se planifica (los pedidos SO-2026-10045/46 no existen en el EWM). SO-2026-10021 ya salió del almacén el 2026-10-09 por un camión armado a mano: queda NO liberado, de referencia. El script acepta --service-date para correr las fechas 'rebase' si la demo se mueve de día."
+  ],
+  "originCode": "GYE-CD",
+  "externalSource": "MANUAL",
+  "baseServiceDate": "2026-10-20",
+  "orders": [
+    {
+      "externalReference": "SO-2026-10040",
+      "destinationCode": "CLI-FER-01",
+      "customerName": "Ferretería El Constructor Cía. Ltda. (demo)",
+      "customerReference": "CLI-FER-01",
+      "serviceDate": "2026-10-20",
+      "rebase": true,
+      "priority": "HIGH",
+      "requestedWindowStart": "08:00",
+      "requestedWindowEnd": "12:00",
+      "markReadyForPlanning": true,
+      "lines": [
+        { "materialCode": "PLP-1222", "materialDescription": "Utility Box Heavy Duty #3 48 l", "quantity": 30, "uom": "UN", "unitWeightKg": 2.4 },
+        { "materialCode": "PLP-311", "materialDescription": "Tacho Americano C/T 72 l", "quantity": 24, "uom": "UN", "unitWeightKg": 3.2 },
+        { "materialCode": "PLP-700", "materialDescription": "Silla Costabela", "quantity": 40, "uom": "UN", "unitWeightKg": 2.6 },
+        { "materialCode": "PLP-111", "materialDescription": "Balde 10 l", "quantity": 60, "uom": "UN", "unitWeightKg": 0.55 }
+      ]
+    },
+    {
+      "externalReference": "SO-2026-10034",
+      "destinationCode": "CLI-AGR-01",
+      "customerName": "Agroexportadora Río Babahoyo S.A. (demo)",
+      "customerReference": "CLI-AGR-01",
+      "serviceDate": "2026-10-20",
+      "rebase": true,
+      "priority": "NORMAL",
+      "markReadyForPlanning": true,
+      "lines": [
+        { "materialCode": "PLP-1601", "materialDescription": "Gaveta Agro Alta", "quantity": 200, "uom": "UN", "unitWeightKg": 1.9 },
+        { "materialCode": "PLP-1608", "materialDescription": "Gaveta Industrial Calada", "quantity": 120, "uom": "UN", "unitWeightKg": 2.3 },
+        { "materialCode": "PLP-1623", "materialDescription": "Gaveta Logix", "quantity": 80, "uom": "UN", "unitWeightKg": 2.6 }
+      ]
+    },
+    {
+      "externalReference": "SO-2026-10041",
+      "destinationCode": "CLI-UIO-01",
+      "customerName": "Distribuidora Andina del Norte (demo)",
+      "customerReference": "CLI-UIO-01",
+      "serviceDate": "2026-10-20",
+      "rebase": true,
+      "priority": "NORMAL",
+      "markReadyForPlanning": true,
+      "lines": [
+        { "materialCode": "PLP-1100-5", "materialDescription": "Cómoda Rattan Expreso 5 pisos", "quantity": 12, "uom": "UN", "unitWeightKg": 6.5 },
+        { "materialCode": "PLP-1001", "materialDescription": "Silla Bambini", "quantity": 36, "uom": "UN", "unitWeightKg": 1.1 },
+        { "materialCode": "PLP-803", "materialDescription": "Banco Portobelo", "quantity": 24, "uom": "UN", "unitWeightKg": 1.4 }
+      ]
+    },
+    {
+      "externalReference": "SO-2026-10045",
+      "destinationCode": "CLI-SUP-01",
+      "customerName": "Supermercados Costa Azul S.A. (demo)",
+      "customerReference": "CLI-SUP-01",
+      "serviceDate": "2026-10-21",
+      "rebase": true,
+      "priority": "NORMAL",
+      "markReadyForPlanning": true,
+      "lines": [
+        { "materialCode": "PLP-571", "materialDescription": "Vaso Party Grande 0,8 l", "quantity": 5000, "uom": "UN", "unitWeightKg": 0.028 }
+      ]
+    },
+    {
+      "externalReference": "SO-2026-10046",
+      "destinationCode": "CLI-SUP-01",
+      "customerName": "Supermercados Costa Azul S.A. (demo)",
+      "customerReference": "CLI-SUP-01",
+      "serviceDate": "2026-10-21",
+      "rebase": true,
+      "priority": "NORMAL",
+      "markReadyForPlanning": true,
+      "lines": [
+        { "materialCode": "PLP-571", "materialDescription": "Vaso Party Grande 0,8 l", "quantity": 4000, "uom": "UN", "unitWeightKg": 0.028 },
+        { "materialCode": "PLP-N105", "materialDescription": "Balde Eco 15 l", "quantity": 120, "uom": "UN", "unitWeightKg": 0.75 }
+      ]
+    },
+    {
+      "externalReference": "SO-2026-10021",
+      "destinationCode": "CLI-SUP-01",
+      "customerName": "Supermercados Costa Azul S.A. (demo)",
+      "customerReference": "CLI-SUP-01",
+      "serviceDate": "2026-10-09",
+      "rebase": false,
+      "priority": "NORMAL",
+      "markReadyForPlanning": false,
+      "lines": [
+        { "materialCode": "PLP-121", "materialDescription": "Balde 20 l", "quantity": 48, "uom": "UN", "unitWeightKg": 1.2 },
+        { "materialCode": "PLP-571", "materialDescription": "Vaso Party Grande 0,8 l", "quantity": 240, "uom": "UN", "unitWeightKg": 0.028 },
+        { "materialCode": "PLP-532", "materialDescription": "Tomatodo Sporty 1 l Tapa Pull Push", "quantity": 120, "uom": "UN", "unitWeightKg": 0.12 },
+        { "materialCode": "PLP-1243", "materialDescription": "Cesto Spirella M 7 l", "quantity": 60, "uom": "UN", "unitWeightKg": 0.25 }
+      ]
+    }
+  ]
+}
