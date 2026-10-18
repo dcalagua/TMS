@@ -155,6 +155,23 @@ Authoritative documents live under `docs/architecture/`:
   chains) refuses every company-scoped write with `423 tenant-suspended`; reads, login, `/me` and the
   MasterAdmin channel stay open; data is never touched. Separate from commercial access (D-14) and
   from RBAC. Contract: `docs/platform-provisioning/LIFECYCLE.md`.
+- `ADR-022-material-physical-profile-and-load-geometry.md` - the warehouse owns a material's physical
+  profile (`material_profile`, V59, written only through the integration API); an order line takes a
+  snapshot of it unless the ERP sent its own block; stackable and nestable goods are planned by
+  effective volume, floor area and stack height (V62), and rates may charge per loading metre (V63).
+- `ADR-023-freight-accruals-and-payables.md` - freight accruals with a GL mapping, consumed on
+  approval (V65), and the payable's payment status, due dates and payments (V67). TMS records what was
+  paid and moves no money (D-01).
+- `ADR-024-peru-tax-and-carrier-documents.md` - settlement hardening (charge codes, match basis,
+  tolerances, V64) and Peruvian taxes: IGV breakdown, SPOT detraction, retention, CPE numbering,
+  credit/debit notes and penalties (V66); percentages are company configuration, never code.
+- `ADR-025-warehouse-sync-v1-1.md` - warehouse contract v1.1: material profiles, plan and POD to the
+  warehouse, order cancellation both ways (each side holds or alerts, neither cancels by itself),
+  reconciliation. Section 7 (dock appointments) is only proposed. Contract:
+  `docs/integrations/WAREHOUSE_EXECUTION_V1.md` §7.
+- `ADR-026-cost-to-serve-allocation.md` - a trip's cost allocated to its orders on a configurable
+  basis, versioned, reported by customer, destination and route (V68). No margin: there is no sales
+  tariff.
 
 Database and security detail lives in `docs/database/DATA_MODEL.md`,
 `docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.

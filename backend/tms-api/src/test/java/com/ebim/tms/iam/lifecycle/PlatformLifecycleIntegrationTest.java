@@ -10,8 +10,10 @@ import com.ebim.tms.iam.entitlements.application.PlatformEntitlementsProperties;
 import com.ebim.tms.iam.entitlements.application.ReceiverProfile;
 import com.ebim.tms.iam.entitlements.infrastructure.JdbcEntitlementRepository;
 import com.ebim.tms.iam.lifecycle.application.LifecycleApplyWriter;
+import com.ebim.tms.iam.lifecycle.application.LifecycleStore.CallContext;
 import com.ebim.tms.iam.lifecycle.application.LifecycleStore.Status;
 import com.ebim.tms.iam.lifecycle.application.PlatformLifecycleService;
+import com.ebim.tms.iam.lifecycle.domain.LifecycleCommand;
 import com.ebim.tms.iam.lifecycle.domain.LifecycleRejection;
 import com.ebim.tms.iam.lifecycle.domain.LifecycleState;
 import com.ebim.tms.iam.lifecycle.infrastructure.JdbcLifecycleRepository;
@@ -68,9 +70,18 @@ class PlatformLifecycleIntegrationTest {
         JdbcClient jdbc = JdbcClient.create(dataSource);
         store = new JdbcLifecycleRepository(jdbc);
         JtiGuard jti = new JtiGuard(new JdbcEntitlementRepository(jdbc, JsonMapper.builder().build()));
-        service = new PlatformLifecycleService(jti, new LifecycleApplyWriter(store, Clock.systemUTC()), store,
-                new PlatformEntitlementsProperties("DEV"), ReceiverProfile.tms());
         transactions = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
+        // The writer in its own transaction, as its Spring proxy runs it: a refusal is returned, its audit
+        // row commits, and only then does the service throw. Wrapping the whole service call instead
+        // would roll the refusal's audit row back with the exception.
+        LifecycleApplyWriter writer = new LifecycleApplyWriter(store, Clock.systemUTC()) {
+            @Override
+            public Outcome apply(LifecycleCommand command, String productCode, CallContext caller) {
+                return transactions.execute(status -> super.apply(command, productCode, caller));
+            }
+        };
+        service = new PlatformLifecycleService(jti, writer, store, new PlatformEntitlementsProperties("DEV"),
+                ReceiverProfile.tms());
         a = provision(TENANT_A, "LCA");
         b = provision(TENANT_B, "LCB");
     }
@@ -115,8 +126,7 @@ class PlatformLifecycleIntegrationTest {
                  "version":%d,"state":"%s","reason":%s,"effectiveAt":"2026-10-13T11:00:00Z",
                  "idempotencyKey":"lifecycle:%s:tms:%d","correlationId":"it"}
                 """.formatted(tenant, version, state, reason == null ? "null" : "\"" + reason + "\"", tenant, version);
-        return transactions.execute(status -> service.apply(tenant.toString(), body.getBytes(StandardCharsets.UTF_8),
-                "lifecycle.v1", "it", call()));
+        return service.apply(tenant.toString(), body.getBytes(StandardCharsets.UTF_8), "lifecycle.v1", "it", call());
     }
 
     private static Connection asRuntimeRole(UUID companyId) throws SQLException {

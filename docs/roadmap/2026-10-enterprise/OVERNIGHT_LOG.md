@@ -1202,3 +1202,40 @@ El EWM no se tocó.
 - Volver la base de la empresa a «por defecto de la instalación» una vez elegida (hoy se cambia, no se borra).
 - Viajes que salieron hace más de 62 días y cierran costo después: sólo «Recalcular» (sin barrido de rango a mano).
 - Sin entradas nuevas en `i18n.ts` (como las fases 50–65).
+
+---
+
+## 80 · Certificación + E2E (2026-10-18, ciclo 1 de 2 · todo verde)
+
+Detalle y números en `CERTIFICATION.md`. Sólo el TMS cambia (pruebas, arnés E2E y documentos); el EWM se verificó y no se
+tocó (sigue en `fb76b4c`).
+
+### Qué entró
+
+1. **Hashes**: V1-V58 del TMS, V1-V55 y `V900` del EWM idénticos a `MIGRATION_HASHES.txt`.
+2. **Rojo de la línea base arreglado**: `PlatformLifecycleIntegrationTest` corre el writer en su propia transacción, como su
+   proxy de Spring; sólo la prueba cambia (DECISIONS_LOG).
+3. **E2E**: s10 nuevo (perfil de material EWM → `TMS_MATP` → `tms.material_profile` → snapshot de la línea); s11 corregido
+   (tres defectos del escenario, nunca corrido antes); `TMS_PORT`/`EWM_PORT` configurables (un `http.server` ajeno ocupaba
+   el 8080). README y `run.sh` al día. Evidencia en `PACK/runtime/e2e/`, sin las claves de la corrida.
+4. **Docs**: filas 43-47 (V64-V68) en `TMS_CURRENT_CAPABILITY_MAP.md`, fila 37 sin el rojo; ADR-022…026 en la lista de
+   referencias de `CLAUDE.md`; `PHASE_MAP.md` fila 80; `CERTIFICATION.md`.
+
+### Pruebas
+
+| Repo | Comando | Resultado |
+|---|---|---|
+| TMS backend | `./mvnw -B clean test` | **2613 corridas, 0 fallos, 0 errores, 2 omitidas** (antes del arreglo: 1 fallo, el conocido) |
+| TMS front | `typecheck` / `lint` / `test` / `build` | OK / 0 errores, 21 avisos (línea base) / **394/394** (58 archivos) / OK |
+| EWM backend | `./mvnw -B clean verify` | unitarias **1728/1728**, IT **1704/1704** (`ArchitectureTest` 81, `SchemaIT` 16) |
+| EWM front | `typecheck` / `test` / `build` | OK / **1476/1476** (125 archivos) / OK |
+| EWM | `auditar-alcance-de-almacen.py --gaps` | GAP 0 (88 controladores, 457 endpoints) |
+| E2E | `BUILD=1 EWM_ROOT=… E2E_WORK=$PACK/runtime/e2e TMS_PORT=18080 EWM_PORT=18081 run.sh` | **s1-s12: 12/12 PASS** (2.ª corrida completa; la 1.ª dio s11 FAIL por el escenario) |
+
+### Qué quedó fuera
+
+- Ningún defecto rojo abierto. Los cortes declarados de las fases 25-70 siguen como estaban (tabla en
+  `CERTIFICATION.md` §7); el principal es el front de geometría de la fase 40.
+- No se re-corrieron las suites tras los cambios de esta fase que no son Java/TypeScript (arnés Python y Markdown); la
+  suite del TMS se corrió completa después del arreglo de la prueba.
+- Ciclo 2 de la fase: libre para lo que el supervisor decida; nada de esta fase lo necesita.

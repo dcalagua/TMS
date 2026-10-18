@@ -7,7 +7,7 @@ milestones, and `DISPATCH_CONFIRMED`. Neither product reads the other's tables. 
 only to seed identity rows and to read evidence from its own two throwaway databases.
 
 ```bash
-scripts/e2e/tms-ewm/run.sh                    # up + scenarios s1..s9, s11, s12 + down   (about 25 minutes)
+scripts/e2e/tms-ewm/run.sh                    # up + scenarios s1..s12 + down   (about 25 minutes)
 KEEP=1 scripts/e2e/tms-ewm/run.sh             # same, but leave everything running afterwards
 scripts/e2e/tms-ewm/run.sh up                 # just the environment
 scripts/e2e/tms-ewm/run.sh scenarios s1 s5    # some scenarios against a running environment
@@ -20,8 +20,12 @@ BUILD=1 scripts/e2e/tms-ewm/run.sh            # rebuild both jars first
 - Docker running.
 - Java 21.
 - `python3` (standard library only), `openssl`, `lsof`, `curl`.
-- The EWM worktree at `../IACLAUDE/WMS-by-EBIM-tms-connector`, on branch `feature/tms-connector-v1`. Set
-  `EWM_ROOT` if it lives elsewhere.
+- An EWM checkout with the TMS connector. The default is `../IACLAUDE/WMS-by-EBIM-tms-connector`
+  (branch `feature/tms-connector-v1`, v1 only); set `EWM_ROOT` to any other checkout, e.g. the v1.1
+  worktree `../IACLAUDE/WMS-by-EBIM-tms-sync` (`feature/tms-sync-overnight`), which s10-s12 need. The
+  harness checks only that `$EWM_ROOT/backend/wms-api` exists, never the branch. `E2E_WORK` moves
+  the work directory (keys, logs, evidence); `TMS_PORT` / `EWM_PORT` (default 8080 / 8081) move the two
+  backends when something else already listens there.
 
 ## What it starts
 
@@ -60,6 +64,7 @@ default `/tmp/tms-ewm-e2e`. Nothing secret is written into the repository.
 | s7 | Trip cancelled while the EWM load is `LOADING` → EWM exception `LOAD_IN_PROGRESS_REQUIRES_INTERVENTION`, then the SLS → `UNAPPLIED`/`TRIP_CANCELLED` + advisory. **7b**: cancelled while `DRAFT` → EWM cancels the load, and `WAREHOUSE_LOAD_CANCELLED` reaches the timeline |
 | s8 | Wrong warehouse, as master-data drift: after the plan went to CD01, the TMS origin is re-pointed to CD02, and the SLS says CD01 → `WAREHOUSE_MISMATCH`. The origin is restored afterwards |
 | s9 | Split: 60 of 100 on trip 1 → trip leaves via SLS, the order stays `READY_FOR_PLANNING` with 40 pending and eligible. **9b**: the 40 on trip 2 → second load for the same ERP order → order `IN_EXECUTION`, EWM order `COMPLETED` |
+| s10 | Material profile (v1.1, phases 20/25): a nestable item created in EWM travels as `TMS_MATP` to `/integration/v1/material-profiles/batch` → `tms.material_profile` (`NESTABLE`, cm → m); an edit raises the TMS version; a TMS order line without measures snapshots it (`physical_source = PROFILE`). A material of its own, so SKU-100 keeps no profile |
 | s11 | POD back (v1.1, phase 30): an SLS dispatches the trip, a delivery recorded in TMS travels as `DELIVERY_RESULT_RECORDED` and lands in EWM's `out_shipment_delivery` projection, which posts nothing |
 | s12 | Order cancellation both ways (v1.1, phase 35, D-03). **12a**: a TMS order cancelled → `ORDER_CANCELLED` webhook → EWM alert `TMS_TRANSPORT_CANCELLED` on its order, which stays uncancelled. **12b**: an EWM order cancelled → `TMS_ORDCX` → TMS blocking hold `WAREHOUSE_CANCELLED` (`source=INTEGRATION`), the order is not cancelled |
 

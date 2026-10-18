@@ -14,8 +14,11 @@ EWM_DB_CONTAINER=tmsewm-e2e-ewm-db
 TMS_DB_PORT=55440
 EWM_DB_PORT=55441
 JWKS_PORT=55499
-TMS_PORT=8080
-EWM_PORT=8081
+: "${TMS_PORT:=8080}"                      # override when something else already listens there
+: "${EWM_PORT:=8081}"
+: "${TMS_URL:=http://localhost:$TMS_PORT}"
+: "${EWM_URL:=http://localhost:$EWM_PORT}"
+export TMS_PORT EWM_PORT TMS_URL EWM_URL   # read by lib/common.py
 # Throwaway passwords of throwaway containers bound to loopback; not credentials of anything real.
 TMS_DB_PASSWORD=e2e_owner_pw
 EWM_DB_PASSWORD=e2e_ewm_pw

@@ -747,3 +747,29 @@
   aprobación → último pago de las facturas `PAID` con último pago en el rango (calendario de la empresa); costo por kg =
   costo repartido / kg que recibieron costo. Por moneda; los días son de toda la empresa. `KPIS_REPORTING_V1.md` §13.
 - **Commit(s):** el de la fase 70, ciclo 1.
+
+### 2026-10-18 · fase 80 · El rojo de la línea base se arregla en la prueba, no en el receptor
+
+- **Regla/decisión afectada:** protocolo §4 («si una prueba ya estaba roja en la línea base, decilo y no la cuentes»)
+  y la regla de la fase 80 («arreglalo si es pequeño»).
+- **Motivo:** `PlatformLifecycleIntegrationTest.versionRules` estaba roja desde `190245f` por un defecto del arnés
+  (diagnóstico de la fase 00): la prueba envolvía `service.apply` entero en un `TransactionTemplate` y el rechazo
+  revertía la fila de auditoría que en producción confirma el proxy de `LifecycleApplyWriter`.
+- **Camino elegido:** sólo la prueba cambia. El writer se construye como subclase anónima que corre `super.apply` en
+  la transacción del template (lo que hace su proxy de Spring) y `put` llama al servicio sin envolverlo. Ningún
+  archivo de `src/main` cambia; ADR-021 queda como estaba.
+- **Commit(s):** el de la fase 80, ciclo 1.
+
+### 2026-10-18 · fase 80 · Arnés E2E: puertos configurables y tres defectos de s11
+
+- **Regla/decisión afectada:** fase 80 punto 4 («si el arnés exige la rama del worktree viejo, adaptalo para aceptar
+  `EWM_ROOT` sin romper el uso anterior»).
+- **Motivo:** el arnés ya aceptaba `EWM_ROOT` y nunca miró la rama, pero fijaba los puertos 8080/8081 y en esta
+  máquina un `python -m http.server 8080` ajeno ocupaba el 8080 (no se tocó). s11, escrito en la fase 30 y nunca
+  corrido, tenía tres defectos: `deliveredAt` como `datetime` sin serializar, la entrega sin llegada a la parada (el
+  TMS responde 409, como debe) y columnas inexistentes en la consulta de `out_shipment_delivery`.
+- **Camino elegido:** `TMS_PORT`/`EWM_PORT` (por defecto 8080/8081, así el uso anterior no cambia) y de ellos
+  `TMS_URL`/`EWM_URL`, que también usa `setup_link.py`. s11 marca llegada y cierre de la parada, manda la hora con
+  precisión completa y lee `result`/`shipment_number`. s10 nuevo (perfil de material) con un material propio para no
+  cambiar la capacidad de SKU-100 en los demás escenarios.
+- **Commit(s):** el de la fase 80, ciclo 1.
