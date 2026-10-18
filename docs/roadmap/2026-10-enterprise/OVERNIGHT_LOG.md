@@ -340,3 +340,90 @@ El EWM no se tocó (sin commit EWM en esta fase).
 - Un `materialCode` con `/` no puede ir por el PUT (el servidor rechaza `%2F` en la ruta): debe ir por el
   batch. Anotado para la fase 25 (emisor EWM) y en `MATERIAL_PROFILE_V1.md` §3.
 - No hay re-aplicación de perfiles a pedidos abiertos (acción explícita futura, ADR-022 §2.4).
+
+---
+
+## 25 · Perfil físico en el EWM + interfaz `TMS_MATP` (2026-10-18, ciclo 1)
+
+Trabajo en `EWM_WT` (commit EWM `4f942eb`); en el TMS sólo documentación.
+
+### Qué entró (EWM)
+
+1. **V56** `V56__item_physical_profile_and_tms_matp.sql`: `md_item.stack_mode` (`NONE|STACKABLE|NESTABLE`,
+   nulo = no declarado), `nest_increment` (en `dimension_uom_code`; `ck_mditem_nest_increment`: obligatorio
+   sólo con `NESTABLE`, `> 0`, exige unidad de dimensión), `max_top_load` + `max_top_load_uom_code`
+   (`ck_mditem_max_top_load`: los dos o ninguno, `> 0`). `TMS_MATP` en `ck_intgout_interfaz` y
+   `ck_intgdestif_interfaz` (recreados). `intg_outbound_message.warehouse_id` anulable **sólo** para
+   `TMS_MATP` (`ck_intgout_almacen`). `intg_tms_connector.material_destination_id`. Bloque `DO` de
+   autoverificación (nada sembrado, ninguna trama vieja sin almacén) y cierre a PostgREST comprobado.
+2. **Materiales**: `StackMode` + `ItemStacking` (dominio, mismas reglas que los CHECK), entidad, DTO
+   (`ItemCreateRequest`/`ItemUpdateRequest`/`ItemResponse`), `ItemService`; formulario `MaterialsPage`
+   (modo, incremento —deshabilitado si no anida y se suelta al cambiar—, carga máxima y su unidad, aviso de
+   la regla 96); importador (4 columnas en la plantilla generada; vacío en UPDATE conserva; pasar a
+   `STACKABLE` suelta el incremento); interfaz `materials` (ausente conserva, `null` vacía).
+3. **Outbox en la misma transacción** (regla 42): `ItemPhysicalProfileEvents` escribe
+   `ITEM_PHYSICAL_PROFILE_CHANGED` con la foto cuando cambia el perfil (alta, edición, importador, interfaz y
+   CUBISCAN); `ITEM_PROFILES_RESEND_REQUESTED` un evento por lote de 500.
+4. **`TMS_MATP`**: `OutboundInterfaceType.TMS_MATP` (JSON, `deEmpresa()`), `TmsMaterialProfileFormatter`
+   (lote del contrato §7.1, todos los campos con `null` explícito, `orientationLocked` no viaja),
+   `TmsUnits` (M/MTR, CM/CMT, MM/MMT, KG/KGM/KGS, G/GRM, M3/MTQ; otra unidad → `null` contado en la
+   referencia), `ContractIdempotencyKey` `ewm-matp:<eventId>` (`:r<n>` en regeneración), referencia de la
+   entrega con `received/applied/refused/stale`. El conector crea el tercer destino `TMS_MATERIALS`
+   (`…/material-profiles/batch`, BEARER). «Reenviar perfiles al TMS»:
+   `POST /api/v1/admin/integrations/tms/material-profiles/resend` (`MANAGE`). `TMS_MATP` en
+   `enabled-interfaces` por defecto: sin conector el evento queda `SKIPPED`, sin destino la trama espera.
+5. Monitor de salida con `scopeSpecOSinAlmacen()`; tablero de inteligencia cuenta la cola de salida «de este
+   almacén o sin almacén». Front: `TMS_MATP` en el monitor y en los destinos.
+6. Docs EWM: `docs/STACKING.md` §11 (qué se declara, qué todavía no se usa, `TMS_MATP`), fila en §8,
+   `CURRENT_CAPABILITIES.md` (3 filas), `docs/tms-sync/DESIGN.md` §2.3 (lo que fijó el código), mapa de
+   migraciones de `CLAUDE.md` (V56). Docs TMS: nota del emisor EWM en `WAREHOUSE_EXECUTION_V1.md` §7.1,
+   `PHASE_MAP.md` (migración real), `DECISIONS_LOG.md` (4 entradas).
+
+### Desvíos registrados (`DECISIONS_LOG.md`)
+
+- Trama sin almacén para un maestro de empresa (V34 lo exigía): relajado sólo para `TMS_MATP` con CHECK.
+- El reenvío parte en eventos de 500 (no dentro del formateador): una trama por evento.
+- Columna `material_destination_id` para el tercer destino.
+- «Unidad contable» = unidad base sin decimales; `NESTABLE` sin incremento convertible viaja sin modo.
+
+### Archivos (EWM)
+
+- Migración: `backend/wms-api/src/main/resources/db/migration/V56__item_physical_profile_and_tms_matp.sql`.
+- Nuevos: `masterdata/item/domain/{StackMode,ItemStacking}`, `masterdata/item/application/ItemPhysicalProfileEvents`,
+  `integration/tms/application/{TmsMaterialProfileFormatter,TmsUnits}`.
+- Modificados: `Item`, `ItemService`, `ItemMapper`, `ItemRepository`, DTO de materiales, `ItemImporter`,
+  `MaterialInboundHandler`, `OutboundInterfaceType`, `OutboundPayload`, `OutboundMessage`,
+  `OutboundMonitorService`, `ContractIdempotencyKey`, `HttpOutboundDeliveryAdapter`, `TmsConnector`,
+  `TmsConnectorService`, `TmsConnectorController`, `TmsConnectorResponses`, `IntelligenceQueries`,
+  `ErpProfileService` (comentario), `application.yml`; front `types.ts`, `MaterialsPage.tsx`,
+  `OutboundMonitorPage.tsx`, `OutboundDestinationsPage.tsx`.
+- Pruebas nuevas: `ItemStackingTest` (5), `TmsMaterialProfileFormatterTest` (33, con golden
+  `contracts/tms/v1_1/golden/material-profiles.expected.json` y fixtures del contrato v1.1),
+  `TmsMaterialProfileIT` (14), `MaterialsPage.perfil.test.tsx` (4). Ampliadas: `MaterialInboundHandlerTest`
+  (+1), `BulkImportIT` (+1 y la plantilla guarda el perfil), `TmsInboundPlanIT` (3 destinos),
+  `IntelligenceQueriesTest` (reescrita: la salida también admite «sin almacén»), `TmsConnectorFixtures`
+  (ruta de perfiles en el TMS de mentira).
+
+### Pruebas
+
+| Repo | Comando | Resultado |
+|---|---|---|
+| EWM backend | `./mvnw -B verify` (completo, Testcontainers) | unitarias **1697/1697** (línea base 1658, +39) · IT **1681/1681** · BUILD SUCCESS |
+| EWM backend | `-Dtest=ArchitectureTest -Dit.test=SchemaIT,TmsMaterialProfileIT` sobre los archivos finales | 80/80 · 30/30 (`SchemaIT` 16 + perfil 14) |
+| EWM front | `npm run typecheck` | OK |
+| EWM front | `npm run test` | **1461/1461** en 122 archivos (línea base 1457) |
+| EWM | `python3 scripts/auditar-alcance-de-almacen.py --gaps` | GAP 0 (86 controladores, 452 endpoints) |
+| Migraciones | hashes TMS V1–V58 / EWM V1–V55 contra `MIGRATION_HASHES.txt` | intactos |
+
+TMS: sólo Markdown (sin Java ni TypeScript), no se corrieron sus suites.
+
+### Qué quedó fuera
+
+- El almacén no usa el anidado ni el aplastamiento (dicho en pantalla y en `STACKING.md` §11).
+- El botón «Reenviar perfiles» en la consola Integraciones › TMS llega con la consola (fase 35); la acción
+  existe por API.
+- Un conector guardado antes de V56 no tiene el destino `TMS_MATERIALS` hasta volver a guardarse (las tramas
+  esperan, regla 91).
+- No se agregaron los campos nuevos al ejemplo publicado de la interfaz `materials`
+  (`InboundPayloadExamples`); el contrato los acepta.
+- E2E s10 (perfil llega al TMS) es de la fase 80.

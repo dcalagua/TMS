@@ -100,3 +100,49 @@
   `orientationLocked` solo no es un bloque. Sigue siendo «en bloque», nunca campo a campo.
 - **Commit(s):** el de la fase 20.
 
+
+### 2026-10-18 · fase 25 · `intg_outbound_message.warehouse_id NOT NULL` frente a una interfaz de maestro
+
+- **Regla/decisión afectada:** EWM V34 (toda trama de salida lleva almacén; `OutboundPayload` y
+  `OutboundMessage` lo exigían) frente a DESIGN §2.2 (`TMS_MATP` por el mecanismo de salida existente).
+- **Motivo:** el perfil de un material es un maestro de la **empresa**; no ocurrió en ningún almacén.
+  Atribuirle uno (p. ej. `intg_tms_connector.default_warehouse_id`) falsificaría el alcance que V34 vino a
+  hacer confiable — el propio V34 lo dice de los mensajes de entrada de maestros.
+- **Camino elegido:** V56 relaja el `NOT NULL` **sólo** para `TMS_MATP` (`ck_intgout_almacen`:
+  `warehouse_id IS NOT NULL OR interface_type IN ('TMS_MATP')`); `OutboundInterfaceType.deEmpresa()` es la
+  mitad en Java. El monitor de salida usa `scopeSpecOSinAlmacen()` (lo que ya hacía la entrada) y el
+  tablero de inteligencia cuenta la cola de salida «de este almacén o sin almacén»
+  (`IntelligenceQueriesTest` reescrito a propósito). Ninguna otra interfaz puede quedar sin almacén.
+- **Commit(s):** el de la fase 25 (repo EWM).
+
+### 2026-10-18 · fase 25 · DESIGN §2.2 «el formateador la parte en lotes de 500 (un mensaje por lote)»
+
+- **Regla/decisión afectada:** DESIGN §2.2 (reenvío de perfiles) y la clave `ewm-matp:<eventId>:<n>`.
+- **Motivo:** `OutboundInterfaceFormatter.format` devuelve **una** trama por evento; partir dentro del
+  formateador exigiría cambiar el contrato de todos los formateadores y de la fábrica.
+- **Camino elegido:** el reenvío escribe un evento `ITEM_PROFILES_RESEND_REQUESTED` por cada 500
+  materiales (cada uno con su agregado), y cada evento produce una trama. La clave queda
+  `ewm-matp:<eventId>` (más `:r<n>` en una regeneración), siempre única por lote.
+- **Commit(s):** el de la fase 25 (repo EWM).
+
+### 2026-10-18 · fase 25 · El tercer destino del conector necesita una columna
+
+- **Regla/decisión afectada:** DESIGN §1 (contenido de V56) y §2.2 («guardar el conector crea un tercer
+  destino `TMS_MATERIALS`»).
+- **Motivo:** el conector guarda el id de cada destino que administra (`dispatch_destination_id`,
+  `milestone_destination_id`, V50); sin columna, re-guardarlo crearía un destino duplicado.
+- **Camino elegido:** V56 agrega `intg_tms_connector.material_destination_id` (anulable). Un conector
+  guardado antes de V56 no tiene el destino hasta volver a guardarse; mientras tanto las tramas
+  `TMS_MATP` esperan con `DESTINATION_NOT_CONFIGURED` (regla 91).
+- **Commit(s):** el de la fase 25 (repo EWM).
+
+### 2026-10-18 · fase 25 · «Unidad contable» y lo que no viaja
+
+- **Regla/decisión afectada:** DESIGN §2.2 («`stackMaxQuantity` sólo viaja si la unidad base es una
+  unidad contable») y contrato §7.1 (`nestIncrementM` obligatorio con `NESTABLE`).
+- **Motivo:** `md_uom` no tiene categoría; y un `NESTABLE` cuyo incremento está en una unidad no
+  convertible daría un `400` del TMS para todo el lote de uno.
+- **Camino elegido:** contable = la unidad base **no admite decimales** (`md_uom.decimal_allowed =
+  false`) y el número es entero. Un `NESTABLE` sin incremento convertible viaja con `stackMode: null`
+  (no declarado) y el incremento se cuenta como no convertido en la referencia del documento.
+- **Commit(s):** el de la fase 25 (repo EWM).

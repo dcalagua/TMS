@@ -505,6 +505,17 @@ Content-Type: application/json
 The same key with another body answers `409` `idempotency-key-reused`; the same key and body replays the
 first answer.
 
+**Warehouse emitter (EWM, overnight-pack phase 25, EWM V56, interface `TMS_MATP`).** EWM always uses the
+batch (a single material is a batch of one; a code with `/` cannot travel in the PUT path), with
+`Idempotency-Key: ewm-matp:<eventId>` (`:r<n>` when an operator regenerates the message). It sends every
+field, with an explicit `null` for what it does not know, so the copy here mirrors the owner;
+`orientationLocked` is never sent (EWM does not model it). Metres, kilograms and cubic metres are
+converted only from a declared unit (`M/MTR`, `CM/CMT`, `MM/MMT`, `KG/KGM/KGS`, `G/GRM`, `M3/MTQ`);
+anything else travels as `null`. `stackMaxQuantity` travels only when the material's base unit is a count
+and the number is whole. A resend of every active material is one batch per 500. `INVALID` and `STALE`
+items are a successful delivery on the EWM side, counted in its monitor. EWM detail:
+`EWM/docs/tms-sync/DESIGN.md` §2.3 and `EWM/docs/STACKING.md` §11.
+
 #### 7.1.1 Physical fields on the order line (ERP -> TMS, `POST /integration/v1/orders[/batch]`)
 
 Additive to `OrderUpsertRequest.lines[]`: `lengthM`, `widthM`, `heightM`, `stackMode`, `stackMaxQuantity`,
