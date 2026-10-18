@@ -76,11 +76,20 @@ order without the floor (`OrderAmounts.withoutGeometry`). The order's volume in 
 the planning volume: a caller that reports the *naive* volume of a measured order is refused as
 exceeding what was ordered (the delivery drawer sends no volume, so it is unaffected).
 
+## Re-stacking per vehicle (post-review fix, 2026-10-18)
+
+The order's stored floor, planning volume and stack height are computed at the reference `H` and
+are what the V37 ledger counts. Every capacity check against a vehicle with a height re-stacks the
+order for **that** vehicle's height (`planning.application.VehicleLoads`): manual assignment, move,
+vehicle swap, run confirmation, both engines, the trip/board capacity views and the rate inputs. The
+profile (lines as `shared.geometry.GeometryLine`) comes from `OrderPlanningPort.geometryProfilesOf`,
+one query per set of orders, only for orders with a measured line; the arithmetic is the same
+`shared.geometry.OrderGeometry` the order was written with. 0.30 m crates stored as stacks of eight
+(2.40 m) load on a 2.20 m vehicle as stacks of seven. A slice is re-stacked in proportion to its share
+of the order's floor. Only a single unit taller than the vehicle (a nestable's base included) is a
+hard `ITEM_TALLER_THAN_VEHICLE`; the calculator now checks that before any other block field.
+
 ## Not in v1 (said)
 
-- **Re-stacking per vehicle** (ADR-022 §5): an order is stacked against the reference `H`. A
-  vehicle lower than its stacks is refused on height even though shorter stacks would fit; a
-  vehicle lower than one unit is refused as `ITEM_TALLER_THAN_VEHICLE`. Conservative (never
-  accepts what does not fit); `OrderGeometryPort.restack` is phase 40 cycle 2.
 - No 3D, no bin-packing, no mixed-material stacks, no unit conversion.
 - Rates by loading metre and warehouse geometry comparison: phase 45 (V63).

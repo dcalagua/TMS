@@ -8,7 +8,7 @@ import java.math.RoundingMode;
  * they are, how much floor they cover and how many cubic metres they really occupy.
  *
  * <p>Pure: no Spring, no clock, no repository. Orders compute a line's figures with it when the
- * line is written, planning will re-stack with it, and rates read what it produced - one
+ * line is written, planning re-stacks with it for each vehicle (OrderGeometry), and rates read what it produced - one
  * arithmetic for all three, which is why it lives in {@code shared}.
  *
  * <pre>
@@ -38,6 +38,10 @@ public final class LoadGeometryCalculator {
     public static final String MISSING_UNIT_WEIGHT = "MISSING_UNIT_WEIGHT";
     public static final String UNBOUNDED_STACK = "UNBOUNDED_STACK";
     public static final String ITEM_TALLER_THAN_VEHICLE = "ITEM_TALLER_THAN_VEHICLE";
+    public static final String QUANTITY_OUT_OF_RANGE = "QUANTITY_OUT_OF_RANGE";
+
+    /** {@code stacks} and {@code perStack} are {@code integer} columns (V62). */
+    private static final BigDecimal MAX_UNITS = BigDecimal.valueOf(Integer.MAX_VALUE);
 
     private static final int VOLUME_SCALE = 4;
     private static final int AREA_SCALE = 4;
@@ -67,19 +71,36 @@ public final class LoadGeometryCalculator {
         if (quantity == null || quantity.signum() <= 0 || quantity.stripTrailingZeros().scale() > 0) {
             return LineGeometry.unmeasured(QUANTITY_NOT_WHOLE);
         }
-        if (block.lengthM() == null) {
+        // Stacks and units are counted in an int (the column), so a count beyond it is not measured
+        // rather than overflowed.
+        if (quantity.compareTo(MAX_UNITS) > 0) {
+            return LineGeometry.unmeasured(QUANTITY_OUT_OF_RANGE);
+        }
+        // A zero or negative measure is as unusable as a missing one, and dividing by it would throw.
+        if (!positive(block.lengthM())) {
             return LineGeometry.unmeasured(MISSING_LENGTH);
         }
-        if (block.widthM() == null) {
+        if (!positive(block.widthM())) {
             return LineGeometry.unmeasured(MISSING_WIDTH);
         }
-        if (block.heightM() == null) {
+        if (!positive(block.heightM())) {
             return LineGeometry.unmeasured(MISSING_HEIGHT);
+        }
+
+        long units = quantity.longValueExact();
+        BigDecimal h = block.heightM();
+        // A unit taller than H does not fit, and nothing else the block says can change that: a stack
+        // mode, a nest increment, a stack maximum or a crush limit only ever shorten a stack, never a
+        // unit. Checked before them, so the answer is ITEM_TALLER_THAN_VEHICLE even when the block is
+        // otherwise incomplete. Described as one unit per stack: what it would be in a vehicle tall
+        // enough to take it, so the order's stack height names the vehicles that can.
+        if (usableHeightM != null && h.compareTo(usableHeightM) > 0) {
+            return figures(GeometryStatus.DOES_NOT_FIT, ITEM_TALLER_THAN_VEHICLE, block, units, 1, h, h);
         }
         if (block.stackMode() == null) {
             return LineGeometry.unmeasured(MISSING_STACK_MODE);
         }
-        if (block.stackMode() == StackMode.NESTABLE && block.nestIncrementM() == null) {
+        if (block.stackMode() == StackMode.NESTABLE && !positive(block.nestIncrementM())) {
             return LineGeometry.unmeasured(MISSING_NEST_INCREMENT);
         }
         if (block.maxTopLoadKg() != null && block.stackMode() != StackMode.NONE
@@ -87,51 +108,55 @@ public final class LoadGeometryCalculator {
             return LineGeometry.unmeasured(MISSING_UNIT_WEIGHT);
         }
 
-        long units = quantity.longValueExact();
-        BigDecimal h = block.heightM();
-        boolean doesNotFit = usableHeightM != null && h.compareTo(usableHeightM) > 0;
-
         long perStack;
-        if (doesNotFit || block.stackMode() == StackMode.NONE) {
-            // A unit taller than H is described as one unit per stack: what it would be in a vehicle
-            // tall enough to take it, so the order's stack height names the vehicles that can.
+        if (block.stackMode() == StackMode.NONE) {
             perStack = 1;
         } else {
-            long bound = Long.MAX_VALUE;
+            // Every bound is taken as a BigDecimal and capped at the line's own units before it
+            // becomes a long: no stack holds more units than the line has, and a huge crush limit
+            // over a tiny unit weight must not overflow into a negative stack.
+            BigDecimal bound = null;
             if (block.stackMaxQuantity() != null) {
-                bound = block.stackMaxQuantity();
+                bound = BigDecimal.valueOf(block.stackMaxQuantity());
             }
             if (usableHeightM != null) {
-                bound = Math.min(bound, heightCap(block, usableHeightM));
+                bound = min(bound, heightCap(block, usableHeightM));
             }
             if (block.maxTopLoadKg() != null) {
-                bound = Math.min(bound, block.maxTopLoadKg().divide(unitWeightKg, 0, RoundingMode.FLOOR)
-                        .longValue() + 1);
+                bound = min(bound, block.maxTopLoadKg().divide(unitWeightKg, 0, RoundingMode.FLOOR).add(BigDecimal.ONE));
             }
-            if (bound == Long.MAX_VALUE) {
+            if (bound == null) {
                 return LineGeometry.unmeasured(UNBOUNDED_STACK);
             }
-            perStack = Math.max(1, bound);
+            perStack = Math.max(1L, bound.min(BigDecimal.valueOf(units)).longValue());
         }
 
-        long stacks = (units + perStack - 1) / perStack;
         long full = Math.min(perStack, units);
+        long stacks = (units + perStack - 1) / perStack;
         long last = units - (stacks - 1) * perStack;
+        return figures(GeometryStatus.MEASURED, null, block, units, perStack, stackHeight(block, full),
+                stackHeight(block, last));
+    }
+
+    /**
+     * The figures of {@code units} in stacks of {@code perStack}. Rounded <em>up</em>: these are what a
+     * vehicle is loaded against, so a rounding never makes a load smaller than it is, and a tiny unit
+     * never rounds down to a zero height or floor (V62's CHECKs want both positive). A vehicle's height
+     * has at most three decimals, so a stack that fits exactly still fits once rounded.
+     */
+    private static LineGeometry figures(GeometryStatus status, String reason, PhysicalBlock block, long units,
+            long perStack, BigDecimal fullHeight, BigDecimal lastHeight) {
+        long stacks = (units + perStack - 1) / perStack;
         BigDecimal footprint = block.lengthM().multiply(block.widthM());
-        BigDecimal fullHeight = stackHeight(block, full);
-        BigDecimal lastHeight = stackHeight(block, last);
         BigDecimal volume = footprint.multiply(fullHeight).multiply(BigDecimal.valueOf(stacks - 1))
                 .add(footprint.multiply(lastHeight));
         BigDecimal floor = footprint.multiply(BigDecimal.valueOf(stacks));
-
-        return new LineGeometry(doesNotFit ? GeometryStatus.DOES_NOT_FIT : GeometryStatus.MEASURED,
-                doesNotFit ? ITEM_TALLER_THAN_VEHICLE : null,
-                Math.toIntExact(perStack), Math.toIntExact(stacks),
-                fullHeight.setScale(METRES_SCALE, RoundingMode.HALF_UP),
-                lastHeight.setScale(METRES_SCALE, RoundingMode.HALF_UP),
-                volume.setScale(VOLUME_SCALE, RoundingMode.HALF_UP),
-                floor.setScale(AREA_SCALE, RoundingMode.HALF_UP),
-                h.setScale(METRES_SCALE, RoundingMode.HALF_UP));
+        return new LineGeometry(status, reason, Math.toIntExact(perStack), Math.toIntExact(stacks),
+                fullHeight.setScale(METRES_SCALE, RoundingMode.UP),
+                lastHeight.setScale(METRES_SCALE, RoundingMode.UP),
+                volume.setScale(VOLUME_SCALE, RoundingMode.UP),
+                floor.setScale(AREA_SCALE, RoundingMode.UP),
+                block.heightM().setScale(METRES_SCALE, RoundingMode.UP));
     }
 
     /**
@@ -162,13 +187,22 @@ public final class LoadGeometryCalculator {
         return floorAreaM2.divide(vehicleWidthM.multiply(fillFactor), METRES_SCALE, RoundingMode.HALF_UP);
     }
 
-    private static long heightCap(PhysicalBlock block, BigDecimal usableHeightM) {
+    /** How many units H takes, given that one unit fits ({@code h <= H}) - so never below one. */
+    private static BigDecimal heightCap(PhysicalBlock block, BigDecimal usableHeightM) {
         return switch (block.stackMode()) {
-            case STACKABLE -> usableHeightM.divide(block.heightM(), 0, RoundingMode.FLOOR).longValue();
+            case STACKABLE -> usableHeightM.divide(block.heightM(), 0, RoundingMode.FLOOR);
             case NESTABLE -> usableHeightM.subtract(block.heightM())
-                    .divide(block.nestIncrementM(), 0, RoundingMode.FLOOR).longValue() + 1;
-            case NONE -> 1;
+                    .divide(block.nestIncrementM(), 0, RoundingMode.FLOOR).add(BigDecimal.ONE);
+            case NONE -> BigDecimal.ONE;
         };
+    }
+
+    private static BigDecimal min(BigDecimal current, BigDecimal candidate) {
+        return current == null ? candidate : current.min(candidate);
+    }
+
+    private static boolean positive(BigDecimal value) {
+        return value != null && value.signum() > 0;
     }
 
     private static BigDecimal stackHeight(PhysicalBlock block, long units) {

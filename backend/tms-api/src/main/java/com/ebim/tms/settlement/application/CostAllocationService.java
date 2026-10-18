@@ -7,7 +7,6 @@ import com.ebim.tms.settlement.domain.CarrierInvoiceLine;
 import com.ebim.tms.settlement.domain.CostAllocationLine;
 import com.ebim.tms.settlement.domain.CostAllocationRun;
 import com.ebim.tms.settlement.domain.CostAllocator;
-import com.ebim.tms.settlement.infrastructure.CarrierInvoiceRepository;
 import com.ebim.tms.settlement.infrastructure.CostAllocationRepository;
 import com.ebim.tms.shared.api.ConflictException;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
@@ -45,9 +44,18 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.ConcurrencyFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Allocates a trip's cost to its orders and keeps every version (migration V68, ADR-026).
@@ -70,8 +78,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CostAllocationService {
 
+    private static final Logger log = LoggerFactory.getLogger(CostAllocationService.class);
+
     private final CostAllocationRepository repository;
-    private final CarrierInvoiceRepository invoiceRepository;
     private final TripSettlementLookupPort tripLookupPort;
     private final TripCostLookupPort tripCostLookupPort;
     private final OrderReferencePort orderReferencePort;
@@ -81,15 +90,18 @@ public class CostAllocationService {
     private final AuditRecorder auditRecorder;
     private final Clock clock;
     private final CostAllocationBasis defaultBasis;
+    private final TransactionTemplate ownTransaction;
 
-    public CostAllocationService(CostAllocationRepository repository, CarrierInvoiceRepository invoiceRepository,
+    public CostAllocationService(CostAllocationRepository repository,
             TripSettlementLookupPort tripLookupPort, TripCostLookupPort tripCostLookupPort,
             OrderReferencePort orderReferencePort, DestinationLookupPort destinationLookupPort,
             RouteTemplateLookupPort routeLookupPort, CompanySettingsPort companySettingsPort,
             AuditRecorder auditRecorder, Clock clock,
-            @Value("${tms.finance.cost-allocation.default-basis:WEIGHT}") CostAllocationBasis defaultBasis) {
+            @Value("${tms.finance.cost-allocation.default-basis:WEIGHT}") CostAllocationBasis defaultBasis,
+            PlatformTransactionManager transactionManager) {
+        this.ownTransaction = new TransactionTemplate(transactionManager);
+        this.ownTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.repository = repository;
-        this.invoiceRepository = invoiceRepository;
         this.tripLookupPort = tripLookupPort;
         this.tripCostLookupPort = tripCostLookupPort;
         this.orderReferencePort = orderReferencePort;
@@ -125,24 +137,76 @@ public class CostAllocationService {
     }
 
     /**
-     * The trips an approved document billed, in the approval's own transaction (ADR-026 section 5).
-     * A note re-allocates too: it changes what the trip was billed.
+     * The trips an approved document billed (ADR-026 section 5). A note re-allocates too: it changes
+     * what the trip was billed.
+     *
+     * <p><b>After the approval commits, not inside it.</b> Allocating inside the approval made a
+     * concurrent allocation of the same trip (the sweep, a person's "Recalcular") fail the approval
+     * itself with a 409 - an expenditure refused because a report was being refreshed. So when called
+     * inside a transaction this only registers the work, which runs once the approval is committed,
+     * one trip per transaction of its own, a conflict retried once; anything still failing is logged
+     * and left to "Recalcular". Called outside a transaction, it runs at once, the same way.
+     *
+     * @return the trips scheduled (inside a transaction) or allocated (outside one)
      */
-    @Transactional
     public int allocateApprovedInvoice(CompanyScope scope, CarrierInvoice invoice, UUID actorId) {
-        // The approval's status change must be visible to the plain-SQL sum of authorised documents.
-        invoiceRepository.flush();
         Set<UUID> trips = invoice.lines().stream().map(CarrierInvoiceLine::tripId).filter(Objects::nonNull)
                 .collect(Collectors.toCollection(TreeSet::new));
+        if (trips.isEmpty()) {
+            return 0;
+        }
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    allocateBilledTrips(scope, trips, actorId);
+                }
+            });
+            return trips.size();
+        }
+        return allocateBilledTrips(scope, trips, actorId);
+    }
+
+    /** One transaction per trip; a concurrency conflict is retried once; nothing escapes. */
+    private int allocateBilledTrips(CompanyScope scope, Set<UUID> trips, UUID actorId) {
         int allocated = 0;
         for (UUID tripId : trips) {
-            Optional<TripAllocationSource> trip = tripLookupPort.findAllocationSource(tripId, scope.companyId());
-            if (trip.isPresent() && !trip.get().cancelled()
-                    && allocate(scope, trip.get(), AllocationTrigger.INVOICE_APPROVED, actorId).isPresent()) {
-                allocated++;
+            for (int attempt = 1; ; attempt++) {
+                try {
+                    if (Boolean.TRUE.equals(ownTransaction.execute(status -> allocateBilled(scope, tripId, actorId)))) {
+                        allocated++;
+                    }
+                    break;
+                } catch (RuntimeException failure) {
+                    if (attempt == 1 && isConcurrencyConflict(failure)) {
+                        continue;
+                    }
+                    log.warn("Trip {} of company {} could not be re-allocated after an invoice approval; its"
+                            + " allocation can be recalculated by hand", tripId, scope.companyId(), failure);
+                    break;
+                }
             }
         }
         return allocated;
+    }
+
+    private boolean allocateBilled(CompanyScope scope, UUID tripId, UUID actorId) {
+        Optional<TripAllocationSource> trip = tripLookupPort.findAllocationSource(tripId, scope.companyId());
+        return trip.isPresent() && !trip.get().cancelled()
+                && allocate(scope, trip.get(), AllocationTrigger.INVOICE_APPROVED, actorId).isPresent();
+    }
+
+    /** A second writer of the same trip's run: its unique version, a lock it held, or a stale row. */
+    private static boolean isConcurrencyConflict(RuntimeException failure) {
+        if (failure instanceof ConcurrencyFailureException) {
+            return true;
+        }
+        if (failure instanceof DataIntegrityViolationException integrity) {
+            String message = String.valueOf(integrity.getMostSpecificCause().getMessage());
+            return message.contains("uq_trip_cost_allocation_run_current")
+                    || message.contains("uq_trip_cost_allocation_run_version");
+        }
+        return false;
     }
 
     /**

@@ -7,7 +7,8 @@ import { StatusChip } from "../../shared/ui/components";
 import { TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
-import { fmtDecimal, fmtQuantity, fmtTime, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
+import { fmtAreaM2, fmtDecimal, fmtMetres, fmtQuantity, fmtTime, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
+import { capacityTone } from "../../shared/geometry/loadGeometry";
 import { R, T } from "../../theme";
 
 interface TripCardProps {
@@ -15,31 +16,47 @@ interface TripCardProps {
   onOpen: () => void;
 }
 
-/** Mismo umbral de casi-capacidad que `CapacityBar`: a partir de aquí la barra avisa en ámbar. */
-const NEAR = 85;
-
-/** Una dimensión de capacidad en miniatura: etiqueta y % arriba, barra fina, cantidad debajo. */
-function MiniCapacity({ label, dimension, amount }: { label: string; dimension: CapacityDimension; amount: string }) {
+/**
+ * Una dimensión de capacidad en miniatura: etiqueta y % arriba, barra fina, cantidad debajo. El tono
+ * (ok / cerca / excedida) sale de `capacityTone`, el mismo que usa `CapacityBar`. `binding` marca la
+ * dimensión que llena el camión (`bindingDimension` del backend).
+ */
+function MiniCapacity({ label, dimension, amount, binding = false }: {
+  label: string; dimension: CapacityDimension; amount: string; binding?: boolean;
+}) {
   const { percentUsed, exceeded, unlimited } = dimension;
   const pct = percentUsed === null ? 0 : Math.min(100, percentUsed);
-  const near = !exceeded && percentUsed !== null && percentUsed >= NEAR;
-  const color = exceeded ? "error" : near ? "warning" : "primary";
+  const tone = capacityTone(dimension);
+  const color = tone === "over" ? "error" : tone === "near" ? "warning" : "primary";
   return (
     <Box sx={{ minWidth: 0 }}>
       <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 0.5 }}>
-        <Typography sx={{ fontSize: T.micro + 0.5, fontWeight: 700, color: "text.secondary" }}>{label}</Typography>
+        <Typography sx={{
+          fontSize: T.micro + 0.5, fontWeight: binding ? 800 : 700, color: binding ? "text.primary" : "text.secondary",
+          textDecoration: binding ? "underline" : "none", textUnderlineOffset: 3,
+        }}>
+          {label}
+        </Typography>
         <Typography sx={{ fontSize: T.micro + 0.5, fontWeight: 800, color: exceeded ? "error.main" : "text.primary", fontVariantNumeric: "tabular-nums" }}>
           {unlimited || percentUsed === null ? "—" : `${Math.round(percentUsed)} %`}
         </Typography>
       </Box>
       <LinearProgress
         variant="determinate" value={pct} color={color}
-        aria-label={label}
+        aria-label={binding ? `${label} · ${t("lo que llena el camión")}` : label}
         sx={{ height: 6, borderRadius: 3, my: 0.5, bgcolor: "action.hover", "& .MuiLinearProgress-bar": { borderRadius: 3 } }}
       />
       <Typography noWrap sx={{ fontSize: T.micro, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>{amount}</Typography>
     </Box>
   );
+}
+
+/**
+ * Piso y alto (V62) aparecen en la tarjeta solo cuando dicen algo: el vehículo declara la medida o
+ * algún pedido del viaje se midió. Un camión de pallets sin geometría sigue viendo sus tres barras.
+ */
+function shows(dimension: CapacityDimension | null | undefined): dimension is CapacityDimension {
+  return dimension != null && (!dimension.unlimited || Number(dimension.used) > 0);
 }
 
 /**
@@ -52,6 +69,7 @@ function MiniCapacity({ label, dimension, amount }: { label: string; dimension: 
  */
 export function TripCard({ trip, onOpen }: TripCardProps) {
   const overCapacity = !trip.capacity.withinCapacity;
+  const binding = trip.capacity.bindingDimension ?? null;
   // Solo la hora: la fecha es la del plan, que el tablero ya dice en su cabecera.
   const departure = trip.plannedDepartureAt ? fmtTime(trip.plannedDepartureAt) : t("Sin definir");
 
@@ -133,9 +151,23 @@ export function TripCard({ trip, onOpen }: TripCardProps) {
         </Box>
 
         <Box sx={{ px: 2, py: 1.5, display: "grid", gap: 1.5, gridTemplateColumns: "repeat(3, minmax(0, 1fr))", flexGrow: 1 }}>
-          <MiniCapacity label={t("Peso")} dimension={trip.capacity.weight} amount={fmtWeightKg(trip.capacity.weight.used)} />
-          <MiniCapacity label={t("Vol.")} dimension={trip.capacity.volume} amount={fmtVolumeM3(trip.capacity.volume.used)} />
-          <MiniCapacity label={t("Pal.")} dimension={trip.capacity.pallets} amount={`${fmtDecimal(trip.capacity.pallets.used)} ${t("pal.")}`} />
+          <MiniCapacity label={t("Peso")} dimension={trip.capacity.weight} amount={fmtWeightKg(trip.capacity.weight.used)}
+            binding={binding === "WEIGHT"} />
+          <MiniCapacity label={t("Vol.")} dimension={trip.capacity.volume} amount={fmtVolumeM3(trip.capacity.volume.used)}
+            binding={binding === "VOLUME"} />
+          <MiniCapacity label={t("Pal.")} dimension={trip.capacity.pallets} amount={`${fmtDecimal(trip.capacity.pallets.used)} ${t("pal.")}`}
+            binding={binding === "PALLETS"} />
+          {shows(trip.capacity.floor) && (
+            <MiniCapacity label={t("Piso")} dimension={trip.capacity.floor} amount={fmtAreaM2(trip.capacity.floor.used)}
+              binding={binding === "FLOOR"} />
+          )}
+          {shows(trip.capacity.height) && (
+            <MiniCapacity label={t("Alto")} dimension={trip.capacity.height}
+              amount={trip.capacity.height.limit == null
+                ? fmtMetres(trip.capacity.height.used)
+                : `${fmtMetres(trip.capacity.height.used)} / ${fmtMetres(trip.capacity.height.limit)}`}
+              binding={binding === "HEIGHT"} />
+          )}
         </Box>
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 1.1, borderTop: "1px solid", borderColor: "divider" }}>

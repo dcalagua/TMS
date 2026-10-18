@@ -26,6 +26,21 @@ public interface FreightAccrualRepository extends JpaRepository<FreightAccrual, 
     @Query("select a from FreightAccrual a where a.id = :id and a.companyId = :companyId")
     Optional<FreightAccrual> findByIdAndCompanyIdForUpdate(@Param("id") UUID id, @Param("companyId") UUID companyId);
 
+    /**
+     * Serialises the birth of a trip's accrual with the approvals that consume it, until the end of
+     * the caller's transaction. A row lock cannot do it: when the sweep is inserting the accrual and an
+     * approval is looking for it, there is no committed row yet for either to lock, and under READ
+     * COMMITTED each would miss the other - the accrual born after its invoice was approved, never
+     * consumed. Keyed on the trip, so different trips never wait for each other.
+     */
+    @Query(value = "SELECT 1 FROM pg_advisory_xact_lock(hashtextextended(:lockName, 0))", nativeQuery = true)
+    Integer lockTripForAccrual(@Param("lockName") String lockName);
+
+    /** The advisory lock key of one trip's accrual. */
+    static String tripLockName(UUID companyId, UUID tripId) {
+        return "tms.freight_accrual:" + companyId + ":" + tripId;
+    }
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select a from FreightAccrual a where a.companyId = :companyId and a.tripId = :tripId"
             + " and a.currency = :currency")

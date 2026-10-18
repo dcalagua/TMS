@@ -8,6 +8,7 @@ import com.ebim.tms.planning.infrastructure.DocumentDeliveryQueries.MonitorRow;
 import com.ebim.tms.shared.reference.CarrierLookupPort;
 import com.ebim.tms.shared.reference.DriverLookupPort;
 import com.ebim.tms.shared.reference.DriverReference;
+import com.ebim.tms.shared.reference.LogisticsDocumentPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
@@ -38,16 +39,18 @@ public class DocumentDeliveryViews {
     private final CarrierLookupPort carriers;
     private final VehicleLookupPort vehicles;
     private final DriverLookupPort drivers;
+    private final LogisticsDocumentPort documents;
 
     public DocumentDeliveryViews(DocumentDeliveryQueries queries, DocumentDeliveryEvidenceRepository evidence,
             OrderPlanningPort orders, CarrierLookupPort carriers, VehicleLookupPort vehicles,
-            DriverLookupPort drivers) {
+            DriverLookupPort drivers, LogisticsDocumentPort documents) {
         this.queries = queries;
         this.evidence = evidence;
         this.orders = orders;
         this.carriers = carriers;
         this.vehicles = vehicles;
         this.drivers = drivers;
+        this.documents = documents;
     }
 
     /** The orders (in this company) that each tracked document covers. */
@@ -82,18 +85,22 @@ public class DocumentDeliveryViews {
         Map<UUID, List<DocumentDeliveryEvidence>> evidenceByDelivery = ids.isEmpty() ? Map.of()
                 : evidence.findByCompanyIdAndDocumentDeliveryIdInOrderByUploadedAtAsc(companyId, ids).stream()
                         .collect(Collectors.groupingBy(DocumentDeliveryEvidence::documentDeliveryId));
+        // ADR-028: the clave de acceso and the authority's code, in one batched read for the page.
+        Map<UUID, LogisticsDocumentPort.FiscalIdentity> fiscal = documents.fiscalIdentitiesOf(
+                deliveries.stream().map(DocumentDelivery::documentId).collect(Collectors.toSet()), companyId);
         return deliveries.stream().map(delivery -> portalDocument(delivery, links,
-                evidenceByDelivery.getOrDefault(delivery.id(), List.of()))).toList();
+                evidenceByDelivery.getOrDefault(delivery.id(), List.of()), fiscal.get(delivery.documentId())))
+                .toList();
     }
 
     public static PortalDocumentView portalDocument(DocumentDelivery delivery, OrderLinks links,
-            List<DocumentDeliveryEvidence> artefacts) {
+            List<DocumentDeliveryEvidence> artefacts, LogisticsDocumentPort.FiscalIdentity fiscal) {
         return new PortalDocumentView(delivery.id(), delivery.documentId(), delivery.documentType(),
                 delivery.documentNumber(), links.orderNumbersOf(delivery.id()), links.customerNameOf(delivery.id()),
                 delivery.status(), delivery.reasonCode(), delivery.remark(), delivery.reportedAt(),
                 delivery.recordedAt(), delivery.returnedAt(), delivery.isOpenForReport(),
                 artefacts.stream().map(item -> new DocumentEvidenceRefView(item.id(), item.evidenceType(),
-                        item.contentType(), item.uploadedAt())).toList());
+                        item.contentType(), item.uploadedAt())).toList(), fiscal);
     }
 
     public List<DocumentDeliveryRowView> rows(UUID companyId, List<MonitorRow> page) {

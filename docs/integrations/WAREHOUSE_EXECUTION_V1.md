@@ -618,7 +618,7 @@ Additive request fields on `POST /integration/v1/dispatch-confirmations` (§4.1)
 |---|---|
 | `vehicle.licensePlate` | **The tractor / truck plate** (the plan's `vehicleLicensePlate`). `VEHICLE_MISMATCH` compares only this |
 | `vehicle.trailerLicensePlate` | The trailer, when there is one. Stored and shown; TMS has no trailer master and never compares it |
-| `orders[].stacks`, `effectiveVolumeM3`, `loadingMeters` | Computed by the WMS with the same footprint rules (ADR-022 §3). `null` when the profile is incomplete, with `geometryReason` (e.g. `NEST_INCREMENT_MISSING`) |
+| `orders[].stacks`, `effectiveVolumeM3`, `loadingMeters` | Computed by the WMS with the same footprint rules (ADR-022 §3). `null` when the profile is incomplete, with `geometryReason` (e.g. `NEST_INCREMENT_MISSING`). Bounded by their columns: `effectiveVolumeM3` (and the v1 `volumeM3`) at most `9999999999.9999`, `loadingMeters` at most `9999999.999`, `weightKg` at most `99999999999.999`; beyond that the document is a `400` naming the field, not a retryable `409` |
 
 TMS stores them (phase 30, V60) and, from phase 45, compares them with the plan as `GEOMETRY_VARIANCE`
 (severity `INFO`): **never a 4xx, never a `MISMATCH`**. The response shape is unchanged.

@@ -154,7 +154,7 @@ class MaterialProfileApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("NESTABLE without nestIncrementM and a non-positive measure are 400, and nothing is stored")
+    @DisplayName("NESTABLE without nestIncrementM, a non-positive measure or an out-of-range unit figure are 400, and nothing is stored")
     void shapeErrorsAre400() throws Exception {
         String code = "BAD-" + UUID.randomUUID();
         put(warehouseToken, code, """
@@ -170,6 +170,15 @@ class MaterialProfileApiIntegrationTest {
         put(warehouseToken, code, """
                 {"sourceSystem": "EWM_EBIM", "sourceUpdatedAt": "2026-10-18T12:00:00Z", "stackMode": "stackable"}
                 """, null).andExpect(status().isBadRequest());
+        // Unit figures the database would refuse are 400 with a sentence, never a "send it again" 409.
+        for (String figures : new String[] {"\"unitWeightKg\": -1", "\"unitWeightKg\": 99999999",
+                "\"unitVolumeM3\": 0.00001", "\"unitVolumeM3\": 12345678"}) {
+            put(warehouseToken, code, """
+                    {"sourceSystem": "EWM_EBIM", "sourceUpdatedAt": "2026-10-18T12:00:00Z", %s}
+                    """.formatted(figures), null)
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("must be greater than zero")));
+        }
 
         assertThat(value("SELECT count(*) FROM tms.material_profile WHERE material_code = '" + code + "'"))
                 .isEqualTo("0");

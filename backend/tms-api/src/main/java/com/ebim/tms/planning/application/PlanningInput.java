@@ -1,5 +1,7 @@
 package com.ebim.tms.planning.application;
 
+import com.ebim.tms.shared.reference.OrderAmounts;
+import com.ebim.tms.shared.reference.OrderGeometryProfile;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.RouteTemplate;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
@@ -49,7 +51,13 @@ public record PlanningInput(
          */
         Map<UUID, Integer> serviceMinutesByLocation,
         /** The shift a proposed trip must fit inside. Never null - see {@link PlanningShift}. */
-        PlanningShift shift) {
+        PlanningShift shift,
+        /**
+         * The geometry profiles of the orders with a measured line, by order id (ADR-022 section 5),
+         * so an engine re-stacks each order for the height of the vehicle it is trying - through
+         * {@link #loadOn}, never by hand. Absent means "nothing to re-stack": the stored figures hold.
+         */
+        Map<UUID, OrderGeometryProfile> geometry) {
 
     public PlanningInput {
         orders = List.copyOf(orders);
@@ -59,6 +67,14 @@ public record PlanningInput(
         serviceMinutesByLocation = serviceMinutesByLocation == null ? Map.of()
                 : Map.copyOf(serviceMinutesByLocation);
         shift = shift == null ? PlanningShift.DEFAULT : shift;
+        geometry = geometry == null ? Map.of() : Map.copyOf(geometry);
+    }
+
+    /** The JOB 05 shape: no geometry profiles, so every order counts its stored figures. */
+    public PlanningInput(UUID originId, LocalDate planningDate, List<PlannableOrder> orders,
+            List<VehicleCapacityReference> vehicles, List<RouteTemplate> routes, TravelMatrix travel,
+            Map<UUID, Integer> serviceMinutesByLocation, PlanningShift shift) {
+        this(originId, planningDate, orders, vehicles, routes, travel, serviceMinutesByLocation, shift, Map.of());
     }
 
     /**
@@ -71,7 +87,21 @@ public record PlanningInput(
     public PlanningInput(UUID originId, LocalDate planningDate, List<PlannableOrder> orders,
             List<VehicleCapacityReference> vehicles, List<RouteTemplate> routes) {
         this(originId, planningDate, orders, vehicles, routes, TravelMatrix.EMPTY, Map.of(),
-                PlanningShift.DEFAULT);
+                PlanningShift.DEFAULT, Map.of());
+    }
+
+    /** The same orders, vehicles and routes with geometry profiles - what a geometry test needs and nothing else. */
+    public PlanningInput withGeometry(Map<UUID, OrderGeometryProfile> profiles) {
+        return new PlanningInput(originId, planningDate, orders, vehicles, routes, travel, serviceMinutesByLocation,
+                shift, profiles);
+    }
+
+    /**
+     * The load {@code amounts} of {@code order} put on {@code vehicle}, re-stacked for its height
+     * ({@link VehicleLoads}). Both engines measure every candidate with this.
+     */
+    public CapacityLoad loadOn(PlannableOrder order, OrderAmounts amounts, CapacityLimits limits) {
+        return VehicleLoads.of(amounts, geometry.get(order.id()), limits);
     }
 
     /** How long a stop at {@code locationId} takes, or zero when nobody has said. */

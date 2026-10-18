@@ -22,6 +22,7 @@ import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.DriverLookupPort;
 import com.ebim.tms.shared.reference.DriverReference;
 import com.ebim.tms.shared.reference.MasterReference;
+import com.ebim.tms.shared.reference.OrderGeometryProfile;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
@@ -110,7 +111,7 @@ public class TripViewAssembler {
             return List.of();
         }
         ShipmentReferences references = referencesOf(trips, companyId);
-        Map<UUID, CapacityLoad> loads = loadsOf(trips);
+        Map<UUID, CapacityLoad> loads = loadsOf(trips, companyId, references.vehicles());
         // Counted in one grouped query rather than read from trip.stops(): that collection is
         // lazy, so asking a board of 300 trips how many stops each has would issue 300 selects.
         Map<UUID, Long> stopCounts = stopCountsOf(trips);
@@ -144,11 +145,10 @@ public class TripViewAssembler {
         trip.stops().forEach(stop -> destinationIds.add(stop.destinationId()));
         Map<UUID, MasterReference> destinations = destinationLookupPort.findAllInCompany(destinationIds, companyId);
 
-        CapacityLoad load = CapacityLoad.of(
-                assignmentRepository.loadByTripId(trip.id(), AssignmentStatus.ACTIVE));
         // One trip: its stops are already being rendered below, so counting them in memory
         // costs nothing extra - unlike the board above, this is not an N+1.
         ShipmentReferences references = referencesOf(List.of(trip), companyId);
+        CapacityLoad load = loadOn(trip, assignments, companyId, references.vehicles());
         TripView view = toView(trip, load, references, trip.stops().size());
 
         List<TripAssignmentView> assignmentViews = assignments.stream()
@@ -299,7 +299,7 @@ public class TripViewAssembler {
             return Map.of();
         }
         Map<UUID, VehicleCapacityReference> vehicles = vehiclesOf(trips, companyId);
-        Map<UUID, CapacityLoad> loads = loadsOf(trips);
+        Map<UUID, CapacityLoad> loads = loadsOf(trips, companyId, vehicles);
         Map<UUID, TripCapacityView> capacities = new HashMap<>();
         for (Trip trip : trips) {
             capacities.put(trip.id(),
@@ -310,8 +310,9 @@ public class TripViewAssembler {
 
     /** The capacity answer for one trip, on its own - the {@code GET /trips/{id}/capacity} body. */
     public TripCapacityView capacityOf(Trip trip, UUID companyId) {
-        CapacityLoad load = CapacityLoad.of(assignmentRepository.loadByTripId(trip.id(), AssignmentStatus.ACTIVE));
-        return summarize(trip, load, vehiclesOf(List.of(trip), companyId));
+        Map<UUID, VehicleCapacityReference> vehicles = vehiclesOf(List.of(trip), companyId);
+        Map<UUID, CapacityLoad> loads = loadsOf(List.of(trip), companyId, vehicles);
+        return summarize(trip, loads.getOrDefault(trip.id(), CapacityLoad.EMPTY), vehicles);
     }
 
     /**
@@ -325,14 +326,40 @@ public class TripViewAssembler {
      * comparisons here would be four more places to forget the next state.
      */
     TripCapacityView summarize(Trip trip, CapacityLoad load, Map<UUID, VehicleCapacityReference> vehicles) {
+        CapacitySource source;
         if (trip.hasCapacitySnapshot()) {
-            return capacityService.summarize(trip.id(), CapacitySource.SNAPSHOT, CapacityLimits.ofSnapshot(trip), load);
+            source = CapacitySource.SNAPSHOT;
+        } else if (trip.vehicleId() == null || vehicles.get(trip.vehicleId()) == null) {
+            source = CapacitySource.NONE;
+        } else {
+            source = CapacitySource.LIVE;
+        }
+        return capacityService.summarize(trip.id(), source, limitsOf(trip, vehicles), load);
+    }
+
+    /**
+     * The limits {@link #summarize} measures a trip against, and the ones its load is re-stacked for:
+     * the snapshot once confirmed, the vehicle live while draft, unlimited without a vehicle.
+     */
+    static CapacityLimits limitsOf(Trip trip, Map<UUID, VehicleCapacityReference> vehicles) {
+        if (trip.hasCapacitySnapshot()) {
+            return CapacityLimits.ofSnapshot(trip);
         }
         VehicleCapacityReference vehicle = trip.vehicleId() == null ? null : vehicles.get(trip.vehicleId());
-        if (vehicle == null) {
-            return capacityService.summarize(trip.id(), CapacitySource.NONE, CapacityLimits.unlimited(), load);
+        return vehicle == null ? CapacityLimits.unlimited() : CapacityLimits.of(vehicle);
+    }
+
+    /** One trip's load on its own vehicle, from the active rows already loaded (ADR-022 section 5). */
+    private CapacityLoad loadOn(Trip trip, List<TripOrderAssignment> active, UUID companyId,
+            Map<UUID, VehicleCapacityReference> vehicles) {
+        CapacityLimits limits = limitsOf(trip, vehicles);
+        if (!VehicleLoads.restacks(limits)) {
+            return CapacityLoad.of(assignmentRepository.loadByTripId(trip.id(), AssignmentStatus.ACTIVE));
         }
-        return capacityService.summarize(trip.id(), CapacitySource.LIVE, CapacityLimits.of(vehicle), load);
+        Set<UUID> geometric = VehicleLoads.geometricOrders(active);
+        Map<UUID, OrderGeometryProfile> profiles = geometric.isEmpty() ? Map.of()
+                : orderPlanningPort.geometryProfilesOf(geometric, companyId);
+        return VehicleLoads.ofAssignments(active, profiles, limits);
     }
 
     Map<UUID, VehicleCapacityReference> vehiclesOf(List<Trip> trips, UUID companyId) {
@@ -391,13 +418,39 @@ public class TripViewAssembler {
                 .collect(Collectors.toSet());
     }
 
-    private Map<UUID, CapacityLoad> loadsOf(List<Trip> trips) {
+    /**
+     * The loads of a whole board: the database's grouped sum, then - only for the trips whose vehicle
+     * has a height and whose load carries a stack - the same rows re-stacked for that vehicle
+     * (ADR-022 section 5). Two more queries for the board at most, never one per trip.
+     */
+    private Map<UUID, CapacityLoad> loadsOf(List<Trip> trips, UUID companyId,
+            Map<UUID, VehicleCapacityReference> vehicles) {
         Map<UUID, CapacityLoad> loads = new HashMap<>();
         List<UUID> tripIds = trips.stream().map(Trip::id).toList();
         for (TripOrderAssignmentRepository.TripLoadRow row
                 : assignmentRepository.loadByTripIds(tripIds, AssignmentStatus.ACTIVE)) {
             loads.put(row.getTripId(), CapacityLoad.of(row));
         }
+        Map<UUID, CapacityLimits> restacking = new HashMap<>();
+        for (Trip trip : trips) {
+            CapacityLimits limits = limitsOf(trip, vehicles);
+            CapacityLoad load = loads.get(trip.id());
+            if (VehicleLoads.restacks(limits) && load != null && load.maxStackHeightM().signum() > 0) {
+                restacking.put(trip.id(), limits);
+            }
+        }
+        if (restacking.isEmpty()) {
+            return loads;
+        }
+        Map<UUID, List<TripOrderAssignment>> rowsByTrip = assignmentRepository
+                .findByCompanyIdAndTripIdInAndStatus(companyId, restacking.keySet(), AssignmentStatus.ACTIVE).stream()
+                .collect(Collectors.groupingBy(TripOrderAssignment::tripId));
+        Set<UUID> geometric = VehicleLoads.geometricOrders(
+                rowsByTrip.values().stream().flatMap(List::stream).toList());
+        Map<UUID, OrderGeometryProfile> profiles = geometric.isEmpty() ? Map.of()
+                : orderPlanningPort.geometryProfilesOf(geometric, companyId);
+        restacking.forEach((tripId, limits) -> loads.put(tripId,
+                VehicleLoads.ofAssignments(rowsByTrip.getOrDefault(tripId, List.of()), profiles, limits)));
         return loads;
     }
 
@@ -455,7 +508,7 @@ public class TripViewAssembler {
                 order == null ? null : order.priority(), order == null ? null : order.requestedWindowStart(),
                 order == null ? null : order.requestedWindowEnd(), assignment.assignedWeightKg(),
                 assignment.assignedVolumeM3(), assignment.assignedPallets(), assignment.wholeOrder(),
-                assignment.assignedAt());
+                assignment.assignedAt(), assignment.assignedFloorAreaM2(), assignment.assignedStackHeightM());
     }
 
     /**

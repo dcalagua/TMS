@@ -27,6 +27,7 @@ import { fmtDecimal, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
 import { marginHint } from "./declaredTotals";
 import { T } from "../../theme";
 import { OrderDocumentsSection } from "./OrderDocumentsSection";
+import { OrderGeometrySection } from "./OrderGeometrySection";
 
 const FORM_ID = "order-form";
 
@@ -660,6 +661,9 @@ function OrderForm({
             </Box>
           </Disclosure>
         </Step>
+
+        {/* ADR-022 §10: lo que el pedido ocupa por geometría, tal como quedó guardado. */}
+        {isEdit && <OrderGeometrySection order={order} />}
 
         {/* ADR-015: los documentos del ERP, de solo lectura, solo para un pedido que ya existe. */}
         {isEdit && <OrderDocumentsSection companyId={companyId} orderId={order.id} />}

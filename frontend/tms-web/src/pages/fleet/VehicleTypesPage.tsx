@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
-  Button, Chip, Paper, Table, TableBody, TableCell, TableContainer,
+  Box, Button, Chip, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Typography,
 } from "@mui/material";
 import {
@@ -110,6 +110,25 @@ export function VehicleTypesPage() {
     { key: "maxWeight", header: t("Peso máx. (kg)"), numeric: true, render: (v) => fmtDecimal(v.maxWeightKg) },
     { key: "maxVolume", header: t("Volumen máx. (m³)"), numeric: true, render: (v) => fmtDecimal(v.maxVolumeM3) },
     { key: "maxPallets", header: t("Pallets máx."), numeric: true, render: (v) => fmtQuantity(v.maxPallets) },
+    {
+      // V62: largo × ancho × alto útiles y el factor de piso. Sin largo/ancho el piso no limita.
+      key: "dimensions",
+      header: t("Caja útil (L × A × H)"),
+      render: (v) => (v.lengthM == null && v.widthM == null && v.heightM == null) ? (
+        <Typography variant="body2" color="text.secondary">{t("Sin medidas")}</Typography>
+      ) : (
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontVariantNumeric: "tabular-nums" }}>
+            {[v.lengthM, v.widthM, v.heightM].map((m) => (m == null ? "-" : fmtDecimal(m))).join(" × ")} m
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: "tabular-nums" }}>
+            {v.loadFloorFillFactor == null
+              ? t("Factor de piso: el de la empresa")
+              : t("Factor de piso: {{factor}}", { factor: fmtDecimal(v.loadFloorFillFactor) })}
+          </Typography>
+        </Box>
+      ),
+    },
     { key: "active", header: t("Estado"), render: (v) => <ActiveBadge active={v.active} /> },
   ];
 

@@ -38,7 +38,16 @@ public record EligibleOrderView(
         // Whether some of this order is already elsewhere. Carried as its own flag rather than
         // left to the reader to infer from two numbers being different, because "this is a split"
         // is the thing a board has to say out loud.
-        boolean partiallyAllocated) {
+        boolean partiallyAllocated,
+        // Load geometry (V62, ADR-022 section 4), read-only and additive: what capacity counts as the
+        // order's volume (effective where a line was measured), the floor its stacks cover in total and
+        // still to place, the tallest stack and the tallest single unit. The board shows them as
+        // "Ocupa"; it never recomputes them. Null heights mean no line was measured.
+        BigDecimal planningVolumeM3,
+        BigDecimal floorAreaM2,
+        BigDecimal pendingFloorAreaM2,
+        BigDecimal maxStackHeightM,
+        BigDecimal maxUnitHeightM) {
 
     public static EligibleOrderView from(PlannableOrder order, MasterReference destination) {
         return new EligibleOrderView(order.id(), order.orderNumber(), order.originId(), order.destinationId(),
@@ -46,6 +55,8 @@ public record EligibleOrderView(
                 order.customerName(), order.customerReference(), order.serviceDate(), order.priority(),
                 order.requestedWindowStart(), order.requestedWindowEnd(), order.totalWeightKg(),
                 order.totalVolumeM3(), order.totalPallets(), order.pending().weightKg(),
-                order.pending().volumeM3(), order.pending().pallets(), order.isPartiallyAllocated());
+                order.pending().volumeM3(), order.pending().pallets(), order.isPartiallyAllocated(),
+                order.ordered().volumeM3(), order.ordered().floorAreaM2(), order.pending().floorAreaM2(),
+                order.maxStackHeightM(), order.maxUnitHeightM());
     }
 }

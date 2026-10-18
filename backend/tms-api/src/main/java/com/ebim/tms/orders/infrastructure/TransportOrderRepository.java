@@ -48,6 +48,17 @@ public interface TransportOrderRepository
      */
     List<TransportOrder> findByIdInAndCompanyId(Collection<UUID> ids, UUID companyId);
 
+    /**
+     * Those of {@code ids} in {@code companyId} with a measured line, lines fetched in the same
+     * statement - what planning re-stacks for a vehicle (ADR-022 section 5,
+     * {@code OrderPlanningPort.geometryProfilesOf}). {@code max_stack_height_m} is set exactly when a
+     * line was measured, so the predicate keeps every other order out of the fetch.
+     */
+    @Query("SELECT DISTINCT o FROM TransportOrder o LEFT JOIN FETCH o.lines "
+            + "WHERE o.id IN :ids AND o.companyId = :companyId AND o.maxStackHeightM IS NOT NULL")
+    List<TransportOrder> findWithMeasuredLines(@Param("ids") Collection<UUID> ids,
+            @Param("companyId") UUID companyId);
+
     /** Candidates for an exact (external_source, external_reference) match, company-scoped. */
     List<TransportOrder> findByCompanyIdAndExternalReferenceIn(UUID companyId, Collection<String> externalReferences);
 

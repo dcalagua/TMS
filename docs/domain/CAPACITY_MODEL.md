@@ -42,10 +42,11 @@ verdict= PlanningCapacityService, inside the transaction that writes
 **Used** is summed over the *assignment* rows, never over the order headers behind them (the height
 is their `MAX`). Since V37 an order may be split across trips by typed amounts
 ([`SPLIT_ORDER_EXECUTION.md`](SPLIT_ORDER_EXECUTION.md)), and every capacity calculation already
-reads the slice each row carries. Since V62 a slice also states its floor (`floorAreaM2`, omitted =
-0, the board prefills the pending figure) and carries the order's tallest stack: TMS splits by
-amounts, not by line quantities, so a slice's geometry cannot be recomputed (ADR-022 §5,
-`DECISIONS_LOG.md`).
+reads the slice each row carries. Since V62 a slice also states its floor (`floorAreaM2`; omitted, it is
+the pending floor in the largest proportion the stated measures take of their pending, so the slice
+that completes any measure completes the floor and the order converges to `PLANNED`) and carries the
+order's tallest stack. Against a vehicle with a height, the rows are re-stacked for that height
+(`VehicleLoads`, ADR-022 §5); the ledger keeps the reference-height figures (`DECISIONS_LOG.md`).
 
 **Limits** come from `fleet` and only from `fleet`: `EffectiveCapacityResolver` resolves each
 dimension independently (the vehicle's own override if it has one, otherwise its vehicle type's

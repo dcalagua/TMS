@@ -81,8 +81,12 @@ multi-leg model exists).
   the owner. No SECURITY DEFINER function: the grant and the guard hold the same rule with less surface.
 - **Triggers**: `TRIP_EXECUTED` joins the three of section 5 - the first run, on the estimate, when a trip that left has
   none (the plan says "the actual if there is one, else the estimate"). The sweep (`CostAllocationSweep`, every 10 min,
-  lookback 62 days over departures) writes `TRIP_EXECUTED` or `TRIP_COST_CLOSED`; approval writes `INVOICE_APPROVED` in
-  its own transaction (credit and debit notes too); `POST .../recalculate` writes `MANUAL`. An automatic trigger whose
+  lookback 62 days over departures; **off by default** since the post-review fixes of 2026-10-18 -
+  `TMS_COST_ALLOCATION_SWEEP_ENABLED=true` - skips suspended and inactive companies, and logs and counts a trip that
+  throws instead of abandoning the company) writes `TRIP_EXECUTED` or `TRIP_COST_CLOSED`; approval writes
+  `INVOICE_APPROVED` **after the approval commits**, one trip per transaction of its own, a concurrency conflict retried
+  once and anything else logged - so a concurrent allocation run can no longer make the approval fail with a 409 (credit
+  and debit notes too); `POST .../recalculate` writes `MANUAL`. An automatic trigger whose
   result would equal the current run writes nothing; a person's recalculation always writes a version. Once a run rests
   on `INVOICED`, a later close of the trip cost does not move it.
 - **Invoiced figure**: the sum of the lines for the trip over every authorised document (`InvoiceStatus.AUTHORISED`),

@@ -100,6 +100,35 @@ describe("el panel de reparto", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it("sin piso medido no pide ni envía piso", async () => {
+    const onSubmit = renderDrawer();
+    expect(screen.queryByLabelText("Piso (m²)")).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Asignar esta parte" }));
+    expect(onSubmit.mock.calls[0][1]).not.toHaveProperty("floorAreaM2");
+  });
+
+  it("con piso medido lo prellena con lo pendiente, lo envía y no deja pasarse (V62)", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <SplitAssignDrawer
+        open order={{ ...ORDER, floorAreaM2: 2, pendingFloorAreaM2: 0.6, maxStackHeightM: 1.363 }}
+        trips={TRIPS} submitting={false} onClose={vi.fn()} onSubmit={onSubmit}
+      />,
+    );
+    const user = userEvent.setup();
+    const floor = screen.getByLabelText("Piso (m²)");
+    expect(floor).toHaveValue(0.6);
+
+    await user.clear(floor);
+    await user.type(floor, "0.9");
+    expect(screen.getByRole("button", { name: "Asignar esta parte" })).toBeDisabled();
+
+    await user.clear(floor);
+    await user.type(floor, "0.4");
+    await user.click(screen.getByRole("button", { name: "Asignar esta parte" }));
+    expect(onSubmit).toHaveBeenCalledWith("trip-1", { weightKg: 300, volumeM3: 3, pallets: 30, floorAreaM2: 0.4 });
+  });
+
   it("dice cuánto queda pendiente en vez de dejarlo al cálculo mental", () => {
     renderDrawer();
 

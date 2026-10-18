@@ -50,9 +50,17 @@ public class IntegrationWarehouseOrderEventService {
             WarehouseOrderEventRecorder.Recorded outcome;
             try {
                 outcome = recorder.record(principal.companyScope(), principal, batch.sourceSystem(), event);
-            } catch (DataIntegrityViolationException raced) {
-                // The same event id landed first on another connection; this item's transaction,
-                // hold included, was rolled back.
+            } catch (DataIntegrityViolationException failure) {
+                // Only uq_warehouse_order_event means "the same event id landed first on another
+                // connection" (this item's transaction, hold included, was rolled back). Any other
+                // constraint is this event being refused: calling it DUPLICATE would tell the sender
+                // it was recorded, and a hold the warehouse asked for would silently not exist.
+                if (!String.valueOf(failure.getMostSpecificCause().getMessage()).contains("uq_warehouse_order_event")) {
+                    results.add(new WarehouseOrderEventBatchResultV1.Item(index, event.eventId(), "INVALID", null,
+                            "The event could not be stored: a value is outside what TMS can record."));
+                    refused++;
+                    continue;
+                }
                 outcome = new WarehouseOrderEventRecorder.Recorded("DUPLICATE", null);
             }
             if (!"DUPLICATE".equals(outcome.result())) {

@@ -126,6 +126,10 @@ public class AccrualService {
     @Transactional
     public boolean accrue(CompanyScope scope, AccrualTrigger trigger, AccruableTrip trip,
             AccrualPricing.Priced priced, UUID actorId) {
+        // Taken before anything is read: an approval of an invoice for this trip either committed
+        // before this point (and the query below sees it) or waits until this accrual is committed
+        // (and then finds it). See FreightAccrualRepository.lockTripForAccrual.
+        lockTrip(scope, trip.tripId());
         if (accrualRepository.findForUpdate(scope.companyId(), trip.tripId(), priced.currency()).isPresent()) {
             return false;
         }
@@ -219,6 +223,8 @@ public class AccrualService {
         }
         int consumed = 0;
         for (Map.Entry<UUID, BigDecimal> trip : byTrip.entrySet()) {
+            // The same lock the accrual's birth takes, so a sweep creating it right now is waited for.
+            lockTrip(scope, trip.getKey());
             Optional<FreightAccrual> accrual =
                     accrualRepository.findForUpdate(scope.companyId(), trip.getKey(), invoice.currency());
             if (accrual.isPresent() && consumeOne(scope, accrual.get(), invoice.id(), invoice.invoiceNumber(),
@@ -228,6 +234,10 @@ public class AccrualService {
             }
         }
         return consumed;
+    }
+
+    private void lockTrip(CompanyScope scope, UUID tripId) {
+        accrualRepository.lockTripForAccrual(FreightAccrualRepository.tripLockName(scope.companyId(), tripId));
     }
 
     private boolean consumeOne(CompanyScope scope, FreightAccrual accrual, UUID invoiceId, String invoiceNumber,

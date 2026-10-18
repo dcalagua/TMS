@@ -129,6 +129,8 @@ export interface AccrualSweepResult {
   adjusted: number
   consumed: number
   unaccrued: number
+  /** Trips whose accrual failed in this pass (logged server-side; the next pass retries them). */
+  failed?: number
 }
 
 export interface GlAccountMappingView {

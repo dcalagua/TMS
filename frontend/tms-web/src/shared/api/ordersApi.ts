@@ -1,4 +1,5 @@
 import { apiDownload, apiRequest, apiUpload, type DownloadedFile } from './httpClient'
+import type { StackMode } from './materialProfilesApi'
 import type { PageResponse } from './pageResponse'
 
 /** Mirrors the backend's `OrderStatus` enum (`orders/domain/OrderStatus.java`). See
@@ -105,6 +106,40 @@ export interface OrderView {
   pendingWeightKg?: number | null
   pendingVolumeM3?: number | null
   pendingPallets?: number | null
+  /**
+   * Geometría de carga (V62, ADR-022 §4) para la columna «Ocupa» de la lista: la misma cifra que
+   * el detalle, leída de la cabecera del pedido. Opcional para tolerar un backend anterior.
+   */
+  geometry?: OrderGeometrySummary | null
+}
+
+/** Mirrors `GeometryStatus` (`shared/geometry/GeometryStatus.java`). Null: la línea no trae bloque físico. */
+export type GeometryStatus = 'MEASURED' | 'UNMEASURED' | 'DOES_NOT_FIT'
+
+/** Mirrors the backend's `OrderView.OrderGeometrySummary` record (lista de pedidos). */
+export interface OrderGeometrySummary {
+  /** Lo que cuenta la capacidad: efectivo donde una línea se midió, declarado en el resto. */
+  planningVolumeM3: number | null
+  floorAreaM2: number | null
+  maxStackHeightM: number | null
+  maxUnitHeightM: number | null
+  /** Suma de las pilas de las líneas medidas; null si ninguna se midió. */
+  stacks: number | null
+  unmeasuredLines: number
+  referenceHeightM: number | null
+}
+
+/** Mirrors the backend's `OrderDetailView.OrderGeometryView` record. */
+export interface OrderGeometryView {
+  planningVolumeM3: number | null
+  floorAreaM2: number | null
+  maxStackHeightM: number | null
+  maxUnitHeightM: number | null
+  stacks: number
+  unmeasuredLines: number
+  referenceHeightM: number | null
+  allocatedFloorAreaM2: number | null
+  pendingFloorAreaM2: number | null
 }
 
 /** Mirrors the backend's `OrderDetailView.OrderLineView` record. */
@@ -120,11 +155,31 @@ export interface OrderLineView {
   lineWeightKg: number | null
   lineVolumeM3: number | null
   palletQuantity: number | null
+  // Bloque físico (V59) y geometría calculada (V62). Opcionales: un backend anterior no los manda.
+  lengthM?: number | null
+  widthM?: number | null
+  heightM?: number | null
+  stackMode?: StackMode | null
+  stackMaxQuantity?: number | null
+  nestIncrementM?: number | null
+  maxTopLoadKg?: number | null
+  orientationLocked?: boolean | null
+  /** `PROFILE` (copiado del perfil de material) u `ORDER_LINE` (lo mandó el ERP en la línea). */
+  physicalSource?: 'PROFILE' | 'ORDER_LINE' | null
+  materialProfileVersion?: number | null
+  geometryStatus?: GeometryStatus | null
+  /** El motivo, como código del backend (`MISSING_LENGTH`, `ITEM_TALLER_THAN_VEHICLE`...). */
+  geometryReason?: string | null
+  stacks?: number | null
+  stackHeightM?: number | null
+  effectiveVolumeM3?: number | null
+  floorAreaM2?: number | null
 }
 
 /** Mirrors the backend's `OrderDetailView` record - returned by get/create/update/mark-ready/cancel. */
-export interface OrderDetailView extends Omit<OrderView, 'lineCount'> {
+export interface OrderDetailView extends Omit<OrderView, 'lineCount' | 'geometry'> {
   lines: OrderLineView[]
+  geometry?: OrderGeometryView | null
 }
 
 /** Mirrors the backend's `OrderRequest.OrderLineRequest` record. */

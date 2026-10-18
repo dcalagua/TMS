@@ -179,6 +179,8 @@ public class ProposalPricer {
             return Optional.empty();
         }
 
+        // Re-stacked for this vehicle (ADR-022 section 5), as the shipment it becomes will be.
+        CapacityLimits limits = CapacityLimits.of(vehicle);
         CostableTrip costable = new CostableTrip(
                 // No trip id: this shipment does not exist yet, which is the whole point. Nothing
                 // downstream looks one up - quoteWithKnownDistance is the overload that does not.
@@ -187,12 +189,12 @@ public class ProposalPricer {
                 sum(carried, PlannableOrder::totalWeightKg),
                 // The planning volume (V62), as the ledger of a real trip sums it, so a proposal and
                 // the shipment it becomes are priced on the same cubic metres (V63).
-                sum(carried, order -> order.ordered().volumeM3()),
+                sum(carried, order -> input.loadOn(order, order.ordered(), limits).volumeM3()),
                 sum(carried, PlannableOrder::totalPallets),
                 true,
                 soleDestinationOf(proposed),
                 proposed.stopLocationIds().size(),
-                sum(carried, order -> order.ordered().floorAreaM2()),
+                sum(carried, order -> input.loadOn(order, order.ordered(), limits).floorAreaM2()),
                 vehicle.widthM(),
                 vehicle.floorFillFactor());
 

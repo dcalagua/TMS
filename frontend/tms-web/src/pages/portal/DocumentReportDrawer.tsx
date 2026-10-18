@@ -21,6 +21,7 @@ import { PhotoPicker, type PickedPhoto } from "../../shared/ui/PhotoPicker";
 import { SignaturePad } from "../../shared/ui/SignaturePad";
 import { StatusChip } from "../../shared/ui/components";
 import { enumLabel } from "../../lib/enums";
+import { logisticsDocumentLabel } from "../../shared/ui/logisticsDocumentLabel";
 import { t } from "../../lib/i18n";
 import { fmtDateTime } from "../../lib/locale";
 import { confirmDialog } from "../../lib/ui";
@@ -98,7 +99,7 @@ export function DocumentReportDrawer({
   const [submitting, setSubmitting] = useState(false);
 
   const editable = document.editable;
-  const typeLabel = enumLabel("deliveryDocumentType", document.documentType);
+  const typeLabel = logisticsDocumentLabel(document.documentType, document.fiscal, true);
   const title = `${typeLabel} ${document.documentNumber}`;
   const dirty = status !== initialStatus || reasonCode !== (document.reasonCode ?? "")
     || remark !== (document.remark ?? "") || photos.length > 0 || signature !== null;

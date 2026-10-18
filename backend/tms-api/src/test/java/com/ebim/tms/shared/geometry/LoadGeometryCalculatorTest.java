@@ -96,6 +96,70 @@ class LoadGeometryCalculatorTest {
         assertThat(geometry.hasFigures()).isTrue();
     }
 
+    @Test
+    @DisplayName("the same crates re-stack per height: eight under 2.40 m, seven under 2.20 m")
+    void restacksPerHeight() {
+        LineGeometry reference = LoadGeometryCalculator.compute(m("16"), "UN", null, CRATE, H);
+        LineGeometry lower = LoadGeometryCalculator.compute(m("16"), "UN", null, CRATE, m("2.20"));
+
+        assertThat(reference.perStack()).isEqualTo(8);
+        assertThat(reference.stackHeightM()).isEqualByComparingTo("2.400");
+        assertThat(lower.status()).isEqualTo(GeometryStatus.MEASURED);
+        assertThat(lower.perStack()).isEqualTo(7);
+        assertThat(lower.stacks()).isEqualTo(3);
+        assertThat(lower.stackHeightM()).isEqualByComparingTo("2.100");
+        assertThat(lower.floorAreaM2()).isEqualByComparingTo("0.7200");
+    }
+
+    @Test
+    @DisplayName("a unit taller than H is ITEM_TALLER_THAN_VEHICLE even when its crush limit has no unit weight")
+    void tallerWinsOverAnIncompleteBlock() {
+        PhysicalBlock tallCrushable = new PhysicalBlock(m("0.50"), m("0.50"), m("2.50"), StackMode.STACKABLE, null,
+                null, m("25"), false);
+        PhysicalBlock tallNoMode = new PhysicalBlock(m("0.50"), m("0.50"), m("2.50"), null, null, null, null, false);
+        // A nestable whose base alone is taller than H cannot be nested into fitting.
+        PhysicalBlock tallNest = new PhysicalBlock(m("0.50"), m("0.50"), m("2.50"), StackMode.NESTABLE, 10, m("0.01"),
+                null, false);
+
+        for (PhysicalBlock block : new PhysicalBlock[] {tallCrushable, tallNoMode, tallNest}) {
+            LineGeometry geometry = LoadGeometryCalculator.compute(m("2"), "UN", null, block, H);
+            assertThat(geometry.status()).isEqualTo(GeometryStatus.DOES_NOT_FIT);
+            assertThat(geometry.reason()).isEqualTo(LoadGeometryCalculator.ITEM_TALLER_THAN_VEHICLE);
+            assertThat(geometry.stacks()).isEqualTo(2);
+            assertThat(geometry.stackHeightM()).isEqualByComparingTo("2.500");
+        }
+    }
+
+    @Test
+    @DisplayName("guards: zero measures are unmeasured, huge bounds do not overflow, tiny units do not round to zero")
+    void guards() {
+        assertThat(LoadGeometryCalculator.compute(m("10"), "UN", null,
+                new PhysicalBlock(m("0.6"), m("0.4"), BigDecimal.ZERO, StackMode.STACKABLE, null, null, null, false), H)
+                .reason()).isEqualTo(LoadGeometryCalculator.MISSING_HEIGHT);
+        assertThat(LoadGeometryCalculator.compute(m("10"), "UN", null,
+                new PhysicalBlock(m("0.1"), m("0.1"), m("0.1"), StackMode.NESTABLE, null, BigDecimal.ZERO, null, false),
+                H).reason()).isEqualTo(LoadGeometryCalculator.MISSING_NEST_INCREMENT);
+        assertThat(LoadGeometryCalculator.compute(m("3000000000"), "UN", null, CRATE, H).reason())
+                .isEqualTo(LoadGeometryCalculator.QUANTITY_OUT_OF_RANGE);
+
+        // A crush limit of a billion kilograms over a gram: the bound is far beyond a long's int range
+        // once multiplied, and the stack is still at most the line's own units.
+        LineGeometry crushable = LoadGeometryCalculator.compute(m("5"), "UN", m("0.001"),
+                new PhysicalBlock(m("0.1"), m("0.1"), m("0.1"), StackMode.STACKABLE, null, null, m("999999999.999"),
+                        false), null);
+        assertThat(crushable.status()).isEqualTo(GeometryStatus.MEASURED);
+        assertThat(crushable.perStack()).isEqualTo(5);
+        assertThat(crushable.stacks()).isEqualTo(1);
+
+        LineGeometry tiny = LoadGeometryCalculator.compute(m("1"), "UN", null,
+                new PhysicalBlock(m("0.0001"), m("0.0001"), m("0.0001"), StackMode.STACKABLE, null, null, null, false),
+                H);
+        assertThat(tiny.stackHeightM()).isPositive();
+        assertThat(tiny.unitHeightM()).isPositive();
+        assertThat(tiny.floorAreaM2()).isPositive();
+        assertThat(tiny.effectiveVolumeM3()).isPositive();
+    }
+
     static Stream<Arguments> unmeasuredCases() {
         return Stream.of(
                 Arguments.of("no block", m("10"), "UN", null, null, H, LoadGeometryCalculator.NO_PHYSICAL_BLOCK),

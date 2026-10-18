@@ -165,6 +165,23 @@ export function fetchCompanyProfile(companyId: string, signal?: AbortSignal): Pr
   return apiRequest<CompanyProfileView>('/admin/companies/current', { companyId, signal })
 }
 
+/**
+ * Mirrors the backend's `CompanyLoadGeometryView` (V62, ADR-022 §4-5): el alto de referencia contra
+ * el que se apilan las líneas y el factor de piso por defecto, con su origen. **Solo lectura**:
+ * ninguna petición escribe todavía esas dos columnas, así que la pantalla las muestra sin campo.
+ */
+export interface CompanyLoadGeometryView {
+  referenceHeightM: number
+  /** `COMPANY`: valor propio de la empresa. `DEPLOYMENT`: el del despliegue (`tms.planning.geometry.*`). */
+  referenceHeightSource: 'COMPANY' | 'DEPLOYMENT'
+  floorFillFactor: number
+  floorFillFactorSource: 'COMPANY' | 'DEPLOYMENT'
+}
+
+export function fetchCompanyLoadGeometry(companyId: string, signal?: AbortSignal): Promise<CompanyLoadGeometryView> {
+  return apiRequest<CompanyLoadGeometryView>('/admin/companies/current/load-geometry', { companyId, signal })
+}
+
 export function updateCompanyProfile(
   companyId: string,
   request: CompanyProfileRequest,

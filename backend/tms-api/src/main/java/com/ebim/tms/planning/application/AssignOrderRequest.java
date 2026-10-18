@@ -4,6 +4,7 @@ import com.ebim.tms.shared.reference.OrderAmounts;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.UUID;
 
 /**
@@ -28,11 +29,19 @@ public record AssignOrderRequest(
         @DecimalMin(value = "0", message = "cannot be negative") BigDecimal volumeM3,
         @DecimalMin(value = "0", message = "cannot be negative") BigDecimal pallets,
         /**
-         * Square metres of floor the slice takes (V62, ADR-022 section 5): the same rule as the other
-         * three - omitted is zero. TMS splits by typed amounts, not by line quantities, so a slice's
-         * geometry cannot be recomputed; the planner states it (the board prefills the pending floor).
+         * Square metres of floor the slice takes (V62, ADR-022 section 5). Unlike the other three,
+         * omitted is <em>not</em> zero: floor is not something a planner weighs or counts, and a slice
+         * carrying goods on no floor would leave the order's floor pending forever, so it could never
+         * become PLANNED. Omitted, it is derived ({@link #amountsAgainst}): the order's pending floor
+         * in the largest proportion the stated measures take of their pending - so the slice that
+         * completes any measure takes the rest of the floor, and the remainder converges.
          */
         @DecimalMin(value = "0", message = "cannot be negative") BigDecimal floorAreaM2) {
+
+    /** {@code allocated_floor_area_m2} is numeric(12,4). */
+    private static final int FLOOR_SCALE = 4;
+
+    private static final int SHARE_SCALE = 10;
 
     /** The single-argument shape every pre-V37 caller used: assign whatever is left of the order. */
     public AssignOrderRequest(UUID orderId) {
@@ -56,5 +65,30 @@ public record AssignOrderRequest(
      */
     public OrderAmounts amounts() {
         return new OrderAmounts(weightKg, volumeM3, pallets, floorAreaM2, null);
+    }
+
+    /**
+     * The slice against what is still pending of the order: {@link #amounts()}, with the floor derived
+     * when it was omitted and the order has floor pending (see {@code floorAreaM2}).
+     */
+    public OrderAmounts amountsAgainst(OrderAmounts pending) {
+        OrderAmounts stated = amounts();
+        if (floorAreaM2 != null || pending.floorAreaM2().signum() <= 0) {
+            return stated;
+        }
+        BigDecimal share = BigDecimal.ZERO;
+        share = share.max(ratio(weightKg, pending.weightKg()));
+        share = share.max(ratio(volumeM3, pending.volumeM3()));
+        share = share.max(ratio(pallets, pending.pallets()));
+        BigDecimal floor = pending.floorAreaM2().multiply(share.min(BigDecimal.ONE))
+                .setScale(FLOOR_SCALE, RoundingMode.HALF_UP).min(pending.floorAreaM2());
+        return new OrderAmounts(stated.weightKg(), stated.volumeM3(), stated.pallets(), floor, null);
+    }
+
+    private static BigDecimal ratio(BigDecimal stated, BigDecimal pending) {
+        if (stated == null || pending == null || pending.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return stated.divide(pending, SHARE_SCALE, RoundingMode.HALF_UP);
     }
 }

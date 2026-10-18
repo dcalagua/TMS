@@ -11,6 +11,7 @@ import com.ebim.tms.shared.reference.TripCostLookupPort.TripCostSummary;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.security.CompanyScopeLoader;
 import com.ebim.tms.shared.security.SystemJobAuthentication;
+import com.ebim.tms.shared.security.TenantOperationGate;
 import com.ebim.tms.shared.settings.AccrualTrigger;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -24,6 +25,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -54,11 +56,14 @@ public class CostAllocationSweep {
     private final CompanyScopeLoader companyScopeLoader;
     private final Clock clock;
     private final Duration lookback;
+    private final ObjectProvider<TenantOperationGate> operationGate;
 
     public CostAllocationSweep(AccruableTripLookupPort tripLookupPort, TripCostLookupPort tripCostLookupPort,
             CostAllocationRepository repository, CostAllocationService allocationService,
             CompanyScopeLoader companyScopeLoader, Clock clock,
-            @Value("${tms.finance.cost-allocation.lookback:62d}") Duration lookback) {
+            @Value("${tms.finance.cost-allocation.lookback:62d}") Duration lookback,
+            ObjectProvider<TenantOperationGate> operationGate) {
+        this.operationGate = operationGate;
         this.tripLookupPort = tripLookupPort;
         this.tripCostLookupPort = tripCostLookupPort;
         this.repository = repository;
@@ -68,13 +73,16 @@ public class CostAllocationSweep {
         this.lookback = lookback;
     }
 
-    /** What one pass did. {@code withoutCost}: trips that left with no figure to split, counted. */
-    public record Result(int allocated, int withoutCost) {
+    /**
+     * What one pass did. {@code withoutCost}: trips that left with no figure to split, counted;
+     * {@code failed}: trips whose allocation threw and were skipped for this pass (logged, retried next).
+     */
+    public record Result(int allocated, int withoutCost, int failed) {
 
-        static final Result NONE = new Result(0, 0);
+        static final Result NONE = new Result(0, 0, 0);
 
         Result plus(Result other) {
-            return new Result(allocated + other.allocated, withoutCost + other.withoutCost);
+            return new Result(allocated + other.allocated, withoutCost + other.withoutCost, failed + other.failed);
         }
     }
 
@@ -88,8 +96,9 @@ public class CostAllocationSweep {
                 continue;
             }
             try {
+                // A suspended organization (ADR-021) is not written to, by a person or by a machine.
                 total = total.plus(SystemJobAuthentication.runAs(scope.get(), ACTOR_LABEL,
-                        () -> sweepCompany(scope.get(), since, now.plusSeconds(1))));
+                        () -> suspended(scope.get()) ? Result.NONE : sweepCompany(scope.get(), since, now.plusSeconds(1))));
             } catch (RuntimeException failure) {
                 log.error("The cost allocation sweep failed for company {}; the next pass retries it", companyId,
                         failure);
@@ -101,6 +110,7 @@ public class CostAllocationSweep {
     Result sweepCompany(CompanyScope scope, OffsetDateTime from, OffsetDateTime to) {
         int allocated = 0;
         int withoutCost = 0;
+        int failed = 0;
         AccruableTrip after = null;
         while (true) {
             List<AccruableTrip> page = tripLookupPort.findExecuted(scope.companyId(), AccrualTrigger.DISPATCHED,
@@ -120,15 +130,32 @@ public class CostAllocationSweep {
                     }
                     continue;
                 }
-                if (allocateOne(scope, trip.tripId(), trigger.get())) {
-                    allocated++;
+                // One trip that throws must not abort the company's pass: logged, counted, retried.
+                try {
+                    if (allocateOne(scope, trip.tripId(), trigger.get())) {
+                        allocated++;
+                    }
+                } catch (RuntimeException failure) {
+                    failed++;
+                    log.warn("The cost allocation of trip {} of company {} failed; the next pass retries it",
+                            trip.tripId(), scope.companyId(), failure);
                 }
             }
             if (page.size() < PAGE) {
                 break;
             }
         }
-        return new Result(allocated, withoutCost);
+        return new Result(allocated, withoutCost, failed);
+    }
+
+    /** Whether MasterAdmin has suspended the company's organization; asked on the company's own connection. */
+    private boolean suspended(CompanyScope scope) {
+        TenantOperationGate gate = operationGate.getIfAvailable();
+        if (gate == null || gate.currentSuspension(scope).isEmpty()) {
+            return false;
+        }
+        log.debug("Cost allocation sweep skipped for suspended company {}", scope.companyId());
+        return true;
     }
 
     /**

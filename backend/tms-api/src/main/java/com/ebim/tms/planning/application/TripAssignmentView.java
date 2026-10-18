@@ -30,5 +30,9 @@ public record TripAssignmentView(
         BigDecimal assignedVolumeM3,
         BigDecimal assignedPallets,
         boolean wholeOrder,
-        OffsetDateTime assignedAt) {
+        OffsetDateTime assignedAt,
+        // Additive (V62, ADR-022 section 6): the floor this assignment takes and the tallest stack it
+        // carries, from the assignment row like the three amounts above. Height null = not measured.
+        BigDecimal assignedFloorAreaM2,
+        BigDecimal assignedStackHeightM) {
 }

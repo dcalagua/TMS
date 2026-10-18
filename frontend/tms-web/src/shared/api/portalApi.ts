@@ -57,6 +57,18 @@ export interface PortalDocument {
   /** False once the office confirmed the return: the report is then final. */
   editable: boolean
   evidence: EvidenceRef[]
+  /**
+   * ADR-028: the authority's identity of the document (an Ecuadorian guide's clave de acceso), or
+   * null when the ERP sent none. Optional: a trip cached offline before V69 has no such field.
+   */
+  fiscal?: PortalDocumentFiscal | null
+}
+
+/** Mirrors `LogisticsDocumentPort.FiscalIdentity`. */
+export interface PortalDocumentFiscal {
+  fiscalCountry: string | null
+  fiscalDocumentCode: string | null
+  authorizationNumber: string | null
 }
 
 export interface PortalStop {

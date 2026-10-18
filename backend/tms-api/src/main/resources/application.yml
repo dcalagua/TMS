@@ -138,7 +138,11 @@ tms:
       # completions when the company accrues at delivery - and accrues what is missing, then
       # adjusts open accruals to closed actual costs. `lookback` bounds the automatic pass; older
       # trips stay listed as unaccrued and can be accrued with POST /settlement/accruals/sweep.
-      sweep-enabled: ${TMS_ACCRUAL_SWEEP_ENABLED:true}
+      # OFF by default: the first pass accrues (books journal entries for) every trip of the last
+      # `lookback` days of every active, non-suspended company. Turn it on per deployment, once
+      # finance has the GL mappings in place, with TMS_ACCRUAL_SWEEP_ENABLED=true (and, for a first
+      # run that should not reach back a month, a shorter TMS_ACCRUAL_SWEEP_LOOKBACK).
+      sweep-enabled: ${TMS_ACCRUAL_SWEEP_ENABLED:false}
       sweep-interval: ${TMS_ACCRUAL_SWEEP_INTERVAL:5m}
       lookback: ${TMS_ACCRUAL_SWEEP_LOOKBACK:31d}
   finance:
@@ -149,7 +153,10 @@ tms:
       # re-allocates those whose cost was closed after their current run; older trips are
       # recalculated by hand (POST /settlement/cost-allocation/trips/{id}/recalculate).
       default-basis: ${TMS_COST_ALLOCATION_DEFAULT_BASIS:WEIGHT}
-      sweep-enabled: ${TMS_COST_ALLOCATION_SWEEP_ENABLED:true}
+      # OFF by default, like the accrual sweep: the first pass allocates every trip of the last
+      # `lookback` days of every active, non-suspended company. Turn it on per deployment with
+      # TMS_COST_ALLOCATION_SWEEP_ENABLED=true. Invoice approval and "Recalcular" allocate either way.
+      sweep-enabled: ${TMS_COST_ALLOCATION_SWEEP_ENABLED:false}
       sweep-interval: ${TMS_COST_ALLOCATION_SWEEP_INTERVAL:10m}
       lookback: ${TMS_COST_ALLOCATION_SWEEP_LOOKBACK:62d}
     pe:

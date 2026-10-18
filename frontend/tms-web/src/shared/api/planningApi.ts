@@ -176,8 +176,17 @@ export interface TripCapacityView {
   weight: CapacityDimension
   volume: CapacityDimension
   pallets: CapacityDimension
+  /** m² de piso (V62); sin límite cuando el tipo de vehículo no declara largo y ancho. Opcional: backend anterior. */
+  floor?: CapacityDimension | null
+  /** La pila más alta contra el alto útil del vehículo (V62): un máximo, nunca una suma. */
+  height?: CapacityDimension | null
   withinCapacity: boolean
+  /** La dimensión más cerca de su límite: lo que «llena» este camión. Null si ninguna tiene %. */
+  bindingDimension?: CapacityBindingDimension | null
 }
+
+/** Mirrors `CapacityLimits.bindingDimension`. */
+export type CapacityBindingDimension = 'WEIGHT' | 'VOLUME' | 'FLOOR' | 'HEIGHT' | 'PALLETS'
 
 /** Mirrors the backend's `EligibleOrderView` record - a planning-board row, never lines. */
 export interface EligibleOrderView {
@@ -204,6 +213,16 @@ export interface EligibleOrderView {
   /** Parte del pedido ya está en un viaje. Bandera propia y no una comparación de dos números:
    * "esto es un reparto" es lo que el tablero tiene que decir en voz alta. */
   partiallyAllocated: boolean
+  /**
+   * Geometría de carga (V62, ADR-022 §4), de sólo lectura. `pendingVolumeM3` ya es el volumen de
+   * planificación; `planningVolumeM3` es el del pedido entero, para compararlo con `totalVolumeM3`
+   * (el declarado). Opcionales: un backend anterior no los manda. Alturas null = nada medido.
+   */
+  planningVolumeM3?: number | null
+  floorAreaM2?: number | null
+  pendingFloorAreaM2?: number | null
+  maxStackHeightM?: number | null
+  maxUnitHeightM?: number | null
 }
 
 export interface EligibleOrderListParams {
@@ -344,6 +363,9 @@ export interface TripAssignmentView {
   assignedPallets: number
   wholeOrder: boolean
   assignedAt: string
+  /** Piso y pila más alta de esta asignación (V62), de la fila de asignación. Opcionales. */
+  assignedFloorAreaM2?: number | null
+  assignedStackHeightM?: number | null
 }
 
 /** Mirrors the backend's `TripStopView` record.
@@ -620,6 +642,8 @@ export interface UnplannedOrderView {
   orderNumber: string | null
   reason:
     | 'EXCEEDS_LARGEST_VEHICLE'
+    /** Una unidad es más alta que cualquier vehículo ofrecido (V62): ni repartir ni reapilar ayuda. */
+    | 'ITEM_TALLER_THAN_VEHICLE'
     | 'NO_VEHICLE_AVAILABLE'
     | 'NO_FLEET'
     | 'TAKEN_WHILE_PLANNING'
@@ -691,6 +715,9 @@ export interface PlanningKpis {
   weightUtilizationPercent: number | null
   volumeUtilizationPercent: number | null
   palletUtilizationPercent: number | null
+  /** Uso de piso y de alto (V62), mismo promedio que las otras tres. Opcionales: backend anterior. */
+  floorUtilizationPercent?: number | null
+  heightUtilizationPercent?: number | null
   /** Alguna distancia salió del estimador local y no de un enrutador. */
   distanceEstimated: boolean
   totalCost: number | null
@@ -804,6 +831,8 @@ export interface AssignOrderRequest {
   weightKg?: number
   volumeM3?: number
   pallets?: number
+  /** m² de piso del tramo (V62, ADR-022 §5): misma regla que las otras tres, omitido = 0. */
+  floorAreaM2?: number
 }
 
 export function assignOrderToTrip(
