@@ -96,6 +96,19 @@ public enum ProblemType {
             HttpStatus.UNPROCESSABLE_ENTITY),
 
     /**
+     * A reported payment is larger than what is still owed on the invoice (V67, ADR-023 section 2):
+     * total, minus credit notes, plus debit notes, minus detraction and retention, minus what was
+     * already paid. Well formed, and refused on its merits: either the payment is against the wrong
+     * invoice or a note TMS has not seen exists, and a person has to say which.
+     */
+    PAYMENT_EXCEEDS_BALANCE("payment-exceeds-balance", "Payment exceeds the open balance",
+            HttpStatus.UNPROCESSABLE_ENTITY),
+
+    /** A payment in another currency than its invoice's (V67). TMS invents no exchange rate. */
+    PAYMENT_CURRENCY_MISMATCH("payment-currency-mismatch", "Payment currency differs from the invoice's",
+            HttpStatus.UNPROCESSABLE_ENTITY),
+
+    /**
      * A capability this deployment has not been configured for was asked of it - today, only
      * proof-of-delivery evidence storage ({@code tms.storage.evidence.mode}).
      *

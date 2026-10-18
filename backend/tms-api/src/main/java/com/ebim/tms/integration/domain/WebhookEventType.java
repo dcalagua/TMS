@@ -57,13 +57,23 @@ public enum WebhookEventType {
      * it comes from {@code tms.business_outbox_event}, so it has no {@code ShipmentEventType} mirror.
      * Its audience is the warehouse preparing the order, which raises an alert and decides (D-03).
      */
-    ORDER_CANCELLED;
+    ORDER_CANCELLED,
+
+    /**
+     * The carrier invoice events (migration V67, ADR-023 section 2), also from the business outbox,
+     * with {@code resource.type = "carrier-invoice"}: a person authorised the obligation, it was handed
+     * to whoever pays, and the payments reported cover it. Their audience is the ERP and the carrier.
+     */
+    INVOICE_APPROVED,
+    PAYABLE_EXPORTED,
+    PAYABLE_PAID;
 
     /**
      * The values published from {@code tms.business_outbox_event} rather than the shipment outbox -
      * what {@code WebhookEventTypeTest} leaves out of the parity check with {@code ShipmentEventType}.
      */
-    public static final Set<WebhookEventType> BUSINESS_EVENTS = Set.of(ORDER_CANCELLED);
+    public static final Set<WebhookEventType> BUSINESS_EVENTS =
+            Set.of(ORDER_CANCELLED, INVOICE_APPROVED, PAYABLE_EXPORTED, PAYABLE_PAID);
 
     /**
      * The event type behind a published fact's {@code eventType} string, or empty when TMS

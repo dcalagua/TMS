@@ -61,6 +61,13 @@ public class Carrier {
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
+    /**
+     * Days from an invoice's date to its due date (V67, ADR-023 section 2). Null: the company's
+     * default, else the configured property. Read at approval and frozen on the invoice.
+     */
+    @Column(name = "payment_terms_days")
+    private Integer paymentTermsDays;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false, nullable = false)
     private OffsetDateTime createdAt;
@@ -165,6 +172,18 @@ public class Carrier {
         this.email = email;
         this.externalReference = externalReference;
         this.updatedBy = actorId;
+    }
+
+    public Integer paymentTermsDays() {
+        return paymentTermsDays;
+    }
+
+    /** 0 to 365 days, or null to fall back ({@code ck_carrier_payment_terms_days}). */
+    public void changePaymentTerms(Integer days) {
+        if (days != null && (days < 0 || days > 365)) {
+            throw new IllegalArgumentException("payment terms are 0 to 365 days");
+        }
+        this.paymentTermsDays = days;
     }
 
     public void activate(UUID actorId) {

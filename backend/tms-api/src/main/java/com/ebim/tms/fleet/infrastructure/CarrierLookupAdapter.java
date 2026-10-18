@@ -71,6 +71,20 @@ class CarrierLookupAdapter implements CarrierLookupPort {
     }
 
     @Override
+    public Optional<UUID> findIdByCode(String code, UUID companyId) {
+        if (code == null || code.isBlank()) {
+            return Optional.empty();
+        }
+        return carrierRepository.findByCompanyIdAndCodeIn(companyId, Set.of(code.trim().toUpperCase(java.util.Locale.ROOT)))
+                .stream().map(Carrier::id).findFirst();
+    }
+
+    @Override
+    public Optional<Integer> paymentTermsDaysOf(UUID id, UUID companyId) {
+        return carrierRepository.findByIdAndCompanyId(id, companyId).map(Carrier::paymentTermsDays);
+    }
+
+    @Override
     public Optional<String> rucOf(UUID id, UUID companyId) {
         return carrierRepository.findByIdInAndCompanyId(Set.of(id), companyId).stream()
                 .filter(carrier -> "RUC".equalsIgnoreCase(carrier.taxIdType()))

@@ -16,6 +16,7 @@ import {
   Inventory2Rounded,
   TuneRounded,
   AccountBalanceWalletRounded,
+  PaymentsRounded,
 } from "@mui/icons-material";
 
 /** Una hoja del menú: una pantalla concreta. */
@@ -81,6 +82,7 @@ export const ICON_TINTS: Record<string, string> = {
   "/settlement": "#8D6E63",
   "/settlement/tolerances": "#A1887F",
   "/settlement/accruals": "#BCAAA4",
+  "/settlement/payables": "#C49A6C",
   "/work-assignments": "#7E57C2",
   "/masters/locations": "#4FC3F7",
   "/masters/origins": "#4DB6AC",
@@ -167,6 +169,10 @@ export const NAV_SECTIONS: NavSection[] = [
       // consume la factura aprobada. Su propio permiso - es contabilidad, no auditoría.
       { to: "/settlement/accruals", label: "Provisiones", icon: <AccountBalanceWalletRounded />,
         capability: "ACCRUAL_VIEW" },
+      // Fase 65: lo que sigue a exportar - vencimientos, antigüedad y pagos que informa el ERP. Leer
+      // pide lo mismo que leer facturas; registrar y confirmar un pago, sus propios permisos.
+      { to: "/settlement/payables", label: "Cuentas por pagar", icon: <PaymentsRounded />,
+        capability: "SETTLEMENT_VIEW" },
       // Junto a Viajes y no en Maestros: mantener la ficha de un camión y planificar su día son
       // trabajos distintos que hacen personas distintas.
       { to: "/work-assignments", label: "Días de trabajo", icon: <EventNoteRounded />,

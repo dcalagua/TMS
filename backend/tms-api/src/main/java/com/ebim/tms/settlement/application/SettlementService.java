@@ -124,6 +124,9 @@ public class SettlementService {
     private final FiscalSettingsResolver fiscalSettingsResolver;
     private final CpeValidationPort cpeValidationPort;
     private final GlAccountMappingRepository glAccountMappingRepository;
+    private final PaymentTermsResolver paymentTermsResolver;
+    private final com.ebim.tms.shared.reference.BusinessEventPublisher businessEventPublisher;
+    private final java.time.Clock clock;
 
     public SettlementService(CarrierInvoiceRepository invoiceRepository, FreightMatchRepository matchRepository,
             FreightDiscrepancyRepository discrepancyRepository, SettlementApprovalRepository approvalRepository,
@@ -133,7 +136,8 @@ public class SettlementService {
             AuditActorProvider auditActorProvider, AuditRecorder auditRecorder,
             io.micrometer.core.instrument.MeterRegistry meterRegistry, AccrualService accrualService,
             FiscalSettingsResolver fiscalSettingsResolver, CpeValidationPort cpeValidationPort,
-            GlAccountMappingRepository glAccountMappingRepository) {
+            GlAccountMappingRepository glAccountMappingRepository, PaymentTermsResolver paymentTermsResolver,
+            com.ebim.tms.shared.reference.BusinessEventPublisher businessEventPublisher, java.time.Clock clock) {
         this.invoiceRepository = invoiceRepository;
         this.matchRepository = matchRepository;
         this.discrepancyRepository = discrepancyRepository;
@@ -151,6 +155,9 @@ public class SettlementService {
         this.fiscalSettingsResolver = fiscalSettingsResolver;
         this.cpeValidationPort = cpeValidationPort;
         this.glAccountMappingRepository = glAccountMappingRepository;
+        this.paymentTermsResolver = paymentTermsResolver;
+        this.businessEventPublisher = businessEventPublisher;
+        this.clock = clock;
     }
 
     // ------------------------------------------------------------------ receiving
@@ -646,6 +653,11 @@ public class SettlementService {
         requireDifferentApprover(invoice, actorId);
         requireNoOpenDiscrepancies(scope, invoice);
         invoice.transitionTo(InvoiceStatus.APPROVED, actorId);
+        // V67 (ADR-023 section 2): the due date is frozen now, under the terms in force now. A note is
+        // not paid on its own, so it has none.
+        if (!invoice.documentType().isNote()) {
+            invoice.fixDueDate(paymentTermsResolver.termsDaysFor(scope.companyId(), invoice.carrierId()));
+        }
 
         approvalRepository.save(new SettlementApproval(scope.companyId(), invoice.id(),
                 SettlementApproval.Decision.APPROVED, actorId, blankToNull(comment)));
@@ -657,6 +669,7 @@ public class SettlementService {
         // The accrual of each billed trip is consumed in this same transaction (V65, ADR-023): an
         // approval that committed without it would leave an obligation counted twice.
         accrualService.consumeApprovedInvoice(scope, invoice, actorId);
+        publish(scope, invoice, com.ebim.tms.shared.reference.BusinessEventPublisher.INVOICE_APPROVED);
         return toView(scope, invoice);
     }
 
@@ -812,7 +825,18 @@ public class SettlementService {
 
         auditRecorder.record(scope, AuditAggregateType.CARRIER_INVOICE, invoice.id(), AuditAction.INVOICE_EXPORTED,
                 Map.of("invoiceNumber", invoice.invoiceNumber(), "exportReference", export.exportReference()));
+        publish(scope, invoice, com.ebim.tms.shared.reference.BusinessEventPublisher.PAYABLE_EXPORTED);
         return PayableExportView.of(export, false);
+    }
+
+    /**
+     * One carrier-invoice webhook (V67, ADR-023 section 2), through the business outbox in this same
+     * transaction: an approval or an export that rolls back takes its event with it.
+     */
+    private void publish(CompanyScope scope, CarrierInvoice invoice, String eventType) {
+        businessEventPublisher.publish(new com.ebim.tms.shared.reference.BusinessEventPublisher.BusinessEvent(
+                scope.companyId(), com.ebim.tms.shared.reference.BusinessEventPublisher.CARRIER_INVOICE, invoice.id(),
+                invoice.invoiceNumber(), eventType, java.time.OffsetDateTime.now(clock)));
     }
 
     private PayableExportPort exporterFor(PayableExport.Format format) {

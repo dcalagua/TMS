@@ -1113,3 +1113,102 @@ queue until the next poll noticed it was gone.
    the response echoes `"status": "REJECTED"`.
 5. Poll interval is agreed. There is no webhook - V1 stops at the transactional outbox, for the
    reasons `docs/integrations/OUTBOUND_SHIPMENT_V1.md` sets out.
+
+## 14. Payable payments (migration V67, ADR-023 section 2)
+
+The ERP tells TMS what it paid against a carrier invoice that TMS exported (`POST /settlement/invoices/{id}/export`).
+**TMS records the payment and moves no money** (decision D-01): it has no bank account, produces no bank file and
+executes nothing. A person can record the same thing by hand, with a second person confirming (four eyes); both channels
+end in one append-only row of `tms.carrier_payment`.
+
+### 14.1 `POST /integration/v1/payable-payments`
+
+- Scope **`integration.payable-payment:write`**, operation `PAYABLE_PAYMENT` (`payable-payment.record` in the inbox).
+- `Idempotency-Key` recommended: the same key with the same payload replays the first response; with another payload it
+  is `409`.
+- The payment is attributed to the credential (`carrier_payment.source = INTEGRATION`, `recorded_by_client`), never to a
+  person. The company is the credential's.
+
+```http
+POST /integration/v1/payable-payments
+Authorization: Bearer tms_ic_<clientId>.<secret>
+Idempotency-Key: 4f7c1c9e-2a1d-4b55-9a0e-6d2f3c7b8a10
+Content-Type: application/json
+
+{
+  "invoice": {
+    "carrierTaxId": "20600000011",
+    "documentType": "01",
+    "series": "F001",
+    "correlative": "000123"
+  },
+  "paymentReference": "SAP-PAY-2026-11-0042",
+  "paidOn": "2026-11-10",
+  "amount": 560.00,
+  "currency": "PEN",
+  "detraction": { "constancyNumber": "DET-889120", "constancyDate": "2026-11-09", "amount": 40.00 },
+  "retentionAmount": null,
+  "sourceSystem": "SAP"
+}
+```
+
+```json
+201 Created
+{
+  "invoiceId": "0b5a3c2e-8f1e-4d0a-9b8e-3c6d2e1f4a77",
+  "invoiceNumber": "F001-123",
+  "paymentId": "6e1d0c9b-7a2f-4e3d-8c1b-5a4f3e2d1c0b",
+  "outcome": "RECORDED",
+  "status": "PAID",
+  "paidAmount": 960.00,
+  "openBalance": 0.00,
+  "dueDate": "2026-11-19"
+}
+```
+
+**Naming the invoice** - exactly one of:
+
+| Key | Fields | Use |
+|---|---|---|
+| TMS id | `invoiceId` | The export payload carries it (`invoiceId`) |
+| CPE | `carrierTaxId` (issuer RUC), `documentType` (`01` default), `series`, `correlative` | Leading zeros of the correlative are ignored |
+| Pre-CPE | `carrierCode`, `invoiceNumber` | A document received without series and correlative |
+
+**The open balance** a payment is checked against:
+
+```
+net     = total - approved credit notes (07) + approved debit notes (08)
+payable = net - detraction - retention        (deposited elsewhere, not paid to the carrier)
+open    = payable - payments already recorded
+```
+
+`amount` is what the carrier was paid. `detraction` is the deposit's proof: when the invoice carries a detraction, its
+constancy number and date are stored on the invoice too; on an invoice without detraction it is a `400`.
+
+### 14.2 Outcomes
+
+| Status | Meaning |
+|---|---|
+| `201` `RECORDED` | The payment was recorded; `status` is `PARTIALLY_PAID` or `PAID` |
+| `200` `DUPLICATE` | The same `paymentReference` for this invoice, with the same date, amount and currency: nothing new is recorded and the first `paymentId` is returned |
+| `400` | Validation (amount not positive, more than two decimals, two invoice keys, a constancy on an invoice without detraction) |
+| `403` | The credential lacks `integration.payable-payment:write` |
+| `404` | No invoice of this company matches the key |
+| `409` | The invoice is not exported yet; the document is a credit/debit note (a note adjusts its invoice and is not paid); the `paymentReference` was already used with other figures |
+| `422` `payment-exceeds-balance` | `amount` is above the open balance; `detail` states net, detraction, retention, paid and open. A `PAID` invoice has an open balance of zero |
+| `422` `payment-currency-mismatch` | `currency` is not the invoice's. TMS converts no currency |
+
+A `4xx` is recorded in the inbox as `REJECTED` with its own status; it is the ERP's to correct and resending the same
+payload will not help.
+
+### 14.3 What the status means afterwards
+
+`EXPORTED` -> `SCHEDULED` (a person planned the date) -> `PARTIALLY_PAID` -> `PAID`, or `ON_HOLD` (a person stopped it, with
+a reason). A payment the ERP reports on a held invoice is recorded - the money left regardless - and ends the hold (audited
+as `PAYABLE_HOLD_RELEASED` with the hold's reason). `PAID` is terminal. Webhooks: `INVOICE_APPROVED`, `PAYABLE_EXPORTED`,
+`PAYABLE_PAID` (`WEBHOOKS_V1.md`).
+
+### 14.4 Not in this contract
+
+Bank files, payment execution, bank accounts, a general ledger, FX, reversing a payment (the ERP issues another document;
+`tms.carrier_payment` is append-only by grant and by trigger).

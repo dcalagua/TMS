@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.Arrays;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 /**
  * The invoice lifecycle (migration V46).
@@ -60,10 +62,64 @@ class InvoiceStatusTest {
     }
 
     @Test
-    @DisplayName("an exported or rejected invoice is finished")
+    @DisplayName("a paid or rejected invoice is finished; an exported one is not since V67")
     void terminalStates() {
-        assertThat(InvoiceStatus.EXPORTED.isTerminal()).isTrue();
+        assertThat(InvoiceStatus.PAID.isTerminal()).isTrue();
         assertThat(InvoiceStatus.REJECTED.isTerminal()).isTrue();
+        assertThat(InvoiceStatus.EXPORTED.isTerminal()).isFalse();
+        assertThat(Arrays.stream(InvoiceStatus.values()).filter(InvoiceStatus::isTerminal).toList())
+                .containsExactlyInAnyOrder(InvoiceStatus.PAID, InvoiceStatus.REJECTED);
+    }
+
+    /** ADR-023 section 2, the table as written there, row by row. */
+    @ParameterizedTest(name = "{0} -> {1}")
+    @CsvSource({
+            "EXPORTED,       SCHEDULED PARTIALLY_PAID PAID ON_HOLD",
+            "SCHEDULED,      PARTIALLY_PAID PAID ON_HOLD",
+            "PARTIALLY_PAID, PARTIALLY_PAID PAID ON_HOLD",
+            "ON_HOLD,        SCHEDULED PARTIALLY_PAID PAID",
+            "PAID,           ''"})
+    @DisplayName("the payment states move exactly as ADR-023 section 2 says")
+    void paymentTransitions(InvoiceStatus from, String to) {
+        java.util.Set<InvoiceStatus> expected = to.isBlank() ? java.util.Set.of()
+                : Arrays.stream(to.trim().split("\\s+")).map(InvoiceStatus::valueOf)
+                        .collect(java.util.stream.Collectors.toSet());
+        assertThat(from.allowedTransitions()).containsExactlyInAnyOrderElementsOf(expected);
+    }
+
+    @Test
+    @DisplayName("nothing goes back to EXPORTED or APPROVED, and nothing reaches a payment state before the export")
+    void paymentStatesFollowTheExport() {
+        java.util.Set<InvoiceStatus> paymentStates = java.util.EnumSet.of(InvoiceStatus.SCHEDULED,
+                InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.PAID, InvoiceStatus.ON_HOLD);
+        for (InvoiceStatus status : InvoiceStatus.values()) {
+            if (status != InvoiceStatus.APPROVED) {
+                assertThat(status.canTransitionTo(InvoiceStatus.EXPORTED)).as(status + " -> EXPORTED").isFalse();
+            }
+            if (!paymentStates.contains(status) && status != InvoiceStatus.EXPORTED) {
+                assertThat(status.allowedTransitions()).as(status.name()).doesNotContainAnyElementsOf(paymentStates);
+            }
+            if (paymentStates.contains(status) || status == InvoiceStatus.EXPORTED) {
+                assertThat(status.canTransitionTo(InvoiceStatus.APPROVED)).isFalse();
+                assertThat(status.canTransitionTo(InvoiceStatus.REJECTED)).isFalse();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("a payment is recorded only after the export and never once paid")
+    void acceptsPaymentOnlyAfterTheExport() {
+        assertThat(Arrays.stream(InvoiceStatus.values()).filter(InvoiceStatus::acceptsPayment).toList())
+                .containsExactlyInAnyOrder(InvoiceStatus.EXPORTED, InvoiceStatus.SCHEDULED,
+                        InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.ON_HOLD);
+    }
+
+    @Test
+    @DisplayName("a paid invoice is still an authorised one: it keeps consuming its accrual and netting its notes")
+    void authorisedIncludesThePaymentStates() {
+        assertThat(InvoiceStatus.AUTHORISED).containsExactlyInAnyOrder(InvoiceStatus.APPROVED, InvoiceStatus.EXPORTED,
+                InvoiceStatus.SCHEDULED, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.PAID, InvoiceStatus.ON_HOLD);
+        assertThat(InvoiceStatus.OPEN_PAYABLE).doesNotContain(InvoiceStatus.PAID);
     }
 
     /**
@@ -81,10 +137,12 @@ class InvoiceStatusTest {
     }
 
     @Test
-    @DisplayName("every state can be refused, except the ones already finished")
+    @DisplayName("every state before the export can be refused, except the ones already finished")
     void everythingLiveCanBeRejected() {
         assertThat(Arrays.stream(InvoiceStatus.values())
                 .filter(status -> !status.isTerminal())
+                // Handed over: what follows is the ERP's payment, not a refusal (V67).
+                .filter(status -> status != InvoiceStatus.EXPORTED && !status.acceptsPayment())
                 .filter(status -> !status.canTransitionTo(InvoiceStatus.REJECTED))
                 .toList())
                 .isEmpty();

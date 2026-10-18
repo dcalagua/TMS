@@ -203,5 +203,19 @@ public enum AuditAction {
     /** The approver accepted a penalty line - the shipper's deduction on the document (V66). */
     PENALTY_ACCEPTED,
     /** A person changed the computed retention, with a reason (V66). */
-    RETENTION_OVERRIDDEN
+    RETENTION_OVERRIDDEN,
+
+    // V67 (ADR-023 section 2): what happens to an invoice after the export. TMS moves no money (D-01).
+    /** The payment of an exported invoice was planned for a date. */
+    PAYABLE_SCHEDULED,
+    /** Payment of the invoice was stopped, with a reason. */
+    PAYABLE_HOLD_PLACED,
+    /** The hold was lifted, with a reason (or by a payment the ERP reported). */
+    PAYABLE_HOLD_RELEASED,
+    /** A person keyed a payment that a second person must confirm. */
+    PAYMENT_REQUESTED,
+    /** The second person refused the keyed payment, with a reason. */
+    PAYMENT_REQUEST_REJECTED,
+    /** A payment was recorded: reported by the ERP, or keyed and confirmed by two people. */
+    PAYMENT_RECORDED
 }

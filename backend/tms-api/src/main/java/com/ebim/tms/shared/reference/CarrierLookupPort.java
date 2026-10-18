@@ -61,4 +61,14 @@ public interface CarrierLookupPort {
     default Optional<String> rucOf(UUID id, UUID companyId) {
         return Optional.empty();
     }
+
+    /** The carrier with this code in the company (codes are stored upper case), active or not (V67). */
+    default Optional<UUID> findIdByCode(String code, UUID companyId) {
+        return Optional.empty();
+    }
+
+    /** The carrier's own payment terms in days; empty when it has none (V67, ADR-023 section 2). */
+    default Optional<Integer> paymentTermsDaysOf(UUID id, UUID companyId) {
+        return Optional.empty();
+    }
 }

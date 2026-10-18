@@ -146,3 +146,67 @@ export function downloadPortalEvidence(
   return apiDownload(`/portal/trips/${tripId}/documents/${documentId}/evidence/${evidenceId}/content`,
     { companyId, signal })
 }
+
+// --- Mis facturas (fase 65) ----------------------------------------------------------------
+//
+// Lo que el transportista ve de sus facturas: un estado simplificado (no ve la auditoría por
+// dentro), el vencimiento, lo pagado y la constancia de detracción. Sin copia en el teléfono: una
+// factura no se reporta desde la calle, así que sin señal la pantalla sólo lo dice.
+
+/** El estado que ve el transportista, no el `InvoiceStatus` de la oficina. */
+export const PORTAL_INVOICE_STATUSES = [
+  'IN_REVIEW', 'APPROVED', 'SCHEDULED', 'PARTIALLY_PAID', 'PAID', 'ON_HOLD', 'REJECTED',
+] as const
+export type PortalInvoiceStatus = (typeof PORTAL_INVOICE_STATUSES)[number]
+
+export interface PortalInvoiceSummary {
+  id: string
+  invoiceNumber: string
+  documentType: string
+  invoiceDate: string
+  currency: string
+  totalAmount: number
+  status: PortalInvoiceStatus
+  dueDate: string | null
+  paidAmount: number
+  /** Null mientras la factura no está aprobada: aún no hay un saldo que pagar. */
+  openBalance: number | null
+  detractionAmount: number | null
+  detractionConstancyNumber: string | null
+}
+
+export interface PortalInvoiceLine {
+  lineNumber: number
+  description: string | null
+  lineAmount: number
+  chargeCode: string
+}
+
+export interface PortalInvoicePayment {
+  paymentReference: string
+  paidOn: string
+  amount: number
+  detractionConstancyNumber: string | null
+  detractionConstancyDate: string | null
+  detractionAmount: number | null
+  retentionAmount: number | null
+}
+
+export interface PortalInvoiceDetail extends PortalInvoiceSummary {
+  netAmount: number | null
+  retentionAmount: number | null
+  payableAmount: number | null
+  rejectionReason: string | null
+  lines: PortalInvoiceLine[]
+  payments: PortalInvoicePayment[]
+}
+
+/** `portal.invoice:read`. */
+export function fetchPortalInvoices(companyId: string, signal?: AbortSignal): Promise<PortalInvoiceSummary[]> {
+  return apiRequest<PortalInvoiceSummary[]>('/portal/invoices', { companyId, signal })
+}
+
+/** `portal.invoice:read`. */
+export function fetchPortalInvoice(companyId: string, invoiceId: string, signal?: AbortSignal): Promise<PortalInvoiceDetail> {
+  return apiRequest<PortalInvoiceDetail>(`/portal/invoices/${invoiceId}`, { companyId, signal })
+}

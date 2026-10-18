@@ -78,8 +78,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AccrualService {
 
-    /** Approved invoices that consume an accrual born after them (V46 statuses; phase 65 adds more). */
-    static final Set<InvoiceStatus> CONSUMING_STATUSES = Set.of(InvoiceStatus.APPROVED, InvoiceStatus.EXPORTED);
+    /**
+     * Approved invoices that consume an accrual born after them: every authorised status, so an invoice
+     * that was paid (V67) still counts as the one that settled the trip.
+     */
+    static final Set<InvoiceStatus> CONSUMING_STATUSES = InvoiceStatus.AUTHORISED;
 
     /** How many executed trips the "unaccrued" report lists before saying it stopped. */
     static final int UNACCRUED_LIMIT = 500;

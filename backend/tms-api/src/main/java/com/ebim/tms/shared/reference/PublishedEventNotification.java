@@ -41,4 +41,7 @@ public record PublishedEventNotification(
 
     /** {@link #resourceType} of an order event (V61, {@code ORDER_CANCELLED}). */
     public static final String ORDER = "order";
+
+    /** {@link #resourceType} of a carrier invoice event (V67, ADR-023 section 2). */
+    public static final String CARRIER_INVOICE = "carrier-invoice";
 }

@@ -1,6 +1,6 @@
 import type { PortalStop } from "../../shared/api/portalApi";
 import { t } from "../../lib/i18n";
-import { fmtDateTime, fmtTime } from "../../lib/locale";
+import { fmtDateTime, fmtNumber, fmtTime } from "../../lib/locale";
 
 /**
  * Medidas y ayudas del portal en el teléfono: fuera, con una mano, a veces con guantes.
@@ -46,4 +46,13 @@ export function staleLabel(savedAt: string, now: Date = new Date()): string {
   return sameDay
     ? t("Sin conexión · datos de las {{time}}", { time: fmtTime(saved) })
     : t("Sin conexión · datos del {{when}}", { when: fmtDateTime(saved) });
+}
+
+/** La clave de las facturas del portal (fase 65). Sin copia en el teléfono: sólo la caché en memoria. */
+export const portalInvoicesKey = (companyId: string) => ["portal-invoices", companyId] as const;
+
+/** Un importe del portal, con su moneda. Null es «aún no hay cifra», y se dice con un guion. */
+export function portalMoney(value: number | null | undefined, currency: string): string {
+  if (value === null || value === undefined) return "—";
+  return `${fmtNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }

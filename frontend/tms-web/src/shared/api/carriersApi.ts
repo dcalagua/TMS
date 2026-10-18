@@ -12,6 +12,8 @@ export interface CarrierView {
   phone: string | null
   email: string | null
   externalReference: string | null
+  /** Fase 65: plazo de pago en días (0-365). Null = el de la empresa (30). Ausente en un servidor anterior. */
+  paymentTermsDays?: number | null
   active: boolean
   createdAt: string
   updatedAt: string
@@ -27,6 +29,8 @@ export interface CarrierRequest {
   phone?: string | null
   email?: string | null
   externalReference?: string | null
+  /** Null = el plazo por defecto de la empresa. */
+  paymentTermsDays?: number | null
 }
 
 export interface CarrierListParams {

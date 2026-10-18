@@ -623,3 +623,65 @@
   `tms.finance.pe.*`; `GET /settlement/fiscal-settings` las expone resueltas. Ningún valor es fijo en código. Edición
   desde «Configuración de empresa»: ciclo 2.
 - **Commit(s):** el de la fase 60, ciclo 1.
+
+### 2026-10-18 · fase 65 · La tarjeta de la torre de control es un endpoint de liquidación
+
+- **Regla/decisión afectada:** ADR-023 §2 («tarjeta en la torre de control»); `ModuleBoundaryTest` (los módulos hablan por
+  `shared`).
+- **Motivo:** meter cifras de cuentas por pagar en `ControlTowerView` obligaría a `planning` a leer montos de `settlement`
+  por un puerto nuevo, y la torre la ven perfiles sin `settlement.invoice:read`.
+- **Camino elegido:** `GET /settlement/payables/summary` (`settlement.invoice:read`): vencidas y por vencer en 7 días por
+  moneda (nunca sumadas entre monedas) y pagos por confirmar. La pantalla de la torre lo pide sólo con `SETTLEMENT_VIEW`;
+  si falla, no rompe la torre.
+- **Commit(s):** el de la fase 65, ciclo 1.
+
+### 2026-10-18 · fase 65 · Retener, liberar y programar
+
+- **Regla/decisión afectada:** ADR-023 §2, tabla de transiciones («motivo para entrar y salir de `ON_HOLD`»).
+- **Motivo:** la tabla no dice a dónde vuelve una retención ni quién la pone; y no hay vuelta a `EXPORTED`.
+- **Camino elegido:** retener, liberar y programar son de `settlement.payment:record` (no mueven dinero). Liberar vuelve a
+  `PARTIALLY_PAID` si ya hubo pago, si no a `SCHEDULED`. Programar una factura retenida se rechaza (409): primero se libera con
+  motivo. Un pago que el ERP informa sobre una factura retenida se registra (el dinero ya salió) y termina la retención,
+  auditado `PAYABLE_HOLD_RELEASED` con el motivo de la retención. `EXPORTED` y los estados de pago ya no se pueden rechazar.
+- **Commit(s):** el de la fase 65, ciclo 1.
+
+### 2026-10-18 · fase 65 · Qué es «saldo», qué se paga y cuándo es 422
+
+- **Regla/decisión afectada:** ADR-023 §2 (saldo = total − NC + ND − detracción − retención − pagado).
+- **Motivo:** el ADR no dice si una nota se paga, qué pasa con un pago sobre una factura `PAID` ni cuándo un pago repetido es
+  un duplicado.
+- **Camino elegido:** sólo una factura `01` se paga; una NC/ND ajusta su saldo (409 si se reporta un pago contra la nota;
+  `ck_carrier_invoice_payment_only_on_invoice`). Las notas cuentan si están en `InvoiceStatus.AUTHORISED` (aprobada o
+  posterior, salvo rechazo), el mismo conjunto que consume la provisión. Una factura `PAID` tiene saldo 0, así que un pago
+  más es 422 `payment-exceeds-balance`, no 409. Antes de exportar es 409. La misma referencia de pago con la misma fecha, monto
+  y moneda es `DUPLICATE` (200, sin fila nueva); con otras cifras, 409. Un saldo negativo (NC llegada después de pagar) se
+  muestra, no se recorta; los reportes sólo listan saldos positivos.
+- **Commit(s):** el de la fase 65, ciclo 1.
+
+### 2026-10-18 · fase 65 · El portal ve aprobaciones de su factura, no la auditoría
+
+- **Regla/decisión afectada:** ADR-023 §2 («nunca los internos de la discrepancia»), ADR-018.
+- **Motivo:** el transportista tiene que poder contestar un rechazo, y el motivo vive en `settlement_approval`.
+- **Camino elegido:** `p_carrier_scope` en `settlement_approval` vía la factura (el transportista ve las decisiones de sus
+  documentos); `freight_match`, `freight_discrepancy`, `payable_export` y `carrier_payment_request` quedan cerrados a toda
+  transacción de transportista. El portal muestra un estado plegado (`IN_REVIEW` para los pasos de auditoría, `APPROVED` para
+  aprobada/exportada) y nunca el motivo interno de una retención.
+- **Commit(s):** el de la fase 65, ciclo 1.
+
+### 2026-10-18 · fase 65 · El plazo de la empresa se lee; editarlo es ciclo 2
+
+- **Regla/decisión afectada:** D-06 («términos de pago 30 días, configurables por empresa»).
+- **Motivo:** la misma que en la fase 60: la escritura de `company_settings` pasa por el perfil de empresa entero (`iam`).
+- **Camino elegido:** V67 crea `company_settings.default_payment_terms_days` (nula) y `PaymentTermsSettingsPort` la lee; la
+  cadena es transportista → empresa → `tms.settlement.default-payment-terms-days` (30). El plazo del transportista sí se edita
+  (maestro de transportistas). La pantalla de empresa: ciclo 2, junto a la fiscal.
+- **Commit(s):** el de la fase 65, ciclo 1.
+
+### 2026-10-18 · fase 65 · Errores tipados del canal de integración
+
+- **Regla/decisión afectada:** bandeja de integración (V18): un error del socio es `REJECTED`, uno nuestro `FAILED`.
+- **Motivo:** `IntegrationRequestExecutor` no conocía `ProblemTypedException`; un 422 `payment-exceeds-balance` se habría
+  registrado como `FAILED` 500 con traza de error.
+- **Camino elegido:** el ejecutor registra un `ProblemTypedException` 4xx como `REJECTED` con su estado y lo relanza; uno 5xx
+  sigue el camino de fallo.
+- **Commit(s):** el de la fase 65, ciclo 1.

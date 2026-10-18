@@ -34,11 +34,12 @@ class WebhookEventTypeTest {
     }
 
     @Test
-    @DisplayName("order events are subscribable and have no shipment mirror (V61)")
+    @DisplayName("order and carrier-invoice events are subscribable and have no shipment mirror (V61, V67)")
     void businessEventsAreTheRest() {
-        assertThat(WebhookEventType.BUSINESS_EVENTS).containsExactly(WebhookEventType.ORDER_CANCELLED);
+        assertThat(WebhookEventType.BUSINESS_EVENTS).containsExactlyInAnyOrder(WebhookEventType.ORDER_CANCELLED,
+                WebhookEventType.INVOICE_APPROVED, WebhookEventType.PAYABLE_EXPORTED, WebhookEventType.PAYABLE_PAID);
         assertThat(Arrays.stream(ShipmentEventType.values()).map(Enum::name))
-                .doesNotContain(WebhookEventType.ORDER_CANCELLED.name());
+                .doesNotContainAnyElementsOf(WebhookEventType.BUSINESS_EVENTS.stream().map(Enum::name).toList());
     }
 
     @Test

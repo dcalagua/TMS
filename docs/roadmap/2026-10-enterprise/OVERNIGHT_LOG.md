@@ -1031,3 +1031,99 @@ El EWM no se tocó.
   recibirlo, por API); el mensaje de pago del ERP es de la fase 65.
 - Atajo «Registrar nota» desde el panel de la factura (hoy por el formulario, eligiendo tipo y factura).
 - Sin entradas nuevas en `i18n.ts` (como las fases 50 y 55).
+
+## 65 · Estado de pago y vencimientos (2026-10-18, ciclo 1 de 2 · completa con corte declarado)
+
+Plan `03` F-4, ADR-023 §2, D-01, D-06. Sólo TMS. **El TMS registra lo que se pagó; no mueve dinero.**
+
+### Qué entró
+
+1. **V67** `V67__payables_payment_status.sql`: `carrier.payment_terms_days` y `company_settings.default_payment_terms_days`
+   (nulas, 0–365); en `carrier_invoice` `due_date` + `payment_terms_days` (congelados al aprobar), `paid_amount`,
+   `on_hold_reason`, `scheduled_payment_date`, `ck_carrier_invoice_status` reescrito con `SCHEDULED`, `PARTIALLY_PAID`, `PAID`,
+   `ON_HOLD` y CHECKs (motivo de retención, una nota no se paga, nada pagado antes de exportar); `carrier_payment`
+   append-only (trigger + grants, atribución: credencial **o** dos personas distintas, `uq_carrier_payment_reference`);
+   `carrier_payment_request` (cuatro ojos, una pendiente por referencia); RLS por tenant en las dos; `p_carrier_scope`
+   restrictiva en factura, líneas, aprobaciones y pagos, y cierre total para el transportista en match, discrepancias,
+   exportación y solicitudes; outbox de negocio con `CARRIER_INVOICE` y tres eventos; vocabulario de webhooks; scope
+   `integration.payable-payment:write`; permisos `settlement.payment:record|confirm` (dos administradores) y
+   `portal.invoice:read` (`CARRIER_OPERATOR`); seis acciones de auditoría.
+2. **Dominio**: `InvoiceStatus` (tabla de transiciones del ADR, `EXPORTED` deja de ser terminal, `AUTHORISED`/`OPEN_PAYABLE`,
+   `acceptsPayment`), `CarrierInvoice` (`fixDueDate`, `schedule`, `placeOnHold`, `releaseHold`, `applyPayment`),
+   `PayableBalance` (neto − detracción − retención − pagado), `CarrierPayment`, `CarrierPaymentRequest`, `PaymentDetail`.
+3. **Plazo**: `PaymentTermsResolver` transportista → empresa → `tms.settlement.default-payment-terms-days` (30); el maestro de
+   transportistas edita el suyo (API + formulario).
+4. **ERP**: `POST /integration/v1/payable-payments` (`PAYABLE_PAYMENT`, `Idempotency-Key`), factura por id, por CPE o por
+   código + número; 201 `RECORDED`, 200 `DUPLICATE`, 404, 409 (sin exportar, nota, referencia con otras cifras), 422
+   `payment-exceeds-balance` / `payment-currency-mismatch`. El ejecutor registra los 4xx tipados como `REJECTED` (antes 500).
+   Contrato con ejemplo en `INBOUND_API_V1.md` §14.
+5. **Oficina** (`/settlement/payables`): detalle del pagable, programar, retener, liberar (con motivo), registrar pago
+   (solicitud) y confirmar/rechazar (otra persona; la misma es 409), pendientes, vencimientos (`/due?within=`),
+   antigüedad (`/aging`, 6 tramos por moneda y transportista) y `/summary` para la tarjeta de la torre de control.
+6. **Webhooks** `INVOICE_APPROVED` (al aprobar), `PAYABLE_EXPORTED` (al exportar), `PAYABLE_PAID` (al quedar pagada) por
+   `business_outbox_event`, misma transacción, `resource.type = "carrier-invoice"` (`WEBHOOKS_V1.md`).
+7. **Portal** «Mis facturas» (`/portal/invoices[/{id}]`): estado plegado, vencimiento, pagado, saldo, detracción y
+   constancia, pagos, motivo de rechazo; nunca la auditoría. Filtro en Java por `CompanyScope.carrierId()` + RLS.
+8. **Front**: «Cuentas por pagar» (`PayablesPage`: Vencimientos, Antigüedad, Pagos por confirmar; `PayableDrawer` con
+   acciones según `allowedActions` y capacidad), tarjeta «Facturas vencidas / por vencer» en la torre
+   (`PayablesSummaryCard`, sólo con `SETTLEMENT_VIEW`), bloque «Pago» en `InvoiceWorkspaceDrawer`, «Mis facturas» en el
+   portal (pestañas en `PortalLayout`, sólo con `CARRIER_INVOICES`), plazo de pago en `CarrierFormDrawer`; estados nuevos en
+   `enums.ts`/`statusTones.ts`; capacidades `PAYMENT_RECORD`, `PAYMENT_CONFIRM`, `CARRIER_INVOICES`.
+
+### Desvíos registrados (`DECISIONS_LOG.md`, +6)
+
+- La tarjeta de la torre es un endpoint de liquidación, no un campo de `ControlTowerView`.
+- Retener / liberar / programar: quién, a dónde vuelve, pago del ERP sobre factura retenida.
+- Saldo, notas, `PAID` + pago = 422, duplicado por referencia.
+- El portal ve las aprobaciones de su factura, no la auditoría.
+- El plazo por defecto de la empresa se lee; editarlo es ciclo 2.
+- Errores tipados del canal de integración.
+
+### Archivos
+
+- Migración: `backend/tms-api/src/main/resources/db/migration/V67__payables_payment_status.sql`.
+- Nuevos (main): `settlement/domain/{PayableBalance, PaymentDetail, CarrierPayment, CarrierPaymentRequest, PaymentSource,
+  PaymentRequestStatus}`, `settlement/application/{PayableService, PaymentTermsResolver, PortalInvoiceService, PayableView,
+  PayableReportViews, PayableRequests, PortalInvoiceViews}`, `settlement/infrastructure/{CarrierPaymentRepository,
+  CarrierPaymentRequestRepository, PayableReportQueries}`, `settlement/api/{PayableController, PortalInvoiceController}`,
+  `integration/api/IntegrationPayablePaymentController`, `integration/application/{IntegrationPayablePaymentService,
+  PayablePaymentV1, PayablePaymentResultV1}`, `shared/reference/PayablePaymentIntakePort`,
+  `shared/settings/PaymentTermsSettingsPort`, `iam/infrastructure/JdbcPaymentTermsSettingsAdapter`.
+- Modificados (main): `InvoiceStatus`, `CarrierInvoice`, `SettlementService` (vencimiento y eventos), `AccrualService`
+  (`AUTHORISED`), `CarrierInvoiceView`/`SummaryView`, `CarrierInvoiceRepository`, `fleet` `Carrier`/`CarrierRequest`/
+  `CarrierView`/`CarrierService`/`CarrierLookupAdapter`, `CarrierLookupPort`, `BusinessEventPublisher`,
+  `BusinessEventOutboxAdapter`, `PublishedEventNotification`, `WebhookEventType`, `IntegrationScope`,
+  `IntegrationOperation`, `IntegrationRequestExecutor`, `ProblemType`, `AuditAction`, `Permission`, `Capability`,
+  `application.yml`.
+- Pruebas: `PayableApiIntegrationTest` (13, nueva), `CarrierInvoicePaymentTest` (7), `PayableBalanceTest` (6),
+  `InvoiceStatusTest` (+tabla del ADR), `TenancyConstraintIntegrationTest` (73 permisos / 199 asignaciones),
+  `SchemaExposureIntegrationTest` (dos tablas), `WebhookEventTypeTest`, `CarrierDocumentDeliveryIntegrationTest`
+  (capacidades del transportista).
+- Front: `shared/api/{payablesApi, settlementApi, portalApi, carriersApi, meApi, problemMessages}.ts`,
+  `pages/settlement/{PayablesPage, PayableDrawer, payableUi, InvoiceWorkspaceDrawer}`,
+  `pages/control-tower/{PayablesSummaryCard, ControlTowerPage}`, `pages/portal/{PortalInvoicesPage, PortalInvoicePage,
+  PortalLayout, portalUi}`, `pages/fleet/CarrierFormDrawer`, `App.tsx`, `app/lazyRoutes.tsx`, `navConfig.tsx`,
+  `statusTones.ts`, `lib/enums.ts`; pruebas `PayablesPage.test.tsx` (10), `PortalInvoicesPage.test.tsx` (3),
+  `PayablesSummaryCard.test.tsx` (3), `CarrierFormDrawer.test.tsx` (3), `PortalLayout.test.tsx` (+1),
+  `InvoiceWorkspaceDrawer.test.tsx` (+2).
+- Docs: `INBOUND_API_V1.md` §14, `WEBHOOKS_V1.md`, ADR-023 «Implementation notes - section 2», `PHASE_MAP.md`,
+  `DECISIONS_LOG.md`.
+
+### Pruebas
+
+| Repo | Comando | Resultado |
+|---|---|---|
+| TMS backend | `./mvnw -B test` (completo, Testcontainers) | **2585 corridas, 1 fallo, 0 errores, 2 omitidas** · 4 min 28 s (fase 60: 2551; +34). El único rojo es el conocido `PlatformLifecycleIntegrationTest.versionRules` (fase 00) |
+| TMS backend | nuevas | transiciones (tabla del ADR, nada vuelve a `EXPORTED`, `PAID` terminal); plazo transportista 45 / propiedad 30 / empresa 10 y congelado; parcial → pagado por CPE y por código + número con detracción descontada (960 de 1000); sobrepago 422 (también sobre `PAID`), moneda 422, sin exportar 409, nota 409 y NC neteada; idempotencia por clave (replay), por referencia (`DUPLICATE`) y 409 con otras cifras; cuatro ojos (el mismo confirma = 409, otro confirma, rechazo con motivo); retener / liberar / programar y pago del ERP sobre retenida; antigüedad, vencimientos y tarjeta coinciden con el saldo del pagable; portal: sólo las suyas, otra = 404, oficina 403 y transportista 403 en oficina; RLS sola: otro transportista ve 0 en factura/línea/pago/aprobación, el propio ve 0 en match/exportación; append-only por grant y por trigger; webhooks en el outbox y en la entrega suscrita |
+| TMS frontend | `npm run typecheck && npm run lint && npm test` | OK · lint 0 errores · **389/389** en 57 archivos (fase 60: 367; +22) |
+| Migraciones | `git diff` de V1–V66 | intactas; sólo V67 nueva |
+
+El EWM no se tocó.
+
+### Qué quedó fuera (ciclo 2)
+
+- Editar el plazo por defecto de la empresa (y la configuración fiscal de la fase 60) desde «Configuración de empresa».
+- Lectura de la factura por el ERP desde la API de integración (hoy el webhook lleva id y número; el ERP ya tiene la
+  exportación).
+- «Mis facturas» sin conexión (el portal de viajes sí funciona offline; las facturas no se guardan en IndexedDB).
+- Exportar antigüedad / vencimientos a CSV; sin entradas nuevas en `i18n.ts` (como las fases 50–60).

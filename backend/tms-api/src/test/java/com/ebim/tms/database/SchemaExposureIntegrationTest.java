@@ -76,6 +76,9 @@ class SchemaExposureIntegrationTest {
             "freight_discrepancy", "settlement_approval", "payable_export",
             // V65: freight accruals (ADR-023). The movements are append-only by grant and by trigger.
             "freight_accrual", "freight_accrual_entry", "gl_account_mapping",
+            // V67: payable payments (ADR-023 section 2). A payment is append-only by grant and by
+            // trigger; a person's request is decided, never deleted.
+            "carrier_payment", "carrier_payment_request",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
             "work_assignment", "work_assignment_trip",
@@ -139,6 +142,9 @@ class SchemaExposureIntegrationTest {
             "freight_discrepancy", "settlement_approval", "payable_export",
             // V65: freight accruals (ADR-023). The movements are append-only by grant and by trigger.
             "freight_accrual", "freight_accrual_entry", "gl_account_mapping",
+            // V67: payable payments (ADR-023 section 2). A payment is append-only by grant and by
+            // trigger; a person's request is decided, never deleted.
+            "carrier_payment", "carrier_payment_request",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
             "work_assignment", "work_assignment_trip",

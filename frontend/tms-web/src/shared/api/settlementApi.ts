@@ -1,10 +1,15 @@
 import { apiRequest } from './httpClient'
 import type { PageResponse } from './pageResponse'
 
-/** Mirrors `InvoiceStatus` (migración V46), en orden de vida. */
+/**
+ * Mirrors `InvoiceStatus` (migración V46), en orden de vida.
+ *
+ * Fase 65: tras `EXPORTED` vienen los estados de pago - lo que el ERP pagó, registrado en TMS.
+ * `EXPORTED` ya no es terminal. `ON_HOLD` es una retención con motivo, no un rechazo.
+ */
 export const INVOICE_STATUSES = [
   'RECEIVED', 'MATCHING', 'MATCHED', 'DISCREPANCY', 'UNDER_REVIEW',
-  'APPROVED', 'REJECTED', 'EXPORTED',
+  'APPROVED', 'REJECTED', 'EXPORTED', 'SCHEDULED', 'PARTIALLY_PAID', 'PAID', 'ON_HOLD',
 ] as const
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number]
 
@@ -75,6 +80,10 @@ export interface CarrierInvoiceSummaryView {
   openDiscrepancyCount: number
   /** V66. Ausente en un servidor anterior: se lee como factura. */
   documentType?: DocumentTypeCode
+  /** Fase 65. Ausentes en un servidor anterior; null = sin vencimiento calculable. */
+  dueDate?: string | null
+  paidAmount?: number
+  onHoldReason?: string | null
 }
 
 /** Mirrors `CarrierInvoiceView.LineView`. */
@@ -235,6 +244,10 @@ export interface CarrierInvoiceView {
   export: PayableExportView | null
   /** V66. Ausente en un servidor anterior. */
   fiscal?: FiscalView | null
+  /** Fase 65: el estado de pago, tal como el ERP lo informó. Ausentes en un servidor anterior. */
+  dueDate?: string | null
+  paidAmount?: number
+  onHoldReason?: string | null
 }
 
 export interface CarrierInvoiceRequest {

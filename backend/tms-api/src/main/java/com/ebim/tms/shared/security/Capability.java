@@ -82,6 +82,9 @@ public enum Capability {
     /** The carrier portal (ADR-018): the only capability a carrier user holds. */
     CARRIER_PORTAL(Permission.PORTAL_TRIP_READ, Permission.PORTAL_DOCUMENT_REPORT),
 
+    /** "Mis facturas" in the carrier portal (V67, ADR-023 section 2). */
+    CARRIER_INVOICES(Permission.PORTAL_INVOICE_READ),
+
     /**
      * The dock board (migration V41).
      *
@@ -129,6 +132,13 @@ public enum Capability {
     ACCRUAL_VIEW(Permission.SETTLEMENT_ACCRUAL_READ),
     ACCRUAL_EXPORT(Permission.SETTLEMENT_ACCRUAL_EXPORT),
     ACCRUAL_MANAGE(Permission.SETTLEMENT_ACCRUAL_MANAGE),
+
+    /**
+     * Payment status (migration V67, ADR-023 section 2): keying a payment, scheduling and holding are
+     * one authority; confirming somebody else's payment is another. Reading uses {@link #SETTLEMENT_VIEW}.
+     */
+    PAYMENT_RECORD(Permission.SETTLEMENT_PAYMENT_RECORD),
+    PAYMENT_CONFIRM(Permission.SETTLEMENT_PAYMENT_CONFIRM),
 
     /**
      * Resource scheduling (migration V47). Its own capability rather than folded into the fleet

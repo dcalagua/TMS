@@ -72,6 +72,8 @@ export const TolerancePoliciesPage = lazy(() =>
   import("../pages/settlement/TolerancePoliciesPage").then((m) => ({ default: m.TolerancePoliciesPage })));
 export const AccrualsPage = lazy(() =>
   import("../pages/settlement/AccrualsPage").then((m) => ({ default: m.AccrualsPage })));
+export const PayablesPage = lazy(() =>
+  import("../pages/settlement/PayablesPage").then((m) => ({ default: m.PayablesPage })));
 export const WorkAssignmentsPage = lazy(() =>
   import("../pages/fleet/WorkAssignmentsPage").then((m) => ({ default: m.WorkAssignmentsPage })));
 export const OwnFleetCostProfilesPage = lazy(() =>
@@ -93,6 +95,11 @@ export const PortalTripsPage = lazy(() =>
   import("../pages/portal/PortalTripsPage").then((m) => ({ default: m.PortalTripsPage })));
 export const PortalTripPage = lazy(() =>
   import("../pages/portal/PortalTripPage").then((m) => ({ default: m.PortalTripPage })));
+// Fase 65: «Mis facturas» del transportista, en el mismo trozo del portal.
+export const PortalInvoicesPage = lazy(() =>
+  import("../pages/portal/PortalInvoicesPage").then((m) => ({ default: m.PortalInvoicesPage })));
+export const PortalInvoicePage = lazy(() =>
+  import("../pages/portal/PortalInvoicePage").then((m) => ({ default: m.PortalInvoicePage })));
 
 export const CompanySettingsPage = lazy(() =>
   import("../pages/settings/CompanySettingsPage").then((m) => ({ default: m.CompanySettingsPage })));

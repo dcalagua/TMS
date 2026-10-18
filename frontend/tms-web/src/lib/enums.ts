@@ -118,6 +118,11 @@ export const ENUM_LABELS = {
     RECEIVED: "Recibida",
     REJECTED: "Rechazada",
     UNDER_REVIEW: "En revisión",
+    // Fase 65: el pago que el ERP informa. TMS lo registra; no mueve dinero.
+    SCHEDULED: "Programada",
+    PARTIALLY_PAID: "Pago parcial",
+    PAID: "Pagada",
+    ON_HOLD: "Retenida",
   },
   /**
    * V46: el veredicto de la comparación.
@@ -219,6 +224,34 @@ export const ENUM_LABELS = {
     COMPANY: "Toda la empresa",
     ORIGIN: "Origen",
     ROUTE: "Ruta",
+  },
+  // Cuentas por pagar (fase 65): vencimientos y pagos que informa el ERP.
+  agingBucket: {
+    NOT_DUE: "Por vencer",
+    DAYS_1_30: "1–30 días",
+    DAYS_31_60: "31–60",
+    DAYS_61_90: "61–90",
+    DAYS_OVER_90: "Más de 90",
+    NO_DUE_DATE: "Sin vencimiento",
+  },
+  paymentSource: {
+    INTEGRATION: "Integración",
+    OPERATOR: "Registro manual",
+  },
+  paymentRequestStatus: {
+    PENDING: "Por confirmar",
+    CONFIRMED: "Confirmada",
+    REJECTED: "Rechazada",
+  },
+  /** Lo que el transportista ve de su factura en el portal: menos detalle que la oficina. */
+  portalInvoiceStatus: {
+    IN_REVIEW: "En revisión",
+    APPROVED: "Aprobada",
+    SCHEDULED: "Programada",
+    PARTIALLY_PAID: "Pago parcial",
+    PAID: "Pagada",
+    ON_HOLD: "En espera",
+    REJECTED: "Rechazada",
   },
   /** V42/JOB 12: por qué un envío no puede salir hoy. */
   /**

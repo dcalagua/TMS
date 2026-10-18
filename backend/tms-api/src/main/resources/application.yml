@@ -129,6 +129,10 @@ tms:
       default-reference-height-m: ${TMS_GEOMETRY_REFERENCE_HEIGHT_M:2.40}
       default-floor-fill-factor: ${TMS_GEOMETRY_FLOOR_FILL_FACTOR:0.85}
   settlement:
+    # Payment terms of a carrier invoice (ADR-023 section 2, V67, D-06): what a carrier without its
+    # own terms gets when its company has no default either. due_date = invoice_date + terms, frozen
+    # at approval.
+    default-payment-terms-days: ${TMS_SETTLEMENT_DEFAULT_PAYMENT_TERMS_DAYS:30}
     accrual:
       # Freight accruals (ADR-023, V65). The sweep reads committed trip facts - departures, or
       # completions when the company accrues at delivery - and accrues what is missing, then

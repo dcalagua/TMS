@@ -19,13 +19,13 @@ import {
   AuditPage, CarriersPage, CompanySettingsPage, ControlTowerPage, DestinationsPage, DriversPage,
   FrequenciesPage, IntegrationsPage, LocationsPage, MaterialProfilesPage, OrdersPage, OriginsPage, PlanningBoardPage,
   AppointmentsPage,
-  SettlementPage, TolerancePoliciesPage, AccrualsPage,
+  SettlementPage, TolerancePoliciesPage, AccrualsPage, PayablesPage,
   OwnFleetCostProfilesPage,
   WorkAssignmentsPage,
   PlanningRunsPage, RateCardsPage, ReportsPage, RoutesPage, SchedulingReleasePage, TripWorkspacePage, TripsPage,
   UsersPage, VehicleTypesPage, VehiclesPage, ZonesPage,
   DeliveryTrackingPage, ShipmentTrackingPage,
-  DocumentDeliveriesPage, PortalTripPage, PortalTripsPage,
+  DocumentDeliveriesPage, PortalTripPage, PortalTripsPage, PortalInvoicePage, PortalInvoicesPage,
 } from "./app/lazyRoutes";
 
 /**
@@ -58,6 +58,9 @@ export default function App() {
               <Route path="portal" element={<PortalLayout />}>
                 <Route index element={<PortalTripsPage />} />
                 <Route path="trips/:tripId" element={<PortalTripPage />} />
+                {/* Fase 65: sus facturas, con `portal.invoice:read`. */}
+                <Route path="invoices" element={<PortalInvoicesPage />} />
+                <Route path="invoices/:invoiceId" element={<PortalInvoicePage />} />
                 <Route path="*" element={<Navigate to="/portal" replace />} />
               </Route>
 
@@ -111,6 +114,7 @@ export default function App() {
                     <Route path="settlement" element={<SettlementPage />} />
                     <Route path="settlement/tolerances" element={<TolerancePoliciesPage />} />
                     <Route path="settlement/accruals" element={<AccrualsPage />} />
+                    <Route path="settlement/payables" element={<PayablesPage />} />
                     <Route path="work-assignments" element={<WorkAssignmentsPage />} />
                     {/* Una ruta completa y no un drawer sobre la lista: un despachador se queda
                         dentro de un viaje durante minutos, y `/trips/{id}` es lo que se pega en un

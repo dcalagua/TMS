@@ -212,6 +212,37 @@ TMS records what the ERP reports. It holds no bank account, produces no bank fil
   `WEBHOOKS_V1.md`'s with `resource.type = "carrier-invoice"`. `ck_webhook_subscription_event_type` is
   restated with the new names.
 
+### Implementation notes - section 2 (phase 65, V67)
+
+- **V67** `V67__payables_payment_status.sql`. Beyond the list above: `carrier_invoice.payment_terms_days` (frozen with the
+  due date, `ck_carrier_invoice_due_date_terms`) and `scheduled_payment_date`; `ck_carrier_invoice_on_hold_reason`,
+  `ck_carrier_invoice_payment_only_on_invoice` (a note is never paid), `ck_carrier_invoice_paid_after_export`;
+  `carrier_payment.carrier_id` with a composite FK to the invoice so the carrier policy reads one column;
+  `ck_carrier_payment_attribution` (a credential, or two different people with the request named);
+  `uq_carrier_payment_request_pending_reference`; restrictive `p_carrier_scope` also on `settlement_approval` (via the
+  invoice, so the portal can say why a document was refused) and `tms.current_carrier_id() IS NULL` on `freight_match`,
+  `freight_discrepancy`, `payable_export` and `carrier_payment_request` (the audit's internals are no carrier's).
+- **Statuses.** `InvoiceStatus.AUTHORISED` (approved and everything after it but a rejection) replaces the V46 pair wherever
+  "approved" was meant: accrual consumption, netting a note into its invoice. `EXPORTED` and the payment states can no longer
+  be rejected. Scheduling a held invoice is refused (leaving a hold needs a reason; a date is not one); releasing goes to
+  `PARTIALLY_PAID` when something was paid, else `SCHEDULED`. A payment the ERP reports on a held invoice is recorded and
+  ends the hold, audited with the hold's reason.
+- **Classes.** `settlement.domain.{PayableBalance, PaymentDetail, CarrierPayment, CarrierPaymentRequest, PaymentSource,
+  PaymentRequestStatus}`; `settlement.application.{PayableService (implements shared.reference.PayablePaymentIntakePort),
+  PaymentTermsResolver, PortalInvoiceService, PayableView, PayableReportViews, PayableRequests, PortalInvoiceViews}`;
+  `settlement.infrastructure.{CarrierPaymentRepository, CarrierPaymentRequestRepository, PayableReportQueries}`;
+  `settlement.api.{PayableController (/settlement/payables), PortalInvoiceController (/portal/invoices)}`;
+  `integration.api.IntegrationPayablePaymentController` + `IntegrationPayablePaymentService`, `PayablePaymentV1`;
+  `shared.settings.PaymentTermsSettingsPort` + `iam.infrastructure.JdbcPaymentTermsSettingsAdapter`;
+  `CarrierLookupPort.{findIdByCode, paymentTermsDaysOf}`; `ProblemType.{PAYMENT_EXCEEDS_BALANCE, PAYMENT_CURRENCY_MISMATCH}`.
+  `IntegrationRequestExecutor` now records a `ProblemTypedException` 4xx as `REJECTED` with its status (it was a 500).
+- **Control Tower card.** Not a field of `ControlTowerView` (that would make `planning` read settlement figures):
+  `GET /settlement/payables/summary` under `settlement.invoice:read`, which the Control Tower screen calls only for a user
+  with `SETTLEMENT_VIEW`.
+- **Webhook resource type.** `BusinessEventOutboxAdapter` maps `CARRIER_INVOICE` to `"carrier-invoice"` (underscore to hyphen).
+- **Company default terms** are read (`company_settings.default_payment_terms_days`); editing them from the company settings
+  screen is phase 65 cycle 2, together with the fiscal settings of phase 60.
+
 ## Consequences
 
 - An accrual never blocks a dispatch, and a dispatch never waits for accounting.

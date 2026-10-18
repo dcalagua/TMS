@@ -33,7 +33,8 @@ public class BusinessEventOutboxAdapter implements BusinessEventPublisher {
                 published.id(),
                 event.companyId(),
                 event.eventType(),
-                event.resourceType().toLowerCase(Locale.ROOT),
+                // ORDER -> "order", CARRIER_INVOICE -> "carrier-invoice" (WEBHOOKS_V1.md).
+                event.resourceType().toLowerCase(Locale.ROOT).replace('_', '-'),
                 event.resourceId(),
                 event.resourceReference(),
                 event.occurredAt()));

@@ -35,7 +35,10 @@ public record CarrierInvoiceSummaryView(
         BigDecimal differenceAmount,
         int openDiscrepancyCount,
         /** SUNAT type (V66): 01, 07 or 08 - so a list can offer the invoices a note may correct. */
-        String documentType) {
+        String documentType,
+        /** V67: due date (frozen at approval) and what was paid, for the queue's payment columns. */
+        LocalDate dueDate,
+        BigDecimal paidAmount) {
 
     public static CarrierInvoiceSummaryView of(CarrierInvoice invoice, FreightMatch match, String carrierName) {
         return new CarrierInvoiceSummaryView(invoice.id(), invoice.carrierId(), carrierName,
@@ -44,6 +47,6 @@ public record CarrierInvoiceSummaryView(
                 match == null ? null : match.status(),
                 match == null ? null : match.expectedAmount(),
                 match == null ? null : match.differenceAmount(),
-                0, invoice.documentType().code());
+                0, invoice.documentType().code(), invoice.dueDate(), invoice.paidAmount());
     }
 }

@@ -95,7 +95,13 @@ public enum IntegrationScope {
      * Report what the warehouse did to its order - cancelled it, or closed it short (migration V61,
      * ADR-025 section 4). Its effect is at most a hold; TMS never cancels by itself (D-03).
      */
-    WAREHOUSE_ORDER_EVENT_WRITE("integration.warehouse-order-event:write");
+    WAREHOUSE_ORDER_EVENT_WRITE("integration.warehouse-order-event:write"),
+
+    /**
+     * The ERP reports what it paid against an exported carrier invoice (migration V67, ADR-023
+     * section 2). TMS records it and moves no money (D-01).
+     */
+    PAYABLE_PAYMENT_WRITE("integration.payable-payment:write");
 
     private static final Map<String, IntegrationScope> BY_CODE = Arrays.stream(values())
             .collect(Collectors.toUnmodifiableMap(IntegrationScope::code, Function.identity()));

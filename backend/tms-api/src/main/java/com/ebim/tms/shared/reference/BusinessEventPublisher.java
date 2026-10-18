@@ -22,6 +22,18 @@ public interface BusinessEventPublisher {
     /** A transport order was cancelled in TMS (WAREHOUSE_EXECUTION_V1 7.4). */
     String ORDER_CANCELLED = "ORDER_CANCELLED";
 
+    /** A carrier invoice, credit or debit note (V67, ADR-023 section 2); on the wire {@code "carrier-invoice"}. */
+    String CARRIER_INVOICE = "CARRIER_INVOICE";
+
+    /** A person authorised a carrier document. */
+    String INVOICE_APPROVED = "INVOICE_APPROVED";
+
+    /** An approved carrier document was handed to whoever pays. */
+    String PAYABLE_EXPORTED = "PAYABLE_EXPORTED";
+
+    /** The payments reported for an invoice cover its open balance. */
+    String PAYABLE_PAID = "PAYABLE_PAID";
+
     /**
      * One business fact.
      *

@@ -135,6 +135,25 @@ public class CarrierInvoice {
     @Column(name = "retention_override_reason")
     private String retentionOverrideReason;
 
+    // ------------------------------------------------------------------ V67 (ADR-023 section 2)
+
+    /** invoice_date + terms, set at approval and frozen. Null before approval and on pre-V67 approvals. */
+    @Column(name = "due_date")
+    private LocalDate dueDate;
+
+    @Column(name = "payment_terms_days")
+    private Integer paymentTermsDays;
+
+    /** What has been paid to the carrier, as reported. Mirrors the sum of its payments. */
+    @Column(name = "paid_amount", nullable = false)
+    private BigDecimal paidAmount = BigDecimal.ZERO;
+
+    @Column(name = "on_hold_reason")
+    private String onHoldReason;
+
+    @Column(name = "scheduled_payment_date")
+    private LocalDate scheduledPaymentDate;
+
     @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("lineNumber ASC")
     private List<CarrierInvoiceLine> lines = new ArrayList<>();
@@ -309,6 +328,103 @@ public class CarrierInvoice {
         this.detractionConstancyDate = date;
     }
 
+    // ------------------------------------------------------------------ after the export (V67)
+
+    /**
+     * Freezes the due date at approval: {@code invoice_date + terms}. The terms are the ones in force
+     * then; a carrier whose terms change later does not move what was already authorised.
+     */
+    public void fixDueDate(int termsDays) {
+        if (termsDays < 0 || termsDays > 365) {
+            throw new IllegalArgumentException("payment terms are 0 to 365 days");
+        }
+        this.paymentTermsDays = termsDays;
+        this.dueDate = invoiceDate.plusDays(termsDays);
+    }
+
+    /**
+     * The payment is planned for a date. From {@code EXPORTED} it becomes {@code SCHEDULED}; an
+     * invoice already scheduled or partly paid keeps its status and only the date moves. A held
+     * invoice is released first, because leaving a hold needs a reason and a date is not one.
+     */
+    public void schedule(LocalDate date, UUID actorId) {
+        if (date == null) {
+            throw new com.ebim.tms.shared.api.InvalidRequestException("A schedule names the planned payment date.");
+        }
+        requirePayable();
+        if (status == InvoiceStatus.ON_HOLD) {
+            throw new ConflictException("This invoice is on hold. Release the hold, with a reason, before scheduling it.");
+        }
+        if (status == InvoiceStatus.EXPORTED) {
+            transitionTo(InvoiceStatus.SCHEDULED, actorId);
+        }
+        this.scheduledPaymentDate = date;
+        this.updatedBy = actorId;
+    }
+
+    public void placeOnHold(String reason, UUID actorId) {
+        String why = requireReason(reason, "A hold says why the payment is stopped.");
+        requirePayable();
+        transitionTo(InvoiceStatus.ON_HOLD, actorId);
+        this.onHoldReason = why;
+    }
+
+    /**
+     * Lifts the hold. Back to {@code PARTIALLY_PAID} when something was already paid, otherwise
+     * {@code SCHEDULED} - the table has no way back to {@code EXPORTED}, and a released payable is one
+     * somebody intends to pay.
+     */
+    public void releaseHold(String reason, UUID actorId) {
+        requireReason(reason, "Releasing a hold says why.");
+        if (status != InvoiceStatus.ON_HOLD) {
+            throw new ConflictException("Only an invoice on hold can be released. This one is " + readable(status)
+                    + ".");
+        }
+        transitionTo(paidAmount.signum() > 0 ? InvoiceStatus.PARTIALLY_PAID : InvoiceStatus.SCHEDULED, actorId);
+        this.onHoldReason = null;
+    }
+
+    /**
+     * One payment, already checked against the open balance by the caller: {@code PAID} when nothing
+     * remains, {@code PARTIALLY_PAID} otherwise. A payment the ERP made on a held invoice ends the hold
+     * - the money left regardless, and the status must say what happened.
+     */
+    public void applyPayment(BigDecimal amount, BigDecimal openBalanceAfter, UUID actorId) {
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("a payment is a positive amount");
+        }
+        if (openBalanceAfter.signum() < 0) {
+            throw new IllegalArgumentException("a payment may not exceed the open balance");
+        }
+        if (!status.acceptsPayment()) {
+            throw new ConflictException("A payment cannot be recorded on an invoice that is " + readable(status) + ".");
+        }
+        transitionTo(openBalanceAfter.signum() == 0 ? InvoiceStatus.PAID : InvoiceStatus.PARTIALLY_PAID, actorId);
+        this.paidAmount = paidAmount.add(amount);
+        this.onHoldReason = null;
+    }
+
+    private void requirePayable() {
+        if (documentType.isNote()) {
+            throw new ConflictException("A credit or debit note adjusts its invoice's balance; it is not paid on its own.");
+        }
+        if (!status.acceptsPayment()) {
+            throw new ConflictException("Only an exported invoice that is not yet paid can be scheduled or held."
+                    + " This one is " + readable(status) + ".");
+        }
+    }
+
+    private static String requireReason(String reason, String message) {
+        if (reason == null || reason.isBlank()) {
+            throw new com.ebim.tms.shared.api.InvalidRequestException(message);
+        }
+        String trimmed = reason.trim();
+        if (trimmed.length() > 500) {
+            throw new com.ebim.tms.shared.api.InvalidRequestException("A reason is at most 500 characters.");
+        }
+        return trimmed;
+    }
+
     /** +1 or -1: what this document does to what is owed. */
     public int effectiveSign() {
         return documentType.effectiveSign();
@@ -436,6 +552,26 @@ public class CarrierInvoice {
 
     public String retentionOverrideReason() {
         return retentionOverrideReason;
+    }
+
+    public LocalDate dueDate() {
+        return dueDate;
+    }
+
+    public Integer paymentTermsDays() {
+        return paymentTermsDays;
+    }
+
+    public BigDecimal paidAmount() {
+        return paidAmount;
+    }
+
+    public String onHoldReason() {
+        return onHoldReason;
+    }
+
+    public LocalDate scheduledPaymentDate() {
+        return scheduledPaymentDate;
     }
 
     public List<CarrierInvoiceLine> lines() {

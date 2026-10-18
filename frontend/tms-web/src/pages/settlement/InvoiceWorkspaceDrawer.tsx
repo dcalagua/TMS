@@ -8,7 +8,7 @@ import { DownloadRounded, ReceiptLongRounded } from "@mui/icons-material";
 import {
   approveInvoice, beginInvoiceReview, exportInvoice, fetchInvoice, matchInvoice, rejectInvoice,
   resolveDiscrepancy,
-  type ExportFormat, type FreightDiscrepancyView, type InvoiceLineView, type PayableExportView,
+  type ExportFormat, type FreightDiscrepancyView, type InvoiceLineView, type InvoiceStatus, type PayableExportView,
 } from "../../shared/api/settlementApi";
 import { saveDownloadedFile, type ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
@@ -31,6 +31,9 @@ function downloadExport(exported: PayableExportView) {
   const blob = new Blob([exported.payload], { type: csv ? "text/csv;charset=utf-8" : "application/json" });
   saveDownloadedFile({ blob, fileName: null }, `${exported.exportReference}.${csv ? "csv" : "json"}`);
 }
+
+/** Fase 65: los estados que dicen algo del pago. Antes de exportar no hay nada que pagar todavía. */
+const PAYMENT_STATUSES: readonly InvoiceStatus[] = ["SCHEDULED", "PARTIALLY_PAID", "PAID", "ON_HOLD"];
 
 interface InvoiceWorkspaceDrawerProps {
   companyId: string;
@@ -222,6 +225,26 @@ export function InvoiceWorkspaceDrawer({
                 format: invoice.export.format,
               })}
             </Alert>
+          )}
+
+          {/* --- el pago (fase 65): lo que el ERP informó. Se gestiona en Cuentas por pagar. --- */}
+          {(invoice.dueDate || (invoice.paidAmount ?? 0) > 0 || PAYMENT_STATUSES.includes(invoice.status)) && (
+            <DetailSection title={t("Pago")}>
+              <KeyFacts columns={3} items={[
+                { label: t("Vencimiento"), value: invoice.dueDate ? fmtDate(invoice.dueDate) : null },
+                {
+                  label: t("Pagado"),
+                  value: invoice.paidAmount === undefined ? null : amount(invoice.paidAmount, invoice.currency),
+                },
+                {
+                  label: t("Estado de pago"),
+                  value: PAYMENT_STATUSES.includes(invoice.status)
+                    ? enumLabel("invoiceStatus", invoice.status)
+                    : t("Sin pagos registrados"),
+                  sub: invoice.status === "ON_HOLD" ? invoice.onHoldReason ?? undefined : undefined,
+                },
+              ]} />
+            </DetailSection>
           )}
 
           {/* --- lo fiscal (V66): tipo SUNAT, CPE, desglose, detracción o retención, notas --- */}

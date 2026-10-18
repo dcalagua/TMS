@@ -119,6 +119,23 @@ public interface CarrierInvoiceRepository extends JpaRepository<CarrierInvoice, 
     boolean existsByCompanyIdAndIssuerRucAndDocumentTypeAndSeriesAndCorrelative(UUID companyId, String issuerRuc,
             DocumentType documentType, String series, String correlative);
 
+    /** A CPE as the ERP names it (V67, the payment's invoice key). */
+    Optional<CarrierInvoice> findByCompanyIdAndIssuerRucAndDocumentTypeAndSeriesAndCorrelative(UUID companyId,
+            String issuerRuc, DocumentType documentType, String series, String correlative);
+
+    /** A document without CPE, by its carrier and printed number (V67). */
+    Optional<CarrierInvoice> findByCompanyIdAndCarrierIdAndInvoiceNumber(UUID companyId, UUID carrierId,
+            String invoiceNumber);
+
+    /**
+     * The carrier portal's list (V67): one carrier's documents, newest first. The carrier predicate is
+     * also {@code p_carrier_scope} in the database; this filter is the one Java owes on its own.
+     */
+    List<CarrierInvoice> findByCompanyIdAndCarrierIdOrderByInvoiceDateDescCreatedAtDesc(UUID companyId,
+            UUID carrierId, Pageable pageable);
+
+    Optional<CarrierInvoice> findByIdAndCompanyIdAndCarrierId(UUID id, UUID companyId, UUID carrierId);
+
     /** The credit and debit notes that correct one invoice (V66). */
     List<CarrierInvoice> findByCompanyIdAndReferencedInvoiceIdOrderByCreatedAtAsc(UUID companyId,
             UUID referencedInvoiceId);

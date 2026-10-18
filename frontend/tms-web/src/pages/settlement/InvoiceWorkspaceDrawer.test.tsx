@@ -51,6 +51,7 @@ function json(body: unknown): Response {
 }
 
 let fetchMock: ReturnType<typeof vi.fn>;
+let served: CarrierInvoiceView = INVOICE;
 
 beforeEach(() => {
   fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
@@ -61,12 +62,13 @@ beforeEach(() => {
         payload: "a,b", exportedAt: "2026-10-03T09:00:00Z", alreadyExported: false,
       });
     }
-    return json(INVOICE);
+    return json(served);
   });
   vi.stubGlobal("fetch", fetchMock);
 });
 
 afterEach(() => {
+  served = INVOICE;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -95,6 +97,22 @@ describe("la factura abierta", () => {
     renderDrawer();
 
     expect(await screen.findByText("Línea 1")).toBeInTheDocument();
+  });
+
+  it("una factura sin estado de pago no enseña el bloque de pago", async () => {
+    renderDrawer();
+    await screen.findByText("Contra estimado");
+
+    expect(screen.queryByRole("region", { name: "Pago" })).not.toBeInTheDocument();
+  });
+
+  it("enseña vencimiento, pagado y estado de pago cuando los hay (fase 65)", async () => {
+    served = { ...INVOICE, status: "PARTIALLY_PAID", allowedTransitions: [], dueDate: "2026-10-31", paidAmount: 500 };
+    renderDrawer();
+
+    const block = await screen.findByRole("region", { name: "Pago" });
+    expect(within(block).getByText("Pago parcial")).toBeInTheDocument();
+    expect(within(block).getByText(/500 PEN/)).toBeInTheDocument();
   });
 
   it("exporta en el formato elegido", async () => {

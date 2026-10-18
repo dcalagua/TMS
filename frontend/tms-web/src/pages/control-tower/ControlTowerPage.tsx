@@ -28,6 +28,7 @@ import { t } from "../../lib/i18n";
 import { fmtDateTime, fmtMinutes, fmtQuantity, fmtTime } from "../../lib/locale";
 import { BlockersPanel, BandMetric, KpiBand,
   AdvisoriesPanel, ExceptionsPanel, OutstandingStopsPanel, WorkloadPanel } from "./ControlTowerPanels";
+import { PayablesSummaryCard } from "./PayablesSummaryCard";
 
 const PAGE_SIZE = 20;
 
@@ -286,6 +287,11 @@ export function ControlTowerPage() {
             contadores: "qué está atascado" y "qué conviene saber" son preguntas diferentes, y una
             lista única haría que un redondeo se leyera como un camión parado. */}
         <AdvisoriesPanel items={overview.advisories} total={summary.openAdvisories} />
+      </Box>
+
+      {/* Fase 65: sólo para quien lee facturas, y se esconde sola si su consulta falla. */}
+      <Box sx={{ mb: 3, "&:empty": { display: "none" } }}>
+        <PayablesSummaryCard />
       </Box>
 
       <FilterBar

@@ -49,7 +49,12 @@ public record CarrierInvoiceView(
         List<ApprovalView> approvals,
         PayableExportView export,
         /** The V66 fiscal part: breakdown, CPE identity, notes, detraction, retention. */
-        FiscalView fiscal) {
+        FiscalView fiscal,
+        /** V67 (ADR-023 section 2): frozen at approval; null before it and on pre-V67 approvals. */
+        LocalDate dueDate,
+        BigDecimal paidAmount,
+        String onHoldReason,
+        LocalDate scheduledPaymentDate) {
 
     /**
      * What the document says to the tax authority (V66, ADR-024 part 2).
@@ -192,7 +197,8 @@ public record CarrierInvoiceView(
                                 approval.decidedBy(), approval.decidedAt(), approval.comment()))
                         .toList(),
                 export == null ? null : PayableExportView.of(export, true),
-                fiscal);
+                fiscal, invoice.dueDate(), invoice.paidAmount(), invoice.onHoldReason(),
+                invoice.scheduledPaymentDate());
     }
 
     private static LineView toLineView(CarrierInvoiceLine line, UUID invoiceCarrierId,

@@ -76,6 +76,16 @@ export function describePlanningError(error: ApiError): string {
 }
 
 /**
+ * La misma excepción para las cuentas por pagar (fase 65): un 422 (`payment-exceeds-balance`,
+ * `payment-currency-mismatch`) o un 409 (quien confirma es quien pidió el pago, la factura no
+ * admite la acción) trae en `detail` la cifra o la regla exacta, escrita para quien registra.
+ */
+export function describePaymentError(error: ApiError): string {
+  if ((error.status === 409 || error.status === 422) && error.problem?.detail) return error.problem.detail;
+  return describeApiError(error);
+}
+
+/**
  * La misma excepción que {@link describePlanningError}, para la importación masiva de pedidos.
  *
  * Los rechazos de fichero completo — "el fichero pesa más de 2 MB", "solo se pueden importar

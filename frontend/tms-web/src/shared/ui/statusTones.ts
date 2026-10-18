@@ -4,6 +4,7 @@ import type {
 import type { ExpectedBasis, InvoiceStatus, MatchStatus } from "../api/settlementApi";
 import type { DocumentDeliveryStatus } from "../api/documentDeliveriesApi";
 import type { AccrualStatus } from "../api/accrualApi";
+import type { PortalInvoiceStatus } from "../api/portalApi";
 import type { TenderStatus } from "../api/tendersApi";
 import type { StatusTone } from "../../theme";
 
@@ -98,6 +99,12 @@ export const INVOICE_STATUS_TONE: Record<InvoiceStatus, StatusTone> = {
   APPROVED: "done",
   REJECTED: "cancelled",
   EXPORTED: "done",
+  // Fase 65: lo que sigue a exportar. Programada y en parte pagada son trabajo vivo; retenida es
+  // ámbar y no rojo - alguien la detuvo con motivo, no es un fracaso.
+  SCHEDULED: "open",
+  PARTIALLY_PAID: "inProgress",
+  PAID: "done",
+  ON_HOLD: "inProgress",
 };
 
 export const MATCH_STATUS_TONE: Record<MatchStatus, StatusTone> = {
@@ -136,4 +143,18 @@ export const ACCRUAL_STATUS_TONE: Record<AccrualStatus, StatusTone> = {
   PARTIALLY_SETTLED: "inProgress",
   SETTLED: "done",
   REVERSED: "cancelled",
+};
+
+/**
+ * Fase 65: la factura vista por el transportista. Pagada es verde; en revisión, en espera y pago
+ * parcial son ámbar porque aún falta algo; rechazada es roja porque le toca a él actuar.
+ */
+export const PORTAL_INVOICE_STATUS_TONE: Record<PortalInvoiceStatus, StatusTone> = {
+  IN_REVIEW: "inProgress",
+  APPROVED: "open",
+  SCHEDULED: "open",
+  PARTIALLY_PAID: "inProgress",
+  PAID: "done",
+  ON_HOLD: "inProgress",
+  REJECTED: "overdue",
 };

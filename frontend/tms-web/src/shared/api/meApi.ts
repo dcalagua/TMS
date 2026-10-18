@@ -76,6 +76,12 @@ export const CAPABILITY = {
   ACCRUAL_EXPORT: "ACCRUAL_EXPORT",
   /** Revertir o cerrar provisiones, provisionar ahora y mantener las cuentas contables. */
   ACCRUAL_MANAGE: "ACCRUAL_MANAGE",
+  /** Cuentas por pagar (fase 65): programar, retener, liberar y proponer un pago manual. */
+  PAYMENT_RECORD: "PAYMENT_RECORD",
+  /** Confirmar o rechazar el pago manual que propuso **otra** persona (cuatro ojos). */
+  PAYMENT_CONFIRM: "PAYMENT_CONFIRM",
+  /** Portal: «Mis facturas» del transportista (`portal.invoice:read`). */
+  CARRIER_INVOICES: "CARRIER_INVOICES",
 } as const;
 
 /**

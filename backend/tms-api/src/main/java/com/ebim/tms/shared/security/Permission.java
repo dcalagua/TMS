@@ -135,6 +135,15 @@ public enum Permission {
     SETTLEMENT_ACCRUAL_MANAGE("settlement.accrual:manage"),
 
     /**
+     * Payment status after the export (migration V67, ADR-023 section 2). TMS records what was paid
+     * and pays nothing (D-01). Two permissions because a manual payment is four-eyes: whoever keys
+     * it is not whoever confirms it - and, as with approval, the rule is enforced on the people, not
+     * only on the permissions.
+     */
+    SETTLEMENT_PAYMENT_RECORD("settlement.payment:record"),
+    SETTLEMENT_PAYMENT_CONFIRM("settlement.payment:confirm"),
+
+    /**
      * A driver-and-vehicle pairing's day (migration V47).
      *
      * <p>Under {@code fleet} rather than {@code planning} because the thing being scheduled is a
@@ -188,6 +197,12 @@ public enum Permission {
      */
     PORTAL_TRIP_READ("portal.trip:read"),
     PORTAL_DOCUMENT_REPORT("portal.document:report"),
+
+    /**
+     * My carrier's invoices, their due dates and what was paid (migration V67, ADR-023 section 2).
+     * Held by {@code CARRIER_OPERATOR} only, like the other portal permissions.
+     */
+    PORTAL_INVOICE_READ("portal.invoice:read"),
 
     AUDIT_LOG_READ("audit.log:read");
 

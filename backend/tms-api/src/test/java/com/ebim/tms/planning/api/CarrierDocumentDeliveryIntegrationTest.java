@@ -206,7 +206,9 @@ class CarrierDocumentDeliveryIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.companies[0].carrierId").value(carrierA))
                 .andExpect(jsonPath("$.companies[0].carrierName").value("Transportes SA"))
-                .andExpect(jsonPath("$.companies[0].capabilities").value(Matchers.contains("CARRIER_PORTAL")));
+                // V67 adds "Mis facturas" to the carrier portal, and still nothing of the office.
+                .andExpect(jsonPath("$.companies[0].capabilities").value(
+                        Matchers.containsInAnyOrder("CARRIER_PORTAL", "CARRIER_INVOICES")));
 
         // V57: as the runtime role, with carrier B's setting, carrier A's rows do not exist.
         assertThat(asRuntimeRole(carrierB, "SELECT count(*) FROM tms.trip WHERE id = '" + shipment.tripId + "'"))

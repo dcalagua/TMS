@@ -120,6 +120,9 @@ type added by a migration appears in the picker without a frontend release.
 | `DELIVERY_RESULT_RECORDED` | What was handed over at a stop was recorded, or corrected |
 | `TENDER_SENT` / `TENDER_ACCEPTED` / `TENDER_REJECTED` / `TENDER_EXPIRED` / `TENDER_CANCELLED` | The five tender transitions (`docs/domain/CARRIER_TENDERING_V1.md`) |
 | `ORDER_CANCELLED` | A transport order was cancelled in TMS (V61). `resource.type` is `"order"` and `resource.reference` the order number; read it back with `GET /integration/v1/orders/{orderNumber}` (`WAREHOUSE_EXECUTION_V1.md` §7.4) |
+| `INVOICE_APPROVED` | A person approved a carrier invoice, credit or debit note (V67, ADR-023 section 2). `resource.type` is `"carrier-invoice"`, `resource.id` the TMS invoice id (the one the export carries) and `resource.reference` the document number |
+| `PAYABLE_EXPORTED` | The approved document was handed to whoever pays (`POST /settlement/invoices/{id}/export`) |
+| `PAYABLE_PAID` | The payments recorded for the invoice cover its open balance (`INBOUND_API_V1.md` section 14). TMS moved no money (D-01) |
 
 A subscription selecting nothing receives nothing, so the API refuses one: "everything" is spelled
 by selecting every type, never by selecting none.
@@ -399,5 +402,6 @@ a machine with no Docker must still be able to prove the contract has not change
   receives, because the inbound API authenticates with a credential instead.
 - **Few non-shipment events.** The tables are generic - `event_id`, `event_type`, `resource_*` - so a
   new family costs no migration to the delivery side. Since V61 the second publisher is
-  `tms.business_outbox_event` (`ORDER_CANCELLED`), written in the same transaction as the business
+  `tms.business_outbox_event` (`ORDER_CANCELLED`; since V67 also `INVOICE_APPROVED`, `PAYABLE_EXPORTED`,
+  `PAYABLE_PAID` with `resource.type = "carrier-invoice"`), written in the same transaction as the business
   change and fanned out through the same path; its row id is the event id.

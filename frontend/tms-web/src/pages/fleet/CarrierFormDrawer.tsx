@@ -24,6 +24,8 @@ interface CarrierFormValues {
   phone: string;
   email: string;
   externalReference: string;
+  /** Texto: vacío significa «el de la empresa», que no es lo mismo que cero días. */
+  paymentTermsDays: string;
 }
 
 interface CarrierFormDrawerProps {
@@ -36,6 +38,7 @@ interface CarrierFormDrawerProps {
 
 const KNOWN_FIELDS = new Set<keyof CarrierFormValues>([
   "code", "businessName", "taxIdType", "taxIdValue", "contactName", "phone", "email", "externalReference",
+  "paymentTermsDays",
 ]);
 
 /**
@@ -60,6 +63,8 @@ export function CarrierFormDrawer({ companyId, carrier, onClose, onSaved }: Carr
       phone: carrier?.phone ?? "",
       email: carrier?.email ?? "",
       externalReference: carrier?.externalReference ?? "",
+      paymentTermsDays: carrier?.paymentTermsDays === null || carrier?.paymentTermsDays === undefined
+        ? "" : String(carrier.paymentTermsDays),
     },
   });
 
@@ -74,6 +79,7 @@ export function CarrierFormDrawer({ companyId, carrier, onClose, onSaved }: Carr
       phone: values.phone.trim() || null,
       email: values.email.trim() || null,
       externalReference: values.externalReference.trim() || null,
+      paymentTermsDays: values.paymentTermsDays.trim() === "" ? null : Number(values.paymentTermsDays.trim()),
     };
 
     try {
@@ -186,6 +192,25 @@ export function CarrierFormDrawer({ companyId, carrier, onClose, onSaved }: Carr
               error={Boolean(errors.externalReference)} helperText={errors.externalReference?.message}
               {...register("externalReference", {
                 maxLength: { value: 100, message: t("No puede superar los {{count}} caracteres", { count: 100 }) },
+              })}
+            />
+          </FormRow>
+        </FormSection>
+
+        <FormSection title={t("Pago")} help={t("Cuándo vence lo que se le debe. TMS calcula el vencimiento; el ERP paga.")}>
+          <FormRow template="220px minmax(0, 1fr)">
+            <TextField
+              label={t("Plazo de pago (días)")} size="small" fullWidth type="number"
+              slotProps={{ htmlInput: { min: 0, max: 365, step: 1, inputMode: "numeric" } }}
+              error={Boolean(errors.paymentTermsDays)}
+              helperText={errors.paymentTermsDays?.message ?? t("Vacío = plazo por defecto de la empresa")}
+              {...register("paymentTermsDays", {
+                validate: (value) => {
+                  const trimmed = value.trim();
+                  if (trimmed === "") return true;
+                  const days = Number(trimmed);
+                  return (Number.isInteger(days) && days >= 0 && days <= 365) || t("Un número entero de 0 a 365");
+                },
               })}
             />
           </FormRow>
