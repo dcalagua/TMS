@@ -146,3 +146,68 @@
   false`) y el número es entero. Un `NESTABLE` sin incremento convertible viaja con `stackMode: null`
   (no declarado) y el incremento se cuenta como no convertido en la referencia del documento.
 - **Commit(s):** el de la fase 25 (repo EWM).
+
+### 2026-10-18 · fase 30 · La huella del SLS no la puede calcular el conector
+
+- **Regla/decisión afectada:** DESIGN §3.4 («`TmsDispatchConfirmationFormatter` agrega por pedido…» con
+  `StackCapacityCalculator`) frente a `ArchitectureTest.tmsConnectorUsesTheWriters` (EWM): `integration.tms`
+  no puede depender de `inventory..`, donde vive el calculador.
+- **Motivo:** mover el calculador o relajar la regla rompería una frontera del EWM para una conveniencia.
+- **Camino elegido:** la calcula `fulfillment.shipping.DispatchExportSource` (que sí puede ver `inventory`)
+  por material del pedido, en la unidad de las dimensiones, y la deja en la foto (`DispatchSnapshot.
+  MaterialGeometry`); el formateador sólo convierte a m³ con `TmsUnits` y suma. Una sola implementación de
+  las fórmulas (regla 201).
+- **Commit(s):** el de la fase 30 (repo EWM).
+
+### 2026-10-18 · fase 30 · `loadingMeters` y el alto útil en el EWM
+
+- **Regla/decisión afectada:** DESIGN §3.4 («el alto útil: el del tipo de vehículo del maestro si existe»;
+  `loadingMeters` «con el ancho del vehículo si se conoce») y contrato §7.3.
+- **Motivo:** `md_vehicle` (EWM V28) no tiene largo, ancho ni alto; `vehicle_type` es texto. No hay de dónde
+  sacar ni H ni el ancho sin inventarlo (regla 199).
+- **Camino elegido:** sin tope por alto (`k` sale del máximo por pila o del aplastamiento) y `loadingMeters`
+  **siempre `null`** desde el EWM, dicho en el contrato §7.3. El TMS tiene el ancho de su vehículo y puede
+  derivarlo (fase 45). Agregar medidas al maestro de vehículos del EWM es otra fase.
+- **Commit(s):** el de la fase 30 (repo EWM).
+
+### 2026-10-18 · fase 30 · `DELIVERY_RESULT_RECORDED` no toca la carga
+
+- **Regla/decisión afectada:** `TmsPlanApplier` (EWM) aplica la carga para todo viaje comprometido, incluso
+  `IN_TRANSIT`/`COMPLETED` (crea la carga si no existe).
+- **Motivo:** un aviso de entrega de un viaje ya entregado crearía una carga para el andén de mercadería que
+  ya está en el cliente.
+- **Camino elegido:** ese aviso **sólo proyecta** la POD (y guarda la foto del plan). Toda otra lectura del
+  plan también proyecta las entregas que traiga, así que un aviso perdido se repara con el siguiente.
+- **Commit(s):** el de la fase 30 (repo EWM).
+
+### 2026-10-18 · fase 30 · El plan sin bloque `delivery` y las líneas de entrega del TMS
+
+- **Regla/decisión afectada:** contrato §7.2 (`delivery.lines[]` desde `order_delivery_line`, V45).
+- **Motivo:** ningún código del TMS escribe `order_delivery_line` todavía (sólo existe la tabla): `lines`
+  sale `[]` en la práctica. Y un TMS anterior a V60 no manda el bloque `delivery`.
+- **Camino elegido:** el TMS lo publica igual (correcto cuando existan filas); el EWM proyecta el bloque y,
+  si falta, los campos planos de v1 (`deliveryResult`, `deliveryNotes`, …) sin bloques ni líneas. Una API
+  del TMS que registre resultados por línea queda fuera de esta fase.
+- **Commit(s):** los de la fase 30 (TMS y EWM).
+
+### 2026-10-18 · fase 30 · La huella del cuerpo v1 de `dispatch-confirmations`
+
+- **Regla/decisión afectada:** «aditivo» en §7.3 frente a `PayloadHash` (TMS), que se calcula sobre el
+  registro re-serializado.
+- **Motivo:** campos nuevos con `null` cambiaban la huella de un cuerpo v1: un reenvío de un documento
+  guardado antes de V60 habría dado `409`.
+- **Camino elegido:** los campos nuevos llevan `@JsonInclude(NON_NULL)`; la prueba `dispatchV1BodyUnchanged`
+  lo fija (sin la anotación falla).
+- **Commit(s):** el de la fase 30 (repo TMS, `4d95697`).
+
+### 2026-10-18 · fase 30 · Golden de `TMS_DISP` a `v1_1`
+
+- **Regla/decisión afectada:** fixtures del contrato «copias textuales; no se editan acá» (EWM
+  `contracts/tms/v1_1/README.md`).
+- **Motivo:** el golden de la confirmación tenía que cambiar a propósito (campos v1.1) y el ejemplo v1 del
+  contrato no los tiene.
+- **Camino elegido:** `v1_1/dispatch-confirmation.json` = ejemplo §4.1 + campos §7.3 del contrato;
+  `v1_1/golden/dispatch-confirmation.expected.json` reemplaza al de `v1/golden` (movido con `git mv`).
+  `v1/dispatch-confirmation.json` queda igual (sigue siendo el ejemplo v1).
+- **Commit(s):** el de la fase 30 (repo EWM).
+

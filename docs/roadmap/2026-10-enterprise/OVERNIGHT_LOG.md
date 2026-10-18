@@ -427,3 +427,74 @@ TMS: sólo Markdown (sin Java ni TypeScript), no se corrieron sus suites.
 - No se agregaron los campos nuevos al ejemplo publicado de la interfaz `materials`
   (`InboundPayloadExamples`); el contrato los acepta.
 - E2E s10 (perfil llega al TMS) es de la fase 80.
+
+---
+
+## 30 · Plan del TMS, POD, placa y huella en el SLS (2026-10-18, ciclo 1 de 2 · corte declarado)
+
+Commits: TMS `4d95697` (código + contrato) y el de esta bitácora; EWM `f887011`. **Sin `.done`**: el ciclo 2
+termina la lectura y las pantallas (abajo). Lo que entró está probado con las suites completas.
+
+### Qué entró
+
+**TMS (V60, aditivo)**
+1. `V60__dispatch_confirmation_v1_1_fields.sql`: `external_dispatch.vehicle_trailer_plate`;
+   `external_dispatch_order.stacks / effective_volume_m3 / loading_meters / geometry_reason` (anulables, CHECK
+   de forma, sin backfill; heredan grants y RLS de V53).
+2. `DispatchConfirmationV1` acepta `vehicle.trailerLicensePlate` y la geometría por pedido; se guardan y se ven en
+   `GET /api/v1/planning/trips/{id}/warehouse`. `VEHICLE_MISMATCH` compara sólo el tracto. `@JsonInclude(NON_NULL)`
+   mantiene la huella de un cuerpo v1 (reenvío previo a V60 = `UNCHANGED`).
+3. Plan v1.1: `orders[].delivery` (resultado, bloques intentado/entregado/rechazado nulos si no se registraron,
+   `lines[]` de `order_delivery_line`) en lecturas por conjunto. `DELIVERY_RESULT_RECORDED` ya salía por el mismo
+   webhook firmado: probado, sin cambios.
+
+**EWM (V57)**
+1. `V57__tms_plan_amounts_vehicle_plate_and_delivery.sql`: `planned_*` en `out_shipment_load_plan_order`,
+   `out_shipment_load_plan_stop`, `vehicle_plate` en carga y despacho, `out_shipment_delivery` (+ `_line`),
+   `ck_tmswh_contrato` con `DELIVERY_RESULT_RECORDED`; RLS + `REVOKE`; autoverificación; en el `TRUNCATE` de
+   `AbstractPostgresIT` y `AuthenticatedScopeITBase`.
+2. Parser/plan: lo planificado y las paradas se guardan (informan, regla 96); placa del tracto en su campo, el
+   remolque del andén no se pisa, conciliación tracto con tracto (cargas previas a V57 leídas de `trailer_number`).
+3. POD: proyección en `integration.tms.delivery` (reemplaza por viaje + pedido; `DELIVERY_RESULT_RECORDED` sólo
+   proyecta). **No contabiliza**: `ArchitectureTest.tmsDeliveryProjectionDoesNotPost`.
+4. Huella: `StackCapacityCalculator.geometria` (puro, con anidado) calculada en `DispatchExportSource`; la
+   confirmación lleva `stacks`, `effectiveVolumeM3`, `loadingMeters` (siempre `null`) y `geometryReason`.
+   Golden de `TMS_DISP` movido a `v1_1/golden` y actualizado a propósito (dicho en el commit).
+5. Docs EWM: mapa V57 en `CLAUDE.md`, 4 filas en `CURRENT_CAPABILITIES.md`, `DESIGN.md` §3.5. Docs TMS: notas de
+   implementación y del emisor EWM en `WAREHOUSE_EXECUTION_V1.md` §7.2/§7.3, `PHASE_MAP.md`, `DECISIONS_LOG.md`
+   (6 entradas).
+
+### Desvíos registrados (`DECISIONS_LOG.md`)
+
+- La huella se calcula en `fulfillment` (el conector no puede ver `inventory`).
+- Sin alto útil ni ancho en el maestro de vehículos del EWM: sin tope por alto, `loadingMeters` siempre `null`.
+- `DELIVERY_RESULT_RECORDED` no crea ni toca la carga.
+- `order_delivery_line` no lo escribe ningún código del TMS: `lines` sale `[]` en la práctica; el EWM proyecta
+  también desde los campos planos de v1.
+- `@JsonInclude(NON_NULL)` en los campos v1.1 de la confirmación (huella de idempotencia).
+- Golden de `TMS_DISP` a `contracts/tms/v1_1`.
+
+### Pruebas
+
+| Repo | Comando | Resultado |
+|---|---|---|
+| TMS backend | `./mvnw -B test` (completo, Testcontainers) | **2354 corridas, 1 fallo, 0 errores, 2 omitidas**. El fallo es el conocido de la línea base `PlatformLifecycleIntegrationTest.versionRules` (fase 00). +5 en `WarehouseExecutionApiIntegrationTest` (25/25) |
+| TMS backend | `-Dtest=WarehouseExecutionApiIntegrationTest,DispatchReconcilerTest,IntegrationShipmentApiTest` | 57/57 |
+| EWM backend | `./mvnw -B verify` (completo) | unitarias **1718/1718** (fase 25: 1697) · IT **1689/1689** (fase 25: 1681) · BUILD SUCCESS |
+| EWM backend | nuevas | `StackGeometryTest` 13 (PLP-571 con y sin H, última pila, tope por alto, aplastamiento, no entra, sin medir), `TmsShipmentPlanParserTest` 3, `TmsDispatchGeometryTest` 4, `TmsInboundPlanIT` +6 (plan v1.1, remolque, carga vieja, POD proyecta sin contabilizar ni crear carga, corrección reemplaza, campos planos + pedido desconocido), `TmsOutboundIT` +2 (tracto/remolque/huella; perfil incompleto), `ArchitectureTest` +1 |
+| EWM | `python3 scripts/auditar-alcance-de-almacen.py --gaps` | GAP 0 (86 controladores, 452 endpoints) |
+| Migraciones | hashes TMS V1–V58 / EWM V1–V55 contra `MIGRATION_HASHES.txt` | intactos |
+
+Frentes (TMS y EWM): no se tocó código de front en este ciclo; no se corrieron sus suites.
+
+### Qué falta (ciclo 2)
+
+- EWM: lectura de la POD por API (lectura separada del proyector) y su vista en el despacho (`SLS-…`), la etapa
+  `TMS_DELIVERY` en `OutboundGraphBuilder` (una consulta por conjunto, `ProcessQueryFanOutIT`) y el enlace
+  «Crear devolución» para FAILED/PARTIAL/REJECTED (abre el RMA prellenado, no lo crea).
+- EWM: exponer lo planificado y las paradas en el detalle de la carga y la columna «Planificado por TMS» (`.tnum`)
+  con su prueba de front; `vehiclePlate` en los tipos del front.
+- TMS: tipos del front (`warehouseApi.ts`, `TripWarehouseCard`) para la placa del remolque y la geometría;
+  `OUTBOUND_SHIPMENT_V1.md` §3.2 con `delivery`.
+- Fuera de la fase: `orders[].geometry` del plan (fase 40), `GEOMETRY_VARIANCE` (fase 45), API de resultados por
+  línea en el TMS.
