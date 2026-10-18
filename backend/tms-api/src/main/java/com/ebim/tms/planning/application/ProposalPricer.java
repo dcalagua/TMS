@@ -185,11 +185,16 @@ public class ProposalPricer {
                 null, companyId, null, input.planningDate(),
                 vehicle.carrierId(), vehicle.vehicleTypeId(), input.originId(), proposed.routeId(),
                 sum(carried, PlannableOrder::totalWeightKg),
-                sum(carried, PlannableOrder::totalVolumeM3),
+                // The planning volume (V62), as the ledger of a real trip sums it, so a proposal and
+                // the shipment it becomes are priced on the same cubic metres (V63).
+                sum(carried, order -> order.ordered().volumeM3()),
                 sum(carried, PlannableOrder::totalPallets),
                 true,
                 soleDestinationOf(proposed),
-                proposed.stopLocationIds().size());
+                proposed.stopLocationIds().size(),
+                sum(carried, order -> order.ordered().floorAreaM2()),
+                vehicle.widthM(),
+                vehicle.floorFillFactor());
 
         return quotationPort.quoteWithKnownDistance(companyId, costable, vehicle.carrierId(),
                 distanceOf(input, proposed));

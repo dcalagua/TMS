@@ -22,6 +22,7 @@ import com.ebim.tms.planning.domain.AssignmentStatus;
 import com.ebim.tms.shared.api.ConflictException;
 import com.ebim.tms.shared.api.ProblemTimes;
 import com.ebim.tms.shared.api.InvalidRequestException;
+import com.ebim.tms.shared.geometry.LoadGeometryCalculator;
 import com.ebim.tms.shared.reference.CarrierLookupPort;
 import com.ebim.tms.shared.reference.DispatchConfirmationCommand;
 import com.ebim.tms.shared.reference.DispatchConfirmationResult;
@@ -41,6 +42,7 @@ import com.ebim.tms.shared.reference.WarehouseMilestoneCommand;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.settings.CompanySettingsPort;
 import com.ebim.tms.shared.settings.DispatchConfirmationMode;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -252,12 +254,19 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
         Set<UUID> orderIds = active.stream().map(TripOrderAssignment::orderId).collect(Collectors.toSet());
         Map<UUID, PlannableOrder> orders = orderPlanningPort.findAllInCompany(orderIds, scope.companyId());
         Map<UUID, List<OrderLineSnapshot>> lines = orderReferencePort.linesOf(orderIds, scope.companyId());
+        VehicleCapacityReference vehicle = trip.vehicleId() == null ? null
+                : vehicleLookupPort.findAllInCompany(Set.of(trip.vehicleId()), scope.companyId()).get(trip.vehicleId());
+        BigDecimal loadWidth = trip.snapshotLoadWidthM() != null ? trip.snapshotLoadWidthM()
+                : vehicle == null ? null : vehicle.widthM();
+        BigDecimal fillFactor = vehicle == null ? null : vehicle.floorFillFactor();
 
         List<DispatchReconciler.PlannedOrder> planned = active.stream().map(assignment -> {
             PlannableOrder order = orders.get(assignment.orderId());
+            List<OrderLineSnapshot> orderLines = lines.getOrDefault(assignment.orderId(), List.of());
             return new DispatchReconciler.PlannedOrder(assignment.orderId(),
                     order == null ? null : order.externalSource(), order == null ? null : order.externalReference(),
-                    assignment.wholeOrder(), assignment.assigned(), lines.getOrDefault(assignment.orderId(), List.of()));
+                    assignment.wholeOrder(), assignment.assigned(), orderLines,
+                    plannedGeometry(assignment, orderLines, loadWidth, fillFactor));
         }).toList();
 
         Set<String> carrierCodes = new HashSet<>();
@@ -267,9 +276,7 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
             Optional.ofNullable(carrierLookupPort.externalReferencesInCompany(Set.of(trip.carrierId()), scope.companyId())
                     .get(trip.carrierId())).ifPresent(carrierCodes::add);
         }
-        String plate = trip.vehicleId() == null ? null
-                : Optional.ofNullable(vehicleLookupPort.findAllInCompany(Set.of(trip.vehicleId()), scope.companyId())
-                        .get(trip.vehicleId())).map(VehicleCapacityReference::licensePlate).orElse(null);
+        String plate = vehicle == null ? null : vehicle.licensePlate();
         DriverReference driver = trip.driverId() == null ? null
                 : driverLookupPort.findAllInCompany(Set.of(trip.driverId()), scope.companyId()).get(trip.driverId());
         Set<String> warehouseCodes = new HashSet<>();
@@ -291,6 +298,31 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
         return new DispatchReconciler.Plan(trip.status(), trip.actualDepartureAt(), trip.dispatchSource(), carrierCodes,
                 plate, driver == null ? null : driver.fullName(), driver == null ? null : driver.documentNumber(),
                 warehouseCodes, previousLoad, planned);
+    }
+
+    /**
+     * The footprint TMS planned for one assignment (ADR-022 section 9). Stacks and effective volume
+     * are the sums of the order's lines, and only for a whole order whose every line was measured:
+     * which units of a line a share carries is not recorded, and a partial sum compared with the
+     * warehouse's whole would report a difference that is only a gap. Loading metres come from the
+     * assignment's own floor (whole or share) across the trip's load width.
+     */
+    static DispatchReconciler.PlannedGeometry plannedGeometry(TripOrderAssignment assignment,
+            List<OrderLineSnapshot> lines, BigDecimal loadWidthM, BigDecimal fillFactor) {
+        Integer stacks = null;
+        BigDecimal effectiveVolume = null;
+        boolean everyLineMeasured = !lines.isEmpty()
+                && lines.stream().allMatch(line -> line.stacks() != null && line.effectiveVolumeM3() != null);
+        if (assignment.wholeOrder() && everyLineMeasured) {
+            stacks = lines.stream().mapToInt(OrderLineSnapshot::stacks).sum();
+            effectiveVolume = lines.stream().map(OrderLineSnapshot::effectiveVolumeM3)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+        BigDecimal floor = assignment.assigned().floorAreaM2();
+        BigDecimal loadingMeters = floor.signum() > 0
+                ? LoadGeometryCalculator.loadingMetres(floor, loadWidthM, fillFactor)
+                : null;
+        return new DispatchReconciler.PlannedGeometry(stacks, effectiveVolume, loadingMeters);
     }
 
     private UUID originOf(CompanyScope scope, Trip trip) {

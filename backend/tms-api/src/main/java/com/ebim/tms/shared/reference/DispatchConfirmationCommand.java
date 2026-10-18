@@ -50,7 +50,8 @@ public record DispatchConfirmationCommand(
      *
      * <p>{@code stacks}, {@code effectiveVolumeM3}, {@code loadingMeters} and {@code geometryReason}
      * are contract v1.1 (§7.3): the geometry the warehouse computed (ADR-022 section 3), each null
-     * when not said. Stored only; nothing compares them yet (phase 45).
+     * when not said. Stored, and compared with the plan as an informative {@code GEOMETRY_VARIANCE}
+     * (phase 45, {@code DispatchReconciler}).
      */
     public record Order(
             String externalSource,

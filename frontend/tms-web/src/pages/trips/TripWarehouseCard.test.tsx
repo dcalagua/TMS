@@ -5,7 +5,8 @@ import type { DispatchDocumentView, TripWarehouseView } from "../../shared/api/w
 import { enumLabel } from "../../lib/enums";
 import { TripWarehouseCard } from "./TripWarehouseCard";
 import {
-  countBySeverity, orderMatchTone, planVsReal, severityTone, sortDocuments, sortMilestones, verificationTone,
+  countBySeverity, geometryVariances, orderMatchTone, planVsReal, severityTone, sortDocuments, sortMilestones,
+  verificationTone,
 } from "./warehouseDispatch";
 
 /**
@@ -202,5 +203,38 @@ describe("la tarjeta de despacho de almacén", () => {
     expect(screen.getByText(/Sin huella: Sin incremento de anidado/)).toBeInTheDocument();
     // El remolque no es una diferencia: la placa comparada sigue siendo la del tracto.
     expect(screen.getByText("Sin diferencias con el plan.")).toBeInTheDocument();
+  });
+
+  it("marca la huella distinta como informativa, junto al resultado del pedido y sin volverlo rojo", () => {
+    const geometry = [
+      { code: "GEOMETRY_VARIANCE", severity: "INFO", orderReference: "PED-1011", lineNumber: null, planned: 10, dispatched: 7, uom: "STACKS", detail: "Informative only." },
+      { code: "GEOMETRY_VARIANCE", severity: "INFO", orderReference: "PED-1011", lineNumber: null, planned: 0.1503, dispatched: 0.18, uom: "M3", detail: null },
+    ];
+    const document = doc({
+      verificationStatus: "MATCHED",
+      discrepancies: geometry,
+      orders: [
+        { orderId: "o-1", externalSource: "SAPB1_PE", externalReference: "PED-1011", warehouseOrderNumber: "OUT-9", status: "SHIPPED", handlingUnits: 2, weightKg: 790, volumeM3: null, matchResult: "MATCHED", stacks: 7, effectiveVolumeM3: 0.18, loadingMeters: null, geometryReason: null },
+      ],
+    });
+
+    expect(geometryVariances(document, "PED-1011")).toEqual([
+      { unit: "pilas", planned: 10, dispatched: 7 },
+      { unit: "m³ efectivos", planned: 0.1503, dispatched: 0.18 },
+    ]);
+    expect(geometryVariances(document, "PED-9999")).toEqual([]);
+    expect(geometryVariances(document, null)).toEqual([]);
+    expect(countBySeverity(document)).toEqual({ ERROR: 0, WARNING: 0, INFO: 2 });
+
+    render(
+      <TripWarehouseCard
+        companyId="c-1" trip={TRIP} loading={false} failed={false} orderNumbers={new Map()}
+        warehouse={warehouse({ verificationStatus: "MATCHED", documents: [document] })}
+      />,
+    );
+
+    expect(screen.getByText("Huella distinta a la planificada (informativa)")).toBeInTheDocument();
+    expect(screen.getAllByText(enumLabel("dispatchDiscrepancyCode", "GEOMETRY_VARIANCE"))).toHaveLength(2);
+    expect(screen.getByText("2 informativas")).toBeInTheDocument();
   });
 });

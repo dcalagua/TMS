@@ -185,6 +185,7 @@ export const ENUM_LABELS = {
     DISPATCH_TIME: "Hora de despacho distinta",
     DRIVER_MISMATCH: "Conductor distinto",
     EXTRA_ORDER: "Pedido no planificado",
+    GEOMETRY_VARIANCE: "Huella distinta (informativa)",
     MISSING_ORDER: "Pedido no despachado",
     NOT_APPLIED: "No se pudo aplicar",
     QUANTITY_UNCOMPARABLE: "Cantidad no comparable",
@@ -344,6 +345,8 @@ export const ENUM_LABELS = {
   },
   costComponentReason: {
     DISTANCE_UNKNOWN: "Sin distancia conocida",
+    FLOOR_AREA_UNKNOWN: "Sin geometría medida (piso desconocido)",
+    LOAD_WIDTH_UNKNOWN: "Vehículo sin ancho de carga",
     PALLETS_UNKNOWN: "Sin pallets declarados",
     STOPS_UNKNOWN: "Sin paradas registradas",
     VOLUME_UNKNOWN: "Sin volumen declarado",
@@ -351,6 +354,7 @@ export const ENUM_LABELS = {
     WEIGHT_UNKNOWN: "Sin peso declarado",
   },
   costQuantitySource: {
+    EFFECTIVE_GEOMETRY: "Geometría efectiva de la carga",
     LINEHAUL_SUBTOTAL: "Subtotal del flete",
     MEASURED_ROUTE: "Recorrido medido del viaje",
     ORDER_DECLARED_TOTALS: "Totales declarados de los pedidos",
@@ -438,6 +442,7 @@ export const ENUM_LABELS = {
     BASE: "Base",
     DISTANCE: "Distancia",
     FUEL_SURCHARGE: "Recargo por combustible",
+    LOADING_METERS: "Metros lineales",
     MAXIMUM_ADJUSTMENT: "Ajuste al máximo",
     MINIMUM_ADJUSTMENT: "Ajuste al mínimo",
     OTHER_ACCESSORIAL: "Accesorio",

@@ -600,6 +600,103 @@ class WarehouseExecutionApiIntegrationTest {
                 .andExpect(status().isBadRequest());
     }
 
+    // --- phase 45: the warehouse's footprint compared, and the plan's footprint priced -------------
+
+    @Test
+    @DisplayName("v1.1 compared: a different footprint is three INFO GEOMETRY_VARIANCE lines, MATCHED and APPLIED, shown on the trip")
+    void dispatchGeometryVarianceIsInformative() throws Exception {
+        mode("HYBRID");
+        Shipment shipment = measuredReadyShipment();
+        String reference = "SLS-" + SEQUENCE.incrementAndGet();
+
+        // TMS planned 10 stacks, 0.1503 m3 and 0.1103 / (2.40 x 0.85) = 0.054 loading metres.
+        String response = dispatch(documentV11(shipment, reference, shipment.plate, "C4X-991",
+                "\"stacks\":7,\"effectiveVolumeM3\":0.18,\"loadingMeters\":0.08,\"geometryReason\":null"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.outcome").value("APPLIED"))
+                .andExpect(jsonPath("$.verificationStatus").value("MATCHED"))
+                .andExpect(jsonPath("$.discrepancies.length()").value(3))
+                .andReturn().getResponse().getContentAsString();
+        List<String> codes = JsonPath.read(response, "$.discrepancies[*].code");
+        List<String> severities = JsonPath.read(response, "$.discrepancies[*].severity");
+        List<String> units = JsonPath.read(response, "$.discrepancies[*].uom");
+        assertThat(codes).containsOnly("GEOMETRY_VARIANCE");
+        assertThat(severities).containsOnly("INFO");
+        assertThat(units).containsExactly("STACKS", "M3", "LDM");
+        assertThat(number(response, "$.discrepancies[2].planned")).isEqualByComparingTo("0.054");
+        assertThat(value("SELECT status FROM tms.trip WHERE id = '" + shipment.tripId + "'")).isEqualTo("IN_TRANSIT");
+
+        mockMvc.perform(asAdmin(get(TRIPS + "/" + shipment.tripId + "/warehouse")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.documents[0].verificationStatus").value("MATCHED"))
+                .andExpect(jsonPath("$.documents[0].orders[0].matchResult").value("MATCHED"))
+                .andExpect(jsonPath("$.documents[0].discrepancies[?(@.code == 'GEOMETRY_VARIANCE')]").exists());
+    }
+
+    @Test
+    @DisplayName("v1 against a measured plan: no geometry is compared, MATCHED with no discrepancy (compatibility)")
+    void dispatchV1AgainstMeasuredPlan() throws Exception {
+        mode("HYBRID");
+        Shipment shipment = measuredReadyShipment();
+
+        dispatch(document(shipment, "SLS-" + SEQUENCE.incrementAndGet(), 1, OffsetDateTime.now(), "CD01", "100"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.verificationStatus").value("MATCHED"))
+                .andExpect(jsonPath("$.discrepancies.length()").value(0));
+        // The same footprint TMS planned is no difference either.
+        Shipment second = measuredReadyShipment();
+        dispatch(documentV11(second, "SLS-" + SEQUENCE.incrementAndGet(), second.plate, "C4X-991",
+                "\"stacks\":10,\"effectiveVolumeM3\":0.1503,\"loadingMeters\":null,\"geometryReason\":null"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.discrepancies.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("V63: a card per loading metre prices the measured shipment on effective geometry; an unmeasured one is NOT_CALCULABLE")
+    void loadingMeterRate() throws Exception {
+        Shipment measured = measuredReadyShipment();
+        String vehicleType = value("SELECT v.vehicle_type_id FROM tms.trip t JOIN tms.vehicle v ON v.id = t.vehicle_id"
+                + " WHERE t.id = '" + measured.tripId + "'");
+        mockMvc.perform(asAdmin(post("/api/v1/rates/rate-cards")).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"code":"LDM-%d","name":"Per loading metre","carrierId":"%s","scope":"CARRIER",
+                                 "vehicleTypeId":"%s","currency":"PEN","validFrom":"%s",
+                                 "amountPerM3":100,"amountPerLoadingMeter":50}
+                                """.formatted(SEQUENCE.incrementAndGet(), carrier, vehicleType,
+                                LocalDate.now(LIMA).minusYears(1))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.amountPerLoadingMeter").value(50));
+
+        String priced = mockMvc.perform(asAdmin(post("/api/v1/rates/trips/" + measured.tripId + "/cost/estimate")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components[?(@.component == 'LOADING_METERS')].unit").value("LOADING_METER"))
+                .andExpect(jsonPath("$.components[?(@.component == 'LOADING_METERS')].quantitySource")
+                        .value("EFFECTIVE_GEOMETRY"))
+                .andExpect(jsonPath("$.components[?(@.component == 'VOLUME')].quantitySource")
+                        .value("EFFECTIVE_GEOMETRY"))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(componentNumber(priced, "LOADING_METERS", "quantity"))
+                .isEqualByComparingTo("0.054");
+        assertThat(componentNumber(priced, "LOADING_METERS", "amount"))
+                .isEqualByComparingTo("2.70");
+        assertThat(componentNumber(priced, "VOLUME", "amount"))
+                .isEqualByComparingTo("15.03");
+        assertThat(number(priced, "$.estimatedAmount")).isEqualByComparingTo("17.73");
+
+        // The same deck, an order nobody measured: the declared 10 m3 and no floor to measure.
+        Shipment unmeasured = readyShipmentOn(vehicleOfType(vehicleType), false);
+        mockMvc.perform(asAdmin(post("/api/v1/rates/trips/" + unmeasured.tripId + "/cost/estimate")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estimateComplete").value(false))
+                .andExpect(jsonPath("$.components[?(@.component == 'LOADING_METERS')].status").value("NOT_CALCULABLE"))
+                .andExpect(jsonPath("$.components[?(@.component == 'LOADING_METERS')].reason").value("FLOOR_AREA_UNKNOWN"))
+                .andExpect(jsonPath("$.components[?(@.component == 'VOLUME')].quantitySource")
+                        .value("ORDER_DECLARED_TOTALS"));
+        assertThat(value("SELECT count(*) FROM tms.trip_cost_component c JOIN tms.trip_cost t ON t.id = c.trip_cost_id"
+                + " WHERE t.trip_id IN ('" + measured.tripId + "', '" + unmeasured.tripId + "')"
+                + " AND c.component = 'LOADING_METERS'")).isEqualTo("2");
+    }
+
     // --- plan v1.1 (§7.2): orders[].delivery and DELIVERY_RESULT_RECORDED ------------------------
 
     @Test
@@ -693,6 +790,37 @@ class WarehouseExecutionApiIntegrationTest {
         return shipment;
     }
 
+    /**
+     * A ready shipment on a 7.20 x 2.40 x 2.40 deck filled to 0.85, carrying one order of PLP-571
+     * measured as ADR-022 measures it: 10 stacks, 0.1503 m3 effective, 0.1103 m2 of floor.
+     */
+    private Shipment measuredReadyShipment() throws Exception {
+        return readyShipmentOn(deckVehicle(), true);
+    }
+
+    private Shipment readyShipmentOn(String vehicleId, boolean measured) throws Exception {
+        LocalDate date = nextDate();
+        String order = order(date, "2");
+        if (measured) {
+            execute("UPDATE tms.transport_order_line SET geometry_status = 'MEASURED', stacks = 10,"
+                    + " stack_height_m = 1.363, effective_volume_m3 = 0.1503, floor_area_m2 = 0.1103"
+                    + " WHERE order_id = '" + order + "'");
+            execute("UPDATE tms.transport_order SET planning_volume_m3 = 0.1503, floor_area_m2 = 0.1103,"
+                    + " max_stack_height_m = 1.363, max_unit_height_m = 0.4 WHERE id = '" + order + "'");
+        }
+        String run = newRun(date);
+        String trip = newTrip(run, date, vehicleId);
+        mockMvc.perform(asAdmin(post(TRIPS + "/" + trip + "/assignments")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"orderId\":\"" + order + "\"}"))
+                .andExpect(status().isOk());
+        confirm(run);
+        transition(trip, "ready", null).andExpect(status().isOk());
+        return new Shipment(trip, order, value("SELECT shipment_number FROM tms.trip WHERE id = '" + trip + "'"),
+                value("SELECT external_reference FROM tms.transport_order WHERE id = '" + order + "'"),
+                value("SELECT v.license_plate FROM tms.trip t JOIN tms.vehicle v ON v.id = t.vehicle_id WHERE t.id = '"
+                        + trip + "'"));
+    }
+
     private Shipment confirmedShipment(String pallets) throws Exception {
         LocalDate date = nextDate();
         String order = order(date, pallets);
@@ -776,6 +904,13 @@ class WarehouseExecutionApiIntegrationTest {
         return JsonPath.read(response, "$.subscription.id");
     }
 
+    /** One figure of the breakdown line for {@code component}; a JsonPath filter always reads a list. */
+    private static BigDecimal componentNumber(String json, String component, String field) {
+        List<Object> read = JsonPath.read(json, "$.components[?(@.component == '" + component + "')]." + field);
+        assertThat(read).hasSize(1);
+        return new BigDecimal(String.valueOf(read.get(0)));
+    }
+
     private static BigDecimal number(String json, String path) {
         Object read = JsonPath.read(json, path);
         return new BigDecimal(String.valueOf(read));
@@ -814,10 +949,14 @@ class WarehouseExecutionApiIntegrationTest {
     }
 
     private String newTrip(String runId, LocalDate date) throws Exception {
+        return newTrip(runId, date, vehicle());
+    }
+
+    private String newTrip(String runId, LocalDate date, String vehicleId) throws Exception {
         String departure = date.atTime(8, 0).atZone(LIMA).toOffsetDateTime().toString();
         String response = mockMvc.perform(asAdmin(post(PLANNING + "/runs/" + runId + "/trips"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"vehicleId\":\"" + vehicle() + "\",\"plannedDepartureAt\":\"" + departure
+                        .content("{\"vehicleId\":\"" + vehicleId + "\",\"plannedDepartureAt\":\"" + departure
                                 + "\",\"version\":0}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         return JsonPath.read(response, "$.trip.id");
@@ -858,6 +997,22 @@ class WarehouseExecutionApiIntegrationTest {
         return insertReturningId("INSERT INTO tms.vehicle (company_id, code, license_plate, carrier_id,"
                 + " vehicle_type_id) VALUES ('" + COMPANY + "', 'WEX-VEH-" + number + "', '"
                 + String.format(Locale.ROOT, "W%02d-%03d", number % 100, number) + "', '" + carrier + "', '" + type + "')");
+    }
+
+    /** A vehicle on a type with a measured deck (V62): 7.20 x 2.40 x 2.40 m, floor filled to 0.85. */
+    private static String deckVehicle() {
+        int number = SEQUENCE.incrementAndGet();
+        String type = insertReturningId("INSERT INTO tms.vehicle_type (company_id, code, name, max_weight_kg,"
+                + " max_volume_m3, max_pallets, length_m, width_m, height_m, load_floor_fill_factor) VALUES ('"
+                + COMPANY + "', 'WEX-DECK-" + number + "', 'Deck', 100000, 400, 1000, 7.20, 2.40, 2.40, 0.85)");
+        return vehicleOfType(type);
+    }
+
+    private static String vehicleOfType(String type) {
+        int number = SEQUENCE.incrementAndGet();
+        return insertReturningId("INSERT INTO tms.vehicle (company_id, code, license_plate, carrier_id,"
+                + " vehicle_type_id) VALUES ('" + COMPANY + "', 'WEX-VEH-" + number + "', '"
+                + String.format(Locale.ROOT, "D%02d-%03d", number % 100, number) + "', '" + carrier + "', '" + type + "')");
     }
 
     @SafeVarargs

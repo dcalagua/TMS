@@ -49,6 +49,14 @@ public final class DispatchReconciler {
      */
     static final BigDecimal WEIGHT_TOLERANCE = new BigDecimal("0.01");
 
+    /**
+     * Relative tolerance for the footprint (contract v1.1, phase 45): effective volume and loading
+     * metres are rounded on both sides and the warehouse stacks without a vehicle height, so the
+     * two computations agree to a few percent at best. Five percent hides the rounding and still
+     * shows a pile counted twice. Stacks are whole numbers and compared exactly.
+     */
+    static final BigDecimal GEOMETRY_TOLERANCE = new BigDecimal("0.05");
+
     public enum Severity {
         ERROR,
         WARNING,
@@ -68,6 +76,13 @@ public final class DispatchReconciler {
         DRIVER_MISMATCH(Severity.WARNING),
         WAREHOUSE_MISMATCH(Severity.ERROR),
         DISPATCH_TIME(Severity.INFO),
+        /**
+         * The warehouse's footprint of an order (stacks, effective m3, loading metres, contract
+         * v1.1 section 7.3) differs from the one TMS planned (ADR-022 section 9). Informative only:
+         * never a {@code MISMATCH}, never a refusal, and it changes no order's match result - the
+         * goods are the same goods, stacked by a calculator that knows a different vehicle.
+         */
+        GEOMETRY_VARIANCE(Severity.INFO),
         UNKNOWN_LOAD(Severity.ERROR),
         /** A check {@code DispatchReadiness} would have refused a person with (ADR-013 section 3). */
         DISPATCH_BLOCKER(Severity.WARNING),
@@ -100,12 +115,30 @@ public final class DispatchReconciler {
         }
     }
 
+    /**
+     * The footprint TMS planned for one order on this trip (ADR-022 sections 3 and 8). Each figure
+     * is null when TMS cannot know it, and a null is never compared: stacks and effective volume
+     * need every line of a whole order measured, loading metres need the floor and the vehicle's
+     * width.
+     */
+    public record PlannedGeometry(Integer stacks, BigDecimal effectiveVolumeM3, BigDecimal loadingMeters) {
+
+        public static final PlannedGeometry UNKNOWN = new PlannedGeometry(null, null, null);
+    }
+
     /** One order the trip carries: what planning committed to take. */
     public record PlannedOrder(UUID orderId, String externalSource, String externalReference, boolean wholeOrder,
-            OrderAmounts assigned, List<OrderLineSnapshot> lines) {
+            OrderAmounts assigned, List<OrderLineSnapshot> lines, PlannedGeometry geometry) {
 
         public PlannedOrder {
             lines = lines == null ? List.of() : List.copyOf(lines);
+            geometry = geometry == null ? PlannedGeometry.UNKNOWN : geometry;
+        }
+
+        /** Without a planned footprint: nothing about geometry is compared. */
+        public PlannedOrder(UUID orderId, String externalSource, String externalReference, boolean wholeOrder,
+                OrderAmounts assigned, List<OrderLineSnapshot> lines) {
+            this(orderId, externalSource, externalReference, wholeOrder, assigned, lines, null);
         }
 
         OrderExternalKey key() {
@@ -203,6 +236,7 @@ public final class DispatchReconciler {
                 continue;
             }
             ExternalDispatchOrderMatch result = compareQuantities(order, plannedOrder, found);
+            compareGeometry(order, plannedOrder, found);
             matches.add(new OrderMatch(key, plannedOrder.orderId(), result));
         }
 
@@ -302,6 +336,44 @@ public final class DispatchReconciler {
         return variance
                 ? ExternalDispatchOrderMatch.VARIANCE
                 : uncomparable ? ExternalDispatchOrderMatch.UNCOMPARABLE : ExternalDispatchOrderMatch.MATCHED;
+    }
+
+    /**
+     * The footprint the warehouse sent against the one TMS planned (phase 45). Each of the three is
+     * compared only when both sides state it; a v1 document, a {@code geometryReason} without
+     * figures or an order TMS never measured says nothing and is not a difference.
+     */
+    private static void compareGeometry(DispatchConfirmationCommand.Order order, PlannedOrder planned,
+            List<Discrepancy> found) {
+        String reference = reference(order.key());
+        PlannedGeometry geometry = planned.geometry();
+        if (order.stacks() != null && geometry.stacks() != null && order.stacks().intValue() != geometry.stacks()) {
+            found.add(new Discrepancy(Code.GEOMETRY_VARIANCE, reference, null, BigDecimal.valueOf(geometry.stacks()),
+                    BigDecimal.valueOf(order.stacks()), "STACKS",
+                    "The warehouse stacked the order in " + order.stacks() + " stacks; TMS planned "
+                            + geometry.stacks() + ". Informative only."));
+        }
+        if (beyondGeometryTolerance(geometry.effectiveVolumeM3(), order.effectiveVolumeM3())) {
+            found.add(new Discrepancy(Code.GEOMETRY_VARIANCE, reference, null, geometry.effectiveVolumeM3(),
+                    order.effectiveVolumeM3(), "M3",
+                    "The warehouse's effective volume differs from the planned one by more than 5%. Informative only."));
+        }
+        if (beyondGeometryTolerance(geometry.loadingMeters(), order.loadingMeters())) {
+            found.add(new Discrepancy(Code.GEOMETRY_VARIANCE, reference, null, geometry.loadingMeters(),
+                    order.loadingMeters(), "LDM",
+                    "The warehouse's loading metres differ from the planned ones by more than 5%. Informative only."));
+        }
+    }
+
+    private static boolean beyondGeometryTolerance(BigDecimal planned, BigDecimal dispatched) {
+        if (planned == null || dispatched == null) {
+            return false;
+        }
+        BigDecimal difference = dispatched.subtract(planned).abs();
+        if (planned.signum() == 0) {
+            return difference.signum() != 0;
+        }
+        return difference.compareTo(planned.abs().multiply(GEOMETRY_TOLERANCE, MathContext.DECIMAL64)) > 0;
     }
 
     // --- transport -------------------------------------------------------------------------

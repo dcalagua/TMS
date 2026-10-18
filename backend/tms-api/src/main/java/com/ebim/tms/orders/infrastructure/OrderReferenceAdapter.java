@@ -61,7 +61,7 @@ class OrderReferenceAdapter implements OrderReferencePort {
             byOrder.put(order.id(), order.lines().stream()
                     .sorted(Comparator.comparingInt(TransportOrderLine::lineNumber))
                     .map(line -> new OrderLineSnapshot(line.lineNumber(), line.materialCode(), line.quantity(),
-                            line.uom()))
+                            line.uom(), line.stacks(), line.effectiveVolumeM3()))
                     .toList());
         }
         return byOrder;

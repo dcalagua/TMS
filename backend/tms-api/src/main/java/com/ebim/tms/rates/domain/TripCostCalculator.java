@@ -15,7 +15,8 @@ import java.util.List;
  *
  * <ol>
  *   <li>{@code BASE}, if the card names one, as a flat line.</li>
- *   <li>Each of {@code DISTANCE}, {@code WEIGHT}, {@code VOLUME}, {@code PALLETS} the card names:
+ *   <li>Each of {@code DISTANCE}, {@code WEIGHT}, {@code VOLUME}, {@code PALLETS},
+ *       {@code LOADING_METERS} (V63) the card names:
  *       {@code rate x quantity}, rounded to the currency's two decimals. A component whose
  *       quantity is unknown becomes a {@link CostComponentStatus#NOT_CALCULABLE} line contributing
  *       nothing - it is never skipped and never charged at zero.</li>
@@ -49,7 +50,7 @@ public final class TripCostCalculator {
      */
     private static final List<RateComponent> LINEHAUL_MEASURED = List.of(
             RateComponent.DISTANCE, RateComponent.WEIGHT, RateComponent.VOLUME, RateComponent.PALLETS,
-            RateComponent.STOP_OFF);
+            RateComponent.LOADING_METERS, RateComponent.STOP_OFF);
 
     /** The flat accessorials, after the fuel surcharge and before the adjustments. */
     private static final List<RateComponent> FLAT_ACCESSORIALS =
@@ -135,7 +136,7 @@ public final class TripCostCalculator {
         }
         BigDecimal quantity = inputs.quantityFor(component);
         if (quantity == null) {
-            lines.add(CostLine.notCalculable(component));
+            lines.add(CostLine.notCalculable(component, inputs.missingReasonFor(component)));
         } else {
             lines.add(CostLine.measured(component, rate, quantity, money(rate.multiply(quantity)),
                     inputs.sourceFor(component)));

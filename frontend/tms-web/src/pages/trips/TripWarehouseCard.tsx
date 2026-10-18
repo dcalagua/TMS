@@ -26,8 +26,8 @@ import { t } from "../../lib/i18n";
 import { fmtDateTime, fmtDecimal, fmtQuantity, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
 import { notifyError, notifySuccess } from "../../lib/ui";
 import {
-  countBySeverity, orderMatchTone, outcomeTone, planVsReal, severityTone, sortDocuments, sortMilestones,
-  verificationTone,
+  countBySeverity, geometryVariances, orderMatchTone, outcomeTone, planVsReal, severityTone, sortDocuments,
+  sortMilestones, verificationTone,
 } from "./warehouseDispatch";
 
 interface TripWarehouseCardProps {
@@ -314,6 +314,7 @@ function DocumentSection({
           <Box sx={{ display: "grid", gap: 0.5, mt: 0.75 }}>
             {document.orders.map((order, index) => {
               const tmsNumber = order.orderId ? orderNumbers.get(order.orderId) : undefined;
+              const footprintDiffs = geometryVariances(document, order.externalReference);
               return (
                 <Box
                   key={`${order.externalSource ?? ""}-${order.externalReference ?? ""}-${index}`}
@@ -333,6 +334,17 @@ function DocumentSection({
                     ].filter(Boolean).join(" · ")}
                   </Typography>
                   <Box sx={{ flex: 1 }} />
+                  {footprintDiffs.length > 0 && (
+                    <Tooltip
+                      title={footprintDiffs.map((diff) => `${t(diff.unit)}: ${t("Plan TMS")} ${
+                        diff.planned === null ? "-" : fmtDecimal(diff.planned, 3)} · ${t("almacén")} ${
+                        diff.dispatched === null ? "-" : fmtDecimal(diff.dispatched, 3)}`).join(" | ")}
+                    >
+                      <span>
+                        <StatusChip label={t("Huella distinta a la planificada (informativa)")} tone="open" />
+                      </span>
+                    </Tooltip>
+                  )}
                   <StatusChip label={enumLabel("dispatchOrderMatch", order.matchResult)} tone={orderMatchTone(order.matchResult)} />
                 </Box>
               );
@@ -346,7 +358,8 @@ function DocumentSection({
 
 /**
  * La huella que calculó el almacén (contrato v1.1): pilas, volumen efectivo y metros lineales.
- * Se muestra tal cual; todavía no se compara con el plan. Sin huella, el motivo del almacén.
+ * Se muestra tal cual; la comparación con el plan la hace el servidor (GEOMETRY_VARIANCE, fase 45)
+ * y se marca aparte con un chip informativo. Sin huella, el motivo del almacén.
  */
 function footprintText(order: DispatchDocumentView["orders"][number]): string | null {
   const parts = [

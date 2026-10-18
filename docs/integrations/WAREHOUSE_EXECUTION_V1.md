@@ -397,7 +397,7 @@ TMS                                         WMS (EWM)
 Decision: **ADR-025** (S-1…S-4 accepted, S-5 proposed). Material profile and load geometry: **ADR-022**.
 Everything here is **additive**: same `/integration/v1` path, same authentication, same envelope; a
 partner that speaks v1 keeps working and ignores the new fields. Each message names the overnight-pack
-phase that implements it; until that phase lands, the endpoint answers `404` and the field is absent. 7.1 landed in phase 20 (V59); 7.2 (POD part) and 7.3 (stored) landed in phase 30 (V60); 7.4 and 7.5 landed in phase 35 (V61).
+phase that implements it; until that phase lands, the endpoint answers `404` and the field is absent. 7.1 landed in phase 20 (V59); 7.2 (POD part) and 7.3 (stored) landed in phase 30 (V60); 7.4 and 7.5 landed in phase 35 (V61); 7.3 (compared) landed in phase 45.
 
 | # | Message | Direction | Endpoint | Scope | Phase |
 |---|---|---|---|---|---|
@@ -643,6 +643,33 @@ counted base unit and dimensions convertible to metres; otherwise both are `null
 `QUANTITY_NOT_IN_BASE_UOM`, `QUANTITY_NOT_WHOLE`, `STACK_LIMIT_NOT_DECLARED`, `MAX_TOP_LOAD_UOM_DIFFERS`,
 `UNIT_WEIGHT_MISSING`). The WMS has no vehicle dimensions, so it stacks without a height cap (`k` from
 the per-stack maximum or the top load) and **`loadingMeters` is always `null`** from the EWM.
+
+**Compared (phase 45).** `DispatchReconciler` compares each order's footprint with the one TMS planned and
+adds one `GEOMETRY_VARIANCE` discrepancy (severity `INFO`) per measure that differs. The response shape,
+the HTTP status (`201`/`200`), the `outcome`, the `verificationStatus` and the order's `matchResult` are
+**unchanged by it**: a dispatch whose only differences are geometric stays `MATCHED` and dispatches the
+trip as its mode allows.
+
+| Measure | TMS planned | Compared when | Tolerance | `uom` |
+|---|---|---|---|---|
+| `stacks` | sum of the order's line stacks (V62) | whole order on the trip, **every** line measured, and the document sends a number | exact | `STACKS` |
+| `effectiveVolumeM3` | sum of the lines' effective volume (V62) | as above | 5% relative | `M3` |
+| `loadingMeters` | assignment's floor area / (trip load width x floor fill factor) | the order has floor on this trip (whole or share), the vehicle has a width, and the document sends a number | 5% relative | `LDM` |
+
+A `null` on either side compares nothing - a v1 document, a `geometryReason` without figures, an order
+TMS never measured or a vehicle without dimensions produce no discrepancy. The warehouse stacks without a
+vehicle height, so its stacks are often fewer and taller than TMS's: that is precisely why the difference
+informs and never refuses. Example response line:
+
+```json
+{ "code": "GEOMETRY_VARIANCE", "severity": "INFO", "orderReference": "PED-1011", "lineNumber": null,
+  "planned": 10, "dispatched": 7, "uom": "STACKS",
+  "detail": "The warehouse stacked the order in 7 stacks; TMS planned 10. Informative only." }
+```
+
+The office sees them in the trip's warehouse card (`GET /api/v1/planning/trips/{id}/warehouse`,
+`documents[].discrepancies[]`) and, per order, as the chip "Huella distinta a la planificada
+(informativa)" beside the order's match result.
 
 ### 7.4 `ORDER_CANCELLED` (TMS → WMS)
 

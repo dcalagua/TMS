@@ -59,7 +59,22 @@ public record RateCardRequest(
         @DecimalMin("0.00") @Digits(integer = 12, fraction = 2) BigDecimal tollAmount,
         @DecimalMin("0.00") @Digits(integer = 12, fraction = 2) BigDecimal accessorialAmount,
         @Size(max = 120) String accessorialLabel,
-        @DecimalMin("0.00") @Digits(integer = 12, fraction = 2) BigDecimal maximumAmount) {
+        @DecimalMin("0.00") @Digits(integer = 12, fraction = 2) BigDecimal maximumAmount,
+        /** Per loading metre of deck (V63, ADR-022 section 8). */
+        @DecimalMin("0.0000") @Digits(integer = 10, fraction = 4) BigDecimal amountPerLoadingMeter) {
+
+    /** The V39 shape: no loading-metre rate. */
+    public RateCardRequest(String code, String name, UUID carrierId, RateCardScope scope, UUID originId,
+            UUID destinationId, UUID routeId, UUID vehicleTypeId, String currency, LocalDate validFrom,
+            LocalDate validTo, BigDecimal baseAmount, BigDecimal amountPerKm, BigDecimal amountPerKg,
+            BigDecimal amountPerM3, BigDecimal amountPerPallet, BigDecimal minimumAmount, BigDecimal amountPerStop,
+            BigDecimal fuelSurchargePercent, BigDecimal amountPerWaitingHour, BigDecimal tollAmount,
+            BigDecimal accessorialAmount, String accessorialLabel, BigDecimal maximumAmount) {
+        this(code, name, carrierId, scope, originId, destinationId, routeId, vehicleTypeId, currency, validFrom,
+                validTo, baseAmount, amountPerKm, amountPerKg, amountPerM3, amountPerPallet, minimumAmount,
+                amountPerStop, fuelSurchargePercent, amountPerWaitingHour, tollAmount, accessorialAmount,
+                accessorialLabel, maximumAmount, null);
+    }
 
     /**
      * The pre-V39 shape: no lane and none of the new charges.
@@ -74,6 +89,6 @@ public record RateCardRequest(
             BigDecimal amountPerPallet, BigDecimal minimumAmount) {
         this(code, name, carrierId, scope, originId, null, routeId, vehicleTypeId, currency, validFrom,
                 validTo, baseAmount, amountPerKm, amountPerKg, amountPerM3, amountPerPallet, minimumAmount,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
     }
 }

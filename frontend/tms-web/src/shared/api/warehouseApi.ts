@@ -53,8 +53,9 @@ export interface DispatchDocumentOrderView {
   weightKg: number | null
   volumeM3: number | null
   matchResult: DispatchOrderMatch | string
-  // Contract v1.1 (V60): the footprint the warehouse computed. Stored and shown, not compared yet
-  // (that is phase 45). Absent or null when the warehouse did not say; then `geometryReason` says why.
+  // Contract v1.1 (V60): the footprint the warehouse computed. Compared with the plan since phase 45
+  // as GEOMETRY_VARIANCE discrepancies (INFO, never a mismatch). Absent or null when the warehouse
+  // did not say; then `geometryReason` says why.
   stacks?: number | null
   effectiveVolumeM3?: number | null
   loadingMeters?: number | null

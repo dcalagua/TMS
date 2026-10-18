@@ -129,6 +129,10 @@ public class RateCard {
     @Column(name = "destination_id")
     private UUID destinationId;
 
+    /** Per loading metre of deck (V63). Null means the agreement says nothing about it. */
+    @Column(name = "amount_per_loading_meter", precision = 14, scale = 4)
+    private BigDecimal amountPerLoadingMeter;
+
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
@@ -277,6 +281,7 @@ public class RateCard {
             case WEIGHT -> amountPerKg;
             case VOLUME -> amountPerM3;
             case PALLETS -> amountPerPallet;
+            case LOADING_METERS -> amountPerLoadingMeter;
             case STOP_OFF -> amountPerStop;
             case FUEL_SURCHARGE -> fuelSurchargePercent;
             case WAITING_TIME -> amountPerWaitingHour;
@@ -291,7 +296,7 @@ public class RateCard {
             case BASE -> baseAmount;
             case TOLL -> tollAmount;
             case OTHER_ACCESSORIAL -> accessorialAmount;
-            case DISTANCE, WEIGHT, VOLUME, PALLETS, STOP_OFF, FUEL_SURCHARGE, WAITING_TIME,
+            case DISTANCE, WEIGHT, VOLUME, PALLETS, LOADING_METERS, STOP_OFF, FUEL_SURCHARGE, WAITING_TIME,
                  MINIMUM_ADJUSTMENT, MAXIMUM_ADJUSTMENT ->
                     throw new IllegalArgumentException(component + " is not a flat charge");
         };
@@ -326,6 +331,11 @@ public class RateCard {
         return maximumAmount;
     }
 
+    /** Per loading metre of deck (V63), or null when the card does not charge for it. */
+    public BigDecimal amountPerLoadingMeter() {
+        return amountPerLoadingMeter;
+    }
+
     /** The lane's far end. Set only for {@link RateCardScope#LANE}. */
     public UUID destinationId() {
         return destinationId;
@@ -341,7 +351,7 @@ public class RateCard {
      */
     public boolean hasAnyComponent() {
         return baseAmount != null || amountPerKm != null || amountPerKg != null
-                || amountPerM3 != null || amountPerPallet != null
+                || amountPerM3 != null || amountPerPallet != null || amountPerLoadingMeter != null
                 || amountPerStop != null || fuelSurchargePercent != null || amountPerWaitingHour != null
                 || tollAmount != null || accessorialAmount != null;
     }
@@ -465,5 +475,6 @@ public class RateCard {
         this.accessorialAmount = components.accessorialAmount();
         this.accessorialLabel = components.accessorialLabel();
         this.maximumAmount = components.maximumAmount();
+        this.amountPerLoadingMeter = components.amountPerLoadingMeter();
     }
 }

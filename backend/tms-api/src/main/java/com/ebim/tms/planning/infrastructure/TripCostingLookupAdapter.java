@@ -103,13 +103,14 @@ public class TripCostingLookupAdapter implements TripCostingLookupPort {
     private CostableTrip toCostable(Trip trip, UUID companyId) {
         TripOrderAssignmentRepository.TripLoad load =
                 assignmentRepository.loadByTripId(trip.id(), AssignmentStatus.ACTIVE);
+        VehicleCapacityReference vehicle = vehicleOf(trip, companyId);
         return new CostableTrip(
                 trip.id(),
                 companyId,
                 trip.shipmentNumber(),
                 trip.planningDate(),
                 trip.carrierId(),
-                vehicleTypeIdOf(trip, companyId),
+                vehicle == null ? null : vehicle.vehicleTypeId(),
                 originOf(trip, companyId),
                 trip.routeId(),
                 zeroIfNull(load == null ? null : load.getWeightKg()),
@@ -117,7 +118,22 @@ public class TripCostingLookupAdapter implements TripCostingLookupPort {
                 zeroIfNull(load == null ? null : load.getPallets()),
                 isCostable(trip),
                 soleDestinationOf(trip),
-                trip.stops().size());
+                trip.stops().size(),
+                zeroIfNull(load == null ? null : load.getFloorAreaM2()),
+                loadWidthOf(trip, vehicle),
+                vehicle == null ? null : vehicle.floorFillFactor());
+    }
+
+    /**
+     * The width loading metres are measured across (V63): what the trip froze at confirmation
+     * (V62), else the vehicle type's current width. The snapshot first for the reason it exists -
+     * a later fleet edit must not restate what a confirmed shipment costs.
+     */
+    private static BigDecimal loadWidthOf(Trip trip, VehicleCapacityReference vehicle) {
+        if (trip.snapshotLoadWidthM() != null) {
+            return trip.snapshotLoadWidthM();
+        }
+        return vehicle == null ? null : vehicle.widthM();
     }
 
     /**
@@ -153,13 +169,11 @@ public class TripCostingLookupAdapter implements TripCostingLookupPort {
      * costs what it costs. Validation of a <em>new</em> assignment is a different question, asked
      * elsewhere.
      */
-    private UUID vehicleTypeIdOf(Trip trip, UUID companyId) {
+    private VehicleCapacityReference vehicleOf(Trip trip, UUID companyId) {
         if (trip.vehicleId() == null) {
             return null;
         }
-        VehicleCapacityReference vehicle =
-                vehicleLookup.findAllInCompany(Set.of(trip.vehicleId()), companyId).get(trip.vehicleId());
-        return vehicle == null ? null : vehicle.vehicleTypeId();
+        return vehicleLookup.findAllInCompany(Set.of(trip.vehicleId()), companyId).get(trip.vehicleId());
     }
 
     private static BigDecimal zeroIfNull(BigDecimal value) {

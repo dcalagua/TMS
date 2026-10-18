@@ -292,3 +292,24 @@ recorded in `docs/roadmap/2026-10-enterprise/DECISIONS_LOG.md`:
   `numeric(6,3)` could not hold.
 - Fulfilment compares deliveries with the order without the floor (`OrderAmounts.withoutGeometry`).
 - UI (section 10) is cycle 2.
+
+## Implementation notes (phase 45 cycle 1, 2026-10-18)
+
+Sections 8 and 9 are implemented with **V63** (`V63__rate_loading_meter.sql`); `docs/domain/RATE_ENGINE_V2.md`
+sections 4.1-4.2 describe the rate side and `WAREHOUSE_EXECUTION_V1.md` section 7.3 the comparison.
+Refinements, recorded in `docs/roadmap/2026-10-enterprise/DECISIONS_LOG.md`:
+
+- **Two reasons, not one.** A non-calculable loading-metre line says `FLOOR_AREA_UNKNOWN` (nothing on
+  the trip measured) or `LOAD_WIDTH_UNKNOWN` (no width in the snapshot nor on the vehicle type). Both
+  are new values of `ck_trip_cost_component_reason`.
+- **Width: snapshot first, then the vehicle type.** The fill factor is read from fleet's resolver at
+  estimation time (the snapshot does not freeze it).
+- **`EFFECTIVE_GEOMETRY` when the ledger has floor area.** Floor exists only on measured lines, so it is
+  the signal that a measured line contributed to the planning volume.
+- **Proposal pricing uses the planning volume too** (`ProposalPricer`), so a proposal and the trip it
+  becomes are priced on the same cubic metres.
+- **Comparison (section 9).** `DispatchReconciler.Code.GEOMETRY_VARIANCE` (`INFO`), one per measure
+  (`uom` = `STACKS`, `M3`, `LDM`), only when both sides state the figure. Stacks exact; effective volume
+  and loading metres with a 5% relative tolerance. Planned stacks and effective volume are the sums of
+  the order's lines, only for a whole order with every line measured; planned loading metres come from
+  the assignment's floor (whole or share). It never changes the order's match result or the verification.

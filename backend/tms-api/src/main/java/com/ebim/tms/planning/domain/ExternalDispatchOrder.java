@@ -15,7 +15,7 @@ import org.hibernate.annotations.UuidGenerator;
  * The per-order summary of a dispatch document (V53). Written once with its document, never updated.
  *
  * <p>The geometry columns are contract v1.1 (V60): what the warehouse computed with ADR-022's
- * footprint rules, null when not said. Stored only; phase 45 compares them with the plan.
+ * footprint rules, null when not said. Stored as sent; {@code DispatchReconciler} compares them with the plan (phase 45).
  */
 @Entity
 @Table(name = "external_dispatch_order")

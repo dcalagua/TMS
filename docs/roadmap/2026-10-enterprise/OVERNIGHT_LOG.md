@@ -700,3 +700,77 @@ El EWM no se tocó.
 - Edición de `reference_load_height_m`/`load_floor_fill_factor` en la pantalla de configuración de empresa (hoy por SQL
   o por la propiedad); `EligibleOrderView` sin piso pendiente.
 - El plan del TMS hacia el almacén (`orders[].geometry`) y la tarifa por metro lineal son de la fase 45.
+
+---
+
+## 45 · Tarifa por metro lineal y geometría del despacho (2026-10-18, ciclo 1 de 2 · completa)
+
+Todo lo pedido entró en el ciclo 1: backend, migración, front, pruebas y documentos. El ciclo 2 queda libre para lo
+que se anota al final.
+
+### Qué entró
+
+1. **V63** `V63__rate_loading_meter.sql`: `rate_card.amount_per_loading_meter numeric(14,4)` (+ `ck_rate_card_loading_meter_nonnegative`,
+   `ck_rate_card_has_a_component` reescrito); `trip_cost_component`: `ck_…_component` (+`LOADING_METERS`), `ck_…_unit`
+   (+`LOADING_METER`), `ck_…_quantity_source` (+`EFFECTIVE_GEOMETRY`), `ck_…_reason` (+`FLOOR_AREA_UNKNOWN`,
+   `LOAD_WIDTH_UNKNOWN`), `ck_…_shape` reescritos. Sin tablas, permisos, scopes ni filas nuevas.
+2. **Motor de tarifas**: `RateComponent.LOADING_METERS` (linehaul, entre `PALLETS` y `STOP_OFF`; el recargo de
+   combustible lo incluye), `CostUnit.LOADING_METER`, `CostQuantitySource.EFFECTIVE_GEOMETRY`, dos motivos nuevos.
+   `CostInputs` (+`loadingMeters`, `loadingMetersReason`, `volumeSource`, `missingReasonFor`): metros lineales =
+   `SUM(assigned_floor_area_m2) / (ancho × factor)` con `LoadGeometryCalculator.loadingMetres`; `VOLUME` dice
+   `EFFECTIVE_GEOMETRY` cuando el ledger tiene piso, si no `ORDER_DECLARED_TOTALS`. `RateCard`/`RateComponents`/
+   `RateCardRequest`/`RateCardView`/`RateCardService` con `amountPerLoadingMeter` (constructores previos conservados).
+3. **Costeo**: `CostableTrip` (+piso, ancho, factor; `withCarrier`), armado por `TripCostingLookupAdapter` (ancho del
+   snapshot del viaje, si no del tipo; factor del resolvedor de flota) y por `ProposalPricer` (que ahora cotiza con el
+   volumen de planificación y el piso pedido).
+4. **Conciliación del despacho** (ADR-022 §9): `DispatchReconciler.Code.GEOMETRY_VARIANCE` (`INFO`) y `PlannedGeometry`;
+   `ExternalDispatchService.plannedGeometry` (pilas y volumen efectivo = suma de líneas si el pedido va completo y todas
+   sus líneas están medidas; metros lineales del piso de la asignación). Pilas exactas, volumen y metros con 5 %. Nunca
+   `MISMATCH`, nunca 4xx, no cambia el `matchResult`. `OrderLineSnapshot` (+`stacks`, `effectiveVolumeM3`).
+5. **Front**: `RateCardFormDrawer` «Por metro lineal»; `ratesApi.ts` (componente, unidad, fuente y motivos — incluidos
+   `STOPS_UNKNOWN`/`WAITING_NOT_RECORDED`, que faltaban); etiquetas en `enums.ts`; `warehouseDispatch.geometryVariances` y
+   chip «Huella distinta a la planificada (informativa)» por pedido en `TripWarehouseCard`.
+6. **Docs**: `RATE_ENGINE_V2.md` §4.1-4.2, `WAREHOUSE_EXECUTION_V1.md` §7.3 «Compared (phase 45)» con ejemplo, notas de
+   implementación en ADR-022, fila 42 de `TMS_CURRENT_CAPABILITY_MAP.md`, `PHASE_MAP.md`, `DECISIONS_LOG.md` (+5).
+
+### Desvíos registrados (`DECISIONS_LOG.md`)
+
+- Dos motivos para un metro lineal no calculable (`FLOOR_AREA_UNKNOWN`, `LOAD_WIDTH_UNKNOWN`).
+- Ancho del snapshot (si no, del tipo); el factor no se congela.
+- `EFFECTIVE_GEOMETRY` cuando el ledger tiene piso.
+- La propuesta se cotiza con el volumen de planificación.
+- Qué huella se compara y con qué tolerancia.
+
+### Archivos
+
+- Migración: `backend/tms-api/src/main/resources/db/migration/V63__rate_loading_meter.sql`.
+- Modificados (main): `rates/domain` (`CostUnit`, `RateComponent`, `CostQuantitySource`, `CostComponentReason`,
+  `CostInputs`, `CostLine`, `TripCostCalculator`, `RateCard`, `RateComponents`), `rates/application` (`RateCardRequest`,
+  `RateCardService`, `RateCardView`, `CarrierQuotationService`), `shared/reference` (`CostableTrip`, `OrderLineSnapshot`,
+  `DispatchConfirmationCommand` doc), `planning` (`DispatchReconciler`, `ExternalDispatchService`, `ProposalPricer`,
+  `TripCostingLookupAdapter`, `ExternalDispatchOrder` doc), `orders/infrastructure/OrderReferenceAdapter`.
+- Pruebas nuevas: `LoadingMeterRateCalculatorTest` (7), `DispatchGeometryReconcilerTest` (6);
+  `WarehouseExecutionApiIntegrationTest` +3; `TripWarehouseCard.test.tsx` +1.
+- Front: `ratesApi.ts`, `warehouseApi.ts` (doc), `enums.ts`, `i18n.ts`, `RateCardFormDrawer.tsx`, `warehouseDispatch.ts`,
+  `TripWarehouseCard.tsx`.
+
+### Pruebas
+
+| Repo | Comando | Resultado |
+|---|---|---|
+| TMS backend | `./mvnw -B test` (completo, Testcontainers) | **2423 corridas, 1 fallo, 0 errores, 2 omitidas** · 4 min 06 s (fase 40: 2407; +16). El único rojo es el conocido `PlatformLifecycleIntegrationTest.versionRules` (fase 00) |
+| TMS backend | nuevas y afectadas | `LoadingMeterRateCalculatorTest` 7/7 (metro lineal, sin ancho, sin piso, VOLUME efectivo vs declarado, linehaul + combustible, tarjeta sólo LDM, tarjeta muda); `DispatchGeometryReconcilerTest` 6/6 (iguales, tres INFO y MATCHED, tolerancia, nada que comparar, junto a un ERROR sigue MISMATCH, huella planificada); `WarehouseExecutionApiIntegrationTest` 28/28 (+3: varianza INFO en `dispatch-confirmations` y en `/warehouse`, cuerpo v1 contra plan medido sin discrepancias, tarifa por metro lineal + `NOT_CALCULABLE FLOOR_AREA_UNKNOWN` persistidos con los CHECK de V63); `PersistedEnumConstraintTest`, `ModuleBoundaryTest`, `DispatchReconcilerTest`, `TripCostCalculatorTest`, `RateEngineV2CalculatorTest`, `RateCardServiceTest`, `TripCostServiceTest` verdes |
+| TMS frontend | `npm run typecheck && npm run lint && npm test` | OK · lint 0 errores (21 avisos previos) · **318/318** (fase 35: 317; +1) |
+| Migraciones | hashes V1–V58 contra `MIGRATION_HASHES.txt`; V59–V62 sin diff | intactos |
+
+El EWM no se tocó.
+
+### Qué quedó fuera (ciclo 2 / otras fases)
+
+- El bloque `orders[].geometry` del plan hacia el almacén (contrato §7.2) sigue sin emitirse: la fase 40 lo dejó para la 45
+  pero el prompt de la 45 no lo pide; es aditivo y pequeño (`ShipmentPlanOrderV1`), candidato del ciclo 2.
+- El EWM manda `loadingMeters` siempre `null` (no tiene medidas de vehículo), así que en la práctica sólo se comparan pilas
+  y volumen efectivo hasta que lo calcule.
+- El factor de piso no se congela en el viaje (DECISIONS_LOG); el front de la fase 40 (barras de piso/alto) sigue pendiente
+  de su ciclo 2.
+- V63 sólo validada con Testcontainers; no aplicada en ninguna base compartida.

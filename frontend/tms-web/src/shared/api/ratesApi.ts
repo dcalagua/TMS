@@ -12,7 +12,7 @@ export type RateCardScope = (typeof RATE_CARD_SCOPES)[number]
  * a percentage of the linehaul above it and of nothing below it.
  */
 export const RATE_COMPONENTS = [
-  'BASE', 'DISTANCE', 'WEIGHT', 'VOLUME', 'PALLETS', 'STOP_OFF',
+  'BASE', 'DISTANCE', 'WEIGHT', 'VOLUME', 'PALLETS', 'LOADING_METERS', 'STOP_OFF',
   'FUEL_SURCHARGE',
   'WAITING_TIME', 'TOLL', 'OTHER_ACCESSORIAL',
   'MINIMUM_ADJUSTMENT', 'MAXIMUM_ADJUSTMENT',
@@ -20,12 +20,12 @@ export const RATE_COMPONENTS = [
 export type RateComponent = (typeof RATE_COMPONENTS)[number]
 
 export type CostComponentStatus = 'APPLIED' | 'NOT_CALCULABLE'
-export type CostUnit = 'KM' | 'KG' | 'M3' | 'PALLET' | 'STOP' | 'HOUR' | 'PERCENT'
+export type CostUnit = 'KM' | 'KG' | 'M3' | 'PALLET' | 'LOADING_METER' | 'STOP' | 'HOUR' | 'PERCENT'
 
 /** Mirrors the backend's `CostQuantitySource` - where a line's quantity came from. */
 export const COST_QUANTITY_SOURCES = [
   'ROUTE_REFERENCE', 'ORDER_DECLARED_TOTALS', 'MEASURED_ROUTE', 'TRIP_STOPS', 'LINEHAUL_SUBTOTAL',
-  'RECORDED_WAITING',
+  'RECORDED_WAITING', 'EFFECTIVE_GEOMETRY',
 ] as const
 export type CostQuantitySource = (typeof COST_QUANTITY_SOURCES)[number]
 
@@ -35,6 +35,10 @@ export const COST_COMPONENT_REASONS = [
   'WEIGHT_UNKNOWN',
   'VOLUME_UNKNOWN',
   'PALLETS_UNKNOWN',
+  'STOPS_UNKNOWN',
+  'WAITING_NOT_RECORDED',
+  'FLOOR_AREA_UNKNOWN',
+  'LOAD_WIDTH_UNKNOWN',
 ] as const
 export type CostComponentReason = (typeof COST_COMPONENT_REASONS)[number]
 
@@ -75,6 +79,8 @@ export interface RateCardView {
   /** El nombre bajo el que aparece el accesorio. Viaja con el importe o no viaja. */
   accessorialLabel: string | null
   maximumAmount: number | null
+  /** Por metro lineal de plataforma (V63): piso de las pilas / (ancho de carga x factor de piso). */
+  amountPerLoadingMeter: number | null
   active: boolean
   createdAt: string
   updatedAt: string
@@ -106,6 +112,7 @@ export interface RateCardRequest {
   accessorialAmount?: number | null
   accessorialLabel?: string | null
   maximumAmount?: number | null
+  amountPerLoadingMeter?: number | null
 }
 
 export interface RateCardListParams {

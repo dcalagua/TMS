@@ -32,7 +32,8 @@ import java.util.UUID;
  *                      when nothing on board declared one. Zero is <em>not</em> treated as a free
  *                      shipment: a per-kg component with a zero total is reported as
  *                      non-calculable rather than charged at nothing (migration V30).
- * @param volumeM3      as {@code weightKg}
+ * @param volumeM3      as {@code weightKg}; since V62 the <em>planning</em> volume (effective where a
+ *                      line was measured), which is what the ledger sums
  * @param pallets       as {@code weightKg}
  * @param costable      whether this trip has reached a state worth pricing - confirmed or beyond.
  *                      A draft is still being rearranged and its load, vehicle and route all still
@@ -69,13 +70,41 @@ public record CostableTrip(
          * {@code RateComponent.STOP_OFF}. Null and zero are different: no stops recorded yet is not
          * the same as a shipment with one drop.
          */
-        Integer stopCount) {
+        Integer stopCount,
+        /**
+         * Square metres of floor the trip's stacks cover (V62 ledger, read from V63). Zero when no
+         * line on board was measured - which is also what tells costing that {@code volumeM3} is
+         * the declared volume rather than an effective one.
+         */
+        BigDecimal floorAreaM2,
+        /**
+         * The vehicle's load width (V63): the trip's confirmation snapshot, else the vehicle type's
+         * current width; null when neither is known.
+         */
+        BigDecimal loadWidthM,
+        /** The vehicle's floor fill factor, already resolved by fleet (type, company, deployment). */
+        BigDecimal floorFillFactor) {
+
+    /** The V39 shape: no geometry, so no loading metres. */
+    public CostableTrip(UUID tripId, UUID companyId, String shipmentNumber, LocalDate planningDate,
+            UUID carrierId, UUID vehicleTypeId, UUID originId, UUID routeId, BigDecimal weightKg,
+            BigDecimal volumeM3, BigDecimal pallets, boolean costable, UUID soleDestinationId, Integer stopCount) {
+        this(tripId, companyId, shipmentNumber, planningDate, carrierId, vehicleTypeId, originId, routeId,
+                weightKg, volumeM3, pallets, costable, soleDestinationId, stopCount, BigDecimal.ZERO, null, null);
+    }
+
+    /** The same trip with another carrier, as a quotation restates it. */
+    public CostableTrip withCarrier(UUID otherCarrierId) {
+        return new CostableTrip(tripId, companyId, shipmentNumber, planningDate, otherCarrierId, vehicleTypeId,
+                originId, routeId, weightKg, volumeM3, pallets, costable, soleDestinationId, stopCount,
+                floorAreaM2, loadWidthM, floorFillFactor);
+    }
 
     /** The pre-V39 shape: no lane and no stop count. */
     public CostableTrip(UUID tripId, UUID companyId, String shipmentNumber, LocalDate planningDate,
             UUID carrierId, UUID vehicleTypeId, UUID originId, UUID routeId, BigDecimal weightKg,
             BigDecimal volumeM3, BigDecimal pallets, boolean costable) {
         this(tripId, companyId, shipmentNumber, planningDate, carrierId, vehicleTypeId, originId, routeId,
-                weightKg, volumeM3, pallets, costable, null, null);
+                weightKg, volumeM3, pallets, costable, null, null, BigDecimal.ZERO, null, null);
     }
 }

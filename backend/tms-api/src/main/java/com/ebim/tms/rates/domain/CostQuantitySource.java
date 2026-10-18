@@ -2,7 +2,7 @@ package com.ebim.tms.rates.domain;
 
 /**
  * Where a cost line's quantity came from. Mirrors {@code ck_trip_cost_component_quantity_source}
- * (migration V30).
+ * (migrations V30, V39 and V63).
  *
  * <p>Recorded rather than assumed, because the first thing anyone disputing an estimate asks is
  * "where did 39.5 km come from" - and the honest answer, in this product, is "a planner typed it
@@ -34,5 +34,14 @@ public enum CostQuantitySource {
     /** The linehaul subtotal a percentage component multiplies (V39). */
     LINEHAUL_SUBTOTAL,
     /** Detention hours somebody recorded against the shipment (V39). */
-    RECORDED_WAITING
+    RECORDED_WAITING,
+    /**
+     * The load geometry of the orders on the trip (V63, ADR-022 section 8): the planning volume
+     * when at least one measured line contributed to it, and the floor area behind loading metres.
+     *
+     * <p>Said on the line because a per-m3 charge on 0.15 m3 of nested buckets and one on the 1.2 m3
+     * the ERP declared for the same buckets are both "VOLUME", and only the source tells a
+     * controller which of the two the carrier is being paid on.
+     */
+    EFFECTIVE_GEOMETRY
 }

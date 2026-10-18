@@ -392,3 +392,54 @@
   de entrega no pide volumen (manda 0), así que no cambia nada para ella; un integrador que reporte el volumen ingenuo
   de un pedido medido recibiría `409` por exceder lo pedido - dicho en `LOAD_GEOMETRY_V1.md`.
 - **Commit(s):** el de la fase 40, ciclo 1.
+
+### 2026-10-18 · fase 45 · Dos motivos para un metro lineal no calculable
+
+- **Regla/decisión afectada:** ADR-022 §8 («`NOT_CALCULABLE` con un motivo cuando el ancho es desconocido»).
+- **Motivo:** hay dos huecos distintos que arregla gente distinta: ninguna línea medida (maestro de materiales) y un
+  vehículo sin ancho (maestro de flota). Un solo motivo mandaría a uno de los dos a buscar en el lugar equivocado.
+- **Camino elegido:** `FLOOR_AREA_UNKNOWN` y `LOAD_WIDTH_UNKNOWN`, ambos en `ck_trip_cost_component_reason` (V63);
+  `CostInputs.missingReasonFor` elige; el resto de componentes sigue con su motivo único.
+- **Commit(s):** el de la fase 45, ciclo 1.
+
+### 2026-10-18 · fase 45 · Ancho del snapshot, factor del resolvedor actual
+
+- **Regla/decisión afectada:** ADR-022 §8 (`snapshot_load_width_m x fill`).
+- **Motivo:** V62 congela el ancho al confirmar pero no el factor de piso; un viaje sin snapshot de ancho (tipo sin
+  dimensiones al confirmar) quedaría siempre sin metros lineales aunque la flota ya los tenga.
+- **Camino elegido:** ancho = snapshot del viaje, si no el del tipo de vehículo actual; factor = el que resuelve flota
+  hoy (tipo → empresa → propiedad), el mismo que usa el límite de piso. Congelar el factor sería otra columna en
+  `trip`; no se agregó.
+- **Commit(s):** el de la fase 45, ciclo 1.
+
+### 2026-10-18 · fase 45 · `EFFECTIVE_GEOMETRY` cuando el ledger tiene piso
+
+- **Regla/decisión afectada:** ADR-022 §8 («`EFFECTIVE_GEOMETRY` cuando alguna línea medida contribuyó»).
+- **Motivo:** el módulo `rates` no puede leer líneas de pedido; el ledger sí sabe cuánto piso suma el viaje y el piso
+  sólo existe en líneas medidas (V62).
+- **Camino elegido:** `SUM(assigned_floor_area_m2) > 0` ⇒ `EFFECTIVE_GEOMETRY`. Matiz dicho en `RATE_ENGINE_V2.md`
+  §4.1: con un volumen sólo declarado y líneas parcialmente medidas, el volumen de planificación es el declarado
+  (regla de la fase 40) y la fuente igual dice `EFFECTIVE_GEOMETRY`, porque una línea medida está detrás.
+- **Commit(s):** el de la fase 45, ciclo 1.
+
+### 2026-10-18 · fase 45 · La propuesta se cotiza con el volumen de planificación
+
+- **Regla/decisión afectada:** `ProposalPricer` (cotizaba con `totalVolumeM3`, el ingenuo).
+- **Motivo:** la tarifa de un viaje real multiplica `SUM(assigned_volume_m3)` = volumen de planificación; una propuesta
+  cotizada con el ingenuo daría otro precio que el viaje en que se convierte.
+- **Camino elegido:** `ordered().volumeM3()` y `ordered().floorAreaM2()` con el ancho y el factor del vehículo. Para
+  pedidos sin geometría no cambia nada (planificación = total).
+- **Commit(s):** el de la fase 45, ciclo 1.
+
+### 2026-10-18 · fase 45 · Qué huella se compara y con qué tolerancia
+
+- **Regla/decisión afectada:** ADR-022 §9 y contrato §7.3 («compara `stacks`, `effectiveVolumeM3`, `loadingMeters`»).
+- **Motivo:** el TMS no guarda qué unidades de una línea lleva una porción de un pedido dividido, y el EWM manda la huella
+  del pedido entero sólo cuando todos sus materiales tienen perfil completo; comparar una suma parcial con un total
+  inventaría una diferencia. El EWM apila sin alto de vehículo y redondea por su lado.
+- **Camino elegido:** pilas y volumen efectivo sólo para pedido completo con todas sus líneas medidas; metros lineales con
+  el piso de la asignación (completa o porción) sobre el ancho del viaje. Pilas exactas; volumen y metros con 5 %
+  relativo (`DispatchReconciler.GEOMETRY_TOLERANCE`, constante, no configuración). Una `GEOMETRY_VARIANCE` por medida
+  (`uom` `STACKS`/`M3`/`LDM`), `INFO`, nunca cambia el `matchResult` del pedido ni la verificación. Un nulo de cualquier
+  lado no compara.
+- **Commit(s):** el de la fase 45, ciclo 1.

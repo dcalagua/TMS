@@ -29,13 +29,26 @@ public record RateComponents(
         BigDecimal tollAmount,
         BigDecimal accessorialAmount,
         String accessorialLabel,
-        BigDecimal maximumAmount) {
+        BigDecimal maximumAmount,
+        /** Per loading metre of deck (V63). Null = this agreement says nothing about it. */
+        BigDecimal amountPerLoadingMeter) {
+
+    /** The V39 shape: no loading-metre rate. */
+    public RateComponents(BigDecimal baseAmount, BigDecimal amountPerKm, BigDecimal amountPerKg,
+            BigDecimal amountPerM3, BigDecimal amountPerPallet, BigDecimal minimumAmount,
+            BigDecimal amountPerStop, BigDecimal fuelSurchargePercent, BigDecimal amountPerWaitingHour,
+            BigDecimal tollAmount, BigDecimal accessorialAmount, String accessorialLabel,
+            BigDecimal maximumAmount) {
+        this(baseAmount, amountPerKm, amountPerKg, amountPerM3, amountPerPallet, minimumAmount, amountPerStop,
+                fuelSurchargePercent, amountPerWaitingHour, tollAmount, accessorialAmount, accessorialLabel,
+                maximumAmount, null);
+    }
 
     /** The pre-V39 shape, so a caller that charges none of the new components need not say so six times. */
     public RateComponents(BigDecimal baseAmount, BigDecimal amountPerKm, BigDecimal amountPerKg,
             BigDecimal amountPerM3, BigDecimal amountPerPallet, BigDecimal minimumAmount) {
         this(baseAmount, amountPerKm, amountPerKg, amountPerM3, amountPerPallet, minimumAmount,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
     }
 
     /** A card that charges one flat amount and nothing else - the simplest legal card, and for tests. */

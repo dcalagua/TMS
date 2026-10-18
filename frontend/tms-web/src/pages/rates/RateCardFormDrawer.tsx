@@ -41,6 +41,7 @@ interface RateCardFormValues {
   amountPerKg: string;
   amountPerM3: string;
   amountPerPallet: string;
+  amountPerLoadingMeter: string;
   minimumAmount: string;
   amountPerStop: string;
   fuelSurchargePercent: string;
@@ -61,7 +62,7 @@ interface RateCardFormDrawerProps {
 const KNOWN_FIELDS = new Set<keyof RateCardFormValues>([
   "code", "name", "carrierId", "scope", "originId", "destinationId", "routeId", "vehicleTypeId", "currency",
   "validFrom", "validTo", "baseAmount", "amountPerKm", "amountPerKg", "amountPerM3",
-  "amountPerPallet", "minimumAmount", "amountPerStop", "fuelSurchargePercent",
+  "amountPerPallet", "amountPerLoadingMeter", "minimumAmount", "amountPerStop", "fuelSurchargePercent",
   "amountPerWaitingHour", "tollAmount", "accessorialAmount", "accessorialLabel", "maximumAmount",
 ]);
 
@@ -125,6 +126,7 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
       amountPerKg: rateCard?.amountPerKg?.toString() ?? "",
       amountPerM3: rateCard?.amountPerM3?.toString() ?? "",
       amountPerPallet: rateCard?.amountPerPallet?.toString() ?? "",
+      amountPerLoadingMeter: rateCard?.amountPerLoadingMeter?.toString() ?? "",
       minimumAmount: rateCard?.minimumAmount?.toString() ?? "",
       amountPerStop: rateCard?.amountPerStop?.toString() ?? "",
       fuelSurchargePercent: rateCard?.fuelSurchargePercent?.toString() ?? "",
@@ -160,6 +162,7 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
       amountPerKg: toAmount(values.amountPerKg),
       amountPerM3: toAmount(values.amountPerM3),
       amountPerPallet: toAmount(values.amountPerPallet),
+      amountPerLoadingMeter: toAmount(values.amountPerLoadingMeter),
       minimumAmount: toAmount(values.minimumAmount),
       amountPerStop: toAmount(values.amountPerStop),
       fuelSurchargePercent: toAmount(values.fuelSurchargePercent),
@@ -370,7 +373,7 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
 
         <FormSection
           title={t("Componentes")}
-          help={t("Todos son opcionales. Un tarifario de distancia pura deja peso y volumen vacíos; un mínimo solo es un precio plano.")}
+          help={t("Todos son opcionales. Un tarifario de distancia pura deja peso y volumen vacíos; un mínimo solo es un precio plano. El metro lineal se mide con la geometría de la carga y el ancho del vehículo.")}
         >
         <FormRow cols={3}>
           {([
@@ -379,6 +382,7 @@ export function RateCardFormDrawer({ companyId, rateCard, onClose, onSaved }: Ra
             ["amountPerKg", "Por kilogramo"],
             ["amountPerM3", "Por m³"],
             ["amountPerPallet", "Por pallet"],
+            ["amountPerLoadingMeter", "Por metro lineal"],
             ["amountPerStop", "Por parada adicional"],
             ["fuelSurchargePercent", "Recargo combustible (%)"],
             ["amountPerWaitingHour", "Por hora de espera"],
