@@ -1,5 +1,7 @@
 package com.ebim.tms.orders.application;
 
+import com.ebim.tms.orders.domain.HoldSource;
+import com.ebim.tms.orders.domain.HoldType;
 import com.ebim.tms.orders.domain.OrderHold;
 import com.ebim.tms.orders.domain.OrderStatus;
 import com.ebim.tms.orders.domain.TransportOrder;
@@ -19,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -133,6 +136,54 @@ public class OrderHoldService implements OrderHoldPort {
         auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, orderId, AuditAction.ORDER_HOLD_RELEASED,
                 detail);
         return OrderHoldView.from(saved);
+    }
+
+    /**
+     * The warehouse's hold (V61, ADR-025 section 4, D-03): the order with the ERP key is held, never
+     * cancelled. Same row lock and the same audit action as {@link #place}; {@code source=INTEGRATION}
+     * and the credential in the detail, because there is no person to name.
+     */
+    @Override
+    @Transactional
+    public IntegrationHoldResult placeFromIntegration(CompanyScope scope, IntegrationHoldCommand command) {
+        Optional<TransportOrder> found = transportOrderRepository.findByCompanyIdAndExternalSourceAndExternalReference(
+                scope.companyId(), command.externalSource(), command.externalReference());
+        if (found.isEmpty()) {
+            return new IntegrationHoldResult(IntegrationHoldOutcome.UNKNOWN_ORDER, null, null, null, false);
+        }
+        TransportOrder order = transportOrderRepository.findByIdAndCompanyIdForUpdate(found.get().id(),
+                scope.companyId()).orElseThrow(() -> new ResourceNotFoundException("Order not found."));
+        boolean committed = isCommitted(order);
+        if (NOT_HOLDABLE.contains(order.status())) {
+            return new IntegrationHoldResult(IntegrationHoldOutcome.ORDER_CLOSED, order.id(), order.orderNumber(), null,
+                    committed);
+        }
+        List<OrderHold> existing = holdRepository.findActiveWithReasonCode(order.id(), command.reasonCode(),
+                scope.companyId());
+        if (!existing.isEmpty()) {
+            return new IntegrationHoldResult(IntegrationHoldOutcome.ALREADY_HELD, order.id(), order.orderNumber(),
+                    existing.get(0).id(), committed);
+        }
+
+        OrderHold saved = holdRepository.saveAndFlush(OrderHold.byIntegration(scope.companyId(), order.id(),
+                HoldType.INTEGRATION, command.reasonCode(), command.reason(), command.blocking(),
+                command.integrationClientId()));
+
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("orderNumber", order.orderNumber());
+        detail.put("holdId", saved.id().toString());
+        detail.put("holdType", saved.holdType().name());
+        detail.put("blocking", String.valueOf(saved.blocking()));
+        detail.put("reasonCode", saved.reasonCode());
+        detail.put("source", HoldSource.INTEGRATION.name());
+        detail.put("integrationClientId", command.integrationClientId().toString());
+        if (committed) {
+            detail.put("onCommittedTrip", "true");
+        }
+        auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, order.id(), AuditAction.ORDER_HOLD_PLACED,
+                detail);
+        return new IntegrationHoldResult(IntegrationHoldOutcome.PLACED, order.id(), order.orderNumber(), saved.id(),
+                committed);
     }
 
     /** How many active blocking holds each order has; absent means none. One query for the whole set. */

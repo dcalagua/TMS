@@ -119,6 +119,7 @@ type added by a migration appears in the picker without a frontend release.
 | `SHIPMENT_CHANGED` | Reserved; nothing produces it yet (see `OUTBOUND_SHIPMENT_V1.md` §6) |
 | `DELIVERY_RESULT_RECORDED` | What was handed over at a stop was recorded, or corrected |
 | `TENDER_SENT` / `TENDER_ACCEPTED` / `TENDER_REJECTED` / `TENDER_EXPIRED` / `TENDER_CANCELLED` | The five tender transitions (`docs/domain/CARRIER_TENDERING_V1.md`) |
+| `ORDER_CANCELLED` | A transport order was cancelled in TMS (V61). `resource.type` is `"order"` and `resource.reference` the order number; read it back with `GET /integration/v1/orders/{orderNumber}` (`WAREHOUSE_EXECUTION_V1.md` §7.4) |
 
 A subscription selecting nothing receives nothing, so the API refuses one: "everything" is spelled
 by selecting every type, never by selecting none.
@@ -396,6 +397,7 @@ a machine with no Docker must still be able to prove the contract has not change
   bulk replay is a straightforward addition on top of the same table when somebody needs it.
 - **No inbound callbacks.** TMS signs what it sends; it does not verify signatures on anything it
   receives, because the inbound API authenticates with a credential instead.
-- **No non-shipment events.** The tables are generic - `event_id`, `event_type`, `resource_*` - so a
-  future family costs no migration to the delivery side, but today the only publisher is the shipment
-  outbox.
+- **Few non-shipment events.** The tables are generic - `event_id`, `event_type`, `resource_*` - so a
+  new family costs no migration to the delivery side. Since V61 the second publisher is
+  `tms.business_outbox_event` (`ORDER_CANCELLED`), written in the same transaction as the business
+  change and fanned out through the same path; its row id is the event id.

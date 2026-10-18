@@ -41,7 +41,9 @@ public enum IntegrationOperation {
     LOGISTICS_DOCUMENT_UPSERT("logistics-document.upsert", IntegrationScope.DOCUMENT_WRITE),
 
     MATERIAL_PROFILE_UPSERT("material-profile.upsert", IntegrationScope.MATERIAL_WRITE),
-    MATERIAL_PROFILE_BATCH("material-profile.batch", IntegrationScope.MATERIAL_WRITE);
+    MATERIAL_PROFILE_BATCH("material-profile.batch", IntegrationScope.MATERIAL_WRITE),
+
+    WAREHOUSE_ORDER_EVENT_BATCH("warehouse-order-event.batch", IntegrationScope.WAREHOUSE_ORDER_EVENT_WRITE);
 
     private final String code;
     private final IntegrationScope requiredScope;

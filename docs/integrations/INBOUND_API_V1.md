@@ -109,6 +109,8 @@ A credential holds one or more scopes, and at least one is required:
 |---|---|
 | `integration.location:write` | `POST /integration/v1/locations`, `/locations/batch` |
 | `integration.order:write` | `POST /integration/v1/orders`, `/orders/batch` |
+| `integration.order:read` | `GET /integration/v1/orders/{orderNumber}`, `GET /integration/v1/orders?status=&updatedSince=` (V61, `WAREHOUSE_EXECUTION_V1.md` §7.4) |
+| `integration.warehouse-order-event:write` | `POST /integration/v1/warehouse-order-events` (V61, `WAREHOUSE_EXECUTION_V1.md` §7.5) |
 | `integration.tracking:write` | `POST /integration/v1/tracking/positions` - see [§12](#12-vehicle-positions-migration-v29) |
 | `integration.tender:respond` | `GET /integration/v1/tenders`, `POST /integration/v1/tenders/{shipmentNumber}/response` - see [§13](#13-carrier-tendering-migration-v31) |
 

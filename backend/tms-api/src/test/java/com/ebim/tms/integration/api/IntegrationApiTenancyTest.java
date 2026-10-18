@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.ebim.tms.integration.application.IntegrationAuthenticationService;
 import com.ebim.tms.integration.application.IntegrationInboxService;
 import com.ebim.tms.integration.application.IntegrationLocationService;
+import com.ebim.tms.integration.application.IntegrationOrderReadService;
 import com.ebim.tms.integration.application.IntegrationOrderService;
 import com.ebim.tms.integration.application.IntegrationRequestExecutor;
 import com.ebim.tms.integration.domain.IntegrationClient;
@@ -23,6 +24,8 @@ import com.ebim.tms.integration.security.IntegrationSecurityConfig;
 import com.ebim.tms.shared.api.ApiExceptionHandler;
 import com.ebim.tms.shared.api.ApiExceptionResponder;
 import com.ebim.tms.shared.api.ApiHeaders;
+import com.ebim.tms.shared.api.PageQuery;
+import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.config.ApplicationConfig;
 import com.ebim.tms.shared.reference.IntakeOutcome;
 import com.ebim.tms.shared.reference.LocationIntakeCommand;
@@ -31,6 +34,8 @@ import com.ebim.tms.shared.reference.LocationIntakeResult;
 import com.ebim.tms.shared.reference.OrderIntakeCommand;
 import com.ebim.tms.shared.reference.OrderIntakePort;
 import com.ebim.tms.shared.reference.OrderIntakeResult;
+import com.ebim.tms.shared.reference.OrderPublicationPort;
+import com.ebim.tms.shared.reference.PublishedOrder;
 import com.ebim.tms.shared.security.CommercialAccessGate;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.security.CompanyScopeLoader;
@@ -46,6 +51,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.junit.jupiter.api.BeforeEach;
@@ -107,6 +113,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
     IntegrationAuthenticationService.class,
     IntegrationLocationService.class,
     IntegrationOrderService.class,
+    IntegrationOrderReadService.class,
     IntegrationRequestExecutor.class,
     IntegrationInboxService.class,
     ApiExceptionResponder.class,
@@ -714,6 +721,23 @@ class IntegrationApiTenancyTest {
         @Bean
         RecordingOrderIntake recordingOrderIntake() {
             return new RecordingOrderIntake();
+        }
+
+        /** The order read API (V61) is not exercised here; it only has to be wired. */
+        @Bean
+        OrderPublicationPort orderPublicationPort() {
+            return new OrderPublicationPort() {
+                @Override
+                public Optional<PublishedOrder> findByOrderNumber(UUID companyId, String orderNumber) {
+                    return Optional.empty();
+                }
+
+                @Override
+                public PageResponse<PublishedOrder> search(UUID companyId, Set<String> statuses,
+                        OffsetDateTime updatedSince, PageQuery pageQuery) {
+                    return new PageResponse<>(List.of(), 0, pageQuery.pageSize(), 0);
+                }
+            };
         }
 
         @Bean

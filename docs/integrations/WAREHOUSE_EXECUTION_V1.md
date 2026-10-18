@@ -397,7 +397,7 @@ TMS                                         WMS (EWM)
 Decision: **ADR-025** (S-1…S-4 accepted, S-5 proposed). Material profile and load geometry: **ADR-022**.
 Everything here is **additive**: same `/integration/v1` path, same authentication, same envelope; a
 partner that speaks v1 keeps working and ignores the new fields. Each message names the overnight-pack
-phase that implements it; until that phase lands, the endpoint answers `404` and the field is absent. 7.1 landed in phase 20 (V59); 7.2 (POD part) and 7.3 (stored) landed in phase 30 (V60).
+phase that implements it; until that phase lands, the endpoint answers `404` and the field is absent. 7.1 landed in phase 20 (V59); 7.2 (POD part) and 7.3 (stored) landed in phase 30 (V60); 7.4 and 7.5 landed in phase 35 (V61).
 
 | # | Message | Direction | Endpoint | Scope | Phase |
 |---|---|---|---|---|---|
@@ -678,6 +678,20 @@ returns a page of the same objects ordered by `updatedAt, orderNumber`.
 ("TMS anuló el transporte de este pedido") and, only if its order is still open with nothing reserved,
 offers a supervisor the cancel action. It never cancels by itself.
 
+**Implementation notes (TMS, phase 35, V61).**
+
+- The event is written to `tms.business_outbox_event` in the same transaction as the cancellation
+  (`OrderService.cancel` → `shared.reference.BusinessEventPublisher` → `integration`
+  `BusinessEventOutboxAdapter`) and fanned out to `tms.webhook_delivery` like a shipment event. The
+  outbox row id is the envelope `id`. A rolled-back cancellation publishes nothing.
+- `cancelledAt` is the order's last update when its status is `CANCELLED` (a cancelled order cannot be
+  edited, planned or held into another state, so nothing touches the row afterwards). TMS has no
+  separate column; `cancelledAt` and `cancelReason` are `null` for any other status.
+- `GET /integration/v1/orders` accepts `status` as one or more order statuses (`NOT_READY`,
+  `READY_FOR_PLANNING`, `PLANNED`, `IN_EXECUTION`, `DELIVERED`, `PARTIALLY_DELIVERED`, `DELIVERY_FAILED`,
+  `CANCELLED`); absent means `CANCELLED`, as the shipment list defaults to `CONFIRMED`. An unknown value
+  is `400`. Page size is capped at 200. Index `ix_transport_order_company_status_updated` serves it.
+
 ### 7.5 `WAREHOUSE_ORDER_EVENT` - `POST /integration/v1/warehouse-order-events`
 
 The warehouse cancelled its order, or closed it short. TMS **never cancels by itself**: it places a hold
@@ -727,6 +741,26 @@ The warehouse cancelled its order, or closed it short. TMS **never cancels by it
 | `UNKNOWN_ORDER` | No TMS order with that key in this company; recorded |
 | `DUPLICATE` | Same `sourceSystem` + `eventId` received before |
 | `INVALID` | The item is malformed (`message` says why) |
+
+**Implementation notes (TMS, phase 35, V61).**
+
+- Each event is its own transaction: the hold and the `tms.warehouse_order_event` row commit together.
+  A concurrent repeat of the same `eventId` loses on `uq_warehouse_order_event`, its hold is rolled
+  back with it, and it answers `DUPLICATE`. `recorded` counts every item stored by the request
+  (everything except `DUPLICATE` and `INVALID`); `orderNumber` is the TMS order the key resolved to.
+- Per-item checks: `eventId` 1-128 of `[A-Za-z0-9._:-]`; `externalSource` and `externalReference`
+  required, at most 80; `occurredAt` required and not more than 5 minutes in the future;
+  `warehouseOrderNumber`/`warehouseCode` at most 80; `reason` at most 500; up to 500 `lines` with
+  non-negative quantities.
+- The hold's text names the warehouse order, the warehouse, the reason and, for a short close, the
+  figures per line ("line 1 SKU-100: requested 100, shipped 97, cancelled 3 UN"), cut at 500 characters.
+  The full event stays in `warehouse_order_event.payload`.
+- `ALREADY_HELD` looks for an active hold with the same reason code, blocking or not. Holds are placed
+  on any order that is not `DELIVERED` or `CANCELLED` - including `IN_EXECUTION` and the shortfall
+  states, where it informs and stops nothing that is already on the road.
+- The audit entry is `ORDER_HOLD_PLACED` with `source=INTEGRATION`, the credential id and, on a trip,
+  `onCommittedTrip=true`. In the TMS UI the hold reads "Puesta por integración" with its reason code.
+- Example `Idempotency-Key` the EWM uses: `ewm-ordcx:<eventId>`.
 
 ### 7.6 Reconciliation (WMS side)
 

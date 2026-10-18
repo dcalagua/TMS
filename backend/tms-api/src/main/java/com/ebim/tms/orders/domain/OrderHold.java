@@ -106,6 +106,21 @@ public class OrderHold {
         return hold;
     }
 
+    /**
+     * A hold an integration credential placed (V61, ADR-025 section 4): the warehouse cancelled or
+     * closed short its order. Lifted by a person, like any other.
+     */
+    public static OrderHold byIntegration(UUID companyId, UUID orderId, HoldType holdType, String reasonCode,
+            String reason, boolean blocking, UUID integrationClientId) {
+        if (integrationClientId == null) {
+            throw new IllegalArgumentException("an integration hold names the credential that placed it");
+        }
+        OrderHold hold = new OrderHold(companyId, orderId, holdType, reasonCode, reason, blocking);
+        hold.source = HoldSource.INTEGRATION;
+        hold.createdByClient = integrationClientId;
+        return hold;
+    }
+
     private OrderHold(UUID companyId, UUID orderId, HoldType holdType, String reasonCode, String reason,
             boolean blocking) {
         this.companyId = companyId;

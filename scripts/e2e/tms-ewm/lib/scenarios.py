@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The nine TMS <-> EWM scenarios, each driven through the real HTTP APIs of both products.
+"""The TMS <-> EWM scenarios (s1-s9 v1; s11 POD and s12 order cancellation, v1.1), each driven through the real HTTP APIs of both products.
 
     scenarios.py [s1 s2 ...]     # default: all, in order
 
@@ -526,7 +526,84 @@ def s9():
     save_env(STATE_FILE, S9_TMS_ORDER=o["id"], S9_EWM_ORDER=eo, S9_REF=ref)
 
 
-ALL = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9"]
+# ----------------------------------------------------------------------------------------- 11
+def ensure_v11_link():
+    """The warehouse link after v1.1 (WAREHOUSE_EXECUTION_V1 7.7): POD and order events subscribed."""
+    st = state()
+    sub = expect(tms("GET", f"/api/v1/webhooks/{st['TMS_SUBSCRIPTION_ID']}"), 200, what="subscription").json
+    sub = sub.get("subscription", sub)
+    wanted = ["SHIPMENT_CONFIRMED", "SHIPMENT_CHANGED", "SHIPMENT_CANCELLED", "DELIVERY_RESULT_RECORDED",
+              "ORDER_CANCELLED"]
+    if sorted(sub.get("eventTypes") or []) != sorted(wanted):
+        expect(tms("PUT", f"/api/v1/webhooks/{sub['id']}", {
+            "name": sub["name"], "description": sub.get("description"), "targetUrl": sub["targetUrl"],
+            "eventTypes": wanted}), 200, what="subscription v1.1")
+
+
+def s11():
+    """POD back to the warehouse: a delivery recorded in TMS reaches EWM's projection, which posts nothing."""
+    tag = "S11"
+    ensure_v11_link()
+    ref, o, eo, trip, shn = prepare(tag, "EXTERNAL_REQUIRED")
+    load, s = physical(tag, eo, shn, 100)
+    wait_disp(s["shipmentNumber"])
+    wait_external(shn)
+    detail = expect(tms("GET", f"/api/v1/planning/trips/{trip}"), 200, what="trip detail").json
+    stop = detail["stops"][0]["id"]
+    expect(tms("PUT", f"/api/v1/planning/trips/{trip}/stops/{stop}/orders/{o['id']}/delivery", {
+        "result": "DELIVERED", "deliveredAt": now_lima(), "receiverName": "Recepción Sodimac",
+        "notes": "E2E s11"}), 200, what="record delivery")
+    pod = wait_until(lambda: ewm_sql(f"""SELECT d.delivery_result, d.transport_reference
+                                           FROM out_shipment_delivery d
+                                          WHERE d.transport_reference = '{shn}'""") or None,
+                     120, 3, f"POD of {shn} projected in EWM")
+    record(tag, "result", {"tmsWebhook": tms_deliveries_for(shn), "ewmDelivery": pod,
+                           "ewmOrder": ewm_sql(f"SELECT status FROM out_order WHERE id='{eo}'")})
+    assert pod[0][0] == "DELIVERED"
+
+
+# ----------------------------------------------------------------------------------------- 12
+def s12():
+    """Order cancellation both ways (D-03): each side holds or alerts, neither cancels by itself."""
+    tag = "S12"
+    ensure_v11_link()
+
+    # 12a: TMS -> EWM. An open TMS order is cancelled; EWM raises an alert on its order and cancels nothing.
+    ref = f"PED-{tag}A-{run_id()}"
+    o = tms_order(ref, 50)
+    eo = ewm_order(ref, 50)
+    expect(tms("POST", f"/api/v1/orders/{o['id']}/cancel?reason=E2E%20s12"), 200, what="TMS cancel")
+    alert = wait_until(lambda: ewm_sql(f"""SELECT code, status FROM intg_tms_exception
+                                             WHERE outbound_order_id = '{eo}'""") or None,
+                       120, 3, "EWM alert TMS_TRANSPORT_CANCELLED")
+    ewm_status = ewm_sql(f"SELECT status FROM out_order WHERE id='{eo}'")[0][0]
+    record(tag + "a", "result", {"tmsOrder": o["orderNumber"], "ewmAlert": alert, "ewmOrderStatus": ewm_status,
+                                 "tmsWebhook": tms_sql(f"""SELECT event_type, status FROM tms.webhook_delivery
+                                                            WHERE payload LIKE '%{o['orderNumber']}%'""")})
+    assert alert[0][0] == "TMS_TRANSPORT_CANCELLED" and ewm_status != "CANCELLED"
+
+    # 12b: EWM -> TMS. An open EWM order is cancelled; TMS places a blocking hold and keeps the order.
+    ref = f"PED-{tag}B-{run_id()}"
+    o = tms_order(ref, 50)
+    eo = ewm_order(ref, 50)
+    cur = expect(ewm("GET", f"/api/v1/outbound-orders/{eo}"), 200, what="EWM order").json
+    expect(ewm("PATCH", f"/api/v1/outbound-orders/{eo}/status", {"status": "CANCELLED", "version": cur["version"]}),
+           200, what="EWM cancel")
+    hold = wait_until(lambda: tms_sql(f"""SELECT reason_code, source, blocking FROM tms.order_hold
+                                           WHERE order_id = '{o['id']}' AND released_at IS NULL""") or None,
+                      120, 3, "TMS hold WAREHOUSE_CANCELLED")
+    view = tms_order_view(o["id"])
+    record(tag + "b", "result", {"tmsHold": hold, "tmsOrderStatus": view["status"],
+                                 "ewmOrdcx": ewm_sql(f"""SELECT m.interface_type, d.status
+                                                           FROM intg_outbound_message m
+                                                           JOIN intg_outbound_delivery d ON d.message_id = m.id
+                                                          WHERE m.interface_type = 'TMS_ORDCX'
+                                                            AND m.payload LIKE '%{ref}%'""")})
+    assert hold[0][0] == "WAREHOUSE_CANCELLED" and hold[0][1] == "INTEGRATION"
+    assert view["status"] != "CANCELLED"
+
+
+ALL = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s11", "s12"]
 
 
 def main(names):

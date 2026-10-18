@@ -38,4 +38,7 @@ public record PublishedEventNotification(
 
     /** What {@link #resourceType} carries for every event family that exists today. */
     public static final String SHIPMENT = "shipment";
+
+    /** {@link #resourceType} of an order event (V61, {@code ORDER_CANCELLED}). */
+    public static final String ORDER = "order";
 }

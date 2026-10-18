@@ -23,6 +23,7 @@ import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.audit.AuditAggregateType;
 import com.ebim.tms.shared.audit.AuditRecorder;
 import com.ebim.tms.shared.geometry.PhysicalBlock;
+import com.ebim.tms.shared.reference.BusinessEventPublisher;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderFulfillmentPort;
@@ -32,6 +33,7 @@ import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.settings.CompanySettingsPort;
 import java.math.BigDecimal;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -73,13 +75,15 @@ public class OrderService {
     private final AuditRecorder auditRecorder;
     private final OrderSchedulingService orderSchedulingService;
     private final OrderLinePhysicalResolver physicalResolver;
+    private final BusinessEventPublisher businessEvents;
 
     public OrderService(TransportOrderRepository transportOrderRepository,
             TransportOrderLineRepository transportOrderLineRepository, OriginLookupPort originLookupPort,
             DestinationLookupPort destinationLookupPort, OrderFulfillmentPort orderFulfillmentPort,
             CompanySettingsPort companySettingsPort, AuditActorProvider auditActorProvider,
             AuditRecorder auditRecorder, OrderSchedulingService orderSchedulingService,
-            OrderLinePhysicalResolver physicalResolver) {
+            OrderLinePhysicalResolver physicalResolver, BusinessEventPublisher businessEvents) {
+        this.businessEvents = businessEvents;
         this.orderSchedulingService = orderSchedulingService;
         this.physicalResolver = physicalResolver;
         this.transportOrderRepository = transportOrderRepository;
@@ -351,6 +355,10 @@ public class OrderService {
         TransportOrder saved = saveOrConflict(order);
         auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.CANCEL,
                 Map.of("orderNumber", saved.orderNumber()));
+        // A signal, not a command (D-03): the warehouse that prepares this order is told, and decides.
+        // Same transaction, so a rolled-back cancellation is never announced (V61, ADR-025 section 4).
+        businessEvents.publish(new BusinessEventPublisher.BusinessEvent(scope.companyId(), BusinessEventPublisher.ORDER,
+                saved.id(), saved.orderNumber(), BusinessEventPublisher.ORDER_CANCELLED, OffsetDateTime.now()));
         return toDetailView(scope, saved);
     }
 

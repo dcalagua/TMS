@@ -19,6 +19,9 @@ import java.util.stream.Collectors;
  * event family that TMS publishes for its own internal reasons and does not offer over the wire
  * would appear in one and not the other.
  *
+ * <p>Since V61 the list also carries {@link #BUSINESS_EVENTS}, facts that are not about a trip and so
+ * have no mirror in {@code ShipmentEventType}.
+ *
  * <p>The duplication is not left to good intentions: {@code WebhookEventTypeTest} asserts on every
  * build that the two lists still coincide, so a value added to the outbox and forgotten here fails
  * a test rather than silently delivering nothing to everyone who subscribed.
@@ -47,7 +50,20 @@ public enum WebhookEventType {
     TENDER_ACCEPTED,
     TENDER_REJECTED,
     TENDER_EXPIRED,
-    TENDER_CANCELLED;
+    TENDER_CANCELLED,
+
+    /**
+     * A transport order was cancelled in TMS (migration V61, ADR-025 section 4). Not a shipment event:
+     * it comes from {@code tms.business_outbox_event}, so it has no {@code ShipmentEventType} mirror.
+     * Its audience is the warehouse preparing the order, which raises an alert and decides (D-03).
+     */
+    ORDER_CANCELLED;
+
+    /**
+     * The values published from {@code tms.business_outbox_event} rather than the shipment outbox -
+     * what {@code WebhookEventTypeTest} leaves out of the parity check with {@code ShipmentEventType}.
+     */
+    public static final Set<WebhookEventType> BUSINESS_EVENTS = Set.of(ORDER_CANCELLED);
 
     /**
      * The event type behind a published fact's {@code eventType} string, or empty when TMS

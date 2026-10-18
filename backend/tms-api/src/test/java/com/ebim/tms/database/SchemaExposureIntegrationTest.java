@@ -91,6 +91,8 @@ class SchemaExposureIntegrationTest {
             "document_delivery_evidence",
             // V59: the warehouse's material profiles (ADR-022).
             "material_profile",
+            // V61: order cancellation with the warehouse (ADR-025 section 4).
+            "business_outbox_event", "warehouse_order_event",
             // V56: MasterAdmin commercial entitlements. Same posture as V51 - owner only, tms_app holds
             // no grant and a deny-all policy; the scoped read goes through a SECURITY DEFINER function.
             "platform_entitlement_applied", "platform_entitlement_audit", "platform_entitlement_jti",
@@ -146,7 +148,9 @@ class SchemaExposureIntegrationTest {
             "document_delivery", "document_delivery_order", "document_delivery_event",
             "document_delivery_evidence",
             // V59: the warehouse's material profiles (ADR-022).
-            "material_profile");
+            "material_profile",
+            // V61: order cancellation with the warehouse (ADR-025 section 4).
+            "business_outbox_event", "warehouse_order_event");
 
     /**
      * The only tables allowed to carry a {@code company_id} and <em>not</em> the tenant policy.
@@ -397,6 +401,9 @@ class SchemaExposureIntegrationTest {
         withheld.put("document_delivery_evidence", List.of("UPDATE", "DELETE"));
         // V59: a profile the warehouse stops sending stays as the last known copy.
         withheld.put("material_profile", List.of("DELETE"));
+        // V61: records of facts, written once.
+        withheld.put("business_outbox_event", List.of("UPDATE", "DELETE"));
+        withheld.put("warehouse_order_event", List.of("UPDATE", "DELETE"));
         // Canonical location replaced these; they are read-only projections now (V23).
         withheld.put("origin", List.of("INSERT", "UPDATE", "DELETE"));
         withheld.put("destination", List.of("INSERT", "UPDATE", "DELETE"));

@@ -157,7 +157,15 @@ export function SchedulingDetailDrawer({
                         : t("Levantada el {{date}}", { date: fmtDateTime(hold.releasedAt) })}
                     </Typography>
                     {hold.reasonCode && (
-                      <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.secondary" }}>{hold.reasonCode}</Typography>
+                      <Typography variant="caption" sx={{ fontFamily: MONO, color: "text.secondary" }}
+                        title={enumLabel("holdReasonCode", hold.reasonCode)}>{hold.reasonCode}</Typography>
+                    )}
+                    {hold.source === "INTEGRATION" && (
+                      <Typography variant="caption" color="text.secondary">
+                        {t("Puesta por integración")}
+                        {hold.reasonCode && enumLabel("holdReasonCode", hold.reasonCode) !== hold.reasonCode
+                          ? ` · ${enumLabel("holdReasonCode", hold.reasonCode)}` : ""}
+                      </Typography>
                     )}
                   </Box>
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>{hold.reason}</Typography>

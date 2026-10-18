@@ -54,7 +54,10 @@ def main():
         r = expect(tms("POST", "/api/v1/integration-clients", {
             "name": "EWM by EBIM (E2E)", "description": "local e2e",
             "scopes": ["integration.shipment:read", "integration.dispatch:write",
-                       "integration.warehouse-milestone:write", "integration.order:write"],
+                       "integration.warehouse-milestone:write", "integration.order:write",
+                       # v1.1 (WAREHOUSE_EXECUTION_V1 7.7).
+                       "integration.material:write", "integration.order:read",
+                       "integration.warehouse-order-event:write"],
             "carrierId": None}), 201, 200, what="integration client")
         save_env(STATE_FILE, TMS_INTEGRATION_BEARER=r.json["bearerToken"],
                  TMS_INTEGRATION_CLIENT_ID=r.json["client"]["id"])

@@ -31,7 +31,9 @@ def main():
         r = expect(tms("POST", "/api/v1/webhooks", {
             "name": "EWM by EBIM CD01 (E2E)", "description": "local e2e",
             "targetUrl": "http://localhost:8081" + st["EWM_WEBHOOK_PATH"],
-            "eventTypes": ["SHIPMENT_CONFIRMED", "SHIPMENT_CHANGED", "SHIPMENT_CANCELLED"]}), 201, 200,
+            "eventTypes": ["SHIPMENT_CONFIRMED", "SHIPMENT_CHANGED", "SHIPMENT_CANCELLED",
+                           # v1.1 (WAREHOUSE_EXECUTION_V1 7.7).
+                           "DELIVERY_RESULT_RECORDED", "ORDER_CANCELLED"]}), 201, 200,
             what="TMS webhook subscription")
         save_env(STATE_FILE, TMS_SUBSCRIPTION_ID=r.json["subscription"]["id"])
         r2 = put_connector(r.json["secret"])

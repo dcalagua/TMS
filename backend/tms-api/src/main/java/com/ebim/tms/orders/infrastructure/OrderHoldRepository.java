@@ -54,6 +54,16 @@ public interface OrderHoldRepository extends JpaRepository<OrderHold, UUID> {
             """)
     boolean existsActiveBlocking(@Param("orderId") UUID orderId, @Param("companyId") UUID companyId);
 
+    /** The oldest active hold of one order with this reason code, blocking or not - ALREADY_HELD (V61). */
+    @Query("""
+            select h from OrderHold h
+             where h.companyId = :companyId and h.orderId = :orderId and h.reasonCode = :reasonCode
+               and h.releasedAt is null
+             order by h.createdAt
+            """)
+    List<OrderHold> findActiveWithReasonCode(@Param("orderId") UUID orderId, @Param("reasonCode") String reasonCode,
+            @Param("companyId") UUID companyId);
+
     interface ActiveBlockingHold {
         UUID getOrderId();
 

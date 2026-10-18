@@ -315,6 +315,11 @@ export const ENUM_LABELS = {
     OTHER: "Otro",
     TRANSPORT: "Transporte",
   },
+  /** V61 (ADR-025 §4): códigos con que el almacén (EWM) pone una retención por integración. */
+  holdReasonCode: {
+    WAREHOUSE_CANCELLED: "El almacén anuló su pedido",
+    WAREHOUSE_SHORT_CLOSED: "El almacén cerró el pedido con saldo",
+  },
   blockerReason: {
     AWAITING_CARRIER_VEHICLE: "Falta vehículo del transportista",
     DRIVER_UNAVAILABLE: "Conductor no disponible",
