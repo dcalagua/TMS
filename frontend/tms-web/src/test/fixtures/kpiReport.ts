@@ -85,6 +85,7 @@ export const KPI_REPORT_FIXTURE: KpiReportView = {
     "rejectionPercent": null
   },
   "cost": [],
+  "settlement": null,
   "daily": [
     {
       "date": "2026-08-01",

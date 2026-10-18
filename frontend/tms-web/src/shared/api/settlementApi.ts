@@ -24,6 +24,28 @@ export type DiscrepancyType =
 export type DiscrepancyStatus = 'OPEN' | 'ACCEPTED' | 'REJECTED'
 
 /**
+ * Mirrors `ChargeCode`: de qué componente del flete habla una línea.
+ *
+ * `FREIGHT` es el flete todo incluido y el valor por defecto - las líneas anteriores a esta fase lo
+ * llevan. Una línea con un código de componente se compara con **ese** componente de la estimación,
+ * no con el viaje entero. `PENALTY` queda fuera de la comparación: TMS no estima penalidades.
+ */
+export const CHARGE_CODES = [
+  'FREIGHT', 'BASE', 'DISTANCE', 'WEIGHT', 'VOLUME', 'PALLETS', 'LOADING_METERS', 'STOP_OFF',
+  'FUEL_SURCHARGE', 'WAITING_TIME', 'TOLL', 'OTHER_ACCESSORIAL', 'PENALTY',
+] as const
+export type ChargeCode = (typeof CHARGE_CODES)[number]
+
+/**
+ * Contra qué cifra se comparó: el costo real cerrado del viaje o su estimación (el costo aún no se
+ * cerró). `MIXED` sólo existe en la cabecera: unos viajes contra real y otros contra estimado.
+ */
+export type LineExpectedBasis = 'ACTUAL' | 'ESTIMATED'
+export type ExpectedBasis = LineExpectedBasis | 'MIXED'
+
+export type ExportFormat = 'JSON' | 'CSV'
+
+/**
  * Mirrors `CarrierInvoiceSummaryView` - una fila de la cola de auditoría.
  *
  * `expectedAmount` **null significa que no había nada con qué comparar**, nunca cero. La pantalla
@@ -50,12 +72,23 @@ export interface InvoiceLineView {
   lineNumber: number
   tripId: string | null
   shipmentNumber: string | null
+  /** Nunca null en una respuesta: una línea sin código es `FREIGHT`. */
+  chargeCode: ChargeCode
   description: string
   quantity: number | null
   unitAmount: number | null
   lineAmount: number
-  /** Null cuando el envío nunca se tarificó, o no es de este transportista. Nunca cero. */
+  /**
+   * Con qué se comparó **esta** línea. Para un código de componente, ese componente de la
+   * estimación (BASE incluye los ajustes de mínimo y máximo); para `FREIGHT`, la cifra del viaje
+   * menos lo esperado de las otras líneas de componente del mismo viaje.
+   *
+   * Null cuando el envío nunca se tarificó, no es de este transportista, o la línea es `PENALTY`
+   * (fuera de la comparación). Nunca cero.
+   */
   expectedAmount: number | null
+  /** Contra qué cifra del viaje: costo real cerrado o estimado. Null cuando no hubo comparación. */
+  expectedBasis: LineExpectedBasis | null
   actualAmount: number | null
   differenceAmount: number | null
 }
@@ -64,6 +97,8 @@ export interface InvoiceLineView {
 export interface MatchView {
   status: MatchStatus
   expectedAmount: number | null
+  /** Contra qué se comparó la factura entera. Null cuando no hubo nada con qué comparar. */
+  expectedBasis: ExpectedBasis | null
   actualAmount: number | null
   invoicedAmount: number
   differenceAmount: number | null
@@ -78,6 +113,8 @@ export interface MatchView {
 export interface FreightDiscrepancyView {
   id: string
   type: DiscrepancyType
+  /** La línea de la que habla. Null = de la cabecera o del viaje entero. */
+  invoiceLineId: string | null
   expectedAmount: number | null
   invoicedAmount: number | null
   differenceAmount: number | null
@@ -99,7 +136,7 @@ export interface SettlementApprovalView {
 export interface PayableExportView {
   id: string
   exportReference: string
-  format: 'JSON' | 'CSV'
+  format: ExportFormat
   payload: string
   exportedAt: string
   /** `true` cuando ya existía: dos clics no crean dos obligaciones. */
@@ -138,6 +175,8 @@ export interface CarrierInvoiceRequest {
   notes?: string | null
   lines: {
     tripId?: string | null
+    /** Null o ausente = `FREIGHT`. */
+    chargeCode?: ChargeCode | null
     description: string
     quantity?: number | null
     unitAmount?: number | null
@@ -200,7 +239,80 @@ export function rejectInvoice(companyId: string, id: string, comment: string): P
   })
 }
 
-/** Repetirlo devuelve la misma exportación: dos clics no crean dos obligaciones. */
-export function exportInvoice(companyId: string, id: string): Promise<PayableExportView> {
-  return apiRequest<PayableExportView>(`/settlement/invoices/${id}/export`, { method: 'POST', companyId })
+/**
+ * Repetirlo devuelve la misma exportación: dos clics no crean dos obligaciones. Si ya estaba
+ * exportada, el servidor la devuelve **con su formato original**, pida el que se pida ahora.
+ */
+export function exportInvoice(
+  companyId: string, id: string, format: ExportFormat = 'JSON',
+): Promise<PayableExportView> {
+  return apiRequest<PayableExportView>(`/settlement/invoices/${id}/export`, {
+    method: 'POST', companyId, query: { format },
+  })
+}
+
+// --- políticas de tolerancia -------------------------------------------------------------
+
+/**
+ * Mirrors `TolerancePolicyView`.
+ *
+ * `carrierId` null es la política de **toda la empresa**; la de un transportista la desplaza para
+ * sus facturas. Una diferencia se acepta si cabe en el importe absoluto **o** en el porcentaje.
+ */
+export interface TolerancePolicyView {
+  id: string
+  carrierId: string | null
+  carrierName: string | null
+  absoluteAmount: number | null
+  percentage: number | null
+  /** Obligatoria cuando hay importe absoluto: 5 PEN y 5 USD no son la misma tolerancia. */
+  currency: string | null
+  active: boolean
+  updatedAt: string
+}
+
+/** Crear: el ámbito (empresa o transportista) se elige aquí y no cambia después. */
+export interface TolerancePolicyCreateRequest {
+  carrierId?: string | null
+  absoluteAmount?: number | null
+  percentage?: number | null
+  currency?: string | null
+}
+
+/** Editar: sólo los límites. */
+export interface TolerancePolicyUpdateRequest {
+  absoluteAmount: number | null
+  percentage: number | null
+  currency: string | null
+}
+
+export function fetchTolerancePolicies(
+  companyId: string, includeInactive = false, signal?: AbortSignal,
+): Promise<TolerancePolicyView[]> {
+  return apiRequest<TolerancePolicyView[]>('/settlement/tolerance-policies', {
+    companyId, signal, query: { includeInactive },
+  })
+}
+
+/** 409 cuando ya hay una política activa para el mismo ámbito. */
+export function createTolerancePolicy(
+  companyId: string, request: TolerancePolicyCreateRequest,
+): Promise<TolerancePolicyView> {
+  return apiRequest<TolerancePolicyView>('/settlement/tolerance-policies', {
+    method: 'POST', companyId, body: request,
+  })
+}
+
+export function updateTolerancePolicy(
+  companyId: string, id: string, request: TolerancePolicyUpdateRequest,
+): Promise<TolerancePolicyView> {
+  return apiRequest<TolerancePolicyView>(`/settlement/tolerance-policies/${id}`, {
+    method: 'PUT', companyId, body: request,
+  })
+}
+
+export function deactivateTolerancePolicy(companyId: string, id: string): Promise<TolerancePolicyView> {
+  return apiRequest<TolerancePolicyView>(`/settlement/tolerance-policies/${id}/deactivate`, {
+    method: 'POST', companyId,
+  })
 }

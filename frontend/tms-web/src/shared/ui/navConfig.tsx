@@ -14,6 +14,7 @@ import {
   FactCheckRounded,
   RouteRounded,
   Inventory2Rounded,
+  TuneRounded,
 } from "@mui/icons-material";
 
 /** Una hoja del menú: una pantalla concreta. */
@@ -77,6 +78,7 @@ export const ICON_TINTS: Record<string, string> = {
   "/document-deliveries": "#26A69A",
   "/appointments": "#FFA726",
   "/settlement": "#8D6E63",
+  "/settlement/tolerances": "#A1887F",
   "/work-assignments": "#7E57C2",
   "/masters/locations": "#4FC3F7",
   "/masters/origins": "#4DB6AC",
@@ -154,6 +156,10 @@ export const NAV_SECTIONS: NavSection[] = [
       // un envío, y quien la mira es finanzas - no planifica, pero necesita llegar a lo que se
       // planificó. TMS valida y exporta; el ERP paga.
       { to: "/settlement", label: "Auditoría de flete", icon: <ReceiptLongRounded />,
+        capability: "SETTLEMENT_VIEW" },
+      // Justo detrás de la auditoría: es la regla con la que ésta decide qué diferencia se acepta.
+      // Leerla pide lo mismo que leer facturas; cambiarla, `settlement.tolerance:manage`.
+      { to: "/settlement/tolerances", label: "Tolerancias", icon: <TuneRounded />,
         capability: "SETTLEMENT_VIEW" },
       // Junto a Viajes y no en Maestros: mantener la ficha de un camión y planificar su día son
       // trabajos distintos que hacen personas distintas.

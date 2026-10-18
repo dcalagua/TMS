@@ -138,6 +138,31 @@ export const ENUM_LABELS = {
     TOTAL_AMOUNT: "Importe total",
     UNMATCHED_TRIP: "Envío sin identificar",
   },
+  /**
+   * Fase 50: de qué componente del flete habla una línea de factura. `FREIGHT` es el todo incluido
+   * y el valor por defecto; `PENALTY` queda fuera de la comparación.
+   */
+  chargeCode: {
+    FREIGHT: "Flete (todo incluido)",
+    BASE: "Base",
+    DISTANCE: "Distancia",
+    WEIGHT: "Peso",
+    VOLUME: "Volumen",
+    PALLETS: "Pallets",
+    LOADING_METERS: "Metros lineales",
+    STOP_OFF: "Parada adicional",
+    FUEL_SURCHARGE: "Recargo combustible",
+    WAITING_TIME: "Tiempo de espera",
+    TOLL: "Peaje",
+    OTHER_ACCESSORIAL: "Otro accesorio",
+    PENALTY: "Penalidad",
+  },
+  /** Fase 50: contra qué cifra se comparó una factura o una línea. */
+  expectedBasis: {
+    ACTUAL: "Contra costo real",
+    ESTIMATED: "Contra estimado",
+    MIXED: "Mixto",
+  },
   /** V42/JOB 12: por qué un envío no puede salir hoy. */
   /**
    * JOB 23: por qué aparece un aviso. Deliberadamente separado de `blockerReason` — un bloqueador

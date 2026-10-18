@@ -66,6 +66,18 @@ public final class DelimitedTextWriter {
         return csv.toString().getBytes(StandardCharsets.UTF_8);
     }
 
+    /**
+     * The same rows as text, <b>without</b> the byte-order mark: for an artifact handed to another
+     * system rather than opened by a person in a spreadsheet (the payable export, V64), where RFC 4180
+     * and the receiving parser are what matter and a BOM is three bytes of noise in the first field.
+     */
+    public static String text(List<String> header, List<List<String>> rows) {
+        StringBuilder csv = new StringBuilder();
+        appendRow(csv, header);
+        rows.forEach(row -> appendRow(csv, row));
+        return csv.toString();
+    }
+
     private static void appendRow(StringBuilder csv, List<String> values) {
         for (int index = 0; index < values.size(); index++) {
             if (index > 0) {

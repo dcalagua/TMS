@@ -7,10 +7,11 @@ import {
 import {
   BarChartRounded, DownloadRounded, LocalShippingRounded, ScheduleRounded,
   InventoryRounded, ReportProblemRounded, PaidRounded, AssignmentTurnedInRounded,
+  ReceiptLongRounded, FactCheckRounded, TimerRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import { saveDownloadedFile } from "../../shared/api/httpClient";
-import { downloadKpiCsv, fetchKpiReport } from "../../shared/api/reportingApi";
+import { downloadKpiCsv, fetchKpiReport, type KpiSettlementView } from "../../shared/api/reportingApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
@@ -74,7 +75,7 @@ export function ReportsPage() {
   }
 
   const report = reportQuery.data;
-  const { shipments, service, exceptions, utilization, orders, tenders, cost, daily } = report;
+  const { shipments, service, exceptions, utilization, orders, tenders, cost, settlement, daily } = report;
 
   /** Un porcentaje del backend, o una raya. Nunca un cero inventado. */
   const pct = (value: number | null) => (value === null ? "-" : fmtPercent(value, 1));
@@ -239,6 +240,15 @@ export function ReportsPage() {
         </AppCard>
       </Box>
 
+      <SectionHeader title={t("Liquidación de fletes")} level={2} />
+      {settlement === null ? (
+        <AppCard title={t("Auditoría de facturas de transportista")}>
+          <Alert severity="info">{t("No disponible para tu cuenta.")}</Alert>
+        </AppCard>
+      ) : (
+        <SettlementSection settlement={settlement} />
+      )}
+
       {/* La tabla diaria es la vista alternativa de las dos gráficas de arriba: los mismos
           números en texto, para quien necesite leerlos exactos o copiarlos. */}
       <AppCard title={t("Detalle por día")} flush>
@@ -276,6 +286,102 @@ export function ReportsPage() {
         </TableContainer>
       </AppCard>
     </>
+  );
+}
+
+/** Una cifra que puede no existir. La raya es la respuesta honesta; 0 sería una afirmación. */
+const orDash = (value: number | null, format: (v: number) => string) => (value === null ? "—" : format(value));
+
+/**
+ * Un ciclo en horas, o en días cuando pasa de dos: "36 h" se lee de un vistazo, "312 h" no.
+ * El número es el del backend; aquí sólo se elige la unidad.
+ */
+function cycle(hours: number | null): string {
+  if (hours === null) return "—";
+  return hours < 48 ? `${fmtDecimal(hours, 1)} h` : `${fmtDecimal(hours / 24, 1)} d`;
+}
+
+/**
+ * La auditoría de flete del rango: cuántas facturas, cuántas con diferencia, cuánto tardan en
+ * aprobarse y, por transportista, cuánto se observó facturado de más y cuánto de eso se rechazó.
+ *
+ * Una fila por transportista **y** moneda: no hay tipo de cambio en TMS, así que dos monedas del
+ * mismo transportista son dos filas y nunca una suma.
+ */
+function SettlementSection({ settlement }: { settlement: KpiSettlementView }) {
+  const pct = (value: number | null) => orDash(value, (v) => fmtPercent(v, 1));
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Box sx={{
+        display: "grid", gap: 2, mb: 2,
+        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0,1fr))", lg: "repeat(4, minmax(0,1fr))" },
+      }}>
+        <KpiCard
+          icon={<ReceiptLongRounded />} color="primary.main" title={t("Facturas")}
+          value={fmtQuantity(settlement.invoicesReceived)}
+          sub={t("{{n}} aprobadas", { n: fmtQuantity(settlement.invoicesApproved) })}
+        />
+        <KpiCard
+          icon={<FactCheckRounded />} color="warning.main" title={t("Con diferencia")}
+          value={pct(settlement.discrepancyRatePercent)}
+          sub={t("{{n}} facturas", { n: fmtQuantity(settlement.invoicesWithDiscrepancy) })}
+        />
+        <KpiCard
+          icon={<TimerRounded />} color="info.main" title={t("Ciclo hasta aprobar (mediana)")}
+          value={cycle(settlement.cycleMedianHours)} sub={t("De recibida a aprobada")}
+        />
+        <KpiCard
+          icon={<TimerRounded />} color="error.main" title={t("Ciclo hasta aprobar (p90)")}
+          value={cycle(settlement.cycleP90Hours)} sub={t("Nueve de cada diez, en este plazo o menos")}
+        />
+      </Box>
+
+      <AppCard title={t("Por transportista")} flush>
+        {settlement.byCarrier.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+            {t("Ninguna factura con fecha en el rango.")}
+          </Typography>
+        ) : (
+          <TableContainer>
+            <Table size="small" sx={dataTableSx}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>{t("Transportista")}</TableCell>
+                  <TableCell>{t("Moneda")}</TableCell>
+                  <TableCell className="numeric-col">{t("Facturas")}</TableCell>
+                  <TableCell className="numeric-col">{t("Aprobadas")}</TableCell>
+                  <TableCell className="numeric-col">{t("Con diferencia")}</TableCell>
+                  <TableCell className="numeric-col">{t("Observado")}</TableCell>
+                  <TableCell className="numeric-col">{t("Ahorrado")}</TableCell>
+                  <TableCell className="numeric-col">{t("Ciclo mediana")}</TableCell>
+                  <TableCell className="numeric-col">{t("Ciclo p90")}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {settlement.byCarrier.map((row) => (
+                  <TableRow key={`${row.carrierId}|${row.currency}`} hover>
+                    <TableCell sx={{ fontWeight: 600 }}>{row.carrierName ?? "—"}</TableCell>
+                    <TableCell>{row.currency}</TableCell>
+                    <TableCell className="numeric-col">{fmtQuantity(row.invoices)}</TableCell>
+                    <TableCell className="numeric-col">{fmtQuantity(row.approved)}</TableCell>
+                    <TableCell className="numeric-col">
+                      {`${fmtQuantity(row.withDiscrepancy)} · ${pct(row.discrepancyRatePercent)}`}
+                    </TableCell>
+                    <TableCell className="numeric-col">{fmtMoney(row.amountObserved, row.currency)}</TableCell>
+                    <TableCell className="numeric-col">{fmtMoney(row.amountSaved, row.currency)}</TableCell>
+                    <TableCell className="numeric-col">{cycle(row.cycleMedianHours)}</TableCell>
+                    <TableCell className="numeric-col">{cycle(row.cycleP90Hours)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </AppCard>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+        {t("Observado: lo facturado por encima de lo esperado en las facturas con diferencia. Ahorrado: la parte de eso que se rechazó.")}
+      </Typography>
+    </Box>
   );
 }
 

@@ -443,3 +443,49 @@
   (`uom` `STACKS`/`M3`/`LDM`), `INFO`, nunca cambia el `matchResult` del pedido ni la verificación. Un nulo de cualquier
   lado no compara.
 - **Commit(s):** el de la fase 45, ciclo 1.
+
+### 2026-10-18 · fase 50 · `expected_basis` admite `MIXED`
+
+- **Regla/decisión afectada:** ADR-024 parte 1, ítem 4 (`ACTUAL` si `trip_cost.closed_at`, si no `ESTIMATED`).
+- **Motivo:** una factura cubre varios viajes y cada uno puede estar cerrado o no; ninguno de los dos valores describe
+  la mezcla y elegir uno mentiría sobre la mitad de la cifra.
+- **Camino elegido:** `freight_match.expected_basis` ∈ (`ACTUAL`, `ESTIMATED`, `MIXED`), nulo sin cifra esperada
+  (`ck_freight_match_basis_needs_expected`). Por línea sólo `ACTUAL`/`ESTIMATED`.
+- **Commit(s):** el de la fase 50, ciclo 1.
+
+### 2026-10-18 · fase 50 · El desglose por componente es el del estimado
+
+- **Regla/decisión afectada:** plan F-1 «compara por componente contra el desglose del costo estimado/real».
+- **Motivo:** el costo real (V30) es un monto único; `trip_cost_component` sólo existe para el estimado.
+- **Camino elegido:** el total del viaje se compara contra el real si está cerrado; cada línea con código de componente
+  contra el componente del estimado (`BASE` incluye los ajustes de mínimo/máximo; un componente que el estimado no cobra
+  es un 0 conocido); la línea `FREIGHT` contra la cifra del viaje menos los componentes de las otras líneas. Sin desglose
+  los esperados por componente son nulos (nunca cero) y el viaje fuera de tolerancia se levanta una vez a nivel viaje.
+  La pantalla y el detalle de la discrepancia dicen «estimate» / «closed actual cost».
+- **Commit(s):** el de la fase 50, ciclo 1.
+
+### 2026-10-18 · fase 50 · La tolerancia absoluta sólo vale en su moneda
+
+- **Regla/decisión afectada:** V46 `toleranceFor` (aplicaba el monto absoluto a cualquier moneda).
+- **Motivo:** 50 PEN no dicen nada de una factura en USD; aplicarlo aceptaría una diferencia que nadie autorizó.
+- **Camino elegido:** `TolerancePolicy.toleranceFor(currency)`: en otra moneda sólo el porcentaje; sin porcentaje,
+  `Tolerance.NONE`. Sin conversión de monedas.
+- **Commit(s):** el de la fase 50, ciclo 1.
+
+### 2026-10-18 · fase 50 · Penalidades fuera de la comparación desde ya
+
+- **Regla/decisión afectada:** ADR-024 parte 2, ítem 6 (fase 60).
+- **Motivo:** con `charge_code` existe `PENALTY` desde V64; dejarla dentro de la suma haría que una deducción abriera
+  una diferencia de total.
+- **Camino elegido:** el matcher excluye las líneas `PENALTY` de toda comparación y las resta del total de cabecera
+  comparado. El CHECK de signo, el motivo obligatorio y la aceptación en la aprobación siguen siendo de la fase 60.
+- **Commit(s):** el de la fase 50, ciclo 1.
+
+### 2026-10-18 · fase 50 · El formato de exportación lo elige la primera exportación
+
+- **Regla/decisión afectada:** ADR-024 parte 1, ítem 6 (no dice cómo se elige el formato).
+- **Motivo:** `uq_payable_export_invoice` admite una exportación por factura; el formato es parte de esa obligación.
+- **Camino elegido:** `POST /settlement/invoices/{id}/export?format=CSV|JSON` (por defecto JSON). Repetir devuelve la
+  exportación existente en su formato original (`alreadyExported: true`), pida lo que pida. CSV sin BOM, CRLF,
+  RFC 4180 (`DelimitedTextWriter.text`, nuevo, junto al `write` con BOM de los reportes).
+- **Commit(s):** el de la fase 50, ciclo 1.

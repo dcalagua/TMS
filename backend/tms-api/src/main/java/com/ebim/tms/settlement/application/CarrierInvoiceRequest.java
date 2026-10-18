@@ -40,14 +40,24 @@ public record CarrierInvoiceRequest(
         @NotEmpty(message = "an invoice needs at least one line") @Valid List<LineRequest> lines) {
 
     /**
-     * @param tripId <b>optional</b>. An accessorial billed against no particular shipment is a real
-     *               line; requiring a trip would force somebody to attach it to an arbitrary one
+     * @param tripId     <b>optional</b>. An accessorial billed against no particular shipment is a
+     *                   real line; requiring a trip would force somebody to attach it to an
+     *                   arbitrary one
+     * @param chargeCode which charge the line bills (V64). Optional: absent is an all-in
+     *                   {@code FREIGHT} line, which is what every client before V64 sent
      */
     public record LineRequest(
             UUID tripId,
             @NotBlank(message = "is required") @Size(max = 300) String description,
             @PositiveOrZero(message = "cannot be negative") BigDecimal quantity,
             @PositiveOrZero(message = "cannot be negative") BigDecimal unitAmount,
-            @NotNull(message = "is required") BigDecimal lineAmount) {
+            @NotNull(message = "is required") BigDecimal lineAmount,
+            com.ebim.tms.settlement.domain.ChargeCode chargeCode) {
+
+        /** A line as every client before V64 sent it. */
+        public LineRequest(UUID tripId, String description, BigDecimal quantity, BigDecimal unitAmount,
+                BigDecimal lineAmount) {
+            this(tripId, description, quantity, unitAmount, lineAmount, null);
+        }
     }
 }

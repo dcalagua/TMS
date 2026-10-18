@@ -175,5 +175,12 @@ public enum AuditAction {
 
     /** A warehouse-owned material profile arrived for the first time or changed (V59, ADR-022). */
     MATERIAL_PROFILE_CREATED,
-    MATERIAL_PROFILE_UPDATED
+    MATERIAL_PROFILE_UPDATED,
+
+    /**
+     * A tolerance policy was created, changed or deactivated (V64, ADR-024 part 1). One action for
+     * the three, with the operation in the metadata: what an auditor searches for is "who widened
+     * the tolerance", whichever button they pressed.
+     */
+    TOLERANCE_POLICY_CHANGED
 }

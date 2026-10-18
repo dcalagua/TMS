@@ -117,9 +117,9 @@ export function AppLayout() {
    * convierten el menú en una paleta y hacen que el ítem donde uno está deje de destacar.
    */
   const renderItem = (item: NavLeaf) => {
-    const active = item.to === "/"
-      ? location.pathname === "/"
-      : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
+    // La hoja más específica que casa con la ruta: en `/settlement/tolerances` se realza
+    // Tolerancias y no también Auditoría de flete, aunque una ruta cuelgue de la otra.
+    const active = leafOf(location.pathname)?.to === item.to;
     const button = (
       <ListItemButton
         key={item.to}

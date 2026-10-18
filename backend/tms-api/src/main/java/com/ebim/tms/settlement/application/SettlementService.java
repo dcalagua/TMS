@@ -107,7 +107,7 @@ public class SettlementService {
     private final TripCostLookupPort tripCostLookupPort;
     private final TripSettlementLookupPort tripSettlementLookupPort;
     private final CarrierLookupPort carrierLookupPort;
-    private final PayableExportPort payableExportPort;
+    private final List<PayableExportPort> payableExportPorts;
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
 
@@ -115,7 +115,7 @@ public class SettlementService {
             FreightDiscrepancyRepository discrepancyRepository, SettlementApprovalRepository approvalRepository,
             PayableExportRepository exportRepository, TolerancePolicyRepository tolerancePolicyRepository,
             TripCostLookupPort tripCostLookupPort, TripSettlementLookupPort tripSettlementLookupPort,
-            CarrierLookupPort carrierLookupPort, PayableExportPort payableExportPort,
+            CarrierLookupPort carrierLookupPort, List<PayableExportPort> payableExportPorts,
             AuditActorProvider auditActorProvider, AuditRecorder auditRecorder,
             io.micrometer.core.instrument.MeterRegistry meterRegistry) {
         this.invoiceRepository = invoiceRepository;
@@ -127,7 +127,7 @@ public class SettlementService {
         this.tripCostLookupPort = tripCostLookupPort;
         this.tripSettlementLookupPort = tripSettlementLookupPort;
         this.carrierLookupPort = carrierLookupPort;
-        this.payableExportPort = payableExportPort;
+        this.payableExportPorts = List.copyOf(payableExportPorts);
         this.auditActorProvider = auditActorProvider;
         this.auditRecorder = auditRecorder;
         this.meterRegistry = meterRegistry;
@@ -192,7 +192,7 @@ public class SettlementService {
         List<CarrierInvoiceLine> lines = new ArrayList<>();
         for (CarrierInvoiceRequest.LineRequest line : request.lines()) {
             lines.add(new CarrierInvoiceLine(scope.companyId(), line.tripId(), line.description().trim(),
-                    line.quantity(), line.unitAmount(), line.lineAmount()));
+                    line.quantity(), line.unitAmount(), line.lineAmount(), line.chargeCode()));
         }
         return lines;
     }
@@ -222,7 +222,7 @@ public class SettlementService {
         Map<UUID, TripCostLookupPort.TripCostSummary> costs =
                 tripCostLookupPort.findCosts(tripIds, scope.companyId());
 
-        Tolerance tolerance = toleranceFor(scope, invoice.carrierId());
+        Tolerance tolerance = toleranceFor(scope, invoice.carrierId(), invoice.currency());
         FreightMatchResult result = FreightMatcher.match(invoice.currency(), invoice.totalAmount(),
                 matcherLines(invoice, trips), matcherCosts(trips, costs, invoice.carrierId()), tolerance,
                 billedElsewhere(scope, invoice, tripIds));
@@ -254,11 +254,14 @@ public class SettlementService {
      * {@code requireNoOpenDiscrepancies} is what stops the approval - so a genuine re-bill after a
      * credit note is accepted by a person rather than blocked by a rule that cannot know.
      */
-    private Set<UUID> billedElsewhere(CompanyScope scope, CarrierInvoice invoice, Set<UUID> tripIds) {
+    private Set<FreightMatcher.TripCharge> billedElsewhere(CompanyScope scope, CarrierInvoice invoice,
+            Set<UUID> tripIds) {
         if (tripIds.isEmpty()) {
             return Set.of();
         }
-        return Set.copyOf(invoiceRepository.findTripIdsBilledOnOtherInvoices(
+        // Since V64 at the grain of (shipment, charge): a toll billed on one invoice and the freight
+        // on another are two halves of one bill, not the shipment paid twice.
+        return Set.copyOf(invoiceRepository.findTripChargesBilledOnOtherInvoices(
                 scope.companyId(), tripIds, invoice.id()));
     }
 
@@ -271,7 +274,7 @@ public class SettlementService {
      * report it as {@link DiscrepancyType#UNMATCHED_TRIP} - which is exactly what it is - rather
      * than comparing an amount against work somebody else did.
      */
-    private List<FreightMatcher.InvoiceLine> matcherLines(CarrierInvoice invoice,
+    static List<FreightMatcher.InvoiceLine> matcherLines(CarrierInvoice invoice,
             Map<UUID, TripSettlementLookupPort.TripSettlementSummary> trips) {
         List<FreightMatcher.InvoiceLine> lines = new ArrayList<>();
         for (CarrierInvoiceLine line : invoice.lines()) {
@@ -282,12 +285,13 @@ public class SettlementService {
                     tripId = null;
                 }
             }
-            lines.add(new FreightMatcher.InvoiceLine(line.id(), tripId, line.lineAmount(), line.description()));
+            lines.add(new FreightMatcher.InvoiceLine(line.id(), tripId, line.lineAmount(), line.description(),
+                    line.chargeCode()));
         }
         return lines;
     }
 
-    private Map<UUID, FreightMatcher.TripCostSnapshot> matcherCosts(
+    static Map<UUID, FreightMatcher.TripCostSnapshot> matcherCosts(
             Map<UUID, TripSettlementLookupPort.TripSettlementSummary> trips,
             Map<UUID, TripCostLookupPort.TripCostSummary> costs, UUID invoiceCarrierId) {
         Map<UUID, FreightMatcher.TripCostSnapshot> snapshots = new java.util.HashMap<>();
@@ -301,7 +305,9 @@ public class SettlementService {
                     // cost row was never estimated are both "no expected figure", never zero.
                     cost == null ? null : cost.expectedAmount(),
                     cost == null ? null : cost.actualAmount(),
-                    cost == null ? null : cost.currency()));
+                    cost == null ? null : cost.currency(),
+                    cost != null && cost.closed(),
+                    cost == null ? Map.of() : cost.estimatedComponents()));
         });
         return snapshots;
     }
@@ -323,7 +329,9 @@ public class SettlementService {
         matchRepository.save(match);
 
         for (FreightMatchResult.Discrepancy discrepancy : result.discrepancies()) {
-            discrepancyRepository.save(new FreightDiscrepancy(scope.companyId(), invoice.id(), null,
+            // The line it is about, since V64 (ADR-024): V46 carried the id into the matcher and
+            // dropped it here, so a difference could not say which line made it.
+            discrepancyRepository.save(new FreightDiscrepancy(scope.companyId(), invoice.id(), discrepancy.lineId(),
                     discrepancy.type(), discrepancy.expectedAmount(), discrepancy.invoicedAmount(),
                     discrepancy.differenceAmount(), invoice.currency(), discrepancy.detail()));
         }
@@ -337,12 +345,13 @@ public class SettlementService {
      * what it will accept has not authorised anything, and a permissive default would let invoices
      * through on an assumption nobody made.
      */
-    private Tolerance toleranceFor(CompanyScope scope, UUID carrierId) {
+    private Tolerance toleranceFor(CompanyScope scope, UUID carrierId, String invoiceCurrency) {
         return tolerancePolicyRepository
                 .findByCompanyIdAndCarrierIdAndActiveTrue(scope.companyId(), carrierId)
                 .or(() -> tolerancePolicyRepository.findByCompanyIdAndCarrierIdIsNullAndActiveTrue(
                         scope.companyId()))
-                .map(TolerancePolicy::toTolerance)
+                // V64: an absolute bound in another currency does not apply (TolerancePolicy#toleranceFor).
+                .map(policy -> policy.toleranceFor(invoiceCurrency))
                 .orElse(Tolerance.NONE);
     }
 
@@ -489,6 +498,16 @@ public class SettlementService {
      */
     @Transactional
     public PayableExportView export(CompanyScope scope, UUID invoiceId) {
+        return export(scope, invoiceId, PayableExport.Format.JSON);
+    }
+
+    /**
+     * The same, in the format asked for (V64: CSV joins JSON). The format is chosen by the first
+     * export; a repeat returns that export as it was, whatever format the repeat asks for - one
+     * obligation, one artifact.
+     */
+    @Transactional
+    public PayableExportView export(CompanyScope scope, UUID invoiceId, PayableExport.Format format) {
         UUID actorId = auditActorProvider.requireAppUserId();
         CarrierInvoice invoice = lockedInvoice(scope, invoiceId);
 
@@ -507,12 +526,13 @@ public class SettlementService {
 
         String carrierName = carrierLookupPort.findAllInCompany(Set.of(invoice.carrierId()), scope.companyId())
                 .values().stream().findFirst().map(reference -> reference.name()).orElse(null);
-        PayableExportPort.PayableDocument document = payableExportPort.render(
+        PayableExportPort.PayableDocument document = exporterFor(format).render(
                 new PayableExportPort.PayableInvoice(invoice.id(), invoice.invoiceNumber(), invoice.invoiceDate(),
                         invoice.carrierId(), carrierName, invoice.currency(), invoice.totalAmount(),
+                        expectedBasisOf(scope, invoice),
                         invoice.lines().stream()
                                 .map(line -> new PayableExportPort.PayableLine(line.lineNumber(), line.tripId(),
-                                        line.description(), line.lineAmount()))
+                                        line.description(), line.lineAmount(), line.chargeCode().name()))
                                 .toList()));
 
         PayableExport export = exportRepository.save(new PayableExport(scope.companyId(), invoice.id(),
@@ -523,6 +543,22 @@ public class SettlementService {
         auditRecorder.record(scope, AuditAggregateType.CARRIER_INVOICE, invoice.id(), AuditAction.INVOICE_EXPORTED,
                 Map.of("invoiceNumber", invoice.invoiceNumber(), "exportReference", export.exportReference()));
         return PayableExportView.of(export, false);
+    }
+
+    private PayableExportPort exporterFor(PayableExport.Format format) {
+        PayableExport.Format wanted = format == null ? PayableExport.Format.JSON : format;
+        return payableExportPorts.stream()
+                .filter(port -> port.format() == wanted)
+                .findFirst()
+                .orElseThrow(() -> new InvalidRequestException("No exporter renders " + wanted + "."));
+    }
+
+    /** What the approved figure was compared against, carried into the export (ADR-024 item 4). */
+    private String expectedBasisOf(CompanyScope scope, CarrierInvoice invoice) {
+        return matchRepository.findByCompanyIdAndCarrierInvoiceId(scope.companyId(), invoice.id())
+                .map(FreightMatch::expectedBasis)
+                .map(Enum::name)
+                .orElse(null);
     }
 
     // ------------------------------------------------------------------ reads

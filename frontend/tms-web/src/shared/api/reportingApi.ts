@@ -131,6 +131,43 @@ export interface KpiCostView {
   variancePercent: number | null
 }
 
+/**
+ * Mirrors the backend's `KpiSettlementCarrierRow` - one per carrier **and** currency. There is no
+ * exchange rate in TMS, so two currencies of the same carrier are two rows and never one sum.
+ */
+export interface KpiSettlementCarrierRow {
+  carrierId: string
+  carrierName: string | null
+  currency: string
+  invoices: number
+  approved: number
+  withDiscrepancy: number
+  discrepancyRatePercent: number | null
+  /** Positive header differences flagged: billed over what was expected. */
+  amountObserved: number
+  /** The part of `amountObserved` refused - discrepancy rejected, or the invoice rejected. */
+  amountSaved: number
+  cycleMedianHours: number | null
+  cycleP90Hours: number | null
+}
+
+/**
+ * Mirrors the backend's `KpiSettlementView`: freight audit over the invoices *dated* in the range
+ * (`invoice_date`), not the ones received in it.
+ */
+export interface KpiSettlementView {
+  invoicesReceived: number
+  /** Of those, APPROVED or EXPORTED. */
+  invoicesApproved: number
+  /** Of those, with at least one discrepancy on their current match. */
+  invoicesWithDiscrepancy: number
+  discrepancyRatePercent: number | null
+  /** Received -> approved, in hours. Null when nothing was approved. */
+  cycleMedianHours: number | null
+  cycleP90Hours: number | null
+  byCarrier: KpiSettlementCarrierRow[]
+}
+
 /** Mirrors the backend's `KpiDailyRow` - one operating day, including the days nothing happened on. */
 export interface KpiDailyRow {
   date: string
@@ -150,8 +187,9 @@ export interface KpiDailyRow {
 /**
  * Mirrors the backend's `KpiReportView`.
  *
- * `orders`, `tenders` and `cost` are `null` when the caller does not hold the permission that owns
- * them (`orders.order:read`, `planning.tender:read`, `rates.trip_cost:read`). Null is not empty: the
+ * `orders`, `tenders`, `cost` and `settlement` are `null` when the caller does not hold the permission
+ * that owns them (`orders.order:read`, `planning.tender:read`, `rates.trip_cost:read`,
+ * `settlement.invoice:read`). Null is not empty: the
  * screen says "not available to you" rather than showing a zero it was never told.
  */
 export interface KpiReportView {
@@ -166,6 +204,7 @@ export interface KpiReportView {
   orders: KpiOrdersView | null
   tenders: KpiTenderView | null
   cost: KpiCostView[] | null
+  settlement: KpiSettlementView | null
   daily: KpiDailyRow[]
 }
 

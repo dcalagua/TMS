@@ -20,6 +20,7 @@ import com.ebim.tms.planning.infrastructure.TripStopRepository;
 import com.ebim.tms.planning.infrastructure.TripTenderRepository;
 import com.ebim.tms.shared.reference.OrderBacklogTotals;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
+import com.ebim.tms.shared.reference.SettlementKpiPort;
 import com.ebim.tms.shared.reference.TripCostAnalyticsPort;
 import com.ebim.tms.shared.reference.TripCostTotals;
 import com.ebim.tms.shared.security.CompanyScope;
@@ -62,6 +63,7 @@ class KpiServiceTest {
     private TripTenderRepository tripTenderRepository;
     private OrderPlanningPort orderPlanningPort;
     private TripCostAnalyticsPort tripCostAnalyticsPort;
+    private SettlementKpiPort settlementKpiPort;
     private KpiService service;
 
     @BeforeEach
@@ -73,8 +75,10 @@ class KpiServiceTest {
         tripTenderRepository = mock(TripTenderRepository.class);
         orderPlanningPort = mock(OrderPlanningPort.class);
         tripCostAnalyticsPort = mock(TripCostAnalyticsPort.class);
+        settlementKpiPort = mock(SettlementKpiPort.class);
         service = new KpiService(tripRepository, tripStopRepository, orderDeliveryRepository,
-                tripExceptionRepository, tripTenderRepository, orderPlanningPort, tripCostAnalyticsPort);
+                tripExceptionRepository, tripTenderRepository, orderPlanningPort, tripCostAnalyticsPort,
+                settlementKpiPort);
 
         // The two days of shipments the whole file is about. 1 March: four trips, one of them
         // cancelled, three departures measured and one of them late. 3 March: two trips, both
@@ -109,6 +113,7 @@ class KpiServiceTest {
             assertThat(report.orders()).isNull();
             assertThat(report.tenders()).isNull();
             assertThat(report.cost()).isNull();
+            assertThat(report.settlement()).isNull();
             // The shipment half of the screen is still there: this caller is entitled to it.
             assertThat(report.shipments().trips()).isEqualTo(6);
         }
@@ -120,6 +125,7 @@ class KpiServiceTest {
 
             verifyNoInteractions(orderPlanningPort);
             verifyNoInteractions(tripCostAnalyticsPort);
+            verifyNoInteractions(settlementKpiPort);
             verify(tripTenderRepository, never()).countByStatusForRange(any(), any(), any());
         }
 
@@ -261,6 +267,44 @@ class KpiServiceTest {
     @Nested
     @DisplayName("the gated sections, once the caller holds them")
     class GatedSections {
+
+        @Test
+        @DisplayName("settlement (V64): rates over invoices received, money per carrier and currency")
+        void settlementBehindItsOwnPermission() {
+            java.util.UUID carrier = java.util.UUID.randomUUID();
+            when(settlementKpiPort.totals(COMPANY, FROM, TO)).thenReturn(new SettlementKpiPort.SettlementKpiTotals(
+                    8, 5, 2, new java.math.BigDecimal("26.5"), new java.math.BigDecimal("70.0"),
+                    List.of(new SettlementKpiPort.CarrierSettlementTotals(carrier, "Rápido", "PEN", 8, 5, 2,
+                            new java.math.BigDecimal("350.00"), new java.math.BigDecimal("120.00"),
+                            new java.math.BigDecimal("26.5"), new java.math.BigDecimal("70.0")))));
+
+            KpiSettlementView settlement = service.report(
+                    scope(Permission.MONITORING_TRANSPORT_READ, Permission.SETTLEMENT_INVOICE_READ), FILTER)
+                    .settlement();
+
+            assertThat(settlement.invoicesReceived()).isEqualTo(8);
+            assertThat(settlement.discrepancyRatePercent()).isEqualByComparingTo("25.0");
+            assertThat(settlement.cycleMedianHours()).isEqualByComparingTo("26.5");
+            assertThat(settlement.byCarrier()).singleElement().satisfies(row -> {
+                assertThat(row.currency()).isEqualTo("PEN");
+                assertThat(row.discrepancyRatePercent()).isEqualByComparingTo("25.0");
+                assertThat(row.amountSaved()).isEqualByComparingTo("120.00");
+            });
+        }
+
+        @Test
+        @DisplayName("settlement with no invoice in the range: a rate of nothing is null, not 0 %")
+        void settlementWithNothingReceived() {
+            when(settlementKpiPort.totals(COMPANY, FROM, TO)).thenReturn(
+                    new SettlementKpiPort.SettlementKpiTotals(0, 0, 0, null, null, List.of()));
+
+            KpiSettlementView settlement = service.report(
+                    scope(Permission.MONITORING_TRANSPORT_READ, Permission.SETTLEMENT_INVOICE_READ), FILTER)
+                    .settlement();
+
+            assertThat(settlement.discrepancyRatePercent()).isNull();
+            assertThat(settlement.cycleMedianHours()).isNull();
+        }
 
         @Test
         @DisplayName("report the planning invariant: everything owed is either planned or not")

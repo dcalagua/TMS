@@ -1,7 +1,7 @@
 import type {
   DeliveryResult, StopExecutionStatus, TripExceptionStatus, TripStatus,
 } from "../api/planningApi";
-import type { InvoiceStatus, MatchStatus } from "../api/settlementApi";
+import type { ExpectedBasis, InvoiceStatus, MatchStatus } from "../api/settlementApi";
 import type { DocumentDeliveryStatus } from "../api/documentDeliveriesApi";
 import type { TenderStatus } from "../api/tendersApi";
 import type { StatusTone } from "../../theme";
@@ -103,6 +103,16 @@ export const MATCH_STATUS_TONE: Record<MatchStatus, StatusTone> = {
   MATCHED: "done",
   DISCREPANCY: "inProgress",
   UNMATCHABLE: "neutral",
+};
+
+/**
+ * Fase 50: contra qué se comparó. Contra el costo real cerrado es la comparación firme; contra el
+ * estimado es provisional (el viaje aún no cerró su costo), y mixto avisa de que conviven las dos.
+ */
+export const EXPECTED_BASIS_TONE: Record<ExpectedBasis, StatusTone> = {
+  ACTUAL: "done",
+  ESTIMATED: "open",
+  MIXED: "inProgress",
 };
 
 /**

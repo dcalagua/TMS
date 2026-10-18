@@ -47,7 +47,13 @@ class ModuleBoundaryTest {
                     // call: an alert is a by-product of half the writes in the product. The rule
                     // forces those calls through com.ebim.tms.shared.notification.
                     // NotificationPublisher, the same way audit is reached through AuditRecorder.
-                    "notification");
+                    "notification",
+                    // Owns freight settlement (V46, V64) and, from phase 55, accruals and payables
+                    // (ADR-023 section 0). Listed before any of that is written so the new code is
+                    // held to "talk through shared": it reads trips, costs and carriers through
+                    // TripSettlementLookupPort, TripCostLookupPort and CarrierLookupPort, and the
+                    // KPI report reads it back through SettlementKpiPort.
+                    "settlement");
 
     @ArchTest
     static final ArchRule modules_are_free_of_cycles =

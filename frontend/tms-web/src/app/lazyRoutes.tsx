@@ -68,6 +68,8 @@ export const AppointmentsPage = lazy(() =>
   import("../pages/appointments/AppointmentsPage").then((m) => ({ default: m.AppointmentsPage })));
 export const SettlementPage = lazy(() =>
   import("../pages/settlement/SettlementPage").then((m) => ({ default: m.SettlementPage })));
+export const TolerancePoliciesPage = lazy(() =>
+  import("../pages/settlement/TolerancePoliciesPage").then((m) => ({ default: m.TolerancePoliciesPage })));
 export const WorkAssignmentsPage = lazy(() =>
   import("../pages/fleet/WorkAssignmentsPage").then((m) => ({ default: m.WorkAssignmentsPage })));
 export const OwnFleetCostProfilesPage = lazy(() =>

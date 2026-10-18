@@ -79,5 +79,11 @@ public enum AuditAggregateType {
     OWN_FLEET_COST_PROFILE,
 
     /** {@code tms.material_profile} (V59, ADR-022). */
-    MATERIAL_PROFILE
+    MATERIAL_PROFILE,
+
+    /**
+     * How far an invoice may differ before a person looks (V46 table, written since V64, ADR-024).
+     * Its own aggregate: the tolerance an invoice was judged against is a decision with an author.
+     */
+    TOLERANCE_POLICY
 }

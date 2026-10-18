@@ -33,11 +33,28 @@ public interface TripCostLookupPort {
      *                       invoice as an overcharge
      * @param actualAmount   what was recorded as spent, or null when nobody recorded it
      * @param currency       what the shipment was priced in, or null when it has no cost row
+     * @param closed         whether the cost was closed (V30): its actual is final, and is what an
+     *                       invoice is compared against (V64, ADR-024)
+     * @param estimatedComponents the estimate's breakdown by component name ({@code RateComponent}
+     *                       names, as strings so settlement does not depend on rates). Empty when
+     *                       there is no estimate; a NOT_CALCULABLE component is present at 0.00,
+     *                       which is what the estimate counted for it
      */
     record TripCostSummary(
             UUID tripId,
             BigDecimal expectedAmount,
             BigDecimal actualAmount,
-            String currency) {
+            String currency,
+            boolean closed,
+            Map<String, BigDecimal> estimatedComponents) {
+
+        public TripCostSummary {
+            estimatedComponents = estimatedComponents == null ? Map.of() : Map.copyOf(estimatedComponents);
+        }
+
+        /** An open cost with no breakdown. */
+        public TripCostSummary(UUID tripId, BigDecimal expectedAmount, BigDecimal actualAmount, String currency) {
+            this(tripId, expectedAmount, actualAmount, currency, false, Map.of());
+        }
     }
 }

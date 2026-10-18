@@ -23,6 +23,9 @@ public interface PayableExportPort {
     /** Renders the obligation. Must be deterministic: the same invoice yields the same reference. */
     PayableDocument render(PayableInvoice invoice);
 
+    /** The one format this implementation renders; the service picks an implementation by it (V64). */
+    PayableExport.Format format();
+
     /**
      * @param reference what a downstream system deduplicates on. <b>Derived from the invoice</b>,
      *                  never from a clock or a counter, so a retried export is recognisably the
@@ -39,9 +42,13 @@ public interface PayableExportPort {
             String carrierName,
             String currency,
             BigDecimal totalAmount,
+            String expectedBasis,
             List<PayableLine> lines) {
     }
 
-    record PayableLine(int lineNumber, UUID tripId, String description, BigDecimal amount) {
+    /**
+     * @param chargeCode which charge the line bills (V64); {@code FREIGHT} for an all-in line
+     */
+    record PayableLine(int lineNumber, UUID tripId, String description, BigDecimal amount, String chargeCode) {
     }
 }

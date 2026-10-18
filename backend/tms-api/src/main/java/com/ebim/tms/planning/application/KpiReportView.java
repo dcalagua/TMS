@@ -30,6 +30,8 @@ import java.util.List;
  * @param orders      planned versus unplanned demand, or null - see above
  * @param tenders     whether carriers took what they were offered, or null - see above
  * @param cost        estimated versus actual, one entry per currency, or null - see above
+ * @param settlement  freight settlement (V64): invoice cycle, share with a difference, amounts
+ *                    observed and saved per carrier; null without {@code settlement.invoice:read}
  * @param daily       one row per day in the range, empty days included. The chart, the detail
  *                    table, and what the CSV export writes
  */
@@ -45,5 +47,6 @@ public record KpiReportView(
         KpiOrdersView orders,
         KpiTenderView tenders,
         List<KpiCostView> cost,
+        KpiSettlementView settlement,
         List<KpiDailyRow> daily) {
 }

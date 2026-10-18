@@ -38,6 +38,8 @@ class JsonPayableExportAdapter implements PayableExportPort {
         document.put("currency", invoice.currency());
         // toPlainString: an amount handed to accounting must never arrive in scientific notation.
         document.put("totalAmount", invoice.totalAmount().toPlainString());
+        // What the approved figure was compared against (V64): ACTUAL, ESTIMATED, MIXED or null.
+        document.put("expectedBasis", invoice.expectedBasis());
         document.put("lines", invoice.lines().stream().map(JsonPayableExportAdapter::line).toList());
 
         return new PayableDocument(referenceFor(invoice), PayableExport.Format.JSON,
@@ -49,6 +51,7 @@ class JsonPayableExportAdapter implements PayableExportPort {
         rendered.put("lineNumber", line.lineNumber());
         rendered.put("tripId", line.tripId() == null ? null : line.tripId().toString());
         rendered.put("description", line.description());
+        rendered.put("chargeCode", line.chargeCode());
         rendered.put("amount", line.amount().toPlainString());
         return rendered;
     }
@@ -59,7 +62,12 @@ class JsonPayableExportAdapter implements PayableExportPort {
      * <p>The invoice id is already unique per installation and is what the obligation is about.
      * Prefixed so a human reading an accounting system can tell where it came from.
      */
-    private static String referenceFor(PayableInvoice invoice) {
+    @Override
+    public PayableExport.Format format() {
+        return PayableExport.Format.JSON;
+    }
+
+    static String referenceFor(PayableInvoice invoice) {
         return "TMS-" + invoice.invoiceId();
     }
 }

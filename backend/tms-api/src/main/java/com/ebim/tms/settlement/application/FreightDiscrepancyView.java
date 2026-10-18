@@ -14,6 +14,8 @@ import java.util.UUID;
  */
 public record FreightDiscrepancyView(
         UUID id,
+        /** The invoice line it is about (V64), or null for the header or a shipment billed over several lines. */
+        UUID invoiceLineId,
         DiscrepancyType type,
         BigDecimal expectedAmount,
         BigDecimal invoicedAmount,
@@ -24,7 +26,7 @@ public record FreightDiscrepancyView(
         OffsetDateTime resolvedAt) {
 
     public static FreightDiscrepancyView of(FreightDiscrepancy discrepancy) {
-        return new FreightDiscrepancyView(discrepancy.id(), discrepancy.type(),
+        return new FreightDiscrepancyView(discrepancy.id(), discrepancy.invoiceLineId(), discrepancy.type(),
                 discrepancy.expectedAmount(), discrepancy.invoicedAmount(), discrepancy.differenceAmount(),
                 discrepancy.detail(), discrepancy.status(), discrepancy.resolutionNotes(),
                 discrepancy.resolvedAt());

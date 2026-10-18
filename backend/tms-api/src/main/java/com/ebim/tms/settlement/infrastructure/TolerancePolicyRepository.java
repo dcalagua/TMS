@@ -13,6 +13,9 @@ public interface TolerancePolicyRepository extends JpaRepository<TolerancePolicy
 
     List<TolerancePolicy> findByCompanyIdAndActiveTrue(UUID companyId);
 
+    /** Every policy of the company, retired ones included - the screen's "show history". */
+    List<TolerancePolicy> findByCompanyId(UUID companyId);
+
     Optional<TolerancePolicy> findByCompanyIdAndCarrierIdAndActiveTrue(UUID companyId, UUID carrierId);
 
     /** The company-wide default: the row with no carrier. */

@@ -62,6 +62,14 @@ export const CAPABILITY = {
   DOCUMENT_DELIVERY_VIEW: "DOCUMENT_DELIVERY_VIEW",
   /** ADR-018: confirmar que el cargo firmado volvió a la oficina. */
   DOCUMENT_DELIVERY_MANAGE: "DOCUMENT_DELIVERY_MANAGE",
+  /** Auditoría de flete: leer facturas, comparaciones y políticas de tolerancia. */
+  SETTLEMENT_VIEW: "SETTLEMENT_VIEW",
+  /** Registrar y comparar facturas, resolver diferencias y mantener las tolerancias. */
+  SETTLEMENT_MANAGE: "SETTLEMENT_MANAGE",
+  /** Aprobar o rechazar: deliberadamente separado de quien registra la factura. */
+  SETTLEMENT_APPROVE: "SETTLEMENT_APPROVE",
+  /** Exportar a contabilidad lo aprobado. */
+  SETTLEMENT_EXPORT: "SETTLEMENT_EXPORT",
 } as const;
 
 /**

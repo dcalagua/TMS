@@ -62,6 +62,28 @@ From the code at `a57af24` (`V46__freight_settlement.sql`, `com.ebim.tms.settlem
    with a discrepancy, amount observed (sum of positive differences rejected or accepted) and saved, per
    carrier.
 
+### Implementation notes - part 1 (phase 50, V64)
+
+- `V64__settlement_charge_codes_and_match_basis.sql`: `carrier_invoice_line.charge_code` (+CHECK, index
+  `(company_id, trip_id, charge_code)`), `freight_match.expected_basis` (`ACTUAL`/`ESTIMATED`/`MIXED`, plus
+  `ck_freight_match_basis_needs_expected`), action `TOLERANCE_POLICY_CHANGED` and aggregate `TOLERANCE_POLICY`.
+- `expected_basis` admits **`MIXED`** for an invoice whose shipments are partly closed and partly open (item 4 named
+  two values; an invoice spans shipments). The per-line basis is `ACTUAL` or `ESTIMATED`.
+- The **component breakdown is the estimate's**: TMS records an actual as one amount. A component line is compared with
+  the estimate's component (`BASE` = `BASE` + `MINIMUM_ADJUSTMENT` + `MAXIMUM_ADJUSTMENT`; a component the estimate does
+  not charge is a known 0); an all-in `FREIGHT` line with the shipment's figure (actual if closed) less the other lines'
+  components. With no breakdown, component expectations are null and an out-of-tolerance shipment is raised once at
+  shipment level.
+- Per-line comparisons use the same tolerance; when the shipment is out but no line is, one shipment-level `LINE_AMOUNT`
+  is raised so nothing out of tolerance passes without a row.
+- An absolute tolerance applies only to invoices in its own currency (`TolerancePolicy.toleranceFor`); against another
+  currency only the percentage applies.
+- `PENALTY` lines are left out of the comparison and out of the compared header total already in phase 50 (the sign
+  CHECK and the approval listing stay in phase 60).
+- CSV export: `CsvPayableExportAdapter`, chosen by `POST .../export?format=CSV` (default JSON); the first export fixes
+  the format. Golden file `src/test/resources/settlement/payable-export-golden.csv` (exempt from EOL normalisation).
+- KPIs: `KpiReportView.settlement`, see `docs/domain/KPIS_REPORTING_V1.md` §12.
+
 ## Decision - part 2: Peruvian taxes and CPE (F-3, phase 60, V66)
 
 1. **Fiscal settings per company.** `company_settings` gains nullable `igv_rate numeric(5,2)`,

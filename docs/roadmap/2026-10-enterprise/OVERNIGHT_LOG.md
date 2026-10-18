@@ -774,3 +774,88 @@ El EWM no se tocó.
 - El factor de piso no se congela en el viaje (DECISIONS_LOG); el front de la fase 40 (barras de piso/alto) sigue pendiente
   de su ciclo 2.
 - V63 sólo validada con Testcontainers; no aplicada en ninguna base compartida.
+
+## 50 · Conciliación endurecida (2026-10-18, ciclo 1 de 2 · completa)
+
+Todo lo pedido entró en el ciclo 1 (plan 03 F-1, ADR-024 parte 1): backend, migración, front, pruebas y documentos.
+
+### Qué entró
+
+1. **V64** `V64__settlement_charge_codes_and_match_basis.sql`: `carrier_invoice_line.charge_code` (CHECK con los 13
+   códigos; nulo = `FREIGHT`) e índice `(company_id, trip_id, charge_code)`; `freight_match.expected_basis`
+   (`ACTUAL`/`ESTIMATED`/`MIXED`, `ck_freight_match_basis_needs_expected`); acción `TOLERANCE_POLICY_CHANGED` y
+   agregado `TOLERANCE_POLICY` (listas completas reescritas). Sin filas: `settlement.tolerance:manage` ya estaba sembrado.
+2. **`settlement` en `ModuleBoundaryTest`** (ADR-023 §0), antes de todo lo demás.
+3. **Tolerancias**: `GET|POST /api/v1/settlement/tolerance-policies`, `PUT /{id}`, `POST /{id}/deactivate`
+   (`TolerancePolicyController`/`Service`; leer con `settlement.invoice:read`, escribir con `settlement.tolerance:manage`).
+   Una activa por empresa y por transportista (409 con frase; los índices de V46 cierran la carrera), auditoría con cotas
+   antes/después. La cota absoluta sólo vale en su moneda.
+4. **Matcher por cargo**: `ChargeCode`, `ExpectedBasis`; duplicado = mismo (viaje, cargo) en la factura u otra no
+   rechazada; el total del viaje decide (real si cerrado, si no estimado); fuera de tolerancia se compara cada línea
+   contra su componente y la diferencia se levanta **en su línea** (`freight_discrepancy.invoice_line_id` lleno, también
+   en `UNMATCHED_TRIP`, `DUPLICATE_INVOICE`, `MISSING_EXPECTED_COST` de una línea); dentro de tolerancia no abre nada pero
+   la vista muestra el esperado por línea (`FreightMatcher.lineExpectations`). `PENALTY` fuera de la comparación.
+   `TripCostLookupPort.TripCostSummary` (+`closed`, `estimatedComponents`, con `@EntityGraph`, sin N+1).
+5. **Exportación CSV**: `CsvPayableExportAdapter` (RFC 4180, CRLF, UTF-8 sin BOM, una fila por línea con cabecera
+   repetida, mismos campos y referencia que el JSON, + `expectedBasis` y `chargeCode` en ambos);
+   `POST …/export?format=CSV|JSON`.
+6. **KPIs de liquidación**: `SettlementKpiPort` (shared) + `SettlementKpiAdapter` (una consulta con `GROUPING SETS`);
+   `KpiReportView.settlement` (nulo sin `settlement.invoice:read`): facturas, aprobadas, % con diferencia, ciclo
+   recibida→aprobada mediana/p90 en horas, observado/ahorrado por transportista y moneda.
+7. **Front**: pantalla «Tolerancias» (`/settlement/tolerances`, menú, `SETTLEMENT_VIEW`/`SETTLEMENT_MANAGE`, drawer,
+   `confirmDialog` al desactivar); **formulario de factura** `InvoiceFormDrawer` (no existía ninguno) con código de cargo
+   por línea; el drawer de la factura muestra cargo, esperado por línea y su base, chip «Contra costo real / estimado /
+   Mixto», «Línea N» en cada diferencia, elección JSON/CSV y descarga; sección «Liquidación de fletes» en Reportes;
+   `CAPABILITY` +`SETTLEMENT_*`; el menú realza sólo la hoja más específica (`leafOf`).
+8. **Docs**: ADR-024 «Implementation notes - part 1», `KPIS_REPORTING_V1.md` §12, `PHASE_MAP.md`, `DECISIONS_LOG.md` (+5).
+
+### Desvíos registrados (`DECISIONS_LOG.md`)
+
+- `expected_basis` admite `MIXED`.
+- El desglose por componente es el del estimado.
+- La tolerancia absoluta sólo vale en su moneda.
+- Penalidades fuera de la comparación desde ya.
+- El formato de exportación lo elige la primera exportación.
+
+### Archivos
+
+- Migración: `backend/tms-api/src/main/resources/db/migration/V64__settlement_charge_codes_and_match_basis.sql`.
+- Nuevos (main): `settlement/domain/{ChargeCode,ExpectedBasis}`, `settlement/application/{TolerancePolicyService,
+  TolerancePolicyRequest,TolerancePolicyView,CsvPayableExportAdapter}`, `settlement/api/TolerancePolicyController`,
+  `settlement/infrastructure/SettlementKpiAdapter`, `shared/reference/SettlementKpiPort`,
+  `planning/application/KpiSettlementView`.
+- Modificados (main): `FreightMatcher`, `FreightMatchResult`, `FreightMatch`, `CarrierInvoiceLine`, `TolerancePolicy`,
+  `SettlementService`, `CarrierInvoiceRequest`, `CarrierInvoiceView`, `FreightDiscrepancyView`, `PayableExportPort`,
+  `JsonPayableExportAdapter`, `SettlementController`, `CarrierInvoiceRepository`, `TolerancePolicyRepository`,
+  `TripCostLookupPort`, `rates/infrastructure/{TripCostLookupAdapter,TripCostRepository}`, `KpiService`,
+  `KpiReportView`, `AuditAction`, `AuditAggregateType`, `DelimitedTextWriter` (+`text`), `.gitattributes` (golden CSV
+  sin normalizar EOL).
+- Pruebas: `FreightMatcherTest` (+15, tabla V64), `TolerancePolicyTest` (5), `CsvPayableExportAdapterTest` (3, golden
+  `src/test/resources/settlement/payable-export-golden.csv`), `KpiServiceTest` (+2 y aserciones de no-consulta),
+  `SettlementApiIntegrationTest` (+13), `ModuleBoundaryTest` (+`settlement`).
+- Front: `settlementApi.ts`, `reportingApi.ts`, `meApi.ts`, `enums.ts`, `statusTones.ts`, `navConfig.tsx`,
+  `AppLayout.tsx`, `App.tsx`, `lazyRoutes.tsx`, `SettlementPage.tsx`, `InvoiceWorkspaceDrawer.tsx`, `ReportsPage.tsx`,
+  nuevos `TolerancePoliciesPage.tsx`, `TolerancePolicyFormDrawer.tsx`, `toleranceRules.ts`, `InvoiceFormDrawer.tsx` y
+  sus pruebas.
+
+### Pruebas
+
+| Repo | Comando | Resultado |
+|---|---|---|
+| TMS backend | `./mvnw -B test` (completo, Testcontainers) | **2461 corridas, 1 fallo, 0 errores, 2 omitidas** · 4 min 04 s (fase 45: 2423; +38). El único rojo es el conocido `PlatformLifecycleIntegrationTest.versionRules` (fase 00) |
+| TMS backend | nuevas y afectadas | `FreightMatcherTest` 42/42 (+15: cargos distintos suman, mismo cargo duplicado con `lineId`, duplicado entre facturas por cargo, fuera de tolerancia por componente con `lineId`, dentro no abre nada, `BASE` + ajustes, `ACTUAL` cerrado, `ESTIMATED` abierto con real, `MIXED`, `FREIGHT` = remanente, sin desglose nulo y a nivel viaje, componente no cobrado = 0 conocido, penalidad excluida, sin código = `FREIGHT`, hallazgos con su línea); `TolerancePolicyTest` 5/5; `ToleranceTest` 8/8; `CsvPayableExportAdapterTest` 3/3 (golden byte a byte); `KpiServiceTest` (+2); `SettlementApiIntegrationTest` 53/53 (+13: cargos, nulo leído como FREIGHT, `invoice_line_id` persistido, dentro de tolerancia sin filas, base ACTUAL, duplicado por cargo, código desconocido 400, CSV idempotente en su formato, ciclo de tolerancias con auditoría, validaciones 400, permisos 403, aislamiento entre empresas, KPIs en el reporte); `ModuleBoundaryTest`, `AuditVocabularyMigrationTest` verdes |
+| TMS frontend | `npm run typecheck && npm run lint && npm test` | OK · lint 0 errores · **338/338** en 51 archivos (fase 45: 318; +20) |
+| Migraciones | `git diff 40de0a5` de V1–V58; V59–V63 contra HEAD | intactas |
+
+El EWM no se tocó.
+
+### Qué quedó fuera (ciclo 2 / otras fases)
+
+- Los selectores de transportista y viaje del front leen `/fleet/carriers` y `/planning/trips`: una cuenta con sólo
+  permisos de liquidación ve la lista vacía (el formulario lo dice) y no puede registrar factura ni tolerancia por
+  transportista. Candidato del ciclo 2: un lookup de transportistas bajo `settlement.invoice:read`.
+- Los botones existentes de revisar/aprobar/rechazar/exportar del drawer no se ocultan por capacidad (el servidor sí lo
+  impide); igual que antes de la fase.
+- No hay entradas nuevas en `i18n.ts` (las pantallas de liquidación nunca las tuvieron).
+- Campos contables en la exportación (cuentas GL, impuestos) llegan con V65/V66 (fases 55 y 60), en JSON y CSV a la vez.
+- V64 sólo validada con Testcontainers; no aplicada en ninguna base compartida.

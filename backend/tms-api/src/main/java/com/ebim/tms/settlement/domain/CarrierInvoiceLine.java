@@ -59,6 +59,14 @@ public class CarrierInvoiceLine {
     @Column(name = "line_amount", nullable = false)
     private BigDecimal lineAmount;
 
+    /**
+     * Which charge this line bills (V64). Null on every V46 line and read as
+     * {@link ChargeCode#FREIGHT}; stored as given, so what was keyed stays what was keyed.
+     */
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "charge_code")
+    private ChargeCode chargeCode;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false, nullable = false)
     private OffsetDateTime createdAt;
@@ -72,6 +80,12 @@ public class CarrierInvoiceLine {
 
     public CarrierInvoiceLine(UUID companyId, UUID tripId, String description, BigDecimal quantity,
             BigDecimal unitAmount, BigDecimal lineAmount) {
+        this(companyId, tripId, description, quantity, unitAmount, lineAmount, null);
+    }
+
+    public CarrierInvoiceLine(UUID companyId, UUID tripId, String description, BigDecimal quantity,
+            BigDecimal unitAmount, BigDecimal lineAmount, ChargeCode chargeCode) {
+        this.chargeCode = chargeCode;
         this.companyId = companyId;
         this.tripId = tripId;
         this.description = description;
@@ -121,5 +135,10 @@ public class CarrierInvoiceLine {
 
     public BigDecimal lineAmount() {
         return lineAmount;
+    }
+
+    /** The charge this line bills; a V46 line, which has none, reads as {@link ChargeCode#FREIGHT}. */
+    public ChargeCode chargeCode() {
+        return ChargeCode.orFreight(chargeCode);
     }
 }
