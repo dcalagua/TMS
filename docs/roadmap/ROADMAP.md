@@ -26,8 +26,8 @@ Hay un documento hermano en el EWM (`WMS-by-EBIM/docs/ROADMAP.md`). La §7
   producción**.
 - **Para quien lo opera (Gyanina):** la carga anidable ya se ve en pantalla («Ocupa»);
   falta poder corregir la altura de referencia sin un desarrollador.
-- **Para quien lo construye (TMS):** QAS está desplegado pero **nadie escribió qué
-  versión de Flyway tiene** (QAS-H1), y hay tres decisiones (D-01, D-04, D-06) que
+- **Para quien lo construye (TMS):** QAS está desplegado y en **V69** (observado el
+  2026-10-19; falta escribir el acta, QAS-H1), y hay tres decisiones (D-01, D-04, D-06) que
   frenan cerrar el ciclo 2.
 
 ---
@@ -99,7 +99,7 @@ la suite: `SUPPORTED` · `LIMITED` · `EXTERNAL_DEPENDENCY` · `NOT_SUPPORTED`.
 
 | Ambiente | Estado | Evidencia |
 |---|---|---|
-| QAS | **Desplegado** (backend en Render, front en Amplify) **[Edu 2026-10-18]**; rama `qas` al día con `dev`. **Versión de Flyway no observada en ningún documento** (QAS-H1) | `docs/environments/QAS.md`; `TMS_QAS_RUNTIME_CERTIFICATION.md` §QAS-H1 |
+| QAS | **Desplegado** (backend en Render, front en Amplify) **[Edu 2026-10-18]**; rama `qas` al día con `dev`. Flyway **observado en V69** el 2026-10-19 00:55 UTC, backend `e88989d` UP (perfil `prod`); queda por escribir el acta en `QAS.md` (QAS-H1) | `docs/environments/QAS.md`; `TMS_QAS_RUNTIME_CERTIFICATION.md` §QAS-H1 |
 | PRD | **No existe** («será otro proyecto Supabase») | `docs/environments/QAS.md`, `00_ESTADO_ACTUAL.md` §1 |
 | CI | `.github/workflows/ci.yml` escrito; **nunca corrió** | `docs/operations/PROMOTION.md` §7 |
 
@@ -217,7 +217,7 @@ decisión, un tercero o un cliente que lo justifique.
 | # | Dependencia | Lado EWM | Lado TMS | Estado | Decide / aprueba | Fuente |
 |---|---|---|---|---|---|---|
 | X-1 | **Conexión en autoservicio** | Pantalla «Conectar con el TMS»: ping, API key, URL del webhook, secreto de firma | `GET /integration/v1/ping`; credencial `tmsc_…` con 6 scopes; alta del webhook firmado | **EN CURSO** | Edu | [Edu 2026-10-18]; EWM:`docs/integrations/TMS_CONNECTOR_V1.md` §2.2; TMS:`docs/integrations/INBOUND_API_V1.md`, TMS:`docs/demo/PLAPASA_TMS_RUNBOOK.md` §6–§7 |
-| X-2 | **Orden de despliegue** | V54 → V58 en orden, después de que el TMS esté arriba | V59–V69 primero; Flyway observado en 69 | Pendiente (EWM base en V53; TMS QAS sin versión observada, QAS-H1) | Dennis | EWM:`docs/tms-sync/DESPLIEGUE.md` §2–§4; TMS:`docs/environments/QAS.md` |
+| X-2 | **Orden de despliegue** | V54 → V58 en orden, después de que el TMS esté arriba | V59–V69 primero; Flyway observado en 69 | **Hecho** 2026-10-18/19: EWM base en V58 (Flyway; V54–V55 el 17-10, V56–V58 el 18-10) · TMS QAS observado en V69 (`e88989d`, 19-10 00:55 UTC) | Dennis | EWM:`docs/tms-sync/DESPLIEGUE.md` §2–§4; TMS:`docs/environments/QAS.md` |
 | X-3 | **Perfil físico apilable/anidable** | Dueño del dato (V56, interfaz `TMS_MATP`) | Lo usa para la geometría de carga (ADR-022) | Hecho; **incrementos de anidado a medir en planta** | PLAPASA (negocio) | EWM:`docs/tms-sync/DESIGN.md` §2; TMS:`docs/roadmap/2026-10-enterprise/02_APILABLES_ANIDABLES.md` §2 |
 | X-4 | **Geometría por pedido en el plan** (`orders[].geometry`) | `loadingMeters` hoy llega vacío | No se emite; falta decidir altura de referencia, re-apilado por vehículo o ambos | Decisión de contrato pendiente | TMS Dev + WMS | TMS:`docs/roadmap/2026-10-enterprise/DECISIONS_LOG.md` (l.811) |
 | X-5 | **Citas de muelle unificadas y ETA (S-5)** | Dueño de la agenda de sus puertas (V39/V45) | Solicita la cita de recogida; emite `TRUCK_ETA_UPDATED` | **Propuesta**; nada implementado | Dennis (D-04 del TMS) | TMS:`docs/architecture/ADR-025-warehouse-sync-v1-1.md` §7; EWM:`docs/tms-sync/DESIGN.md` §5 |
