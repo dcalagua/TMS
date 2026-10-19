@@ -2,7 +2,7 @@ package com.ebim.tms.rates.domain;
 
 /**
  * What a measured {@link RateComponent}'s quantity is counted in. Mirrors
- * {@code ck_trip_cost_component_unit} (migration V30).
+ * {@code ck_trip_cost_component_unit} (migrations V30, V39 and V63).
  *
  * <p>Stored on the line rather than inferred from the component by whoever renders it: an estimate
  * printed for a carrier has to say "1 250 KG x 0.0850" without the reader having to know what the
@@ -13,6 +13,12 @@ public enum CostUnit {
     KG,
     M3,
     PALLET,
+    /**
+     * A metre of deck length (V63, ADR-022 section 8): the floor the trip's stacks cover divided by
+     * the vehicle's load width and floor fill factor. Never stored as a figure of its own - it is
+     * derived at estimation time from the ledger and the trip's snapshot.
+     */
+    LOADING_METER,
     /** A drop after the first (V39). See {@code RateComponent.STOP_OFF} for why the first is free. */
     STOP,
     /** An hour of detention (V39). */

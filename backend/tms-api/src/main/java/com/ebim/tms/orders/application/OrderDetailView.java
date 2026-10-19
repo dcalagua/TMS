@@ -4,7 +4,11 @@ import com.ebim.tms.orders.domain.OrderPriority;
 import com.ebim.tms.orders.domain.OrderStatus;
 import com.ebim.tms.orders.domain.TotalsSource;
 import com.ebim.tms.orders.domain.TransportOrder;
+import com.ebim.tms.orders.domain.PhysicalSource;
 import com.ebim.tms.orders.domain.TransportOrderLine;
+import com.ebim.tms.shared.geometry.GeometryStatus;
+import com.ebim.tms.shared.geometry.PhysicalBlock;
+import com.ebim.tms.shared.geometry.StackMode;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderFulfillmentStatus;
 import java.math.BigDecimal;
@@ -63,7 +67,37 @@ public record OrderDetailView(
         BigDecimal allocatedPallets,
         BigDecimal pendingWeightKg,
         BigDecimal pendingVolumeM3,
-        BigDecimal pendingPallets) {
+        BigDecimal pendingPallets,
+        /**
+         * Load geometry (V62, ADR-022 section 4): what capacity counts as the order's volume, the
+         * floor its stacks cover, the tallest stack, the lines that could not be measured (counted,
+         * never estimated) and the height {@code H} the lines were stacked against.
+         */
+        OrderGeometryView geometry) {
+
+    /** The order's geometry as the order form shows it ("Ocupa: N pilas · m3 efectivos · m2 · alto"). */
+    public record OrderGeometryView(
+            BigDecimal planningVolumeM3,
+            BigDecimal floorAreaM2,
+            BigDecimal maxStackHeightM,
+            BigDecimal maxUnitHeightM,
+            int stacks,
+            int unmeasuredLines,
+            BigDecimal referenceHeightM,
+            BigDecimal allocatedFloorAreaM2,
+            BigDecimal pendingFloorAreaM2) {
+
+        static OrderGeometryView from(TransportOrder order) {
+            int stacks = order.lines().stream()
+                    .map(TransportOrderLine::stacks)
+                    .filter(java.util.Objects::nonNull)
+                    .mapToInt(Integer::intValue)
+                    .sum();
+            return new OrderGeometryView(order.planningVolumeM3(), order.floorAreaM2(), order.maxStackHeightM(),
+                    order.maxUnitHeightM(), stacks, order.geometryUnmeasuredLines(), order.geometryReferenceHeightM(),
+                    order.allocated().floorAreaM2(), order.allocation().pending().floorAreaM2());
+        }
+    }
 
     /**
      * There is deliberately no overload that defaults {@code fulfillmentStatus}. Every caller has
@@ -85,7 +119,7 @@ public record OrderDetailView(
                 lines, order.version(), order.createdAt(), order.updatedAt(),
                 order.allocated().weightKg(), order.allocated().volumeM3(), order.allocated().pallets(),
                 order.allocation().pending().weightKg(), order.allocation().pending().volumeM3(),
-                order.allocation().pending().pallets());
+                order.allocation().pending().pallets(), OrderGeometryView.from(order));
     }
 
     public record OrderLineView(
@@ -99,12 +133,39 @@ public record OrderDetailView(
             BigDecimal unitVolumeM3,
             BigDecimal lineWeightKg,
             BigDecimal lineVolumeM3,
-            BigDecimal palletQuantity) {
+            BigDecimal palletQuantity,
+            BigDecimal lengthM,
+            BigDecimal widthM,
+            BigDecimal heightM,
+            StackMode stackMode,
+            Integer stackMaxQuantity,
+            BigDecimal nestIncrementM,
+            BigDecimal maxTopLoadKg,
+            Boolean orientationLocked,
+            PhysicalSource physicalSource,
+            Long materialProfileVersion,
+            GeometryStatus geometryStatus,
+            String geometryReason,
+            Integer stacks,
+            BigDecimal stackHeightM,
+            BigDecimal effectiveVolumeM3,
+            BigDecimal floorAreaM2) {
 
+        /**
+         * The physical snapshot (V59) travels with the line, so an editor that sends the line back
+         * can keep it, and a reader can tell an ERP block from a profile copy.
+         */
         static OrderLineView from(TransportOrderLine line) {
+            PhysicalBlock block = line.physicalBlock();
             return new OrderLineView(line.id(), line.lineNumber(), line.materialCode(), line.materialDescription(),
                     line.quantity(), line.uom(), line.unitWeightKg(), line.unitVolumeM3(), line.lineWeightKg(),
-                    line.lineVolumeM3(), line.palletQuantity());
+                    line.lineVolumeM3(), line.palletQuantity(),
+                    block == null ? null : block.lengthM(), block == null ? null : block.widthM(),
+                    block == null ? null : block.heightM(), block == null ? null : block.stackMode(),
+                    block == null ? null : block.stackMaxQuantity(), block == null ? null : block.nestIncrementM(),
+                    block == null ? null : block.maxTopLoadKg(), block == null ? null : block.orientationLocked(),
+                    line.physicalSource(), line.materialProfileVersion(), line.geometryStatus(), line.geometryReason(),
+                    line.stacks(), line.stackHeightM(), line.effectiveVolumeM3(), line.floorAreaM2());
         }
     }
 }

@@ -3,6 +3,7 @@ package com.ebim.tms.settlement.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -222,6 +223,8 @@ class SettlementApiIntegrationTest {
                 : "{\"tripId\":\"" + tripId + "\",\"description\":\"Linehaul\",\"lineAmount\":" + lineAmount + "}";
         return "{\"carrierId\":\"" + carrierId + "\",\"invoiceNumber\":\"" + number
                 + "\",\"invoiceDate\":\"2026-04-05\",\"currency\":\"PEN\",\"totalAmount\":" + total
+                // V66: a PEN document states its breakdown; VAT-free here so the figures stay as before.
+                + ",\"subtotalAmount\":" + total + ",\"taxRate\":0,\"taxAmount\":0"
                 + ",\"lines\":[" + line + "]}";
     }
 
@@ -682,6 +685,298 @@ class SettlementApiIntegrationTest {
         }
     }
 
+    // --- phase 50 · V64 · ADR-024 part 1 ---------------------------------------------
+
+    private static final String TOLERANCES = "/api/v1/settlement/tolerance-policies";
+
+    /** An invoice whose lines are (tripId, chargeCode, amount) triples; a null code is omitted. */
+    private String codedInvoice(String number, String total, String... lines) {
+        StringBuilder rendered = new StringBuilder();
+        for (int index = 0; index < lines.length; index += 3) {
+            if (index > 0) {
+                rendered.append(',');
+            }
+            rendered.append("{\"tripId\":\"").append(lines[index]).append("\",\"description\":\"Line ")
+                    .append(index / 3 + 1).append('"');
+            if (lines[index + 1] != null) {
+                rendered.append(",\"chargeCode\":\"").append(lines[index + 1]).append('"');
+            }
+            rendered.append(",\"lineAmount\":").append(lines[index + 2]).append('}');
+        }
+        return "{\"carrierId\":\"" + carrierA + "\",\"invoiceNumber\":\"" + number
+                + "\",\"invoiceDate\":\"2026-04-05\",\"currency\":\"PEN\",\"totalAmount\":" + total
+                // V66: a PEN document states its breakdown; VAT-free here so the figures stay as before.
+                + ",\"subtotalAmount\":" + total + ",\"taxRate\":0,\"taxAmount\":0"
+                + ",\"lines\":[" + rendered + "]}";
+    }
+
+    /** The estimate of {@code tripA} broken down as BASE 1450 - what a rate card with only a base produces. */
+    private void baseComponentFor(String tripId) {
+        execute("INSERT INTO tms.trip_cost_component (trip_cost_id, company_id, component, status, amount)"
+                + " SELECT id, company_id, 'BASE', 'APPLIED', estimated_amount FROM tms.trip_cost"
+                + " WHERE trip_id = '" + tripId + "'");
+    }
+
+    private String matchAndRead(String id) throws Exception {
+        return mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/match"), COMPANY_A))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+    }
+
+    @Nested
+    @DisplayName("charge codes, match basis and per-line discrepancies (V64)")
+    class ChargeCodes {
+
+        @Test
+        @DisplayName("freight and a toll of one shipment are one bill: summed, no duplicate")
+        void twoChargesOfOneShipmentMatch() throws Exception {
+            tolerance(COMPANY_A, "3");
+            String id = receive(codedInvoice(nextNumber("CC"), "1480.00",
+                    tripA, "FREIGHT", "1450.00", tripA, "TOLL", "30.00"), COMPANY_A);
+
+            String body = matchAndRead(id);
+            assertThat((String) JsonPath.read(body, "$.match.status")).isEqualTo("MATCHED");
+            assertThat((String) JsonPath.read(body, "$.match.expectedBasis")).isEqualTo("ESTIMATED");
+            assertThat((java.util.List<?>) JsonPath.read(body, "$.discrepancies")).isEmpty();
+            assertThat((String) JsonPath.read(body, "$.lines[1].chargeCode")).isEqualTo("TOLL");
+            assertThat(count("SELECT count(*) FROM tms.carrier_invoice_line WHERE carrier_invoice_id = '" + id
+                    + "' AND charge_code = 'TOLL'")).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("a line without a code is stored null and read as FREIGHT")
+        void uncodedLineIsFreight() throws Exception {
+            String id = receive(codedInvoice(nextNumber("NC"), "1450.00", tripA, null, "1450.00"), COMPANY_A);
+
+            mockMvc.perform(asAdmin(get(INVOICES + "/" + id), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.lines[0].chargeCode").value("FREIGHT"));
+            assertThat(count("SELECT count(*) FROM tms.carrier_invoice_line WHERE carrier_invoice_id = '" + id
+                    + "' AND charge_code IS NULL")).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("out of tolerance: the difference is raised on the line that makes it, with invoice_line_id")
+        void discrepancyCarriesItsLine() throws Exception {
+            tolerance(COMPANY_A, "3");
+            baseComponentFor(tripA);
+            // BASE as estimated; a toll the estimate never charged.
+            String id = receive(codedInvoice(nextNumber("LN"), "1750.00",
+                    tripA, "BASE", "1450.00", tripA, "TOLL", "300.00"), COMPANY_A);
+
+            String body = matchAndRead(id);
+            String tollLine = JsonPath.read(body, "$.lines[1].id");
+            assertThat((String) JsonPath.read(body, "$.status")).isEqualTo("DISCREPANCY");
+            assertThat(count("SELECT count(*) FROM tms.freight_discrepancy WHERE carrier_invoice_id = '" + id
+                    + "' AND type = 'LINE_AMOUNT' AND invoice_line_id = '" + tollLine + "'")).isEqualTo(1);
+            // The BASE line matched its component and opened nothing.
+            assertThat(count("SELECT count(*) FROM tms.freight_discrepancy WHERE carrier_invoice_id = '" + id
+                    + "' AND type = 'LINE_AMOUNT'")).isEqualTo(1);
+            assertThat(((Number) JsonPath.read(body, "$.lines[1].expectedAmount")).doubleValue()).isZero();
+            assertThat((String) JsonPath.read(body, "$.lines[1].expectedBasis")).isEqualTo("ESTIMATED");
+            assertThat((java.util.List<String>) JsonPath.read(body, "$.discrepancies[*].invoiceLineId"))
+                    .contains(tollLine);
+        }
+
+        @Test
+        @DisplayName("within tolerance the per-line comparison is shown and opens nothing")
+        void withinToleranceShowsButOpensNothing() throws Exception {
+            tolerance(COMPANY_A, "3");
+            baseComponentFor(tripA);
+            String id = receive(codedInvoice(nextNumber("WT"), "1470.00",
+                    tripA, "BASE", "1450.00", tripA, "TOLL", "20.00"), COMPANY_A);
+
+            String body = matchAndRead(id);
+            assertThat((String) JsonPath.read(body, "$.match.status")).isEqualTo("MATCHED");
+            assertThat(((Number) JsonPath.read(body, "$.lines[1].differenceAmount")).doubleValue()).isEqualTo(20.0);
+            assertThat(count("SELECT count(*) FROM tms.freight_discrepancy WHERE carrier_invoice_id = '" + id
+                    + "'")).isZero();
+        }
+
+        @Test
+        @DisplayName("a closed cost is compared against its actual, and the match says ACTUAL")
+        void closedCostIsTheBasis() throws Exception {
+            execute("UPDATE tms.trip_cost SET actual_amount = 1600.00, actual_recorded_at = now(),"
+                    + " closed_at = now(), closed_by = (SELECT id FROM tms.app_user"
+                    + " WHERE email = 'stl.admin@example.invalid') WHERE trip_id = '" + tripA + "'");
+            String id = receive(codedInvoice(nextNumber("AC"), "1600.00", tripA, "FREIGHT", "1600.00"), COMPANY_A);
+
+            String body = matchAndRead(id);
+            assertThat((String) JsonPath.read(body, "$.match.status")).isEqualTo("MATCHED");
+            assertThat((String) JsonPath.read(body, "$.match.expectedBasis")).isEqualTo("ACTUAL");
+            assertThat(count("SELECT count(*) FROM tms.freight_match WHERE carrier_invoice_id = '" + id
+                    + "' AND expected_basis = 'ACTUAL' AND expected_amount = 1600.00")).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("across invoices a duplicate is the same shipment AND charge")
+        void duplicateAcrossInvoicesIsPerCharge() throws Exception {
+            String first = receive(codedInvoice(nextNumber("D1"), "1450.00", tripA, "FREIGHT", "1450.00"), COMPANY_A);
+            String toll = receive(codedInvoice(nextNumber("D2"), "30.00", tripA, "TOLL", "30.00"), COMPANY_A);
+            String again = receive(codedInvoice(nextNumber("D3"), "1450.00", tripA, "FREIGHT", "1450.00"), COMPANY_A);
+
+            matchAndRead(toll);
+            matchAndRead(again);
+            assertThat(count("SELECT count(*) FROM tms.freight_discrepancy WHERE carrier_invoice_id = '" + toll
+                    + "' AND type = 'DUPLICATE_INVOICE'")).isZero();
+            assertThat(count("SELECT count(*) FROM tms.freight_discrepancy WHERE carrier_invoice_id = '" + again
+                    + "' AND type = 'DUPLICATE_INVOICE' AND invoice_line_id IS NOT NULL")).isEqualTo(1);
+            assertThat(first).isNotBlank();
+        }
+
+        @Test
+        @DisplayName("an unknown charge code is refused before it reaches the database")
+        void unknownChargeCodeIsRefused() throws Exception {
+            mockMvc.perform(asAdmin(post(INVOICES), COMPANY_A).contentType(MediaType.APPLICATION_JSON)
+                            .content(codedInvoice(nextNumber("UK"), "10.00", tripA, "BRIBE", "10.00")))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Nested
+    @DisplayName("CSV export (V64)")
+    class CsvExport {
+
+        @Test
+        @DisplayName("an approved invoice exports as CSV; a repeat in JSON returns the CSV it already made")
+        void csvExportIsIdempotentInItsFirstFormat() throws Exception {
+            tolerance(COMPANY_A, "3");
+            String id = receive(codedInvoice(nextNumber("CSV"), "1480.00",
+                    tripA, "FREIGHT", "1450.00", tripA, "TOLL", "30.00"), COMPANY_A);
+            matchAndRead(id);
+            mockMvc.perform(asChecker(post(INVOICES + "/" + id + "/approve"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(status().isOk());
+
+            String body = mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/export").param("format", "CSV"),
+                            COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.format").value("CSV"))
+                    .andExpect(jsonPath("$.exportReference").value("TMS-" + id))
+                    .andReturn().getResponse().getContentAsString();
+            String payload = JsonPath.read(body, "$.payload");
+            assertThat(payload).startsWith("reference,invoiceId,").contains(",TOLL,").contains("\r\n");
+            assertThat(payload.split("\r\n")).hasSize(3);
+
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/export").param("format", "JSON"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.format").value("CSV"))
+                    .andExpect(jsonPath("$.alreadyExported").value(true));
+        }
+    }
+
+    /**
+     * The tolerance endpoints, in company B so the 3 % company policy every other test in this class
+     * leans on is never touched.
+     */
+    @Nested
+    @DisplayName("tolerance policies (V64)")
+    class TolerancePolicies {
+
+        private String create(String body) throws Exception {
+            String response = mockMvc.perform(asAdmin(post(TOLERANCES), COMPANY_B)
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isCreated())
+                    .andReturn().getResponse().getContentAsString();
+            return JsonPath.read(response, "$.id");
+        }
+
+        @Test
+        @DisplayName("create, one active per scope, change, retire - each audited")
+        void lifecycle() throws Exception {
+            execute("UPDATE tms.tolerance_policy SET active = false WHERE company_id = '" + COMPANY_B + "'");
+            String company = create("{\"absoluteAmount\":10,\"currency\":\"pen\",\"percentage\":2}");
+
+            mockMvc.perform(asAdmin(post(TOLERANCES), COMPANY_B).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"percentage\":5}"))
+                    .andExpect(status().isConflict());
+
+            String carrier = create("{\"carrierId\":\"" + carrierB + "\",\"percentage\":4}");
+
+            mockMvc.perform(asAdmin(put(TOLERANCES + "/" + company), COMPANY_B)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"percentage\":2.5}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.percentage").value(2.5))
+                    .andExpect(jsonPath("$.absoluteAmount").doesNotExist());
+
+            mockMvc.perform(asAdmin(post(TOLERANCES + "/" + carrier + "/deactivate"), COMPANY_B))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.active").value(false));
+
+            mockMvc.perform(asAdmin(get(TOLERANCES), COMPANY_B))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].carrierId").doesNotExist());
+            mockMvc.perform(asAdmin(get(TOLERANCES).param("includeInactive", "true"), COMPANY_B))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.id == '" + carrier + "')].carrierName").value("CARR-B SA"));
+
+            assertThat(count("SELECT count(*) FROM tms.audit_event WHERE aggregate_type = 'TOLERANCE_POLICY'"
+                    + " AND action = 'TOLERANCE_POLICY_CHANGED' AND aggregate_id IN ('" + company + "', '"
+                    + carrier + "')")).isEqualTo(4);
+            assertThat(count("SELECT count(*) FROM tms.tolerance_policy WHERE id = '" + company
+                    + "' AND currency IS NULL AND absolute_amount IS NULL")).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("an absolute bound needs its currency, and some bound is needed")
+        void boundsAreValidated() throws Exception {
+            mockMvc.perform(asAdmin(post(TOLERANCES), COMPANY_B).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"absoluteAmount\":10}"))
+                    .andExpect(status().isBadRequest());
+            mockMvc.perform(asAdmin(post(TOLERANCES), COMPANY_B).contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isBadRequest());
+            mockMvc.perform(asAdmin(post(TOLERANCES), COMPANY_B).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"percentage\":101}"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("reading needs settlement.invoice:read; writing needs settlement.tolerance:manage")
+        void permissions() throws Exception {
+            mockMvc.perform(asViewer(get(TOLERANCES), COMPANY_A)).andExpect(status().isOk());
+            mockMvc.perform(asViewer(post(TOLERANCES), COMPANY_A).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"percentage\":50}"))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(asPlanner(post(TOLERANCES), COMPANY_A).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"percentage\":50}"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("another company's policy is not found, and its carrier cannot be named")
+        void tenantIsolation() throws Exception {
+            String foreign = idOf("INSERT INTO tms.tolerance_policy (company_id, carrier_id, percentage, active)"
+                    + " VALUES ('" + COMPANY_B + "', '" + carrierB + "', 1, false) RETURNING id");
+            mockMvc.perform(asAdmin(put(TOLERANCES + "/" + foreign), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"percentage\":9}"))
+                    .andExpect(status().isNotFound());
+            mockMvc.perform(asAdmin(post(TOLERANCES), COMPANY_A).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"carrierId\":\"" + carrierB + "\",\"percentage\":9}"))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Nested
+    @DisplayName("settlement KPIs (V64)")
+    class SettlementKpis {
+
+        @Test
+        @DisplayName("the KPI report carries the settlement section for a caller who may read invoices")
+        void reportHasSettlement() throws Exception {
+            String id = receive(codedInvoice(nextNumber("KPI"), "1450.00", tripA, "FREIGHT", "1450.00"), COMPANY_A);
+            matchAndRead(id);
+
+            mockMvc.perform(asAdmin(get("/api/v1/reporting/kpis").param("from", "2026-04-01")
+                            .param("to", "2026-04-30"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.settlement.invoicesReceived").isNumber())
+                    .andExpect(jsonPath("$.settlement.byCarrier[0].currency").value("PEN"))
+                    .andExpect(jsonPath("$.settlement.byCarrier[0].carrierName").value("CARR-A SA"));
+        }
+    }
+
     // --- plumbing ------------------------------------------------------------------
 
     private MockHttpServletRequestBuilder asAdmin(MockHttpServletRequestBuilder builder, UUID companyId) {
@@ -723,6 +1018,269 @@ class SettlementApiIntegrationTest {
             return rows.getLong(1);
         } catch (SQLException failed) {
             throw new IllegalStateException("could not read the settlement fixture", failed);
+        }
+    }
+
+    // --- phase 60 · V66 · ADR-024 part 2 ---------------------------------------------
+
+    /** carrierA's RUC, made valid for the fiscal tests (the fixture's is a hash, not a check digit). */
+    private static final String CARRIER_RUC = "20100070970";
+
+    /**
+     * A document with its fiscal part: {@code (kind, documentNumber, taxId, subtotal, taxRate, tax,
+     * total, referencedId)} and the lines as JSON objects.
+     */
+    private String fiscalBody(String kind, String documentNumber, String taxId, String subtotal,
+            String taxRate, String tax, String total, String referencedId, String... lines) {
+        StringBuilder body = new StringBuilder("{\"carrierId\":\"" + carrierA + "\",\"invoiceDate\":\"2026-10-15\""
+                + ",\"currency\":\"PEN\",\"totalAmount\":" + total);
+        if (kind != null) {
+            body.append(",\"documentKind\":\"").append(kind).append('"');
+        }
+        if (documentNumber != null) {
+            body.append(",\"documentNumber\":\"").append(documentNumber).append("\",\"issuerTaxId\":\"")
+                    .append(taxId).append('"');
+        } else {
+            body.append(",\"invoiceNumber\":\"").append(nextNumber("FIS")).append('"');
+        }
+        if (subtotal != null) {
+            body.append(",\"subtotalAmount\":").append(subtotal).append(",\"taxRate\":").append(taxRate)
+                    .append(",\"taxAmount\":").append(tax);
+        }
+        if (referencedId != null) {
+            body.append(",\"referencedInvoiceId\":\"").append(referencedId).append('"');
+        }
+        return body.append(",\"lines\":[").append(String.join(",", lines)).append("]}").toString();
+    }
+
+    private String freightLine(String amount) {
+        return "{\"tripId\":\"" + tripA + "\",\"description\":\"Flete\",\"chargeCode\":\"FREIGHT\",\"lineAmount\":"
+                + amount + "}";
+    }
+
+    private String postInvoice(String body) throws Exception {
+        return mockMvc.perform(asAdmin(post(INVOICES), COMPANY_A).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andReturn().getResponse().getContentAsString();
+    }
+
+    private int postStatus(String body) throws Exception {
+        return mockMvc.perform(asAdmin(post(INVOICES), COMPANY_A).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andReturn().getResponse().getStatus();
+    }
+
+    private void approveByChecker(String id) throws Exception {
+        mockMvc.perform(asChecker(post(INVOICES + "/" + id + "/approve"), COMPANY_A)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("APPROVED"));
+    }
+
+    /** A factura F001 for tripA: subtotal 1450 (the estimate) + IGV 18 % = 1711.00. */
+    private String approvedCpeInvoice() throws Exception {
+        String id = JsonPath.read(postInvoice(fiscalBody(null, "F001-" + SEQUENCE.incrementAndGet(),
+                CARRIER_RUC, "1450.00", "18.00", "261.00", "1711.00", null, freightLine("1450.00"))), "$.id");
+        mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/match"), COMPANY_A))
+                .andExpect(jsonPath("$.status").value("MATCHED"));
+        approveByChecker(id);
+        return id;
+    }
+
+    @Nested
+    @DisplayName("Peruvian taxes, fiscal documents, notes and penalties (V66, ADR-027)")
+    class PeruvianTaxes {
+
+        @BeforeEach
+        void validCarrierRuc() {
+            execute("UPDATE tms.carrier SET tax_id_type = 'RUC', tax_id_value = '" + CARRIER_RUC + "' WHERE id = '"
+                    + carrierA + "'");
+        }
+
+        @Test
+        @DisplayName("a Peruvian factura is numbered series-correlative, computes its detraction and is compared by subtotal")
+        void cpeInvoice() throws Exception {
+            int correlative = SEQUENCE.incrementAndGet();
+            String body = fiscalBody(null, "F001-000" + correlative, CARRIER_RUC, "1450.00", "18.00", "261.00",
+                    "1711.00", null, freightLine("1450.00"));
+            String response = mockMvc.perform(asAdmin(post(INVOICES), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.invoiceNumber").value("F001-" + correlative))
+                    .andExpect(jsonPath("$.fiscal.fiscalCountry").value("PE"))
+                    .andExpect(jsonPath("$.fiscal.vatLabel").value("IGV"))
+                    .andExpect(jsonPath("$.fiscal.documentKind").value("INVOICE"))
+                    .andExpect(jsonPath("$.fiscal.fiscalDocumentCode").value("01"))
+                    .andExpect(jsonPath("$.fiscal.documentNumber").value("F001-" + correlative))
+                    .andExpect(jsonPath("$.fiscal.subtotalAmount").value(1450.00))
+                    // 1711.00 x 4 % = 68.44, deposited in whole soles: 68. No retention beside it.
+                    .andExpect(jsonPath("$.fiscal.withholdings.length()").value(1))
+                    .andExpect(jsonPath("$.fiscal.withholdings[0].kind").value("PE_DETRACTION"))
+                    .andExpect(jsonPath("$.fiscal.withholdings[0].code").value("027"))
+                    .andExpect(jsonPath("$.fiscal.withholdings[0].amount").value(68.00))
+                    .andExpect(jsonPath("$.fiscal.withholdingTotalAmount").value(68.00))
+                    // Never "valid": nobody asked the tax authority.
+                    .andExpect(jsonPath("$.fiscal.electronicValidation").value("EXTERNAL_DEPENDENCY"))
+                    .andReturn().getResponse().getContentAsString();
+            String id = JsonPath.read(response, "$.id");
+
+            // The IGV is fiscal credit: the subtotal is what the shipment's 1450 estimate is compared with.
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/match"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("MATCHED"))
+                    .andExpect(jsonPath("$.match.invoicedAmount").value(1450.00))
+                    .andExpect(jsonPath("$.match.differenceAmount").value(0.00));
+
+            // Padding the correlative does not make another document.
+            assertThat(postStatus(body)).isEqualTo(409);
+        }
+
+        @Test
+        @DisplayName("the fiscal rules resolve to the deployment's defaults for a company that set none")
+        void fiscalSettings() throws Exception {
+            mockMvc.perform(asAdmin(get("/api/v1/settlement/fiscal-settings"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.regime").value("PE"))
+                    .andExpect(jsonPath("$.fiscalCurrency").value("PEN"))
+                    .andExpect(jsonPath("$.vatLabel").value("IGV"))
+                    .andExpect(jsonPath("$.vatRate").value(18.00))
+                    .andExpect(jsonPath("$.documentKinds[1].code").value("07"))
+                    .andExpect(jsonPath("$.taxId.rule").value("PE_RUC"))
+                    .andExpect(jsonPath("$.withholdings[0].kind").value("PE_DETRACTION"))
+                    .andExpect(jsonPath("$.withholdings[0].code").value("027"))
+                    .andExpect(jsonPath("$.withholdings[0].rate").value(4.00))
+                    .andExpect(jsonPath("$.withholdings[0].thresholdAmount").value(400.00))
+                    .andExpect(jsonPath("$.withholdings[0].strictlyAboveThreshold").value(true))
+                    .andExpect(jsonPath("$.withholdings[1].kind").value("PE_RETENTION"))
+                    .andExpect(jsonPath("$.withholdings[1].enabled").value(false));
+        }
+
+        @Test
+        @DisplayName("a wrong check digit, another carrier's RUC, a missing or broken breakdown are refused")
+        void refusals() throws Exception {
+            String series = String.valueOf(SEQUENCE.incrementAndGet());
+            assertThat(postStatus(fiscalBody(null, "F001-" + series, "20100070971", "1450.00", "18.00", "261.00",
+                    "1711.00", null, freightLine("1450.00")))).isEqualTo(400);
+
+            mockMvc.perform(asAdmin(post(INVOICES), COMPANY_A).contentType(MediaType.APPLICATION_JSON)
+                            .content(fiscalBody(null, "F001-" + series, "20131312955", "1450.00", "18.00", "261.00",
+                                    "1711.00", null, freightLine("1450.00"))))
+                    .andExpect(status().isUnprocessableEntity())
+                    .andExpect(jsonPath("$.type").value(org.hamcrest.Matchers.endsWith("issuer-tax-id-mismatch")));
+
+            // PEN without breakdown, and a breakdown two cents off.
+            assertThat(postStatus(fiscalBody(null, null, null, null, null, null, "1711.00", null,
+                    freightLine("1450.00")))).isEqualTo(400);
+            assertThat(postStatus(fiscalBody(null, null, null, "1450.00", "18.00", "261.00", "1711.02", null,
+                    freightLine("1450.00")))).isEqualTo(400);
+            // An IGV rate the Peruvian regime does not allow (18 or 0 by default).
+            assertThat(postStatus(fiscalBody(null, null, null, "1450.00", "10.00", "145.00", "1595.00", null,
+                    freightLine("1450.00")))).isEqualTo(400);
+            // A Peruvian number in the Ecuadorian format.
+            assertThat(postStatus(fiscalBody(null, "001-001-000000123", CARRIER_RUC, "1450.00", "18.00", "261.00",
+                    "1711.00", null, freightLine("1450.00")))).isEqualTo(400);
+            // ...but one cent of rounding is accepted.
+            assertThat(postStatus(fiscalBody(null, null, null, "1450.00", "18.00", "261.00", "1711.01", null,
+                    freightLine("1450.00")))).isEqualTo(201);
+        }
+
+        @Test
+        @DisplayName("a credit note matches against its invoice, is approved and reduces the invoice's net")
+        void creditNote() throws Exception {
+            String invoice = approvedCpeInvoice();
+            String note = JsonPath.read(postInvoice(fiscalBody("CREDIT_NOTE", "FC01-" + SEQUENCE.incrementAndGet(),
+                    CARRIER_RUC, "100.00", "18.00", "18.00", "118.00", invoice, freightLine("100.00"))), "$.id");
+
+            mockMvc.perform(asAdmin(get(INVOICES + "/" + note), COMPANY_A))
+                    .andExpect(jsonPath("$.invoiceNumber").value(org.hamcrest.Matchers.startsWith("07-FC01-")))
+                    .andExpect(jsonPath("$.fiscal.effectiveSign").value(-1))
+                    .andExpect(jsonPath("$.fiscal.referencedInvoiceId").value(invoice))
+                    // A note decides no withholding of its own.
+                    .andExpect(jsonPath("$.fiscal.withholdings.length()").value(0));
+
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + note + "/match"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("MATCHED"))
+                    .andExpect(jsonPath("$.match.expectedAmount").value(1450.00));
+            approveByChecker(note);
+
+            mockMvc.perform(asAdmin(get(INVOICES + "/" + invoice), COMPANY_A))
+                    .andExpect(jsonPath("$.fiscal.netAmount").value(1593.00))
+                    .andExpect(jsonPath("$.fiscal.notes[0].documentKind").value("CREDIT_NOTE"))
+                    .andExpect(jsonPath("$.fiscal.notes[0].fiscalDocumentCode").value("07"))
+                    .andExpect(jsonPath("$.fiscal.notes[0].status").value("APPROVED"));
+
+            // The original is still not a duplicate of its own correction.
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + invoice + "/export"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.payload").value(org.hamcrest.Matchers.containsString("\"netAmount\":\"1593.00\"")));
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + note + "/export"), COMPANY_A))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.payload").value(org.hamcrest.Matchers.containsString("\"effectiveSign\":-1")))
+                    .andExpect(jsonPath("$.payload").value(org.hamcrest.Matchers.containsString("\"fiscalDocumentCode\":\"07\"")));
+        }
+
+        @Test
+        @DisplayName("a credit note above what remains of the invoice is a discrepancy; a note needs its invoice")
+        void creditAboveRemainder() throws Exception {
+            String invoice = approvedCpeInvoice();
+            String note = JsonPath.read(postInvoice(fiscalBody("CREDIT_NOTE", "FC01-" + SEQUENCE.incrementAndGet(),
+                    CARRIER_RUC, "2000.00", "18.00", "360.00", "2360.00", invoice, freightLine("2000.00"))), "$.id");
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + note + "/match"), COMPANY_A))
+                    .andExpect(jsonPath("$.status").value("DISCREPANCY"))
+                    .andExpect(jsonPath("$.discrepancies[0].type").value("TOTAL_AMOUNT"))
+                    .andExpect(jsonPath("$.discrepancies[0].expectedAmount").value(1450.00));
+
+            assertThat(postStatus(fiscalBody("CREDIT_NOTE", null, null, "10.00", "18.00", "1.80", "11.80", null,
+                    freightLine("10.00")))).isEqualTo(400);
+            assertThat(postStatus(fiscalBody(null, null, null, "10.00", "18.00", "1.80", "11.80", invoice,
+                    freightLine("10.00")))).isEqualTo(400);
+        }
+
+        @Test
+        @DisplayName("a debit note adds to the shipment and is compared with its figure")
+        void debitNote() throws Exception {
+            String invoice = approvedCpeInvoice();
+            String note = JsonPath.read(postInvoice(fiscalBody("DEBIT_NOTE", "FD01-" + SEQUENCE.incrementAndGet(),
+                    CARRIER_RUC, "500.00", "18.00", "90.00", "590.00", invoice, freightLine("500.00"))), "$.id");
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + note + "/match"), COMPANY_A))
+                    .andExpect(jsonPath("$.status").value("DISCREPANCY"))
+                    .andExpect(jsonPath("$.discrepancies[0].type").value("LINE_AMOUNT"))
+                    .andExpect(jsonPath("$.discrepancies[0].invoicedAmount").value(1950.00));
+        }
+
+        @Test
+        @DisplayName("a penalty is negative with a reason, and the approver accepts it before approving")
+        void penalty() throws Exception {
+            String penalty = "{\"tripId\":\"" + tripA + "\",\"description\":\"Demora\",\"chargeCode\":\"PENALTY\""
+                    + ",\"lineAmount\":-50.00,\"penaltyReason\":\"Llegó 3 h tarde\",\"penaltyReferenceType\":\"LATE_ARRIVAL\"}";
+            // Positive penalty, negative freight, penalty without reason: all refused.
+            assertThat(postStatus(fiscalBody(null, null, null, "1500.00", "18.00", "270.00", "1770.00", null,
+                    freightLine("1450.00"), penalty.replace("-50.00", "50.00")))).isEqualTo(400);
+            assertThat(postStatus(fiscalBody(null, null, null, "1400.00", "18.00", "252.00", "1652.00", null,
+                    freightLine("-1450.00")))).isEqualTo(400);
+            assertThat(postStatus(fiscalBody(null, null, null, "1400.00", "18.00", "252.00", "1652.00", null,
+                    freightLine("1450.00"), penalty.replace(",\"penaltyReason\":\"Llegó 3 h tarde\"", ""))))
+                    .isEqualTo(400);
+
+            String id = JsonPath.read(postInvoice(fiscalBody(null, null, null, "1400.00", "18.00", "252.00",
+                    "1652.00", null, freightLine("1450.00"), penalty)), "$.id");
+            String matched = mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/match"), COMPANY_A))
+                    .andExpect(jsonPath("$.status").value("DISCREPANCY"))
+                    .andExpect(jsonPath("$.discrepancies.length()").value(1))
+                    .andExpect(jsonPath("$.discrepancies[0].type").value("PENALTY"))
+                    .andExpect(jsonPath("$.lines[1].penaltyReason").value("Llegó 3 h tarde"))
+                    .andReturn().getResponse().getContentAsString();
+            String discrepancy = JsonPath.read(matched, "$.discrepancies[0].id");
+
+            mockMvc.perform(asAdmin(post(INVOICES + "/" + id + "/review"), COMPANY_A)).andExpect(status().isOk());
+            mockMvc.perform(asChecker(post(INVOICES + "/" + id + "/approve"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(status().isConflict());
+            mockMvc.perform(asChecker(post(INVOICES + "/" + id + "/discrepancies/" + discrepancy + "/resolve"), COMPANY_A)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"ACCEPTED\"}"))
+                    .andExpect(status().isOk());
+            assertThat(count("SELECT count(*) FROM tms.audit_event WHERE aggregate_id = '" + id
+                    + "' AND action = 'PENALTY_ACCEPTED'")).isEqualTo(1);
+            approveByChecker(id);
         }
     }
 

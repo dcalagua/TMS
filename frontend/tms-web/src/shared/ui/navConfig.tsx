@@ -13,6 +13,11 @@ import {
   EventRepeatRounded,
   FactCheckRounded,
   RouteRounded,
+  Inventory2Rounded,
+  TuneRounded,
+  AccountBalanceWalletRounded,
+  PaymentsRounded,
+  InsightsRounded,
 } from "@mui/icons-material";
 
 /** Una hoja del menú: una pantalla concreta. */
@@ -28,6 +33,24 @@ export interface NavLeaf {
    * comprobarlo en cada llamada.
    */
   capability?: string;
+  /**
+   * Permiso fino (`modulo.recurso:accion`) que además tiene que tener la empresa activa. Para la
+   * hoja cuyo permiso no está implicado por la capability de su grupo: MASTER_DATA_VIEW se
+   * concede con cualquier lectura de maestros, y eso no basta para abrir los perfiles de material.
+   * Igual que la capability, esconder es solo UX.
+   */
+  permission?: string;
+}
+
+/** ¿Se ofrece esta hoja? Antes de que `/me` responda no se sabe nada y no se ofrece nada que
+ * dependa de un permiso. Compartido por el menú, el buscador y las migas para que no diverjan. */
+export function leafAllowed(
+  leaf: NavLeaf,
+  access: { ready: boolean; hasCapability: (c: string) => boolean; hasPermission: (p: string) => boolean },
+): boolean {
+  if (leaf.capability !== undefined && !(access.ready && access.hasCapability(leaf.capability))) return false;
+  if (leaf.permission !== undefined && !(access.ready && access.hasPermission(leaf.permission))) return false;
+  return true;
 }
 
 export interface NavSection {
@@ -58,6 +81,10 @@ export const ICON_TINTS: Record<string, string> = {
   "/document-deliveries": "#26A69A",
   "/appointments": "#FFA726",
   "/settlement": "#8D6E63",
+  "/settlement/tolerances": "#A1887F",
+  "/settlement/accruals": "#BCAAA4",
+  "/settlement/payables": "#C49A6C",
+  "/settlement/cost-to-serve": "#A1887F",
   "/work-assignments": "#7E57C2",
   "/masters/locations": "#4FC3F7",
   "/masters/origins": "#4DB6AC",
@@ -65,6 +92,7 @@ export const ICON_TINTS: Record<string, string> = {
   "/masters/zones": "#9CCC65",
   "/masters/frequencies": "#26C6DA",
   "/masters/routes": "#FFB74D",
+  "/masters/material-profiles": "#A1887F",
   "/fleet/carriers": "#7986CB",
   "/fleet/vehicle-types": "#B0BEC5",
   "/fleet/vehicles": "#42A5F5",
@@ -135,6 +163,22 @@ export const NAV_SECTIONS: NavSection[] = [
       // planificó. TMS valida y exporta; el ERP paga.
       { to: "/settlement", label: "Auditoría de flete", icon: <ReceiptLongRounded />,
         capability: "SETTLEMENT_VIEW" },
+      // Justo detrás de la auditoría: es la regla con la que ésta decide qué diferencia se acepta.
+      // Leerla pide lo mismo que leer facturas; cambiarla, `settlement.tolerance:manage`.
+      { to: "/settlement/tolerances", label: "Tolerancias", icon: <TuneRounded />,
+        capability: "SETTLEMENT_VIEW" },
+      // La obligación entre el servicio y la factura (V65, ADR-023): nace del viaje ejecutado y la
+      // consume la factura aprobada. Su propio permiso - es contabilidad, no auditoría.
+      { to: "/settlement/accruals", label: "Provisiones", icon: <AccountBalanceWalletRounded />,
+        capability: "ACCRUAL_VIEW" },
+      // Fase 65: lo que sigue a exportar - vencimientos, antigüedad y pagos que informa el ERP. Leer
+      // pide lo mismo que leer facturas; registrar y confirmar un pago, sus propios permisos.
+      { to: "/settlement/payables", label: "Cuentas por pagar", icon: <PaymentsRounded />,
+        capability: "SETTLEMENT_VIEW" },
+      // Fase 70 (ADR-026): el costo de los viajes repartido entre sus pedidos, por cliente, destino
+      // y ruta. Sin margen - no hay tarifa de venta. Su propio permiso de lectura.
+      { to: "/settlement/cost-to-serve", label: "Costo para servir", icon: <InsightsRounded />,
+        capability: "COST_TO_SERVE_VIEW" },
       // Junto a Viajes y no en Maestros: mantener la ficha de un camión y planificar su día son
       // trabajos distintos que hacen personas distintas.
       { to: "/work-assignments", label: "Días de trabajo", icon: <EventNoteRounded />,
@@ -156,6 +200,10 @@ export const NAV_SECTIONS: NavSection[] = [
       { to: "/masters/zones", label: "Zonas", icon: <CropFreeRounded /> },
       { to: "/masters/frequencies", label: "Frecuencias", icon: <CalendarViewWeekRounded /> },
       { to: "/masters/routes", label: "Rutas", icon: <AltRouteRounded /> },
+      // El último: lo mantiene el almacén (EWM) y aquí solo se consulta. Lleva su propio permiso
+      // porque MASTER_DATA_VIEW se concede con cualquier lectura de maestros.
+      { to: "/masters/material-profiles", label: "Perfiles de material", icon: <Inventory2Rounded />,
+        permission: "masterdata.material_profile:read" },
     ],
   },
   {

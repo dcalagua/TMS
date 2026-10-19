@@ -64,10 +64,34 @@ public record OrderView(
         BigDecimal allocatedPallets,
         BigDecimal pendingWeightKg,
         BigDecimal pendingVolumeM3,
-        BigDecimal pendingPallets) {
+        BigDecimal pendingPallets,
+        /**
+         * Load geometry (V62, ADR-022 section 4) for the list's "Ocupa" column - the same figures
+         * {@link OrderDetailView.OrderGeometryView} carries, read from the order header, plus the
+         * stack count summed by the same grouped query that counts the lines (never the lines).
+         */
+        OrderGeometrySummary geometry) {
 
+    /** What the list shows of an order's geometry. {@code stacks} is null when no line was measured. */
+    public record OrderGeometrySummary(
+            BigDecimal planningVolumeM3,
+            BigDecimal floorAreaM2,
+            BigDecimal maxStackHeightM,
+            BigDecimal maxUnitHeightM,
+            Integer stacks,
+            int unmeasuredLines,
+            BigDecimal referenceHeightM) {
+    }
+
+    /** The pre-V62 shape: a line count and no geometry figures beyond the order header. */
     public static OrderView from(TransportOrder order, MasterReference origin, MasterReference destination,
             long lineCount, OrderFulfillmentStatus fulfillmentStatus) {
+        return from(order, origin, destination, lineCount, null, fulfillmentStatus);
+    }
+
+    /** {@code stacks} is the sum of the measured lines' stacks, or null when none was measured. */
+    public static OrderView from(TransportOrder order, MasterReference origin, MasterReference destination,
+            long lineCount, Integer stacks, OrderFulfillmentStatus fulfillmentStatus) {
         return new OrderView(order.id(), order.orderNumber(), order.externalSource(), order.externalReference(),
                 order.originId(), origin == null ? null : origin.code(), origin == null ? null : origin.name(),
                 order.destinationId(), destination == null ? null : destination.code(),
@@ -79,6 +103,9 @@ public record OrderView(
                 (int) lineCount, order.version(), order.createdAt(), order.updatedAt(),
                 order.allocated().weightKg(), order.allocated().volumeM3(), order.allocated().pallets(),
                 order.allocation().pending().weightKg(), order.allocation().pending().volumeM3(),
-                order.allocation().pending().pallets());
+                order.allocation().pending().pallets(),
+                new OrderGeometrySummary(order.planningVolumeM3(), order.floorAreaM2(), order.maxStackHeightM(),
+                        order.maxUnitHeightM(), stacks, order.geometryUnmeasuredLines(),
+                        order.geometryReferenceHeightM()));
     }
 }

@@ -18,11 +18,18 @@ public final class PlatformProvisioningPaths {
     /** Commercial entitlements (ebim.entitlements/v1, V56): additive, with scopes of their own. */
     public static final String TENANT_ENTITLEMENTS = BASE + "/tenants/*/entitlements";
     public static final String ENTITLEMENTS_MANIFEST = BASE + "/entitlements/manifest";
+    /** Operational lifecycle (lifecycle.v1, V58, ADR-021): additive, with scopes of their own. */
+    public static final String TENANT_LIFECYCLE = BASE + "/tenants/*/lifecycle";
 
     /** Whether a request URI belongs to the entitlements contract, whose errors are {@code {error, message}}. */
     public static boolean isEntitlements(String requestUri) {
         return requestUri != null && (requestUri.equals(ENTITLEMENTS_MANIFEST)
                 || (requestUri.startsWith(TENANTS + "/") && requestUri.endsWith("/entitlements")));
+    }
+
+    /** Whether a request URI belongs to the lifecycle contract, whose errors are {@code {error, message}} too. */
+    public static boolean isLifecycle(String requestUri) {
+        return requestUri != null && requestUri.startsWith(TENANTS + "/") && requestUri.endsWith("/lifecycle");
     }
 
     private PlatformProvisioningPaths() {}

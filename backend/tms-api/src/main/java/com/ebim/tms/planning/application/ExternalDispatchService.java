@@ -20,7 +20,9 @@ import com.ebim.tms.planning.infrastructure.TripRepository;
 import com.ebim.tms.planning.infrastructure.WarehouseMilestoneRepository;
 import com.ebim.tms.planning.domain.AssignmentStatus;
 import com.ebim.tms.shared.api.ConflictException;
+import com.ebim.tms.shared.api.ProblemTimes;
 import com.ebim.tms.shared.api.InvalidRequestException;
+import com.ebim.tms.shared.geometry.LoadGeometryCalculator;
 import com.ebim.tms.shared.reference.CarrierLookupPort;
 import com.ebim.tms.shared.reference.DispatchConfirmationCommand;
 import com.ebim.tms.shared.reference.DispatchConfirmationResult;
@@ -40,6 +42,7 @@ import com.ebim.tms.shared.reference.WarehouseMilestoneCommand;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.settings.CompanySettingsPort;
 import com.ebim.tms.shared.settings.DispatchConfirmationMode;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -226,9 +229,10 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
         // (or made ready) cannot be recorded as that plan's departure without inventing a time.
         OffsetDateTime earliest = trip.status() == TripStatus.CONFIRMED ? trip.confirmedAt() : trip.readyAt();
         if (earliest != null && at.isBefore(earliest)) {
-            notes.add(Discrepancy.of(Code.NOT_APPLIED, "The warehouse dispatched at " + at + ", before the shipment "
-                    + "was " + (trip.status() == TripStatus.CONFIRMED ? "confirmed" : "made ready") + " (" + earliest
-                    + ") in TMS. A person must resolve it."));
+            notes.add(Discrepancy.of(Code.NOT_APPLIED,
+                    "The warehouse dispatched at " + ProblemTimes.at(at, scope.zoneId()) + ", before the shipment was "
+                    + (trip.status() == TripStatus.CONFIRMED ? "confirmed" : "made ready")
+                    + " (" + ProblemTimes.at(earliest, scope.zoneId()) + ") in TMS. A person must resolve it."));
             return ExternalDispatchOutcome.UNAPPLIED;
         }
         for (DispatchReadiness.Blocker blocker : readiness.evaluate(scope, trip, at)) {
@@ -250,12 +254,19 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
         Set<UUID> orderIds = active.stream().map(TripOrderAssignment::orderId).collect(Collectors.toSet());
         Map<UUID, PlannableOrder> orders = orderPlanningPort.findAllInCompany(orderIds, scope.companyId());
         Map<UUID, List<OrderLineSnapshot>> lines = orderReferencePort.linesOf(orderIds, scope.companyId());
+        VehicleCapacityReference vehicle = trip.vehicleId() == null ? null
+                : vehicleLookupPort.findAllInCompany(Set.of(trip.vehicleId()), scope.companyId()).get(trip.vehicleId());
+        BigDecimal loadWidth = trip.snapshotLoadWidthM() != null ? trip.snapshotLoadWidthM()
+                : vehicle == null ? null : vehicle.widthM();
+        BigDecimal fillFactor = vehicle == null ? null : vehicle.floorFillFactor();
 
         List<DispatchReconciler.PlannedOrder> planned = active.stream().map(assignment -> {
             PlannableOrder order = orders.get(assignment.orderId());
+            List<OrderLineSnapshot> orderLines = lines.getOrDefault(assignment.orderId(), List.of());
             return new DispatchReconciler.PlannedOrder(assignment.orderId(),
                     order == null ? null : order.externalSource(), order == null ? null : order.externalReference(),
-                    assignment.wholeOrder(), assignment.assigned(), lines.getOrDefault(assignment.orderId(), List.of()));
+                    assignment.wholeOrder(), assignment.assigned(), orderLines,
+                    plannedGeometry(assignment, orderLines, loadWidth, fillFactor));
         }).toList();
 
         Set<String> carrierCodes = new HashSet<>();
@@ -265,9 +276,7 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
             Optional.ofNullable(carrierLookupPort.externalReferencesInCompany(Set.of(trip.carrierId()), scope.companyId())
                     .get(trip.carrierId())).ifPresent(carrierCodes::add);
         }
-        String plate = trip.vehicleId() == null ? null
-                : Optional.ofNullable(vehicleLookupPort.findAllInCompany(Set.of(trip.vehicleId()), scope.companyId())
-                        .get(trip.vehicleId())).map(VehicleCapacityReference::licensePlate).orElse(null);
+        String plate = vehicle == null ? null : vehicle.licensePlate();
         DriverReference driver = trip.driverId() == null ? null
                 : driverLookupPort.findAllInCompany(Set.of(trip.driverId()), scope.companyId()).get(trip.driverId());
         Set<String> warehouseCodes = new HashSet<>();
@@ -291,6 +300,31 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
                 warehouseCodes, previousLoad, planned);
     }
 
+    /**
+     * The footprint TMS planned for one assignment (ADR-022 section 9). Stacks and effective volume
+     * are the sums of the order's lines, and only for a whole order whose every line was measured:
+     * which units of a line a share carries is not recorded, and a partial sum compared with the
+     * warehouse's whole would report a difference that is only a gap. Loading metres come from the
+     * assignment's own floor (whole or share) across the trip's load width.
+     */
+    static DispatchReconciler.PlannedGeometry plannedGeometry(TripOrderAssignment assignment,
+            List<OrderLineSnapshot> lines, BigDecimal loadWidthM, BigDecimal fillFactor) {
+        Integer stacks = null;
+        BigDecimal effectiveVolume = null;
+        boolean everyLineMeasured = !lines.isEmpty()
+                && lines.stream().allMatch(line -> line.stacks() != null && line.effectiveVolumeM3() != null);
+        if (assignment.wholeOrder() && everyLineMeasured) {
+            stacks = lines.stream().mapToInt(OrderLineSnapshot::stacks).sum();
+            effectiveVolume = lines.stream().map(OrderLineSnapshot::effectiveVolumeM3)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+        BigDecimal floor = assignment.assigned().floorAreaM2();
+        BigDecimal loadingMeters = floor.signum() > 0
+                ? LoadGeometryCalculator.loadingMetres(floor, loadWidthM, fillFactor)
+                : null;
+        return new DispatchReconciler.PlannedGeometry(stacks, effectiveVolume, loadingMeters);
+    }
+
     private UUID originOf(CompanyScope scope, Trip trip) {
         return planningRunRepository.findByIdAndCompanyId(trip.planningRunId(), scope.companyId())
                 .map(PlanningRun::originId)
@@ -305,8 +339,8 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
                 command.integrationClientId(), command.idempotencyKey(), command.correlationId(), command.sourceSystem(),
                 command.dispatchReference(), command.revision(), command.transportReference(), command.loadReference(),
                 command.warehouseCode(), command.actualDispatchAt(), command.carrierCode(), command.carrierName(),
-                command.vehicleLicensePlate(), command.vehicleType(), command.driverName(),
-                command.driverDocumentNumber(), command.sealNumber(), command.transportDocumentNumber(),
+                command.vehicleLicensePlate(), command.vehicleType(), command.vehicleTrailerPlate(),
+                command.driverName(), command.driverDocumentNumber(), command.sealNumber(), command.transportDocumentNumber(),
                 command.totalHandlingUnits(), command.totalWeightKg(), command.totalVolumeM3(), outcome, verification,
                 toJson(discrepancies), command.payloadHash(), command.rawBody(), now);
         try {
@@ -330,11 +364,19 @@ public class ExternalDispatchService implements WarehouseExecutionPort {
                 }
                 dispatchOrders.save(new ExternalDispatchOrder(saved.id(), scope.companyId(), match.orderId(),
                         order.externalSource(), order.externalReference(), order.warehouseOrderNumber(),
-                        order.handlingUnits(), order.weightKg(), order.volumeM3(), order.status(), match.result()));
+                        order.handlingUnits(), order.weightKg(), order.volumeM3(), order.status(), match.result(),
+                        order.stacks(), order.effectiveVolumeM3(), order.loadingMeters(), order.geometryReason()));
             }
             dispatchOrders.flush();
             return saved;
         } catch (DataIntegrityViolationException raced) {
+            String constraint = String.valueOf(raced.getMostSpecificCause().getMessage());
+            if (!constraint.contains("uq_external_dispatch_revision") && !constraint.contains("uq_external_dispatch_current")) {
+                // Not a race: the database refused a value of this document, and it will refuse it
+                // on every retry. Said as invalid, so the sender fixes the document instead of looping.
+                throw new InvalidRequestException("Dispatch " + command.dispatchReference() + " revision "
+                        + command.revision() + " could not be stored: a value is outside what TMS can record.");
+            }
             // The same document delivered twice at the same instant: the loser is told to retry, and
             // its retry is answered UNCHANGED from the winner's row.
             throw new ConflictException("Dispatch " + command.dispatchReference() + " revision " + command.revision()

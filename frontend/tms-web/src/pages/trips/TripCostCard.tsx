@@ -141,11 +141,11 @@ export function TripCostCard({ companyId, tripId, canManage }: TripCostCardProps
             },
           })}>
             {[
-              { label: t("Estimado"), value: fmtMoney(cost.estimatedAmount, cost.currency ?? "PEN"), color: "text.primary" },
-              { label: t("Real"), value: cost.actualAmount === null ? "-" : fmtMoney(cost.actualAmount, cost.currency ?? "PEN"), color: "text.primary" },
+              { label: t("Estimado"), value: fmtMoney(cost.estimatedAmount, cost.currency), color: "text.primary" },
+              { label: t("Real"), value: cost.actualAmount === null ? "-" : fmtMoney(cost.actualAmount, cost.currency), color: "text.primary" },
               {
                 label: t("Diferencia"),
-                value: cost.variance === null ? "-" : fmtMoney(cost.variance, cost.currency ?? "PEN"),
+                value: cost.variance === null ? "-" : fmtMoney(cost.variance, cost.currency),
                 // El signo importa más que el número: por encima del estimado es rojo.
                 color: cost.variance === null ? "text.primary" : cost.variance > 0 ? "error.main" : "success.main",
               },
@@ -206,7 +206,7 @@ export function TripCostCard({ companyId, tripId, canManage }: TripCostCardProps
                       <TableCell>
                         {component.quantitySource ? enumLabel("costQuantitySource", component.quantitySource) : "-"}
                       </TableCell>
-                      <TableCell className="numeric-col">{fmtMoney(component.amount, cost.currency ?? "PEN")}</TableCell>
+                      <TableCell className="numeric-col">{fmtMoney(component.amount, cost.currency)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

@@ -153,6 +153,23 @@ describe("el portal y los datos del teléfono", () => {
     expect(await screen.findByText("Todo sincronizado")).toBeInTheDocument();
   });
 
+  it("«Mis facturas» sólo aparece con CARRIER_INVOICES (fase 65)", async () => {
+    const { unmount } = renderPortal();
+    await screen.findByText("LISTA");
+    expect(screen.queryByRole("tab", { name: "Mis facturas" })).not.toBeInTheDocument();
+    unmount();
+
+    COMPANY.capabilities = ["CARRIER_PORTAL", "CARRIER_INVOICES"];
+    try {
+      renderPortal();
+      await screen.findByText("LISTA");
+      expect(screen.getByRole("tab", { name: "Mis viajes" })).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByRole("tab", { name: "Mis facturas" })).toHaveAttribute("href", "/portal/invoices");
+    } finally {
+      COMPANY.capabilities = ["CARRIER_PORTAL"];
+    }
+  });
+
   it("sin nada en cola y con red, el indicador dice «En línea»", async () => {
     renderPortal();
 

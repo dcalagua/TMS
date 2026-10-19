@@ -53,4 +53,23 @@ public interface CarrierLookupPort {
     default Map<UUID, String> externalReferencesInCompany(Set<UUID> ids, UUID companyId) {
         return Map.of();
     }
+
+    /**
+     * The carrier's tax id when its type is one of {@code taxIdTypes} (compared ignoring case, V9),
+     * for checking the issuer of a fiscal document (V66, ADR-027): a regime names which identifier
+     * type is its fiscal one (Peru and Ecuador: {@code RUC}). Empty when it has another type or none.
+     */
+    default Optional<String> taxIdOf(UUID id, UUID companyId, Set<String> taxIdTypes) {
+        return Optional.empty();
+    }
+
+    /** The carrier with this code in the company (codes are stored upper case), active or not (V67). */
+    default Optional<UUID> findIdByCode(String code, UUID companyId) {
+        return Optional.empty();
+    }
+
+    /** The carrier's own payment terms in days; empty when it has none (V67, ADR-023 section 2). */
+    default Optional<Integer> paymentTermsDaysOf(UUID id, UUID companyId) {
+        return Optional.empty();
+    }
 }

@@ -22,9 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 class OrderReferenceAdapter implements OrderReferencePort {
 
     private final TransportOrderRepository orders;
+    private final TransportOrderLineRepository lines;
 
-    OrderReferenceAdapter(TransportOrderRepository orders) {
+    OrderReferenceAdapter(TransportOrderRepository orders, TransportOrderLineRepository lines) {
         this.orders = orders;
+        this.lines = lines;
     }
 
     @Override
@@ -59,9 +61,37 @@ class OrderReferenceAdapter implements OrderReferencePort {
             byOrder.put(order.id(), order.lines().stream()
                     .sorted(Comparator.comparingInt(TransportOrderLine::lineNumber))
                     .map(line -> new OrderLineSnapshot(line.lineNumber(), line.materialCode(), line.quantity(),
-                            line.uom()))
+                            line.uom(), line.stacks(), line.effectiveVolumeM3()))
                     .toList());
         }
         return byOrder;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, OrderLineSnapshot> linesByIds(Set<UUID> lineIds, UUID companyId) {
+        Map<UUID, OrderLineSnapshot> byId = new HashMap<>();
+        if (lineIds.isEmpty()) {
+            return byId;
+        }
+        for (TransportOrderLine line : lines.findInCompany(lineIds, companyId)) {
+            byId.put(line.id(), new OrderLineSnapshot(line.lineNumber(), line.materialCode(), line.quantity(),
+                    line.uom()));
+        }
+        return byId;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, OrderCostReference> costReferencesOf(Set<UUID> orderIds, UUID companyId) {
+        Map<UUID, OrderCostReference> byId = new HashMap<>();
+        if (orderIds.isEmpty()) {
+            return byId;
+        }
+        for (TransportOrder order : orders.findByIdInAndCompanyId(orderIds, companyId)) {
+            byId.put(order.id(), new OrderCostReference(order.id(), order.orderNumber(), order.destinationId(),
+                    order.customerReference(), order.customerName()));
+        }
+        return byId;
     }
 }

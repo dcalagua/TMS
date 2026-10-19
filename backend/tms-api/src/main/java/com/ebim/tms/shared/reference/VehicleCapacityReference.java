@@ -32,5 +32,19 @@ public record VehicleCapacityReference(
         BigDecimal maxVolumeM3,
         Integer maxPallets,
         boolean active,
-        String availabilityStatus) {
+        String availabilityStatus,
+        /** The vehicle type's load space (V62); null = no such limit. */
+        BigDecimal lengthM,
+        BigDecimal widthM,
+        BigDecimal heightM,
+        /** Already resolved by fleet: type, else company, else deployment. */
+        BigDecimal floorFillFactor) {
+
+    /** The pre-V62 shape: no load-space dimensions, so floor and height are unlimited. */
+    public VehicleCapacityReference(UUID id, String code, String licensePlate, UUID carrierId, String carrierName,
+            UUID vehicleTypeId, String vehicleTypeCode, BigDecimal maxWeightKg, BigDecimal maxVolumeM3,
+            Integer maxPallets, boolean active, String availabilityStatus) {
+        this(id, code, licensePlate, carrierId, carrierName, vehicleTypeId, vehicleTypeCode, maxWeightKg, maxVolumeM3,
+                maxPallets, active, availabilityStatus, null, null, null, null);
+    }
 }

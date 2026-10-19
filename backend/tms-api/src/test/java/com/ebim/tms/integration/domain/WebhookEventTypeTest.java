@@ -30,16 +30,31 @@ class WebhookEventTypeTest {
     void coversEveryPublishedType() {
         List<String> published = Arrays.stream(ShipmentEventType.values()).map(Enum::name).toList();
 
-        assertThat(WebhookEventType.names()).containsExactlyInAnyOrderElementsOf(published);
+        assertThat(shipmentEvents()).containsExactlyInAnyOrderElementsOf(published);
+    }
+
+    @Test
+    @DisplayName("order and carrier-invoice events are subscribable and have no shipment mirror (V61, V67)")
+    void businessEventsAreTheRest() {
+        assertThat(WebhookEventType.BUSINESS_EVENTS).containsExactlyInAnyOrder(WebhookEventType.ORDER_CANCELLED,
+                WebhookEventType.INVOICE_APPROVED, WebhookEventType.PAYABLE_EXPORTED, WebhookEventType.PAYABLE_PAID);
+        assertThat(Arrays.stream(ShipmentEventType.values()).map(Enum::name))
+                .doesNotContainAnyElementsOf(WebhookEventType.BUSINESS_EVENTS.stream().map(Enum::name).toList());
     }
 
     @Test
     @DisplayName("the two enums are declared in the same order, so the two lists read as one")
     void sameOrder() {
         List<String> published = Arrays.stream(ShipmentEventType.values()).map(Enum::name).toList();
-        List<String> subscribable = Arrays.stream(WebhookEventType.values()).map(Enum::name).toList();
+        assertThat(shipmentEvents()).isEqualTo(published);
+    }
 
-        assertThat(subscribable).isEqualTo(published);
+    /** The subscribable vocabulary minus the business events, in declaration order. */
+    private static List<String> shipmentEvents() {
+        return Arrays.stream(WebhookEventType.values())
+                .filter(value -> !WebhookEventType.BUSINESS_EVENTS.contains(value))
+                .map(Enum::name)
+                .toList();
     }
 
     @Test

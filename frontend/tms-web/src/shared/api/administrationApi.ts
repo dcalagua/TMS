@@ -1,6 +1,7 @@
 import { apiRequest } from './httpClient'
 import type { OrganizationView } from './meApi'
 import type { PageResponse } from './pageResponse'
+import type { CostAllocationBasis } from './costToServeApi'
 
 /** Mirrors the backend's `CompanySettingsView` (migration V34). */
 export interface CompanySettingsView {
@@ -15,7 +16,19 @@ export interface CompanySettingsView {
    * que es el valor por defecto del servidor.
    */
   dispatchConfirmationMode?: DispatchConfirmationMode
+  /** Cuándo nace la provisión de flete (V65, ADR-023, D-07). Ausente en un backend anterior: `DISPATCHED`. */
+  accrualTrigger?: AccrualTrigger
+  /**
+   * Cómo se reparte el costo de un viaje entre sus pedidos (V68, ADR-026). Null = el valor por
+   * defecto de la instalación (peso); ausente en un backend anterior.
+   */
+  costAllocationBasis?: CostAllocationBasis | null
 }
+
+/** Mirrors `AccrualTrigger` (`shared/settings`): al despachar (por defecto) o al entregar. */
+export type AccrualTrigger = 'DISPATCHED' | 'DELIVERED'
+
+export const ACCRUAL_TRIGGERS: AccrualTrigger[] = ['DISPATCHED', 'DELIVERED']
 
 /**
  * Mirrors the backend's `DispatchConfirmationMode` enum (`shared/settings`).
@@ -65,6 +78,10 @@ export interface CompanyProfileRequest {
   shipmentNumberPrefix: string
   /** Opcional: omitirlo conserva el modo actual en lugar de devolverlo a `MANUAL`. */
   dispatchConfirmationMode?: DispatchConfirmationMode
+  /** Opcional, como el modo: omitirlo conserva el disparador actual. */
+  accrualTrigger?: AccrualTrigger
+  /** Opcional: omitirlo conserva la base actual (V68). */
+  costAllocationBasis?: CostAllocationBasis
 }
 
 /** Mirrors the backend's `CompanyCreateRequest`. There is no `organizationId`: the caller's own is used. */
@@ -146,6 +163,23 @@ export interface UserListParams {
 
 export function fetchCompanyProfile(companyId: string, signal?: AbortSignal): Promise<CompanyProfileView> {
   return apiRequest<CompanyProfileView>('/admin/companies/current', { companyId, signal })
+}
+
+/**
+ * Mirrors the backend's `CompanyLoadGeometryView` (V62, ADR-022 §4-5): el alto de referencia contra
+ * el que se apilan las líneas y el factor de piso por defecto, con su origen. **Solo lectura**:
+ * ninguna petición escribe todavía esas dos columnas, así que la pantalla las muestra sin campo.
+ */
+export interface CompanyLoadGeometryView {
+  referenceHeightM: number
+  /** `COMPANY`: valor propio de la empresa. `DEPLOYMENT`: el del despliegue (`tms.planning.geometry.*`). */
+  referenceHeightSource: 'COMPANY' | 'DEPLOYMENT'
+  floorFillFactor: number
+  floorFillFactorSource: 'COMPANY' | 'DEPLOYMENT'
+}
+
+export function fetchCompanyLoadGeometry(companyId: string, signal?: AbortSignal): Promise<CompanyLoadGeometryView> {
+  return apiRequest<CompanyLoadGeometryView>('/admin/companies/current/load-geometry', { companyId, signal })
 }
 
 export function updateCompanyProfile(

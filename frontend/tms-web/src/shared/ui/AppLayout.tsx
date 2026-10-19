@@ -19,7 +19,8 @@ import { AccountMenu } from "./AccountMenu";
 import { CompanySelector } from "./CompanySelector";
 import { NavSearch } from "./NavSearch";
 import { NotificationsMenu } from "./NotificationsMenu";
-import { NAV_SECTIONS, OVERVIEW_NAV, leafOf, sectionOf, type NavLeaf } from "./navConfig";
+import { TenantSuspendedBanner } from "./TenantSuspendedBanner";
+import { NAV_SECTIONS, OVERVIEW_NAV, leafAllowed, leafOf, sectionOf, type NavLeaf } from "./navConfig";
 
 const DRAWER_WIDTH = 256;
 const RAIL_WIDTH = 72;
@@ -51,7 +52,7 @@ export function AppLayout() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const { mode, toggle: toggleMode, themeKey, brandAccent } = useColorMode();
-  const { hasCapability, status, selected, profile } = useCompany();
+  const { hasCapability, hasPermission, status, selected, profile } = useCompany();
 
   // Marco premium: oscuro siempre, tintado por el tema.
   const shellTheme = getTheme("dark", themeKey, brandAccent ?? undefined);
@@ -84,10 +85,12 @@ export function AppLayout() {
   const allowed = (capability?: string) =>
     capability === undefined || (status === "ready" && hasCapability(capability));
 
-  const overview = OVERVIEW_NAV.filter((leaf) => allowed(leaf.capability));
+  const access = { ready: status === "ready", hasCapability, hasPermission };
+
+  const overview = OVERVIEW_NAV.filter((leaf) => leafAllowed(leaf, access));
   const sections = NAV_SECTIONS
     .filter((section) => allowed(section.capability))
-    .map((section) => ({ ...section, items: section.items.filter((item) => allowed(item.capability)) }))
+    .map((section) => ({ ...section, items: section.items.filter((item) => leafAllowed(item, access)) }))
     .filter((section) => section.items.length > 0);
 
   // Migas: sección › pantalla, en una sola línea. `leafOf` casa por prefijo, así que
@@ -114,9 +117,9 @@ export function AppLayout() {
    * convierten el menú en una paleta y hacen que el ítem donde uno está deje de destacar.
    */
   const renderItem = (item: NavLeaf) => {
-    const active = item.to === "/"
-      ? location.pathname === "/"
-      : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
+    // La hoja más específica que casa con la ruta: en `/settlement/tolerances` se realza
+    // Tolerancias y no también Auditoría de flete, aunque una ruta cuelgue de la otra.
+    const active = leafOf(location.pathname)?.to === item.to;
     const button = (
       <ListItemButton
         key={item.to}
@@ -405,6 +408,9 @@ export function AppLayout() {
          * de un metro, que es donde el ojo pierde el renglón al volver.
          */}
         <Box sx={{ maxWidth: 1600, mx: "auto", width: "100%" }}>
+          {/* ADR-021: aviso fijo mientras MasterAdmin tenga suspendida la organización. Solo UX:
+              el servidor rechaza las escrituras con 423 tenant-suspended de todos modos. */}
+          <TenantSuspendedBanner company={selected} />
           {/* El único límite de Suspense de la app: el armazón se queda en pantalla mientras se
               descarga el trozo de una pantalla, en lugar de parpadear entero. */}
           <Suspense fallback={<LoadingState minHeight="50vh" />}>

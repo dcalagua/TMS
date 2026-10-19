@@ -18,14 +18,14 @@ import {
   updateTripRoute,
   type DeliveryResult, type StopExecutionStatus, type TripDetailView, type TripView,
 } from "../../shared/api/planningApi";
-import { describeApiError, describePlanningError } from "../../shared/api/problemMessages";
+import { describeApiError, describePlanningError, describePlanningRefusal } from "../../shared/api/problemMessages";
 import { TripStopMap, type TripStopMapOrigin, type TripStopMapStop } from "../../shared/maps/TripStopMap";
 import { CapacityBar, FormDrawer, StatusChip } from "../../shared/ui/components";
 import { STOP_EXECUTION_TONE, TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
 import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
 import { t, tp } from "../../lib/i18n";
-import { fmtDate, fmtDateTime, fmtDecimal, fmtTime, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
+import { fmtAreaM2, fmtDate, fmtDateTime, fmtDecimal, fmtMetres, fmtTime, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
 import { R, T, type StatusTone } from "../../theme";
 import { TripDriverDrawer } from "./TripDriverDrawer";
 import { TripVehicleDrawer } from "./TripVehicleDrawer";
@@ -184,7 +184,7 @@ export function TripDetailDrawer({
       applyDetail(await moveOrderToTrip(companyId, tripId, orderId, { targetTripId }));
       notifySuccess(t("Pedido movido"), orderNumber);
     } catch (error) {
-      notifyError(t("No se pudo mover el pedido"), describePlanningError(error as ApiError));
+      notifyError(t("No se pudo mover el pedido"), describePlanningRefusal(error as ApiError));
     } finally {
       setBusyOrderId(null);
     }
@@ -407,11 +407,22 @@ export function TripDetailDrawer({
             </Box>
 
             <Box>
-              {sectionTitle(t("Capacidad"))}
-              <Box sx={{ display: "grid", columnGap: 3, gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" } }}>
+              {sectionTitle(t("Capacidad"), trip.capacity.bindingDimension ? (
+                // Lo que llena este camión, según el backend (la dimensión con mayor %).
+                <Chip size="small" variant="outlined" sx={{ height: 20, fontSize: 10.5, fontWeight: 700 }}
+                  label={t("Lo llena: {{dimension}}", { dimension: enumLabel("capacityDimension", trip.capacity.bindingDimension) })} />
+              ) : undefined)}
+              {/* Cinco dimensiones desde V62: peso, volumen de planificación, pallets, piso y alto de pila. */}
+              <Box sx={{ display: "grid", columnGap: 3, gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(3, minmax(0, 1fr))" } }}>
                 <CapacityBar kind="weight" dimension={trip.capacity.weight} />
                 <CapacityBar kind="volume" dimension={trip.capacity.volume} />
                 <CapacityBar kind="pallets" dimension={trip.capacity.pallets} />
+                {trip.capacity.floor && (
+                  <CapacityBar kind="floor" dimension={trip.capacity.floor} vehicleAssigned={trip.vehicleId !== null} />
+                )}
+                {trip.capacity.height && (
+                  <CapacityBar kind="height" dimension={trip.capacity.height} vehicleAssigned={trip.vehicleId !== null} />
+                )}
               </Box>
             </Box>
 
@@ -643,6 +654,8 @@ export function TripDetailDrawer({
                               pedido: es lo que se comprometió en este viaje. */}
                           <Typography variant="caption" sx={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
                             {fmtWeightKg(assignment.assignedWeightKg)} · {fmtVolumeM3(assignment.assignedVolumeM3)} · {fmtDecimal(assignment.assignedPallets)} {t("pallets")}
+                            {(assignment.assignedFloorAreaM2 ?? 0) > 0 && ` · ${fmtAreaM2(assignment.assignedFloorAreaM2)} ${t("de piso")}`}
+                            {assignment.assignedStackHeightM != null && ` · ${t("alto {{height}}", { height: fmtMetres(assignment.assignedStackHeightM) })}`}
                           </Typography>
                           {editable && (
                             <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", mt: 0.75 }}>

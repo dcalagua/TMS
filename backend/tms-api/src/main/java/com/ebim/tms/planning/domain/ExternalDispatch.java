@@ -74,6 +74,10 @@ public class ExternalDispatch {
     @Column(name = "vehicle_type", updatable = false)
     private String vehicleType;
 
+    /** Contract v1.1 (V60): the trailer, stored and shown, never compared. */
+    @Column(name = "vehicle_trailer_plate", updatable = false)
+    private String vehicleTrailerPlate;
+
     @Column(name = "driver_name", updatable = false)
     private String driverName;
 
@@ -138,8 +142,8 @@ public class ExternalDispatch {
     public ExternalDispatch(UUID companyId, UUID tripId, UUID integrationClientId, String idempotencyKey,
             String correlationId, String sourceSystem, String dispatchReference, int revision,
             String transportReference, String loadReference, String warehouseCode, OffsetDateTime actualDispatchAt,
-            String carrierCode, String carrierName, String vehicleLicensePlate, String vehicleType, String driverName,
-            String driverDocumentNumber, String sealNumber, String transportDocumentNumber,
+            String carrierCode, String carrierName, String vehicleLicensePlate, String vehicleType, String vehicleTrailerPlate,
+            String driverName, String driverDocumentNumber, String sealNumber, String transportDocumentNumber,
             Integer totalHandlingUnits, BigDecimal totalWeightKg, BigDecimal totalVolumeM3,
             ExternalDispatchOutcome outcome, DispatchVerificationStatus verificationStatus, String discrepancies,
             String payloadHash, String rawPayload, OffsetDateTime receivedAt) {
@@ -159,6 +163,7 @@ public class ExternalDispatch {
         this.carrierName = carrierName;
         this.vehicleLicensePlate = vehicleLicensePlate;
         this.vehicleType = vehicleType;
+        this.vehicleTrailerPlate = vehicleTrailerPlate;
         this.driverName = driverName;
         this.driverDocumentNumber = driverDocumentNumber;
         this.sealNumber = sealNumber;
@@ -259,6 +264,10 @@ public class ExternalDispatch {
 
     public String vehicleType() {
         return vehicleType;
+    }
+
+    public String vehicleTrailerPlate() {
+        return vehicleTrailerPlate;
     }
 
     public String driverName() {

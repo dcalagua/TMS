@@ -42,3 +42,6 @@ mvnw   text eol=lf
 
 # Generated lock files: keep them tracked, keep diffs collapsed in reviews.
 package-lock.json linguist-generated=true -diff
+
+# Golden files compared byte for byte (RFC 4180 CRLF records): never normalised.
+backend/tms-api/src/test/resources/settlement/*.csv -text

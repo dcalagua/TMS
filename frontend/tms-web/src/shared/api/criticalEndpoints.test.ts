@@ -31,6 +31,9 @@ vi.mock("../config/env", () => ({
     supabaseUrl: "http://localhost:54321",
     supabaseAnonKey: "test-anon-key-placeholder",
     googleMapsApiKey: null,
+    mapTileUrl: "https://tile.test.invalid/{z}/{x}/{y}.png",
+    mapTileAttribution: "test",
+    geocoderUrl: "https://geocoder.test.invalid/search",
   } satisfies AppEnv,
 }));
 const COMPANY = "11111111-1111-4111-8111-111111111111";

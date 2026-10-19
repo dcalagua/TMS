@@ -1,6 +1,7 @@
 package com.ebim.tms.shared.reference;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
@@ -33,11 +34,38 @@ public interface TripCostLookupPort {
      *                       invoice as an overcharge
      * @param actualAmount   what was recorded as spent, or null when nobody recorded it
      * @param currency       what the shipment was priced in, or null when it has no cost row
+     * @param closed         whether the cost was closed (V30): its actual is final, and is what an
+     *                       invoice is compared against (V64, ADR-024)
+     * @param estimatedComponents the estimate's breakdown by component name ({@code RateComponent}
+     *                       names, as strings so settlement does not depend on rates). Empty when
+     *                       there is no estimate; a NOT_CALCULABLE component is present at 0.00,
+     *                       which is what the estimate counted for it
+     * @param closedAt       when the cost was last closed, null while open. Each close is a distinct
+     *                       instant (a reopen clears it), which is what keys an accrual adjustment
+     *                       (V65, ADR-023)
      */
     record TripCostSummary(
             UUID tripId,
             BigDecimal expectedAmount,
             BigDecimal actualAmount,
-            String currency) {
+            String currency,
+            boolean closed,
+            Map<String, BigDecimal> estimatedComponents,
+            OffsetDateTime closedAt) {
+
+        public TripCostSummary {
+            estimatedComponents = estimatedComponents == null ? Map.of() : Map.copyOf(estimatedComponents);
+        }
+
+        /** The V64 shape, without the closing instant. */
+        public TripCostSummary(UUID tripId, BigDecimal expectedAmount, BigDecimal actualAmount, String currency,
+                boolean closed, Map<String, BigDecimal> estimatedComponents) {
+            this(tripId, expectedAmount, actualAmount, currency, closed, estimatedComponents, null);
+        }
+
+        /** An open cost with no breakdown. */
+        public TripCostSummary(UUID tripId, BigDecimal expectedAmount, BigDecimal actualAmount, String currency) {
+            this(tripId, expectedAmount, actualAmount, currency, false, Map.of());
+        }
     }
 }

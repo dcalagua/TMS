@@ -31,6 +31,8 @@ import java.util.UUID;
  *                           served only through an authenticated, company-scoped TMS request, so
  *                           the number tells a partner what exists and the API tells them how to
  *                           ask for it
+ * @param delivery           the same result as one nested block with the V45 amounts and lines
+ *                           (WAREHOUSE_EXECUTION_V1 §7.2), or null until a result is recorded
  */
 public record PublishedShipmentOrder(
         UUID orderId,
@@ -47,13 +49,24 @@ public record PublishedShipmentOrder(
         String deliveryNotes,
         int evidenceCount,
         // Additive (WAREHOUSE_EXECUTION_V1 §3.3): the sequence of the stop that delivers it.
-        Integer stopSequence) {
+        Integer stopSequence,
+        // Additive (WAREHOUSE_EXECUTION_V1 §7.2, plan v1.1).
+        PublishedShipmentDelivery delivery) {
 
     /** The shape before {@code stopSequence}, for callers that predate it. */
     public PublishedShipmentOrder(UUID orderId, String orderNumber, String externalSource, String externalReference,
             String destinationCode, BigDecimal weightKg, BigDecimal volumeM3, BigDecimal pallets, String deliveryResult,
             OffsetDateTime deliveredAt, String deliveryReceiverName, String deliveryNotes, int evidenceCount) {
         this(orderId, orderNumber, externalSource, externalReference, destinationCode, weightKg, volumeM3, pallets,
-                deliveryResult, deliveredAt, deliveryReceiverName, deliveryNotes, evidenceCount, null);
+                deliveryResult, deliveredAt, deliveryReceiverName, deliveryNotes, evidenceCount, null, null);
+    }
+
+    /** The shape before {@code delivery}, for callers that predate it. */
+    public PublishedShipmentOrder(UUID orderId, String orderNumber, String externalSource, String externalReference,
+            String destinationCode, BigDecimal weightKg, BigDecimal volumeM3, BigDecimal pallets, String deliveryResult,
+            OffsetDateTime deliveredAt, String deliveryReceiverName, String deliveryNotes, int evidenceCount,
+            Integer stopSequence) {
+        this(orderId, orderNumber, externalSource, externalReference, destinationCode, weightKg, volumeM3, pallets,
+                deliveryResult, deliveredAt, deliveryReceiverName, deliveryNotes, evidenceCount, stopSequence, null);
     }
 }

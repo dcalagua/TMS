@@ -3,7 +3,7 @@ import { Box, Card, CardContent, Divider, LinearProgress, Typography } from "@mu
 import { alpha } from "@mui/material/styles";
 import { WarningAmberRounded, ErrorOutlineRounded } from "@mui/icons-material";
 import { t } from "../../../lib/i18n";
-import { fmtDecimal, fmtVolumeM3, fmtWeightKg } from "../../../lib/locale";
+import { capacityAmount, capacityTone, type CapacityUnit } from "../../geometry/loadGeometry";
 
 export interface AppCardProps {
   title?: ReactNode;
@@ -87,7 +87,7 @@ export function DetailGrid({ children, columns = 2 }: { children: ReactNode; col
   );
 }
 
-export type CapacityUnit = "weight" | "volume" | "pallets";
+export type { CapacityUnit };
 
 /** Una dimensión de capacidad tal y como la calculó el backend. */
 export interface CapacityDimension {
@@ -98,14 +98,24 @@ export interface CapacityDimension {
   unlimited: boolean;
 }
 
-/** Una dimensión así de llena merece un aviso antes de estar realmente excedida. Esto solo
- * cambia cómo se presenta la barra, nunca el veredicto, que es del backend. */
-const WARNING_THRESHOLD = 85;
-
 const UNIT_LABEL: Record<CapacityUnit, string> = {
   weight: "Peso",
   volume: "Volumen",
   pallets: "Pallets",
+  floor: "Piso",
+  height: "Alto de pila",
+};
+
+/**
+ * Qué significa "sin límite" con un vehículo asignado: en peso, volumen y pallets no pasa (son
+ * obligatorios en el tipo de vehículo); en piso y alto es que el tipo no declara sus medidas.
+ */
+const UNLIMITED_COPY: Record<CapacityUnit, string> = {
+  weight: "Sin límite",
+  volume: "Sin límite",
+  pallets: "Sin límite",
+  floor: "El vehículo no declara largo y ancho",
+  height: "El vehículo no declara alto",
 };
 
 /**
@@ -128,17 +138,18 @@ const UNIT_LABEL: Record<CapacityUnit, string> = {
  * - un límite normal: barra llena, coloreada por el propio `exceeded` del backend y por el
  *   umbral de casi-capacidad de arriba.
  */
-export function CapacityBar({ kind, dimension }: { kind: CapacityUnit; dimension: CapacityDimension }) {
+export function CapacityBar({ kind, dimension, vehicleAssigned = false }: {
+  kind: CapacityUnit;
+  dimension: CapacityDimension;
+  /** Con vehículo, "sin límite" en piso o alto se explica como medida no declarada en su tipo. */
+  vehicleAssigned?: boolean;
+}) {
   const { used, limit, percentUsed, exceeded, unlimited } = dimension;
   const label = t(UNIT_LABEL[kind]);
+  const amount = (value: number): string => capacityAmount(kind, value);
 
-  const amount = (value: number): string => {
-    if (kind === "weight") return fmtWeightKg(value);
-    if (kind === "volume") return fmtVolumeM3(value);
-    return `${fmtDecimal(value)} ${t("pallets")}`;
-  };
-
-  const near = !exceeded && percentUsed !== null && percentUsed >= WARNING_THRESHOLD;
+  const tone = capacityTone(dimension);
+  const near = tone === "near";
   const color = exceeded ? "error.main" : near ? "warning.main" : "primary.main";
 
   return (
@@ -150,7 +161,7 @@ export function CapacityBar({ kind, dimension }: { kind: CapacityUnit; dimension
           sx={{ fontVariantNumeric: "tabular-nums", color: exceeded ? "error.main" : "text.secondary", fontWeight: exceeded ? 800 : 500 }}
         >
           {unlimited
-            ? `${amount(used)} · ${t("Sin límite")}`
+            ? `${amount(used)} · ${t(vehicleAssigned ? UNLIMITED_COPY[kind] : "Sin límite")}`
             : percentUsed === null
               ? `${amount(used)} / ${amount(limit ?? 0)} · ${t("Sin límite definido")}`
               : `${amount(used)} / ${amount(limit ?? 0)} · ${Math.round(percentUsed)}%`}

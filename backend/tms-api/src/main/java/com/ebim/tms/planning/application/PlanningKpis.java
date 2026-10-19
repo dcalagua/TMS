@@ -57,7 +57,11 @@ public record PlanningKpis(
         BigDecimal palletUtilizationPercent,
         boolean distanceEstimated,
         BigDecimal totalCost,
-        ProposalPricing pricing) {
+        ProposalPricing pricing,
+        /** Floor used against {@code L x W x fill} (V62), averaged like the others; null when unknown. */
+        BigDecimal floorUtilizationPercent,
+        /** Tallest stack against the vehicle's height (V62), averaged like the others; null when unknown. */
+        BigDecimal heightUtilizationPercent) {
 
     /**
      * Keeps {@code pricing} non-null for every caller, so no screen has to guard it.
@@ -69,6 +73,16 @@ public record PlanningKpis(
      */
     public PlanningKpis {
         pricing = pricing == null ? ProposalPricing.NOT_ASKED : pricing;
+    }
+
+    /** The pre-V62 shape: no floor or height utilisation. */
+    public PlanningKpis(int trips, int vehicles, int plannedOrders, int unplannedOrders, int lateOrders,
+            BigDecimal totalDistanceKm, long totalDurationMinutes, BigDecimal weightUtilizationPercent,
+            BigDecimal volumeUtilizationPercent, BigDecimal palletUtilizationPercent,
+            boolean distanceEstimated, BigDecimal totalCost, ProposalPricing pricing) {
+        this(trips, vehicles, plannedOrders, unplannedOrders, lateOrders, totalDistanceKm, totalDurationMinutes,
+                weightUtilizationPercent, volumeUtilizationPercent, palletUtilizationPercent, distanceEstimated,
+                totalCost, pricing, null, null);
     }
 
     /** The pre-JOB-11 shape, for the engines: they compute everything but the price. */
@@ -85,7 +99,8 @@ public record PlanningKpis(
     public PlanningKpis pricedWith(ProposalPricing pricing) {
         return new PlanningKpis(trips, vehicles, plannedOrders, unplannedOrders, lateOrders,
                 totalDistanceKm, totalDurationMinutes, weightUtilizationPercent, volumeUtilizationPercent,
-                palletUtilizationPercent, distanceEstimated, pricing.totalCost(), pricing);
+                palletUtilizationPercent, distanceEstimated, pricing.totalCost(), pricing, floorUtilizationPercent,
+                heightUtilizationPercent);
     }
 
     public static final PlanningKpis NONE = new PlanningKpis(

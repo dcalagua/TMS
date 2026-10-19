@@ -61,8 +61,10 @@ import tools.jackson.databind.ObjectMapper;
  *
  * <h2>What is authorized where</h2>
  *
- * <p>The commercial entitlements routes (V56) share this chain, key and switch, with scopes of their
- * own and the contract's {@code {error, message}} error body.
+ * <p>The commercial entitlements routes (V56) and the operational lifecycle routes (V58, ADR-021) share
+ * this chain, key and switch, each with scopes of their own and the {@code {error, message}} error body.
+ * The tenant suspension filter of the user and partner chains is deliberately absent here: this is the
+ * channel that lifts a suspension, so it is never itself suspended.
  *
  * <p>One scope per operation, declared here where it is structural: a method added under the prefix
  * without its line is caught by {@code anyRequest().denyAll()}, not left open to any MasterAdmin
@@ -124,6 +126,10 @@ public class PlatformProvisioningSecurityConfig {
                                 .hasAuthority(PlatformScopes.AUTHORITY_ENTITLEMENTS_READ)
                         .requestMatchers(HttpMethod.GET, PlatformProvisioningPaths.ENTITLEMENTS_MANIFEST)
                                 .hasAuthority(PlatformScopes.AUTHORITY_ENTITLEMENTS_READ)
+                        .requestMatchers(HttpMethod.PUT, PlatformProvisioningPaths.TENANT_LIFECYCLE)
+                                .hasAuthority(PlatformScopes.AUTHORITY_LIFECYCLE_WRITE)
+                        .requestMatchers(HttpMethod.GET, PlatformProvisioningPaths.TENANT_LIFECYCLE)
+                                .hasAuthority(PlatformScopes.AUTHORITY_LIFECYCLE_READ)
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .bearerTokenResolver(ignoringHealth())
@@ -168,7 +174,7 @@ public class PlatformProvisioningSecurityConfig {
         @Override
         public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException failure)
                 throws IOException {
-            if (PlatformProvisioningPaths.isEntitlements(request.getRequestURI())) {
+            if (isContractRoute(request.getRequestURI())) {
                 if (enabled) {
                     response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
                 }
@@ -188,9 +194,11 @@ public class PlatformProvisioningSecurityConfig {
         @Override
         public void handle(HttpServletRequest request, HttpServletResponse response,
                 org.springframework.security.access.AccessDeniedException failure) throws IOException {
-            if (PlatformProvisioningPaths.isEntitlements(request.getRequestURI())) {
+            if (isContractRoute(request.getRequestURI())) {
+                boolean lifecycle = PlatformProvisioningPaths.isLifecycle(request.getRequestURI());
                 writeEntitlements(response, enabled ? 403 : 503, enabled ? "INSUFFICIENT_SCOPE" : "M2M_NOT_CONFIGURED",
-                        enabled ? "The token lacks the entitlements scope this operation needs"
+                        enabled ? "The token lacks the " + (lifecycle ? "lifecycle" : "entitlements")
+                                + " scope this operation needs"
                                 : "Platform provisioning is not enabled");
                 return;
             }
@@ -203,6 +211,11 @@ public class PlatformProvisioningSecurityConfig {
             write(response, authentication instanceof PlatformProvisioningAuthentication && tenantOperation
                     ? ProvisioningErrorCode.MISSING_SCOPE
                     : ProvisioningErrorCode.ACCESS_DENIED);
+        }
+
+        /** Entitlements and lifecycle both answer {@code {error, message}}; tenant creation keeps its own body. */
+        private static boolean isContractRoute(String requestUri) {
+            return PlatformProvisioningPaths.isEntitlements(requestUri) || PlatformProvisioningPaths.isLifecycle(requestUri);
         }
 
         /**

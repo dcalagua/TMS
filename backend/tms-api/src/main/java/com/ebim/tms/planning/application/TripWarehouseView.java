@@ -37,6 +37,8 @@ public record TripWarehouseView(
             String carrierCode,
             String carrierName,
             String vehicleLicensePlate,
+            // Contract v1.1 (V60): stored and shown, never compared.
+            String vehicleTrailerPlate,
             String driverName,
             String driverDocumentNumber,
             String sealNumber,
@@ -49,8 +51,10 @@ public record TripWarehouseView(
             List<Order> orders) {
     }
 
+    /** The geometry fields are contract v1.1 (V60): what the warehouse computed, null when not said. */
     public record Order(UUID orderId, String externalSource, String externalReference, String warehouseOrderNumber,
-            String status, Integer handlingUnits, BigDecimal weightKg, BigDecimal volumeM3, String matchResult) {
+            String status, Integer handlingUnits, BigDecimal weightKg, BigDecimal volumeM3, String matchResult,
+            Integer stacks, BigDecimal effectiveVolumeM3, BigDecimal loadingMeters, String geometryReason) {
     }
 
     public record Milestone(String type, String eventId, String loadReference, String warehouseCode,

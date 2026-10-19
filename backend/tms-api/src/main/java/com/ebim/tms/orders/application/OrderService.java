@@ -6,6 +6,7 @@ import com.ebim.tms.orders.domain.OrderLineInput;
 import com.ebim.tms.orders.domain.OrderNumbers;
 import com.ebim.tms.orders.domain.OrderStatus;
 import com.ebim.tms.orders.domain.OrderTotals;
+import com.ebim.tms.orders.domain.PhysicalSource;
 import com.ebim.tms.orders.domain.SchedulingAssessment;
 import com.ebim.tms.orders.domain.SchedulingReason;
 import com.ebim.tms.orders.domain.TransportOrder;
@@ -21,6 +22,8 @@ import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.audit.AuditAggregateType;
 import com.ebim.tms.shared.audit.AuditRecorder;
+import com.ebim.tms.shared.geometry.PhysicalBlock;
+import com.ebim.tms.shared.reference.BusinessEventPublisher;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderFulfillmentPort;
@@ -28,8 +31,10 @@ import com.ebim.tms.shared.reference.OrderFulfillmentStatus;
 import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.settings.CompanySettingsPort;
+import com.ebim.tms.shared.settings.LoadGeometrySettings;
 import java.math.BigDecimal;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -70,13 +75,21 @@ public class OrderService {
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
     private final OrderSchedulingService orderSchedulingService;
+    private final OrderLinePhysicalResolver physicalResolver;
+    private final BusinessEventPublisher businessEvents;
+    private final LoadGeometrySettings geometrySettings;
 
     public OrderService(TransportOrderRepository transportOrderRepository,
             TransportOrderLineRepository transportOrderLineRepository, OriginLookupPort originLookupPort,
             DestinationLookupPort destinationLookupPort, OrderFulfillmentPort orderFulfillmentPort,
             CompanySettingsPort companySettingsPort, AuditActorProvider auditActorProvider,
-            AuditRecorder auditRecorder, OrderSchedulingService orderSchedulingService) {
+            AuditRecorder auditRecorder, OrderSchedulingService orderSchedulingService,
+            OrderLinePhysicalResolver physicalResolver, BusinessEventPublisher businessEvents,
+            LoadGeometrySettings geometrySettings) {
+        this.businessEvents = businessEvents;
+        this.geometrySettings = geometrySettings;
         this.orderSchedulingService = orderSchedulingService;
+        this.physicalResolver = physicalResolver;
         this.transportOrderRepository = transportOrderRepository;
         this.transportOrderLineRepository = transportOrderLineRepository;
         this.originLookupPort = originLookupPort;
@@ -99,7 +112,7 @@ public class OrderService {
         Set<UUID> destinationIds = orders.stream().map(TransportOrder::destinationId).collect(Collectors.toSet());
         Map<UUID, MasterReference> origins = originLookupPort.findAllInCompany(originIds, scope.companyId());
         Map<UUID, MasterReference> destinations = destinationLookupPort.findAllInCompany(destinationIds, scope.companyId());
-        Map<UUID, Long> lineCounts = loadLineCounts(orders);
+        Map<UUID, TransportOrderLineRepository.OrderLineCount> lineCounts = loadLineCounts(orders);
         // One call for the whole page, like the two lookups above it. What happened to the goods
         // is planning's to answer (OrderFulfillmentPort), and it is a second dimension beside
         // `status`, never a replacement for it - see OrderFulfillmentStatus.
@@ -108,7 +121,7 @@ public class OrderService {
 
         List<OrderView> content = orders.stream()
                 .map(order -> OrderView.from(order, origins.get(order.originId()), destinations.get(order.destinationId()),
-                        lineCounts.getOrDefault(order.id(), 0L),
+                        lineCountOf(lineCounts.get(order.id())), stacksOf(lineCounts.get(order.id())),
                         fulfillment.getOrDefault(order.id(), OrderFulfillmentStatus.PENDING)))
                 .toList();
         return new PageResponse<>(content, pageQuery.pageNumber(), pageQuery.pageSize(), page.getTotalElements());
@@ -133,8 +146,9 @@ public class OrderService {
             throw duplicateExternalReference(externalSource, externalReference);
         }
 
-        List<OrderLineInput> lines = toLineInputs(request.lines());
         DeclaredTotals declared = toDeclaredTotals(request);
+        List<OrderLineInput> lines = physicalResolver.resolve(scope.companyId(), toLineInputs(request.lines()),
+                declared, List.of());
         requireConsistentTotals(lines, declared);
 
         UUID actorId = auditActorProvider.writerAppUserId();
@@ -142,7 +156,7 @@ public class OrderService {
                 request.originId(), request.destinationId(), blankToNull(request.customerName()),
                 blankToNull(request.customerReference()), request.serviceDate(), request.priority(),
                 request.requestedWindowStart(), request.requestedWindowEnd(), actorId);
-        order.applyLines(lines, declared, actorId);
+        order.applyLines(lines, declared, geometrySettings.referenceHeightOf(scope.companyId()), actorId);
         TransportOrder saved = saveOrConflict(order);
         auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.CREATE,
                 Map.of("orderNumber", saved.orderNumber()));
@@ -167,19 +181,33 @@ public class OrderService {
             throw duplicateExternalReference(externalSource, externalReference);
         }
 
-        List<OrderLineInput> lines = toLineInputs(request.lines());
         DeclaredTotals declared = toDeclaredTotals(request);
+        List<OrderLineInput> lines = physicalResolver.resolve(scope.companyId(), toLineInputs(request.lines()),
+                declared, order.lines());
         requireConsistentTotals(lines, declared);
 
         UUID actorId = auditActorProvider.writerAppUserId();
         order.applyChanges(externalSource, externalReference, request.originId(), request.destinationId(),
                 blankToNull(request.customerName()), blankToNull(request.customerReference()), request.serviceDate(),
                 request.priority(), request.requestedWindowStart(), request.requestedWindowEnd(), actorId);
-        order.applyLines(lines, declared, actorId);
+        order.applyLines(lines, declared, geometrySettings.referenceHeightOf(scope.companyId()), actorId);
         TransportOrder saved = saveOrConflict(order);
         auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.UPDATE,
                 Map.of("orderNumber", saved.orderNumber()));
         return OrderDetailView.from(saved, origin, destination, fulfillmentOf(scope, saved.id()));
+    }
+
+    /**
+     * The lines {@link #update} would write for {@code request} on order {@code id}: the request's
+     * lines after the physical copy rule ({@link OrderLinePhysicalResolver}). The integration intake
+     * compares these, not the raw request, with the stored lines - otherwise a redelivery that omits
+     * a unit weight the profile filled in would read as a change on every send.
+     */
+    @Transactional(readOnly = true)
+    public List<OrderLineInput> effectiveLines(CompanyScope scope, UUID id, OrderRequest request) {
+        TransportOrder order = find(scope, id);
+        return physicalResolver.resolve(scope.companyId(), toLineInputs(request.lines()), toDeclaredTotals(request),
+                order.lines());
     }
 
     /**
@@ -331,6 +359,10 @@ public class OrderService {
         TransportOrder saved = saveOrConflict(order);
         auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.CANCEL,
                 Map.of("orderNumber", saved.orderNumber()));
+        // A signal, not a command (D-03): the warehouse that prepares this order is told, and decides.
+        // Same transaction, so a rolled-back cancellation is never announced (V61, ADR-025 section 4).
+        businessEvents.publish(new BusinessEventPublisher.BusinessEvent(scope.companyId(), BusinessEventPublisher.ORDER,
+                saved.id(), saved.orderNumber(), BusinessEventPublisher.ORDER_CANCELLED, OffsetDateTime.now()));
         return toDetailView(scope, saved);
     }
 
@@ -494,12 +526,22 @@ public class OrderService {
         return value.stripTrailingZeros().toPlainString();
     }
 
+    /**
+     * The lines as sent. A physical field on a line makes it carry its own block, marked
+     * {@link PhysicalSource#ORDER_LINE}; {@link OrderLinePhysicalResolver} decides the rest.
+     */
     private static List<OrderLineInput> toLineInputs(List<OrderRequest.OrderLineRequest> lines) {
         return lines.stream()
                 .map(line -> new OrderLineInput(line.materialCode().trim(), line.materialDescription().trim(),
                         line.quantity(), line.uom().trim().toUpperCase(Locale.ROOT), line.unitWeightKg(),
-                        line.unitVolumeM3(), line.palletQuantity()))
+                        line.unitVolumeM3(), line.palletQuantity(), sentBlock(line), PhysicalSource.ORDER_LINE, null))
                 .toList();
+    }
+
+    private static PhysicalBlock sentBlock(OrderRequest.OrderLineRequest line) {
+        return new PhysicalBlock(line.lengthM(), line.widthM(), line.heightM(), line.stackMode(),
+                line.stackMaxQuantity(), line.nestIncrementM(), line.maxTopLoadKg(),
+                Boolean.TRUE.equals(line.orientationLocked()));
     }
 
     /**
@@ -514,16 +556,24 @@ public class OrderService {
     }
 
     /** One batched {@code GROUP BY} query for the whole page, never one COUNT per order row. */
-    private Map<UUID, Long> loadLineCounts(List<TransportOrder> orders) {
-        Map<UUID, Long> counts = new HashMap<>();
+    private Map<UUID, TransportOrderLineRepository.OrderLineCount> loadLineCounts(List<TransportOrder> orders) {
+        Map<UUID, TransportOrderLineRepository.OrderLineCount> counts = new HashMap<>();
         if (orders.isEmpty()) {
             return counts;
         }
         Set<UUID> orderIds = orders.stream().map(TransportOrder::id).collect(Collectors.toSet());
         for (TransportOrderLineRepository.OrderLineCount count : transportOrderLineRepository.countByOrderIds(orderIds)) {
-            counts.put(count.getOrderId(), count.getLineCount());
+            counts.put(count.getOrderId(), count);
         }
         return counts;
+    }
+
+    private static long lineCountOf(TransportOrderLineRepository.OrderLineCount count) {
+        return count == null ? 0L : count.getLineCount();
+    }
+
+    private static Integer stacksOf(TransportOrderLineRepository.OrderLineCount count) {
+        return count == null || count.getStacks() == null ? null : count.getStacks().intValue();
     }
 
     /**

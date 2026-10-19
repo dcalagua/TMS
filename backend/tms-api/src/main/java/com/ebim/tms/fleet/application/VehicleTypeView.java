@@ -24,12 +24,13 @@ public record VehicleTypeView(
         Integer axles,
         boolean active,
         OffsetDateTime createdAt,
-        OffsetDateTime updatedAt) {
+        OffsetDateTime updatedAt,
+        BigDecimal loadFloorFillFactor) {
 
     public static VehicleTypeView from(VehicleType type) {
         return new VehicleTypeView(type.id(), type.code(), type.name(), type.maxWeightKg(), type.maxVolumeM3(),
                 type.maxPallets(), type.lengthM(), type.widthM(), type.heightM(), type.bodyType(),
                 type.temperatureControlled(), type.minTemperatureCelsius(), type.maxTemperatureCelsius(),
-                type.axles(), type.active(), type.createdAt(), type.updatedAt());
+                type.axles(), type.active(), type.createdAt(), type.updatedAt(), type.loadFloorFillFactor());
     }
 }

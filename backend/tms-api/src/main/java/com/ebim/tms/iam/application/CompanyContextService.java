@@ -1,7 +1,9 @@
 package com.ebim.tms.iam.application;
 
+import com.ebim.tms.iam.lifecycle.application.TenantLifecycleService;
 import com.ebim.tms.shared.reference.CarrierLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
+import java.util.Set;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
@@ -18,12 +20,18 @@ public class CompanyContextService {
 
     /** Optional, as in {@link MeService}: the carrier's name is a label. */
     private final ObjectProvider<CarrierLookupPort> carriers;
+    /** Optional, as in {@link MeService}: the operational state is the banner's input. */
+    private final ObjectProvider<TenantLifecycleService> lifecycle;
 
-    public CompanyContextService(ObjectProvider<CarrierLookupPort> carriers) {
+    public CompanyContextService(ObjectProvider<CarrierLookupPort> carriers,
+            ObjectProvider<TenantLifecycleService> lifecycle) {
         this.carriers = carriers;
+        this.lifecycle = lifecycle;
     }
 
     public CompanyAccessView describe(CompanyScope scope) {
-        return CompanyAccessViews.from(scope, carriers.getIfAvailable());
+        return CompanyAccessViews.from(scope, carriers.getIfAvailable(),
+                OperationalStatuses.of(lifecycle.getIfAvailable(), Set.of(scope.organizationId()))
+                        .get(scope.organizationId()));
     }
 }

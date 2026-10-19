@@ -4,10 +4,13 @@ import com.ebim.tms.orders.domain.OrderStatus;
 import com.ebim.tms.orders.domain.TransportOrder;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
@@ -45,10 +48,44 @@ public interface TransportOrderRepository
      */
     List<TransportOrder> findByIdInAndCompanyId(Collection<UUID> ids, UUID companyId);
 
+    /**
+     * Those of {@code ids} in {@code companyId} with a measured line, lines fetched in the same
+     * statement - what planning re-stacks for a vehicle (ADR-022 section 5,
+     * {@code OrderPlanningPort.geometryProfilesOf}). {@code max_stack_height_m} is set exactly when a
+     * line was measured, so the predicate keeps every other order out of the fetch.
+     */
+    @Query("SELECT DISTINCT o FROM TransportOrder o LEFT JOIN FETCH o.lines "
+            + "WHERE o.id IN :ids AND o.companyId = :companyId AND o.maxStackHeightM IS NOT NULL")
+    List<TransportOrder> findWithMeasuredLines(@Param("ids") Collection<UUID> ids,
+            @Param("companyId") UUID companyId);
+
     /** Candidates for an exact (external_source, external_reference) match, company-scoped. */
     List<TransportOrder> findByCompanyIdAndExternalReferenceIn(UUID companyId, Collection<String> externalReferences);
 
     boolean existsByCompanyIdAndExternalSourceAndExternalReference(UUID companyId, String externalSource, String externalReference);
+
+    /** One order by its TMS number, company-scoped - the integration read of WAREHOUSE_EXECUTION_V1 7.4. */
+    Optional<TransportOrder> findByCompanyIdAndOrderNumber(UUID companyId, String orderNumber);
+
+    /**
+     * The order feed (V61): this company's orders in one of {@code statuses}, touched at or after
+     * {@code updatedSince}, oldest-touched first with the id as tie-breaker - the shape
+     * of {@code TripRepository.findPublishable}, served by {@code ix_transport_order_company_status_updated}.
+     */
+    @Query("SELECT o FROM TransportOrder o WHERE o.companyId = :companyId AND o.status IN :statuses "
+            + "AND o.updatedAt >= :updatedSince ORDER BY o.updatedAt ASC, o.id ASC")
+    Page<TransportOrder> findPublishable(@Param("companyId") UUID companyId,
+            @Param("statuses") Collection<OrderStatus> statuses,
+            @Param("updatedSince") OffsetDateTime updatedSince, Pageable pageable);
+
+    /**
+     * {@link #findPublishable} without a lower bound. Two queries rather than {@code :since IS NULL OR}:
+     * PostgreSQL cannot type a null bind parameter that appears only in an {@code IS NULL} test.
+     */
+    @Query("SELECT o FROM TransportOrder o WHERE o.companyId = :companyId AND o.status IN :statuses "
+            + "ORDER BY o.updatedAt ASC, o.id ASC")
+    Page<TransportOrder> findPublishable(@Param("companyId") UUID companyId,
+            @Param("statuses") Collection<OrderStatus> statuses, Pageable pageable);
 
     /**
      * Resolves the order a sending system's own key names, for the inbound integration upsert.

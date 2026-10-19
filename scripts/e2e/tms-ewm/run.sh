@@ -96,5 +96,5 @@ case "${1:-all}" in
         rc=0; scenarios || rc=$?
         [ "${KEEP:-0}" = 1 ] || down
         exit $rc ;;
-    *) fail "usage: run.sh [all|up|scenarios [s1..s9]|down]" ;;
+    *) fail "usage: run.sh [all|up|scenarios [s1..s12]|down]" ;;
 esac

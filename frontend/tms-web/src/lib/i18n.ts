@@ -10,6 +10,11 @@
 
 import { EN_SHIPMENT_TRACKING } from "./i18n.shipmentTracking";
 import { EN_PORTAL_OFFLINE } from "./i18n.portalOffline";
+import { EN_TENANT_LIFECYCLE } from "./i18n.tenantLifecycle";
+import { EN_MATERIAL_PROFILES } from "./i18n.materialProfiles";
+import { EN_LOAD_GEOMETRY } from "./i18n.loadGeometry";
+import { EN_LOGISTICS_DOCUMENTS } from "./i18n.logisticsDocuments";
+import { EN_TAX_REGIMES } from "./i18n.taxRegimes";
 
 const EN_CHROME: Record<string, string> = {
   "Citas de muelle": "Dock appointments",
@@ -329,6 +334,10 @@ const EN_DATA: Record<string, string> = {
   "Buscar": "Search",
   "Buscar transportistas": "Search carriers",
   "Buscar una dirección": "Search an address",
+  "Buscando...": "Searching...",
+  "Resultados de la búsqueda": "Search results",
+  "El servicio de búsqueda de direcciones no respondió. Puedes ubicar el punto en el mapa.":
+    "The address search service did not answer. You can place the point on the map.",
   "Buscar una pantalla": "Search for a screen",
   "Cabecera de firma": "Signature header",
   "Cabecera y líneas del pedido de transporte.": "Header and lines of the transport order.",
@@ -881,6 +890,7 @@ const EN_DATA: Record<string, string> = {
   "Mantenimiento": "Maintenance",
   "Mapa": "Map",
   "Mapa de paradas": "Stops map",
+  "Mapa de la ubicación del vehículo": "Vehicle location map",
   "Mapa para seleccionar la ubicación": "Map to pick the location",
   "Marca «Puede utilizarse como destino» en una ubicación o crea una nueva.": "Tick “Can be used as destination” on a location, or create a new one.",
   "Marca «Puede utilizarse como origen» en una ubicación o crea una nueva.": "Tick “Can be used as origin” on a location, or create a new one.",
@@ -1629,6 +1639,11 @@ const EN_APP: Record<string, string> = {
   "Cuerpo enviado": "Body sent",
   "Cuándo": "When",
   "Cuándo ocurrió de verdad, no cuándo se está tecleando.": "When it actually happened, not when it is being typed.",
+  "±{{margin}} · entre {{min}} y {{max}}": "±{{margin}} · between {{min}} and {{max}}",
+  "Las líneas suman {{value}}: hay que declarar exactamente eso.":
+    "The lines add up to {{value}}: that is exactly what must be declared.",
+  "Cuándo ocurrió de verdad, no cuándo se está tecleando. No antes de las {{time}}.":
+    "When it actually happened, not when it is being typed. Not before {{time}}.",
   "Cuándo se tomó la firma o la foto. Opcional.": "When the signature or photo was taken. Optional.",
   "Cómo se calcula lo que cuesta un envío con este transportista.": "How a shipment's cost with this carrier is calculated.",
   "Cómo se resolvió": "How it was resolved",
@@ -1950,6 +1965,15 @@ const EN_APP: Record<string, string> = {
   "Por kilómetro": "Per kilometre",
   "Por m³": "Per m³",
   "Por pallet": "Per pallet",
+  "Por metro lineal": "Per loading metre",
+  "Todos son opcionales. Un tarifario de distancia pura deja peso y volumen vacíos; un mínimo solo es un precio plano. El metro lineal se mide con la geometría de la carga y el ancho del vehículo.":
+    "All optional. A pure distance card leaves weight and volume empty; a minimum alone is a flat price. Loading metres are measured from the load geometry and the vehicle's width.",
+  "Huella distinta a la planificada (informativa)": "Footprint differs from the plan (informative)",
+  "Plan TMS": "TMS plan",
+  "almacén": "warehouse",
+  "pilas": "stacks",
+  "m³ efectivos": "effective m³",
+  "m lineales": "loading metres",
   "Por parada adicional": "Per additional stop",
   "Prefijo de envíos": "Shipment prefix",
   "Prefijo de pedidos": "Order prefix",
@@ -2118,7 +2142,6 @@ const EN_APP: Record<string, string> = {
   "Todos": "All",
   "Todos los envíos de la empresa por día, con el estado en que está cada uno.": "Every shipment of the company by day, with the state each one is in.",
   "Todos los términos son opcionales: una oferta puede ser solo una pregunta.": "Every term is optional: an offer can be just a question.",
-  "Todos son opcionales. Un tarifario de distancia pura deja peso y volumen vacíos; un mínimo solo es un precio plano.": "All are optional. A distance-only rate card leaves weight and volume empty; a minimum alone is a flat price.",
   "Totales": "Totals",
   "Tres letras, p. ej. PEN": "Three letters, e.g. PEN",
   "Tu membresía en esta compañía no habilita ningún módulo todavía.": "Your membership in this company enables no module yet.",
@@ -2371,7 +2394,7 @@ const EN_DOCUMENT_DELIVERY: Record<string, string> = {
   "Reporte del transportista": "Carrier report", "Cargo recibido en oficina": "Signed copy returned to the office",
 };
 
-const EN: Record<string, string> = { ...EN_CHROME, ...EN_DATA, ...EN_APP, ...EN_SCHEDULING, ...EN_DOCUMENT_DELIVERY, ...EN_SHIPMENT_TRACKING, ...EN_PORTAL_OFFLINE };
+const EN: Record<string, string> = { ...EN_CHROME, ...EN_DATA, ...EN_APP, ...EN_SCHEDULING, ...EN_DOCUMENT_DELIVERY, ...EN_SHIPMENT_TRACKING, ...EN_PORTAL_OFFLINE, ...EN_TENANT_LIFECYCLE, ...EN_MATERIAL_PROFILES, ...EN_LOAD_GEOMETRY, ...EN_LOGISTICS_DOCUMENTS, ...EN_TAX_REGIMES };
 
 export type Lang = "es" | "en";
 

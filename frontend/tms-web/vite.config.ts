@@ -108,6 +108,9 @@ export default defineConfig({
     testTimeout: 20_000,
     hookTimeout: 20_000,
     setupFiles: ['./src/test/setup.ts'],
+    // Las fechas se dibujan en el huso del navegador, y los fixtures están escritos en hora de
+    // Lima. Sin fijarlo, la suite pasa en una máquina de Lima y falla en el CI, que corre en UTC.
+    env: { TZ: 'America/Lima' },
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
   },
 })

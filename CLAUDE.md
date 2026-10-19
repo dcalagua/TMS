@@ -51,7 +51,7 @@ Never print secrets or read real `.env` secret files. Use `.env.example` with pl
 ## Frontend style
 
 Use MUI as the visual base (ADR-008). Route confirmations and critical feedback through
-`confirmDialog` / `confirmWithReason` in `src/lib/ui.tsx` - screens never build their own.
+`confirmDialog` / `promptDialog` (the confirmation with a reason) in `src/lib/ui.tsx` - screens never build their own.
 Build reusable enterprise components and responsive dense screens; prefer drawers and side
 panels over large modals. Do not reintroduce Bootstrap, SweetAlert2, Tailwind or Ant because a
 historical report mentions them.
@@ -149,6 +149,42 @@ Authoritative documents live under `docs/architecture/`:
   the local copy, through a `CommercialAccessGate` separate from RBAC. No permission is a paid
   capability; the sellable registry is empty. Mode seeded SHADOW. Numbered 017 because 013-016 are
   taken on unmerged branches. Contract: `docs/platform-provisioning/ENTITLEMENTS.md`.
+- `ADR-021-operational-tenant-lifecycle.md` - MasterAdmin suspends/reactivates a tenant through
+  `PUT|GET /internal/platform-provisioning/tenants/{id}/lifecycle` (`lifecycle.v1`, scopes
+  `tms:lifecycle:write|read`, V58). While `SUSPENDED`, `TenantSuspensionFilter` (user and partner
+  chains) refuses every company-scoped write with `423 tenant-suspended`; reads, login, `/me` and the
+  MasterAdmin channel stay open; data is never touched. Separate from commercial access (D-14) and
+  from RBAC. Contract: `docs/platform-provisioning/LIFECYCLE.md`.
+- `ADR-022-material-physical-profile-and-load-geometry.md` - the warehouse owns a material's physical
+  profile (`material_profile`, V59, written only through the integration API); an order line takes a
+  snapshot of it unless the ERP sent its own block; stackable and nestable goods are planned by
+  effective volume, floor area and stack height (V62), and rates may charge per loading metre (V63).
+- `ADR-023-freight-accruals-and-payables.md` - freight accruals with a GL mapping, consumed on
+  approval (V65), and the payable's payment status, due dates and payments (V67). TMS records what was
+  paid and moves no money (D-01).
+- `ADR-024-peru-tax-and-carrier-documents.md` - settlement hardening (charge codes, match basis,
+  tolerances, V64) and Peruvian taxes: IGV breakdown, SPOT detraction, retention, CPE numbering,
+  credit/debit notes and penalties (V66); percentages are company configuration, never code. Part 2
+  superseded in part by ADR-027.
+- `ADR-025-warehouse-sync-v1-1.md` - warehouse contract v1.1: material profiles, plan and POD to the
+  warehouse, order cancellation both ways (each side holds or alerts, neither cancels by itself),
+  reconciliation. Section 7 (dock appointments) is only proposed. Contract:
+  `docs/integrations/WAREHOUSE_EXECUTION_V1.md` §7.
+- `ADR-026-cost-to-serve-allocation.md` - a trip's cost allocated to its orders on a configurable
+  basis, versioned, reported by customer, destination and route (V68). No margin: there is no sales
+  tariff.
+- `ADR-027-tax-regimes-per-country.md` - taxes of received carrier documents by the company's fiscal
+  country (`company_settings.fiscal_country`, else `default_country`): Peru, Ecuador and a generic
+  regime for any other country. VAT, document codes, number format, tax-id check and withholdings as a
+  list (`carrier_invoice_withholding`); every rate is `tms.finance.tax.<country>.*` overridable per
+  company (`settlement.tax:manage`). TMS receives and checks shape; it issues nothing to SRI/SUNAT.
+  Supersedes ADR-024 part 2 where they conflict (V65-V67 rewritten in place).
+- `ADR-028-logistics-documents-received-international.md` - logistics documents are **received, never
+  issued**: TMS does not generate, sign, send or validate invoices or remission guides with the SRI or
+  SUNAT. The catalogue is international (V69): generic `REMISSION_GUIDE` (GRE_* stay as Peruvian
+  aliases), nullable fiscal columns (country, authority code, clave de acceso, transport dates, carrier,
+  plate, origin) and `logistics_document_recipient`. Only shape is validated (EC: 3-3-9 number,
+  49-digit clave). Amends ADR-015 decision 1. Contract: `docs/integrations/INBOUND_API_V1.md` §15.
 
 Database and security detail lives in `docs/database/DATA_MODEL.md`,
 `docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.
@@ -163,7 +199,17 @@ Read these before changing schema, security or module boundaries. If an implemen
 
 ## Deferred by decision (do not introduce early)
 
-OR-Tools/route optimization, EWM integration, ERP integration, Kafka/microservices/event sourcing, Supabase Realtime, Storage (except evidence, ADR-020), and live map tracking. Add them only when a concrete requirement and an ADR justify them.
+OR-Tools/route optimization, ERP integration, Kafka/microservices/event sourcing, Supabase Realtime, Storage (except evidence, ADR-020), and live fleet map tracking. Add them only when a concrete requirement and an ADR justify them.
+
+EWM integration has left this list: v1 was merged into `dev` on 2026-09-28 (PR #13) under ADR-013
+and `docs/integrations/WAREHOUSE_EXECUTION_V1.md` - signed webhook + plan pull towards the warehouse,
+`dispatch-confirmations` and `warehouse-milestones` back. It stays contract-only: no shared table, no
+foreign key, no warehouse state in `TripStatus`. Extending it needs the contract doc updated, not a
+new ADR, unless a principle of ADR-013 changes.
+
+A map is not live tracking: `/shipment-tracking` (ADR-019) draws on Leaflet the shipments the
+warehouse actually dispatched, with their stops and documents, and the trip screens draw stored
+positions. A live fleet map that follows vehicles in real time is what stays deferred.
 
 GPS/telematics has left this list under ADR-007, and only as far as the ADR goes: TMS owns a
 normalised position contract, its storage and its sampling policy, and ships **no vendor adapter**.

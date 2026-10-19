@@ -1,5 +1,6 @@
 package com.ebim.tms.rates.domain;
 
+import com.ebim.tms.shared.geometry.LoadGeometryCalculator;
 import com.ebim.tms.shared.reference.CostableTrip;
 import java.math.BigDecimal;
 
@@ -42,7 +43,31 @@ public record CostInputs(BigDecimal distanceKm, BigDecimal weightKg, BigDecimal 
          * <p>Null whenever {@code distanceKm} is null - there is no provenance for an absent
          * figure.
          */
-        CostQuantitySource distanceSource) {
+        CostQuantitySource distanceSource,
+        /**
+         * Metres of deck the load takes (V63, ADR-022 section 8), or null when they cannot be
+         * known - in which case {@link #loadingMetersReason} says why.
+         */
+        BigDecimal loadingMeters,
+        /**
+         * Why {@link #loadingMeters} is null: {@code FLOOR_AREA_UNKNOWN} when nothing on the trip
+         * was measured, {@code LOAD_WIDTH_UNKNOWN} when the vehicle has no load width. Null when
+         * the loading metres are known, and when nobody asked (the pre-V63 constructors).
+         */
+        CostComponentReason loadingMetersReason,
+        /**
+         * Where {@link #volumeM3} came from (V63): {@code EFFECTIVE_GEOMETRY} when a measured line
+         * contributed to the trip's planning volume, {@code ORDER_DECLARED_TOTALS} otherwise. Null
+         * falls back to the component's declared source.
+         */
+        CostQuantitySource volumeSource) {
+
+    /** The V39 shape: no geometry, so no loading metres and a volume read as declared. */
+    public CostInputs(BigDecimal distanceKm, BigDecimal weightKg, BigDecimal volumeM3, BigDecimal pallets,
+            BigDecimal chargeableStops, BigDecimal waitingHours, CostQuantitySource distanceSource) {
+        this(distanceKm, weightKg, volumeM3, pallets, chargeableStops, waitingHours, distanceSource,
+                null, null, null);
+    }
 
     /**
      * The quantities of a trip, with {@code distanceKm} supplied separately because it comes from
@@ -64,7 +89,8 @@ public record CostInputs(BigDecimal distanceKm, BigDecimal weightKg, BigDecimal 
      * genuinely absent in that case rather than zero.
      */
     public CostInputs(BigDecimal distanceKm, BigDecimal weightKg, BigDecimal volumeM3, BigDecimal pallets) {
-        this(distanceKm, weightKg, volumeM3, pallets, null, null, CostQuantitySource.ROUTE_REFERENCE);
+        this(distanceKm, weightKg, volumeM3, pallets, null, null, CostQuantitySource.ROUTE_REFERENCE,
+                null, null, null);
     }
 
     public static CostInputs of(CostableTrip trip, BigDecimal distanceKm) {
@@ -86,19 +112,45 @@ public record CostInputs(BigDecimal distanceKm, BigDecimal weightKg, BigDecimal 
                 ? null
                 : BigDecimal.valueOf(Math.max(0, stopCount - 1));
         BigDecimal distance = positiveOrNull(distanceKm);
+        BigDecimal floor = positiveOrNull(trip.floorAreaM2());
+        BigDecimal loadingMeters = floor == null
+                ? null
+                : LoadGeometryCalculator.loadingMetres(floor, trip.loadWidthM(), trip.floorFillFactor());
+        CostComponentReason loadingMetersReason = floor == null
+                ? CostComponentReason.FLOOR_AREA_UNKNOWN
+                : loadingMeters == null ? CostComponentReason.LOAD_WIDTH_UNKNOWN : null;
         return new CostInputs(distance, positiveOrNull(trip.weightKg()),
                 positiveOrNull(trip.volumeM3()), positiveOrNull(trip.pallets()),
                 chargeableStops, positiveOrNull(waitingHours),
-                distance == null ? null : distanceSource);
+                distance == null ? null : distanceSource,
+                positiveOrNull(loadingMeters), loadingMetersReason,
+                // Any floor at all means a measured line is behind the planning volume (V62: floor
+                // area exists only on measured lines), and the breakdown says so.
+                floor == null ? CostQuantitySource.ORDER_DECLARED_TOTALS : CostQuantitySource.EFFECTIVE_GEOMETRY);
+    }
+
+    /**
+     * Why a component's quantity is missing on <em>this</em> estimate: loading metres can be
+     * missing for two reasons (V63), every other component for one.
+     */
+    public CostComponentReason missingReasonFor(RateComponent component) {
+        if (component == RateComponent.LOADING_METERS && loadingMetersReason != null) {
+            return loadingMetersReason;
+        }
+        return component.missingQuantityReason();
     }
 
     /**
      * Where a component's quantity came from on <em>this</em> estimate, which is the declared
-     * source for everything except distance - see {@link #distanceSource}.
+     * source for everything except distance (see {@link #distanceSource}) and volume (see
+     * {@link #volumeSource}).
      */
     public CostQuantitySource sourceFor(RateComponent component) {
         if (component == RateComponent.DISTANCE && distanceSource != null) {
             return distanceSource;
+        }
+        if (component == RateComponent.VOLUME && volumeSource != null) {
+            return volumeSource;
         }
         return component.quantitySource();
     }
@@ -110,6 +162,7 @@ public record CostInputs(BigDecimal distanceKm, BigDecimal weightKg, BigDecimal 
             case WEIGHT -> weightKg;
             case VOLUME -> volumeM3;
             case PALLETS -> pallets;
+            case LOADING_METERS -> loadingMeters;
             case STOP_OFF -> chargeableStops;
             case WAITING_TIME -> waitingHours;
             // The linehaul is not known until the linehaul components have been summed, so the

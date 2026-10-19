@@ -1,7 +1,7 @@
 package com.ebim.tms.rates.domain;
 
 /**
- * One line of a freight charge (migrations V30 and V39).
+ * One line of a freight charge (migrations V30, V39 and V63).
  *
  * <p><b>The order of the constants is the order of application, and that is load-bearing.</b> These
  * components do not commute: a fuel surcharge levied before the linehaul is complete charges a
@@ -10,7 +10,7 @@ package com.ebim.tms.rates.domain;
  * order, and {@code docs/domain/RATE_ENGINE_V2.md} states the resulting arithmetic as a contract.
  *
  * <pre>
- *   BASE + DISTANCE + WEIGHT + VOLUME + PALLETS + STOP_OFF   -&gt; the linehaul
+ *   BASE + DISTANCE + WEIGHT + VOLUME + PALLETS + LOADING_METERS + STOP_OFF -&gt; the linehaul
  *   + FUEL_SURCHARGE     (a percentage of the linehaul, and of nothing else)
  *   + WAITING_TIME + TOLL + OTHER_ACCESSORIAL                -&gt; the accessorials
  *   then MINIMUM_ADJUSTMENT or MAXIMUM_ADJUSTMENT on the total
@@ -38,6 +38,16 @@ public enum RateComponent {
     VOLUME(CostUnit.M3, CostQuantitySource.ORDER_DECLARED_TOTALS),
 
     PALLETS(CostUnit.PALLET, CostQuantitySource.ORDER_DECLARED_TOTALS),
+
+    /**
+     * Per loading metre of deck (V63, ADR-022 section 8).
+     *
+     * <p>Part of the linehaul, beside the other load measures, so the fuel surcharge is taken on it
+     * like on a per-pallet charge. Its quantity comes only from measured geometry - a trip on which
+     * no line was measured has no floor area, and its line is {@code NOT_CALCULABLE}
+     * ({@code FLOOR_AREA_UNKNOWN}), never charged at zero.
+     */
+    LOADING_METERS(CostUnit.LOADING_METER, CostQuantitySource.EFFECTIVE_GEOMETRY),
 
     /**
      * Per drop <em>after the first</em> (V39).
@@ -107,7 +117,7 @@ public enum RateComponent {
     /** Whether this component contributes to the linehaul the fuel surcharge is taken on. */
     public boolean isLinehaul() {
         return switch (this) {
-            case BASE, DISTANCE, WEIGHT, VOLUME, PALLETS, STOP_OFF -> true;
+            case BASE, DISTANCE, WEIGHT, VOLUME, PALLETS, LOADING_METERS, STOP_OFF -> true;
             case FUEL_SURCHARGE, WAITING_TIME, TOLL, OTHER_ACCESSORIAL,
                  MINIMUM_ADJUSTMENT, MAXIMUM_ADJUSTMENT -> false;
         };
@@ -119,7 +129,8 @@ public enum RateComponent {
     }
 
     /**
-     * Why this component could not be calculated. Exhaustive with no default, so a new component
+     * Why this component could not be calculated, when the estimate gives no more precise reason
+     * (see {@code CostInputs.loadingMetersReason}). Exhaustive with no default, so a new component
      * must be given an answer out here rather than falling through to a plausible one.
      */
     public CostComponentReason missingQuantityReason() {
@@ -128,6 +139,7 @@ public enum RateComponent {
             case WEIGHT -> CostComponentReason.WEIGHT_UNKNOWN;
             case VOLUME -> CostComponentReason.VOLUME_UNKNOWN;
             case PALLETS -> CostComponentReason.PALLETS_UNKNOWN;
+            case LOADING_METERS -> CostComponentReason.FLOOR_AREA_UNKNOWN;
             case STOP_OFF -> CostComponentReason.STOPS_UNKNOWN;
             case WAITING_TIME -> CostComponentReason.WAITING_NOT_RECORDED;
             case FUEL_SURCHARGE -> CostComponentReason.DISTANCE_UNKNOWN;

@@ -3,7 +3,10 @@ package com.ebim.tms.settlement.application;
 import com.ebim.tms.settlement.domain.CarrierInvoice;
 import com.ebim.tms.settlement.domain.CarrierInvoiceLine;
 import com.ebim.tms.settlement.domain.FreightDiscrepancy;
+import com.ebim.tms.settlement.domain.ChargeCode;
+import com.ebim.tms.settlement.domain.ExpectedBasis;
 import com.ebim.tms.settlement.domain.FreightMatch;
+import com.ebim.tms.settlement.domain.FreightMatcher;
 import com.ebim.tms.settlement.domain.InvoiceStatus;
 import com.ebim.tms.settlement.domain.MatchStatus;
 import com.ebim.tms.settlement.domain.PayableExport;
@@ -44,12 +47,100 @@ public record CarrierInvoiceView(
         MatchView match,
         List<FreightDiscrepancyView> discrepancies,
         List<ApprovalView> approvals,
-        PayableExportView export) {
+        PayableExportView export,
+        /** The V66 fiscal part: breakdown, fiscal identity, notes, withholdings (ADR-027). */
+        FiscalView fiscal,
+        /** V67 (ADR-023 section 2): frozen at approval; null before it and on pre-V67 approvals. */
+        LocalDate dueDate,
+        BigDecimal paidAmount,
+        String onHoldReason,
+        LocalDate scheduledPaymentDate) {
+
+    /**
+     * The fiscal part of the document, under the regime it was received with (V66, ADR-024 part 2,
+     * ADR-027). TMS received this document and checked its shape; it issued nothing.
+     *
+     * @param netAmount            an invoice's total less approved credit notes plus approved debit
+     *                             notes; null on a note
+     * @param electronicValidation what the tax authority says of the document - always
+     *                             {@code EXTERNAL_DEPENDENCY} today, never "valid" (ADR-024 part 2,
+     *                             item 4); null without a fiscal identity
+     */
+    public record FiscalView(
+            String fiscalCountry,
+            String regime,
+            String vatLabel,
+            String documentKind,
+            String fiscalDocumentCode,
+            int effectiveSign,
+            String documentNumber,
+            String issuerTaxId,
+            BigDecimal subtotalAmount,
+            BigDecimal taxRate,
+            BigDecimal taxAmount,
+            UUID referencedInvoiceId,
+            String referencedInvoiceNumber,
+            BigDecimal netAmount,
+            List<NoteView> notes,
+            List<WithholdingView> withholdings,
+            BigDecimal withholdingTotalAmount,
+            String electronicValidation) {
+
+        public static FiscalView of(CarrierInvoice invoice, String referencedInvoiceNumber, BigDecimal netAmount,
+                List<NoteView> notes, FiscalDocumentValidationPort.FiscalDocumentValidationStatus validation) {
+            com.ebim.tms.settlement.domain.tax.TaxRegime regime = invoice.fiscalCountry() == null ? null
+                    : com.ebim.tms.settlement.domain.tax.TaxRegimes.forCountry(invoice.fiscalCountry());
+            return new FiscalView(invoice.fiscalCountry(), regime == null ? null : regime.code().name(),
+                    regime == null ? null : regime.vatLabel(), invoice.documentKind().name(),
+                    invoice.fiscalDocumentCode(), invoice.effectiveSign(), invoice.fiscalDocumentNumber(),
+                    invoice.issuerTaxId(), invoice.subtotalAmount(), invoice.taxRate(), invoice.taxAmount(),
+                    invoice.referencedInvoiceId(), referencedInvoiceNumber, netAmount, List.copyOf(notes),
+                    WithholdingView.of(invoice), invoice.withholdingTotal(),
+                    validation == null ? null : validation.name());
+        }
+    }
+
+    /**
+     * One withholding of the document (ADR-027): what TMS computed, what applies, and its certificate.
+     *
+     * @param computedAmount what the rules called for; differs from {@code amount} only with an override
+     */
+    public record WithholdingView(String kind, String label, String code, String base, BigDecimal baseAmount,
+            BigDecimal rate, BigDecimal computedAmount, BigDecimal amount, String overrideReason,
+            String certificateNumber, LocalDate certificateDate) {
+
+        public static List<WithholdingView> of(CarrierInvoice invoice) {
+            return invoice.withholdings().stream()
+                    .map(withholding -> new WithholdingView(withholding.kind().name(), withholding.kind().label(),
+                            withholding.code(), withholding.base().name(), withholding.baseAmount(),
+                            withholding.rate(), withholding.computedAmount(), withholding.amount(),
+                            withholding.overrideReason(), withholding.certificateNumber(),
+                            withholding.certificateDate()))
+                    .toList();
+        }
+    }
+
+    /** A credit or debit note that corrects this invoice, as the invoice lists it. */
+    public record NoteView(UUID id, String documentKind, String fiscalDocumentCode, String invoiceNumber,
+            LocalDate invoiceDate, BigDecimal totalAmount, InvoiceStatus status) {
+
+        public static NoteView of(CarrierInvoice note) {
+            return new NoteView(note.id(), note.documentKind().name(), note.fiscalDocumentCode(),
+                    note.invoiceNumber(), note.invoiceDate(), note.totalAmount(), note.status());
+        }
+    }
 
     /**
      * One billed line beside what TMS knows about the shipment it names.
      *
-     * @param expectedAmount   <b>null when the shipment was never priced</b>, never zero
+     * @param chargeCode       which charge the line bills (V64); {@code FREIGHT} for a V46 line
+     * @param expectedAmount   what <b>this line</b> is compared against (V64): the estimate's
+     *                         component of its charge, or for an all-in line the shipment's figure
+     *                         less its other lines' components. <b>Null when it cannot be known</b> -
+     *                         never zero - and for a penalty, a duplicate or a foreign shipment,
+     *                         which are compared with nothing. Shown whether or not the match opened
+     *                         anything: within tolerance the comparison is information, not a block
+     * @param expectedBasis    what {@code expectedAmount} is: the closed actual or the estimate
      * @param differenceAmount billed minus expected, null when there is no expected figure
      * @param shipmentNumber   null when the line names no shipment, or one this carrier did not run
      */
@@ -58,13 +149,19 @@ public record CarrierInvoiceView(
             int lineNumber,
             UUID tripId,
             String shipmentNumber,
+            ChargeCode chargeCode,
             String description,
             BigDecimal quantity,
             BigDecimal unitAmount,
             BigDecimal lineAmount,
             BigDecimal expectedAmount,
+            ExpectedBasis expectedBasis,
             BigDecimal actualAmount,
-            BigDecimal differenceAmount) {
+            BigDecimal differenceAmount,
+            /** Why the shipper deducts, on a PENALTY line (V66). */
+            String penaltyReason,
+            com.ebim.tms.settlement.domain.PenaltyReferenceType penaltyReferenceType,
+            UUID penaltyReferenceId) {
     }
 
     /**
@@ -79,6 +176,8 @@ public record CarrierInvoiceView(
             BigDecimal actualAmount,
             BigDecimal invoicedAmount,
             BigDecimal differenceAmount,
+            /** What {@code expectedAmount} is (V64): ACTUAL, ESTIMATED, MIXED; null before V64. */
+            ExpectedBasis expectedBasis,
             BigDecimal toleranceAbsolute,
             BigDecimal tolerancePercentage,
             int matchedTripCount,
@@ -94,10 +193,15 @@ public record CarrierInvoiceView(
     public static CarrierInvoiceView of(CarrierInvoice invoice, String carrierName, FreightMatch match,
             List<FreightDiscrepancy> discrepancies, List<SettlementApproval> approvals, PayableExport export,
             Map<UUID, TripSettlementLookupPort.TripSettlementSummary> trips,
-            Map<UUID, TripCostLookupPort.TripCostSummary> costs) {
+            Map<UUID, TripCostLookupPort.TripCostSummary> costs, FiscalView fiscal) {
 
+        // The matcher's own per-line split, so the screen shows the figures a match would raise
+        // differences from - computed, never stored, and therefore always against today's costs.
+        Map<UUID, FreightMatcher.LineExpectation> expectations = FreightMatcher.lineExpectations(
+                SettlementService.matcherLines(invoice, trips),
+                SettlementService.matcherCosts(trips, costs, invoice.carrierId()));
         List<LineView> lines = invoice.lines().stream()
-                .map(line -> toLineView(line, invoice.carrierId(), trips, costs))
+                .map(line -> toLineView(line, invoice.carrierId(), trips, costs, expectations.get(line.id())))
                 .toList();
 
         return new CarrierInvoiceView(invoice.id(), invoice.carrierId(), carrierName, invoice.invoiceNumber(),
@@ -106,19 +210,21 @@ public record CarrierInvoiceView(
                 invoice.notes(), invoice.version(), lines,
                 match == null ? null : new MatchView(match.status(), match.expectedAmount(),
                         match.actualAmount(), match.invoicedAmount(), match.differenceAmount(),
-                        match.toleranceAbsolute(), match.tolerancePercentage(), match.matchedTripCount(),
+                        match.expectedBasis(), match.toleranceAbsolute(), match.tolerancePercentage(), match.matchedTripCount(),
                         match.unmatchedLineCount(), match.computedAt()),
                 discrepancies.stream().map(FreightDiscrepancyView::of).toList(),
                 approvals.stream()
                         .map(approval -> new ApprovalView(approval.id(), approval.decision(),
                                 approval.decidedBy(), approval.decidedAt(), approval.comment()))
                         .toList(),
-                export == null ? null : PayableExportView.of(export, true));
+                export == null ? null : PayableExportView.of(export, true),
+                fiscal, invoice.dueDate(), invoice.paidAmount(), invoice.onHoldReason(),
+                invoice.scheduledPaymentDate());
     }
 
     private static LineView toLineView(CarrierInvoiceLine line, UUID invoiceCarrierId,
             Map<UUID, TripSettlementLookupPort.TripSettlementSummary> trips,
-            Map<UUID, TripCostLookupPort.TripCostSummary> costs) {
+            Map<UUID, TripCostLookupPort.TripCostSummary> costs, FreightMatcher.LineExpectation expectation) {
         TripSettlementLookupPort.TripSettlementSummary trip =
                 line.tripId() == null ? null : trips.get(line.tripId());
         // A shipment this carrier did not run is shown as unnamed, matching how the matcher treats
@@ -127,13 +233,15 @@ public record CarrierInvoiceView(
         TripCostLookupPort.TripCostSummary cost =
                 theirs ? costs.get(line.tripId()) : null;
 
-        BigDecimal expected = cost == null ? null : cost.expectedAmount();
+        BigDecimal expected = expectation == null ? null : expectation.expectedAmount();
         return new LineView(line.id(), line.lineNumber(), line.tripId(),
                 theirs ? trip.shipmentNumber() : null,
-                line.description(), line.quantity(), line.unitAmount(), line.lineAmount(),
+                line.chargeCode(), line.description(), line.quantity(), line.unitAmount(), line.lineAmount(),
                 expected,
+                expected == null ? null : expectation.basis(),
                 cost == null ? null : cost.actualAmount(),
                 // Null, not zero: without an expected figure there is no difference to state.
-                expected == null ? null : line.lineAmount().subtract(expected));
+                expected == null ? null : line.lineAmount().subtract(expected),
+                line.penaltyReason(), line.penaltyReferenceType(), line.penaltyReferenceId());
     }
 }

@@ -232,16 +232,23 @@ class TenancyConstraintIntegrationTest {
         // role and the only one of level CARRIER. ORGANIZATION_ADMIN therefore no longer holds the
         // whole catalogue: it holds everything except the two portal permissions.
         //
+        // V59 took it to 67 (ADR-022): masterdata.material_profile:read for the four office roles.
+        // There is no manage permission: the warehouse owns the profile.
+        // V65 took it to 70 (ADR-023): settlement.accrual:read|export|manage.
+        // V66 took it to 71 (ADR-027): settlement.tax:manage, the company's fiscal regime.
+        // V67 took it to 73 (ADR-023 section 2): settlement.payment:record|confirm and portal.invoice:read.
+        // V68 took it to 76 (ADR-026): settlement.cost_allocation:read|manage.
+        //
         // These totals are deliberately exact rather than "at least". The catalogue is a schema
         // contract: a permission that appears without a migration declaring it, or a grant that
         // widens a role silently, is the kind of change this test exists to make visible. The
         // named invariants below are the ones that carry meaning - the counts only anchor them.
         assertThat(count("SELECT count(*) FROM tms.role")).isEqualTo(5);
-        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(66);
+        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(76);
         assertThat(count("SELECT count(*) FROM tms.permission WHERE code = resource || ':' || action"))
-                .isEqualTo(66);
+                .isEqualTo(76);
 
-        // 64 + 63 + 34 + 19 + 2 (V57: the office permissions to the four office roles, the read
+        // 65 + 64 + 35 + 20 + 2 (V59: material_profile:read to the four office roles. V57: the office permissions to the four office roles, the read
         // only to VIEWER; the two portal permissions to CARRIER_OPERATOR). ORGANIZATION_ADMIN holds the whole catalogue; COMPANY_ADMIN holds
         // all of it but iam.organization:manage, which is asserted by name further down.
         //
@@ -254,19 +261,29 @@ class TenancyConstraintIntegrationTest {
         // V52's planning.trip:dispatch-override goes to the two administrator roles only: dispatching
         // past the warehouse is a supervisor's decision, not a planner's.
         // V54's orders.hold:manage goes to both administrators and PLANNER.
-        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(182);
+        // V65's settlement.accrual:read goes to the four office roles; export and manage to the two
+        // administrators only (+8): handing a journal to accounting and reversing an obligation are
+        // not a planner's authority.
+        // V67's settlement.payment:record|confirm go to the two administrators only (+4) - recording that
+        // money left is the authority V46 gives approval and export - and portal.invoice:read to
+        // CARRIER_OPERATOR alone (+1).
+        // V66's settlement.tax:manage goes to the two administrators only (+2): the regime decides what is
+        // withheld from every carrier.
+        // V68's settlement.cost_allocation:read goes to the four office roles and manage to the two
+        // administrators (+6): recalculating what an order cost is not a planner's authority.
+        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(207);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'ORGANIZATION_ADMIN'"))
-                .isEqualTo(64);
+                .isEqualTo(73);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'COMPANY_ADMIN'"))
-                .isEqualTo(63);
+                .isEqualTo(72);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'PLANNER'"))
-                .isEqualTo(34);
+                .isEqualTo(37);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'VIEWER'"))
-                .isEqualTo(19);
+                .isEqualTo(22);
         // ADR-018: the portal and the office never share a permission.
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id"

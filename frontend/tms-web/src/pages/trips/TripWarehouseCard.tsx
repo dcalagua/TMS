@@ -26,8 +26,8 @@ import { t } from "../../lib/i18n";
 import { fmtDateTime, fmtDecimal, fmtQuantity, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
 import { notifyError, notifySuccess } from "../../lib/ui";
 import {
-  countBySeverity, orderMatchTone, outcomeTone, planVsReal, severityTone, sortDocuments, sortMilestones,
-  verificationTone,
+  countBySeverity, geometryVariances, orderMatchTone, outcomeTone, planVsReal, severityTone, sortDocuments,
+  sortMilestones, verificationTone,
 } from "./warehouseDispatch";
 
 interface TripWarehouseCardProps {
@@ -209,6 +209,10 @@ function DocumentSection({
         <DetailItem label={t("Sistema")} value={document.sourceSystem} />
         <DetailItem label={t("Carga")} value={document.loadReference} />
         <DetailItem label={t("Despacho físico")} value={document.actualDispatchAt ? fmtDateTime(document.actualDispatchAt) : null} />
+        {/* El remolque (contrato v1.1) se muestra y no se compara: la placa del plan es la del tracto. */}
+        {document.vehicleTrailerPlate && (
+          <DetailItem label={t("Remolque")} value={document.vehicleTrailerPlate} />
+        )}
         <DetailItem label={t("Precinto")} value={document.sealNumber} />
         <DetailItem label={t("Guía de transporte")} value={document.transportDocumentNumber} />
         <DetailItem label={t("Recibido")} value={fmtDateTime(document.receivedAt)} />
@@ -310,6 +314,7 @@ function DocumentSection({
           <Box sx={{ display: "grid", gap: 0.5, mt: 0.75 }}>
             {document.orders.map((order, index) => {
               const tmsNumber = order.orderId ? orderNumbers.get(order.orderId) : undefined;
+              const footprintDiffs = geometryVariances(document, order.externalReference);
               return (
                 <Box
                   key={`${order.externalSource ?? ""}-${order.externalReference ?? ""}-${index}`}
@@ -325,9 +330,21 @@ function DocumentSection({
                       order.status,
                       order.handlingUnits === null ? null : `${fmtQuantity(order.handlingUnits)} ${t("bultos")}`,
                       order.weightKg === null ? null : fmtWeightKg(order.weightKg),
+                      footprintText(order),
                     ].filter(Boolean).join(" · ")}
                   </Typography>
                   <Box sx={{ flex: 1 }} />
+                  {footprintDiffs.length > 0 && (
+                    <Tooltip
+                      title={footprintDiffs.map((diff) => `${t(diff.unit)}: ${t("Plan TMS")} ${
+                        diff.planned === null ? "-" : fmtDecimal(diff.planned, 3)} · ${t("almacén")} ${
+                        diff.dispatched === null ? "-" : fmtDecimal(diff.dispatched, 3)}`).join(" | ")}
+                    >
+                      <span>
+                        <StatusChip label={t("Huella distinta a la planificada (informativa)")} tone="open" />
+                      </span>
+                    </Tooltip>
+                  )}
                   <StatusChip label={enumLabel("dispatchOrderMatch", order.matchResult)} tone={orderMatchTone(order.matchResult)} />
                 </Box>
               );
@@ -337,6 +354,23 @@ function DocumentSection({
       )}
     </Box>
   );
+}
+
+/**
+ * La huella que calculó el almacén (contrato v1.1): pilas, volumen efectivo y metros lineales.
+ * Se muestra tal cual; la comparación con el plan la hace el servidor (GEOMETRY_VARIANCE, fase 45)
+ * y se marca aparte con un chip informativo. Sin huella, el motivo del almacén.
+ */
+function footprintText(order: DispatchDocumentView["orders"][number]): string | null {
+  const parts = [
+    order.stacks == null ? null : `${fmtQuantity(order.stacks)} ${t("pilas")}`,
+    order.effectiveVolumeM3 == null ? null : `${fmtVolumeM3(order.effectiveVolumeM3)} ${t("efectivos")}`,
+    order.loadingMeters == null ? null : `${fmtDecimal(order.loadingMeters, 2)} ${t("m lineales")}`,
+  ].filter(Boolean);
+  if (parts.length > 0) return parts.join(" · ");
+  return order.geometryReason
+    ? `${t("Sin huella")}: ${enumLabel("dispatchGeometryReason", order.geometryReason)}`
+    : null;
 }
 
 /**

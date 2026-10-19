@@ -75,7 +75,33 @@ public enum IntegrationScope {
     WAREHOUSE_MILESTONE_WRITE("integration.warehouse-milestone:write"),
 
     /** Record the documents an ERP issued for orders - invoice, delivery note, GRE (V55, ADR-015). */
-    DOCUMENT_WRITE("integration.document:write");
+    DOCUMENT_WRITE("integration.document:write"),
+
+    /**
+     * Write the physical profile of materials (migration V59, ADR-022): what a warehouse measured.
+     * Write-only, like {@link #DISPATCH_WRITE}; the profile is master data the warehouse owns.
+     */
+    MATERIAL_WRITE("integration.material:write"),
+
+    /**
+     * Read transport orders back (migration V61, ADR-025 section 4): one by number and the feed by
+     * status and {@code updatedSince}. What a warehouse reads after an {@code ORDER_CANCELLED} webhook.
+     * Separate from {@link #ORDER_WRITE}: the ERP that writes orders need not read them, and the
+     * warehouse that reads them must not write them.
+     */
+    ORDER_READ("integration.order:read"),
+
+    /**
+     * Report what the warehouse did to its order - cancelled it, or closed it short (migration V61,
+     * ADR-025 section 4). Its effect is at most a hold; TMS never cancels by itself (D-03).
+     */
+    WAREHOUSE_ORDER_EVENT_WRITE("integration.warehouse-order-event:write"),
+
+    /**
+     * The ERP reports what it paid against an exported carrier invoice (migration V67, ADR-023
+     * section 2). TMS records it and moves no money (D-01).
+     */
+    PAYABLE_PAYMENT_WRITE("integration.payable-payment:write");
 
     private static final Map<String, IntegrationScope> BY_CODE = Arrays.stream(values())
             .collect(Collectors.toUnmodifiableMap(IntegrationScope::code, Function.identity()));

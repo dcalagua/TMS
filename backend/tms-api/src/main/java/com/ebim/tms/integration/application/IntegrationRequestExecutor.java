@@ -6,6 +6,7 @@ import com.ebim.tms.integration.domain.IntegrationRequestStatus;
 import com.ebim.tms.shared.api.ConflictException;
 import com.ebim.tms.shared.api.IdempotencyConflictException;
 import com.ebim.tms.shared.api.InvalidRequestException;
+import com.ebim.tms.shared.api.ProblemTypedException;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.web.CorrelationId;
 import io.micrometer.core.instrument.Counter;
@@ -152,18 +153,34 @@ public class IntegrationRequestExecutor {
             recordRejection(principal, operation, key, payloadHash, snapshot, 409, truncate(conflict.getMessage()),
                     receivedAt);
             throw conflict;
+        } catch (ProblemTypedException refused) {
+            // A business refusal with its own problem type (a 422 payment-exceeds-balance, V67): the
+            // partner's problem, recorded with the status the response carries - not a 500 of ours.
+            if (refused.type().status().is4xxClientError()) {
+                recordRejection(principal, operation, key, payloadHash, snapshot, refused.type().status().value(),
+                        truncate(refused.getMessage()), receivedAt);
+                throw refused;
+            }
+            throw recordFailure(principal, operation, key, payloadHash, snapshot, receivedAt, refused);
         } catch (RuntimeException unexpected) {
-            // Ours, not the caller's. The cause goes to the log under the correlation id; the
-            // inbox and the response both say only that it failed.
-            String correlationId = CorrelationId.current().orElse("-");
-            log.error("Integration operation {} failed for client {} [correlationId={}]", operation.code(),
-                    principal.clientId(), correlationId, unexpected);
-            inbox.record(row(principal, operation, key, payloadHash, snapshot, null,
-                    IntegrationRequestStatus.FAILED, 500,
-                    "The request could not be completed. Correlation id: " + correlationId, null, receivedAt));
-            count(operation, "FAILED");
-            throw unexpected;
+            throw recordFailure(principal, operation, key, payloadHash, snapshot, receivedAt, unexpected);
         }
+    }
+
+    /**
+     * Ours, not the caller's. The cause goes to the log under the correlation id; the inbox and the
+     * response both say only that it failed.
+     */
+    private RuntimeException recordFailure(IntegrationPrincipal principal, IntegrationOperation operation,
+            String key, String payloadHash, String snapshot, OffsetDateTime receivedAt, RuntimeException unexpected) {
+        String correlationId = CorrelationId.current().orElse("-");
+        log.error("Integration operation {} failed for client {} [correlationId={}]", operation.code(),
+                principal.clientId(), correlationId, unexpected);
+        inbox.record(row(principal, operation, key, payloadHash, snapshot, null,
+                IntegrationRequestStatus.FAILED, 500,
+                "The request could not be completed. Correlation id: " + correlationId, null, receivedAt));
+        count(operation, "FAILED");
+        return unexpected;
     }
 
     private void count(IntegrationOperation operation, String outcome) {

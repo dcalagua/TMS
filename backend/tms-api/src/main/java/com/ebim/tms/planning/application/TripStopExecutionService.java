@@ -12,11 +12,13 @@ import com.ebim.tms.planning.infrastructure.TripExceptionRepository;
 import com.ebim.tms.planning.infrastructure.TripRepository;
 import com.ebim.tms.shared.api.ConflictException;
 import com.ebim.tms.shared.api.InvalidRequestException;
+import com.ebim.tms.shared.api.ProblemTimes;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -138,7 +140,7 @@ public class TripStopExecutionService {
         requireReason(target, exceptionType, notes);
 
         OffsetDateTime occurredAt = resolveOccurredAt(requestedAt);
-        requireNotBefore(occurredAt, earliestAllowedFor(trip, stop, target));
+        requireNotBefore(occurredAt, earliestAllowedFor(trip, stop, target), scope.zoneId());
 
         UUID actorId = auditActorProvider.requireAppUserId();
         trip.recordStopOutcome(stopId, target, occurredAt, notes, actorId);
@@ -255,9 +257,10 @@ public class TripStopExecutionService {
         return requested;
     }
 
-    private static void requireNotBefore(OffsetDateTime occurredAt, OffsetDateTime earliest) {
+    private static void requireNotBefore(OffsetDateTime occurredAt, OffsetDateTime earliest, ZoneId zone) {
         if (earliest != null && occurredAt.isBefore(earliest)) {
-            throw new InvalidRequestException("occurredAt cannot be before " + earliest + ".");
+            throw new InvalidRequestException(
+                    "occurredAt cannot be before " + ProblemTimes.at(earliest, zone) + ".");
         }
     }
 

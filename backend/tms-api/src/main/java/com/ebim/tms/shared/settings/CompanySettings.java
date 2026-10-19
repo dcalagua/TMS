@@ -1,5 +1,7 @@
 package com.ebim.tms.shared.settings;
 
+import java.math.BigDecimal;
+
 /**
  * One company's operational defaults, as the rest of the product reads them (migration V34).
  *
@@ -19,7 +21,24 @@ public record CompanySettings(
         String defaultCountry,
         String orderNumberPrefix,
         String shipmentNumberPrefix,
-        DispatchConfirmationMode dispatchConfirmationMode) {
+        DispatchConfirmationMode dispatchConfirmationMode,
+        /**
+         * The usable height order lines are stacked against when written (V62, ADR-022 section 4).
+         * Null = the deployment's {@code tms.planning.geometry.default-reference-height-m}.
+         */
+        BigDecimal referenceLoadHeightM,
+        /**
+         * Share of a vehicle type's floor a load can cover (V62). Null = the deployment's
+         * {@code tms.planning.geometry.default-floor-fill-factor}; a vehicle type's own factor wins.
+         */
+        BigDecimal loadFloorFillFactor,
+        /** When a freight accrual is born (V65, ADR-023, D-07). Null reads DISPATCHED. */
+        AccrualTrigger accrualTrigger,
+        /**
+         * How a trip's cost is split between its orders (V68, ADR-026). Null = the deployment's
+         * {@code tms.finance.cost-allocation.default-basis}.
+         */
+        CostAllocationBasis costAllocationBasis) {
 
     /** ISO 3166-1 alpha-2 of the launch market, and the default of {@code tms.location.country}. */
     public static final String DEFAULT_COUNTRY = "PE";
@@ -30,7 +49,7 @@ public record CompanySettings(
 
     private static final CompanySettings DEFAULTS = new CompanySettings(
             DEFAULT_COUNTRY, DEFAULT_ORDER_NUMBER_PREFIX, DEFAULT_SHIPMENT_NUMBER_PREFIX,
-            DispatchConfirmationMode.MANUAL);
+            DispatchConfirmationMode.MANUAL, null, null, AccrualTrigger.DISPATCHED, null);
 
     /**
      * Blank-tolerant on purpose. The columns behind this are all {@code NOT NULL} with defaults, so
@@ -44,6 +63,30 @@ public record CompanySettings(
         dispatchConfirmationMode = dispatchConfirmationMode == null
                 ? DispatchConfirmationMode.MANUAL
                 : dispatchConfirmationMode;
+        accrualTrigger = accrualTrigger == null ? AccrualTrigger.DISPATCHED : accrualTrigger;
+    }
+
+    /** The V65 shape, for callers that predate cost allocation (V68): the basis follows the deployment. */
+    public CompanySettings(String defaultCountry, String orderNumberPrefix, String shipmentNumberPrefix,
+            DispatchConfirmationMode dispatchConfirmationMode, BigDecimal referenceLoadHeightM,
+            BigDecimal loadFloorFillFactor, AccrualTrigger accrualTrigger) {
+        this(defaultCountry, orderNumberPrefix, shipmentNumberPrefix, dispatchConfirmationMode,
+                referenceLoadHeightM, loadFloorFillFactor, accrualTrigger, null);
+    }
+
+    /** The V62 shape, for callers that predate freight accruals (V65): the trigger reads DISPATCHED. */
+    public CompanySettings(String defaultCountry, String orderNumberPrefix, String shipmentNumberPrefix,
+            DispatchConfirmationMode dispatchConfirmationMode, BigDecimal referenceLoadHeightM,
+            BigDecimal loadFloorFillFactor) {
+        this(defaultCountry, orderNumberPrefix, shipmentNumberPrefix, dispatchConfirmationMode,
+                referenceLoadHeightM, loadFloorFillFactor, AccrualTrigger.DISPATCHED);
+    }
+
+    /** The V52 shape, for callers that predate load geometry (V62): both geometry values unset. */
+    public CompanySettings(String defaultCountry, String orderNumberPrefix, String shipmentNumberPrefix,
+            DispatchConfirmationMode dispatchConfirmationMode) {
+        this(defaultCountry, orderNumberPrefix, shipmentNumberPrefix, dispatchConfirmationMode, null, null,
+                AccrualTrigger.DISPATCHED);
     }
 
     /** The V34 shape, for callers that predate the dispatch mode (V52): the mode reads MANUAL. */
@@ -53,7 +96,44 @@ public record CompanySettings(
 
     /** A copy with another dispatch mode. */
     public CompanySettings withDispatchConfirmationMode(DispatchConfirmationMode mode) {
-        return new CompanySettings(defaultCountry, orderNumberPrefix, shipmentNumberPrefix, mode);
+        return new CompanySettings(defaultCountry, orderNumberPrefix, shipmentNumberPrefix, mode,
+                referenceLoadHeightM, loadFloorFillFactor, accrualTrigger, costAllocationBasis);
+    }
+
+    /** A copy with another accrual trigger. */
+    public CompanySettings withAccrualTrigger(AccrualTrigger trigger) {
+        return new CompanySettings(defaultCountry, orderNumberPrefix, shipmentNumberPrefix,
+                dispatchConfirmationMode, referenceLoadHeightM, loadFloorFillFactor, trigger, costAllocationBasis);
+    }
+
+    /** A copy with another cost allocation basis (null = the deployment default). */
+    public CompanySettings withCostAllocationBasis(CostAllocationBasis basis) {
+        return new CompanySettings(defaultCountry, orderNumberPrefix, shipmentNumberPrefix,
+                dispatchConfirmationMode, referenceLoadHeightM, loadFloorFillFactor, accrualTrigger, basis);
+    }
+
+    /** Reads a stored basis; null or unknown reads as unset, so the deployment default applies. */
+    public static CostAllocationBasis costAllocationBasisOf(String stored) {
+        if (stored == null || stored.isBlank()) {
+            return null;
+        }
+        try {
+            return CostAllocationBasis.valueOf(stored.trim());
+        } catch (IllegalArgumentException unknown) {
+            return null;
+        }
+    }
+
+    /** Reads a stored trigger, tolerating an unknown one as the default (D-07) rather than failing. */
+    public static AccrualTrigger accrualTriggerOf(String stored) {
+        if (stored == null || stored.isBlank()) {
+            return AccrualTrigger.DISPATCHED;
+        }
+        try {
+            return AccrualTrigger.valueOf(stored.trim());
+        } catch (IllegalArgumentException unknown) {
+            return AccrualTrigger.DISPATCHED;
+        }
     }
 
     /** Reads a stored value, tolerating an unknown one as the safe default rather than failing a write. */

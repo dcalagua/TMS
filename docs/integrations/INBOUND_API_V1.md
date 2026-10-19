@@ -109,8 +109,11 @@ A credential holds one or more scopes, and at least one is required:
 |---|---|
 | `integration.location:write` | `POST /integration/v1/locations`, `/locations/batch` |
 | `integration.order:write` | `POST /integration/v1/orders`, `/orders/batch` |
+| `integration.order:read` | `GET /integration/v1/orders/{orderNumber}`, `GET /integration/v1/orders?status=&updatedSince=` (V61, `WAREHOUSE_EXECUTION_V1.md` §7.4) |
+| `integration.warehouse-order-event:write` | `POST /integration/v1/warehouse-order-events` (V61, `WAREHOUSE_EXECUTION_V1.md` §7.5) |
 | `integration.tracking:write` | `POST /integration/v1/tracking/positions` - see [§12](#12-vehicle-positions-migration-v29) |
 | `integration.tender:respond` | `GET /integration/v1/tenders`, `POST /integration/v1/tenders/{shipmentNumber}/response` - see [§13](#13-carrier-tendering-migration-v31) |
+| `integration.document:write` | `POST /integration/v1/logistics-documents` (V55, V69) - see [§15](#15-logistics-documents-migrations-v55-and-v69-adr-015-adr-028) |
 
 `integration.tender:respond` is the one scope that is **not sufficient on its own**: the credential
 holding it must also be bound to a carrier (`carrierId`, §2.4). Read and write are one scope rather
@@ -661,6 +664,7 @@ unambiguous, and RFC 9457 does not require it to resolve. **Branch on `type` or 
 | `401` | `unauthenticated` | Credential missing, malformed, unknown, revoked, inactive, wrong secret, scopeless, or its company is deactivated |
 | `403` | `access-denied` | Authenticated, but the credential lacks the scope for this endpoint |
 | `403` | `company-scope-forbidden` | An `X-Company-Id` was sent naming a company other than the credential's own |
+| `423` | `tenant-suspended` | The organization's operation is suspended by EBIM MasterAdmin (ADR-021). Writes are refused until it is reactivated; GETs keep working. Body carries `error: TENANT_SUSPENDED` and `reason`. Retry later, do not change the payload |
 | `400` | `company-scope-invalid` | An `X-Company-Id` was sent that is not a UUID |
 | `404` | `resource-not-found` | A referenced master (origin, destination, zone) does not exist **in this company** |
 | `409` | `conflict` | Business conflict, e.g. an order already planned, or a code/external-reference collision |
@@ -1110,3 +1114,270 @@ queue until the next poll noticed it was gone.
    the response echoes `"status": "REJECTED"`.
 5. Poll interval is agreed. There is no webhook - V1 stops at the transactional outbox, for the
    reasons `docs/integrations/OUTBOUND_SHIPMENT_V1.md` sets out.
+
+## 14. Payable payments (migrations V66/V67, ADR-023 section 2, ADR-027)
+
+The ERP tells TMS what it paid against a carrier invoice that TMS exported (`POST /settlement/invoices/{id}/export`).
+**TMS records the payment and moves no money** (decision D-01): it has no bank account, produces no bank file and
+executes nothing. A person can record the same thing by hand, with a second person confirming (four eyes); both channels
+end in one append-only row of `tms.carrier_payment`.
+
+The fiscal vocabulary is the **company's tax regime** (ADR-027), selected by its fiscal country: Peru (SUNAT codes,
+`F001-123`, 11-digit RUC, detraction or retention), Ecuador (SRI codes, `001-001-000000123`, 13-digit RUC, income-tax and
+VAT withholdings) or the generic regime of any other country (free-text number and tax id, no withholdings). TMS
+**receives** carrier documents and checks their shape; it issues, signs or sends nothing to a tax authority.
+
+### 14.1 `POST /integration/v1/payable-payments`
+
+- Scope **`integration.payable-payment:write`**, operation `PAYABLE_PAYMENT` (`payable-payment.record` in the inbox).
+- `Idempotency-Key` recommended: the same key with the same payload replays the first response; with another payload it
+  is `409`.
+- The payment is attributed to the credential (`carrier_payment.source = INTEGRATION`, `recorded_by_client`), never to a
+  person. The company is the credential's.
+
+Peru (a factura with detraction, paid net; the detraction's constancy recorded with the payment):
+
+```http
+POST /integration/v1/payable-payments
+Authorization: Bearer tms_ic_<clientId>.<secret>
+Idempotency-Key: 4f7c1c9e-2a1d-4b55-9a0e-6d2f3c7b8a10
+Content-Type: application/json
+
+{
+  "invoice": {
+    "carrierTaxId": "20600000011",
+    "documentType": "01",
+    "documentNumber": "F001-000123"
+  },
+  "paymentReference": "SAP-PAY-2026-11-0042",
+  "paidOn": "2026-11-10",
+  "amount": 560.00,
+  "currency": "PEN",
+  "withholdings": [
+    { "kind": "PE_DETRACTION", "amount": 40.00, "certificateNumber": "DET-889120", "certificateDate": "2026-11-09" }
+  ],
+  "sourceSystem": "SAP"
+}
+```
+
+Ecuador (a factura at VAT 0% with the income-tax withholding, paid net; the comprobante de retención recorded):
+
+```json
+{
+  "invoice": {
+    "carrierTaxId": "0990004196001",
+    "documentType": "01",
+    "documentNumber": "001-001-000000123"
+  },
+  "paymentReference": "ERP-PAY-2026-11-0007",
+  "paidOn": "2026-11-10",
+  "amount": 990.00,
+  "currency": "USD",
+  "withholdings": [
+    { "kind": "EC_INCOME_TAX_WITHHOLDING", "amount": 10.00,
+      "certificateNumber": "001-001-000000045", "certificateDate": "2026-10-16" }
+  ],
+  "sourceSystem": "SAP"
+}
+```
+
+```json
+201 Created
+{
+  "invoiceId": "0b5a3c2e-8f1e-4d0a-9b8e-3c6d2e1f4a77",
+  "invoiceNumber": "F001-123",
+  "paymentId": "6e1d0c9b-7a2f-4e3d-8c1b-5a4f3e2d1c0b",
+  "outcome": "RECORDED",
+  "status": "PAID",
+  "paidAmount": 960.00,
+  "openBalance": 0.00,
+  "dueDate": "2026-11-19"
+}
+```
+
+**Naming the invoice** - exactly one of:
+
+| Key | Fields | Use |
+|---|---|---|
+| TMS id | `invoiceId` | The export payload carries it (`invoiceId`) |
+| Fiscal document | `carrierTaxId` (issuer tax id, up to 20 characters: Peru 11, Ecuador 13), `documentType` (the country's code - Peru `01`/`07`/`08`, Ecuador `01`/`04`/`05` - or the kind `INVOICE`/`CREDIT_NOTE`/`DEBIT_NOTE`; `INVOICE` by default), `documentNumber` (in the regime's format) | Read by the company's current regime and normalised as at receipt: `F001-000123` is `F001-123`, `001-001-123` is `001-001-000000123` |
+| No fiscal identity | `carrierCode`, `invoiceNumber` | A document received without a fiscal number |
+
+**The open balance** a payment is checked against:
+
+```
+net     = total - approved credit notes + approved debit notes
+payable = net - sum of the document's withholdings    (deposited with the tax authority, not paid to the carrier)
+open    = payable - payments already recorded
+```
+
+`amount` is what the carrier was paid. `withholdings` is informative - the balance is computed from the document's own
+withholdings, which TMS computed at receipt - and carries their proof: for each kind the document carries, its
+`certificateNumber` and `certificateDate` (Peru's detraction constancy, Ecuador's comprobante de retención) are stored on
+the document's withholding. A kind the document does not carry is a `400`. Kinds: `PE_DETRACTION`, `PE_RETENTION`,
+`EC_INCOME_TAX_WITHHOLDING`, `EC_VAT_WITHHOLDING`. The report is kept whole on the payment
+(`carrier_payment.reported_withholdings`).
+
+### 14.2 Outcomes
+
+| Status | Meaning |
+|---|---|
+| `201` `RECORDED` | The payment was recorded; `status` is `PARTIALLY_PAID` or `PAID` |
+| `200` `DUPLICATE` | The same `paymentReference` for this invoice, with the same date, amount and currency: nothing new is recorded and the first `paymentId` is returned |
+| `400` | Validation (amount not positive, more than two decimals, two invoice keys, a document number not in the regime's format, a `documentType` the regime does not have, an unknown withholding kind or one the document does not carry, a certificate date without its number) |
+| `403` | The credential lacks `integration.payable-payment:write` |
+| `404` | No invoice of this company matches the key |
+| `409` | The invoice is not exported yet; the document is a credit/debit note (a note adjusts its invoice and is not paid); the `paymentReference` was already used with other figures |
+| `422` `payment-exceeds-balance` | `amount` is above the open balance; `detail` states net, withheld, paid and open. A `PAID` invoice has an open balance of zero |
+| `422` `payment-currency-mismatch` | `currency` is not the invoice's. TMS converts no currency |
+
+A `4xx` is recorded in the inbox as `REJECTED` with its own status; it is the ERP's to correct and resending the same
+payload will not help.
+
+### 14.3 What the status means afterwards
+
+`EXPORTED` -> `SCHEDULED` (a person planned the date) -> `PARTIALLY_PAID` -> `PAID`, or `ON_HOLD` (a person stopped it, with
+a reason). A payment the ERP reports on a held invoice is recorded - the money left regardless - and ends the hold (audited
+as `PAYABLE_HOLD_RELEASED` with the hold's reason). `PAID` is terminal. Webhooks: `INVOICE_APPROVED`, `PAYABLE_EXPORTED`,
+`PAYABLE_PAID` (`WEBHOOKS_V1.md`).
+
+### 14.4 Not in this contract
+
+Bank files, payment execution, bank accounts, a general ledger, FX, reversing a payment (the ERP issues another document;
+`tms.carrier_payment` is append-only by grant and by trigger), and anything with the tax authority: TMS does not issue,
+sign or send electronic documents or withholding certificates to SUNAT or the SRI, and does not validate a received one
+online (`electronicValidation` is `EXTERNAL_DEPENDENCY`, never "valid").
+
+## 15. Logistics documents (migrations V55 and V69, ADR-015, ADR-028)
+
+The invoices, delivery notes and remission guides the customer's ERP issued for its orders. **TMS
+receives them and shows them; it never issues, signs, sends or validates a document with a tax
+authority** (no SRI or SUNAT emission, no XML, no status query). The document an authority accepted is
+the ERP's; TMS keeps its data, links it to orders many to many and shows it on the order, the trip
+and the carrier portal. Nothing here moves an order, a trip or a delivery.
+
+### 15.1 `POST /integration/v1/logistics-documents`
+
+- Scope **`integration.document:write`**, operation `LOGISTICS_DOCUMENT_UPSERT`.
+- Identity: (`sourceSystem`, `documentType`, `documentNumber`). The same identity again is an
+  upsert: `201 CREATED`, `200 UPDATED` (content or links changed), `200 UNCHANGED`.
+- `Idempotency-Key` optional, semantics of §4.2: the same key with the same payload replays the first
+  response; with another payload it is `409`.
+- Orders are matched exactly by (`externalSource`, `externalReference`). An order not yet known is
+  reported in `unknownOrders` and linked by a later re-send. The trip is derived through the orders:
+  a guide shows on every trip that carries one of its orders.
+
+| Field | Type | Notes |
+|---|---|---|
+| `sourceSystem` | string, required | ERP namespace, `^[A-Z0-9_]{2,40}$` |
+| `documentType` | required | `INVOICE`, `DELIVERY_NOTE`, `REMISSION_GUIDE`, `GRE_REMITENTE`, `GRE_TRANSPORTISTA`, `OTHER` |
+| `documentNumber` | string ≤ 60, required | As issued. With `fiscalCountry=EC` see 15.2 |
+| `issueDate` | date | |
+| `issuerTaxId`, `recipientTaxId` | string ≤ 20 | The issuer's RUC (EC: 13 digits) |
+| `recipientName` | string ≤ 200 | Single-recipient documents; a guide uses `recipients` |
+| `amount`, `currency` | decimal ≥ 0, ISO 4217 | Informational; both or neither |
+| `status` | string ≤ 40 | The ERP's own reading (`AUTORIZADO`, `ISSUED`...). Stored, **never interpreted** |
+| `orders[]` | 1-500, required | `{externalSource, externalReference}` |
+| **V69 (all optional)** | | |
+| `fiscalCountry` | ISO 3166-1 alpha-2 | `EC`, `PE`, ... in upper case |
+| `fiscalDocumentCode` | `^[0-9A-Z]{1,4}$` | The authority's class code: `06` SRI guía de remisión, `01` factura; `09` / `31` SUNAT GRE |
+| `authorizationNumber` | ≤ 64, no spaces | SRI clave de acceso (EC: exactly 49 digits), SUNAT reference |
+| `transportStartDate`, `transportEndDate` | date | End not before start |
+| `carrierTaxId` ≤ 20, `carrierName` ≤ 300, `vehiclePlate` ≤ 20 | string | As printed on the guide; **not** compared with the trip |
+| `originAddress`, `transferReason` | string ≤ 300 | Dirección de partida, motivo de traslado |
+| `recipients[]` | ≤ 500 | Destinatarios, in order; replaced whole on a re-send |
+| `recipients[].taxId` ≤ 20, `.name` ≤ 300, `.destinationAddress` ≤ 300, `.transferReason` ≤ 300 | string | |
+| `recipients[].destinationEstablishmentCode` ≤ 10, `.route` ≤ 300 | string | SRI `codEstabDestino`, `ruta` |
+| `recipients[].relatedDocumentCode` (1-4), `.relatedDocumentNumber` ≤ 60, `.relatedDocumentAuthorizationNumber` ≤ 64, `.relatedDocumentDate` | | The supporting sales document (`codDocSustento`, `numDocSustento`...) |
+| `recipients[].items[]` ≤ 500 | `{code ≤ 40, additionalCode ≤ 40, description ≤ 300 (required), quantity ≥ 0, unit ≤ 20}` | Display-only, never reconciled with the order lines |
+
+A body without the V69 fields is the same v1 document it always was: the new fields are omitted
+from the request fingerprint when absent, so an `Idempotency-Key` stored before V69 still replays.
+
+### 15.2 Catalogue and shape rules
+
+| `documentType` | Country | Authority code | Shown as |
+|---|---|---|---|
+| `REMISSION_GUIDE` | `EC` | `06` | Guía de remisión (SRI 06) |
+| `GRE_REMITENTE` | `PE` (implied) | `09` | GRE remitente (SUNAT 09) |
+| `GRE_TRANSPORTISTA` | `PE` (implied) | `31` | GRE transportista (SUNAT 31) |
+| `REMISSION_GUIDE` | `PE` | `09` / `31` | GRE remitente / transportista |
+| `REMISSION_GUIDE` | other / none | as sent | Guía de remisión (XX) |
+
+`GRE_*` are SUNAT's: they stay valid without a country and are refused with any country but `PE`.
+A code that contradicts the table (an Ecuadorian guide labelled `01`) is `400`, never corrected.
+
+Only **shape** is validated, and only where the country is declared. With `fiscalCountry = EC`:
+
+- `documentNumber` of an SRI comprobante (`REMISSION_GUIDE`, or any type with a `fiscalDocumentCode`)
+  is `establecimiento-puntoEmision-secuencial`: `^\d{3}-\d{3}-\d{9}$`;
+- `authorizationNumber`, when present, is exactly 49 digits;
+- `issuerTaxId`, when present, is 13 digits.
+
+The clave's mod-11 digit is not verified, nothing is checked against the SRI, and Peru's numbers stay
+"never parsed". A violation is `400 malformed-request` naming every problem, recorded `REJECTED` in the
+inbox; the database refuses the same rows (V69 CHECKs).
+
+### 15.3 Example: an Ecuadorian guía de remisión (PLAPASA, demo data)
+
+All numbers below are **fake but well formed** (the clave has a valid mod-11 digit and environment
+`1` = pruebas). Do not reuse them as real documents.
+
+```http
+POST /integration/v1/logistics-documents
+Authorization: Bearer tms_ic_<clientId>.<secret>
+Idempotency-Key: plapasa-gr-001-001-000000123
+Content-Type: application/json
+
+{
+  "sourceSystem": "SAP_EC",
+  "documentType": "REMISSION_GUIDE",
+  "documentNumber": "001-001-000000123",
+  "issueDate": "2026-10-15",
+  "issuerTaxId": "0992999999001",
+  "status": "AUTORIZADO",
+  "fiscalCountry": "EC",
+  "fiscalDocumentCode": "06",
+  "authorizationNumber": "1510202606099299999900110010010000001231234567819",
+  "transportStartDate": "2026-10-15",
+  "transportEndDate": "2026-10-16",
+  "carrierTaxId": "0991111111001",
+  "carrierName": "TRLIT Transportes del Litoral (demo)",
+  "vehiclePlate": "GBC-5678",
+  "originAddress": "Km 14,5 Vía a Daule, Guayaquil",
+  "transferReason": "Venta",
+  "recipients": [
+    {
+      "taxId": "0990000000001",
+      "name": "Ferretería El Constructor",
+      "destinationAddress": "Av. Juan Tanca Marengo Km 2, Guayaquil",
+      "transferReason": "Venta",
+      "relatedDocumentCode": "01",
+      "relatedDocumentNumber": "001-002-000004567",
+      "relatedDocumentDate": "2026-10-14",
+      "items": [
+        { "code": "PVC-110-3", "description": "Tubo PVC 110 mm x 3 m", "quantity": 120, "unit": "UND" },
+        { "code": "CDO-110", "description": "Codo PVC 110 mm 90°", "quantity": 40, "unit": "UND" }
+      ]
+    }
+  ],
+  "orders": [ { "externalSource": "SAP_EC", "externalReference": "SO-2026-10040" } ]
+}
+```
+
+```json
+201 Created
+{ "id": "5d8e1c2a-...", "outcome": "CREATED", "linkedOrders": 1, "unknownOrders": [] }
+```
+
+The clave de acceso decomposes as `15102026` (date) · `06` (comprobante) · `0992999999001` (RUC) ·
+`1` (pruebas) · `001001` (serie) · `000000123` (secuencial) · `12345678` (código numérico) · `1`
+(emisión normal) · `9` (mod-11). TMS stores it whole and never splits it.
+
+### 15.4 Reading them back
+
+`GET /api/v1/orders/{orderId}/documents` (`orders.order:read`) and
+`GET /api/v1/planning/trips/{tripId}/documents` return each document with `issuerTaxId`,
+`recipientTaxId`, a `fiscal` object (the V69 fields, null when absent) and `recipients[]`. The carrier
+portal's trip view carries `fiscal` (`fiscalCountry`, `fiscalDocumentCode`, `authorizationNumber`) on
+each document, under the carrier boundary of ADR-018.

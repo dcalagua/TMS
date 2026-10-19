@@ -127,4 +127,27 @@ public class TolerancePolicy {
     public boolean active() {
         return active;
     }
+
+    public UUID companyId() {
+        return companyId;
+    }
+
+    public OffsetDateTime updatedAt() {
+        return updatedAt;
+    }
+
+    /**
+     * The tolerance that applies to an invoice in {@code invoiceCurrency} (V64).
+     *
+     * <p>An absolute bound is a sum of money in {@link #currency}: 50 PEN says nothing about a USD
+     * invoice, and applying it there would accept a difference nobody authorised. So against another
+     * currency only the percentage applies - and a policy with no percentage is then no tolerance
+     * at all, which is {@link Tolerance#NONE}'s honest default.
+     */
+    public Tolerance toleranceFor(String invoiceCurrency) {
+        if (absoluteAmount != null && currency != null && !currency.equals(invoiceCurrency)) {
+            return new Tolerance(null, percentage);
+        }
+        return toTolerance();
+    }
 }

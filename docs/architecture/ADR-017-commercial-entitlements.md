@@ -35,9 +35,9 @@ what a member may do inside a company - and `Capability` is a UX grouping of per
    `CommercialAccess.commercialActive` is `false` and `CommercialEntitlementService` grants no
    sellable capability and no commercial limit; the organization keeps operating TMS -
    `CommercialAccess.operationAllowed()` is `true` for every decision and the gate never refuses on
-   a commercial fact. A full operational shutdown is a separate, explicit policy that does not exist
-   yet; `CommercialAccessGate`/`CommercialAccessFilter` stay as the hook it would use (and still fail
-   closed). This is **not** RBAC: no role or permission changes it, and it grants nothing a
+   a commercial fact. A full operational shutdown is a separate, explicit policy: since 2026-10-13 it
+   is ADR-021 (`lifecycle.v1`), enforced by its own `TenantSuspensionFilter`, so
+   `CommercialAccessGate`/`CommercialAccessFilter` stay unused by it (and still fail closed). This is **not** RBAC: no role or permission changes it, and it grants nothing a
    permission withholds.
 4. **No permission becomes a paid capability.** The sellable registry (`TmsCapabilityRegistry`) is
    empty; the manifest declares only the `tms.core` baseline. `CommercialEntitlementService` can

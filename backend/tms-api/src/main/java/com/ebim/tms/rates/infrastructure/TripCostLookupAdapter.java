@@ -2,6 +2,7 @@ package com.ebim.tms.rates.infrastructure;
 
 import com.ebim.tms.rates.domain.TripCost;
 import com.ebim.tms.shared.reference.TripCostLookupPort;
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -36,14 +37,22 @@ class TripCostLookupAdapter implements TripCostLookupPort {
             return Map.of();
         }
         Map<UUID, TripCostSummary> byTrip = new HashMap<>();
-        for (TripCost cost : tripCostRepository.findByCompanyIdAndTripIdIn(companyId, tripIds)) {
+        for (TripCost cost : tripCostRepository.findWithComponentsByCompanyIdAndTripIdIn(companyId, tripIds)) {
+            Map<String, BigDecimal> components = new HashMap<>();
+            if (cost.hasEstimate()) {
+                cost.components().forEach(component ->
+                        components.merge(component.component().name(), component.amount(), BigDecimal::add));
+            }
             byTrip.put(cost.tripId(), new TripCostSummary(
                     cost.tripId(),
                     // Null stays null. A shipment nobody estimated has no expected figure, and
                     // reading that as zero would report an entire invoice as an overcharge.
                     cost.estimatedAmount(),
                     cost.actualAmount(),
-                    cost.currency()));
+                    cost.currency(),
+                    cost.isClosed(),
+                    components,
+                    cost.closedAt()));
         }
         return Map.copyOf(byTrip);
     }

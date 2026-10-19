@@ -97,10 +97,7 @@ public class CarrierQuotationService implements CarrierQuotationPort {
      */
     private Optional<CarrierQuote> quoteAgainst(UUID companyId, CostableTrip trip, UUID carrierId,
             CostInputs inputs) {
-        CostableTrip asCandidate = new CostableTrip(trip.tripId(), companyId, trip.shipmentNumber(),
-                trip.planningDate(), carrierId, trip.vehicleTypeId(), trip.originId(), trip.routeId(),
-                trip.weightKg(), trip.volumeM3(), trip.pallets(), trip.costable(), trip.soleDestinationId(),
-                trip.stopCount());
+        CostableTrip asCandidate = trip.withCarrier(carrierId);
 
         List<RateCard> candidates =
                 rateCardRepository.findByCompanyIdAndCarrierIdAndActiveTrue(companyId, carrierId);

@@ -53,11 +53,13 @@ UNSUPPORTED_MEDIA_TYPE`, `422 SNAPSHOT_INVALID` / `ENVIRONMENT_MISMATCH` / `CHEC
 application.** When the deciding snapshot says `false` (reason `APP_INACTIVE`),
 `CommercialEntitlementService.capabilityEnabled` is `false` and `limit` is empty for every sellable
 code. Company-scoped requests keep working. The baseline `tms.core` is not commercial, and nothing
-operational is gated on it. A full operational shutdown is a separate, explicit policy that does
-not exist yet:
-- `CommercialAccessFilter` (after `CompanyScopeFilter` and `IntegrationAuthenticationFilter`) is the
-  hook it would use; today the production gate never refuses.
-- The `403 commercial-access-suspended` problem type and its web copy remain for that policy.
+operational is gated on it. A full operational shutdown is a separate, explicit policy - since
+2026-10-13 it exists, on its own channel (`lifecycle.v1`, ADR-021, [`LIFECYCLE.md`](LIFECYCLE.md)):
+- it is enforced by `TenantSuspensionFilter` (`423 tenant-suspended`, writes only), NOT through
+  `CommercialAccessFilter`: the commercial gate still never refuses, and `appActive` still decides
+  nothing operational;
+- the `403 commercial-access-suspended` problem type and its web copy remain, unused by any
+  commercial fact.
 - The checksum-pinned FIX-ENT-v1 README still says "bloquea el acceso operativo"; ADR-017's
   amendment records the TMS reading.
 

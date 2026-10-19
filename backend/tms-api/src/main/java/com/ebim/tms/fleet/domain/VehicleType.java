@@ -64,6 +64,9 @@ public class VehicleType {
     @Column(name = "height_m", precision = 6, scale = 2)
     private BigDecimal heightM;
 
+    @Column(name = "load_floor_fill_factor", precision = 4, scale = 3)
+    private BigDecimal loadFloorFillFactor;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "body_type")
     private VehicleBodyType bodyType;
@@ -161,6 +164,19 @@ public class VehicleType {
 
     public BigDecimal heightM() {
         return heightM;
+    }
+
+    /** Share of {@code length x width} a load can cover (V62), or null for the company's default. */
+    public BigDecimal loadFloorFillFactor() {
+        return loadFloorFillFactor;
+    }
+
+    /**
+     * Sets the floor fill factor (V62, ADR-022 section 5). Separate from {@link #applyChanges} so the
+     * import, which has no such column, keeps its shape; the CHECK {@code 0 < x <= 1} stands beneath.
+     */
+    public void changeLoadFloorFillFactor(BigDecimal factor) {
+        this.loadFloorFillFactor = factor;
     }
 
     public VehicleBodyType bodyType() {

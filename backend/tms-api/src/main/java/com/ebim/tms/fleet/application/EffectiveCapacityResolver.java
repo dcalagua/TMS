@@ -2,6 +2,7 @@ package com.ebim.tms.fleet.application;
 
 import com.ebim.tms.fleet.domain.Vehicle;
 import com.ebim.tms.fleet.domain.VehicleType;
+import java.math.BigDecimal;
 import org.springframework.stereotype.Service;
 
 /**
@@ -20,9 +21,20 @@ import org.springframework.stereotype.Service;
 public class EffectiveCapacityResolver {
 
     public EffectiveCapacity resolve(Vehicle vehicle, VehicleType type) {
+        return resolve(vehicle, type, null);
+    }
+
+    /**
+     * The same, with the floor fill factor to use when the vehicle type has none of its own (the
+     * company's, else the deployment's - ADR-022 section 5). The load space itself (L/W/H) is the
+     * type's: a vehicle has no dimension override.
+     */
+    public EffectiveCapacity resolve(Vehicle vehicle, VehicleType type, BigDecimal fallbackFloorFillFactor) {
         var maxWeightKg = vehicle.maxWeightOverrideKg() != null ? vehicle.maxWeightOverrideKg() : type.maxWeightKg();
         var maxVolumeM3 = vehicle.maxVolumeOverrideM3() != null ? vehicle.maxVolumeOverrideM3() : type.maxVolumeM3();
         int maxPallets = vehicle.maxPalletsOverride() != null ? vehicle.maxPalletsOverride() : type.maxPallets();
-        return new EffectiveCapacity(maxWeightKg, maxVolumeM3, maxPallets);
+        BigDecimal fill = type.loadFloorFillFactor() != null ? type.loadFloorFillFactor() : fallbackFloorFillFactor;
+        return new EffectiveCapacity(maxWeightKg, maxVolumeM3, maxPallets, type.lengthM(), type.widthM(),
+                type.heightM(), fill);
     }
 }

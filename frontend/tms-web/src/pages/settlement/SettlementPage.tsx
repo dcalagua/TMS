@@ -1,7 +1,9 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Box, Typography } from "@mui/material";
-import { FactCheckRounded, ReceiptLongRounded } from "@mui/icons-material";
+import { useNavigate } from "react-router-dom";
+import { Box, Button, Typography } from "@mui/material";
+import { AddRounded, FactCheckRounded, ReceiptLongRounded, TuneRounded } from "@mui/icons-material";
+import { CAPABILITY } from "../../shared/api/meApi";
 import {
   INVOICE_STATUSES, fetchInvoices,
   type CarrierInvoiceSummaryView, type InvoiceStatus,
@@ -15,6 +17,7 @@ import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDate, fmtDecimal } from "../../lib/locale";
 import { useCompany } from "../../shared/company/CompanyContext";
+import { InvoiceFormDrawer } from "./InvoiceFormDrawer";
 import { InvoiceWorkspaceDrawer } from "./InvoiceWorkspaceDrawer";
 
 const PAGE_SIZE = 25;
@@ -40,9 +43,13 @@ const DEFAULT_FILTERS: AppliedFilters = { status: "" };
  * a alguien a discutir con un transportista que no hizo nada mal.
  */
 export function SettlementPage() {
-  const { selected } = useCompany();
+  const { selected, hasCapability } = useCompany();
   const companyId = selected?.id ?? "";
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  // Esconder es sólo UX: el servidor vuelve a exigir el permiso al registrar.
+  const canManage = hasCapability(CAPABILITY.SETTLEMENT_MANAGE);
+  const [creating, setCreating] = useState(false);
   const [page, setPage] = useState(0);
   // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
   const [filters, setFiltersState] = useState<AppliedFilters>(DEFAULT_FILTERS);
@@ -144,6 +151,18 @@ export function SettlementPage() {
         subtitle={t("Lo que el transportista factura, lo que TMS esperaba, y quién lo decide. TMS valida y exporta; el ERP paga.")}
         onRefresh={refresh}
         refreshing={invoicesQuery.isFetching}
+        actions={
+          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+            <Button variant="outlined" startIcon={<TuneRounded />} onClick={() => navigate("/settlement/tolerances")}>
+              {t("Tolerancias")}
+            </Button>
+            {canManage && (
+              <Button variant="contained" startIcon={<AddRounded />} onClick={() => setCreating(true)}>
+                {t("Registrar factura")}
+              </Button>
+            )}
+          </Box>
+        }
       />
 
       <FilterBar
@@ -168,6 +187,19 @@ export function SettlementPage() {
         emptyMessage={t("Cuando llegue una, aparecerá aquí con lo que TMS esperaba al lado.")}
         footer={pageData ? <Pagination page={pageData} onPageChange={setPage} /> : undefined}
       />
+
+      {creating && (
+        <InvoiceFormDrawer
+          companyId={companyId}
+          onClose={() => setCreating(false)}
+          onSaved={(invoice) => {
+            // Recién registrada, se abre directamente: lo siguiente que se hace con ella es compararla.
+            setCreating(false);
+            refresh();
+            setOpenInvoiceId(invoice.id);
+          }}
+        />
+      )}
 
       {openInvoiceId && (
         <InvoiceWorkspaceDrawer

@@ -16,6 +16,7 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import com.ebim.tms.shared.geometry.OrderGeometry;
 import com.ebim.tms.shared.reference.OrderAllocation;
 import com.ebim.tms.shared.reference.OrderAmounts;
 import java.util.List;
@@ -30,7 +31,7 @@ import org.hibernate.annotations.UuidGenerator;
  * {@code docs/database/DATA_MODEL.md} section 12 for the schema decisions.
  *
  * <p>{@code lines} is owned here, exactly like {@code Route} owns {@code stops}: every mutation
- * goes through {@link #applyLines(List, UUID)}, which - unlike {@code Route.replaceStops} - does
+ * goes through {@link #applyLines(List, DeclaredTotals, BigDecimal, UUID)}, which - unlike {@code Route.replaceStops} - does
  * not diff against what is persisted, because an order line has no natural key that survives an
  * edit (see {@link TransportOrderLine}'s class comment). {@code totalWeightKg}/{@code
  * totalVolumeM3}/{@code totalPallets} are a transactional snapshot re-resolved by the same
@@ -115,6 +116,29 @@ public class TransportOrder {
 
     @Column(name = "allocated_pallets", nullable = false, precision = 12, scale = 2)
     private BigDecimal allocatedPallets = BigDecimal.ZERO;
+
+    @Column(name = "allocated_floor_area_m2", nullable = false, precision = 12, scale = 4)
+    private BigDecimal allocatedFloorAreaM2 = BigDecimal.ZERO;
+
+    // Load geometry (V62, ADR-022 section 4), re-resolved with the totals by applyLines. Null planning
+    // volume only on an entity that has never had its lines applied; ordered() then reads the total.
+    @Column(name = "planning_volume_m3", nullable = false, precision = 14, scale = 4)
+    private BigDecimal planningVolumeM3;
+
+    @Column(name = "floor_area_m2", nullable = false, precision = 12, scale = 4)
+    private BigDecimal floorAreaM2 = BigDecimal.ZERO;
+
+    @Column(name = "max_stack_height_m", precision = 9, scale = 3)
+    private BigDecimal maxStackHeightM;
+
+    @Column(name = "max_unit_height_m", precision = 9, scale = 3)
+    private BigDecimal maxUnitHeightM;
+
+    @Column(name = "geometry_unmeasured_lines", nullable = false)
+    private int geometryUnmeasuredLines;
+
+    @Column(name = "geometry_reference_height_m", precision = 5, scale = 2)
+    private BigDecimal geometryReferenceHeightM;
 
     // The declared (asserted) figures, kept next to the effective totals rather than instead of
     // them - migration V17 and OrderTotals' class comment explain why both are persisted.
@@ -249,14 +273,42 @@ public class TransportOrder {
         return totalPallets;
     }
 
-    /** Everything the customer asked for, as the three measures a vehicle is constrained by. */
+    /**
+     * Everything the customer asked for, in the measures a vehicle is constrained by: weight, the
+     * planning volume (V62), pallets, floor area, and the tallest stack.
+     */
     public OrderAmounts ordered() {
-        return new OrderAmounts(totalWeightKg, totalVolumeM3, totalPallets);
+        return new OrderAmounts(totalWeightKg, planningVolumeM3(), totalPallets, floorAreaM2, maxStackHeightM);
     }
 
-    /** The part of it on trips that have not closed out (migration V37). */
+    /** The part of it on trips that have not closed out (migration V37, floor since V62). */
     public OrderAmounts allocated() {
-        return new OrderAmounts(allocatedWeightKg, allocatedVolumeM3, allocatedPallets);
+        return new OrderAmounts(allocatedWeightKg, allocatedVolumeM3, allocatedPallets, allocatedFloorAreaM2, null);
+    }
+
+    /** What capacity counts as this order's volume (V62); the declared total when nothing was measured. */
+    public BigDecimal planningVolumeM3() {
+        return planningVolumeM3 == null ? totalVolumeM3 : planningVolumeM3;
+    }
+
+    public BigDecimal floorAreaM2() {
+        return floorAreaM2;
+    }
+
+    public BigDecimal maxStackHeightM() {
+        return maxStackHeightM;
+    }
+
+    public BigDecimal maxUnitHeightM() {
+        return maxUnitHeightM;
+    }
+
+    public int geometryUnmeasuredLines() {
+        return geometryUnmeasuredLines;
+    }
+
+    public BigDecimal geometryReferenceHeightM() {
+        return geometryReferenceHeightM;
     }
 
     /** Ordered and allocated together, from which pending is derived. */
@@ -340,13 +392,8 @@ public class TransportOrder {
      * cares whether the two contradicted each other asks {@link OrderTotals#mismatches} before
      * calling - {@code OrderService} turns one into a 400 and the bulk import into a row error.
      */
-    public void applyLines(List<OrderLineInput> inputs, DeclaredTotals declared, UUID actorId) {
-        lines.clear();
-        int lineNumber = 1;
-        for (OrderLineInput input : inputs) {
-            lines.add(new TransportOrderLine(this, lineNumber++, input, actorId));
-        }
-
+    public void applyLines(List<OrderLineInput> inputs, DeclaredTotals declared, BigDecimal referenceHeightM,
+            UUID actorId) {
         DeclaredTotals safeDeclared = declared == null ? DeclaredTotals.none() : declared;
         this.declaredWeightKg = safeDeclared.weightKg();
         this.declaredVolumeM3 = safeDeclared.volumeM3();
@@ -357,6 +404,23 @@ public class TransportOrder {
         this.totalVolumeM3 = totals.volumeM3();
         this.totalPallets = totals.pallets();
         this.totalsSource = totals.source();
+
+        // The order's geometry from its lines' (ADR-022 section 4), at the reference height: the
+        // ledger's figures. Planning re-stacks the same lines for each vehicle with the same
+        // arithmetic (OrderGeometry), so the two can never disagree about a formula.
+        OrderGeometry geometry = OrderGeometry.of(inputs.stream().map(OrderLineInput::geometryLine).toList(),
+                totalVolumeM3, referenceHeightM);
+        lines.clear();
+        int lineNumber = 1;
+        for (int i = 0; i < inputs.size(); i++) {
+            lines.add(new TransportOrderLine(this, lineNumber++, inputs.get(i), geometry.lines().get(i), actorId));
+        }
+        this.planningVolumeM3 = geometry.planningVolumeM3();
+        this.floorAreaM2 = geometry.floorAreaM2();
+        this.maxStackHeightM = geometry.maxStackHeightM();
+        this.maxUnitHeightM = geometry.maxUnitHeightM();
+        this.geometryUnmeasuredLines = geometry.unmeasuredLines();
+        this.geometryReferenceHeightM = geometry.anyBlock() ? referenceHeightM : null;
         this.updatedBy = actorId;
     }
 
@@ -516,6 +580,7 @@ public class TransportOrder {
         this.allocatedWeightKg = amounts.weightKg();
         this.allocatedVolumeM3 = amounts.volumeM3();
         this.allocatedPallets = amounts.pallets();
+        this.allocatedFloorAreaM2 = amounts.floorAreaM2();
     }
 
     /**

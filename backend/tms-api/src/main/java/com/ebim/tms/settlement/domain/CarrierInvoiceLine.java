@@ -59,6 +59,25 @@ public class CarrierInvoiceLine {
     @Column(name = "line_amount", nullable = false)
     private BigDecimal lineAmount;
 
+    /**
+     * Which charge this line bills (V64). Null on every V46 line and read as
+     * {@link ChargeCode#FREIGHT}; stored as given, so what was keyed stays what was keyed.
+     */
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "charge_code")
+    private ChargeCode chargeCode;
+
+    /** Why the shipper deducts (V66); required on a PENALTY line, absent on every other. */
+    @Column(name = "penalty_reason")
+    private String penaltyReason;
+
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "penalty_reference_type")
+    private PenaltyReferenceType penaltyReferenceType;
+
+    @Column(name = "penalty_reference_id")
+    private UUID penaltyReferenceId;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false, nullable = false)
     private OffsetDateTime createdAt;
@@ -72,18 +91,57 @@ public class CarrierInvoiceLine {
 
     public CarrierInvoiceLine(UUID companyId, UUID tripId, String description, BigDecimal quantity,
             BigDecimal unitAmount, BigDecimal lineAmount) {
+        this(companyId, tripId, description, quantity, unitAmount, lineAmount, null);
+    }
+
+    public CarrierInvoiceLine(UUID companyId, UUID tripId, String description, BigDecimal quantity,
+            BigDecimal unitAmount, BigDecimal lineAmount, ChargeCode chargeCode) {
+        this.chargeCode = chargeCode;
         this.companyId = companyId;
         this.tripId = tripId;
         this.description = description;
         this.quantity = quantity;
         this.unitAmount = unitAmount;
         this.lineAmount = lineAmount;
+        if (lineAmount != null && lineAmount.signum() < 0 && this.chargeCode != ChargeCode.PENALTY) {
+            // ck_carrier_invoice_line_sign (V66): a negative amount is a deduction, and only a
+            // penalty is one. A credit note is its own document with positive amounts.
+            throw new IllegalArgumentException("only a PENALTY line carries a negative amount;"
+                    + " a credit is a credit note (07)");
+        }
+        if (this.chargeCode == ChargeCode.PENALTY && (lineAmount == null || lineAmount.signum() >= 0)) {
+            throw new IllegalArgumentException("a PENALTY line is a deduction: its amount is negative");
+        }
         if ((quantity == null) != (unitAmount == null)) {
             // Mirrors ck_carrier_invoice_line_unit_block: an amount per unit with no unit count is
             // not a partial record, it is an unanswerable one.
             throw new IllegalArgumentException(
                     "a line states a quantity and a unit amount together, or neither");
         }
+    }
+
+    /**
+     * Why the shipper deducts and what for (V66, ADR-024 part 2, item 6). Only on a PENALTY line,
+     * and there the reason is required.
+     */
+    public CarrierInvoiceLine withPenalty(String reason, PenaltyReferenceType referenceType, UUID referenceId) {
+        boolean any = reason != null || referenceType != null || referenceId != null;
+        if (chargeCode != ChargeCode.PENALTY) {
+            if (any) {
+                throw new IllegalArgumentException("only a PENALTY line states a penalty reason or reference");
+            }
+            return this;
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("a PENALTY line says why the shipper deducts it");
+        }
+        if (referenceId != null && referenceType == null) {
+            throw new IllegalArgumentException("a penalty reference id needs its type");
+        }
+        this.penaltyReason = reason.trim();
+        this.penaltyReferenceType = referenceType;
+        this.penaltyReferenceId = referenceId;
+        return this;
     }
 
     void attachTo(CarrierInvoice invoice, int lineNumber) {
@@ -121,5 +179,22 @@ public class CarrierInvoiceLine {
 
     public BigDecimal lineAmount() {
         return lineAmount;
+    }
+
+    /** The charge this line bills; a V46 line, which has none, reads as {@link ChargeCode#FREIGHT}. */
+    public ChargeCode chargeCode() {
+        return ChargeCode.orFreight(chargeCode);
+    }
+
+    public String penaltyReason() {
+        return penaltyReason;
+    }
+
+    public PenaltyReferenceType penaltyReferenceType() {
+        return penaltyReferenceType;
+    }
+
+    public UUID penaltyReferenceId() {
+        return penaltyReferenceId;
     }
 }

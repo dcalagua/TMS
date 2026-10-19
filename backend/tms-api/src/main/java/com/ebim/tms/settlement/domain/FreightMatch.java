@@ -58,6 +58,11 @@ public class FreightMatch {
     private String currency;
 
     /** What was compared against, snapshotted: a tolerance widened next month restates nothing. */
+    /** What {@link #expectedAmount} is (V64). Null on matches computed before V64, and when it is null. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "expected_basis")
+    private ExpectedBasis expectedBasis;
+
     @Column(name = "tolerance_absolute")
     private BigDecimal toleranceAbsolute;
 
@@ -98,6 +103,7 @@ public class FreightMatch {
         this.actualAmount = result.actualAmount();
         this.invoicedAmount = result.invoicedAmount();
         this.differenceAmount = result.differenceAmount();
+        this.expectedBasis = result.expectedBasis();
         this.matchedTripCount = result.matchedTripCount();
         this.unmatchedLineCount = result.unmatchedLineCount();
         this.computedAt = OffsetDateTime.now();
@@ -133,6 +139,10 @@ public class FreightMatch {
 
     public String currency() {
         return currency;
+    }
+
+    public ExpectedBasis expectedBasis() {
+        return expectedBasis;
     }
 
     public BigDecimal toleranceAbsolute() {

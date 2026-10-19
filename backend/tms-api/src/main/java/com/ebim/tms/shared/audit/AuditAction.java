@@ -171,5 +171,54 @@ public enum AuditAction {
     INVOICE_MATCHED,
     INVOICE_APPROVED,
     INVOICE_REJECTED,
-    INVOICE_EXPORTED
+    INVOICE_EXPORTED,
+
+    /** A warehouse-owned material profile arrived for the first time or changed (V59, ADR-022). */
+    MATERIAL_PROFILE_CREATED,
+    MATERIAL_PROFILE_UPDATED,
+
+    /**
+     * A tolerance policy was created, changed or deactivated (V64, ADR-024 part 1). One action for
+     * the three, with the operation in the metadata: what an auditor searches for is "who widened
+     * the tolerance", whichever button they pressed.
+     */
+    TOLERANCE_POLICY_CHANGED,
+
+    /** A freight accrual was born from a dispatched or delivered trip (V65, ADR-023). */
+    ACCRUAL_CREATED,
+    /** The accrued balance moved to the closed actual cost (V65). */
+    ACCRUAL_ADJUSTED,
+    /** An approved invoice consumed the accrual of its trips (V65). */
+    ACCRUAL_CONSUMED,
+    /** A person reversed an accrual or closed its remainder (V65). Always carries the reason. */
+    ACCRUAL_REVERSED,
+    /** The accrual journal of a period was generated for the ERP (V65). */
+    ACCRUAL_JOURNAL_EXPORTED,
+    /** A GL account mapping was created, changed or retired (V65). */
+    GL_MAPPING_CHANGED,
+    /** A carrier's credit note (07) was recorded against one of its invoices (V66, ADR-024). */
+    CREDIT_NOTE_RECEIVED,
+    /** A carrier's debit note (08) was recorded against one of its invoices (V66). */
+    DEBIT_NOTE_RECEIVED,
+    /** The approver accepted a penalty line - the shipper's deduction on the document (V66). */
+    PENALTY_ACCEPTED,
+    /** A person changed the computed retention, with a reason (V66). */
+    RETENTION_OVERRIDDEN,
+
+    // V67 (ADR-023 section 2): what happens to an invoice after the export. TMS moves no money (D-01).
+    /** The payment of an exported invoice was planned for a date. */
+    PAYABLE_SCHEDULED,
+    /** Payment of the invoice was stopped, with a reason. */
+    PAYABLE_HOLD_PLACED,
+    /** The hold was lifted, with a reason (or by a payment the ERP reported). */
+    PAYABLE_HOLD_RELEASED,
+    /** A person keyed a payment that a second person must confirm. */
+    PAYMENT_REQUESTED,
+    /** The second person refused the keyed payment, with a reason. */
+    PAYMENT_REQUEST_REJECTED,
+    /** A payment was recorded: reported by the ERP, or keyed and confirmed by two people. */
+    PAYMENT_RECORDED,
+
+    /** A trip's cost was allocated to its orders: a new version of the allocation (V68, ADR-026). */
+    COST_ALLOCATED
 }

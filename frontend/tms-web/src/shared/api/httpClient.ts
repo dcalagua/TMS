@@ -15,6 +15,11 @@ export type ProblemCode =
   | "company-scope-forbidden"
   /** El contrato comercial de la organización (EBIM MasterAdmin) no permite operar ahora. No es un permiso. */
   | "commercial-access-suspended"
+  /**
+   * ADR-021: EBIM MasterAdmin suspendió la operación de la organización (`lifecycle.v1`). HTTP 423:
+   * las escrituras se rechazan y la lectura sigue. Distinto de lo comercial y de un permiso.
+   */
+  | "tenant-suspended"
   | "access-denied"
   | "validation-failed"
   | "malformed-request"

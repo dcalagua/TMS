@@ -1,6 +1,10 @@
 package com.ebim.tms.planning.infrastructure;
 
-import com.ebim.tms.planning.domain.AssignmentStatus;
+import com.ebim.tms.planning.application.CapacityLimits;
+import com.ebim.tms.planning.application.CapacityLoad;
+import com.ebim.tms.planning.application.TripAssignmentService;
+import com.ebim.tms.planning.application.TripRouteMetrics;
+import com.ebim.tms.planning.application.TripRoutingService;
 import com.ebim.tms.planning.domain.PlanningRun;
 import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.planning.domain.TripStatus;
@@ -9,8 +13,6 @@ import com.ebim.tms.shared.reference.TripCostingLookupPort;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import java.math.BigDecimal;
-import com.ebim.tms.planning.application.TripRouteMetrics;
-import com.ebim.tms.planning.application.TripRoutingService;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OriginLookupPort;
@@ -47,19 +49,19 @@ public class TripCostingLookupAdapter implements TripCostingLookupPort {
 
     private final TripRepository tripRepository;
     private final PlanningRunRepository planningRunRepository;
-    private final TripOrderAssignmentRepository assignmentRepository;
     private final VehicleLookupPort vehicleLookup;
     private final OriginLookupPort originLookupPort;
     private final DestinationLookupPort destinationLookupPort;
     private final TripRoutingService tripRoutingService;
+    private final TripAssignmentService tripAssignmentService;
 
     public TripCostingLookupAdapter(TripRepository tripRepository, PlanningRunRepository planningRunRepository,
-            TripOrderAssignmentRepository assignmentRepository, VehicleLookupPort vehicleLookup,
+            VehicleLookupPort vehicleLookup,
             OriginLookupPort originLookupPort, DestinationLookupPort destinationLookupPort,
-            TripRoutingService tripRoutingService) {
+            TripRoutingService tripRoutingService, TripAssignmentService tripAssignmentService) {
+        this.tripAssignmentService = tripAssignmentService;
         this.tripRepository = tripRepository;
         this.planningRunRepository = planningRunRepository;
-        this.assignmentRepository = assignmentRepository;
         this.vehicleLookup = vehicleLookup;
         this.originLookupPort = originLookupPort;
         this.destinationLookupPort = destinationLookupPort;
@@ -101,23 +103,42 @@ public class TripCostingLookupAdapter implements TripCostingLookupPort {
     }
 
     private CostableTrip toCostable(Trip trip, UUID companyId) {
-        TripOrderAssignmentRepository.TripLoad load =
-                assignmentRepository.loadByTripId(trip.id(), AssignmentStatus.ACTIVE);
+        VehicleCapacityReference vehicle = vehicleOf(trip, companyId);
+        // The load on this trip's own vehicle, re-stacked for its height (ADR-022 section 5): the
+        // loading metres a rate charges are the floor the stacks really cover in that vehicle.
+        CapacityLimits limits = trip.hasCapacitySnapshot() ? CapacityLimits.ofSnapshot(trip)
+                : vehicle == null ? CapacityLimits.unlimited() : CapacityLimits.of(vehicle);
+        CapacityLoad load = tripAssignmentService.currentLoad(trip.id(), companyId, limits);
         return new CostableTrip(
                 trip.id(),
                 companyId,
                 trip.shipmentNumber(),
                 trip.planningDate(),
                 trip.carrierId(),
-                vehicleTypeIdOf(trip, companyId),
+                vehicle == null ? null : vehicle.vehicleTypeId(),
                 originOf(trip, companyId),
                 trip.routeId(),
-                zeroIfNull(load == null ? null : load.getWeightKg()),
-                zeroIfNull(load == null ? null : load.getVolumeM3()),
-                zeroIfNull(load == null ? null : load.getPallets()),
+                load.weightKg(),
+                load.volumeM3(),
+                load.pallets(),
                 isCostable(trip),
                 soleDestinationOf(trip),
-                trip.stops().size());
+                trip.stops().size(),
+                load.floorAreaM2(),
+                loadWidthOf(trip, vehicle),
+                vehicle == null ? null : vehicle.floorFillFactor());
+    }
+
+    /**
+     * The width loading metres are measured across (V63): what the trip froze at confirmation
+     * (V62), else the vehicle type's current width. The snapshot first for the reason it exists -
+     * a later fleet edit must not restate what a confirmed shipment costs.
+     */
+    private static BigDecimal loadWidthOf(Trip trip, VehicleCapacityReference vehicle) {
+        if (trip.snapshotLoadWidthM() != null) {
+            return trip.snapshotLoadWidthM();
+        }
+        return vehicle == null ? null : vehicle.widthM();
     }
 
     /**
@@ -153,16 +174,10 @@ public class TripCostingLookupAdapter implements TripCostingLookupPort {
      * costs what it costs. Validation of a <em>new</em> assignment is a different question, asked
      * elsewhere.
      */
-    private UUID vehicleTypeIdOf(Trip trip, UUID companyId) {
+    private VehicleCapacityReference vehicleOf(Trip trip, UUID companyId) {
         if (trip.vehicleId() == null) {
             return null;
         }
-        VehicleCapacityReference vehicle =
-                vehicleLookup.findAllInCompany(Set.of(trip.vehicleId()), companyId).get(trip.vehicleId());
-        return vehicle == null ? null : vehicle.vehicleTypeId();
-    }
-
-    private static BigDecimal zeroIfNull(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO : value;
+        return vehicleLookup.findAllInCompany(Set.of(trip.vehicleId()), companyId).get(trip.vehicleId());
     }
 }

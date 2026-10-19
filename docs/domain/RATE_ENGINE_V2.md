@@ -1,13 +1,14 @@
 # TMS by EBIM - rate engine (V2)
 
-Owner: `com.ebim.tms.rates`. Schema: `V30__rates_and_trip_costing.sql`, `V39__rate_engine_v2.sql`.
+Owner: `com.ebim.tms.rates`. Schema: `V30__rates_and_trip_costing.sql`, `V39__rate_engine_v2.sql`,
+`V63__rate_loading_meter.sql` (loading metres and volume provenance, ADR-022 section 8).
 
 ## 1. The order of application is a contract
 
 **These components do not commute.** The calculator walks `RateComponent` in declaration order and
 this is the arithmetic it produces:
 
-    BASE + DISTANCE + WEIGHT + VOLUME + PALLETS + STOP_OFF        →  the LINEHAUL
+    BASE + DISTANCE + WEIGHT + VOLUME + PALLETS + LOADING_METERS + STOP_OFF  →  the LINEHAUL
     + FUEL_SURCHARGE        (a percentage OF THE LINEHAUL, and of nothing else)
     + WAITING_TIME + TOLL + OTHER_ACCESSORIAL                     →  the accessorials
     then MINIMUM_ADJUSTMENT or MAXIMUM_ADJUSTMENT on the total
@@ -29,8 +30,9 @@ Two of those placements are decisions rather than details:
 | `BASE` | flat | — |
 | `DISTANCE` | KM | the trip's **measured route** (V38), else the master route's reference |
 | `WEIGHT` | KG | the orders' declared totals |
-| `VOLUME` | M3 | the orders' declared totals |
+| `VOLUME` | M3 | the trip's **planning volume** (V62): effective where a line was measured, declared elsewhere - the line says which (section 4.1) |
 | `PALLETS` | PALLET | the orders' declared totals |
+| `LOADING_METERS` | LOADING_METER | floor area of the trip's stacks / (load width x floor fill factor) (V63, section 4.2) |
 | `STOP_OFF` | STOP | the trip's stops, **minus one** |
 | `FUEL_SURCHARGE` | PERCENT | the linehaul subtotal |
 | `WAITING_TIME` | HOUR | detention somebody recorded |
@@ -83,6 +85,45 @@ route at all** — which before V39 simply could not be priced per kilometre how
 Nothing is still a legitimate answer: with neither, the component reports itself non-calculable
 rather than being multiplied by a zero nobody meant. That rule is unchanged since V30; it just has
 one more place to look first.
+
+## 4.1 Where the cubic metres came from (V63)
+
+Since V62 the ledger's `assigned_volume_m3` is the order's **planning volume**: the effective volume
+of the stacks where a line was measured (ADR-022), the declared volume elsewhere. `VOLUME` keeps
+multiplying `SUM(assigned_volume_m3)`, so nothing about the arithmetic changed; what changed is that
+the line now says which cubic metres it charged:
+
+| `quantity_source` | When |
+|---|---|
+| `EFFECTIVE_GEOMETRY` | at least one measured line contributed (the trip's ledger has floor area) |
+| `ORDER_DECLARED_TOTALS` | nothing on the trip was measured |
+
+Ten nested buckets declared at 1.2 m³ occupy 0.15 m³. A per-m³ carrier paid on the first figure is
+paid eight times too much; the source is how a controller sees which of the two the estimate used.
+When an order mixes measured and unmeasured lines, its planning volume is the phase-40 rule
+(`LOAD_GEOMETRY_V1.md`) and the source is still `EFFECTIVE_GEOMETRY`: a measured line is behind it.
+
+## 4.2 Loading metres (V63)
+
+`LOADING_METERS` charges the length of deck the load takes, the way groupage tariffs are written:
+
+    loadingMeters = SUM(assigned_floor_area_m2) / (loadWidth x floorFillFactor)     (3 decimals, half up)
+
+- **Floor** - the trip's ledger (V62), the same figure the floor capacity bar shows. Zero when no line
+  on the trip was measured; the line is then `NOT_CALCULABLE` with `FLOOR_AREA_UNKNOWN`.
+- **Width** - the trip's confirmation snapshot (`snapshot_load_width_m`, V62), else the vehicle type's
+  current width. Unknown -> `NOT_CALCULABLE` with `LOAD_WIDTH_UNKNOWN`.
+- **Fill factor** - resolved by fleet (vehicle type, else company, else `tms.planning.geometry.*`), the
+  same one the floor limit uses, so a full deck is exactly `L` loading metres.
+- Linehaul: the fuel surcharge is taken on it, like on a per-pallet charge.
+- The same rule prices a *proposed* trip (`ProposalPricer`): the orders' ordered floor area and
+  planning volume across the vehicle's width and factor.
+
+The two reasons are different on purpose: the first is fixed in the material master (a complete
+physical profile), the second in the fleet master (the vehicle type's L/W/H).
+
+Example (`LoadingMeterRateCalculatorTest`): 4.08 m² of floor on a 2.40 m deck filled to 0.85 is
+2.000 LDM; at 50.00 per LDM that is 100.00.
 
 ## 5. Scopes
 

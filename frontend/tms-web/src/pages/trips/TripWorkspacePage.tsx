@@ -160,6 +160,7 @@ export function TripWorkspacePage() {
    * para que no necesite una segunda consulta, y el registro existente cuando es una corrección. */
   const [delivery, setDelivery] = useState<{
     stopId: string; stopLabel: string; orderId: string; orderNumber: string; existing?: OrderDeliveryView;
+    earliestDeliveredAt?: string | null;
   } | null>(null);
   const [evidenceFor, setEvidenceFor] = useState<{
     deliveryId: string; orderNumber: string; stopLabel: string; result: OrderDeliveryView["result"];
@@ -815,6 +816,10 @@ export function TripWorkspacePage() {
                                               stopId: stop.id, stopLabel,
                                               orderId: assignment.orderId, orderNumber: assignment.orderNumber,
                                               existing: recorded,
+                                              // El mismo suelo que aplica el backend: la llegada a
+                                              // esta parada, y si aún no se registró, la salida del
+                                              // envío. Si no hay ninguna de las dos, no hay suelo.
+                                              earliestDeliveredAt: stop.actualArrivalAt ?? trip?.actualDepartureAt ?? null,
                                             });
                                           }}
                                         >
@@ -1001,6 +1006,7 @@ export function TripWorkspacePage() {
           stopLabel={delivery.stopLabel}
           orderNumber={delivery.orderNumber}
           existing={delivery.existing}
+          earliestDeliveredAt={delivery.earliestDeliveredAt}
           onClose={() => setDelivery(null)}
           onSubmit={submitDelivery}
         />

@@ -14,10 +14,16 @@ export interface AppEnv {
   readonly supabaseAnonKey: string;
   /**
    * Clave de la Google Maps JavaScript API, o `null` si no está puesta. `null` es un estado
-   * soportado y no un error: el selector de ubicación degrada a latitud/longitud manual en
-   * vez de fallar al cargar.
+   * soportado y no un error: los mapas de paradas degradan a un aviso en vez de fallar al
+   * cargar. El selector de ubicación ya no la usa: va sobre Leaflet y no necesita clave.
    */
   readonly googleMapsApiKey: string | null;
+  /** Plantilla de teselas del mapa. Por defecto las públicas de OpenStreetMap. */
+  readonly mapTileUrl: string;
+  /** Crédito que el mapa muestra sobre las teselas. Obligatorio, y cambia con el proveedor. */
+  readonly mapTileAttribution: string;
+  /** Endpoint de búsqueda de direcciones compatible con Nominatim. */
+  readonly geocoderUrl: string;
 }
 
 const DEFAULT_API_BASE_URL = "http://localhost:8080/api/v1";
@@ -26,6 +32,14 @@ const DEFAULT_API_BASE_URL = "http://localhost:8080/api/v1";
 // tumbar la app entera cuando todavía no se ha creado `.env.local`.
 const DEFAULT_SUPABASE_URL = "http://localhost:54321";
 const DEFAULT_SUPABASE_ANON_KEY = "local-development-anon-key-placeholder";
+// Teselas y geocodificador públicos de OpenStreetMap. A diferencia de los valores de Supabase
+// de arriba, estos sí funcionan tal cual: el mapa se ve sin configurar nada. Lo que no hacen es
+// escalar - la política de uso de la fundación desaconseja apoyarse en ellos para tráfico de
+// producción, y por eso los tres son sobreescribibles.
+export const DEFAULT_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const DEFAULT_TILE_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>';
+const DEFAULT_GEOCODER_URL = "https://nominatim.openstreetmap.org/search";
 
 function readEnv(): AppEnv {
   const raw = import.meta.env;
@@ -35,6 +49,9 @@ function readEnv(): AppEnv {
     supabaseUrl: raw.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL,
     supabaseAnonKey: raw.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY,
     googleMapsApiKey: raw.VITE_GOOGLE_MAPS_API_KEY?.trim() || null,
+    mapTileUrl: raw.VITE_MAP_TILE_URL?.trim() || DEFAULT_TILE_URL,
+    mapTileAttribution: raw.VITE_MAP_TILE_ATTRIBUTION?.trim() || DEFAULT_TILE_ATTRIBUTION,
+    geocoderUrl: (raw.VITE_GEOCODER_URL?.trim() || DEFAULT_GEOCODER_URL).replace(/\/+$/, ""),
   };
 }
 

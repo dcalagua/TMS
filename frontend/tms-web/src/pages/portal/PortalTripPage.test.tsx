@@ -118,6 +118,34 @@ describe("la pantalla del viaje en el portal", () => {
     expect(await screen.findByRole("heading", { name: "Factura F001-1" })).toBeInTheDocument();
   });
 
+  it("ADR-028: una guía ecuatoriana se nombra SRI 06 y su clave de acceso se copia desde la tarjeta", async () => {
+    const clave = "1510202606099299999900110010010000001231234567819";
+    const withGuide: PortalTripDetail = {
+      ...DETAIL,
+      stops: [{
+        ...DETAIL.stops[0],
+        documents: [{
+          id: "dd-9", documentId: "d-9", documentType: "REMISSION_GUIDE", documentNumber: "001-001-000000123",
+          orderNumbers: ["TO-1"], customerName: "Ferretería El Constructor", status: "PENDING", reasonCode: null,
+          remark: null, reportedAt: null, recordedAt: null, returnedAt: null, editable: true, evidence: [],
+          fiscal: { fiscalCountry: "EC", fiscalDocumentCode: "06", authorizationNumber: clave },
+        }],
+      }],
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(withGuide), {
+      status: 200, headers: { "content-type": "application/json" },
+    })));
+    const user = userEvent.setup();
+    renderTrip();
+
+    expect(await screen.findByRole("button", { name: "Guía de remisión (SRI 06) 001-001-000000123" })).toBeInTheDocument();
+    expect(screen.getByText(clave)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Copiar clave de acceso" }));
+    await expect(navigator.clipboard.readText()).resolves.toBe(clave);
+    // Un documento sin datos fiscales no enseña ninguna clave.
+    expect(screen.queryAllByRole("button", { name: /^Copiar/ })).toHaveLength(1);
+  });
+
   it("sin señal enseña la copia guardada y de cuándo es", async () => {
     await store.putSnapshot("u-1", COMPANY, `trip:${TRIP}`, DETAIL, new Date().toISOString());
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);

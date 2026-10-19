@@ -17,13 +17,27 @@ import org.springframework.data.repository.query.Param;
  */
 public interface TransportOrderLineRepository extends JpaRepository<TransportOrderLine, UUID> {
 
-    @Query("SELECT l.order.id AS orderId, COUNT(l) AS lineCount FROM TransportOrderLine l "
+    // SUM(stacks) rides on the same grouped read (V62): the list's "Ocupa" column needs the order's
+    // stack count, which lives on the lines, and a second query per page would be the N+1 again.
+    @Query("SELECT l.order.id AS orderId, COUNT(l) AS lineCount, SUM(l.stacks) AS stacks FROM TransportOrderLine l "
             + "WHERE l.order.id IN :orderIds GROUP BY l.order.id")
     List<OrderLineCount> countByOrderIds(@Param("orderIds") Collection<UUID> orderIds);
+
+    /**
+     * The lines among {@code lineIds} that belong to an order of {@code companyId}, in one query -
+     * for the published shipment plan's per-line delivery results (WAREHOUSE_EXECUTION_V1 §7.2).
+     * The line has no company of its own; the predicate goes through its order.
+     */
+    @Query("SELECT l FROM TransportOrderLine l WHERE l.id IN :lineIds AND l.order.companyId = :companyId")
+    List<TransportOrderLine> findInCompany(@Param("lineIds") Collection<UUID> lineIds,
+            @Param("companyId") UUID companyId);
 
     interface OrderLineCount {
         UUID getOrderId();
 
         long getLineCount();
+
+        /** Sum of the measured lines' stacks; null when no line of the order carries any. */
+        Long getStacks();
     }
 }

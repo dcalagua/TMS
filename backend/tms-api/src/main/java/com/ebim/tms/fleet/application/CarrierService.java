@@ -81,6 +81,7 @@ public class CarrierService {
         Carrier carrier = new Carrier(scope.companyId(), code, request.businessName().trim(), taxIdType, taxIdValue,
                 blankToNull(request.contactName()), blankToNull(request.phone()), email,
                 blankToNull(request.externalReference()), actorId);
+        carrier.changePaymentTerms(request.paymentTermsDays());
         Carrier saved = saveOrConflict(carrier, code);
         auditRecorder.record(scope, AuditAggregateType.CARRIER, saved.id(), AuditAction.CREATE,
                 Map.of("code", saved.code()));
@@ -107,6 +108,7 @@ public class CarrierService {
         carrier.applyChanges(code, request.businessName().trim(), taxIdType, taxIdValue,
                 blankToNull(request.contactName()), blankToNull(request.phone()), email,
                 blankToNull(request.externalReference()), actorId);
+        carrier.changePaymentTerms(request.paymentTermsDays());
         Carrier saved = saveOrConflict(carrier, code);
         auditRecorder.record(scope, AuditAggregateType.CARRIER, saved.id(), AuditAction.UPDATE,
                 Map.of("code", saved.code()));

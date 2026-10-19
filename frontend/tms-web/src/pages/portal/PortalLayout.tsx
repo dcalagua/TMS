@@ -1,16 +1,17 @@
 import { Suspense, useEffect, useState } from "react";
-import { Navigate, Outlet, useNavigate } from "react-router-dom";
+import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  AppBar, Box, Button, Divider, IconButton, ListItemIcon, Menu, MenuItem, Toolbar, Typography,
+  AppBar, Box, Button, Divider, IconButton, ListItemIcon, Menu, MenuItem, Tab, Tabs, Toolbar, Typography,
 } from "@mui/material";
 import {
   ApartmentRounded, CheckRounded, DarkModeRounded, LightModeRounded, LocalShippingRounded, LogoutRounded,
-  MoreVertRounded, SystemUpdateRounded,
+  MoreVertRounded, ReceiptLongRounded, SystemUpdateRounded,
 } from "@mui/icons-material";
 import { CAPABILITY, isCarrierScoped } from "../../shared/api/meApi";
 import { useAuth } from "../../shared/auth/AuthContext";
 import { useCompany } from "../../shared/company/CompanyContext";
 import { EmptyState, ErrorState, LoadingState } from "../../shared/ui/components";
+import { TenantSuspendedBanner } from "../../shared/ui/TenantSuspendedBanner";
 import { useColorMode } from "../../lib/colorMode";
 import { t, tp } from "../../lib/i18n";
 import { applyServiceWorkerUpdate, useServiceWorkerUpdate } from "../../lib/serviceWorker";
@@ -85,7 +86,7 @@ function usePhoneChrome() {
 function PortalShell({ allowed }: { allowed: boolean }) {
   const navigate = useNavigate();
   const { signOut } = useAuth();
-  const { companies, selected, selectCompany, profile } = useCompany();
+  const { companies, selected, selectCompany, profile, hasCapability } = useCompany();
   const { entries, wipe } = usePortalOffline();
   const { mode, toggle } = useColorMode();
   const updateReady = useServiceWorkerUpdate();
@@ -212,13 +213,46 @@ function PortalShell({ allowed }: { allowed: boolean }) {
             message={t("Tu usuario de transportista no tiene un rol con acceso a los viajes. Pide a la oficina que te asigne el rol de operador de transportista.")}
           />
         ) : (
-          <Suspense fallback={<LoadingState minHeight="50vh" />}>
-            <Outlet />
-          </Suspense>
+          <>
+            {/* ADR-021: el mismo aviso que la oficina; los reportes pendientes esperan en la cola. */}
+            <TenantSuspendedBanner company={selected} />
+            {hasCapability(CAPABILITY.CARRIER_INVOICES) && <PortalSections />}
+            <Suspense fallback={<LoadingState minHeight="50vh" />}>
+              <Outlet />
+            </Suspense>
+          </>
         )}
       </Box>
 
       <SyncSheet open={syncOpen} onClose={() => setSyncOpen(false)} />
     </Box>
+  );
+}
+
+/** Las dos listas del portal. Se paran en ellas: el detalle de un viaje o una factura trae su «Volver». */
+const SECTION_PATHS: Record<string, "trips" | "invoices"> = {
+  "/portal": "trips",
+  "/portal/": "trips",
+  "/portal/invoices": "invoices",
+  "/portal/invoices/": "invoices",
+};
+
+/**
+ * «Mis viajes» y «Mis facturas» (fase 65), sólo para quien tiene `portal.invoice:read`. Sin ese
+ * permiso el portal sigue siendo una sola lista, como siempre.
+ */
+function PortalSections() {
+  const { pathname } = useLocation();
+  const section = SECTION_PATHS[pathname];
+  if (!section) return null;
+  return (
+    <Tabs
+      value={section} variant="fullWidth" aria-label={t("Secciones del portal")}
+      sx={{ mb: 2, bgcolor: "background.paper", borderRadius: "12px", border: "1px solid", borderColor: "divider",
+        "& .MuiTab-root": { minHeight: 52, fontSize: 16, fontWeight: 800, textTransform: "none" } }}
+    >
+      <Tab value="trips" label={t("Mis viajes")} icon={<LocalShippingRounded />} iconPosition="start" component={Link} to="/portal" />
+      <Tab value="invoices" label={t("Mis facturas")} icon={<ReceiptLongRounded />} iconPosition="start" component={Link} to="/portal/invoices" />
+    </Tabs>
   );
 }

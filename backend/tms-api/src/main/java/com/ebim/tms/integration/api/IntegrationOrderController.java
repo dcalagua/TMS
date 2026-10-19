@@ -1,27 +1,37 @@
 package com.ebim.tms.integration.api;
 
 import com.ebim.tms.integration.application.IntegrationExecution;
+import com.ebim.tms.integration.application.IntegrationOrderReadService;
 import com.ebim.tms.integration.application.IntegrationOrderService;
 import com.ebim.tms.integration.application.IntegrationPrincipal;
 import com.ebim.tms.integration.application.IntegrationRequestExecutor;
 import com.ebim.tms.integration.application.OrderBatchRequest;
 import com.ebim.tms.integration.application.OrderBatchResult;
+import com.ebim.tms.integration.application.OrderStatusV1;
 import com.ebim.tms.integration.application.OrderUpsertRequest;
 import com.ebim.tms.integration.application.OrderUpsertResult;
 import com.ebim.tms.integration.domain.IntegrationOperation;
 import com.ebim.tms.shared.api.ApiHeaders;
+import com.ebim.tms.shared.api.PageQuery;
+import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.config.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.time.OffsetDateTime;
+import java.util.Set;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -48,11 +58,38 @@ import org.springframework.web.bind.annotation.RestController;
 public class IntegrationOrderController {
 
     private final IntegrationOrderService orderService;
+    private final IntegrationOrderReadService readService;
     private final IntegrationRequestExecutor executor;
 
-    public IntegrationOrderController(IntegrationOrderService orderService, IntegrationRequestExecutor executor) {
+    public IntegrationOrderController(IntegrationOrderService orderService, IntegrationOrderReadService readService,
+            IntegrationRequestExecutor executor) {
         this.orderService = orderService;
+        this.readService = readService;
         this.executor = executor;
+    }
+
+    @GetMapping("/{orderNumber}")
+    @PreAuthorize("hasAuthority('integration.order:read')")
+    @Operation(summary = "One transport order: its key, status and cancellation (WAREHOUSE_EXECUTION_V1 7.4)",
+            description = "What a warehouse reads after an ORDER_CANCELLED webhook. 404 for another company's "
+                    + "order exactly as for an unknown one.")
+    public OrderStatusV1 find(IntegrationPrincipal principal, @PathVariable String orderNumber) {
+        return readService.find(principal, orderNumber);
+    }
+
+    @GetMapping
+    @PreAuthorize("hasAuthority('integration.order:read')")
+    @Operation(summary = "The order feed by status and updatedSince",
+            description = "Defaults to CANCELLED. Ordered oldest-touched first (updatedAt, then id) so a partner "
+                    + "can page a reconciliation deterministically.")
+    public PageResponse<OrderStatusV1> search(
+            IntegrationPrincipal principal,
+            @Parameter(description = "One or more order statuses. Defaults to CANCELLED.")
+            @RequestParam(required = false) Set<String> status,
+            @Parameter(description = "Only orders touched at or after this instant (ISO-8601).")
+            @RequestParam(required = false) OffsetDateTime updatedSince,
+            @ModelAttribute PageQuery pageQuery) {
+        return readService.search(principal, status, updatedSince, pageQuery);
     }
 
     @PostMapping

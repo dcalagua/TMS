@@ -24,6 +24,8 @@ export interface VehicleTypeView {
   minTemperatureCelsius: number | null
   maxTemperatureCelsius: number | null
   axles: number | null
+  /** Parte de largo × ancho que una carga puede cubrir (V62). Null: el de la empresa, o el del despliegue. */
+  loadFloorFillFactor?: number | null
   active: boolean
   createdAt: string
   updatedAt: string
@@ -44,6 +46,8 @@ export interface VehicleTypeRequest {
   minTemperatureCelsius?: number | null
   maxTemperatureCelsius?: number | null
   axles?: number | null
+  /** 0 < x ≤ 1. Null: el de la empresa. Enviarlo siempre: un PUT que lo omite lo borra. */
+  loadFloorFillFactor?: number | null
 }
 
 export interface VehicleTypeListParams {

@@ -14,6 +14,7 @@ import com.ebim.tms.shared.reference.OrderExternalKey;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,7 +44,11 @@ public class IntegrationDocumentController {
     @Operation(summary = "Create or replace a document by (sourceSystem, documentType, documentNumber)",
             description = "201 when created, 200 when updated or unchanged. Orders are matched exactly by "
                     + "(externalSource, externalReference); an order not yet known is reported and linked by a "
-                    + "later re-send. Nothing here moves an order, a trip or a delivery.")
+                    + "later re-send. Nothing here moves an order, a trip or a delivery. The optional fiscal "
+                    + "fields (fiscalCountry, authorizationNumber, transport dates, carrier, plate, recipients) "
+                    + "are stored as received: TMS never issues or validates a document with the SRI or SUNAT "
+                    + "(ADR-028); with fiscalCountry EC only the shape of the number and the 49-digit clave de "
+                    + "acceso is checked.")
     public ResponseEntity<LogisticsDocumentResultV1> upsert(
             IntegrationPrincipal principal,
             @RequestHeader(value = ApiHeaders.IDEMPOTENCY_KEY, required = false) String idempotencyKey,
@@ -59,7 +64,8 @@ public class IntegrationDocumentController {
                                     request.orders().stream()
                                             .map(key -> new OrderExternalKey(key.externalSource(),
                                                     key.externalReference().trim()))
-                                            .toList()));
+                                            .toList(),
+                                    fiscal(request), recipients(request)));
                     LogisticsDocumentResultV1 body = new LogisticsDocumentResultV1(intake.id(), intake.outcome(),
                             intake.linkedOrders().size(),
                             intake.unknownOrders().stream()
@@ -68,5 +74,29 @@ public class IntegrationDocumentController {
                             request.sourceSystem(), request.documentNumber());
                 });
         return IntegrationResponses.of(execution);
+    }
+
+    /** ADR-028: the fiscal identity and transport data, as sent. Absent fields stay absent. */
+    private static LogisticsDocumentPort.Fiscal fiscal(LogisticsDocumentV1 request) {
+        return new LogisticsDocumentPort.Fiscal(request.fiscalCountry(), request.fiscalDocumentCode(),
+                request.authorizationNumber(), request.transportStartDate(), request.transportEndDate(),
+                request.carrierTaxId(), request.carrierName(), request.vehiclePlate(), request.originAddress(),
+                request.transferReason());
+    }
+
+    private static List<LogisticsDocumentPort.Recipient> recipients(LogisticsDocumentV1 request) {
+        if (request.recipients() == null) {
+            return List.of();
+        }
+        return request.recipients().stream().map(recipient -> new LogisticsDocumentPort.Recipient(recipient.taxId(),
+                recipient.name(), recipient.destinationAddress(), recipient.transferReason(),
+                recipient.destinationEstablishmentCode(), recipient.route(), recipient.relatedDocumentCode(),
+                recipient.relatedDocumentNumber(), recipient.relatedDocumentAuthorizationNumber(),
+                recipient.relatedDocumentDate(),
+                recipient.items() == null ? List.of() : recipient.items().stream()
+                        .map(item -> new LogisticsDocumentPort.Item(item.code(), item.additionalCode(),
+                                item.description(), item.quantity(), item.unit()))
+                        .toList()))
+                .toList();
     }
 }

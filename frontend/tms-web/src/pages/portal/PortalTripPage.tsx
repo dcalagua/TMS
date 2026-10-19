@@ -4,7 +4,8 @@ import {
   Alert, Box, Button, ButtonBase, CircularProgress, Fab, IconButton, LinearProgress, Paper, Skeleton, Typography,
 } from "@mui/material";
 import {
-  ArrowBackRounded, ChevronRightRounded, CloudUploadRounded, DirectionsRounded, ErrorOutlineRounded, LockRounded,
+  ArrowBackRounded, ChevronRightRounded, CloudUploadRounded, ContentCopyRounded, DirectionsRounded, ErrorOutlineRounded,
+  LockRounded,
   PersonRounded, PhotoCameraRounded, PlaceRounded, RefreshRounded, ScheduleRounded, SkipNextRounded, TripOriginRounded,
   LocalShippingRounded,
 } from "@mui/icons-material";
@@ -15,7 +16,8 @@ import { EmptyState, ErrorState, StatusChip } from "../../shared/ui/components";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDateTime } from "../../lib/locale";
-import { notifyWithAction, toast } from "../../lib/ui";
+import { notifyError, notifySuccess, notifyWithAction, toast } from "../../lib/ui";
+import { authorizationLabel, logisticsDocumentLabel } from "../../shared/ui/logisticsDocumentLabel";
 import { R } from "../../theme";
 import { DocumentReportDrawer, type SaveOutcome } from "./DocumentReportDrawer";
 import { OfflineBanner } from "./OfflineBanner";
@@ -164,7 +166,7 @@ export function PortalTripPage() {
       {nextPending && !openDocument && (
         <Fab
           variant="extended" color="primary" onClick={() => setOpenDocumentId(nextPending.documentId)}
-          aria-label={t("Siguiente pendiente: {{doc}}", { doc: `${enumLabel("deliveryDocumentType", nextPending.documentType)} ${nextPending.documentNumber}` })}
+          aria-label={t("Siguiente pendiente: {{doc}}", { doc: `${logisticsDocumentLabel(nextPending.documentType, nextPending.fiscal, true)} ${nextPending.documentNumber}` })}
           sx={{
             position: "fixed", zIndex: 3, right: `calc(${SAFE_AREA.right} + 16px)`, bottom: `calc(${SAFE_AREA.bottom} + 20px)`,
             height: 56, px: 2.5, fontSize: 17, fontWeight: 800, textTransform: "none", gap: 1,
@@ -266,8 +268,21 @@ function StopStep({ stop, last, onOpen }: { stop: ShownStop; last: boolean; onOp
 }
 
 function DocumentRow({ doc, onOpen }: { doc: ShownDocument; onOpen: () => void }) {
-  const typeLabel = enumLabel("deliveryDocumentType", doc.documentType);
+  const typeLabel = logisticsDocumentLabel(doc.documentType, doc.fiscal, true);
   const closed = !doc.editable;
+  // ADR-028: la clave de acceso de una guía ecuatoriana, a mano para un control en carretera. Fuera
+  // del ButtonBase: un botón de copiar dentro de otro botón no se puede pulsar solo.
+  const authorization = doc.fiscal?.authorizationNumber ?? null;
+  const authorizationName = authorizationLabel(doc.fiscal?.fiscalCountry);
+
+  async function copyAuthorization(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      notifySuccess(t("Copiado al portapapeles"));
+    } catch {
+      notifyError(t("No se pudo copiar"));
+    }
+  }
   return (
     <Paper variant="outlined" sx={{
       borderRadius: `${R.md}px`, overflow: "hidden",
@@ -312,6 +327,21 @@ function DocumentRow({ doc, onOpen }: { doc: ShownDocument; onOpen: () => void }
         </Box>
         {closed ? <LockRounded color="disabled" /> : <ChevronRightRounded color="action" />}
       </ButtonBase>
+      {authorization && (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, px: 1.5, pb: 1, borderTop: "1px dashed", borderColor: "divider", pt: 0.75 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography color="text.secondary" sx={{ fontSize: 13, fontWeight: 700 }}>{authorizationName}</Typography>
+            <Typography sx={{ fontFamily: "monospace", fontSize: 13, wordBreak: "break-all" }}>{authorization}</Typography>
+          </Box>
+          <IconButton
+            aria-label={t("Copiar {{what}}", { what: authorizationName.toLowerCase() })}
+            onClick={() => void copyAuthorization(authorization)}
+            sx={{ width: 44, height: 44 }}
+          >
+            <ContentCopyRounded />
+          </IconButton>
+        </Box>
+      )}
     </Paper>
   );
 }

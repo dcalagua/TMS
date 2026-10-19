@@ -2,7 +2,7 @@ package com.ebim.tms.rates.domain;
 
 /**
  * Why a {@link RateComponent} the card charges for could not be calculated for this shipment.
- * Mirrors {@code ck_trip_cost_component_reason} (migration V30).
+ * Mirrors {@code ck_trip_cost_component_reason} (migrations V30, V39 and V63).
  *
  * <p>A code and not a sentence: the line is shown to an operator in their own language, and a
  * message frozen into a row at estimation time would still be in whichever language the person who
@@ -33,5 +33,15 @@ public enum CostComponentReason {
      * so a controller comparing an estimate against an invoice can see that waiting was never in
      * the estimate rather than wondering whether it was zero.
      */
-    WAITING_NOT_RECORDED
+    WAITING_NOT_RECORDED,
+    /**
+     * No line on the trip was measured (V63), so there is no floor area to turn into loading
+     * metres. Fixed in the material master (a complete physical profile), not in the fleet.
+     */
+    FLOOR_AREA_UNKNOWN,
+    /**
+     * The trip's vehicle has no load width (V63): neither the confirmation snapshot nor the vehicle
+     * type carries one. Fixed in the fleet master (the vehicle type's L/W/H).
+     */
+    LOAD_WIDTH_UNKNOWN
 }

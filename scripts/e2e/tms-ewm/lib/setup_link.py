@@ -7,14 +7,14 @@ with the secret TMS showed once.
 """
 import secrets
 
-from common import EWM_URL, STATE_FILE, expect, http, log, save_env, state, tms
+from common import EWM_URL, STATE_FILE, TMS_URL, expect, http, log, save_env, state, tms
 
 
 def put_connector(webhook_secret):
     st = state()
     cur = http("GET", EWM_URL + "/api/v1/admin/integrations/tms/connector")
     version = cur.json.get("version") if cur.status == 200 and cur.json else None
-    body = {"baseUrl": "http://localhost:8080", "credential": st["TMS_INTEGRATION_BEARER"],
+    body = {"baseUrl": TMS_URL, "credential": st["TMS_INTEGRATION_BEARER"],
             "webhookSecret": webhook_secret, "sourceSystem": "EWM_EBIM", "tmsCompanyId": st["TMS_CO"],
             "defaultWarehouseId": None, "includeSlsDocument": True, "active": True, "version": version}
     return expect(http("PUT", EWM_URL + "/api/v1/admin/integrations/tms/connector", body), 200, 201,
@@ -30,8 +30,10 @@ def main():
     if "TMS_SUBSCRIPTION_ID" not in st:
         r = expect(tms("POST", "/api/v1/webhooks", {
             "name": "EWM by EBIM CD01 (E2E)", "description": "local e2e",
-            "targetUrl": "http://localhost:8081" + st["EWM_WEBHOOK_PATH"],
-            "eventTypes": ["SHIPMENT_CONFIRMED", "SHIPMENT_CHANGED", "SHIPMENT_CANCELLED"]}), 201, 200,
+            "targetUrl": EWM_URL + st["EWM_WEBHOOK_PATH"],
+            "eventTypes": ["SHIPMENT_CONFIRMED", "SHIPMENT_CHANGED", "SHIPMENT_CANCELLED",
+                           # v1.1 (WAREHOUSE_EXECUTION_V1 7.7).
+                           "DELIVERY_RESULT_RECORDED", "ORDER_CANCELLED"]}), 201, 200,
             what="TMS webhook subscription")
         save_env(STATE_FILE, TMS_SUBSCRIPTION_ID=r.json["subscription"]["id"])
         r2 = put_connector(r.json["secret"])

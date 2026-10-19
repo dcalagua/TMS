@@ -52,6 +52,8 @@ public record RateCardView(
         BigDecimal accessorialAmount,
         String accessorialLabel,
         BigDecimal maximumAmount,
+        /** Per loading metre of deck (V63). */
+        BigDecimal amountPerLoadingMeter,
         boolean active,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt) {
@@ -103,6 +105,7 @@ public record RateCardView(
                 card.accessorialAmount(),
                 card.accessorialLabel(),
                 card.maximumAmount(),
+                card.amountPerLoadingMeter(),
                 card.active(),
                 card.createdAt(),
                 card.updatedAt());

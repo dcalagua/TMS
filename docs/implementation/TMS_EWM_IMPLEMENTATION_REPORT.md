@@ -1,5 +1,19 @@
 # TMS ⇄ EWM integration v1 - implementation report
 
+> **Status note - 2026-10-18 (overnight pack phase 05).** This report is a dated record of
+> 2026-09-28 and is not rewritten. Since it was written:
+>
+> - **It is merged.** TMS `feature/tms-ewm-integration-v1` reached `dev` on 2026-09-28 (PR #13,
+>   `0553f16`); the EWM side was merged the same day (`docs/roadmap/2026-10-enterprise/00_ESTADO_ACTUAL.md` §3). "Nothing was merged" below was true when written.
+> - `SHIPMENT_CHANGED` (commit `cb5a663`) and the additive plan fields (`originExternalReference`,
+>   `routeCode`, `driver`, `orders[].stopSequence`) are in `dev`; `WAREHOUSE_EXECUTION_V1.md` carries
+>   the same note.
+> - Phase 11 (carrier portal), blocked here by a security decision, was delivered later under
+>   ADR-018/ADR-019 (V57), which supersede ADR-016; document delivery tracking (ADR-015 section 5) is
+>   delivered by the same ADR-018.
+> - Test gates moved on: TMS backend 2324 run / 1 known failure, frontend 308/308 at `40de0a5`
+>   (`docs/architecture/TMS_CURRENT_CAPABILITY_MAP.md`).
+
 **Date:** 2026-09-28 · **Author:** autonomous run (Claude Opus 5.5) under the approved brief of 2026-09-27
 
 ## 1. Executive summary

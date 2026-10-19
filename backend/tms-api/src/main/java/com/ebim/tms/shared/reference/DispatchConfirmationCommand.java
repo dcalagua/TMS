@@ -12,6 +12,7 @@ import java.util.UUID;
  *
  * @param sourceSystem the producer of the dispatch (EWM by EBIM: {@code EWM_EBIM}), never an ERP
  *     namespace
+ * @param vehicleTrailerPlate contract v1.1 (§7.3): the trailer, or null. Stored, never compared
  */
 public record DispatchConfirmationCommand(
         UUID integrationClientId,
@@ -28,6 +29,7 @@ public record DispatchConfirmationCommand(
         String carrierName,
         String vehicleLicensePlate,
         String vehicleType,
+        String vehicleTrailerPlate,
         String driverName,
         String driverDocumentNumber,
         String sealNumber,
@@ -43,7 +45,14 @@ public record DispatchConfirmationCommand(
         orders = orders == null ? List.of() : List.copyOf(orders);
     }
 
-    /** One order in the document, keyed by its ERP namespace and reference. */
+    /**
+     * One order in the document, keyed by its ERP namespace and reference.
+     *
+     * <p>{@code stacks}, {@code effectiveVolumeM3}, {@code loadingMeters} and {@code geometryReason}
+     * are contract v1.1 (§7.3): the geometry the warehouse computed (ADR-022 section 3), each null
+     * when not said. Stored, and compared with the plan as an informative {@code GEOMETRY_VARIANCE}
+     * (phase 45, {@code DispatchReconciler}).
+     */
     public record Order(
             String externalSource,
             String externalReference,
@@ -52,10 +61,21 @@ public record DispatchConfirmationCommand(
             Integer handlingUnits,
             BigDecimal weightKg,
             BigDecimal volumeM3,
-            List<Line> lines) {
+            List<Line> lines,
+            Integer stacks,
+            BigDecimal effectiveVolumeM3,
+            BigDecimal loadingMeters,
+            String geometryReason) {
 
         public Order {
             lines = lines == null ? List.of() : List.copyOf(lines);
+        }
+
+        /** The v1 shape, with no geometry. */
+        public Order(String externalSource, String externalReference, String warehouseOrderNumber, String status,
+                Integer handlingUnits, BigDecimal weightKg, BigDecimal volumeM3, List<Line> lines) {
+            this(externalSource, externalReference, warehouseOrderNumber, status, handlingUnits, weightKg, volumeM3,
+                    lines, null, null, null, null);
         }
 
         public OrderExternalKey key() {

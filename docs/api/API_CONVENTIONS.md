@@ -109,6 +109,7 @@ Every error, from a filter or a controller, is one `application/problem+json` do
 | `company-scope-invalid` | 400 | `X-Company-Id` is not a UUID |
 | `company-scope-forbidden` | 403 | the caller holds no active membership in the selected company |
 | `access-denied` | 403 | authenticated and scoped, but the required permission is missing |
+| `tenant-suspended` | 423 | EBIM MasterAdmin suspended the organization (`lifecycle.v1`, ADR-021): writes are refused, reads continue. Carries `error: TENANT_SUSPENDED` and `reason` (`NON_PAYMENT`, `MANUAL`, `TERMINATED`) |
 | `validation-failed` | 400 | Bean Validation rejected fields; see `errors` |
 | `malformed-request` | 400 | unreadable body, wrong parameter type, unsupported sort, wrong method or media type |
 | `resource-not-found` | 404 | no such resource **inside the caller's company scope** |

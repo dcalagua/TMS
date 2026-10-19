@@ -1,8 +1,10 @@
 package com.ebim.tms.orders.application;
 
 import com.ebim.tms.orders.domain.OrderPriority;
+import com.ebim.tms.shared.geometry.StackMode;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -60,6 +62,12 @@ public record OrderRequest(
      * One requested order line. {@code palletQuantity} allows zero (an explicit "no pallet
      * contribution", distinct from "unknown" - {@code null}), the same {@code != null} rather
      * than {@code > 0} discipline {@code EffectiveCapacityResolver} uses for a vehicle override.
+     *
+     * <p>The eight physical fields (V59, ADR-022 section 2) are optional. When any of them is sent,
+     * the line's block wins over the material profile <em>as a whole</em> (D-02); when none is, the
+     * profile is copied. {@code orientationLocked} alone does not make a block. The rules between
+     * fields (NESTABLE needs {@code nestIncrementM}) are {@code PhysicalBlock}'s, checked once in
+     * {@code OrderLinePhysicalResolver}.
      */
     public record OrderLineRequest(
             @NotBlank @Size(max = 64) String materialCode,
@@ -68,6 +76,21 @@ public record OrderRequest(
             @NotBlank @Size(max = 16) String uom,
             @DecimalMin(value = "0", inclusive = false, message = "must be greater than zero") BigDecimal unitWeightKg,
             @DecimalMin(value = "0", inclusive = false, message = "must be greater than zero") BigDecimal unitVolumeM3,
-            @DecimalMin(value = "0", message = "must be zero or greater") BigDecimal palletQuantity) {
+            @DecimalMin(value = "0", message = "must be zero or greater") BigDecimal palletQuantity,
+            @DecimalMin(value = "0", inclusive = false, message = "must be greater than zero") BigDecimal lengthM,
+            @DecimalMin(value = "0", inclusive = false, message = "must be greater than zero") BigDecimal widthM,
+            @DecimalMin(value = "0", inclusive = false, message = "must be greater than zero") BigDecimal heightM,
+            StackMode stackMode,
+            @Min(value = 1, message = "must be at least 1") Integer stackMaxQuantity,
+            @DecimalMin(value = "0", inclusive = false, message = "must be greater than zero") BigDecimal nestIncrementM,
+            @DecimalMin(value = "0", inclusive = false, message = "must be greater than zero") BigDecimal maxTopLoadKg,
+            Boolean orientationLocked) {
+
+        /** A line without physical fields - what every caller before V59 sends. */
+        public OrderLineRequest(String materialCode, String materialDescription, BigDecimal quantity, String uom,
+                BigDecimal unitWeightKg, BigDecimal unitVolumeM3, BigDecimal palletQuantity) {
+            this(materialCode, materialDescription, quantity, uom, unitWeightKg, unitVolumeM3, palletQuantity, null,
+                    null, null, null, null, null, null, null);
+        }
     }
 }

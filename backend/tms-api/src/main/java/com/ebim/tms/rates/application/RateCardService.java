@@ -339,18 +339,20 @@ public class RateCardService {
         RateComponents components = new RateComponents(request.baseAmount(), request.amountPerKm(),
                 request.amountPerKg(), request.amountPerM3(), request.amountPerPallet(), request.minimumAmount(),
                 request.amountPerStop(), request.fuelSurchargePercent(), request.amountPerWaitingHour(),
-                request.tollAmount(), request.accessorialAmount(), label, request.maximumAmount());
+                request.tollAmount(), request.accessorialAmount(), label, request.maximumAmount(),
+                request.amountPerLoadingMeter());
         // The floor and the ceiling are deliberately not on this list, for the reason
         // RateCard.hasAnyComponent gives: a limit is a rule about other charges, not a charge.
         boolean hasComponent = components.baseAmount() != null || components.amountPerKm() != null
                 || components.amountPerKg() != null || components.amountPerM3() != null
-                || components.amountPerPallet() != null || components.amountPerStop() != null
+                || components.amountPerPallet() != null || components.amountPerLoadingMeter() != null
+                || components.amountPerStop() != null
                 || components.fuelSurchargePercent() != null || components.amountPerWaitingHour() != null
                 || components.tollAmount() != null || components.accessorialAmount() != null;
         if (!hasComponent) {
             throw new InvalidRequestException(
                     "A rate card must define at least one charge: baseAmount, amountPerKm, amountPerKg, "
-                            + "amountPerM3, amountPerPallet, amountPerStop, fuelSurchargePercent, "
+                            + "amountPerM3, amountPerPallet, amountPerLoadingMeter, amountPerStop, fuelSurchargePercent, "
                             + "amountPerWaitingHour, tollAmount or accessorialAmount.");
         }
         return components;

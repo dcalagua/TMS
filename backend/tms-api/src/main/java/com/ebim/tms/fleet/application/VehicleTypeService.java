@@ -68,6 +68,7 @@ public class VehicleTypeService {
                 request.maxVolumeM3(), request.maxPallets(), request.lengthM(), request.widthM(), request.heightM(),
                 request.bodyType(), request.temperatureControlled(), request.minTemperatureCelsius(),
                 request.maxTemperatureCelsius(), request.axles(), actorId);
+        type.changeLoadFloorFillFactor(request.loadFloorFillFactor());
         return VehicleTypeView.from(saveOrConflict(type, code));
     }
 
@@ -85,6 +86,7 @@ public class VehicleTypeService {
                 request.maxPallets(), request.lengthM(), request.widthM(), request.heightM(), request.bodyType(),
                 request.temperatureControlled(), request.minTemperatureCelsius(), request.maxTemperatureCelsius(),
                 request.axles(), actorId);
+        type.changeLoadFloorFillFactor(request.loadFloorFillFactor());
         return VehicleTypeView.from(saveOrConflict(type, code));
     }
 

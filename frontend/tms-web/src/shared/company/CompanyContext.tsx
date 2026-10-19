@@ -4,7 +4,7 @@ import { t } from "../../lib/i18n";
 import { notifyError } from "../../lib/ui";
 import { ApiError, onApiResponseError } from "../api/httpClient";
 import { fetchMe, type CompanyAccessView, type MeView, type UserView } from "../api/meApi";
-import { describeApiError, isCompanyScopeStale } from "../api/problemMessages";
+import { describeApiError, isCompanyScopeStale, isTenantSuspended } from "../api/problemMessages";
 import { useAuth } from "../auth/AuthContext";
 import { readMeCopy, writeMeCopy } from "./meOfflineCopy";
 
@@ -92,6 +92,12 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return onApiResponseError((error: ApiError) => {
+      // ADR-021: una escritura rechazada por suspensión refresca `/me`, para que el aviso fijo
+      // aparezca aunque la suspensión haya llegado con la sesión ya abierta.
+      if (isTenantSuspended(error)) {
+        void queryClient.invalidateQueries({ queryKey: ["me"] });
+        return;
+      }
       if (!isCompanyScopeStale(error)) return;
       notifyError(
         t("Cambió tu acceso a la compañía"),

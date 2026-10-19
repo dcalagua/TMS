@@ -1,4 +1,5 @@
 import { t } from "../../lib/i18n";
+import { describeCapacityRefusal } from "../geometry/loadGeometry";
 import { isAuthFailureResponse, type ApiError, type ProblemCode } from "./httpClient";
 
 /**
@@ -18,6 +19,8 @@ const CODE_COPY: Record<ProblemCode, string> = {
   "company-scope-forbidden": "Ya no tienes acceso a esa compañía. Elige otra.",
   "commercial-access-suspended":
     "La suscripción de TMS de tu organización no está activa. Tus datos se conservan; contacta a tu ejecutivo de EBIM.",
+  "tenant-suspended":
+    "La cuenta de tu organización está suspendida: puedes consultar y exportar tus datos, pero no registrar cambios. Si es por falta de pago, regulariza el pago con tu proveedor.",
   "access-denied": "No tienes permiso para realizar esta acción.",
   "validation-failed": "Hay campos que debes corregir.",
   "malformed-request": "No se pudo procesar la solicitud.",
@@ -48,6 +51,11 @@ export function isAuthProblem(error: ApiError): boolean {
   return isAuthFailureResponse(error.status, error.code);
 }
 
+/** True cuando el servidor rechazó una escritura porque la operación de la organización está suspendida (ADR-021). */
+export function isTenantSuspended(error: ApiError): boolean {
+  return error.code === "tenant-suspended";
+}
+
 /** True para el único código que significa "recarga `/me`, la empresa elegida está obsoleta". */
 export function isCompanyScopeStale(error: ApiError): boolean {
   return error.code === "company-scope-forbidden";
@@ -65,6 +73,30 @@ export function describePlanningError(error: ApiError): string {
   if ((error.code === "conflict" || error.code === "malformed-request") && error.problem?.detail) {
     return error.problem.detail;
   }
+  return describeApiError(error);
+}
+
+/**
+ * {@link describePlanningError}, con los rechazos de capacidad dichos en castellano: el backend
+ * nombra cada dimensión que no cupo (peso, volumen, pallets, piso, alto) y la unidad más alta que el
+ * vehículo (`ITEM_TALLER_THAN_VEHICLE`) en una frase técnica en inglés; aquí se reescriben con sus
+ * cifras. Si la frase no tiene esa forma se muestra el `detail` tal cual, como siempre.
+ */
+export function describePlanningRefusal(error: ApiError): string {
+  if (error.code === "conflict") {
+    const refusal = describeCapacityRefusal(error.problem?.detail);
+    if (refusal) return refusal;
+  }
+  return describePlanningError(error);
+}
+
+/**
+ * La misma excepción para las cuentas por pagar (fase 65): un 422 (`payment-exceeds-balance`,
+ * `payment-currency-mismatch`) o un 409 (quien confirma es quien pidió el pago, la factura no
+ * admite la acción) trae en `detail` la cifra o la regla exacta, escrita para quien registra.
+ */
+export function describePaymentError(error: ApiError): string {
+  if ((error.status === 409 || error.status === 422) && error.problem?.detail) return error.problem.detail;
   return describeApiError(error);
 }
 

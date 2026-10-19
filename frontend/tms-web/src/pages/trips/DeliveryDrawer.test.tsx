@@ -76,4 +76,35 @@ describe("el cajón de entrega", () => {
 
     expect(await screen.findByText(/no puede superar lo llevado/)).toBeInTheDocument();
   });
+
+  /**
+   * El suelo de la hora de entrega.
+   *
+   * El backend rechaza una entrega anterior a la llegada a la parada - la mercaderia no pudo
+   * entregarse antes de que el camion estuviera alli - y el selector arranca vacio: al elegir dia
+   * en el calendario pone las 00:00, que SIEMPRE es anterior. El camino normal fallaba siempre.
+   *
+   * Lo que se protege aqui es que el limite llegue al campo y se le diga a quien opera, en vez de
+   * dejar que lo descubra con un mensaje del servidor en hora UTC.
+   */
+  it("anuncia la hora minima cuando la parada ya registro una llegada", () => {
+    render(
+      <DeliveryDrawer
+        stopLabel="Parada 1 · Tienda Cayma"
+        orderNumber="TO-00000009"
+        earliestDeliveredAt="2026-10-09T13:07:40-05:00"
+        onClose={() => {}}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(screen.getByText(/No antes de las 13:07/)).toBeInTheDocument();
+  });
+
+  it("no impone ningun suelo cuando el envio no registro salida ni llegada", () => {
+    drawer(vi.fn().mockResolvedValue(undefined));
+
+    expect(screen.getByText("Cuándo ocurrió de verdad, no cuándo se está tecleando.")).toBeInTheDocument();
+    expect(screen.queryByText(/No antes de las/)).not.toBeInTheDocument();
+  });
 });

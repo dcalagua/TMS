@@ -65,6 +65,15 @@ interface DeliveryDrawerProps {
   orderNumber: string;
   /** El registro existente cuando esto es una corrección; `undefined` cuando es un alta. */
   existing?: OrderDeliveryView;
+  /**
+   * El instante antes del cual la entrega no pudo ocurrir: la llegada a la parada, o la salida
+   * del envío si todavía no se registró llegada. Es el mismo límite que aplica el backend
+   * (`TripDeliveryService.resolveDeliveredAt`), traído aquí para que el selector no llegue
+   * siquiera a ofrecer una hora que vaya a ser rechazada.
+   *
+   * Opcional: un envío sin salida registrada no tiene suelo, y entonces no se impone ninguno.
+   */
+  earliestDeliveredAt?: string | null;
   onClose: () => void;
   /** Lanza un `Error` con la frase del servidor si el backend rechaza. */
   onSubmit: (values: DeliveryValues) => Promise<void>;
@@ -90,8 +99,12 @@ function toLocalInput(iso: string | null | undefined): string {
  * formulario consulta (`DELIVERY_RESULTS_NEEDING_TIME` y hermanas) solo dan forma al formulario:
  * enseñan el campo que hace falta y esconden el que sobra, pero no sustituyen a la validación.
  */
-export function DeliveryDrawer({ stopLabel, orderNumber, existing, onClose, onSubmit }: DeliveryDrawerProps) {
+export function DeliveryDrawer({
+  stopLabel, orderNumber, existing, earliestDeliveredAt, onClose, onSubmit,
+}: DeliveryDrawerProps) {
   const [formError, setFormError] = useState<string | null>(null);
+  // En el mismo formato de texto que el campo, que es lo que `DateInput` compara.
+  const earliest = toLocalInput(earliestDeliveredAt);
 
   const {
     register, control, handleSubmit,
@@ -204,7 +217,11 @@ export function DeliveryDrawer({ stopLabel, orderNumber, existing, onClose, onSu
             <FormDateInput
               control={control} name="deliveredAt" mode="datetime"
               label={t("Entregado el")} size="small" fullWidth
-              helperText={t("Cuándo ocurrió de verdad, no cuándo se está tecleando.")}
+              min={earliest || undefined}
+              helperText={earliest
+                ? t("Cuándo ocurrió de verdad, no cuándo se está tecleando. No antes de las {{time}}.",
+                  { time: earliest.slice(11) })
+                : t("Cuándo ocurrió de verdad, no cuándo se está tecleando.")}
             />
           )}
 

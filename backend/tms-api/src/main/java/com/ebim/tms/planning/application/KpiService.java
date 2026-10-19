@@ -13,6 +13,7 @@ import com.ebim.tms.planning.infrastructure.TripTenderRepository;
 import com.ebim.tms.shared.io.DelimitedTextWriter;
 import com.ebim.tms.shared.reference.OrderBacklogTotals;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
+import com.ebim.tms.shared.reference.SettlementKpiPort;
 import com.ebim.tms.shared.reference.TripCostAnalyticsPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.security.Permission;
@@ -86,11 +87,12 @@ public class KpiService {
     private final TripTenderRepository tripTenderRepository;
     private final OrderPlanningPort orderPlanningPort;
     private final TripCostAnalyticsPort tripCostAnalyticsPort;
+    private final SettlementKpiPort settlementKpiPort;
 
     public KpiService(TripRepository tripRepository, TripStopRepository tripStopRepository,
             OrderDeliveryRepository orderDeliveryRepository, TripExceptionRepository tripExceptionRepository,
             TripTenderRepository tripTenderRepository, OrderPlanningPort orderPlanningPort,
-            TripCostAnalyticsPort tripCostAnalyticsPort) {
+            TripCostAnalyticsPort tripCostAnalyticsPort, SettlementKpiPort settlementKpiPort) {
         this.tripRepository = tripRepository;
         this.tripStopRepository = tripStopRepository;
         this.orderDeliveryRepository = orderDeliveryRepository;
@@ -98,6 +100,7 @@ public class KpiService {
         this.tripTenderRepository = tripTenderRepository;
         this.orderPlanningPort = orderPlanningPort;
         this.tripCostAnalyticsPort = tripCostAnalyticsPort;
+        this.settlementKpiPort = settlementKpiPort;
     }
 
     /**
@@ -124,6 +127,13 @@ public class KpiService {
                 scope.has(Permission.ORDERS_ORDER_READ) ? orders(companyId, range) : null,
                 scope.has(Permission.PLANNING_TENDER_READ) ? tenders(companyId, range) : null,
                 scope.has(Permission.RATES_TRIP_COST_READ) ? cost(companyId, range) : null,
+                scope.has(Permission.SETTLEMENT_INVOICE_READ)
+                        ? KpiSettlementView.from(settlementKpiPort.totals(companyId, range.from(), range.to()))
+                        : null,
+                scope.has(Permission.SETTLEMENT_ACCRUAL_READ)
+                        ? KpiFinanceView.from(settlementKpiPort.finance(companyId, scope.zoneId(), range.from(),
+                                range.to()))
+                        : null,
                 series.rows());
     }
 

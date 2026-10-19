@@ -8,6 +8,7 @@ import com.ebim.tms.planning.infrastructure.TripOrderAssignmentRepository;
 import com.ebim.tms.shared.api.ConflictException;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.OrderAmounts;
+import com.ebim.tms.shared.reference.OrderGeometryProfile;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import java.util.List;
 import java.util.Map;
@@ -42,10 +43,37 @@ public class TripAssignmentService {
         this.orderPlanningPort = orderPlanningPort;
     }
 
-    /** The trip's current load, summed by the database over active rows only. */
+    /** The trip's current load as stored (reference height), summed by the database over active rows only. */
     @Transactional(readOnly = true)
     public CapacityLoad currentLoad(UUID tripId) {
         return CapacityLoad.of(assignmentRepository.loadByTripId(tripId, AssignmentStatus.ACTIVE));
+    }
+
+    /**
+     * The trip's current load on a vehicle with {@code limits} (ADR-022 section 5): re-stacked for the
+     * vehicle's height when it has one ({@link VehicleLoads}), the database's sum otherwise. Every
+     * capacity check of an existing trip asks this, so a 2.20 m van is judged on stacks that fit it.
+     */
+    @Transactional(readOnly = true)
+    public CapacityLoad currentLoad(UUID tripId, UUID companyId, CapacityLimits limits) {
+        if (!VehicleLoads.restacks(limits)) {
+            return currentLoad(tripId);
+        }
+        List<TripOrderAssignment> rows = activeAssignments(tripId);
+        return VehicleLoads.ofAssignments(rows, profilesOf(VehicleLoads.geometricOrders(rows), companyId), limits);
+    }
+
+    /** The load {@code slice} of {@code order} adds to a vehicle with {@code limits}, re-stacked for it. */
+    @Transactional(readOnly = true)
+    public CapacityLoad sliceLoad(PlannableOrder order, OrderAmounts slice, UUID companyId, CapacityLimits limits) {
+        if (!VehicleLoads.restacks(limits) || order.maxStackHeightM() == null) {
+            return CapacityLoad.of(slice);
+        }
+        return VehicleLoads.of(slice, profilesOf(Set.of(order.id()), companyId).get(order.id()), limits);
+    }
+
+    private Map<UUID, OrderGeometryProfile> profilesOf(Set<UUID> orderIds, UUID companyId) {
+        return orderIds.isEmpty() ? Map.of() : orderPlanningPort.geometryProfilesOf(orderIds, companyId);
     }
 
     @Transactional(readOnly = true)

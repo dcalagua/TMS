@@ -44,6 +44,15 @@ public enum ProblemType {
      */
     COMMERCIAL_ACCESS_SUSPENDED("commercial-access-suspended", "Commercial access is suspended", HttpStatus.FORBIDDEN),
 
+    /**
+     * EBIM MasterAdmin has suspended the operation of the organization ({@code lifecycle.v1}, ADR-021):
+     * writes are refused, reads go on. Distinct from {@link #COMMERCIAL_ACCESS_SUSPENDED} (commercial is
+     * not operational access, D-14) and from {@link #ACCESS_DENIED}: no role can lift it, and no data is
+     * lost - operation resumes when MasterAdmin sends {@code ACTIVE}. The document also carries the
+     * contract's stable {@code error: TENANT_SUSPENDED} and the {@code reason}.
+     */
+    TENANT_SUSPENDED("tenant-suspended", "Tenant operation is suspended", HttpStatus.LOCKED),
+
     /** Authenticated and scoped, but the caller lacks the permission the operation requires. */
     ACCESS_DENIED("access-denied", "Access denied", HttpStatus.FORBIDDEN),
 
@@ -76,6 +85,28 @@ public enum ProblemType {
      */
     DISPATCH_REQUIRES_EXTERNAL_CONFIRMATION("dispatch-requires-external-confirmation",
             "Dispatch requires the warehouse's confirmation", HttpStatus.CONFLICT),
+
+    /**
+     * A carrier's document names an issuer tax id other than the carrier's own (V66, ADR-024 part 2
+     * item 3, ADR-027). Distinct from {@link #VALIDATION_FAILED} because the payload is well formed:
+     * either the document belongs to another carrier or the carrier's master data is wrong, and a
+     * person has to say which.
+     */
+    ISSUER_TAX_ID_MISMATCH("issuer-tax-id-mismatch", "Issuer tax id does not match the carrier",
+            HttpStatus.UNPROCESSABLE_ENTITY),
+
+    /**
+     * A reported payment is larger than what is still owed on the invoice (V67, ADR-023 section 2):
+     * total, minus credit notes, plus debit notes, minus the withholdings, minus what was
+     * already paid. Well formed, and refused on its merits: either the payment is against the wrong
+     * invoice or a note TMS has not seen exists, and a person has to say which.
+     */
+    PAYMENT_EXCEEDS_BALANCE("payment-exceeds-balance", "Payment exceeds the open balance",
+            HttpStatus.UNPROCESSABLE_ENTITY),
+
+    /** A payment in another currency than its invoice's (V67). TMS invents no exchange rate. */
+    PAYMENT_CURRENCY_MISMATCH("payment-currency-mismatch", "Payment currency differs from the invoice's",
+            HttpStatus.UNPROCESSABLE_ENTITY),
 
     /**
      * A capability this deployment has not been configured for was asked of it - today, only

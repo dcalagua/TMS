@@ -32,6 +32,7 @@ import { OrderImportDrawer } from "./OrderImportDrawer";
 import { releaseWithOverride } from "../scheduling/releaseFlow";
 import { OrderFilterBar, OrderStatusTabs } from "./OrderFilters";
 import { DEFAULT_ORDER_FILTERS, type OrderFilters } from "./orderFilterModel";
+import { OccupancyCell } from "../../shared/geometry/Occupancy";
 
 const PAGE_SIZE = 25;
 
@@ -309,6 +310,14 @@ export function OrdersPage() {
           secondary={`${fmtVolumeM3(order.totalVolumeM3)} · ${fmtDecimal(order.totalPallets)} ${t("pallets")} · ${fmtQuantity(order.lineCount)} ${order.lineCount === 1 ? t("línea") : t("líneas")}`}
         />
       ),
+    },
+    {
+      // V62 (ADR-022): lo que el pedido ocupa por geometría —pilas, piso, alto— y el volumen que
+      // cuenta la planificación frente al declarado. Lo calcula el backend al grabar las líneas.
+      key: "occupancy",
+      header: t("Ocupa"),
+      width: 230,
+      render: (order) => <OccupancyCell geometry={order.geometry} declaredVolumeM3={order.totalVolumeM3} />,
     },
     {
       // El estado de planificación y, debajo, el resultado de la entrega. Un pedido rechazado en

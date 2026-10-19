@@ -2,6 +2,7 @@ import { apiDownload, apiRequest, apiUpload, type DownloadedFile } from './httpC
 import type {
   DocumentDeliveryReason, DocumentDeliveryStatus, DocumentEvidenceType,
 } from './documentDeliveriesApi'
+import type { DocumentKind, ReportedWithholding, WithholdingView } from './settlementApi'
 
 //
 // El portal de transportistas (ADR-018 §6). Lo usa un usuario con membresía de transportista y
@@ -57,6 +58,18 @@ export interface PortalDocument {
   /** False once the office confirmed the return: the report is then final. */
   editable: boolean
   evidence: EvidenceRef[]
+  /**
+   * ADR-028: the authority's identity of the document (an Ecuadorian guide's clave de acceso), or
+   * null when the ERP sent none. Optional: a trip cached offline before V69 has no such field.
+   */
+  fiscal?: PortalDocumentFiscal | null
+}
+
+/** Mirrors `LogisticsDocumentPort.FiscalIdentity`. */
+export interface PortalDocumentFiscal {
+  fiscalCountry: string | null
+  fiscalDocumentCode: string | null
+  authorizationNumber: string | null
 }
 
 export interface PortalStop {
@@ -145,4 +158,69 @@ export function downloadPortalEvidence(
 ): Promise<DownloadedFile> {
   return apiDownload(`/portal/trips/${tripId}/documents/${documentId}/evidence/${evidenceId}/content`,
     { companyId, signal })
+}
+
+// --- Mis facturas (fase 65, ADR-027) -------------------------------------------------------
+//
+// Lo que el transportista ve de sus facturas: un estado simplificado (no ve la auditoría por
+// dentro), el vencimiento, lo pagado y las retenciones con su comprobante. Sin copia en el
+// teléfono: una factura no se reporta desde la calle, así que sin señal la pantalla sólo lo dice.
+
+/** El estado que ve el transportista, no el `InvoiceStatus` de la oficina. */
+export const PORTAL_INVOICE_STATUSES = [
+  'IN_REVIEW', 'APPROVED', 'SCHEDULED', 'PARTIALLY_PAID', 'PAID', 'ON_HOLD', 'REJECTED',
+] as const
+export type PortalInvoiceStatus = (typeof PORTAL_INVOICE_STATUSES)[number]
+
+export interface PortalInvoiceSummary {
+  id: string
+  invoiceNumber: string
+  documentKind: DocumentKind
+  /** El código del país (01, 04…); null en el régimen genérico. */
+  fiscalDocumentCode: string | null
+  invoiceDate: string
+  currency: string
+  totalAmount: number
+  status: PortalInvoiceStatus
+  dueDate: string | null
+  paidAmount: number
+  /** Null mientras la factura no está aprobada: aún no hay un saldo que pagar. */
+  openBalance: number | null
+  /** Lo que el cargador retiene o deposita aparte; null = ninguna retención. */
+  withholdingTotalAmount: number | null
+}
+
+export interface PortalInvoiceLine {
+  lineNumber: number
+  description: string | null
+  lineAmount: number
+  chargeCode: string
+}
+
+export interface PortalInvoicePayment {
+  paymentReference: string
+  paidOn: string
+  amount: number
+  withholdings: ReportedWithholding[]
+}
+
+export interface PortalInvoiceDetail extends PortalInvoiceSummary {
+  /** El nombre del impuesto del régimen con que se recibió (IGV, IVA…). */
+  vatLabel: string | null
+  withholdings: WithholdingView[]
+  netAmount: number | null
+  payableAmount: number | null
+  rejectionReason: string | null
+  lines: PortalInvoiceLine[]
+  payments: PortalInvoicePayment[]
+}
+
+/** `portal.invoice:read`. */
+export function fetchPortalInvoices(companyId: string, signal?: AbortSignal): Promise<PortalInvoiceSummary[]> {
+  return apiRequest<PortalInvoiceSummary[]>('/portal/invoices', { companyId, signal })
+}
+
+/** `portal.invoice:read`. */
+export function fetchPortalInvoice(companyId: string, invoiceId: string, signal?: AbortSignal): Promise<PortalInvoiceDetail> {
+  return apiRequest<PortalInvoiceDetail>(`/portal/invoices/${invoiceId}`, { companyId, signal })
 }

@@ -8,6 +8,7 @@ import com.ebim.tms.settlement.application.PayableExportView;
 import com.ebim.tms.settlement.application.SettlementService;
 import com.ebim.tms.settlement.domain.FreightDiscrepancy;
 import com.ebim.tms.settlement.domain.InvoiceStatus;
+import com.ebim.tms.settlement.domain.PayableExport;
 import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.security.CompanyScope;
@@ -158,8 +159,10 @@ public class SettlementController {
     @Operation(summary = "Export the approved obligation for accounting. Repeating it returns the same export")
     @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
             description = "Id of a company the caller is a member of")
-    public PayableExportView export(CompanyScope scope, @PathVariable UUID id) {
-        return settlementService.export(scope, id);
+    public PayableExportView export(CompanyScope scope, @PathVariable UUID id,
+            @Parameter(description = "JSON (default) or CSV. A repeat returns the first export as it was")
+            @RequestParam(required = false, defaultValue = "JSON") PayableExport.Format format) {
+        return settlementService.export(scope, id, format);
     }
 
     /** A decision on one difference. */

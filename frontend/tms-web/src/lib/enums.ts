@@ -118,6 +118,11 @@ export const ENUM_LABELS = {
     RECEIVED: "Recibida",
     REJECTED: "Rechazada",
     UNDER_REVIEW: "En revisión",
+    // Fase 65: el pago que el ERP informa. TMS lo registra; no mueve dinero.
+    SCHEDULED: "Programada",
+    PARTIALLY_PAID: "Pago parcial",
+    PAID: "Pagada",
+    ON_HOLD: "Retenida",
   },
   /**
    * V46: el veredicto de la comparación.
@@ -135,8 +140,139 @@ export const ENUM_LABELS = {
     DUPLICATE_INVOICE: "Factura duplicada",
     LINE_AMOUNT: "Importe de línea",
     MISSING_EXPECTED_COST: "Sin coste esperado",
+    PENALTY: "Penalidad a aceptar",
     TOTAL_AMOUNT: "Importe total",
     UNMATCHED_TRIP: "Envío sin identificar",
+  },
+  /**
+   * Fase 50: de qué componente del flete habla una línea de factura. `FREIGHT` es el todo incluido
+   * y el valor por defecto; `PENALTY` queda fuera de la comparación.
+   */
+  chargeCode: {
+    FREIGHT: "Flete (todo incluido)",
+    BASE: "Base",
+    DISTANCE: "Distancia",
+    WEIGHT: "Peso",
+    VOLUME: "Volumen",
+    PALLETS: "Pallets",
+    LOADING_METERS: "Metros lineales",
+    STOP_OFF: "Parada adicional",
+    FUEL_SURCHARGE: "Recargo combustible",
+    WAITING_TIME: "Tiempo de espera",
+    TOLL: "Peaje",
+    OTHER_ACCESSORIAL: "Otro accesorio",
+    PENALTY: "Penalidad",
+  },
+  /**
+   * ADR-027: la clase interna del comprobante. El código del país (01/07/08 en Perú, 01/04/05 en
+   * Ecuador) lo trae el régimen fiscal del servidor; aquí sólo la palabra.
+   */
+  documentKind: {
+    INVOICE: "Factura",
+    CREDIT_NOTE: "Nota de crédito",
+    DEBIT_NOTE: "Nota de débito",
+  },
+  /** ADR-027: las retenciones que conoce el producto, por país. */
+  withholdingKind: {
+    PE_DETRACTION: "Detracción (SPOT)",
+    PE_RETENTION: "Retención del IGV",
+    EC_INCOME_TAX_WITHHOLDING: "Retención en la fuente (IR)",
+    EC_VAT_WITHHOLDING: "Retención de IVA",
+  },
+  /** ADR-027: a qué se aplica la tasa de una retención. */
+  withholdingBase: {
+    TOTAL: "Total",
+    SUBTOTAL: "Subtotal",
+    VAT: "Impuesto",
+  },
+  /** ADR-027: el régimen fiscal de la empresa. */
+  taxRegime: {
+    PE: "Perú",
+    EC: "Ecuador",
+    GENERIC: "Genérico",
+  },
+  /** V66: a qué se refiere una penalidad. */
+  penaltyReferenceType: {
+    TRIP_EXCEPTION: "Incidencia del viaje",
+    DELIVERY_FAILED: "Entrega fallida",
+    LATE_ARRIVAL: "Demora",
+    OTHER: "Otra",
+  },
+  /** Fase 50: contra qué cifra se comparó una factura o una línea. */
+  expectedBasis: {
+    ACTUAL: "Contra costo real",
+    ESTIMATED: "Contra estimado",
+    MIXED: "Mixto",
+  },
+  // Provisiones de flete (V65, ADR-023).
+  accrualStatus: {
+    OPEN: "Abierta",
+    PARTIALLY_SETTLED: "Consumida en parte",
+    SETTLED: "Liquidada",
+    REVERSED: "Revertida",
+  },
+  accrualBasis: {
+    ESTIMATED: "Estimado",
+    ACTUAL: "Costo real",
+  },
+  accrualEntryType: {
+    ACCRUE: "Provisión",
+    ADJUST: "Ajuste",
+    CONSUME: "Consumo",
+    REVERSE: "Reversión",
+  },
+  accrualSourceType: {
+    TRIP_DISPATCHED: "Despacho del viaje",
+    TRIP_COMPLETED: "Entrega del viaje",
+    TRIP_COST_ACTUAL: "Cierre del costo real",
+    INVOICE_APPROVED: "Factura aprobada",
+    MANUAL: "Manual",
+  },
+  unaccruedReason: {
+    NO_CARRIER: "Sin transportista",
+    NO_TRIP_COST: "Sin costo del viaje",
+    NOT_CALCULABLE: "Costo no calculable",
+    PENDING_SWEEP: "Pendiente de provisionar",
+  },
+  glConcept: {
+    FREIGHT_EXPENSE: "Gasto de flete",
+    FREIGHT_ACCRUAL: "Provisión de flete",
+    VAT_CREDIT: "Impuesto (crédito fiscal)",
+    WITHHOLDING_PAYABLE: "Retención por pagar",
+    CARRIER_PAYABLE: "Cuenta por pagar al transportista",
+  },
+  glScopeType: {
+    COMPANY: "Toda la empresa",
+    ORIGIN: "Origen",
+    ROUTE: "Ruta",
+  },
+  // Cuentas por pagar (fase 65): vencimientos y pagos que informa el ERP.
+  agingBucket: {
+    NOT_DUE: "Por vencer",
+    DAYS_1_30: "1–30 días",
+    DAYS_31_60: "31–60",
+    DAYS_61_90: "61–90",
+    DAYS_OVER_90: "Más de 90",
+    NO_DUE_DATE: "Sin vencimiento",
+  },
+  paymentSource: {
+    INTEGRATION: "Integración",
+    OPERATOR: "Registro manual",
+  },
+  paymentRequestStatus: {
+    PENDING: "Por confirmar",
+    CONFIRMED: "Confirmada",
+    REJECTED: "Rechazada",
+  },
+  /** Lo que el transportista ve de su factura en el portal: menos detalle que la oficina. */
+  portalInvoiceStatus: {
+    IN_REVIEW: "En revisión",
+    APPROVED: "Aprobada",
+    SCHEDULED: "Programada",
+    PARTIALLY_PAID: "Pago parcial",
+    PAID: "Pagada",
+    ON_HOLD: "En espera",
+    REJECTED: "Rechazada",
   },
   /** V42/JOB 12: por qué un envío no puede salir hoy. */
   /**
@@ -157,6 +293,32 @@ export const ENUM_LABELS = {
     EXTERNAL_REQUIRED: "Requiere confirmación del almacén (WMS)",
     HYBRID: "Híbrido: el primero que confirme",
     MANUAL: "Despacho manual (TMS)",
+  },
+  /** ADR-026 / D-08: cómo se reparte el costo de un viaje entre sus pedidos. */
+  costAllocationBasis: {
+    WEIGHT: "Por peso (kg)",
+    EFFECTIVE_VOLUME: "Por volumen efectivo (m³)",
+    FLOOR_AREA: "Por piso ocupado (m²)",
+    PALLETS: "Por pallets",
+    STOPS: "Por paradas (y peso dentro de la parada)",
+    EQUAL: "Partes iguales por pedido",
+  },
+  /** ADR-026: de dónde sale el costo que se repartió. */
+  allocationCostSource: {
+    INVOICED: "Facturado",
+    ACTUAL: "Real cerrado",
+    ESTIMATED: "Estimado",
+  },
+  /** ADR-026: por qué se agrupa el reporte de costo para servir. */
+  costToServeGroupBy: {
+    CUSTOMER: "Cliente",
+    DESTINATION: "Destino",
+    ROUTE: "Ruta",
+  },
+  /** ADR-023 / D-07: cuándo nace la provisión de flete. */
+  accrualTrigger: {
+    DISPATCHED: "Al despachar el viaje",
+    DELIVERED: "Al entregar (completar) el viaje",
   },
   /** ADR-013 §2: quién movió el envío a "en ruta". */
   dispatchSource: {
@@ -185,6 +347,7 @@ export const ENUM_LABELS = {
     DISPATCH_TIME: "Hora de despacho distinta",
     DRIVER_MISMATCH: "Conductor distinto",
     EXTRA_ORDER: "Pedido no planificado",
+    GEOMETRY_VARIANCE: "Huella distinta (informativa)",
     MISSING_ORDER: "Pedido no despachado",
     NOT_APPLIED: "No se pudo aplicar",
     QUANTITY_UNCOMPARABLE: "Cantidad no comparable",
@@ -208,19 +371,42 @@ export const ENUM_LABELS = {
     UNKNOWN: "Desconocido",
     VARIANCE: "Con diferencia",
   },
+  /**
+   * Contrato v1.1 §7.3: por qué el almacén no calculó la huella de un pedido. Un motivo nuevo
+   * se muestra con su código: el catálogo es del emisor y crece.
+   */
+  dispatchGeometryReason: {
+    DIMENSION_UOM_NOT_CONVERTIBLE: "Unidad de medida de las dimensiones no convertible",
+    DIMENSION_UOM_NOT_DECLARED: "Sin unidad de medida de las dimensiones",
+    ITEM_TALLER_THAN_VEHICLE: "Más alto que el vehículo",
+    MAX_TOP_LOAD_UOM_DIFFERS: "Carga máxima encima en otra unidad",
+    NEST_INCREMENT_MISSING: "Sin incremento de anidado",
+    PROFILE_INCOMPLETE: "Perfil físico incompleto",
+    QUANTITY_NOT_IN_BASE_UOM: "Cantidad fuera de la unidad base",
+    QUANTITY_NOT_WHOLE: "Cantidad no entera",
+    STACK_LIMIT_NOT_DECLARED: "Sin límite de apilado",
+    STACK_MODE_NOT_DECLARED: "Sin modo de apilado",
+    UNIT_WEIGHT_MISSING: "Sin peso unitario",
+    UOM_NOT_COUNTABLE: "Unidad no contable",
+  },
   /** ADR-013 §13.10: hitos del almacén. Informan; nunca mueven el ciclo de vida. */
   warehouseMilestoneType: {
     LOAD_CANCELLED: "Carga cancelada",
     LOAD_READY: "Carga lista",
     LOADING_STARTED: "Carga iniciada",
   },
-  /** ADR-015: los documentos que viajan con un pedido. */
+  /**
+   * ADR-015: los documentos que viajan con un pedido. ADR-028: `REMISSION_GUIDE` es la guía de
+   * cualquier país; las GRE son sus alias peruanos. La etiqueta por país (SRI 06, SUNAT 09/31) la
+   * arma `logisticsDocumentLabel`, no este diccionario.
+   */
   logisticsDocumentType: {
     DELIVERY_NOTE: "Nota de entrega",
     GRE_REMITENTE: "Guía de remisión remitente",
     GRE_TRANSPORTISTA: "Guía de remisión transportista",
     INVOICE: "Factura",
     OTHER: "Otro documento",
+    REMISSION_GUIDE: "Guía de remisión",
   },
   /**
    * ADR-018: el mismo tipo de documento, con la etiqueta corta del portal y del monitor de entrega.
@@ -232,6 +418,7 @@ export const ENUM_LABELS = {
     GRE_TRANSPORTISTA: "GRE transportista",
     INVOICE: "Factura",
     OTHER: "Otro",
+    REMISSION_GUIDE: "Guía de remisión",
   },
   /** ADR-018 §4: qué pasó con un documento en un viaje. Sin estado parcial. */
   documentDeliveryStatus: {
@@ -297,6 +484,11 @@ export const ENUM_LABELS = {
     OTHER: "Otro",
     TRANSPORT: "Transporte",
   },
+  /** V61 (ADR-025 §4): códigos con que el almacén (EWM) pone una retención por integración. */
+  holdReasonCode: {
+    WAREHOUSE_CANCELLED: "El almacén anuló su pedido",
+    WAREHOUSE_SHORT_CLOSED: "El almacén cerró el pedido con saldo",
+  },
   blockerReason: {
     AWAITING_CARRIER_VEHICLE: "Falta vehículo del transportista",
     DRIVER_UNAVAILABLE: "Conductor no disponible",
@@ -321,6 +513,8 @@ export const ENUM_LABELS = {
   },
   costComponentReason: {
     DISTANCE_UNKNOWN: "Sin distancia conocida",
+    FLOOR_AREA_UNKNOWN: "Sin geometría medida (piso desconocido)",
+    LOAD_WIDTH_UNKNOWN: "Vehículo sin ancho de carga",
     PALLETS_UNKNOWN: "Sin pallets declarados",
     STOPS_UNKNOWN: "Sin paradas registradas",
     VOLUME_UNKNOWN: "Sin volumen declarado",
@@ -328,6 +522,7 @@ export const ENUM_LABELS = {
     WEIGHT_UNKNOWN: "Sin peso declarado",
   },
   costQuantitySource: {
+    EFFECTIVE_GEOMETRY: "Geometría efectiva de la carga",
     LINEHAUL_SUBTOTAL: "Subtotal del flete",
     MEASURED_ROUTE: "Recorrido medido del viaje",
     ORDER_DECLARED_TOTALS: "Totales declarados de los pedidos",
@@ -415,6 +610,7 @@ export const ENUM_LABELS = {
     BASE: "Base",
     DISTANCE: "Distancia",
     FUEL_SURCHARGE: "Recargo por combustible",
+    LOADING_METERS: "Metros lineales",
     MAXIMUM_ADJUSTMENT: "Ajuste al máximo",
     MINIMUM_ADJUSTMENT: "Ajuste al mínimo",
     OTHER_ACCESSORIAL: "Accesorio",
@@ -508,6 +704,19 @@ export const ENUM_LABELS = {
     ACCEPTED: "Aceptada",
     CANCELLED: "Detenida",
     EXHAUSTED: "Agotada",
+  },
+  /** `TripCapacityView.bindingDimension` (V62): la dimensión que llena el camión. */
+  capacityDimension: {
+    FLOOR: "Piso",
+    HEIGHT: "Alto",
+    PALLETS: "Pallets",
+    VOLUME: "Volumen",
+    WEIGHT: "Peso",
+  },
+  stackMode: {
+    NESTABLE: "Anidable",
+    NONE: "Sin apilar",
+    STACKABLE: "Apilable",
   },
   vehicleBodyType: {
     CONTAINER: "Portacontenedor",

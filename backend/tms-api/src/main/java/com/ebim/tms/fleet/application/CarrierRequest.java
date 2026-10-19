@@ -1,5 +1,7 @@
 package com.ebim.tms.fleet.application;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -21,5 +23,7 @@ public record CarrierRequest(
         @Size(max = 200) String contactName,
         @Size(max = 32) String phone,
         @Size(max = 200) String email,
-        @Size(max = 200) String externalReference) {
+        @Size(max = 200) String externalReference,
+        // V67 (ADR-023 section 2): null falls back to the company's default, then to the property.
+        @Min(0) @Max(365) Integer paymentTermsDays) {
 }

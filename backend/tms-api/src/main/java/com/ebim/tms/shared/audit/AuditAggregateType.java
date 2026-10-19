@@ -76,5 +76,25 @@ public enum AuditAggregateType {
     CARRIER_INVOICE,
 
     /** What running one of our own trucks is modelled to cost (V48, JOB 22). */
-    OWN_FLEET_COST_PROFILE
+    OWN_FLEET_COST_PROFILE,
+
+    /** {@code tms.material_profile} (V59, ADR-022). */
+    MATERIAL_PROFILE,
+
+    /**
+     * How far an invoice may differ before a person looks (V46 table, written since V64, ADR-024).
+     * Its own aggregate: the tolerance an invoice was judged against is a decision with an author.
+     */
+    TOLERANCE_POLICY,
+
+    /**
+     * A freight obligation between the service and the invoice (V65, ADR-023). Its own aggregate: an
+     * accrual outlives the trip's execution and is closed by an invoice, so neither TRIP nor
+     * CARRIER_INVOICE answers "who reversed this". The journal export is recorded against the
+     * company id, since it covers a period rather than one accrual.
+     */
+    FREIGHT_ACCRUAL,
+
+    /** Which account a concept is booked to (V65, ADR-023). */
+    GL_ACCOUNT_MAPPING
 }

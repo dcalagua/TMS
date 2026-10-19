@@ -33,7 +33,14 @@ public record CarrierInvoiceSummaryView(
         MatchStatus matchStatus,
         BigDecimal expectedAmount,
         BigDecimal differenceAmount,
-        int openDiscrepancyCount) {
+        int openDiscrepancyCount,
+        /** V66 (ADR-027): INVOICE, CREDIT_NOTE or DEBIT_NOTE - so a list can offer the invoices a note may correct. */
+        String documentKind,
+        /** The country's code for the kind (PE 01/07/08, EC 01/04/05); null where the regime has none. */
+        String fiscalDocumentCode,
+        /** V67: due date (frozen at approval) and what was paid, for the queue's payment columns. */
+        LocalDate dueDate,
+        BigDecimal paidAmount) {
 
     public static CarrierInvoiceSummaryView of(CarrierInvoice invoice, FreightMatch match, String carrierName) {
         return new CarrierInvoiceSummaryView(invoice.id(), invoice.carrierId(), carrierName,
@@ -42,6 +49,7 @@ public record CarrierInvoiceSummaryView(
                 match == null ? null : match.status(),
                 match == null ? null : match.expectedAmount(),
                 match == null ? null : match.differenceAmount(),
-                0);
+                0, invoice.documentKind().name(), invoice.fiscalDocumentCode(), invoice.dueDate(),
+                invoice.paidAmount());
     }
 }

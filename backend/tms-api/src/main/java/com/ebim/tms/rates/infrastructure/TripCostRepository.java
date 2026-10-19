@@ -32,6 +32,13 @@ public interface TripCostRepository extends JpaRepository<TripCost, UUID> {
     List<TripCost> findByCompanyIdAndTripIdIn(UUID companyId, Collection<UUID> tripIds);
 
     /**
+     * The same, with each estimate's breakdown fetched in the one query: settlement compares an
+     * invoice per component (V64), and twenty lines must not become twenty more round trips.
+     */
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = "components")
+    List<TripCost> findWithComponentsByCompanyIdAndTripIdIn(UUID companyId, Collection<UUID> tripIds);
+
+    /**
      * What a range of operating days cost, grouped by currency - the whole of
      * {@code TripCostAnalyticsPort}, in one statement that returns at most a handful of rows.
      *

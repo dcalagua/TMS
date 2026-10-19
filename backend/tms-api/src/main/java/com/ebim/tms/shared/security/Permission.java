@@ -43,6 +43,12 @@ public enum Permission {
     MASTERDATA_ROUTE_READ("masterdata.route:read"),
     MASTERDATA_ROUTE_MANAGE("masterdata.route:manage"),
 
+    /**
+     * The warehouse-owned physical profile of a material (migration V59, ADR-022). Read only: the
+     * one write path is the integration API, so there is no manage permission to grant.
+     */
+    MASTERDATA_MATERIAL_PROFILE_READ("masterdata.material_profile:read"),
+
     FLEET_CARRIER_READ("fleet.carrier:read"),
     FLEET_CARRIER_MANAGE("fleet.carrier:manage"),
     FLEET_VEHICLE_TYPE_READ("fleet.vehicle_type:read"),
@@ -120,6 +126,36 @@ public enum Permission {
     SETTLEMENT_INVOICE_APPROVE("settlement.invoice:approve"),
     SETTLEMENT_INVOICE_EXPORT("settlement.invoice:export"),
     SETTLEMENT_TOLERANCE_MANAGE("settlement.tolerance:manage"),
+    /**
+     * Freight accruals (V65, ADR-023). Reading the open obligation is for everyone who reads invoices;
+     * exporting it to accounting and reversing it are administrators' authority.
+     */
+    SETTLEMENT_ACCRUAL_READ("settlement.accrual:read"),
+    SETTLEMENT_ACCRUAL_EXPORT("settlement.accrual:export"),
+    SETTLEMENT_ACCRUAL_MANAGE("settlement.accrual:manage"),
+
+    /**
+     * Payment status after the export (migration V67, ADR-023 section 2). TMS records what was paid
+     * and pays nothing (D-01). Two permissions because a manual payment is four-eyes: whoever keys
+     * it is not whoever confirms it - and, as with approval, the rule is enforced on the people, not
+     * only on the permissions.
+     */
+    SETTLEMENT_PAYMENT_RECORD("settlement.payment:record"),
+    SETTLEMENT_PAYMENT_CONFIRM("settlement.payment:confirm"),
+
+    /**
+     * Cost to serve (migration V68, ADR-026): what each order, customer, destination and route cost.
+     * Reading is for everyone who reads accruals; recalculating a trip's allocation is an administrator's.
+     */
+    SETTLEMENT_COST_ALLOCATION_READ("settlement.cost_allocation:read"),
+    SETTLEMENT_COST_ALLOCATION_MANAGE("settlement.cost_allocation:manage"),
+
+    /**
+     * Editing the company's fiscal regime (migration V66, ADR-027): its fiscal country, VAT rates and
+     * withholdings. Reading the resolved regime is {@link #SETTLEMENT_INVOICE_READ}, so every invoice
+     * form can preview with it; changing what is withheld from every carrier is an administrator's.
+     */
+    SETTLEMENT_TAX_MANAGE("settlement.tax:manage"),
 
     /**
      * A driver-and-vehicle pairing's day (migration V47).
@@ -175,6 +211,12 @@ public enum Permission {
      */
     PORTAL_TRIP_READ("portal.trip:read"),
     PORTAL_DOCUMENT_REPORT("portal.document:report"),
+
+    /**
+     * My carrier's invoices, their due dates and what was paid (migration V67, ADR-023 section 2).
+     * Held by {@code CARRIER_OPERATOR} only, like the other portal permissions.
+     */
+    PORTAL_INVOICE_READ("portal.invoice:read"),
 
     AUDIT_LOG_READ("audit.log:read");
 

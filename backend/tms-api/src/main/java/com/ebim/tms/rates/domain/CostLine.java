@@ -51,8 +51,13 @@ public record CostLine(
     }
 
     static CostLine notCalculable(RateComponent component) {
+        return notCalculable(component, component.missingQuantityReason());
+    }
+
+    /** A non-calculable line whose reason the estimate states (V63: loading metres have two). */
+    static CostLine notCalculable(RateComponent component, CostComponentReason reason) {
         return new CostLine(component, CostComponentStatus.NOT_CALCULABLE, null, null, null, null,
-                TripCostCalculator.ZERO_MONEY, component.missingQuantityReason());
+                TripCostCalculator.ZERO_MONEY, reason);
     }
 
     public boolean isApplied() {

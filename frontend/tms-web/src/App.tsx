@@ -17,15 +17,15 @@ import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { PortalLayout } from "./pages/portal/PortalLayout";
 import {
   AuditPage, CarriersPage, CompanySettingsPage, ControlTowerPage, DestinationsPage, DriversPage,
-  FrequenciesPage, IntegrationsPage, LocationsPage, OrdersPage, OriginsPage, PlanningBoardPage,
+  FrequenciesPage, IntegrationsPage, LocationsPage, MaterialProfilesPage, OrdersPage, OriginsPage, PlanningBoardPage,
   AppointmentsPage,
-  SettlementPage,
+  SettlementPage, TolerancePoliciesPage, AccrualsPage, PayablesPage, CostToServePage,
   OwnFleetCostProfilesPage,
   WorkAssignmentsPage,
   PlanningRunsPage, RateCardsPage, ReportsPage, RoutesPage, SchedulingReleasePage, TripWorkspacePage, TripsPage,
   UsersPage, VehicleTypesPage, VehiclesPage, ZonesPage,
   DeliveryTrackingPage, ShipmentTrackingPage,
-  DocumentDeliveriesPage, PortalTripPage, PortalTripsPage,
+  DocumentDeliveriesPage, PortalTripPage, PortalTripsPage, PortalInvoicePage, PortalInvoicesPage,
 } from "./app/lazyRoutes";
 
 /**
@@ -58,6 +58,9 @@ export default function App() {
               <Route path="portal" element={<PortalLayout />}>
                 <Route index element={<PortalTripsPage />} />
                 <Route path="trips/:tripId" element={<PortalTripPage />} />
+                {/* Fase 65: sus facturas, con `portal.invoice:read`. */}
+                <Route path="invoices" element={<PortalInvoicesPage />} />
+                <Route path="invoices/:invoiceId" element={<PortalInvoicePage />} />
                 <Route path="*" element={<Navigate to="/portal" replace />} />
               </Route>
 
@@ -83,6 +86,9 @@ export default function App() {
                     <Route path="masters/zones" element={<ZonesPage />} />
                     <Route path="masters/frequencies" element={<FrequenciesPage />} />
                     <Route path="masters/routes" element={<RoutesPage />} />
+                    {/* Solo lectura y tras `masterdata.material_profile:read`, que la propia
+                        pantalla comprueba: la capability del grupo Maestros no lo implica. */}
+                    <Route path="masters/material-profiles" element={<MaterialProfilesPage />} />
 
                     <Route path="fleet/carriers" element={<CarriersPage />} />
                     <Route path="fleet/vehicle-types" element={<VehicleTypesPage />} />
@@ -106,6 +112,10 @@ export default function App() {
                     <Route path="document-deliveries" element={<DocumentDeliveriesPage />} />
                     <Route path="appointments" element={<AppointmentsPage />} />
                     <Route path="settlement" element={<SettlementPage />} />
+                    <Route path="settlement/tolerances" element={<TolerancePoliciesPage />} />
+                    <Route path="settlement/accruals" element={<AccrualsPage />} />
+                    <Route path="settlement/payables" element={<PayablesPage />} />
+                    <Route path="settlement/cost-to-serve" element={<CostToServePage />} />
                     <Route path="work-assignments" element={<WorkAssignmentsPage />} />
                     {/* Una ruta completa y no un drawer sobre la lista: un despachador se queda
                         dentro de un viaje durante minutos, y `/trips/{id}` es lo que se pega en un

@@ -82,6 +82,32 @@ export function countBySeverity(document: DispatchDocumentView): Record<"ERROR" 
   return counts;
 }
 
+/** Unidad de cada diferencia de huella (contrato v1.1 §7.3) tal como la nombra el servidor. */
+const GEOMETRY_UNIT_LABEL: Record<string, string> = {
+  STACKS: "pilas",
+  M3: "m³ efectivos",
+  LDM: "m lineales",
+};
+
+/**
+ * Las diferencias de huella de un pedido: plan del TMS contra lo que calculó el almacén, una por
+ * medida. Informativas (ADR-022 §9): nunca vuelven rojo el documento, por eso se muestran aparte
+ * del resultado de conciliación del pedido.
+ */
+export function geometryVariances(
+  document: DispatchDocumentView,
+  orderReference: string | null,
+): { unit: string; planned: number | null; dispatched: number | null }[] {
+  if (!orderReference) return [];
+  return document.discrepancies
+    .filter((discrepancy) => discrepancy.code === "GEOMETRY_VARIANCE" && discrepancy.orderReference === orderReference)
+    .map((discrepancy) => ({
+      unit: GEOMETRY_UNIT_LABEL[discrepancy.uom ?? ""] ?? discrepancy.uom ?? "",
+      planned: discrepancy.planned,
+      dispatched: discrepancy.dispatched,
+    }));
+}
+
 export type PlanVsRealKey = "carrier" | "plate" | "driver" | "warehouse" | "time";
 
 export interface PlanVsRealRow {

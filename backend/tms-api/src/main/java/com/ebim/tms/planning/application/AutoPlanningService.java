@@ -22,6 +22,7 @@ import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.RoutingPort;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.OriginLookupPort;
+import com.ebim.tms.shared.reference.OrderGeometryProfile;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.PlannableOrderQuery;
 import com.ebim.tms.shared.reference.RouteTemplate;
@@ -193,7 +194,7 @@ public class AutoPlanningService {
                 continue;
             }
             applied.add(new ProposedTrip(proposed.vehicleId(), proposed.routeId(), accepted,
-                    trip.stops().stream().map(TripStopView::destinationId).toList()));
+                    trip.stops().stream().map(TripStopView::destinationId).toList(), proposed.bindingDimension()));
             created.add(trip);
         }
 
@@ -262,8 +263,15 @@ public class AutoPlanningService {
         TravelMatrix travel = resolveTravel(scope, run, plannable, places);
         Map<UUID, Integer> serviceMinutes = new LinkedHashMap<>();
 
+        // ADR-022 section 5: the orders with a measured line, in one query, so the engine re-stacks
+        // each for the height of the vehicle it tries instead of judging it on the reference height.
+        Set<UUID> geometric = plannable.stream().filter(order -> order.maxStackHeightM() != null)
+                .map(PlannableOrder::id).collect(Collectors.toSet());
+        Map<UUID, OrderGeometryProfile> geometry = geometric.isEmpty() ? Map.of()
+                : orderPlanningPort.geometryProfilesOf(geometric, scope.companyId());
+
         PlanningInput input = new PlanningInput(run.originId(), run.planningDate(), plannable, vehicles, routes,
-                travel, serviceMinutes, PlanningShift.DEFAULT);
+                travel, serviceMinutes, PlanningShift.DEFAULT, geometry);
         return new Snapshot(input, excluded, orderNumbers, vehicleCodes);
     }
 

@@ -1,17 +1,21 @@
 package com.ebim.tms.integration.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ebim.tms.database.DockerAvailability;
 import com.ebim.tms.database.PostgresTestDatabase;
+import com.ebim.tms.integration.application.DispatchConfirmationV1;
 import com.ebim.tms.integration.domain.IntegrationSecrets;
 import com.ebim.tms.shared.api.ApiHeaders;
 import com.ebim.tms.shared.security.TestJwts;
 import com.jayway.jsonpath.JsonPath;
+import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -49,6 +53,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * WMS -> TMS end to end inside TMS (ADR-013, WAREHOUSE_EXECUTION_V1 §4): a warehouse credential posts
@@ -66,6 +71,7 @@ class WarehouseExecutionApiIntegrationTest {
     private static final String TRIPS = PLANNING + "/trips";
     private static final String DISPATCHES = "/integration/v1/dispatch-confirmations";
     private static final String MILESTONES = "/integration/v1/warehouse-milestones";
+    private static final String SHIPMENTS = "/integration/v1/shipments";
     private static final ZoneId LIMA = ZoneId.of("America/Lima");
 
     private static final UUID ORGANIZATION = UUID.fromString("88888888-0000-4000-8000-000000000001");
@@ -87,6 +93,9 @@ class WarehouseExecutionApiIntegrationTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
     private String adminToken;
 
     @TestConfiguration(proxyBeanMethods = false)
@@ -105,6 +114,12 @@ class WarehouseExecutionApiIntegrationTest {
         registry.add("spring.datasource.url", () -> jdbcUrl);
         registry.add("spring.datasource.username", PostgresTestDatabase::username);
         registry.add("spring.datasource.password", PostgresTestDatabase::password);
+        // Webhooks on, so the plan v1.1 test can prove DELIVERY_RESULT_RECORDED reaches a
+        // subscription. The target is never called: the dispatcher's first pass is an hour away.
+        registry.add("tms.integration.webhooks.secret-key", () -> "wex-test-webhook-key-0123456789abcdef");
+        registry.add("tms.integration.webhooks.allow-insecure-targets", () -> "true");
+        registry.add("tms.integration.webhooks.allow-private-network-targets", () -> "true");
+        registry.add("tms.integration.webhooks.poll-interval", () -> "1h");
     }
 
     private static void seedFixture() {
@@ -506,6 +521,281 @@ class WarehouseExecutionApiIntegrationTest {
         dispatch("{not json").andExpect(status().isBadRequest());
     }
 
+    // --- contract v1.1 (§7.3): trailer plate and per-order geometry --------------------------------
+
+    @Test
+    @DisplayName("v1.1: the trailer plate and the per-order geometry are stored and shown; another trailer is no mismatch")
+    void dispatchV11FieldsStored() throws Exception {
+        mode("HYBRID");
+        Shipment shipment = readyShipment("100");
+        String reference = "SLS-" + SEQUENCE.incrementAndGet();
+
+        dispatch(documentV11(shipment, reference, shipment.plate, "C4X-991",
+                "\"stacks\":10,\"effectiveVolumeM3\":0.1503,\"loadingMeters\":0.05,\"geometryReason\":null"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.outcome").value("APPLIED"))
+                .andExpect(jsonPath("$.verificationStatus").value("MATCHED"))
+                .andExpect(jsonPath("$.discrepancies[?(@.code == 'VEHICLE_MISMATCH')]").doesNotExist());
+
+        assertThat(value("SELECT vehicle_trailer_plate FROM tms.external_dispatch WHERE dispatch_reference = '"
+                + reference + "'")).isEqualTo("C4X-991");
+        assertThat(value("SELECT o.stacks || ':' || o.effective_volume_m3 || ':' || o.loading_meters || ':'"
+                + " || coalesce(o.geometry_reason, '-') FROM tms.external_dispatch_order o JOIN tms.external_dispatch d"
+                + " ON d.id = o.external_dispatch_id WHERE d.dispatch_reference = '" + reference + "'"))
+                .isEqualTo("10:0.1503:0.050:-");
+
+        String view = mockMvc.perform(asAdmin(get(TRIPS + "/" + shipment.tripId + "/warehouse")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.documents[0].vehicleTrailerPlate").value("C4X-991"))
+                .andExpect(jsonPath("$.documents[0].orders[0].stacks").value(10))
+                .andExpect(jsonPath("$.documents[0].orders[0].geometryReason").value(nullValue()))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(number(view, "$.documents[0].orders[0].effectiveVolumeM3")).isEqualByComparingTo("0.1503");
+        assertThat(number(view, "$.documents[0].orders[0].loadingMeters")).isEqualByComparingTo("0.05");
+    }
+
+    @Test
+    @DisplayName("v1.1: geometry beyond the columns' bounds is a 400 naming the field, not a retry-409")
+    void dispatchV11GeometryOutOfBounds() throws Exception {
+        mode("HYBRID");
+        Shipment shipment = readyShipment("100");
+        dispatch(documentV11(shipment, "SLS-" + SEQUENCE.incrementAndGet(), shipment.plate, "C4X-991",
+                "\"stacks\":10,\"effectiveVolumeM3\":0.1503,\"loadingMeters\":99999999,\"geometryReason\":null"))
+                .andExpect(status().isBadRequest())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .string(org.hamcrest.Matchers.containsString("loadingMeters")));
+        dispatch(documentV11(shipment, "SLS-" + SEQUENCE.incrementAndGet(), shipment.plate, "C4X-991",
+                "\"stacks\":10,\"effectiveVolumeM3\":123456789012,\"loadingMeters\":0.05,\"geometryReason\":null"))
+                .andExpect(status().isBadRequest())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .string(org.hamcrest.Matchers.containsString("effectiveVolumeM3")));
+    }
+
+    @Test
+    @DisplayName("v1.1: VEHICLE_MISMATCH compares only licensePlate, even when the trailer carries the planned plate")
+    void dispatchV11VehicleMismatchOnTractorOnly() throws Exception {
+        mode("HYBRID");
+        Shipment shipment = readyShipment("100");
+        String reference = "SLS-" + SEQUENCE.incrementAndGet();
+
+        dispatch(documentV11(shipment, reference, "ZZZ-999", shipment.plate,
+                "\"stacks\":null,\"geometryReason\":\"NEST_INCREMENT_MISSING\""))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.verificationStatus").value("MISMATCH"))
+                .andExpect(jsonPath("$.discrepancies[?(@.code == 'VEHICLE_MISMATCH')]").exists())
+                .andExpect(jsonPath("$.discrepancies.length()").value(1));
+        assertThat(value("SELECT coalesce(o.stacks::text, '-') || ':' || coalesce(o.effective_volume_m3::text, '-')"
+                + " || ':' || o.geometry_reason FROM tms.external_dispatch_order o JOIN tms.external_dispatch d"
+                + " ON d.id = o.external_dispatch_id WHERE d.dispatch_reference = '" + reference + "'"))
+                .isEqualTo("-:-:NEST_INCREMENT_MISSING");
+    }
+
+    @Test
+    @DisplayName("v1.1: a v1 body stores no v1.1 field and fingerprints exactly as before; bad v1.1 values are a 400")
+    void dispatchV1BodyUnchanged() throws Exception {
+        mode("HYBRID");
+        Shipment shipment = readyShipment("100");
+        String reference = "SLS-" + SEQUENCE.incrementAndGet();
+        String body = document(shipment, reference, 1, OffsetDateTime.now(), "CD01", "100");
+
+        dispatch(body).andExpect(status().isCreated()).andExpect(jsonPath("$.verificationStatus").value("MATCHED"));
+        dispatch(body).andExpect(status().isOk()).andExpect(jsonPath("$.outcome").value("UNCHANGED"));
+        assertThat(value("SELECT coalesce(d.vehicle_trailer_plate, '-') || ':' || coalesce(o.stacks::text, '-') || ':'"
+                + " || coalesce(o.effective_volume_m3::text, '-') || ':' || coalesce(o.loading_meters::text, '-') || ':'"
+                + " || coalesce(o.geometry_reason, '-') FROM tms.external_dispatch_order o JOIN tms.external_dispatch d"
+                + " ON d.id = o.external_dispatch_id WHERE d.dispatch_reference = '" + reference + "'"))
+                .isEqualTo("-:-:-:-:-");
+
+        // The idempotency fingerprint is the re-serialised request: a v1 body must not grow the
+        // v1.1 keys, or a document stored before V60 would be refused as different content.
+        String canonical = objectMapper.writeValueAsString(objectMapper.readValue(body, DispatchConfirmationV1.class));
+        assertThat(canonical).doesNotContain("trailerLicensePlate", "stacks", "effectiveVolumeM3", "loadingMeters",
+                "geometryReason");
+
+        dispatch(documentV11(shipment, "SLS-" + SEQUENCE.incrementAndGet(), shipment.plate, "C4X-991",
+                "\"stacks\":-1"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // --- phase 45: the warehouse's footprint compared, and the plan's footprint priced -------------
+
+    @Test
+    @DisplayName("v1.1 compared: a different footprint is three INFO GEOMETRY_VARIANCE lines, MATCHED and APPLIED, shown on the trip")
+    void dispatchGeometryVarianceIsInformative() throws Exception {
+        mode("HYBRID");
+        Shipment shipment = measuredReadyShipment();
+        String reference = "SLS-" + SEQUENCE.incrementAndGet();
+
+        // TMS planned 10 stacks, 0.1503 m3 and 0.1103 / (2.40 x 0.85) = 0.054 loading metres.
+        String response = dispatch(documentV11(shipment, reference, shipment.plate, "C4X-991",
+                "\"stacks\":7,\"effectiveVolumeM3\":0.18,\"loadingMeters\":0.08,\"geometryReason\":null"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.outcome").value("APPLIED"))
+                .andExpect(jsonPath("$.verificationStatus").value("MATCHED"))
+                .andExpect(jsonPath("$.discrepancies.length()").value(3))
+                .andReturn().getResponse().getContentAsString();
+        List<String> codes = JsonPath.read(response, "$.discrepancies[*].code");
+        List<String> severities = JsonPath.read(response, "$.discrepancies[*].severity");
+        List<String> units = JsonPath.read(response, "$.discrepancies[*].uom");
+        assertThat(codes).containsOnly("GEOMETRY_VARIANCE");
+        assertThat(severities).containsOnly("INFO");
+        assertThat(units).containsExactly("STACKS", "M3", "LDM");
+        assertThat(number(response, "$.discrepancies[2].planned")).isEqualByComparingTo("0.054");
+        assertThat(value("SELECT status FROM tms.trip WHERE id = '" + shipment.tripId + "'")).isEqualTo("IN_TRANSIT");
+
+        mockMvc.perform(asAdmin(get(TRIPS + "/" + shipment.tripId + "/warehouse")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.documents[0].verificationStatus").value("MATCHED"))
+                .andExpect(jsonPath("$.documents[0].orders[0].matchResult").value("MATCHED"))
+                .andExpect(jsonPath("$.documents[0].discrepancies[?(@.code == 'GEOMETRY_VARIANCE')]").exists());
+    }
+
+    @Test
+    @DisplayName("v1 against a measured plan: no geometry is compared, MATCHED with no discrepancy (compatibility)")
+    void dispatchV1AgainstMeasuredPlan() throws Exception {
+        mode("HYBRID");
+        Shipment shipment = measuredReadyShipment();
+
+        dispatch(document(shipment, "SLS-" + SEQUENCE.incrementAndGet(), 1, OffsetDateTime.now(), "CD01", "100"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.verificationStatus").value("MATCHED"))
+                .andExpect(jsonPath("$.discrepancies.length()").value(0));
+        // The same footprint TMS planned is no difference either.
+        Shipment second = measuredReadyShipment();
+        dispatch(documentV11(second, "SLS-" + SEQUENCE.incrementAndGet(), second.plate, "C4X-991",
+                "\"stacks\":10,\"effectiveVolumeM3\":0.1503,\"loadingMeters\":null,\"geometryReason\":null"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.discrepancies.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("V63: a card per loading metre prices the measured shipment on effective geometry; an unmeasured one is NOT_CALCULABLE")
+    void loadingMeterRate() throws Exception {
+        Shipment measured = measuredReadyShipment();
+        String vehicleType = value("SELECT v.vehicle_type_id FROM tms.trip t JOIN tms.vehicle v ON v.id = t.vehicle_id"
+                + " WHERE t.id = '" + measured.tripId + "'");
+        mockMvc.perform(asAdmin(post("/api/v1/rates/rate-cards")).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"code":"LDM-%d","name":"Per loading metre","carrierId":"%s","scope":"CARRIER",
+                                 "vehicleTypeId":"%s","currency":"PEN","validFrom":"%s",
+                                 "amountPerM3":100,"amountPerLoadingMeter":50}
+                                """.formatted(SEQUENCE.incrementAndGet(), carrier, vehicleType,
+                                LocalDate.now(LIMA).minusYears(1))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.amountPerLoadingMeter").value(50));
+
+        String priced = mockMvc.perform(asAdmin(post("/api/v1/rates/trips/" + measured.tripId + "/cost/estimate")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components[?(@.component == 'LOADING_METERS')].unit").value("LOADING_METER"))
+                .andExpect(jsonPath("$.components[?(@.component == 'LOADING_METERS')].quantitySource")
+                        .value("EFFECTIVE_GEOMETRY"))
+                .andExpect(jsonPath("$.components[?(@.component == 'VOLUME')].quantitySource")
+                        .value("EFFECTIVE_GEOMETRY"))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(componentNumber(priced, "LOADING_METERS", "quantity"))
+                .isEqualByComparingTo("0.054");
+        assertThat(componentNumber(priced, "LOADING_METERS", "amount"))
+                .isEqualByComparingTo("2.70");
+        assertThat(componentNumber(priced, "VOLUME", "amount"))
+                .isEqualByComparingTo("15.03");
+        assertThat(number(priced, "$.estimatedAmount")).isEqualByComparingTo("17.73");
+
+        // The same deck, an order nobody measured: the declared 10 m3 and no floor to measure.
+        Shipment unmeasured = readyShipmentOn(vehicleOfType(vehicleType), false);
+        mockMvc.perform(asAdmin(post("/api/v1/rates/trips/" + unmeasured.tripId + "/cost/estimate")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estimateComplete").value(false))
+                .andExpect(jsonPath("$.components[?(@.component == 'LOADING_METERS')].status").value("NOT_CALCULABLE"))
+                .andExpect(jsonPath("$.components[?(@.component == 'LOADING_METERS')].reason").value("FLOOR_AREA_UNKNOWN"))
+                .andExpect(jsonPath("$.components[?(@.component == 'VOLUME')].quantitySource")
+                        .value("ORDER_DECLARED_TOTALS"));
+        assertThat(value("SELECT count(*) FROM tms.trip_cost_component c JOIN tms.trip_cost t ON t.id = c.trip_cost_id"
+                + " WHERE t.trip_id IN ('" + measured.tripId + "', '" + unmeasured.tripId + "')"
+                + " AND c.component = 'LOADING_METERS'")).isEqualTo("2");
+    }
+
+    // --- plan v1.1 (§7.2): orders[].delivery and DELIVERY_RESULT_RECORDED ------------------------
+
+    @Test
+    @DisplayName("plan v1.1: delivery is null until a result is recorded, then carries the blocks and lines; the webhook is fanned out")
+    void planDeliveryBlock() throws Exception {
+        String subscription = subscribe("DELIVERY_RESULT_RECORDED");
+        Shipment shipment = readyShipment("100");
+        transition(shipment.tripId, "dispatch", null).andExpect(status().isOk());
+
+        plan(shipment)
+                .andExpect(jsonPath("$.orders[0].deliveryResult").value(nullValue()))
+                .andExpect(jsonPath("$.orders[0].delivery").value(nullValue()));
+
+        String stop = stopIdsOf(shipment.tripId).get(0);
+        stopAction(shipment.tripId, stop, "arrive").andExpect(status().isOk());
+        recordDelivery(shipment, stop, """
+                {"result":"PARTIAL","deliveredAt":"%s","receiverName":"M. Quispe","notes":"10 refused",
+                 "quantities":{"attemptedWeightKg":1000,"attemptedVolumeM3":10,"attemptedPallets":100,
+                   "deliveredWeightKg":900,"deliveredVolumeM3":9,"deliveredPallets":90,
+                   "refusedWeightKg":100,"refusedVolumeM3":1,"refusedPallets":10}}
+                """.formatted(OffsetDateTime.now()));
+        // No API writes per-line results yet (V45 table only); the plan reads whatever is there.
+        execute("INSERT INTO tms.order_delivery_line (company_id, order_delivery_id, order_id, order_line_id, uom,"
+                + " quantity_attempted, quantity_delivered, quantity_refused) SELECT d.company_id, d.id, d.order_id,"
+                + " l.id, l.uom, 100, 90, 10 FROM tms.order_delivery d JOIN tms.transport_order_line l"
+                + " ON l.order_id = d.order_id WHERE d.order_id = '" + shipment.orderId + "'");
+
+        String body = plan(shipment)
+                // The flat v1 fields are unchanged beside the block.
+                .andExpect(jsonPath("$.orders[0].deliveryResult").value("PARTIAL"))
+                .andExpect(jsonPath("$.orders[0].deliveryReceiverName").value("M. Quispe"))
+                .andExpect(jsonPath("$.orders[0].delivery.result").value("PARTIAL"))
+                .andExpect(jsonPath("$.orders[0].delivery.receiverName").value("M. Quispe"))
+                .andExpect(jsonPath("$.orders[0].delivery.evidenceCount").value(0))
+                .andExpect(jsonPath("$.orders[0].delivery.deliveredAt").exists())
+                .andExpect(jsonPath("$.orders[0].delivery.lines.length()").value(1))
+                .andExpect(jsonPath("$.orders[0].delivery.lines[0].lineNumber").value(1))
+                .andExpect(jsonPath("$.orders[0].delivery.lines[0].materialCode").value("SKU-100"))
+                .andExpect(jsonPath("$.orders[0].delivery.lines[0].uom").value("UN"))
+                .andExpect(jsonPath("$.orders[0].geometry").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        String block = "$.orders[0].delivery.";
+        assertThat(number(body, block + "attempted.weightKg")).isEqualByComparingTo("1000");
+        assertThat(number(body, block + "attempted.volumeM3")).isEqualByComparingTo("10");
+        assertThat(number(body, block + "attempted.pallets")).isEqualByComparingTo("100");
+        assertThat(number(body, block + "delivered.weightKg")).isEqualByComparingTo("900");
+        assertThat(number(body, block + "delivered.pallets")).isEqualByComparingTo("90");
+        assertThat(number(body, block + "refused.weightKg")).isEqualByComparingTo("100");
+        assertThat(number(body, block + "refused.volumeM3")).isEqualByComparingTo("1");
+        assertThat(number(body, block + "lines[0].quantityAttempted")).isEqualByComparingTo("100");
+        assertThat(number(body, block + "lines[0].quantityDelivered")).isEqualByComparingTo("90");
+        assertThat(number(body, block + "lines[0].quantityRefused")).isEqualByComparingTo("10");
+
+        // The same signed webhook as the other events: one delivery queued for the subscriber,
+        // a trigger naming the shipment, which the WMS answers by pulling this plan.
+        assertThat(value("SELECT count(*) FROM tms.webhook_delivery WHERE webhook_subscription_id = '" + subscription
+                + "' AND event_type = 'DELIVERY_RESULT_RECORDED' AND payload LIKE '%\"" + shipment.shipmentNumber
+                + "\"%'")).isEqualTo("1");
+        assertThat(value("SELECT payload LIKE '%\"type\":\"DELIVERY_RESULT_RECORDED\"%' FROM tms.webhook_delivery"
+                + " WHERE webhook_subscription_id = '" + subscription + "' AND payload LIKE '%\""
+                + shipment.shipmentNumber + "\"%'")).isEqualTo("t");
+    }
+
+    @Test
+    @DisplayName("plan v1.1: a result recorded without amounts has null blocks - never zero - and no lines")
+    void planDeliveryWithoutAmounts() throws Exception {
+        Shipment shipment = readyShipment("100");
+        transition(shipment.tripId, "dispatch", null).andExpect(status().isOk());
+        String stop = stopIdsOf(shipment.tripId).get(0);
+        stopAction(shipment.tripId, stop, "arrive").andExpect(status().isOk());
+        recordDelivery(shipment, stop, "{\"result\":\"DELIVERED\",\"deliveredAt\":\"" + OffsetDateTime.now() + "\"}");
+
+        plan(shipment)
+                .andExpect(jsonPath("$.orders[0].deliveryResult").value("DELIVERED"))
+                .andExpect(jsonPath("$.orders[0].delivery.result").value("DELIVERED"))
+                .andExpect(jsonPath("$.orders[0].delivery.receiverName").value(nullValue()))
+                .andExpect(jsonPath("$.orders[0].delivery.attempted").value(nullValue()))
+                .andExpect(jsonPath("$.orders[0].delivery.delivered").value(nullValue()))
+                .andExpect(jsonPath("$.orders[0].delivery.refused").value(nullValue()))
+                .andExpect(jsonPath("$.orders[0].delivery.lines").isEmpty());
+    }
+
     // --- helpers ----------------------------------------------------------------------------------
 
     private record Shipment(String tripId, String orderId, String shipmentNumber, String orderReference, String plate) {
@@ -515,6 +805,37 @@ class WarehouseExecutionApiIntegrationTest {
         Shipment shipment = confirmedShipment(pallets);
         transition(shipment.tripId, "ready", null).andExpect(status().isOk());
         return shipment;
+    }
+
+    /**
+     * A ready shipment on a 7.20 x 2.40 x 2.40 deck filled to 0.85, carrying one order of PLP-571
+     * measured as ADR-022 measures it: 10 stacks, 0.1503 m3 effective, 0.1103 m2 of floor.
+     */
+    private Shipment measuredReadyShipment() throws Exception {
+        return readyShipmentOn(deckVehicle(), true);
+    }
+
+    private Shipment readyShipmentOn(String vehicleId, boolean measured) throws Exception {
+        LocalDate date = nextDate();
+        String order = order(date, "2");
+        if (measured) {
+            execute("UPDATE tms.transport_order_line SET geometry_status = 'MEASURED', stacks = 10,"
+                    + " stack_height_m = 1.363, effective_volume_m3 = 0.1503, floor_area_m2 = 0.1103"
+                    + " WHERE order_id = '" + order + "'");
+            execute("UPDATE tms.transport_order SET planning_volume_m3 = 0.1503, floor_area_m2 = 0.1103,"
+                    + " max_stack_height_m = 1.363, max_unit_height_m = 0.4 WHERE id = '" + order + "'");
+        }
+        String run = newRun(date);
+        String trip = newTrip(run, date, vehicleId);
+        mockMvc.perform(asAdmin(post(TRIPS + "/" + trip + "/assignments")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"orderId\":\"" + order + "\"}"))
+                .andExpect(status().isOk());
+        confirm(run);
+        transition(trip, "ready", null).andExpect(status().isOk());
+        return new Shipment(trip, order, value("SELECT shipment_number FROM tms.trip WHERE id = '" + trip + "'"),
+                value("SELECT external_reference FROM tms.transport_order WHERE id = '" + order + "'"),
+                value("SELECT v.license_plate FROM tms.trip t JOIN tms.vehicle v ON v.id = t.vehicle_id WHERE t.id = '"
+                        + trip + "'"));
     }
 
     private Shipment confirmedShipment(String pallets) throws Exception {
@@ -547,6 +868,69 @@ class WarehouseExecutionApiIntegrationTest {
                  "someFutureField":"ignored"}
                 """.formatted(reference, revision, shipment.shipmentNumber, reference, warehouse, at, shipment.plate,
                 shipment.orderReference, quantity);
+    }
+
+    /**
+     * {@link #document} in contract v1.1 (§7.3): {@code vehicle.trailerLicensePlate} and the
+     * order's geometry fields, given as a JSON fragment.
+     */
+    private static String documentV11(Shipment shipment, String reference, String plate, String trailer,
+            String geometry) {
+        return """
+                {"sourceSystem":"EWM_EBIM","dispatchReference":"%s","revision":1,"transportReference":"%s",
+                 "loadReference":"CRG-%s","warehouseCode":"CD01","actualDispatchAt":"%s",
+                 "carrier":{"code":"TRSA","name":"Transportes SA"},
+                 "vehicle":{"licensePlate":"%s","trailerLicensePlate":"%s","type":"FURGON"},
+                 "totals":{"handlingUnits":2,"weightKg":1000},
+                 "orders":[{"externalSource":"SAPB1_PE","externalReference":"%s","warehouseOrderNumber":"ORR-1",
+                   "status":"SHIPPED","handlingUnits":2,"weightKg":1000,%s,
+                   "lines":[{"lineNumber":1,"materialCode":"SKU-100","quantity":100,"uom":"UN","handlingUnitCode":"HU-1"}]}]}
+                """.formatted(reference, shipment.shipmentNumber, reference, OffsetDateTime.now(), plate, trailer,
+                shipment.orderReference, geometry);
+    }
+
+    private ResultActions plan(Shipment shipment) throws Exception {
+        return mockMvc.perform(get(SHIPMENTS + "/" + shipment.shipmentNumber)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + warehouseToken))
+                .andExpect(status().isOk());
+    }
+
+    private void recordDelivery(Shipment shipment, String stop, String body) throws Exception {
+        mockMvc.perform(asAdmin(put(TRIPS + "/" + shipment.tripId + "/stops/" + stop + "/orders/" + shipment.orderId
+                        + "/delivery")).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk());
+    }
+
+    private ResultActions stopAction(String tripId, String stopId, String action) throws Exception {
+        return mockMvc.perform(asAdmin(post(TRIPS + "/" + tripId + "/stops/" + stopId + "/" + action))
+                .contentType(MediaType.APPLICATION_JSON).content("{}"));
+    }
+
+    private List<String> stopIdsOf(String tripId) throws Exception {
+        String body = mockMvc.perform(asAdmin(get(TRIPS + "/" + tripId))).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return JsonPath.read(body, "$.stops[*].id");
+    }
+
+    /** A webhook subscription of the company to {@code eventType}; returns its id. */
+    private String subscribe(String eventType) throws Exception {
+        String response = mockMvc.perform(asAdmin(post("/api/v1/webhooks")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"WMS " + SEQUENCE.incrementAndGet() + "\","
+                                + "\"targetUrl\":\"http://wms.example.invalid/tms\",\"eventTypes\":[\"" + eventType + "\"]}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        return JsonPath.read(response, "$.subscription.id");
+    }
+
+    /** One figure of the breakdown line for {@code component}; a JsonPath filter always reads a list. */
+    private static BigDecimal componentNumber(String json, String component, String field) {
+        List<Object> read = JsonPath.read(json, "$.components[?(@.component == '" + component + "')]." + field);
+        assertThat(read).hasSize(1);
+        return new BigDecimal(String.valueOf(read.get(0)));
+    }
+
+    private static BigDecimal number(String json, String path) {
+        Object read = JsonPath.read(json, path);
+        return new BigDecimal(String.valueOf(read));
     }
 
     private ResultActions dispatch(String body) throws Exception {
@@ -582,10 +966,14 @@ class WarehouseExecutionApiIntegrationTest {
     }
 
     private String newTrip(String runId, LocalDate date) throws Exception {
+        return newTrip(runId, date, vehicle());
+    }
+
+    private String newTrip(String runId, LocalDate date, String vehicleId) throws Exception {
         String departure = date.atTime(8, 0).atZone(LIMA).toOffsetDateTime().toString();
         String response = mockMvc.perform(asAdmin(post(PLANNING + "/runs/" + runId + "/trips"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"vehicleId\":\"" + vehicle() + "\",\"plannedDepartureAt\":\"" + departure
+                        .content("{\"vehicleId\":\"" + vehicleId + "\",\"plannedDepartureAt\":\"" + departure
                                 + "\",\"version\":0}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         return JsonPath.read(response, "$.trip.id");
@@ -626,6 +1014,22 @@ class WarehouseExecutionApiIntegrationTest {
         return insertReturningId("INSERT INTO tms.vehicle (company_id, code, license_plate, carrier_id,"
                 + " vehicle_type_id) VALUES ('" + COMPANY + "', 'WEX-VEH-" + number + "', '"
                 + String.format(Locale.ROOT, "W%02d-%03d", number % 100, number) + "', '" + carrier + "', '" + type + "')");
+    }
+
+    /** A vehicle on a type with a measured deck (V62): 7.20 x 2.40 x 2.40 m, floor filled to 0.85. */
+    private static String deckVehicle() {
+        int number = SEQUENCE.incrementAndGet();
+        String type = insertReturningId("INSERT INTO tms.vehicle_type (company_id, code, name, max_weight_kg,"
+                + " max_volume_m3, max_pallets, length_m, width_m, height_m, load_floor_fill_factor) VALUES ('"
+                + COMPANY + "', 'WEX-DECK-" + number + "', 'Deck', 100000, 400, 1000, 7.20, 2.40, 2.40, 0.85)");
+        return vehicleOfType(type);
+    }
+
+    private static String vehicleOfType(String type) {
+        int number = SEQUENCE.incrementAndGet();
+        return insertReturningId("INSERT INTO tms.vehicle (company_id, code, license_plate, carrier_id,"
+                + " vehicle_type_id) VALUES ('" + COMPANY + "', 'WEX-VEH-" + number + "', '"
+                + String.format(Locale.ROOT, "D%02d-%03d", number % 100, number) + "', '" + carrier + "', '" + type + "')");
     }
 
     @SafeVarargs

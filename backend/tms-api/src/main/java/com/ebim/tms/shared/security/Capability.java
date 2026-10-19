@@ -28,7 +28,8 @@ public enum Capability {
             Permission.MASTERDATA_ZONE_READ,
             Permission.MASTERDATA_DESTINATION_READ,
             Permission.MASTERDATA_FREQUENCY_READ,
-            Permission.MASTERDATA_ROUTE_READ),
+            Permission.MASTERDATA_ROUTE_READ,
+            Permission.MASTERDATA_MATERIAL_PROFILE_READ),
     MASTER_DATA_MANAGE(
             Permission.MASTERDATA_LOCATION_MANAGE,
             Permission.MASTERDATA_ORIGIN_MANAGE,
@@ -81,6 +82,9 @@ public enum Capability {
     /** The carrier portal (ADR-018): the only capability a carrier user holds. */
     CARRIER_PORTAL(Permission.PORTAL_TRIP_READ, Permission.PORTAL_DOCUMENT_REPORT),
 
+    /** "Mis facturas" in the carrier portal (V67, ADR-023 section 2). */
+    CARRIER_INVOICES(Permission.PORTAL_INVOICE_READ),
+
     /**
      * The dock board (migration V41).
      *
@@ -120,6 +124,31 @@ public enum Capability {
             Permission.SETTLEMENT_TOLERANCE_MANAGE),
     SETTLEMENT_APPROVE(Permission.SETTLEMENT_INVOICE_APPROVE),
     SETTLEMENT_EXPORT(Permission.SETTLEMENT_INVOICE_EXPORT),
+
+    /**
+     * Freight accruals (migration V65, ADR-023). Apart from the invoice capabilities: reading the
+     * open obligation, handing its journal to accounting and reversing it are three authorities.
+     */
+    ACCRUAL_VIEW(Permission.SETTLEMENT_ACCRUAL_READ),
+    ACCRUAL_EXPORT(Permission.SETTLEMENT_ACCRUAL_EXPORT),
+    ACCRUAL_MANAGE(Permission.SETTLEMENT_ACCRUAL_MANAGE),
+
+    /** Cost to serve (migration V68, ADR-026): the report, and recalculating a trip's allocation. */
+    COST_TO_SERVE_VIEW(Permission.SETTLEMENT_COST_ALLOCATION_READ),
+    COST_ALLOCATION_MANAGE(Permission.SETTLEMENT_COST_ALLOCATION_MANAGE),
+
+    /**
+     * The company's fiscal regime (migration V66, ADR-027): editing its fiscal country, VAT rates and
+     * withholdings. Reading the resolved regime uses {@link #SETTLEMENT_VIEW}.
+     */
+    TAX_REGIME_MANAGE(Permission.SETTLEMENT_TAX_MANAGE),
+
+    /**
+     * Payment status (migration V67, ADR-023 section 2): keying a payment, scheduling and holding are
+     * one authority; confirming somebody else's payment is another. Reading uses {@link #SETTLEMENT_VIEW}.
+     */
+    PAYMENT_RECORD(Permission.SETTLEMENT_PAYMENT_RECORD),
+    PAYMENT_CONFIRM(Permission.SETTLEMENT_PAYMENT_CONFIRM),
 
     /**
      * Resource scheduling (migration V47). Its own capability rather than folded into the fleet

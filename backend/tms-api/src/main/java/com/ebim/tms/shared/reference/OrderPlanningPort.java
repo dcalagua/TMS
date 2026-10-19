@@ -47,6 +47,13 @@ public interface OrderPlanningPort {
     Map<UUID, PlannableOrder> findAllInCompany(Set<UUID> ids, UUID companyId);
 
     /**
+     * The geometry profiles of those of {@code orderIds} that belong to {@code companyId} and have a
+     * measured line (ADR-022 section 5), in one query - what planning re-stacks for a vehicle whose
+     * height is not the reference height. An order without a measured line is simply absent.
+     */
+    Map<UUID, OrderGeometryProfile> geometryProfilesOf(Collection<UUID> orderIds, UUID companyId);
+
+    /**
      * Puts part or all of an order onto a trip, and returns what is left (migration V37).
      *
      * <p>This replaced {@code markPlanned}. The difference is the whole of split allocation: a

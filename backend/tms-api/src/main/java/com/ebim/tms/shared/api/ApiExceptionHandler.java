@@ -5,6 +5,7 @@ import com.ebim.tms.shared.security.CompanyScopeDeniedException;
 import com.ebim.tms.shared.security.CompanyScopeInvalidException;
 import com.ebim.tms.shared.security.CompanyScopeRequiredException;
 import com.ebim.tms.shared.security.MachineCredentialException;
+import com.ebim.tms.shared.security.TenantSuspendedException;
 import com.ebim.tms.shared.security.UnprovisionedPrincipalException;
 import com.ebim.tms.shared.storage.EvidenceRejectedException;
 import com.ebim.tms.shared.storage.EvidenceStorageUnavailableException;
@@ -126,6 +127,21 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return respond(ApiProblems.of(ProblemType.COMMERCIAL_ACCESS_SUSPENDED, failure.getMessage()), request);
     }
 
+    /**
+     * Operational suspension (ADR-021). Besides the usual {@code code}, the document carries the
+     * {@code lifecycle.v1} contract's stable {@code error} and the {@code reason}, so a partner can
+     * tell non-payment from a manual suspension without parsing prose.
+     */
+    @ExceptionHandler(TenantSuspendedException.class)
+    public ResponseEntity<ProblemDetail> handleTenantSuspended(TenantSuspendedException failure, WebRequest request) {
+        ProblemDetail problem = ApiProblems.of(ProblemType.TENANT_SUSPENDED, failure.getMessage());
+        problem.setProperty("error", TenantSuspendedException.ERROR_CODE);
+        if (failure.reason() != null) {
+            problem.setProperty("reason", failure.reason());
+        }
+        return respond(problem, request);
+    }
+
     @ExceptionHandler(CompanyScopeInvalidException.class)
     public ResponseEntity<ProblemDetail> handleCompanyScopeInvalid(
             CompanyScopeInvalidException failure, WebRequest request) {
@@ -154,6 +170,16 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         // Machine-readable detail a caller can act on - the release gate's reasons (ADR-014).
         failure.properties().forEach(problem::setProperty);
         return respond(problem, request);
+    }
+
+    /**
+     * A failure that carries its own problem type. Used by the control-plane provisioning API,
+     * where several distinct outcomes share one HTTP status and the caller is a machine that has to
+     * tell them apart without reading the sentence.
+     */
+    @ExceptionHandler(ProblemTypedException.class)
+    public ResponseEntity<ProblemDetail> handleTyped(ProblemTypedException failure, WebRequest request) {
+        return respond(ApiProblems.of(failure.type(), failure.getMessage()), request);
     }
 
     /**

@@ -2,24 +2,38 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   Alert, Box, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  TextField, Typography,
+  TextField, ToggleButton, ToggleButtonGroup, Typography,
 } from "@mui/material";
-import { ReceiptLongRounded } from "@mui/icons-material";
+import { DownloadRounded, ReceiptLongRounded } from "@mui/icons-material";
 import {
   approveInvoice, beginInvoiceReview, exportInvoice, fetchInvoice, matchInvoice, rejectInvoice,
   resolveDiscrepancy,
-  type FreightDiscrepancyView, type InvoiceLineView,
+  type ExportFormat, type FreightDiscrepancyView, type InvoiceLineView, type InvoiceStatus, type PayableExportView,
 } from "../../shared/api/settlementApi";
-import type { ApiError } from "../../shared/api/httpClient";
+import { saveDownloadedFile, type ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { FormDrawer, StatusChip } from "../../shared/ui/components";
 import { DetailSection, KeyFacts } from "../../shared/ui/components/DetailLayout";
-import { INVOICE_STATUS_TONE, MATCH_STATUS_TONE } from "../../shared/ui/statusTones";
+import { EXPECTED_BASIS_TONE, INVOICE_STATUS_TONE, MATCH_STATUS_TONE } from "../../shared/ui/statusTones";
 import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDate, fmtDateTime, fmtDecimal } from "../../lib/locale";
 import { R, T } from "../../theme";
+
+/**
+ * Entrega al navegador lo que se exportó, tal cual lo guardó el servidor. No se vuelve a pedir:
+ * el payload ya está en la pantalla, y una segunda llamada podría devolver otra cosa si alguien
+ * tocara la exportación entre medias.
+ */
+function downloadExport(exported: PayableExportView) {
+  const csv = exported.format === "CSV";
+  const blob = new Blob([exported.payload], { type: csv ? "text/csv;charset=utf-8" : "application/json" });
+  saveDownloadedFile({ blob, fileName: null }, `${exported.exportReference}.${csv ? "csv" : "json"}`);
+}
+
+/** Fase 65: los estados que dicen algo del pago. Antes de exportar no hay nada que pagar todavía. */
+const PAYMENT_STATUSES: readonly InvoiceStatus[] = ["SCHEDULED", "PARTIALLY_PAID", "PAID", "ON_HOLD"];
 
 interface InvoiceWorkspaceDrawerProps {
   companyId: string;
@@ -47,6 +61,9 @@ export function InvoiceWorkspaceDrawer({
 }: InvoiceWorkspaceDrawerProps) {
   const [busy, setBusy] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  // El formato se elige antes de exportar. Una factura ya exportada conserva el suyo: el servidor
+  // devuelve la exportación existente, pida lo que se pida.
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("JSON");
 
   const invoiceQuery = useQuery({
     queryKey: ["settlement-invoice", companyId, invoiceId],
@@ -79,6 +96,13 @@ export function InvoiceWorkspaceDrawer({
   function difference(value: number | null | undefined) {
     if (value === null || value === undefined) return "—";
     return `${value > 0 ? "+" : ""}${fmtDecimal(value, 2)}`;
+  }
+
+  /** "Línea N" para una diferencia que habla de una línea; nada para la cabecera o el viaje. */
+  function lineLabel(lineId: string | null): string | null {
+    if (lineId === null) return null;
+    const line = invoice?.lines.find((candidate) => candidate.id === lineId);
+    return line ? t("Línea {{n}}", { n: line.lineNumber }) : null;
   }
 
   const openDifferences = invoice?.discrepancies.filter((d) => d.status === "OPEN") ?? [];
@@ -131,12 +155,22 @@ export function InvoiceWorkspaceDrawer({
             </Button>
           )}
           {invoice?.status === "APPROVED" && (
-            <Button
-              variant="contained" disabled={busy}
-              onClick={() => void run(() => exportInvoice(companyId, invoice.id), t("Exportada"))}
-            >
-              {t("Exportar a contabilidad")}
-            </Button>
+            <>
+              <ToggleButtonGroup
+                size="small" exclusive value={exportFormat} disabled={busy}
+                aria-label={t("Formato de exportación")}
+                onChange={(_event, value: ExportFormat | null) => { if (value) setExportFormat(value); }}
+              >
+                <ToggleButton value="JSON">JSON</ToggleButton>
+                <ToggleButton value="CSV">CSV</ToggleButton>
+              </ToggleButtonGroup>
+              <Button
+                variant="contained" disabled={busy}
+                onClick={() => void run(() => exportInvoice(companyId, invoice.id, exportFormat), t("Exportada"))}
+              >
+                {t("Exportar a contabilidad")}
+              </Button>
+            </>
           )}
         </>
       }
@@ -174,13 +208,117 @@ export function InvoiceWorkspaceDrawer({
           )}
 
           {invoice.export && (
-            <Alert severity="success" variant="outlined">
-              {t("Exportada a contabilidad el {{when}} con la referencia {{reference}}.", {
+            <Alert
+              severity="success" variant="outlined"
+              action={(
+                <Button
+                  size="small" color="inherit" startIcon={<DownloadRounded />}
+                  onClick={() => invoice.export && downloadExport(invoice.export)}
+                >
+                  {t("Descargar {{format}}", { format: invoice.export.format })}
+                </Button>
+              )}
+            >
+              {t("Exportada a contabilidad el {{when}} con la referencia {{reference}} ({{format}}).", {
                 when: fmtDateTime(invoice.export.exportedAt),
                 reference: invoice.export.exportReference,
+                format: invoice.export.format,
               })}
             </Alert>
           )}
+
+          {/* --- el pago (fase 65): lo que el ERP informó. Se gestiona en Cuentas por pagar. --- */}
+          {(invoice.dueDate || (invoice.paidAmount ?? 0) > 0 || PAYMENT_STATUSES.includes(invoice.status)) && (
+            <DetailSection title={t("Pago")}>
+              <KeyFacts columns={3} items={[
+                { label: t("Vencimiento"), value: invoice.dueDate ? fmtDate(invoice.dueDate) : null },
+                {
+                  label: t("Pagado"),
+                  value: invoice.paidAmount === undefined ? null : amount(invoice.paidAmount, invoice.currency),
+                },
+                {
+                  label: t("Estado de pago"),
+                  value: PAYMENT_STATUSES.includes(invoice.status)
+                    ? enumLabel("invoiceStatus", invoice.status)
+                    : t("Sin pagos registrados"),
+                  sub: invoice.status === "ON_HOLD" ? invoice.onHoldReason ?? undefined : undefined,
+                },
+              ]} />
+            </DetailSection>
+          )}
+
+          {/* --- lo fiscal (ADR-027): comprobante, desglose, retenciones y notas, en el vocabulario del régimen --- */}
+          {invoice.fiscal && (() => {
+            const fiscal = invoice.fiscal;
+            const vat = fiscal.vatLabel ?? t("Impuesto");
+            const kindLabel = enumLabel("documentKind", fiscal.documentKind);
+            return (
+              <DetailSection title={t("Comprobante e impuestos")}>
+                <KeyFacts columns={4} items={[
+                  {
+                    label: t("Tipo"),
+                    value: fiscal.fiscalDocumentCode ? `${kindLabel} (${fiscal.fiscalDocumentCode})` : kindLabel,
+                    sub: fiscal.referencedInvoiceNumber
+                      ? t("Corrige la factura {{number}}", { number: fiscal.referencedInvoiceNumber })
+                      : fiscal.fiscalCountry ? t("Régimen {{country}}", { country: fiscal.fiscalCountry }) : undefined,
+                  },
+                  {
+                    label: t("Comprobante"),
+                    value: fiscal.documentNumber,
+                    sub: fiscal.issuerTaxId ? t("Emisor {{taxId}}", { taxId: fiscal.issuerTaxId }) : undefined,
+                  },
+                  { label: t("Subtotal"), value: amount(fiscal.subtotalAmount, invoice.currency) },
+                  {
+                    label: vat,
+                    value: amount(fiscal.taxAmount, invoice.currency),
+                    sub: fiscal.taxRate !== null ? `${fmtDecimal(fiscal.taxRate, 2)} %` : undefined,
+                  },
+                  ...fiscal.withholdings.map((withholding) => ({
+                    label: withholding.label ?? enumLabel("withholdingKind", withholding.kind),
+                    value: amount(withholding.amount, invoice.currency),
+                    sub: [
+                      withholding.rate !== null
+                        ? (withholding.code
+                          ? t("Código {{code}} al {{rate}} %", { code: withholding.code, rate: fmtDecimal(withholding.rate, 2) })
+                          : t("Al {{rate}} %", { rate: fmtDecimal(withholding.rate, 2) }))
+                        : null,
+                      withholding.overrideReason
+                        ? t("Cambiada: {{reason}}", { reason: withholding.overrideReason })
+                        : null,
+                      withholding.certificateNumber
+                        ? t("Comprobante {{number}}", { number: withholding.certificateNumber })
+                        : t("Comprobante pendiente"),
+                    ].filter(Boolean).join(" · "),
+                  })),
+                  {
+                    label: t("Neto con notas"),
+                    value: fiscal.netAmount !== null ? amount(fiscal.netAmount, invoice.currency) : null,
+                  },
+                  {
+                    label: t("Validación electrónica"),
+                    // Nunca «válido»: TMS no consulta a la autoridad tributaria, y lo dice.
+                    value: fiscal.electronicValidation === "EXTERNAL_DEPENDENCY"
+                      ? t("No disponible (dependencia externa)")
+                      : fiscal.electronicValidation,
+                  },
+                ]} />
+                {fiscal.withholdings.length === 0 && (
+                  <Typography variant="caption" color="text.secondary">{t("Sin retenciones en este documento.")}</Typography>
+                )}
+                {fiscal.notes.length > 0 && (
+                  <Box sx={{ mt: 1, display: "grid", gap: 0.5 }}>
+                    {fiscal.notes.map((note) => (
+                      <Typography key={note.id} variant="body2" sx={{ fontVariantNumeric: "tabular-nums" }}>
+                        {`${enumLabel("documentKind", note.documentKind)} ${note.invoiceNumber} · ${fmtDate(note.invoiceDate)} · `}
+                        {`${note.documentKind === "CREDIT_NOTE" ? "-" : "+"}${fmtDecimal(note.totalAmount, 2)} ${invoice.currency} · `}
+                        {enumLabel("invoiceStatus", note.status)}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
+              </DetailSection>
+            );
+          })()}
 
           {/* --- la comparación, que es la razón de existir de la pantalla --- */}
           <DetailSection title={t("La comparación")}>
@@ -196,8 +334,25 @@ export function InvoiceWorkspaceDrawer({
                     {t("Ningún envío de esta factura tiene coste estimado, así que TMS no tiene con qué compararla. No es un sobrecoste: es que no hay opinión que dar.")}
                   </Alert>
                 )}
+                {/* Mixto avisa de que el esperado suma cifras firmes y provisionales. */}
+                {invoice.match.expectedBasis === "MIXED" && (
+                  <Alert severity="info" variant="outlined" sx={{ mb: 1.5 }}>
+                    {t("Algunos viajes se compararon contra su costo real cerrado y otros contra el estimado, porque su costo aún no se cerró.")}
+                  </Alert>
+                )}
                 <KeyFacts columns={4} items={[
-                  { label: t("Esperado"), value: amount(invoice.match.expectedAmount, invoice.currency) },
+                  {
+                    label: t("Esperado"),
+                    value: amount(invoice.match.expectedAmount, invoice.currency),
+                    // Junto al esperado y no en una nota al pie: comparar contra una estimación es una
+                    // afirmación provisional, y quien aprueba tiene que saberlo antes de aprobar.
+                    sub: invoice.match.expectedBasis && (
+                      <StatusChip
+                        label={enumLabel("expectedBasis", invoice.match.expectedBasis)}
+                        tone={EXPECTED_BASIS_TONE[invoice.match.expectedBasis]}
+                      />
+                    ),
+                  },
                   { label: t("Coste real"), value: amount(invoice.match.actualAmount, invoice.currency) },
                   { label: t("Facturado"), value: amount(invoice.match.invoicedAmount, invoice.currency) },
                   {
@@ -231,6 +386,8 @@ export function InvoiceWorkspaceDrawer({
               <Table size="small">
                 <TableHead>
                   <TableRow>
+                    <TableCell align="right">#</TableCell>
+                    <TableCell>{t("Cargo")}</TableCell>
                     <TableCell>{t("Concepto")}</TableCell>
                     <TableCell>{t("Envío")}</TableCell>
                     <TableCell align="right">{t("Esperado")}</TableCell>
@@ -241,6 +398,8 @@ export function InvoiceWorkspaceDrawer({
                 <TableBody>
                   {invoice.lines.map((line: InvoiceLineView) => (
                     <TableRow key={line.id} hover>
+                      <TableCell align="right" sx={{ color: "text.secondary" }}>{line.lineNumber}</TableCell>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>{enumLabel("chargeCode", line.chargeCode)}</TableCell>
                       <TableCell>{line.description}</TableCell>
                       <TableCell>
                         {line.shipmentNumber ?? (
@@ -249,7 +408,21 @@ export function InvoiceWorkspaceDrawer({
                           </Typography>
                         )}
                       </TableCell>
-                      <TableCell align="right">{amount(line.expectedAmount, invoice.currency)}</TableCell>
+                      <TableCell align="right">
+                        {/* Una penalidad no tiene estimación: no es un hueco, es que no se compara. */}
+                        {line.chargeCode === "PENALTY" ? (
+                          <Typography variant="caption" color="text.secondary">{t("Fuera de la comparación")}</Typography>
+                        ) : (
+                          <>
+                            {amount(line.expectedAmount, invoice.currency)}
+                            {line.expectedBasis && (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                                {line.expectedBasis === "ACTUAL" ? t("costo real") : t("estimado")}
+                              </Typography>
+                            )}
+                          </>
+                        )}
+                      </TableCell>
                       <TableCell align="right">{fmtDecimal(line.lineAmount, 2)}</TableCell>
                       <TableCell align="right">{difference(line.differenceAmount)}</TableCell>
                     </TableRow>
@@ -281,6 +454,9 @@ export function InvoiceWorkspaceDrawer({
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
                         {enumLabel("discrepancyType", discrepancy.type)}
                       </Typography>
+                      {lineLabel(discrepancy.invoiceLineId) && (
+                        <StatusChip label={lineLabel(discrepancy.invoiceLineId) ?? ""} />
+                      )}
                       {discrepancy.status !== "OPEN" && (
                         <Typography variant="caption" color="text.secondary">
                           {discrepancy.status === "ACCEPTED" ? t("Aceptada") : t("Rechazada")}

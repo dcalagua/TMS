@@ -82,6 +82,18 @@ export function fmtVolumeM3(value: number | null | undefined): string {
   return amount === EMPTY ? EMPTY : `${amount} m³`;
 }
 
+/** Superficie de piso en m² (geometría de carga, V62). Mismo criterio que `fmtVolumeM3`. */
+export function fmtAreaM2(value: number | null | undefined): string {
+  const amount = fmtNumber(value, { maximumFractionDigits: 2 });
+  return amount === EMPTY ? EMPTY : `${amount} m²`;
+}
+
+/** Una longitud en metros: el alto de una pila, el de un vehículo. Dos decimales bastan. */
+export function fmtMetres(value: number | null | undefined): string {
+  const amount = fmtNumber(value, { maximumFractionDigits: 2 });
+  return amount === EMPTY ? EMPTY : `${amount} m`;
+}
+
 /** `value` es un porcentaje ya expresado 0-100, como reporta el backend el uso de capacidad. */
 export function fmtPercent(value: number | null | undefined, fractionDigits = 0): string {
   if (value === null || value === undefined || Number.isNaN(value)) return EMPTY;
@@ -89,9 +101,14 @@ export function fmtPercent(value: number | null | undefined, fractionDigits = 0)
     .format(value / 100);
 }
 
-/** Importe con la moneda que indique el dato (los tarifarios llevan la suya). */
-export function fmtMoney(value: number | null | undefined, currency = "PEN"): string {
+/**
+ * Importe con la moneda **del dato** (un tarifario, una factura, un costo llevan la suya). No hay
+ * moneda por defecto: TMS opera en varios países (ADR-027) y suponer una pintaría soles en una
+ * factura en dólares. Sin moneda conocida se pinta el número solo, nunca una moneda inventada.
+ */
+export function fmtMoney(value: number | null | undefined, currency: string | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return EMPTY;
+  if (!currency || !/^[A-Za-z]{3}$/.test(currency)) return fmtDecimal(value);
   try {
     return new Intl.NumberFormat(localeFor(), { style: "currency", currency }).format(value);
   } catch {

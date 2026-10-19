@@ -111,6 +111,8 @@ public class PlanningEngineV2 implements PlanningEngine {
         Corridors corridors = Corridors.of(input.routes());
         List<ProposedTrip> trips = new ArrayList<>();
         Map<UUID, TripPlan> plansByTrip = new LinkedHashMap<>();
+        // A copy: a vehicle further down that takes an order the next one refuses is moved up.
+        List<VehicleCapacityReference> fleet = new ArrayList<>(input.vehicles());
         int nextVehicle = 0;
 
         for (Map.Entry<UUID, List<PlannableOrder>> group
@@ -121,18 +123,23 @@ public class PlanningEngineV2 implements PlanningEngine {
             TripBuilder open = null;
 
             for (PlannableOrder order : ordersInGroup) {
-                if (exceedsEveryVehicle(order, input.vehicles())) {
+                if (tallerThanEveryVehicle(order, input.vehicles())) {
+                    unplanned.add(new UnplannedOrder(order.id(), order.orderNumber(),
+                            UnplannedReason.ITEM_TALLER_THAN_VEHICLE));
+                    continue;
+                }
+                if (exceedsEveryVehicle(order, input)) {
                     unplanned.add(new UnplannedOrder(order.id(), order.orderNumber(),
                             UnplannedReason.EXCEEDS_LARGEST_VEHICLE));
                     continue;
                 }
-                if (nextVehicle >= input.vehicles().size()) {
+                if (nextVehicle >= fleet.size()) {
                     unplanned.add(new UnplannedOrder(order.id(), order.orderNumber(),
                             UnplannedReason.NO_VEHICLE_AVAILABLE));
                     continue;
                 }
                 if (open == null) {
-                    open = new TripBuilder(input.vehicles().get(nextVehicle), routeId);
+                    open = new TripBuilder(fleet.get(nextVehicle), routeId);
                 }
 
                 Fit fit = open.tryAdd(order, input);
@@ -146,9 +153,17 @@ public class PlanningEngineV2 implements PlanningEngine {
                 if (!open.isEmpty()) {
                     closeTrip(open, input, trips, plansByTrip);
                     nextVehicle++;
-                    open = nextVehicle < input.vehicles().size()
-                            ? new TripBuilder(input.vehicles().get(nextVehicle), routeId)
-                            : null;
+                    open = null;
+                }
+                // Heaviest is not tallest: the order tries every remaining vehicle on its own, and the
+                // first that takes it moves up to the next position (HeuristicPlanningEngine does the
+                // same). The skipped ones stay, in order, for the orders after it.
+                int fitting = firstTaking(fleet, nextVehicle, order, input);
+                if (fitting >= 0) {
+                    fleet.add(nextVehicle, fleet.remove(fitting));
+                }
+                if (nextVehicle < fleet.size()) {
+                    open = new TripBuilder(fleet.get(nextVehicle), routeId);
                 }
                 if (open == null) {
                     unplanned.add(new UnplannedOrder(order.id(), order.orderNumber(),
@@ -179,7 +194,8 @@ public class PlanningEngineV2 implements PlanningEngine {
     private static void closeTrip(TripBuilder open, PlanningInput input, List<ProposedTrip> trips,
             Map<UUID, TripPlan> plansByTrip) {
         TripPlan plan = open.finish(input);
-        trips.add(new ProposedTrip(open.vehicle.id(), open.routeId, plan.orderIds(), plan.stopIds()));
+        trips.add(new ProposedTrip(open.vehicle.id(), open.routeId, plan.orderIds(), plan.stopIds(),
+                open.limits.bindingDimension(open.load)));
         plansByTrip.put(open.vehicle.id(), plan);
     }
 
@@ -219,7 +235,8 @@ public class PlanningEngineV2 implements PlanningEngine {
         }
 
         Fit tryAdd(PlannableOrder order, PlanningInput input) {
-            CapacityLoad candidate = load.plus(CapacityLoad.of(order.pending()));
+            // Re-stacked for this vehicle's height (ADR-022 section 5).
+            CapacityLoad candidate = load.plus(input.loadOn(order, order.pending(), limits));
             if (!limits.accommodates(candidate)) {
                 return Fit.EXCEEDS_CAPACITY;
             }
@@ -330,6 +347,8 @@ public class PlanningEngineV2 implements PlanningEngine {
             List<BigDecimal> weightPercents = new ArrayList<>();
             List<BigDecimal> volumePercents = new ArrayList<>();
             List<BigDecimal> palletPercents = new ArrayList<>();
+            List<BigDecimal> floorPercents = new ArrayList<>();
+            List<BigDecimal> heightPercents = new ArrayList<>();
 
             for (ProposedTrip trip : trips) {
                 distinctVehicles.add(trip.vehicleId());
@@ -341,16 +360,19 @@ public class PlanningEngineV2 implements PlanningEngine {
                     lateOrders += countLate(plan, trip, orders, input);
                 }
 
+                VehicleCapacityReference vehicle = vehicles.get(trip.vehicleId());
+                CapacityLimits tripLimits = vehicle == null ? null : CapacityLimits.of(vehicle);
                 CapacityLoad load = trip.orderIds().stream()
                         .map(orders::get)
                         .filter(java.util.Objects::nonNull)
-                        .map(order -> CapacityLoad.of(order.pending()))
+                        .map(order -> input.loadOn(order, order.pending(), tripLimits))
                         .reduce(CapacityLoad.EMPTY, CapacityLoad::plus);
-                VehicleCapacityReference vehicle = vehicles.get(trip.vehicleId());
                 if (vehicle != null) {
                     weightPercents.add(percent(load.weightKg(), vehicle.maxWeightKg()));
                     volumePercents.add(percent(load.volumeM3(), vehicle.maxVolumeM3()));
                     palletPercents.add(percent(load.pallets(), palletsOf(vehicle)));
+                    floorPercents.add(percent(load.floorAreaM2(), CapacityLimits.floorOf(vehicle)));
+                    heightPercents.add(percent(load.maxStackHeightM(), vehicle.heightM()));
                 }
             }
 
@@ -367,7 +389,10 @@ public class PlanningEngineV2 implements PlanningEngine {
                     PlanningKpis.averagePercent(palletPercents),
                     input.travel().anyEstimated(),
                     // Never computed here - see the class comment. JOB 06 owns proposal pricing.
-                    null);
+                    null,
+                    ProposalPricing.NOT_ASKED,
+                    PlanningKpis.averagePercent(floorPercents),
+                    PlanningKpis.averagePercent(heightPercents));
         }
 
         /**
@@ -470,8 +495,30 @@ public class PlanningEngineV2 implements PlanningEngine {
     }
 
     /** True when no vehicle could take this order's outstanding part on its own. */
-    private static boolean exceedsEveryVehicle(PlannableOrder order, List<VehicleCapacityReference> vehicles) {
-        CapacityLoad alone = CapacityLoad.of(order.pending());
-        return vehicles.stream().noneMatch(vehicle -> CapacityLimits.of(vehicle).accommodates(alone));
+    /** One unit of the order is taller than every vehicle offered (ADR-022): no split or re-stack helps. */
+    private static boolean tallerThanEveryVehicle(PlannableOrder order, List<VehicleCapacityReference> vehicles) {
+        return order.maxUnitHeightM() != null && !vehicles.isEmpty()
+                && vehicles.stream().noneMatch(vehicle -> CapacityLimits.of(vehicle).admitsUnitHeight(order.maxUnitHeightM()));
+    }
+
+    private static boolean exceedsEveryVehicle(PlannableOrder order, PlanningInput input) {
+        return input.vehicles().stream().noneMatch(vehicle -> takes(vehicle, order, input));
+    }
+
+    /** The first vehicle from {@code from} on that takes the order's outstanding part on its own, or -1. */
+    private static int firstTaking(List<VehicleCapacityReference> fleet, int from, PlannableOrder order,
+            PlanningInput input) {
+        for (int i = from; i < fleet.size(); i++) {
+            if (takes(fleet.get(i), order, input)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean takes(VehicleCapacityReference vehicle, PlannableOrder order, PlanningInput input) {
+        CapacityLimits limits = CapacityLimits.of(vehicle);
+        return limits.admitsUnitHeight(order.maxUnitHeightM())
+                && limits.accommodates(input.loadOn(order, order.pending(), limits));
     }
 }

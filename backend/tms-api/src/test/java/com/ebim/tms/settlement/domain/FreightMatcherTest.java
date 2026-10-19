@@ -319,7 +319,7 @@ class FreightMatcherTest {
         void billedOnAnotherInvoice() {
             FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("1450"),
                     List.of(line(TRIP, "1450")), priced(TRIP, "1450"), THREE_PERCENT,
-                    Set.of(TRIP));
+                    Set.of(new FreightMatcher.TripCharge(TRIP, ChargeCode.FREIGHT)));
 
             assertThat(result.status()).isNotEqualTo(MatchStatus.MATCHED);
             assertThat(result.discrepancies()).extracting(FreightMatchResult.Discrepancy::type)
@@ -338,7 +338,7 @@ class FreightMatcherTest {
 
             FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("2000"),
                     List.of(line(TRIP, "1450"), line(OTHER_TRIP, "550")), costs, THREE_PERCENT,
-                    Set.of(TRIP));
+                    Set.of(new FreightMatcher.TripCharge(TRIP, ChargeCode.FREIGHT)));
 
             assertThat(result.status()).isEqualTo(MatchStatus.DISCREPANCY);
             assertThat(result.discrepancies()).extracting(FreightMatchResult.Discrepancy::type)
@@ -388,6 +388,258 @@ class FreightMatcherTest {
             assertThat(result.discrepancies()).extracting(FreightMatchResult.Discrepancy::type)
                     .doesNotContain(DiscrepancyType.DUPLICATE_INVOICE);
             assertThat(result.unmatchedLineCount()).isEqualTo(2);
+        }
+    }
+
+    // ======================================================================== V64 · ADR-024 part 1
+
+    private static InvoiceLine coded(UUID lineId, UUID tripId, String amount, ChargeCode code) {
+        return new InvoiceLine(lineId, tripId, new BigDecimal(amount), code.name().toLowerCase(), code);
+    }
+
+    /** Estimate 1000 = BASE 900 + MINIMUM_ADJUSTMENT 0 + FUEL 80 + TOLL 20; open unless closed. */
+    private static TripCostSnapshot broken(UUID tripId, String actual, boolean closed) {
+        return new TripCostSnapshot(tripId, new BigDecimal("1000"), actual == null ? null : new BigDecimal(actual),
+                "PEN", closed, Map.of(
+                        "BASE", new BigDecimal("900"),
+                        "MINIMUM_ADJUSTMENT", new BigDecimal("0"),
+                        "FUEL_SURCHARGE", new BigDecimal("80"),
+                        "TOLL", new BigDecimal("20")));
+    }
+
+    /**
+     * Several lines per shipment, charge codes, and what an invoice is compared against
+     * (V64, ADR-024 part 1, item 5). A table of cases: one row per rule the matcher now holds.
+     */
+    @Nested
+    @DisplayName("charge codes and the per-component comparison (V64)")
+    class ChargeCodes {
+
+        private final UUID base = UUID.randomUUID();
+        private final UUID fuel = UUID.randomUUID();
+        private final UUID toll = UUID.randomUUID();
+
+        @Test
+        @DisplayName("freight and toll lines of one shipment are summed, not a duplicate")
+        void differentChargesOfOneShipmentAreSummed() {
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("1000"),
+                    List.of(coded(base, TRIP, "980", ChargeCode.FREIGHT), coded(toll, TRIP, "20", ChargeCode.TOLL)),
+                    Map.of(TRIP, broken(TRIP, null, false)), Tolerance.NONE);
+
+            assertThat(result.status()).isEqualTo(MatchStatus.MATCHED);
+            assertThat(result.discrepancies()).isEmpty();
+            assertThat(result.matchedTripCount()).isEqualTo(1);
+            assertThat(result.expectedAmount()).isEqualByComparingTo("1000");
+            assertThat(result.expectedBasis()).isEqualTo(ExpectedBasis.ESTIMATED);
+        }
+
+        @Test
+        @DisplayName("the same shipment and charge twice on one invoice is the duplicate, on its line")
+        void sameChargeTwiceIsADuplicate() {
+            UUID second = UUID.randomUUID();
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("1020"),
+                    List.of(coded(base, TRIP, "1000", ChargeCode.FREIGHT), coded(toll, TRIP, "20", ChargeCode.TOLL),
+                            coded(second, TRIP, "20", ChargeCode.TOLL)),
+                    Map.of(TRIP, broken(TRIP, null, false)), new Tolerance(new BigDecimal("50"), null));
+
+            assertThat(result.discrepancies())
+                    .filteredOn(d -> d.type() == DiscrepancyType.DUPLICATE_INVOICE)
+                    .singleElement()
+                    .satisfies(d -> assertThat(d.lineId()).isEqualTo(second));
+        }
+
+        @Test
+        @DisplayName("a charge another invoice bills is a duplicate; a different charge of that shipment is not")
+        void duplicateAcrossInvoicesIsPerCharge() {
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("1000"),
+                    List.of(coded(base, TRIP, "980", ChargeCode.FREIGHT), coded(toll, TRIP, "20", ChargeCode.TOLL)),
+                    Map.of(TRIP, broken(TRIP, null, false)), Tolerance.NONE,
+                    Set.of(new FreightMatcher.TripCharge(TRIP, ChargeCode.TOLL)));
+
+            assertThat(result.discrepancies())
+                    .filteredOn(d -> d.type() == DiscrepancyType.DUPLICATE_INVOICE)
+                    .singleElement()
+                    .satisfies(d -> assertThat(d.lineId()).isEqualTo(toll));
+        }
+
+        @Test
+        @DisplayName("out of tolerance: each component out is raised on its own line")
+        void outOfTolerancePerComponentWithLineId() {
+            // BASE 900 billed 900, FUEL 80 billed 200, TOLL 20 billed 20: 1120 against 1000.
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("1120"),
+                    List.of(coded(base, TRIP, "900", ChargeCode.BASE), coded(fuel, TRIP, "200", ChargeCode.FUEL_SURCHARGE),
+                            coded(toll, TRIP, "20", ChargeCode.TOLL)),
+                    Map.of(TRIP, broken(TRIP, null, false)), THREE_PERCENT);
+
+            assertThat(result.status()).isEqualTo(MatchStatus.DISCREPANCY);
+            assertThat(result.discrepancies())
+                    .filteredOn(d -> d.type() == DiscrepancyType.LINE_AMOUNT)
+                    .singleElement()
+                    .satisfies(d -> {
+                        assertThat(d.lineId()).isEqualTo(fuel);
+                        assertThat(d.expectedAmount()).isEqualByComparingTo("80");
+                        assertThat(d.differenceAmount()).isEqualByComparingTo("120");
+                        assertThat(d.detail()).contains("FUEL_SURCHARGE").contains("estimate");
+                    });
+            assertThat(result.discrepancies()).extracting(FreightMatchResult.Discrepancy::type)
+                    .contains(DiscrepancyType.TOTAL_AMOUNT);
+        }
+
+        @Test
+        @DisplayName("within tolerance: a component difference opens nothing")
+        void withinToleranceOpensNothing() {
+            // FUEL billed 100 against 80, but the shipment is 1020 against 1000: within 3%.
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("1020"),
+                    List.of(coded(base, TRIP, "900", ChargeCode.BASE), coded(fuel, TRIP, "100", ChargeCode.FUEL_SURCHARGE),
+                            coded(toll, TRIP, "20", ChargeCode.TOLL)),
+                    Map.of(TRIP, broken(TRIP, null, false)), THREE_PERCENT);
+
+            assertThat(result.status()).isEqualTo(MatchStatus.MATCHED);
+            assertThat(result.discrepancies()).isEmpty();
+            // ...and the screen still sees the comparison.
+            Map<UUID, FreightMatcher.LineExpectation> expectations = FreightMatcher.lineExpectations(
+                    List.of(coded(base, TRIP, "900", ChargeCode.BASE), coded(fuel, TRIP, "100", ChargeCode.FUEL_SURCHARGE),
+                            coded(toll, TRIP, "20", ChargeCode.TOLL)),
+                    Map.of(TRIP, broken(TRIP, null, false)));
+            assertThat(expectations.get(fuel).expectedAmount()).isEqualByComparingTo("80");
+            assertThat(expectations.get(base).expectedAmount()).isEqualByComparingTo("900");
+        }
+
+        @Test
+        @DisplayName("BASE is compared with the base plus the tariff's minimum adjustment")
+        void baseIncludesAdjustments() {
+            TripCostSnapshot withMinimum = new TripCostSnapshot(TRIP, new BigDecimal("1000"), null, "PEN", false,
+                    Map.of("BASE", new BigDecimal("700"), "MINIMUM_ADJUSTMENT", new BigDecimal("300")));
+            Map<UUID, FreightMatcher.LineExpectation> expectations = FreightMatcher.lineExpectations(
+                    List.of(coded(base, TRIP, "1000", ChargeCode.BASE)), Map.of(TRIP, withMinimum));
+
+            assertThat(expectations.get(base).expectedAmount()).isEqualByComparingTo("1000");
+        }
+
+        @Test
+        @DisplayName("a closed cost is compared against its ACTUAL, and the result says so")
+        void closedCostComparesAgainstActual() {
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("1100"),
+                    List.of(coded(base, TRIP, "1100", ChargeCode.FREIGHT)),
+                    Map.of(TRIP, broken(TRIP, "1100", true)), Tolerance.NONE);
+
+            assertThat(result.status()).isEqualTo(MatchStatus.MATCHED);
+            assertThat(result.expectedAmount()).isEqualByComparingTo("1100");
+            assertThat(result.expectedBasis()).isEqualTo(ExpectedBasis.ACTUAL);
+        }
+
+        @Test
+        @DisplayName("an open cost with an actual recorded is still compared against its ESTIMATE")
+        void openCostComparesAgainstEstimate() {
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("1100"),
+                    List.of(coded(base, TRIP, "1100", ChargeCode.FREIGHT)),
+                    Map.of(TRIP, broken(TRIP, "1100", false)), Tolerance.NONE);
+
+            assertThat(result.status()).isEqualTo(MatchStatus.DISCREPANCY);
+            assertThat(result.expectedAmount()).isEqualByComparingTo("1000");
+            assertThat(result.expectedBasis()).isEqualTo(ExpectedBasis.ESTIMATED);
+            assertThat(result.discrepancies()).extracting(FreightMatchResult.Discrepancy::lineId)
+                    .contains(base);
+        }
+
+        @Test
+        @DisplayName("one shipment closed and one open is MIXED")
+        void mixedBasis() {
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("2100"),
+                    List.of(coded(base, TRIP, "1100", ChargeCode.FREIGHT), coded(toll, OTHER_TRIP, "1000", ChargeCode.FREIGHT)),
+                    Map.of(TRIP, broken(TRIP, "1100", true), OTHER_TRIP, broken(OTHER_TRIP, null, false)),
+                    Tolerance.NONE);
+
+            assertThat(result.expectedBasis()).isEqualTo(ExpectedBasis.MIXED);
+            assertThat(result.status()).isEqualTo(MatchStatus.MATCHED);
+        }
+
+        @Test
+        @DisplayName("an all-in line beside a component is compared with what the component leaves")
+        void freightLineGetsTheRemainder() {
+            Map<UUID, FreightMatcher.LineExpectation> expectations = FreightMatcher.lineExpectations(
+                    List.of(coded(base, TRIP, "900", ChargeCode.FREIGHT), coded(fuel, TRIP, "80", ChargeCode.FUEL_SURCHARGE)),
+                    Map.of(TRIP, broken(TRIP, null, false)));
+
+            assertThat(expectations.get(base).expectedAmount()).isEqualByComparingTo("920");
+            assertThat(expectations.get(fuel).expectedAmount()).isEqualByComparingTo("80");
+        }
+
+        @Test
+        @DisplayName("no breakdown: components are unknown, never zero, and the shipment is raised whole")
+        void noBreakdownIsUnknownNotZero() {
+            TripCostSnapshot flat = new TripCostSnapshot(TRIP, new BigDecimal("1000"), null, "PEN");
+            List<InvoiceLine> lines = List.of(coded(base, TRIP, "1000", ChargeCode.BASE),
+                    coded(toll, TRIP, "200", ChargeCode.TOLL));
+
+            assertThat(FreightMatcher.lineExpectations(lines, Map.of(TRIP, flat)).get(toll).expectedAmount()).isNull();
+
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("1200"), lines,
+                    Map.of(TRIP, flat), THREE_PERCENT);
+            assertThat(result.discrepancies())
+                    .filteredOn(d -> d.type() == DiscrepancyType.LINE_AMOUNT)
+                    .singleElement()
+                    .satisfies(d -> {
+                        assertThat(d.lineId()).isNull();
+                        assertThat(d.expectedAmount()).isEqualByComparingTo("1000");
+                        assertThat(d.invoicedAmount()).isEqualByComparingTo("1200");
+                    });
+        }
+
+        @Test
+        @DisplayName("a component the estimate does not charge is expected at the tariff's zero")
+        void unchargedComponentIsAKnownZero() {
+            Map<UUID, FreightMatcher.LineExpectation> expectations = FreightMatcher.lineExpectations(
+                    List.of(coded(fuel, TRIP, "50", ChargeCode.WAITING_TIME)), Map.of(TRIP, broken(TRIP, null, false)));
+
+            assertThat(expectations.get(fuel).expectedAmount()).isEqualByComparingTo("0");
+            assertThat(expectations.get(fuel).basis()).isEqualTo(ExpectedBasis.ESTIMATED);
+        }
+
+        @Test
+        @DisplayName("a penalty is out of every comparison and out of the compared header, and listed to accept (V66)")
+        void penaltyIsExcluded() {
+            UUID penalty = UUID.randomUUID();
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("900"),
+                    List.of(coded(base, TRIP, "1000", ChargeCode.FREIGHT), coded(penalty, TRIP, "-100", ChargeCode.PENALTY)),
+                    Map.of(TRIP, broken(TRIP, null, false)), Tolerance.NONE);
+
+            // No difference against the cost; the only item is the penalty the approver must accept.
+            assertThat(result.differenceAmount()).isEqualByComparingTo("0");
+            assertThat(result.status()).isEqualTo(MatchStatus.DISCREPANCY);
+            assertThat(result.discrepancies()).singleElement().satisfies(found -> {
+                assertThat(found.type()).isEqualTo(DiscrepancyType.PENALTY);
+                assertThat(found.lineId()).isEqualTo(penalty);
+                assertThat(found.invoicedAmount()).isEqualByComparingTo("-100");
+                assertThat(found.expectedAmount()).isNull();
+            });
+            assertThat(FreightMatcher.lineExpectations(
+                    List.of(coded(penalty, TRIP, "-100", ChargeCode.PENALTY)), Map.of(TRIP, broken(TRIP, null, false))))
+                    .doesNotContainKey(penalty);
+        }
+
+        @Test
+        @DisplayName("a V46 line without a code reads as FREIGHT: two of them are still a duplicate")
+        void uncodedLinesAreFreight() {
+            assertThat(new InvoiceLine(base, TRIP, BigDecimal.ONE, "x", null).chargeCode())
+                    .isEqualTo(ChargeCode.FREIGHT);
+            assertThat(new FreightMatcher.TripCharge(TRIP, null))
+                    .isEqualTo(new FreightMatcher.TripCharge(TRIP, ChargeCode.FREIGHT));
+        }
+
+        @Test
+        @DisplayName("unmatched and missing-cost findings carry their line")
+        void shipmentFindingsCarryTheirLine() {
+            UUID orphan = UUID.randomUUID();
+            FreightMatchResult result = FreightMatcher.match("PEN", new BigDecimal("1050"),
+                    List.of(coded(base, TRIP, "1000", ChargeCode.FREIGHT), coded(orphan, null, "50", ChargeCode.TOLL)),
+                    Map.of(TRIP, new TripCostSnapshot(TRIP, null, null, "PEN")), Tolerance.NONE);
+
+            assertThat(result.discrepancies())
+                    .extracting(FreightMatchResult.Discrepancy::type, FreightMatchResult.Discrepancy::lineId)
+                    .containsExactlyInAnyOrder(
+                            org.assertj.core.groups.Tuple.tuple(DiscrepancyType.UNMATCHED_TRIP, orphan),
+                            org.assertj.core.groups.Tuple.tuple(DiscrepancyType.MISSING_EXPECTED_COST, base));
         }
     }
 }

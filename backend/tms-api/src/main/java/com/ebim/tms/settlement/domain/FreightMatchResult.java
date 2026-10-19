@@ -18,6 +18,8 @@ import java.util.List;
  * @param invoicedAmount   what the carrier billed. Always known - it is on the document
  * @param differenceAmount {@code invoiced - expected}, or null exactly when expected is null
  * @param discrepancies    what a freight auditor has to look at, empty when there is nothing
+ * @param expectedBasis    what {@code expectedAmount} is - the closed actual, the estimate, or a mix
+ *                         across shipments (V64). Null exactly when {@code expectedAmount} is
  */
 public record FreightMatchResult(
         MatchStatus status,
@@ -27,18 +29,25 @@ public record FreightMatchResult(
         BigDecimal differenceAmount,
         int matchedTripCount,
         int unmatchedLineCount,
-        List<Discrepancy> discrepancies) {
+        List<Discrepancy> discrepancies,
+        ExpectedBasis expectedBasis) {
 
     public FreightMatchResult {
         discrepancies = List.copyOf(discrepancies);
     }
 
-    /** One thing wrong, with the figures that make it wrong beside it. */
+    /**
+     * One thing wrong, with the figures that make it wrong beside it.
+     *
+     * @param lineId the invoice line it is about, or null when it is about the header or a shipment
+     *               billed over several lines (V64: {@code freight_discrepancy.invoice_line_id})
+     */
     public record Discrepancy(
             DiscrepancyType type,
             BigDecimal expectedAmount,
             BigDecimal invoicedAmount,
             BigDecimal differenceAmount,
-            String detail) {
+            String detail,
+            java.util.UUID lineId) {
     }
 }

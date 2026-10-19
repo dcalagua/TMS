@@ -74,6 +74,16 @@ class SchemaExposureIntegrationTest {
             // deleted is an obligation somebody can make disappear.
             "carrier_invoice", "carrier_invoice_line", "tolerance_policy", "freight_match",
             "freight_discrepancy", "settlement_approval", "payable_export",
+            // V65: freight accruals (ADR-023). The movements are append-only by grant and by trigger.
+            "freight_accrual", "freight_accrual_entry", "gl_account_mapping",
+            // V67: payable payments (ADR-023 section 2). A payment is append-only by grant and by
+            // trigger; a person's request is decided, never deleted.
+            "carrier_payment", "carrier_payment_request",
+            // V66: the withholdings of a document (ADR-027) - figures frozen by trigger, never deleted -
+            // and a company's per-kind tax overrides, replaced whole by a PUT.
+            "carrier_invoice_withholding", "company_tax_withholding_setting",
+            // V68: cost to serve (ADR-026). The rows are append-only; a run is only ever superseded.
+            "trip_cost_allocation_run", "trip_cost_allocation",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
             "work_assignment", "work_assignment_trip",
@@ -86,13 +96,22 @@ class SchemaExposureIntegrationTest {
             "order_hold",
             // V55: the documents that travel with orders (ADR-015).
             "logistics_document", "logistics_document_order",
+            // V69: the destinatarios of a guide (ADR-028).
+            "logistics_document_recipient",
             // V57: document delivery tracking (ADR-018).
             "document_delivery", "document_delivery_order", "document_delivery_event",
             "document_delivery_evidence",
+            // V59: the warehouse's material profiles (ADR-022).
+            "material_profile",
+            // V61: order cancellation with the warehouse (ADR-025 section 4).
+            "business_outbox_event", "warehouse_order_event",
             // V56: MasterAdmin commercial entitlements. Same posture as V51 - owner only, tms_app holds
             // no grant and a deny-all policy; the scoped read goes through a SECURITY DEFINER function.
             "platform_entitlement_applied", "platform_entitlement_audit", "platform_entitlement_jti",
-            "platform_entitlement_mode", "platform_entitlement_mode_event", "platform_entitlement_shadow_diff");
+            "platform_entitlement_mode", "platform_entitlement_mode_event", "platform_entitlement_shadow_diff",
+            // V58: MasterAdmin operational lifecycle (ADR-021). Same posture as V56 - owner only, tms_app
+            // holds no grant and a deny-all policy; the scoped reads go through SECURITY DEFINER functions.
+            "platform_tenant_lifecycle", "platform_tenant_lifecycle_audit");
 
     /**
      * The tables whose rows belong to a company and are therefore filtered by RLS for the
@@ -128,6 +147,16 @@ class SchemaExposureIntegrationTest {
             // deleted is an obligation somebody can make disappear.
             "carrier_invoice", "carrier_invoice_line", "tolerance_policy", "freight_match",
             "freight_discrepancy", "settlement_approval", "payable_export",
+            // V65: freight accruals (ADR-023). The movements are append-only by grant and by trigger.
+            "freight_accrual", "freight_accrual_entry", "gl_account_mapping",
+            // V67: payable payments (ADR-023 section 2). A payment is append-only by grant and by
+            // trigger; a person's request is decided, never deleted.
+            "carrier_payment", "carrier_payment_request",
+            // V66: the withholdings of a document (ADR-027) - figures frozen by trigger, never deleted -
+            // and a company's per-kind tax overrides, replaced whole by a PUT.
+            "carrier_invoice_withholding", "company_tax_withholding_setting",
+            // V68: cost to serve (ADR-026). The rows are append-only; a run is only ever superseded.
+            "trip_cost_allocation_run", "trip_cost_allocation",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
             "work_assignment", "work_assignment_trip",
@@ -137,9 +166,15 @@ class SchemaExposureIntegrationTest {
             "order_hold",
             // V55: the documents that travel with orders (ADR-015).
             "logistics_document", "logistics_document_order",
+            // V69: the destinatarios of a guide (ADR-028).
+            "logistics_document_recipient",
             // V57: document delivery tracking (ADR-018).
             "document_delivery", "document_delivery_order", "document_delivery_event",
-            "document_delivery_evidence");
+            "document_delivery_evidence",
+            // V59: the warehouse's material profiles (ADR-022).
+            "material_profile",
+            // V61: order cancellation with the warehouse (ADR-025 section 4).
+            "business_outbox_event", "warehouse_order_event");
 
     /**
      * The only tables allowed to carry a {@code company_id} and <em>not</em> the tenant policy.
@@ -149,6 +184,14 @@ class SchemaExposureIntegrationTest {
      * may select - before any company scope exists. A tenant policy on it would make
      * authentication impossible, so it carries {@code p_backend_managed} like the rest of the
      * identity tables (V13 section 5).
+     *
+     * <p>{@code platform_tenant} and {@code platform_provisioning} (V51) are control-plane tables:
+     * they map an EBIM MasterAdmin tenant to a TMS organization and company, so by their nature they
+     * list every tenant, and a per-tenant policy would make the mapping unreadable by the only
+     * caller that needs it. What keeps them safe is not a policy but the grant: V51 revokes
+     * <em>all</em> privileges on both from {@code tms_app}, so the role every company-scoped request
+     * runs as cannot read them at all. Provisioning writes on the owner connection because it runs
+     * before any company exists.
      */
     private static final List<String> COMPANY_COLUMN_WITHOUT_TENANT_POLICY = List.of("membership",
             // V51: records which company a MasterAdmin provisioning created. Written before any company
@@ -298,6 +341,31 @@ class SchemaExposureIntegrationTest {
                 .isEmpty();
     }
 
+    /**
+     * The carrier portal (ADR-018) runs as {@code tms_app} with {@code tms.current_carrier_id()} set.
+     * Every settlement and finance table carries a RESTRICTIVE {@code p_carrier_scope}: its own
+     * invoices and payments for a carrier, nothing of the office's internals. A finance table added
+     * without one would be readable from a carrier session; this names it.
+     */
+    @Test
+    @DisplayName("every settlement and finance table carries the restrictive carrier policy (ADR-018)")
+    void financeTablesCarryTheCarrierPolicy() throws SQLException {
+        assertThat(strings("""
+                SELECT t.name
+                FROM unnest(ARRAY['carrier_invoice', 'carrier_invoice_line', 'settlement_approval',
+                                  'carrier_payment', 'carrier_payment_request', 'freight_match',
+                                  'freight_discrepancy', 'payable_export', 'freight_accrual',
+                                  'freight_accrual_entry', 'gl_account_mapping', 'trip_cost_allocation_run',
+                                  'trip_cost_allocation']) AS t(name)
+                WHERE NOT EXISTS (SELECT 1 FROM pg_policies p
+                                   WHERE p.schemaname = 'tms' AND p.tablename = t.name
+                                     AND p.policyname = 'p_carrier_scope' AND p.permissive = 'RESTRICTIVE')
+                ORDER BY 1
+                """))
+                .as("a carrier session must not read the office's finance figures")
+                .isEmpty();
+    }
+
     @Test
     @DisplayName("no policy is granted to the Supabase API roles: the Data API stays denied")
     void policiesTargetTheRuntimeRoleOnly() throws SQLException {
@@ -354,6 +422,8 @@ class SchemaExposureIntegrationTest {
         withheld.put("webhook_delivery_attempt", List.of("UPDATE", "DELETE"));
         withheld.put("settlement_approval", List.of("UPDATE", "DELETE"));
         withheld.put("payable_export", List.of("UPDATE", "DELETE"));
+        // V66: a withholding is written with its document; only its certificate is updated (ADR-027).
+        withheld.put("carrier_invoice_withholding", List.of("DELETE"));
         // A measurement is superseded, not corrected; the feed is trimmed, so DELETE stays (V29).
         withheld.put("tracking_position", List.of("UPDATE"));
         // Corrected in place, never removed (V28, V32, V34, V35, V40, V41, V45).
@@ -374,12 +444,19 @@ class SchemaExposureIntegrationTest {
         // V55: a document is replaced, never deleted; its order links are rewritten whole.
         withheld.put("logistics_document", List.of("DELETE"));
         withheld.put("logistics_document_order", List.of("UPDATE"));
+        // V69: a guide's recipients are rewritten whole on a re-send, like its order links.
+        withheld.put("logistics_document_recipient", List.of("UPDATE"));
         // V57: a tracked document is reported and returned, never removed; its history and
         // evidence are append-only.
         withheld.put("document_delivery", List.of("DELETE"));
         withheld.put("document_delivery_order", List.of("UPDATE", "DELETE"));
         withheld.put("document_delivery_event", List.of("UPDATE", "DELETE"));
         withheld.put("document_delivery_evidence", List.of("UPDATE", "DELETE"));
+        // V59: a profile the warehouse stops sending stays as the last known copy.
+        withheld.put("material_profile", List.of("DELETE"));
+        // V61: records of facts, written once.
+        withheld.put("business_outbox_event", List.of("UPDATE", "DELETE"));
+        withheld.put("warehouse_order_event", List.of("UPDATE", "DELETE"));
         // Canonical location replaced these; they are read-only projections now (V23).
         withheld.put("origin", List.of("INSERT", "UPDATE", "DELETE"));
         withheld.put("destination", List.of("INSERT", "UPDATE", "DELETE"));

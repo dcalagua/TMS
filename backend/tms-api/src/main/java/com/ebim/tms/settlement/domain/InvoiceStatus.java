@@ -1,5 +1,6 @@
 package com.ebim.tms.settlement.domain;
 
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
@@ -44,26 +45,60 @@ public enum InvoiceStatus {
     /** A person refused it, with a reason. */
     REJECTED,
 
-    /** Handed to whoever pays. Terminal. */
-    EXPORTED;
+    /**
+     * Handed to whoever pays. No longer terminal since V67: what happens next is the ERP's to report
+     * (ADR-023 section 2), and TMS records it without moving any money (D-01).
+     */
+    EXPORTED,
 
-    private static final Map<InvoiceStatus, Set<InvoiceStatus>> TRANSITIONS = Map.of(
-            RECEIVED, EnumSet.of(MATCHING, REJECTED),
+    /** The ERP (or a person) planned the payment for a date. Nothing has been paid yet. */
+    SCHEDULED,
+
+    /** Some of the open balance has been paid. Repeats while payments arrive. */
+    PARTIALLY_PAID,
+
+    /** The payments reported cover the open balance. Terminal. */
+    PAID,
+
+    /** Payment was stopped, with a reason; leaving the hold also needs one. */
+    ON_HOLD;
+
+    /**
+     * The states of an obligation somebody authorised (V67): an approved invoice and everything that
+     * can follow it except a rejection. What consumes an accrual, what nets a note into its invoice
+     * and what the aging reads - one set, so widening the lifecycle cannot silently drop a paid
+     * invoice from them.
+     */
+    public static final Set<InvoiceStatus> AUTHORISED =
+            Collections.unmodifiableSet(EnumSet.of(APPROVED, EXPORTED, SCHEDULED, PARTIALLY_PAID, PAID, ON_HOLD));
+
+    /** Authorised and not yet paid in full: what is still owed (V67). */
+    public static final Set<InvoiceStatus> OPEN_PAYABLE =
+            Collections.unmodifiableSet(EnumSet.of(APPROVED, EXPORTED, SCHEDULED, PARTIALLY_PAID, ON_HOLD));
+
+    private static final Map<InvoiceStatus, Set<InvoiceStatus>> TRANSITIONS = Map.ofEntries(
+            Map.entry(RECEIVED, EnumSet.of(MATCHING, REJECTED)),
             // Re-matching is legal from MATCHING itself: a run that read a shipment mid-costing is
             // re-run rather than unwound.
-            MATCHING, EnumSet.of(MATCHING, MATCHED, DISCREPANCY, REJECTED),
+            Map.entry(MATCHING, EnumSet.of(MATCHING, MATCHED, DISCREPANCY, REJECTED)),
             // A clean match may be approved directly. It may also be re-matched - a cost corrected
             // after the fact must be able to change the verdict.
-            MATCHED, EnumSet.of(MATCHING, APPROVED, REJECTED),
+            Map.entry(MATCHED, EnumSet.of(MATCHING, APPROVED, REJECTED)),
             // THE rule. A discrepancy goes to a person or is refused. It does NOT go to APPROVED.
-            DISCREPANCY, EnumSet.of(UNDER_REVIEW, MATCHING, REJECTED),
-            UNDER_REVIEW, EnumSet.of(APPROVED, REJECTED, MATCHING),
-            APPROVED, EnumSet.of(EXPORTED, REJECTED),
+            Map.entry(DISCREPANCY, EnumSet.of(UNDER_REVIEW, MATCHING, REJECTED)),
+            Map.entry(UNDER_REVIEW, EnumSet.of(APPROVED, REJECTED, MATCHING)),
+            Map.entry(APPROVED, EnumSet.of(EXPORTED, REJECTED)),
             // Terminal both ways. A rejected invoice is re-received as a new document, because a
             // carrier who disagrees issues a credit note and a new number - they do not edit the
             // one that was refused.
-            REJECTED, EnumSet.noneOf(InvoiceStatus.class),
-            EXPORTED, EnumSet.noneOf(InvoiceStatus.class));
+            Map.entry(REJECTED, EnumSet.noneOf(InvoiceStatus.class)),
+            // V67 (ADR-023 section 2). Nothing goes back to EXPORTED and nothing leaves PAID: a
+            // payment is corrected by the ERP with another document, not by unwinding a status.
+            Map.entry(EXPORTED, EnumSet.of(SCHEDULED, PARTIALLY_PAID, PAID, ON_HOLD)),
+            Map.entry(SCHEDULED, EnumSet.of(PARTIALLY_PAID, PAID, ON_HOLD)),
+            Map.entry(PARTIALLY_PAID, EnumSet.of(PARTIALLY_PAID, PAID, ON_HOLD)),
+            Map.entry(ON_HOLD, EnumSet.of(SCHEDULED, PARTIALLY_PAID, PAID)),
+            Map.entry(PAID, EnumSet.noneOf(InvoiceStatus.class)));
 
     /** The states this one may move to. Empty for a terminal state. */
     public Set<InvoiceStatus> allowedTransitions() {
@@ -88,6 +123,14 @@ public enum InvoiceStatus {
     /** Whether the invoice can still be edited - its lines, its total, its dates. */
     public boolean isEditable() {
         return this == RECEIVED || this == DISCREPANCY || this == UNDER_REVIEW;
+    }
+
+    /**
+     * Whether a payment may be recorded against an invoice in this state (V67): only after the
+     * export - TMS does not report a payment of something it never handed over - and never once paid.
+     */
+    public boolean acceptsPayment() {
+        return this == EXPORTED || this == SCHEDULED || this == PARTIALLY_PAID || this == ON_HOLD;
     }
 
     public boolean isTerminal() {

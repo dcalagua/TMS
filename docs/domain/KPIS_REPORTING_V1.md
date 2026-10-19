@@ -325,3 +325,38 @@ at the stated scale. The column is the same denormalization V16 rule 7 made onto
   Docker/Testcontainers is unavailable in the build environment (see the repository's
   `DB_CERTIFICATION=BLOCKED_ENVIRONMENT` note). That is the highest-value thing to do the moment a
   database is reachable.
+
+## 12. Settlement (V64, ADR-024 part 1, item 7)
+
+`KpiReportView.settlement` (`KpiSettlementView`), **null for a caller without `settlement.invoice:read`** -
+the same rule as `orders`, `tenders` and `cost`, and the port is not even called. Read through
+`shared.reference.SettlementKpiPort`, implemented by `settlement.infrastructure.SettlementKpiAdapter` with one
+grouped query (`CarrierInvoiceRepository.settlementKpis`, `GROUPING SETS ((carrier, currency), ())`).
+
+| Figure | Definition |
+|---|---|
+| Population | Carrier invoices whose `invoice_date` falls in the range (both ends inclusive). |
+| `invoicesReceived` / `invoicesApproved` | All of them / those with an `APPROVED` decision in `settlement_approval`. |
+| `invoicesWithDiscrepancy`, `discrepancyRatePercent` | Invoices whose current match raised at least one `freight_discrepancy` (any type, any status), over invoices received. Null rate when none was received. |
+| `cycleMedianHours`, `cycleP90Hours` | `percentile_cont` of hours from `carrier_invoice.created_at` (received in TMS) to the first APPROVED decision, over approved invoices only; one decimal, HALF_UP. Null when none was approved. |
+| `byCarrier[].amountObserved` | Sum of positive `TOTAL_AMOUNT` differences (billed over expected, outside tolerance). Header level only, so line and header differences are never counted twice. |
+| `byCarrier[].amountSaved` | The part of `amountObserved` that was refused: the difference rejected, or the invoice rejected. |
+
+Money is per carrier **and currency** (one row each); the company-wide figures are counts and hours. No FX.
+The screen ("Liquidación de fletes" on `/reports`) shows four tiles and the per-carrier table. The daily CSV
+export is unchanged: settlement is not a per-day series.
+
+## 13. Finance (V68, ADR-026 section 8)
+
+`KpiReportView.finance`, null without `settlement.accrual:read` (and absent from a backend before V68). Per currency,
+never summed across currencies:
+
+- **Open accrual balance**: accrued - consumed - reversed of the `OPEN` and `PARTIALLY_SETTLED` accruals whose service
+  date is on or before the end of the range.
+- **Accrual vs invoice**: over the accruals served in the range that an approved invoice consumed, what the authorised
+  documents billed for those trips minus what was accrued (and the percentage of the accrued).
+- **Cost per kg**: cost allocated to orders by the current allocation runs of the range, over the kilograms that
+  received cost.
+
+Company-wide: **average days to payment**, first approval to last payment, of the invoices that became `PAID` with the
+last payment in the range.

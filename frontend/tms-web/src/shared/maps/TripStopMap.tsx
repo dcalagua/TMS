@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Box, Typography, useTheme } from "@mui/material";
-import { isGoogleMapsConfigured, loadCoreLibrary, loadMapsLibrary, loadMarkerLibrary } from "./googleMapsLoader";
-import type { MapLoadStatus } from "./types";
+import {
+  DARK_TILE_FILTER, DEFAULT_CENTER, L, needsDarkTileFilter, stopIcon, tileLayer, vehicleIcon, ZOOM_COUNTRY,
+} from "./leafletMap";
 import { t } from "../../lib/i18n";
 
 /** La forma del marcador de origen: un viaje tiene como mucho uno, dibujado como parada "0". */
@@ -46,166 +47,148 @@ export interface TripStopMapProps {
   height?: number;
 }
 
-const DEFAULT_CENTER: google.maps.LatLngLiteral = { lat: -12.046374, lng: -77.042793 };
-const DEFAULT_ZOOM = 5;
-const INK = "#1a1a1a";
-const MUTED = "#6c757d";
-
-function markerIcon(filled: boolean): google.maps.Icon {
-  const fill = filled ? INK : "#ffffff";
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30">` +
-    `<circle cx="15" cy="15" r="12.5" fill="${fill}" stroke="${INK}" stroke-width="2"/></svg>`;
-  return { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}` };
-}
-
-/**
- * El marcador del vehículo: un disco relleno con anillo blanco, sin número.
- *
- * Deliberadamente una forma distinta de la de los marcadores de parada, y no el mismo círculo en
- * otro color. El color por sí solo sería la única señal que distingue una posición reportada de
- * una parada planificada, y eso falla para un despachador con daltonismo y vuelve a fallar en
- * una impresión.
- */
-function vehicleIcon(color: string): google.maps.Icon {
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30">` +
-    `<circle cx="15" cy="15" r="11" fill="${color}" stroke="#ffffff" stroke-width="3"/>` +
-    `<circle cx="15" cy="15" r="13" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`;
-  return { url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}` };
-}
-
-function markerLabel(text: string, filled: boolean): google.maps.MarkerLabel {
-  return { text, color: filled ? "#ffffff" : INK, fontWeight: "700", fontSize: "12px" };
-}
+const LINE = "#6c757d";
 
 /**
  * La secuencia de paradas de un viaje planificado sobre un mapa: el origen como marcador "0", un
  * marcador numerado por parada en su secuencia real de `trip_stop`, y una polilínea de líneas
- * rectas entre las coordenadas conocidas — nunca una ruta calculada (Directions/Routes siguen
- * siendo opcionales y sin usar por defecto). Una parada sin coordenadas simplemente no se
- * dibuja; listarla igualmente, con una nota de "no se puede mapear", es trabajo de quien llama.
+ * rectas entre las coordenadas conocidas — nunca una ruta calculada. Una parada sin coordenadas
+ * simplemente no se dibuja; decir cuántas quedaron fuera es trabajo de este componente, y lo hace
+ * debajo del mapa.
  *
- * Es hermano de `StopsMap`, no un envoltorio suyo: la numeración, el resaltado de selección y la
- * polilínea viven aquí, que es lo que el comentario de `StopsMap` decía que le correspondía al
- * trabajo de secuencia de paradas.
+ * Va sobre Leaflet y teselas de OpenStreetMap, así que **no necesita clave de API**. Antes
+ * dependía de `VITE_GOOGLE_MAPS_API_KEY` y sin ella la pestaña Mapa mostraba un aviso en lugar
+ * del mapa, que es justo lo que no sirve cuando alguien quiere ver por dónde va un viaje.
  */
 export function TripStopMap({
   origin, stops, vehicle = null, selectedStopId = null, onSelectStop, height = 320,
 }: TripStopMapProps) {
   const theme = useTheme();
+  const ink = theme.palette.text.primary;
   // El vehículo es lo único de este mapa que está pasando ahora, así que toma el color de acción
   // del tema activo en lugar de un azul fijo.
   const vehicleColor = theme.palette.info.main;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const markerCtorRef = useRef<typeof google.maps.Marker | null>(null);
-  const boundsCtorRef = useRef<typeof google.maps.LatLngBounds | null>(null);
-  const polylineCtorRef = useRef<typeof google.maps.Polyline | null>(null);
-  const markersRef = useRef<google.maps.Marker[]>([]);
-  const polylineRef = useRef<google.maps.Polyline | null>(null);
-  const [status, setStatus] = useState<MapLoadStatus>(() => (isGoogleMapsConfigured() ? "loading" : "unavailable"));
+  const mapRef = useRef<L.Map | null>(null);
+  const layersRef = useRef<L.Layer[]>([]);
+  const onSelectRef = useRef(onSelectStop);
+  // En un efecto y no durante el render: el marcador guarda esta referencia en su `click`, asi
+  // que basta con que este al dia antes del siguiente evento, y tocar un ref mientras React
+  // renderiza es justo lo que no hay que hacer.
+  useEffect(() => { onSelectRef.current = onSelectStop; }, [onSelectStop]);
+
+  /**
+   * Solo se guarda el FRACASO, no el ciclo completo.
+   *
+   * Que el mapa este listo no necesita estado: el efecto que dibuja corre despues del que crea
+   * el mapa, asi que le basta con mirar `mapRef`. Un estado "ready" solo anadiria un render de
+   * mas en cada montaje. Que Leaflet no haya podido arrancar si necesita estado, porque el
+   * render ya ocurrio y hay que volver a pintar el aviso en su lugar.
+   */
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    if (!isGoogleMapsConfigured()) return;
-    let cancelled = false;
+    const container = containerRef.current;
+    if (!container) return;
 
-    void Promise.all([loadMapsLibrary(), loadMarkerLibrary(), loadCoreLibrary()])
-      .then(([{ Map, Polyline }, { Marker }, { LatLngBounds }]) => {
-        if (cancelled || !containerRef.current) return;
-        mapRef.current = new Map(containerRef.current, {
-          center: DEFAULT_CENTER,
-          zoom: DEFAULT_ZOOM,
-          streetViewControl: false,
-          mapTypeControl: false,
-          fullscreenControl: false,
-        });
-        markerCtorRef.current = Marker;
-        boundsCtorRef.current = LatLngBounds;
-        polylineCtorRef.current = Polyline;
-        setStatus("ready");
-      })
-      .catch(() => {
-        if (!cancelled) setStatus("unavailable");
+    let map: L.Map;
+    try {
+      map = L.map(container, {
+        center: DEFAULT_CENTER,
+        zoom: ZOOM_COUNTRY,
+        // La rueda se deja fuera a propósito: este mapa vive dentro de un drawer que se desplaza,
+        // y un mapa que captura la rueda deja atrapado a quien sólo quería seguir bajando.
+        scrollWheelZoom: false,
       });
+      tileLayer().addTo(map);
+      mapRef.current = map;
+    } catch {
+      // El linter marca este setState dentro de un efecto, y aqui es correcto: no hay otra forma
+      // de volver a pintar cuando una biblioteca externa falla al inicializarse sobre un nodo que
+      // solo existe despues del render. Es el unico camino que lo hace, y solo si Leaflet revienta.
+      setFailed(true);
+      return;
+    }
+
+    // Este mapa vive detrás de una pestaña dentro de un drawer, así que casi nunca se monta con
+    // su tamaño final: Leaflet mide un contenedor a medio abrir - o de altura cero, si la
+    // pestaña aún no estaba activa - y deja las teselas grises hasta que algo lo toca. Observar
+    // el tamaño lo corrige sin depender de la animación ni de qué pestaña se abrió primero.
+    const observer = new ResizeObserver(() => map.invalidateSize());
+    observer.observe(container);
 
     return () => {
-      cancelled = true;
-      markersRef.current.forEach((marker) => marker.setMap(null));
-      markersRef.current = [];
-      polylineRef.current?.setMap(null);
-      polylineRef.current = null;
+      observer.disconnect();
+      map.remove();
       mapRef.current = null;
-      markerCtorRef.current = null;
-      boundsCtorRef.current = null;
-      polylineCtorRef.current = null;
+      layersRef.current = [];
     };
   }, []);
 
   useEffect(() => {
     const map = mapRef.current;
-    const Marker = markerCtorRef.current;
-    const LatLngBounds = boundsCtorRef.current;
-    const Polyline = polylineCtorRef.current;
-    if (!map || !Marker || !LatLngBounds || !Polyline || status !== "ready") return;
+    if (!map) return;
 
-    markersRef.current.forEach((marker) => marker.setMap(null));
-    markersRef.current = [];
-    polylineRef.current?.setMap(null);
-    polylineRef.current = null;
+    layersRef.current.forEach((layer) => layer.remove());
+    layersRef.current = [];
 
-    const path: google.maps.LatLngLiteral[] = [];
+    const path: L.LatLngExpression[] = [];
+    const add = (layer: L.Layer) => { layer.addTo(map); layersRef.current.push(layer); };
 
     if (origin && origin.latitude !== null && origin.longitude !== null) {
-      const position = { lat: origin.latitude, lng: origin.longitude };
+      const position: L.LatLngTuple = [origin.latitude, origin.longitude];
       path.push(position);
-      markersRef.current.push(
-        new Marker({ map, position, title: origin.label, label: markerLabel("0", true), icon: markerIcon(true), zIndex: 500 }),
-      );
+      add(L.marker(position, {
+        icon: stopIcon("0", true, ink), title: origin.label, zIndexOffset: 500, keyboard: false,
+      }));
     }
 
     stops.forEach((stop) => {
       if (stop.latitude === null || stop.longitude === null) return;
-      const position = { lat: stop.latitude, lng: stop.longitude };
+      const position: L.LatLngTuple = [stop.latitude, stop.longitude];
       path.push(position);
       const selected = stop.id === selectedStopId;
-      const marker = new Marker({
-        map,
-        position,
+      const marker = L.marker(position, {
+        icon: stopIcon(String(stop.sequence), selected, ink),
         title: stop.label,
-        label: markerLabel(String(stop.sequence), selected),
-        icon: markerIcon(selected),
-        zIndex: selected ? 400 : 100 + stop.sequence,
+        zIndexOffset: selected ? 400 : 100 + stop.sequence,
       });
-      if (onSelectStop) marker.addListener("click", () => onSelectStop(stop.id));
-      markersRef.current.push(marker);
+      marker.on("click", () => onSelectRef.current?.(stop.id));
+      add(marker);
     });
 
+    // La polilínea va DEBAJO de los marcadores, y nunca incluye al vehículo: une las paradas
+    // planificadas en su orden, en líneas rectas, porque una ruta calculada afirmaría un camino
+    // que nadie eligió.
     if (path.length >= 2) {
-      polylineRef.current = new Polyline({ map, path, strokeColor: MUTED, strokeOpacity: 0.8, strokeWeight: 2, geodesic: true });
+      add(L.polyline(path, { color: LINE, weight: 2, opacity: 0.8 }));
     }
 
-    // Después de la polilínea, para que la posición reportada nunca forme parte del camino
-    // planificado, y por encima de todos los marcadores de parada: cuando el camión está parado
-    // en la parada 3, la respuesta a "dónde está" no puede quedar escondida detrás de la
-    // respuesta a "a dónde debe ir".
-    let vehiclePosition: google.maps.LatLngLiteral | null = null;
+    // Por encima de todos los marcadores de parada: cuando el camión está parado en la parada 3,
+    // la respuesta a "dónde está" no puede quedar escondida detrás de la respuesta a "a dónde
+    // debe ir".
+    let vehiclePosition: L.LatLngTuple | null = null;
     if (vehicle) {
-      vehiclePosition = { lat: vehicle.latitude, lng: vehicle.longitude };
-      markersRef.current.push(
-        new Marker({ map, position: vehiclePosition, title: vehicle.label, icon: vehicleIcon(vehicleColor), zIndex: 900 }),
-      );
+      vehiclePosition = [vehicle.latitude, vehicle.longitude];
+      add(L.marker(vehiclePosition, {
+        icon: vehicleIcon(vehicleColor), title: vehicle.label, zIndexOffset: 900, keyboard: false,
+      }));
     }
 
     if (path.length === 0 && !vehiclePosition) return;
-    const bounds = new LatLngBounds();
-    path.forEach((position) => bounds.extend(position));
-    if (vehiclePosition) bounds.extend(vehiclePosition);
-    map.fitBounds(bounds);
-  }, [origin, stops, vehicle, selectedStopId, status, onSelectStop, vehicleColor]);
+    const everything = vehiclePosition ? [...path, vehiclePosition] : path;
+    const bounds = L.latLngBounds(everything as L.LatLngTuple[]);
+    // Un solo punto da unos límites sin área, y encuadrarlos lleva al zoom máximo sobre un
+    // tejado. Con uno se centra a escala de ciudad; con varios se encuadran todos.
+    if (everything.length === 1) {
+      map.setView(bounds.getCenter(), 14);
+    } else {
+      map.fitBounds(bounds, { padding: [32, 32] });
+    }
+  }, [origin, stops, vehicle, selectedStopId, ink, vehicleColor]);
 
-  if (status === "unavailable") {
+  if (failed) {
     return (
       <Alert severity="info" sx={{ mb: 2 }} role="status">
         {t("El mapa no está disponible. Puedes ingresar la latitud y la longitud manualmente.")}
@@ -221,14 +204,21 @@ export function TripStopMap({
         ref={containerRef}
         role="application"
         aria-label={t("Mapa de paradas")}
-        sx={{ height, borderRadius: "10px", border: "1px solid", borderColor: "divider", overflow: "hidden" }}
+        sx={{
+          height,
+          borderRadius: "10px",
+          border: "1px solid",
+          borderColor: "divider",
+          overflow: "hidden",
+          // Leaflet se dibuja en capas posicionadas; sin esto se monta sobre el drawer.
+          "& .leaflet-pane": { zIndex: 0 },
+          "& .leaflet-top, & .leaflet-bottom": { zIndex: 1 },
+          ...(theme.palette.mode === "dark" && needsDarkTileFilter()
+            ? { "& .leaflet-tile": { filter: DARK_TILE_FILTER } }
+            : {}),
+        }}
       />
-      {status === "loading" && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
-          {t("Cargando el mapa...")}
-        </Typography>
-      )}
-      {status === "ready" && unmappedCount > 0 && (
+      {unmappedCount > 0 && (
         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
           {unmappedCount === 1
             ? t("{{count}} destino no tiene coordenadas y no aparece en el mapa.", { count: unmappedCount })

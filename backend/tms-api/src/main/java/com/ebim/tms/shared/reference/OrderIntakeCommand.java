@@ -47,7 +47,10 @@ public record OrderIntakeCommand(
         lines = lines == null ? List.of() : List.copyOf(lines);
     }
 
-    /** One requested line; mirrors {@code OrderRequest.OrderLineRequest} without its types. */
+    /**
+     * One requested line; mirrors {@code OrderRequest.OrderLineRequest} without its types. The
+     * physical fields (V59, ADR-022 section 2) are optional; {@code stackMode} is the plain code.
+     */
     public record Line(
             String materialCode,
             String materialDescription,
@@ -55,6 +58,21 @@ public record OrderIntakeCommand(
             String uom,
             BigDecimal unitWeightKg,
             BigDecimal unitVolumeM3,
-            BigDecimal palletQuantity) {
+            BigDecimal palletQuantity,
+            BigDecimal lengthM,
+            BigDecimal widthM,
+            BigDecimal heightM,
+            String stackMode,
+            Integer stackMaxQuantity,
+            BigDecimal nestIncrementM,
+            BigDecimal maxTopLoadKg,
+            Boolean orientationLocked) {
+
+        /** A line without physical fields. */
+        public Line(String materialCode, String materialDescription, BigDecimal quantity, String uom,
+                BigDecimal unitWeightKg, BigDecimal unitVolumeM3, BigDecimal palletQuantity) {
+            this(materialCode, materialDescription, quantity, uom, unitWeightKg, unitVolumeM3, palletQuantity, null,
+                    null, null, null, null, null, null, null);
+        }
     }
 }

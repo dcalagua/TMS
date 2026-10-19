@@ -5,6 +5,8 @@ import com.ebim.tms.integration.application.IntegrationProperties;
 import com.ebim.tms.shared.api.ApiExceptionResponder;
 import com.ebim.tms.shared.security.CommercialAccessFilter;
 import com.ebim.tms.shared.security.CommercialAccessGate;
+import com.ebim.tms.shared.security.TenantOperationGate;
+import com.ebim.tms.shared.security.TenantSuspensionFilter;
 import com.ebim.tms.shared.security.TmsAccessDeniedHandler;
 import com.ebim.tms.shared.security.TmsAuthenticationEntryPoint;
 import org.springframework.beans.factory.ObjectProvider;
@@ -60,7 +62,8 @@ public class IntegrationSecurityConfig {
             ApiExceptionResponder apiExceptionResponder,
             TmsAuthenticationEntryPoint authenticationEntryPoint,
             TmsAccessDeniedHandler accessDeniedHandler,
-            ObjectProvider<CommercialAccessGate> commercialAccessGate) throws Exception {
+            ObjectProvider<CommercialAccessGate> commercialAccessGate,
+            ObjectProvider<TenantOperationGate> tenantOperationGate) throws Exception {
 
         http
                 .securityMatcher(INTEGRATION_PATH)
@@ -88,6 +91,11 @@ public class IntegrationSecurityConfig {
         // access rule as for people applies (ADR-017), right after the credential binds the company.
         commercialAccessGate.ifAvailable(gate -> http.addFilterAfter(
                 new CommercialAccessFilter(gate, apiExceptionResponder), IntegrationAuthenticationFilter.class));
+
+        // An operationally suspended organization (lifecycle.v1, ADR-021) cannot write through its partner
+        // credentials either: same filter, same 423, reads still allowed.
+        tenantOperationGate.ifAvailable(gate -> http.addFilterAfter(
+                new TenantSuspensionFilter(gate, apiExceptionResponder), IntegrationAuthenticationFilter.class));
 
         return http.build();
     }

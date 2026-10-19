@@ -74,7 +74,14 @@ public class CompanyAdministrationService {
                 upper(request.shipmentNumberPrefix()),
                 request.dispatchConfirmationMode() == null
                         ? before.settings().dispatchConfirmationMode()
-                        : request.dispatchConfirmationMode());
+                        : request.dispatchConfirmationMode(),
+                null, null,
+                request.accrualTrigger() == null
+                        ? before.settings().accrualTrigger()
+                        : request.accrualTrigger(),
+                request.costAllocationBasis() == null
+                        ? before.settings().costAllocationBasis()
+                        : request.costAllocationBasis());
 
         if (repository.updateCompany(scope.companyId(), name, taxIdentifier, timeZone, actorId) == 0) {
             // The row was there a statement ago, so this is a company deactivated or removed
@@ -197,6 +204,16 @@ public class CompanyAdministrationService {
             // Who may dispatch is the most consequential line on this screen: audited with both ends.
             changes.put("dispatchConfirmationModeFrom", before.settings().dispatchConfirmationMode().name());
             changes.put("dispatchConfirmationMode", after.dispatchConfirmationMode().name());
+        }
+        if (before.settings().accrualTrigger() != after.accrualTrigger()) {
+            // Moves which month a freight cost lands in: both ends, like the dispatch mode.
+            changes.put("accrualTriggerFrom", before.settings().accrualTrigger().name());
+            changes.put("accrualTrigger", after.accrualTrigger().name());
+        }
+        if (before.settings().costAllocationBasis() != after.costAllocationBasis()) {
+            // Changes what every later allocation run divides by (V68): both ends.
+            changes.put("costAllocationBasisFrom", String.valueOf(before.settings().costAllocationBasis()));
+            changes.put("costAllocationBasis", String.valueOf(after.costAllocationBasis()));
         }
         return changes;
     }

@@ -1,6 +1,7 @@
 package com.ebim.tms.settlement.infrastructure;
 
 import com.ebim.tms.settlement.domain.CarrierInvoice;
+import com.ebim.tms.settlement.domain.tax.DocumentKind;
 import com.ebim.tms.settlement.domain.InvoiceStatus;
 import jakarta.persistence.LockModeType;
 import java.util.Collection;
@@ -62,8 +63,99 @@ public interface CarrierInvoiceRepository extends JpaRepository<CarrierInvoice, 
     default List<UUID> findTripIdsBilledOnOtherInvoices(UUID companyId, Collection<UUID> tripIds,
             UUID excludedInvoiceId) {
         return findTripIdsBilledOnOtherInvoices(companyId, tripIds, excludedInvoiceId,
-                InvoiceStatus.REJECTED);
+                InvoiceStatus.REJECTED, DocumentKind.INVOICE);
     }
+
+    /**
+     * Which (shipment, charge) pairs of these shipments some <b>other</b> live invoice of this
+     * company already bills (V64) - the question {@link #findTripIdsBilledOnOtherInvoices} asks,
+     * at the grain the matcher now decides duplicates on. Same exclusions, same reasons. A null
+     * charge code (every V46 line) reads as {@code FREIGHT}.
+     */
+    default java.util.Set<com.ebim.tms.settlement.domain.FreightMatcher.TripCharge> findTripChargesBilledOnOtherInvoices(
+            UUID companyId, Collection<UUID> tripIds, UUID excludedInvoiceId) {
+        java.util.Set<com.ebim.tms.settlement.domain.FreightMatcher.TripCharge> charges = new java.util.LinkedHashSet<>();
+        for (Object[] row : findTripChargeRowsBilledOnOtherInvoices(companyId, tripIds, excludedInvoiceId,
+                InvoiceStatus.REJECTED, DocumentKind.INVOICE)) {
+            charges.add(new com.ebim.tms.settlement.domain.FreightMatcher.TripCharge((UUID) row[0],
+                    (com.ebim.tms.settlement.domain.ChargeCode) row[1]));
+        }
+        return charges;
+    }
+
+    /** Invoices by id within a company: the journal names the invoice a consumption came from (V65). */
+    List<CarrierInvoice> findByCompanyIdAndIdIn(UUID companyId, Collection<UUID> ids);
+
+    /**
+     * What already-approved invoices of one currency billed for one trip, per invoice: rows of
+     * (invoice id, invoice number, sum of that trip's lines). Read when an accrual is born after its
+     * invoice was approved (V65), so the order the two happened in does not change the balance.
+     */
+    @Query("""
+            select i.id, i.invoiceNumber, sum(l.lineAmount)
+              from CarrierInvoiceLine l
+              join l.invoice i
+             where l.companyId = :companyId
+               and l.tripId = :tripId
+               and i.currency = :currency
+               and i.status in :statuses
+               and i.documentKind = :invoiceType
+             group by i.id, i.invoiceNumber
+            """)
+    List<Object[]> sumApprovedLinesForTrip(@Param("companyId") UUID companyId, @Param("tripId") UUID tripId,
+            @Param("currency") String currency, @Param("statuses") Collection<InvoiceStatus> statuses,
+            @Param("invoiceType") DocumentKind invoiceType);
+
+    /**
+     * The same, for invoices only (V66): a credit or debit note corrects the payable and is booked
+     * against expense by the ERP; it does not draw on the accrual (DECISIONS_LOG, phase 60).
+     */
+    default List<Object[]> sumApprovedLinesForTrip(UUID companyId, UUID tripId, String currency,
+            Collection<InvoiceStatus> statuses) {
+        return sumApprovedLinesForTrip(companyId, tripId, currency, statuses, DocumentKind.INVOICE);
+    }
+
+    /** Whether this issuer already sent this fiscal document (V66, backed by {@code uq_carrier_invoice_fiscal_document}). */
+    boolean existsByCompanyIdAndFiscalCountryAndIssuerTaxIdAndDocumentKindAndFiscalDocumentNumber(UUID companyId,
+            String fiscalCountry, String issuerTaxId, DocumentKind documentKind, String fiscalDocumentNumber);
+
+    /** A fiscal document as the ERP names it (V67, the payment's invoice key). */
+    Optional<CarrierInvoice> findByCompanyIdAndFiscalCountryAndIssuerTaxIdAndDocumentKindAndFiscalDocumentNumber(
+            UUID companyId, String fiscalCountry, String issuerTaxId, DocumentKind documentKind,
+            String fiscalDocumentNumber);
+
+    /** A document without a fiscal identity, by its carrier and printed number (V67). */
+    Optional<CarrierInvoice> findByCompanyIdAndCarrierIdAndInvoiceNumber(UUID companyId, UUID carrierId,
+            String invoiceNumber);
+
+    /**
+     * The carrier portal's list (V67): one carrier's documents, newest first. The carrier predicate is
+     * also {@code p_carrier_scope} in the database; this filter is the one Java owes on its own.
+     */
+    List<CarrierInvoice> findByCompanyIdAndCarrierIdOrderByInvoiceDateDescCreatedAtDesc(UUID companyId,
+            UUID carrierId, Pageable pageable);
+
+    Optional<CarrierInvoice> findByIdAndCompanyIdAndCarrierId(UUID id, UUID companyId, UUID carrierId);
+
+    /** The credit and debit notes that correct one invoice (V66). */
+    List<CarrierInvoice> findByCompanyIdAndReferencedInvoiceIdOrderByCreatedAtAsc(UUID companyId,
+            UUID referencedInvoiceId);
+
+    @Query("""
+            select distinct l.tripId, l.chargeCode
+              from CarrierInvoiceLine l
+              join l.invoice i
+             where l.companyId = :companyId
+               and l.tripId in :tripIds
+               and i.id <> :excludedInvoiceId
+               and i.status <> :excludedStatus
+               and i.documentKind = :invoiceType
+            """)
+    List<Object[]> findTripChargeRowsBilledOnOtherInvoices(@Param("companyId") UUID companyId,
+            @Param("tripIds") Collection<UUID> tripIds,
+            @Param("excludedInvoiceId") UUID excludedInvoiceId,
+            @Param("excludedStatus") InvoiceStatus excludedStatus,
+            @Param("invoiceType") DocumentKind invoiceType);
 
     /**
      * The query behind it. {@code REJECTED} arrives as a bound parameter rather than as an enum
@@ -79,9 +171,82 @@ public interface CarrierInvoiceRepository extends JpaRepository<CarrierInvoice, 
                and l.tripId in :tripIds
                and i.id <> :excludedInvoiceId
                and i.status <> :excludedStatus
+               and i.documentKind = :invoiceType
             """)
     List<UUID> findTripIdsBilledOnOtherInvoices(@Param("companyId") UUID companyId,
             @Param("tripIds") Collection<UUID> tripIds,
             @Param("excludedInvoiceId") UUID excludedInvoiceId,
-            @Param("excludedStatus") InvoiceStatus excludedStatus);
+            @Param("excludedStatus") InvoiceStatus excludedStatus,
+            @Param("invoiceType") DocumentKind invoiceType);
+
+    /**
+     * Settlement KPIs over a range of invoice dates, per carrier and currency, plus one grand row
+     * (carrier and currency null) whose counts and hours span them all (V64, ADR-024 item 7).
+     *
+     * <p>"Observed" is the positive {@code TOTAL_AMOUNT} difference - one per invoice at most, so
+     * line and header differences are never counted twice; "saved" is the part of it refused, by
+     * rejecting the difference or the invoice. The cycle runs from {@code created_at} (when TMS
+     * received it) to the first APPROVED decision; {@code percentile_cont} skips the unapproved.
+     */
+    @Query(value = """
+            WITH inv AS (
+                SELECT i.carrier_id, i.currency, i.created_at,
+                       (SELECT min(a.decided_at) FROM tms.settlement_approval a
+                         WHERE a.company_id = i.company_id AND a.carrier_invoice_id = i.id
+                           AND a.decision = 'APPROVED') AS approved_at,
+                       EXISTS (SELECT 1 FROM tms.freight_discrepancy d
+                                WHERE d.company_id = i.company_id AND d.carrier_invoice_id = i.id)
+                           AS has_discrepancy,
+                       (SELECT coalesce(sum(d.difference_amount), 0) FROM tms.freight_discrepancy d
+                         WHERE d.company_id = i.company_id AND d.carrier_invoice_id = i.id
+                           AND d.type = 'TOTAL_AMOUNT' AND d.difference_amount > 0) AS observed,
+                       (SELECT coalesce(sum(d.difference_amount), 0) FROM tms.freight_discrepancy d
+                         WHERE d.company_id = i.company_id AND d.carrier_invoice_id = i.id
+                           AND d.type = 'TOTAL_AMOUNT' AND d.difference_amount > 0
+                           AND (d.status = 'REJECTED' OR i.status = 'REJECTED')) AS saved
+                  FROM tms.carrier_invoice i
+                 WHERE i.company_id = :companyId
+                   AND i.invoice_date BETWEEN :fromDate AND :toDate
+            )
+            SELECT carrier_id AS "carrierId",
+                   currency AS "currency",
+                   count(*) AS "invoices",
+                   count(approved_at) AS "approved",
+                   count(*) FILTER (WHERE has_discrepancy) AS "withDiscrepancy",
+                   sum(observed) AS "amountObserved",
+                   sum(saved) AS "amountSaved",
+                   percentile_cont(0.5) WITHIN GROUP (
+                       ORDER BY extract(epoch FROM approved_at - created_at) / 3600.0) AS "cycleMedianHours",
+                   percentile_cont(0.9) WITHIN GROUP (
+                       ORDER BY extract(epoch FROM approved_at - created_at) / 3600.0) AS "cycleP90Hours",
+                   (GROUPING(carrier_id, currency) <> 0) AS "grandTotal"
+              FROM inv
+             GROUP BY GROUPING SETS ((carrier_id, currency), ())
+             ORDER BY "grandTotal", carrier_id, currency
+            """, nativeQuery = true)
+    List<SettlementKpiRow> settlementKpis(@Param("companyId") UUID companyId,
+            @Param("fromDate") java.time.LocalDate from, @Param("toDate") java.time.LocalDate to);
+
+    /** The projection behind {@link #settlementKpis}; translated to a port type by the adapter. */
+    interface SettlementKpiRow {
+        UUID getCarrierId();
+
+        String getCurrency();
+
+        long getInvoices();
+
+        long getApproved();
+
+        long getWithDiscrepancy();
+
+        java.math.BigDecimal getAmountObserved();
+
+        java.math.BigDecimal getAmountSaved();
+
+        Double getCycleMedianHours();
+
+        Double getCycleP90Hours();
+
+        boolean getGrandTotal();
+    }
 }

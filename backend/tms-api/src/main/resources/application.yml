@@ -121,6 +121,91 @@ tms:
     # stay absent, so "did not record its revision" stays distinguishable from "is the wrong
     # revision".
     commit: ${TMS_RELEASE_COMMIT:}
+  planning:
+    geometry:
+      # Load geometry by footprint (ADR-022, V62). Used only when the company has not set its own
+      # value in company_settings (reference_load_height_m, load_floor_fill_factor) and, for the
+      # fill factor, when the vehicle type has none either. Overridable per deployment.
+      default-reference-height-m: ${TMS_GEOMETRY_REFERENCE_HEIGHT_M:2.40}
+      default-floor-fill-factor: ${TMS_GEOMETRY_FLOOR_FILL_FACTOR:0.85}
+  settlement:
+    # Payment terms of a carrier invoice (ADR-023 section 2, V67, D-06): what a carrier without its
+    # own terms gets when its company has no default either. due_date = invoice_date + terms, frozen
+    # at approval.
+    default-payment-terms-days: ${TMS_SETTLEMENT_DEFAULT_PAYMENT_TERMS_DAYS:30}
+    accrual:
+      # Freight accruals (ADR-023, V65). The sweep reads committed trip facts - departures, or
+      # completions when the company accrues at delivery - and accrues what is missing, then
+      # adjusts open accruals to closed actual costs. `lookback` bounds the automatic pass; older
+      # trips stay listed as unaccrued and can be accrued with POST /settlement/accruals/sweep.
+      # OFF by default: the first pass accrues (books journal entries for) every trip of the last
+      # `lookback` days of every active, non-suspended company. Turn it on per deployment, once
+      # finance has the GL mappings in place, with TMS_ACCRUAL_SWEEP_ENABLED=true (and, for a first
+      # run that should not reach back a month, a shorter TMS_ACCRUAL_SWEEP_LOOKBACK).
+      sweep-enabled: ${TMS_ACCRUAL_SWEEP_ENABLED:false}
+      sweep-interval: ${TMS_ACCRUAL_SWEEP_INTERVAL:5m}
+      lookback: ${TMS_ACCRUAL_SWEEP_LOOKBACK:31d}
+  finance:
+    cost-allocation:
+      # Cost to serve (ADR-026, V68, D-08). The base a company without its own
+      # (company_settings.cost_allocation_basis) splits a trip's cost by: WEIGHT, EFFECTIVE_VOLUME,
+      # FLOOR_AREA, PALLETS, STOPS or EQUAL. The sweep allocates trips that left within `lookback` and
+      # re-allocates those whose cost was closed after their current run; older trips are
+      # recalculated by hand (POST /settlement/cost-allocation/trips/{id}/recalculate).
+      default-basis: ${TMS_COST_ALLOCATION_DEFAULT_BASIS:WEIGHT}
+      # OFF by default, like the accrual sweep: the first pass allocates every trip of the last
+      # `lookback` days of every active, non-suspended company. Turn it on per deployment with
+      # TMS_COST_ALLOCATION_SWEEP_ENABLED=true. Invoice approval and "Recalcular" allocate either way.
+      sweep-enabled: ${TMS_COST_ALLOCATION_SWEEP_ENABLED:false}
+      sweep-interval: ${TMS_COST_ALLOCATION_SWEEP_INTERVAL:10m}
+      lookback: ${TMS_COST_ALLOCATION_SWEEP_LOOKBACK:62d}
+    tax:
+      # Tax regimes per country (ADR-027, V66, decision D-06): what a company that has not set its own
+      # value (company_settings.fiscal_country / vat_rate / freight_vat_rate and
+      # company_tax_withholding_setting) gets. The regime is selected by the company's fiscal country
+      # (null = default_country): PE and EC have their own, any other country gets `generic`.
+      # TMS RECEIVES carrier documents and checks their shape; it issues, signs or sends nothing to a
+      # tax authority. Every rate below is a default to VERIFY WITH THE CUSTOMER'S ACCOUNTANT.
+      pe:
+        # Peru. The TMS_PE_* names are the ones phase 60 used (backward compatible).
+        vat-rate: ${TMS_PE_IGV_RATE:18.00}
+        freight-vat-rate: ${TMS_PE_FREIGHT_IGV_RATE:18.00}
+        allowed-vat-rates: ${TMS_PE_ALLOWED_IGV_RATES:18.00,0.00}
+        withholdings:
+          # SPOT annex code 027 (transport of goods), 4%, on PEN totals STRICTLY above S/ 400, whole soles.
+          detraction:
+            enabled: ${TMS_PE_DETRACTION_ENABLED:true}
+            code: ${TMS_PE_DETRACTION_CODE:027}
+            rate: ${TMS_PE_DETRACTION_RATE:4.00}
+            threshold-amount: ${TMS_PE_DETRACTION_THRESHOLD_PEN:400.00}
+          # Only where the company is a retention agent, and never where detraction applies.
+          retention:
+            enabled: ${TMS_PE_RETENTION_AGENT:false}
+            rate: ${TMS_PE_RETENTION_RATE:3.00}
+      ec:
+        # Ecuador. IVA 15% general since 2024-04-01; domestic land freight is 0% (LRTI art. 56), so a
+        # freight document is previewed at 0%. Allowed rates: 0, 5 and 15.
+        vat-rate: ${TMS_EC_IVA_RATE:15.00}
+        freight-vat-rate: ${TMS_EC_FREIGHT_IVA_RATE:0.00}
+        allowed-vat-rates: ${TMS_EC_ALLOWED_IVA_RATES:0.00,5.00,15.00}
+        withholdings:
+          # Retención en la fuente de IR, code 310 (transport of goods), 1% of the subtotal. SRI
+          # Resolution NAC-DGERCGC26-00000009 (in force 2026-03-01) replaced the table: CONFIRM the 1%.
+          income-tax:
+            enabled: ${TMS_EC_IR_WITHHOLDING_ENABLED:true}
+            code: ${TMS_EC_IR_WITHHOLDING_CODE:310}
+            rate: ${TMS_EC_IR_WITHHOLDING_RATE:1.00}
+          # Retención de IVA, 70% of the VAT for services (30/70/100 per NAC-DGERCGC20-00000061), only
+          # where the company is a VAT-withholding agent. Off by default; yields nothing on VAT 0%.
+          vat:
+            enabled: ${TMS_EC_IVA_WITHHOLDING_ENABLED:false}
+            rate: ${TMS_EC_IVA_WITHHOLDING_RATE:70.00}
+      generic:
+        # Any other country: no currency enforced, no withholdings, any VAT rate 0 <= r < 100 unless a
+        # list is given. No general rate is assumed: a company sets its own vat_rate to get a preview.
+        vat-rate: ${TMS_GENERIC_VAT_RATE:}
+        freight-vat-rate: ${TMS_GENERIC_FREIGHT_VAT_RATE:}
+        allowed-vat-rates: ${TMS_GENERIC_ALLOWED_VAT_RATES:}
   security:
     jwt:
       # Supabase Auth coordinates. No default: a deployment that does not set these fails at

@@ -1,6 +1,7 @@
 package com.ebim.tms.fleet.application;
 
 import com.ebim.tms.fleet.domain.VehicleBodyType;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -32,5 +33,11 @@ public record VehicleTypeRequest(
         boolean temperatureControlled,
         BigDecimal minTemperatureCelsius,
         BigDecimal maxTemperatureCelsius,
-        @Min(value = 1, message = "must be at least 1") Integer axles) {
+        @Min(value = 1, message = "must be at least 1") Integer axles,
+        /**
+         * Share of {@code length x width} a load can cover (V62, ADR-022 section 5); null = the
+         * company's default, else the deployment's.
+         */
+        @DecimalMin(value = "0.0", inclusive = false, message = "must be greater than zero")
+        @DecimalMax(value = "1.0", message = "must be at most 1") BigDecimal loadFloorFillFactor) {
 }
