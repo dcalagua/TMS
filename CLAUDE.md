@@ -72,6 +72,14 @@ Simple now + correctly separable + scalable later.
     docs                  Architecture, ADRs, database, security, overnight reports
     scripts               Local developer/CI helper scripts
 
+## Product roadmap
+
+- `docs/roadmap/ROADMAP.md` - the product roadmap (in Spanish, for the business owner): where the TMS
+  stands today, what blocks production (H0), the next 4-6 weeks (H1), the next quarter (H2), vision,
+  explicit out-of-scope items (no issuing of electronic documents, no moving money) and the EWM <-> TMS
+  dependency table shared verbatim with the EWM roadmap. Supersedes `docs/product/ROADMAP_NEXT.md` as
+  the roadmap. Code and ADRs stay in English.
+
 ## Architecture references
 
 Authoritative documents live under `docs/architecture/`:
