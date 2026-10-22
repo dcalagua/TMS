@@ -148,6 +148,14 @@ public enum Capability {
     COST_ALLOCATION_MANAGE(Permission.SETTLEMENT_COST_ALLOCATION_MANAGE),
 
     /**
+     * Freight claims and the incident centre (migration V71): reading them, opening and working
+     * one, and deciding it - the last of which is four-eyes against whoever opened the claim.
+     */
+    CLAIMS_VIEW(Permission.SETTLEMENT_CLAIM_READ),
+    CLAIMS_MANAGE(Permission.SETTLEMENT_CLAIM_MANAGE),
+    CLAIMS_DECIDE(Permission.SETTLEMENT_CLAIM_DECIDE),
+
+    /**
      * The company's fiscal regime (migration V66, ADR-027): editing its fiscal country, VAT rates and
      * withholdings. Reading the resolved regime uses {@link #SETTLEMENT_VIEW}.
      */

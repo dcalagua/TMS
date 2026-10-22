@@ -78,6 +78,10 @@ export const PayablesPage = lazy(() =>
   import("../pages/settlement/PayablesPage").then((m) => ({ default: m.PayablesPage })));
 export const CostToServePage = lazy(() =>
   import("../pages/settlement/CostToServePage").then((m) => ({ default: m.CostToServePage })));
+export const ClaimsPage = lazy(() =>
+  import("../pages/claims/ClaimsPage").then((m) => ({ default: m.ClaimsPage })));
+export const IncidentsPage = lazy(() =>
+  import("../pages/claims/IncidentsPage").then((m) => ({ default: m.IncidentsPage })));
 export const WorkAssignmentsPage = lazy(() =>
   import("../pages/fleet/WorkAssignmentsPage").then((m) => ({ default: m.WorkAssignmentsPage })));
 export const OwnFleetCostProfilesPage = lazy(() =>

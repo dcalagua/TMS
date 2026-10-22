@@ -10,7 +10,7 @@ import {
   PlaceRounded, BuildRounded, CheckRounded, SkipNextRounded, ReportProblemRounded,
   InventoryRounded, AttachFileRounded, DownloadRounded, BadgeRounded, EditRounded,
   HourglassTopRounded, LocalShippingOutlined, MapOutlined, PlaceOutlined, ReportProblemOutlined,
-  HistoryRounded, Inventory2Outlined, PrintRounded, ShareRounded,
+  HistoryRounded, Inventory2Outlined, PrintRounded, ShareRounded, GavelRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
@@ -100,6 +100,9 @@ const STOP_ACTIONS = {
  * proveedor externo y es la única lectura de esta pantalla que puede fallar legítimamente
  * mientras el resto funciona.
  */
+/** V71: los resultados de una entrega que dejan algo que reclamarle al transportista. */
+const SHORTFALL_RESULTS = new Set(["PARTIAL", "REJECTED", "FAILED"]);
+
 export function TripWorkspacePage() {
   const theme = useTheme();
   const isNarrow = useMediaQuery(theme.breakpoints.down("lg"));
@@ -127,6 +130,8 @@ export function TripWorkspacePage() {
   /** Los documentos de un envío son los de sus pedidos (ADR-015): el endpoint pide además
    * `orders.order:read`, así que sin él la tarjeta no se pide. */
   const canReadOrders = hasPermission("orders.order:read");
+  /** V71: un faltante o una incidencia se reclaman al transportista desde aquí, ya prellenado. */
+  const canClaim = hasPermission("settlement.claim:manage");
   const queryClient = useQueryClient();
 
   const queryKey = tripQueryKeys.detail(companyId, tripId);
@@ -857,6 +862,19 @@ export function TripWorkspacePage() {
                                           {recorded ? <EditRounded fontSize="small" /> : <InventoryRounded fontSize="small" />}
                                         </IconButton>
                                       </Tooltip>
+                                      {recorded && canClaim && trip.carrierId !== null
+                                        && SHORTFALL_RESULTS.has(recorded.result) && (
+                                        <Tooltip title={t("Abrir reclamo")}>
+                                          <IconButton
+                                            size="small" component={Link}
+                                            to={`/settlement/claims?fromDelivery=${recorded.id}`}
+                                            aria-label={t("Abrir reclamo")}
+                                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                                          >
+                                            <GavelRounded fontSize="small" />
+                                          </IconButton>
+                                        </Tooltip>
+                                      )}
                                       {recorded && (
                                         <Tooltip title={t("Adjuntar prueba de entrega")}>
                                           <IconButton
@@ -938,6 +956,15 @@ export function TripWorkspacePage() {
                         tone={exception.status === "OPEN" ? "overdue" : "done"}
                       />
                       <Box sx={{ flex: 1 }} />
+                      {canClaim && trip.carrierId !== null && (
+                        <Button
+                          size="small" variant="outlined" color="inherit" sx={QUIET_OUTLINE}
+                          startIcon={<GavelRounded />} component={Link}
+                          to={`/settlement/claims?fromException=${exception.id}`}
+                        >
+                          {t("Abrir reclamo")}
+                        </Button>
+                      )}
                       {canExecute && exception.status === "OPEN" && (
                         <Button
                           size="small" variant="outlined" color="inherit" sx={QUIET_OUTLINE}

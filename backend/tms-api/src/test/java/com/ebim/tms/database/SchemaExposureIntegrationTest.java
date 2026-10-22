@@ -84,6 +84,9 @@ class SchemaExposureIntegrationTest {
             "carrier_invoice_withholding", "company_tax_withholding_setting",
             // V68: cost to serve (ADR-026). The rows are append-only; a run is only ever superseded.
             "trip_cost_allocation_run", "trip_cost_allocation",
+            // V71: freight claims. A claim is cancelled or closed, never deleted; its evidence is
+            // append-only; its lines are rewritten whole while it is OPEN.
+            "freight_claim", "freight_claim_line", "freight_claim_evidence",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
             "work_assignment", "work_assignment_trip",
@@ -162,6 +165,9 @@ class SchemaExposureIntegrationTest {
             "carrier_invoice_withholding", "company_tax_withholding_setting",
             // V68: cost to serve (ADR-026). The rows are append-only; a run is only ever superseded.
             "trip_cost_allocation_run", "trip_cost_allocation",
+            // V71: freight claims. A claim is cancelled or closed, never deleted; its evidence is
+            // append-only; its lines are rewritten whole while it is OPEN.
+            "freight_claim", "freight_claim_line", "freight_claim_evidence",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
             "work_assignment", "work_assignment_trip",

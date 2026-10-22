@@ -96,6 +96,12 @@ export const CAPABILITY = {
   CARRIER_SCORECARD_VIEW: "CARRIER_SCORECARD_VIEW",
   /** ADR-027: editar el régimen fiscal de la empresa (`settlement.tax:manage`). Leerlo es `SETTLEMENT_VIEW`. */
   TAX_REGIME_MANAGE: "TAX_REGIME_MANAGE",
+  /** V71: ver los reclamos de carga y el centro de incidencias (`settlement.claim:read`). */
+  CLAIMS_VIEW: "CLAIMS_VIEW",
+  /** Abrir, corregir, enviar a revisión, anular y cerrar un reclamo (`settlement.claim:manage`). */
+  CLAIMS_MANAGE: "CLAIMS_MANAGE",
+  /** Aceptar, aceptar en parte o rechazar el reclamo que abrió **otra** persona (cuatro ojos). */
+  CLAIMS_DECIDE: "CLAIMS_DECIDE",
 } as const;
 
 /**
