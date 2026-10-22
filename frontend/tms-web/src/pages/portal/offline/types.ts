@@ -1,4 +1,5 @@
 import type { DocumentDeliveryReason } from "../../../shared/api/documentDeliveriesApi";
+import type { PortalExecutionAction } from "../../../shared/api/portalApi";
 import type { ReportStatus } from "../portalReport";
 
 /**
@@ -27,22 +28,14 @@ export interface Snapshot<T = unknown> {
  */
 export type OutboxState = "PENDING" | "SENDING" | "FAILED";
 
-/** Un reporte hecho sin red, guardado entero: campos, fotos y firma como blobs. */
-export interface OutboxEntry {
+/** Lo que toda entrada de la cola lleva, sea del tipo que sea. */
+interface OutboxEntryBase {
   id: string;
   userId: string;
   companyId: string;
   tripId: string;
-  documentId: string;
   /** El de ADR-018 §5, creado al abrir el panel: un reenvío nunca registra dos veces. */
   idempotencyKey: string;
-  status: ReportStatus;
-  reasonCode: DocumentDeliveryReason | null;
-  remark: string | null;
-  /** Cuándo tocó «Guardar» en la puerta del cliente, no cuándo se sincronizó. */
-  reportedAt: string;
-  photos: Blob[];
-  signature: Blob | null;
   createdAt: string;
   attempts: number;
   lastError: string | null;
@@ -50,10 +43,47 @@ export interface OutboxEntry {
   /** ISO-8601. Antes de esta hora el envío automático no lo reintenta (espera exponencial). */
   nextAttemptAt: string | null;
   /** Para enseñarlo en la cola sin tener que leer el viaje. */
+  shipmentNumber: string | null;
+}
+
+/**
+ * Un reporte de documento hecho sin red, guardado entero: campos, fotos y firma como blobs.
+ * `kind` falta en las entradas guardadas antes de V70: todas eran reportes de documento.
+ */
+export interface DocumentOutboxEntry extends OutboxEntryBase {
+  kind?: "DOCUMENT_REPORT";
+  documentId: string;
+  status: ReportStatus;
+  reasonCode: DocumentDeliveryReason | null;
+  remark: string | null;
+  /** Cuándo tocó «Guardar» en la puerta del cliente, no cuándo se sincronizó. */
+  reportedAt: string;
+  photos: Blob[];
+  signature: Blob | null;
   documentType: string;
   documentNumber: string;
   customerName: string | null;
-  shipmentNumber: string | null;
+}
+
+/**
+ * Una acción de la parada hecha sin red (V70): llegada, inicio de descarga, fin o no atención;
+ * el resultado de entrega de un pedido con sus fotos y firma; o una incidencia. Guardada entera,
+ * con la hora en que se tocó el botón, que es la que cuenta en el historial de la oficina.
+ */
+export interface ExecutionOutboxEntry extends OutboxEntryBase {
+  kind: "EXECUTION";
+  action: PortalExecutionAction;
+  /** Cómo se nombra en la hoja de sincronización: «Llegada · Parada 2 Bodega San Martín». */
+  title: string;
+  /** Cuándo se tocó el botón. */
+  reportedAt: string;
+}
+
+export type OutboxEntry = DocumentOutboxEntry | ExecutionOutboxEntry;
+
+/** Un reporte de documento (incluidas las entradas sin `kind` de antes de V70). */
+export function isDocumentEntry(entry: OutboxEntry): entry is DocumentOutboxEntry {
+  return entry.kind !== "EXECUTION";
 }
 
 /**

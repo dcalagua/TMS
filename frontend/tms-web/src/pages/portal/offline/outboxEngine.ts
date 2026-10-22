@@ -1,6 +1,8 @@
-import type { PortalDocument, PortalReportInput } from "../../../shared/api/portalApi";
+import type { PortalReportInput } from "../../../shared/api/portalApi";
 import { classifySendError, isOnline as browserOnline, sendErrorMessage } from "./network";
-import { byCreatedAt, type OfflineStore, type OutboxEntry } from "./types";
+import {
+  byCreatedAt, isDocumentEntry, type DocumentOutboxEntry, type OfflineStore, type OutboxEntry,
+} from "./types";
 
 /**
  * La cola de reportes hechos sin red y su envío (ADR-019 §1), sin React: se prueba con un
@@ -10,6 +12,8 @@ import { byCreatedAt, type OfflineStore, type OutboxEntry } from "./types";
  * - de la más antigua a la más nueva, una a la vez;
  * - un documento nunca adelanta a otro reporte anterior suyo que siga en cola: la corrección
  *   llegaría antes que el reporte que corrige;
+ * - las acciones de las paradas de un viaje (V70) salen en el orden en que se hicieron, una tras
+ *   otra: la entrega de un pedido no puede llegar antes que la llegada a su parada;
  * - sin respuesta o 5xx: se reintenta con espera exponencial (5 s, 10 s, 20 s… hasta 5 min);
  *   sin respuesta además corta la pasada, porque el resto tampoco saldrá;
  * - 2xx: la entrada se borra;
@@ -27,18 +31,26 @@ export function backoffDelay(attempts: number): number {
   return Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** Math.max(0, attempts - 1));
 }
 
-export type OutboxDraft = Omit<OutboxEntry,
-  "id" | "userId" | "createdAt" | "attempts" | "lastError" | "state" | "nextAttemptAt">;
+/** `Omit` que reparte sobre la unión: cada clase de entrada conserva sus propios campos. */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+type EngineOwned = "id" | "userId" | "createdAt" | "attempts" | "lastError" | "state" | "nextAttemptAt";
+
+export type OutboxDraft = DistributiveOmit<OutboxEntry, EngineOwned>;
+
+/** El borrador de un reporte de documento: lo que el panel de reporte encola. */
+export type DocumentOutboxDraft = Omit<DocumentOutboxEntry, EngineOwned>;
 
 export interface OutboxEngineDeps {
   store: OfflineStore;
   userId: string;
-  send: (entry: OutboxEntry) => Promise<PortalDocument>;
+  /** El envío de una entrada. Lo que responde el servidor solo se pasa a `onSent`. */
+  send: (entry: OutboxEntry) => Promise<unknown>;
   now?: () => number;
   isOnline?: () => boolean;
   newId?: () => string;
   /** Tras un 2xx: para invalidar las lecturas del viaje. */
-  onSent?: (entry: OutboxEntry, document: PortalDocument) => void;
+  onSent?: (entry: OutboxEntry, response: unknown) => void;
   /** Cada vez que cambia algo de la cola: para repintar. */
   onChange?: () => void;
 }
@@ -66,8 +78,18 @@ export interface OutboxEngine {
   isPaused(): boolean;
 }
 
+/**
+ * Qué entradas tienen que salir en orden entre sí: los reportes de un mismo documento, y todas
+ * las acciones de las paradas de un mismo viaje.
+ */
+export function orderingKey(entry: OutboxEntry): string {
+  return isDocumentEntry(entry)
+    ? `doc|${entry.companyId}|${entry.tripId}|${entry.documentId}`
+    : `exec|${entry.companyId}|${entry.tripId}`;
+}
+
 /** El cuerpo del POST a partir de una entrada guardada. */
-export function entryToReport(entry: OutboxEntry): PortalReportInput {
+export function entryToReport(entry: DocumentOutboxEntry): PortalReportInput {
   return {
     status: entry.status,
     reasonCode: entry.reasonCode,
@@ -96,13 +118,13 @@ export function createOutboxEngine(deps: OutboxEngineDeps): OutboxEngine {
     if (paused || !online()) return { ...result, paused };
 
     const entries = (await deps.store.listOutbox(deps.userId)).sort(byCreatedAt);
-    // Los documentos con un reporte anterior aún en cola: los posteriores esperan su turno.
+    // Lo que tiene algo anterior aún en cola (un documento, o las paradas de un viaje): lo
+    // posterior espera su turno.
     const blocked = new Set<string>();
-    const docKey = (entry: OutboxEntry) => `${entry.companyId}|${entry.tripId}|${entry.documentId}`;
 
     for (const entry of entries) {
       if (entry.state === "FAILED") continue;
-      const key = docKey(entry);
+      const key = orderingKey(entry);
       if (blocked.has(key)) { result.deferred++; continue; }
       if (!force && entry.nextAttemptAt !== null && Date.parse(entry.nextAttemptAt) > now()) {
         blocked.add(key);
@@ -112,11 +134,11 @@ export function createOutboxEngine(deps: OutboxEngineDeps): OutboxEngine {
 
       await update({ ...entry, state: "SENDING" });
       try {
-        const document = await deps.send(entry);
+        const response = await deps.send(entry);
         await deps.store.deleteOutbox(entry.id);
         changed();
         result.sent++;
-        deps.onSent?.(entry, document);
+        deps.onSent?.(entry, response);
       } catch (error) {
         const failure = classifySendError(error);
         if (failure === "auth") {
@@ -148,7 +170,7 @@ export function createOutboxEngine(deps: OutboxEngineDeps): OutboxEngine {
 
   return {
     async enqueue(draft) {
-      const entry: OutboxEntry = {
+      const entry = {
         ...draft,
         id: newId(),
         userId: deps.userId,
@@ -157,7 +179,7 @@ export function createOutboxEngine(deps: OutboxEngineDeps): OutboxEngine {
         lastError: null,
         state: "PENDING",
         nextAttemptAt: null,
-      };
+      } as OutboxEntry;
       await update(entry);
       return entry;
     },

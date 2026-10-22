@@ -7,8 +7,9 @@ import {
   ArrowBackRounded, ChevronRightRounded, CloudUploadRounded, ContentCopyRounded, DirectionsRounded, ErrorOutlineRounded,
   LockRounded,
   PersonRounded, PhotoCameraRounded, PlaceRounded, RefreshRounded, ScheduleRounded, SkipNextRounded, TripOriginRounded,
-  LocalShippingRounded,
+  LocalShippingRounded, ReportProblemRounded,
 } from "@mui/icons-material";
+import type { PortalStopTransition } from "../../shared/api/portalApi";
 import { fetchPortalTrip } from "../../shared/api/portalApi";
 import { useCompany } from "../../shared/company/CompanyContext";
 import { DocumentStatusChip } from "../../shared/ui/DocumentStatusChip";
@@ -16,15 +17,22 @@ import { EmptyState, ErrorState, StatusChip } from "../../shared/ui/components";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDateTime } from "../../lib/locale";
-import { notifyError, notifySuccess, notifyWithAction, toast } from "../../lib/ui";
+import { confirmDialog, notifyError, notifySuccess, notifyWithAction, toast } from "../../lib/ui";
 import { authorizationLabel, logisticsDocumentLabel } from "../../shared/ui/logisticsDocumentLabel";
 import { R } from "../../theme";
 import { DocumentReportDrawer, type SaveOutcome } from "./DocumentReportDrawer";
 import { OfflineBanner } from "./OfflineBanner";
 import { usePortalOffline } from "./offline/offlineContext";
 import {
-  applyOutboxOverlay, nextPendingDocument, type ShownDocument, type ShownTripDetail,
+  applyOutboxOverlay, nextPendingDocument, type ShownDocument, type ShownOrder, type ShownTripDetail,
 } from "./offline/overlay";
+import { PortalDeliveryDrawer } from "./PortalDeliveryDrawer";
+import { PortalProblemDrawer } from "./PortalProblemDrawer";
+import { StopExecution, TripIncidents } from "./PortalStopExecution";
+import {
+  ExecutionRejectedError, PORTAL_DELIVERY_REPORT, PORTAL_STOP_ACTIONS, PORTAL_STOP_EXECUTE, usePortalExecution,
+  type ExecutionOutcome,
+} from "./portalExecution";
 import { usePortalQuery } from "./offline/usePortalQuery";
 import { describeLoadError, portalTripKey } from "./portalReport";
 import { PORTAL_BAR_HEIGHT, SAFE_AREA, directionsUrl } from "./portalUi";
@@ -41,14 +49,22 @@ type ShownStop = ShownTripDetail["stops"][number];
  *
  * El servidor agrupa los documentos por parada; los de un pedido que no casó con ninguna llegan
  * en un último grupo sin parada, y se enseñan aparte en lugar de esconderse.
+ *
+ * Desde V70, mientras el viaje está en ruta, cada parada se trabaja desde aquí: «Llegué»,
+ * «Empecé la descarga», «Terminé la parada» o «No se pudo atender»; el resultado de cada pedido
+ * con sus fotos y firma; y las incidencias. Con los mismos servicios que la oficina, y con la
+ * misma cola sin señal que los documentos.
  */
 export function PortalTripPage() {
   const { tripId = "" } = useParams();
   const navigate = useNavigate();
-  const { selected } = useCompany();
+  const { selected, hasPermission } = useCompany();
   const { entries } = usePortalOffline();
   const companyId = selected?.id ?? "";
   const [openDocumentId, setOpenDocumentId] = useState<string | null>(null);
+  const [deliveryFor, setDeliveryFor] = useState<{ stopId: string; stopLabel: string; order: ShownOrder } | null>(null);
+  const [problem, setProblem] = useState<{ mode: "incident" | "fail"; stop: { id: string; label: string } | null } | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const tripQuery = usePortalQuery({
     queryKey: portalTripKey(companyId, tripId),
@@ -81,6 +97,43 @@ export function PortalTripPage() {
   }
 
   const trip = detail?.trip;
+  const onTheRoad = trip?.status === "IN_TRANSIT";
+  const canExecute = onTheRoad && hasPermission(PORTAL_STOP_EXECUTE);
+  const canReport = onTheRoad && hasPermission(PORTAL_DELIVERY_REPORT);
+  const run = usePortalExecution(companyId, tripId, trip?.shipmentNumber ?? null);
+
+  function executed(outcome: ExecutionOutcome, message: string) {
+    toast(outcome === "queued" ? t("Guardado sin conexión. Se enviará al recuperar señal.") : message,
+      outcome === "queued" ? "info" : "success");
+  }
+
+  async function transition(stop: ShownTripDetail["stops"][number], move: PortalStopTransition) {
+    if (!stop.stopId) return;
+    const label = stopLabelOf(stop);
+    if (move === "fail") { setProblem({ mode: "fail", stop: { id: stop.stopId, label } }); return; }
+    if (move === "complete" && stop.orders.some((order) => !order.delivery)) {
+      const confirmed = await confirmDialog({
+        title: t("¿Terminar la parada?"),
+        text: t("Hay pedidos de esta parada sin resultado de entrega. Podrás registrarlo después mientras el viaje siga en ruta."),
+        confirmLabel: t("Terminar igual"),
+        cancelLabel: t("Volver"),
+      });
+      if (!confirmed) return;
+    }
+    const action = PORTAL_STOP_ACTIONS.find((candidate) => candidate.transition === move);
+    const at = new Date().toISOString();
+    setBusy(true);
+    try {
+      const outcome = await run({ type: "STOP", stopId: stop.stopId, transition: move, occurredAt: at },
+        `${t(action?.label ?? move)} · ${label}`, crypto.randomUUID(), at);
+      executed(outcome, t("Parada actualizada"));
+    } catch (error) {
+      notifyError(error instanceof ExecutionRejectedError ? error.message : t("No se pudo guardar."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const reported = trip ? trip.documentCount - trip.pendingCount : 0;
   const progress = trip && trip.documentCount > 0 ? Math.round((reported / trip.documentCount) * 100) : 0;
 
@@ -146,6 +199,17 @@ export function PortalTripPage() {
             </Alert>
           )}
 
+          {canExecute && (
+            <Button
+              variant="outlined" color="warning" startIcon={<ReportProblemRounded />}
+              onClick={() => setProblem({ mode: "incident", stop: null })}
+              sx={{ minHeight: 48, fontWeight: 800, textTransform: "none", justifySelf: "start" }}
+            >
+              {t("Reportar incidencia del viaje")}
+            </Button>
+          )}
+          <TripIncidents incidents={detail.incidents} />
+
           {detail.stops.length === 0 ? (
             <EmptyState title={t("Sin documentos")} message={t("Este viaje no lleva documentos que reportar.")} />
           ) : (
@@ -156,6 +220,14 @@ export function PortalTripPage() {
                   stop={stop}
                   last={index === detail.stops.length - 1}
                   onOpen={(doc) => setOpenDocumentId(doc.documentId)}
+                  execution={stop.stopId === null ? null : (
+                    <StopExecution
+                      stop={stop} canExecute={canExecute} canReport={canReport} busy={busy}
+                      onTransition={(move) => void transition(stop, move)}
+                      onDelivery={(order) => stop.stopId && setDeliveryFor({ stopId: stop.stopId, stopLabel: stopLabelOf(stop), order })}
+                      onIncident={() => stop.stopId && setProblem({ mode: "incident", stop: { id: stop.stopId, label: stopLabelOf(stop) } })}
+                    />
+                  )}
                 />
               ))}
             </Box>
@@ -163,7 +235,7 @@ export function PortalTripPage() {
         </>
       )}
 
-      {nextPending && !openDocument && (
+      {nextPending && !openDocument && !deliveryFor && !problem && (
         <Fab
           variant="extended" color="primary" onClick={() => setOpenDocumentId(nextPending.documentId)}
           aria-label={t("Siguiente pendiente: {{doc}}", { doc: `${logisticsDocumentLabel(nextPending.documentType, nextPending.fiscal, true)} ${nextPending.documentNumber}` })}
@@ -189,8 +261,41 @@ export function PortalTripPage() {
           onSaved={saved}
         />
       )}
+
+      {deliveryFor && detail && (
+        <PortalDeliveryDrawer
+          key={`${deliveryFor.stopId}|${deliveryFor.order.orderId}`}
+          companyId={companyId}
+          tripId={tripId}
+          shipmentNumber={detail.trip.shipmentNumber}
+          stopId={deliveryFor.stopId}
+          stopLabel={deliveryFor.stopLabel}
+          order={deliveryFor.order}
+          evidenceEnabled={detail.evidenceEnabled}
+          onClose={() => setDeliveryFor(null)}
+          onSaved={(outcome) => executed(outcome, t("Entrega registrada"))}
+        />
+      )}
+
+      {problem && detail && (
+        <PortalProblemDrawer
+          companyId={companyId}
+          tripId={tripId}
+          shipmentNumber={detail.trip.shipmentNumber}
+          mode={problem.mode}
+          stop={problem.stop}
+          onClose={() => setProblem(null)}
+          onSaved={(outcome) => executed(outcome, problem.mode === "fail" ? t("Parada actualizada") : t("Incidencia reportada"))}
+        />
+      )}
     </Box>
   );
+}
+
+/** «Parada 2 · Bodega San Martín»: como se nombra una parada fuera de su tarjeta. */
+function stopLabelOf(stop: ShownStop): string {
+  const number = stop.sequence !== null ? t("Parada {{n}}", { n: stop.sequence }) : t("Parada");
+  return stop.destinationName ? `${number} · ${stop.destinationName}` : number;
 }
 
 function InfoLine({ icon, children }: { icon: ReactNode; children: ReactNode }) {
@@ -202,13 +307,17 @@ function InfoLine({ icon, children }: { icon: ReactNode; children: ReactNode }) 
   );
 }
 
-function StopStep({ stop, last, onOpen }: { stop: ShownStop; last: boolean; onOpen: (doc: ShownDocument) => void }) {
+function StopStep({ stop, last, onOpen, execution }: {
+  stop: ShownStop; last: boolean; onOpen: (doc: ShownDocument) => void; execution: ReactNode;
+}) {
   const unassigned = stop.stopId === null;
   const title = unassigned
     ? t("Documentos sin parada")
     : stop.destinationName ?? (stop.sequence !== null ? t("Parada {{n}}", { n: stop.sequence }) : t("Parada"));
   const done = stop.documents.filter((doc) => doc.status !== "PENDING").length;
-  const complete = stop.documents.length > 0 && done === stop.documents.length;
+  // Atendida (V70), o con todos sus documentos reportados: el riel se pinta en verde.
+  const complete = stop.executionStatus === "COMPLETED"
+    || (stop.documents.length > 0 && done === stop.documents.length);
   const navigation = unassigned ? null : directionsUrl(stop);
 
   return (
@@ -258,6 +367,8 @@ function StopStep({ stop, last, onOpen }: { stop: ShownStop; last: boolean; onOp
             </Button>
           )}
         </Box>
+
+        {execution}
 
         <Box sx={{ display: "grid", gap: 1 }}>
           {stop.documents.map((doc) => <DocumentRow key={doc.documentId} doc={doc} onOpen={() => onOpen(doc)} />)}

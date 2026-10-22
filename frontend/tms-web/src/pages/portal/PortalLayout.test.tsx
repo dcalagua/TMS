@@ -8,7 +8,7 @@ import { UiHost } from "../../lib/ui";
 import type { CompanyAccessView } from "../../shared/api/meApi";
 import { readMeCopy, writeMeCopy } from "../../shared/company/meOfflineCopy";
 import { createMemoryStore } from "./offline/memoryStore";
-import type { OutboxEntry } from "./offline/types";
+import type { DocumentOutboxEntry as OutboxEntry } from "./offline/types";
 
 /**
  * El armazón del portal y lo que guarda el teléfono (ADR-019 §1): al cerrar sesión se avisa de lo
