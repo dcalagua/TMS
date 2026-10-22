@@ -75,6 +75,15 @@ public enum Capability {
 
     TRANSPORT_MONITOR_VIEW(Permission.MONITORING_TRANSPORT_READ),
 
+    /**
+     * The carrier scorecard ({@code docs/domain/CARRIER_SCORECARD_V1.md}). Backed by the same
+     * permission as the transport monitor - the endpoint enforces {@code monitoring.transport:read},
+     * because this is the transport the control tower shows by carrier, asked over a range - and a
+     * capability of its own so the menu entry is a name the product can grant, hide or document on
+     * its own. No migration: a capability is derived from permissions and never stored.
+     */
+    CARRIER_SCORECARD_VIEW(Permission.MONITORING_TRANSPORT_READ),
+
     /** The document delivery monitor (ADR-018). */
     DOCUMENT_DELIVERY_VIEW(Permission.PLANNING_DOCUMENT_DELIVERY_READ),
     DOCUMENT_DELIVERY_MANAGE(Permission.PLANNING_DOCUMENT_DELIVERY_RETURN),

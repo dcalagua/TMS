@@ -72,6 +72,7 @@ them would actually be enforced. The mapping:
 | `FLEET_VIEW` | `fleet.carrier:read`, `fleet.vehicle_type:read`, `fleet.vehicle:read` |
 | `FLEET_MANAGE` | the three `fleet.*:manage` permissions |
 | `TRANSPORT_MONITOR_VIEW` | `monitoring.transport:read` |
+| `CARRIER_SCORECARD_VIEW` | `monitoring.transport:read` (the carrier scorecard; finer blocks gated inside by their own permissions) |
 | `IAM_VIEW` / `IAM_MANAGE` | the four `iam.*:read` / `iam.*:manage` permissions |
 | `AUDIT_VIEW` | `audit.log:read` |
 

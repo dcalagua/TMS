@@ -1,12 +1,13 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Box, Button, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Typography,
 } from "@mui/material";
 import {
   AddRounded, UploadRounded, BusinessRounded, EditRounded, BlockRounded, CheckCircleRounded,
-  BadgeRounded, QrCodeRounded, ToggleOnRounded,
+  BadgeRounded, QrCodeRounded, ToggleOnRounded, LeaderboardRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
@@ -40,9 +41,12 @@ const DEFAULT_FILTERS: AppliedFilters = { code: "", businessName: "", taxIdValue
 type ModalState = { mode: "create" } | { mode: "edit"; carrier: CarrierView } | null;
 
 export function CarriersPage() {
-  const { selected, hasPermission } = useCompany();
+  const { selected, hasPermission, hasCapability } = useCompany();
   const companyId = selected?.id ?? "";
   const canManage = hasPermission("fleet.carrier:manage");
+  // ITEM 3: "Ver desempeño" abre el scorecard con el detalle de este transportista.
+  const canScore = hasCapability("CARRIER_SCORECARD_VIEW");
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [page, setPage] = useState(0);
@@ -111,7 +115,7 @@ export function CarriersPage() {
     { key: "active", header: t("Estado"), render: (c) => <ActiveBadge active={c.active} /> },
   ];
 
-  if (canManage) {
+  if (canManage || canScore) {
     columns.push({
       key: "actions",
       header: t("Acciones"),
@@ -119,14 +123,20 @@ export function CarriersPage() {
       render: (carrier) => (
         <ActionMenu
           items={[
-            { key: "edit", label: t("Editar"), icon: <EditRounded />, onSelect: () => setModal({ mode: "edit", carrier }) },
-            {
-              key: "active",
-              label: carrier.active ? t("Desactivar") : t("Activar"),
-              icon: carrier.active ? <BlockRounded /> : <CheckCircleRounded />,
-              dangerous: carrier.active,
-              onSelect: () => void toggleActive(carrier),
-            },
+            ...(canScore ? [{
+              key: "scorecard", label: t("Ver desempeño"), icon: <LeaderboardRounded />,
+              onSelect: () => navigate(`/reporting/carriers?carrier=${carrier.id}`),
+            }] : []),
+            ...(canManage ? [
+              { key: "edit", label: t("Editar"), icon: <EditRounded />, onSelect: () => setModal({ mode: "edit", carrier }) },
+              {
+                key: "active",
+                label: carrier.active ? t("Desactivar") : t("Activar"),
+                icon: carrier.active ? <BlockRounded /> : <CheckCircleRounded />,
+                dangerous: carrier.active,
+                onSelect: () => void toggleActive(carrier),
+              },
+            ] : []),
           ]}
         />
       ),
