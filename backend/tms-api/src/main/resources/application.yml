@@ -128,6 +128,16 @@ tms:
       # fill factor, when the vehicle type has none either. Overridable per deployment.
       default-reference-height-m: ${TMS_GEOMETRY_REFERENCE_HEIGHT_M:2.40}
       default-floor-fill-factor: ${TMS_GEOMETRY_FLOOR_FILL_FACTOR:0.85}
+    tender-waterfall:
+      auto-advance:
+        # Automatic advance of tender waterfalls (ITEM 10): every `interval`, each running waterfall
+        # whose offer has lapsed (or that waits at a rank after a carrier system's rejection) is
+        # advanced exactly as the "Avanzar" button does - the next stored carrier is offered the
+        # shipment, signed with the person who started the waterfall and audited as
+        # system:tender-waterfall. OFF by default: it sends offers to carriers with nobody clicking.
+        # Turn it on per deployment with TMS_TENDER_WATERFALL_AUTO_ADVANCE_ENABLED=true.
+        enabled: ${TMS_TENDER_WATERFALL_AUTO_ADVANCE_ENABLED:false}
+        interval: ${TMS_TENDER_WATERFALL_AUTO_ADVANCE_INTERVAL:1m}
   settlement:
     # Payment terms of a carrier invoice (ADR-023 section 2, V67, D-06): what a carrier without its
     # own terms gets when its company has no default either. due_date = invoice_date + terms, frozen
