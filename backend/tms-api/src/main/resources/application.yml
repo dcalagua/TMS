@@ -344,6 +344,21 @@ tms:
     # The most positions one read returns. The map draws a recent trail, not a forensic
     # reconstruction; the application clamps this to 2000 whatever is configured.
     track-limit: ${TMS_TRACKING_TRACK_LIMIT:200}
+  tracking-links:
+    # Customer tracking links (migration V74, ADR-029). A link is a bearer credential for one
+    # order, so every one of these bounds its exposure. The hard cap is fixed at creation; the
+    # soft end is computed at read time from when the order closed.
+    max-lifetime: ${TMS_TRACKING_LINK_MAX_LIFETIME:30d}
+    after-closure: ${TMS_TRACKING_LINK_AFTER_CLOSURE:7d}
+    # Live (unrevoked, unexpired) links one order may have at a time.
+    max-active-per-order: ${TMS_TRACKING_LINK_MAX_ACTIVE:5}
+    rate-limit:
+      # Per client address, every request to the public endpoint, per minute.
+      requests-per-minute: ${TMS_TRACKING_LINK_RATE_PER_MINUTE:30}
+      # Per client address, unknown/expired/revoked tokens per ten minutes: the enumeration brake.
+      misses-per-ten-minutes: ${TMS_TRACKING_LINK_MISSES_PER_TEN_MINUTES:10}
+      # Per link, views per minute - a link pasted into a busy group chat still works.
+      views-per-link-per-minute: ${TMS_TRACKING_LINK_VIEWS_PER_MINUTE:60}
 
 logging:
   # The correlation id is on every line, so a request can be followed across log entries and

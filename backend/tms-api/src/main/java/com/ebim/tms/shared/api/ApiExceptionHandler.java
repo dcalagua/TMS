@@ -182,6 +182,17 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return respond(ApiProblems.of(failure.type(), failure.getMessage()), request);
     }
 
+    /** A rate limit (ADR-029), with the {@code Retry-After} the client is expected to honour. */
+    @ExceptionHandler(RateLimitedException.class)
+    public ResponseEntity<ProblemDetail> handleRateLimited(RateLimitedException failure, WebRequest request) {
+        ProblemDetail problem = ApiProblems.of(failure.type(), failure.getMessage());
+        setInstance(problem, request);
+        return ResponseEntity.status(problem.getStatus())
+                .header(org.springframework.http.HttpHeaders.RETRY_AFTER, Long.toString(failure.retryAfterSeconds()))
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(problem);
+    }
+
     /**
      * Declared after {@link #handleConflict} but matched before it: Spring picks the most
      * specific handler for the thrown type, so an {@link IdempotencyConflictException} - which is

@@ -81,7 +81,10 @@ public class CompanyAdministrationService {
                         : request.accrualTrigger(),
                 request.costAllocationBasis() == null
                         ? before.settings().costAllocationBasis()
-                        : request.costAllocationBasis());
+                        : request.costAllocationBasis(),
+                request.trackingPlateDisplay() == null
+                        ? before.settings().trackingPlateDisplay()
+                        : request.trackingPlateDisplay());
 
         if (repository.updateCompany(scope.companyId(), name, taxIdentifier, timeZone, actorId) == 0) {
             // The row was there a statement ago, so this is a company deactivated or removed
@@ -214,6 +217,11 @@ public class CompanyAdministrationService {
             // Changes what every later allocation run divides by (V68): both ends.
             changes.put("costAllocationBasisFrom", String.valueOf(before.settings().costAllocationBasis()));
             changes.put("costAllocationBasis", String.valueOf(after.costAllocationBasis()));
+        }
+        if (before.settings().trackingPlateDisplay() != after.trackingPlateDisplay()) {
+            // Changes what an anonymous customer link publishes (V74, ADR-029): both ends.
+            changes.put("trackingPlateDisplayFrom", before.settings().trackingPlateDisplay().name());
+            changes.put("trackingPlateDisplay", after.trackingPlateDisplay().name());
         }
         return changes;
     }

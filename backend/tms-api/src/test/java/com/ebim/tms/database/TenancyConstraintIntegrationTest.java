@@ -238,15 +238,16 @@ class TenancyConstraintIntegrationTest {
         // V66 took it to 71 (ADR-027): settlement.tax:manage, the company's fiscal regime.
         // V67 took it to 73 (ADR-023 section 2): settlement.payment:record|confirm and portal.invoice:read.
         // V68 took it to 76 (ADR-026): settlement.cost_allocation:read|manage.
+        // V74 took it to 77 (ADR-029): orders.tracking_link:manage, the customer tracking link.
         //
         // These totals are deliberately exact rather than "at least". The catalogue is a schema
         // contract: a permission that appears without a migration declaring it, or a grant that
         // widens a role silently, is the kind of change this test exists to make visible. The
         // named invariants below are the ones that carry meaning - the counts only anchor them.
         assertThat(count("SELECT count(*) FROM tms.role")).isEqualTo(5);
-        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(76);
+        assertThat(count("SELECT count(*) FROM tms.permission")).isEqualTo(77);
         assertThat(count("SELECT count(*) FROM tms.permission WHERE code = resource || ':' || action"))
-                .isEqualTo(76);
+                .isEqualTo(77);
 
         // 65 + 64 + 35 + 20 + 2 (V59: material_profile:read to the four office roles. V57: the office permissions to the four office roles, the read
         // only to VIEWER; the two portal permissions to CARRIER_OPERATOR). ORGANIZATION_ADMIN holds the whole catalogue; COMPANY_ADMIN holds
@@ -271,16 +272,18 @@ class TenancyConstraintIntegrationTest {
         // withheld from every carrier.
         // V68's settlement.cost_allocation:read goes to the four office roles and manage to the two
         // administrators (+6): recalculating what an order cost is not a planner's authority.
-        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(207);
+        // V74's orders.tracking_link:manage goes to both administrators and PLANNER (+3), like V54's holds:
+        // publishing a view of an order to someone with no session is not a VIEWER's authority.
+        assertThat(count("SELECT count(*) FROM tms.role_permission")).isEqualTo(210);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'ORGANIZATION_ADMIN'"))
-                .isEqualTo(73);
+                .isEqualTo(74);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'COMPANY_ADMIN'"))
-                .isEqualTo(72);
+                .isEqualTo(73);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'PLANNER'"))
-                .isEqualTo(37);
+                .isEqualTo(38);
         assertThat(count("SELECT count(*) FROM tms.role_permission rp"
                 + " JOIN tms.role r ON r.id = rp.role_id WHERE r.code = 'VIEWER'"))
                 .isEqualTo(22);

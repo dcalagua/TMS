@@ -70,6 +70,12 @@ public enum Permission {
      * order for credit or stock is a commercial decision that the person keying orders may not hold.
      */
     ORDERS_HOLD_MANAGE("orders.hold:manage"),
+    /**
+     * Generate, list and revoke an order's customer tracking links (migration V74, ADR-029). Its own
+     * authority: handing an anonymous party a view of an order is a customer-facing decision that a
+     * VIEWER, who may read every order, must not be able to make.
+     */
+    ORDERS_TRACKING_LINK_MANAGE("orders.tracking_link:manage"),
 
     PLANNING_PLAN_READ("planning.plan:read"),
     PLANNING_PLAN_MANAGE("planning.plan:manage"),
