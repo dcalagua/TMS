@@ -2325,7 +2325,7 @@ const EN_DOCUMENT_DELIVERY: Record<string, string> = {
     "Your carrier's trips show up here once the warehouse dispatches them.",
   "Abrir viaje {{n}}": "Open trip {{n}}", "Despachado {{when}}": "Dispatched {{when}}",
   "Despacho sin hora": "Dispatch time unknown", "Sin placa": "No plate",
-  "{{done}}/{{total}} entregados": "{{done}}/{{total}} delivered", "{{n}} paradas": "{{n}} stops",
+  "{{done}}/{{total}} entregados": "{{done}}/{{total}} delivered", "{{n}} paradas": "{{n}} stops", "1 parada": "1 stop",
   "Documentos entregados": "Documents delivered", "{{n}} pendientes": "{{n}} pending",
   "{{n}} rechazados": "{{n}} rejected", "{{n}} no entregados": "{{n}} not delivered",
   "{{n}} cargos recibidos": "{{n}} signed copies returned",

@@ -198,7 +198,7 @@ function PortalTripCard({ trip, queued, onOpen }: { trip: PortalTripSummary; que
               label={t("Cargo recibido: {{n}}", { n: trip.returnedCount })} />
           )}
           <Typography color="text.secondary" sx={{ fontSize: 14, ml: "auto" }}>
-            {t("{{n}} paradas", { n: trip.stopCount })}
+            {trip.stopCount === 1 ? t("1 parada") : t("{{n}} paradas", { n: trip.stopCount })}
           </Typography>
         </Box>
       </CardActionArea>
