@@ -25,3 +25,19 @@ no envía (falta la suscripción del webhook del lado del TMS).
 
 Cuando cambien pantallas relevantes, hay que regenerarla: recapturar, revisar el texto de cada ficha y
 volver a imprimir. **Toda entrada nueva en `navConfig.tsx` necesita su ficha.**
+
+
+## Flujo integrado eWMS ⇄ eTMS (PDF)
+
+`EBIM_Flujo_eWMS_eTMS.pdf` — 32 páginas A4, 5,9 MB. Un día de la demo PLAPASA (22/10/2026) recorrido en los
+dos sistemas: tres pedidos del ERP con la misma clave en ambos (SO-2026-10090/91/92), el plan PL-00000006 y el
+viaje VJ-00000015 del TMS, la carga planificada CRG-000005 que nace en el eWMS, ola, picking, packing y el
+despacho SLS-000004 (601) que pone el viaje en ruta solo, la entrega completa y parcial que vuelve al almacén,
+la anulación que cruza como alerta y la factura de TRLIT conciliada, aprobada con cuatro ojos y exportada.
+Abre con el flujo en una página y la tabla de los siete mensajes entre sistemas; cierra con lo que falta para
+producción.
+
+- **Datos:** cargados por la API de cada sistema en los tenants de demostración (eWMS dev y eTMS QAS). Las
+  capturas se tomaron después en solo lectura (cero escrituras). TMS QAS todavía no tiene su clave de firma de
+  webhooks: los avisos del TMS al eWMS los firmó un script con el secreto del conector, en el formato del TMS, y
+  el eWMS leyó el viaje y el pedido reales. El PDF lo dice.
