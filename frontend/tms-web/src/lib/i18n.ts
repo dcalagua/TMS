@@ -16,6 +16,7 @@ import { EN_LOAD_GEOMETRY } from "./i18n.loadGeometry";
 import { EN_LOGISTICS_DOCUMENTS } from "./i18n.logisticsDocuments";
 import { EN_TAX_REGIMES } from "./i18n.taxRegimes";
 import { EN_DOCKS } from "./i18n.docks";
+import { EN_ROUTE_SHEET } from "./i18n.routeSheet";
 
 const EN_CHROME: Record<string, string> = {
   "Citas de muelle": "Dock appointments",
@@ -2395,7 +2396,7 @@ const EN_DOCUMENT_DELIVERY: Record<string, string> = {
   "Reporte del transportista": "Carrier report", "Cargo recibido en oficina": "Signed copy returned to the office",
 };
 
-const EN: Record<string, string> = { ...EN_CHROME, ...EN_DATA, ...EN_APP, ...EN_SCHEDULING, ...EN_DOCUMENT_DELIVERY, ...EN_SHIPMENT_TRACKING, ...EN_PORTAL_OFFLINE, ...EN_TENANT_LIFECYCLE, ...EN_MATERIAL_PROFILES, ...EN_LOAD_GEOMETRY, ...EN_LOGISTICS_DOCUMENTS, ...EN_TAX_REGIMES, ...EN_DOCKS };
+const EN: Record<string, string> = { ...EN_CHROME, ...EN_DATA, ...EN_APP, ...EN_SCHEDULING, ...EN_DOCUMENT_DELIVERY, ...EN_SHIPMENT_TRACKING, ...EN_PORTAL_OFFLINE, ...EN_TENANT_LIFECYCLE, ...EN_MATERIAL_PROFILES, ...EN_LOAD_GEOMETRY, ...EN_LOGISTICS_DOCUMENTS, ...EN_TAX_REGIMES, ...EN_DOCKS, ...EN_ROUTE_SHEET };
 
 export type Lang = "es" | "en";
 

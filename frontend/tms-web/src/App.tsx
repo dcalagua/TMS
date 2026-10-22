@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "./app/queryClient";
 import { UiHost } from "./lib/ui";
+import { LoadingState } from "./shared/ui/components";
 import { AuthProvider } from "./shared/auth/AuthContext";
 import { ProtectedRoute } from "./shared/auth/ProtectedRoute";
 import { CompanyProvider } from "./shared/company/CompanyContext";
@@ -22,7 +23,7 @@ import {
   SettlementPage, TolerancePoliciesPage, AccrualsPage, PayablesPage, CostToServePage,
   OwnFleetCostProfilesPage,
   WorkAssignmentsPage,
-  PlanningRunsPage, RateCardsPage, ReportsPage, RoutesPage, SchedulingReleasePage, TripWorkspacePage, TripsPage,
+  PlanningRunsPage, RateCardsPage, ReportsPage, RoutesPage, SchedulingReleasePage, TripRouteSheetPage, TripWorkspacePage, TripsPage,
   UsersPage, VehicleTypesPage, VehiclesPage, ZonesPage,
   DeliveryTrackingPage, ShipmentTrackingPage,
   DocumentDeliveriesPage, PortalTripPage, PortalTripsPage, PortalInvoicePage, PortalInvoicesPage,
@@ -67,6 +68,14 @@ export default function App() {
               {/* La aplicación de oficina. Quien opera la empresa elegida como transportista
                   sale de aquí hacia /portal, sea cual sea la ruta que pidió (incluida `/`). */}
               <Route element={<OfficeOnly />}>
+                {/* La hoja de ruta imprimible, fuera del armazón: sin menú ni barra, lo que se ve
+                    es lo que sale en el papel. Dentro de RequireCompany como el viaje del que sale,
+                    y con su propio Suspense porque el único de la oficina vive en AppLayout. */}
+                <Route element={<RequireCompany />}>
+                  <Route path="trips/:tripId/print" element={
+                    <Suspense fallback={<LoadingState minHeight="50vh" />}><TripRouteSheetPage /></Suspense>
+                  } />
+                </Route>
                 <Route element={<AppLayout />}>
                   <Route index element={<DashboardPage />} />
 
