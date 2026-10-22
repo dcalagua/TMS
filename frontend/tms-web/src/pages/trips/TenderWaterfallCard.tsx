@@ -4,7 +4,7 @@ import {
   Alert, Box, Button, Chip, Divider, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Typography,
 } from "@mui/material";
-import { AltRouteRounded, PlayArrowRounded, SkipNextRounded, StopRounded } from "@mui/icons-material";
+import { AltRouteRounded, AutorenewRounded, PlayArrowRounded, SkipNextRounded, StopRounded } from "@mui/icons-material";
 import { LoadingState, StatusChip, dataTableSx } from "../../shared/ui/components";
 import { R } from "../../theme";
 import { WorkspaceCard } from "./WorkspaceCard";
@@ -36,8 +36,12 @@ interface TenderWaterfallCardProps {
  *
  * <h2>Por qué hay un botón de avanzar</h2>
  * Crear una oferta pasa por `requireAppUserId`, que rechaza a una máquina por diseño: una oferta a
- * un transportista es un compromiso comercial y el rastro tiene que nombrar a quien lo hizo. No hay
- * barrido automático, así que la pantalla dice cuándo venció la oferta y una persona avanza.
+ * un transportista es un compromiso comercial y el rastro tiene que nombrar a quien lo hizo. Por eso
+ * la pantalla dice cuándo venció la oferta y una persona puede avanzar.
+ *
+ * Desde el ITEM 10 la instalación puede además avanzar sola (`autoAdvance`, apagado de fábrica): el
+ * barrido firma la oferta siguiente con quien inició la cascada y queda auditado como
+ * `system:tender-waterfall`. El botón sigue ahí para no esperar a la próxima vuelta.
  */
 export function TenderWaterfallCard({ companyId, tripId, canManage }: TenderWaterfallCardProps) {
   const queryClient = useQueryClient();
@@ -107,7 +111,16 @@ export function TenderWaterfallCard({ companyId, tripId, canManage }: TenderWate
     <WorkspaceCard
       icon={<AltRouteRounded />}
       title={t("Cascada de tendering")}
-      actions={plan && <StatusChip label={enumLabel("waterfallStatus", plan.status)} tone={STATUS_TONE[plan.status]} />}
+      actions={plan && (
+        <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
+          {/* ITEM 10: la instalación avanza sola las ofertas vencidas. Solo mientras la cascada corre:
+              en una terminada no hay nada que avanzar y el chip sería ruido. */}
+          {plan.autoAdvance === true && plan.status === "ACTIVE" && (
+            <StatusChip label={t("Avance automático")} tone="open" icon={<AutorenewRounded sx={{ fontSize: 14 }} />} />
+          )}
+          <StatusChip label={enumLabel("waterfallStatus", plan.status)} tone={STATUS_TONE[plan.status]} />
+        </Box>
+      )}
     >
       {!plan ? (
         <>
@@ -137,7 +150,9 @@ export function TenderWaterfallCard({ companyId, tripId, canManage }: TenderWate
                 </Button>
               )}
             >
-              {t("La oferta actual venció sin respuesta. Avanza para ofrecer al siguiente transportista.")}
+              {plan.autoAdvance === true
+                ? t("La oferta actual venció sin respuesta. El avance automático la pasará al siguiente transportista en su próxima vuelta; puedes adelantarlo.")
+                : t("La oferta actual venció sin respuesta. Avanza para ofrecer al siguiente transportista.")}
             </Alert>
           )}
 

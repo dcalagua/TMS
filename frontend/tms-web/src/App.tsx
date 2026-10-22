@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "./app/queryClient";
 import { UiHost } from "./lib/ui";
+import { LoadingState } from "./shared/ui/components";
 import { AuthProvider } from "./shared/auth/AuthContext";
 import { ProtectedRoute } from "./shared/auth/ProtectedRoute";
 import { CompanyProvider } from "./shared/company/CompanyContext";
@@ -20,12 +21,15 @@ import {
   FrequenciesPage, IntegrationsPage, LocationsPage, MaterialProfilesPage, OrdersPage, OriginsPage, PlanningBoardPage,
   AppointmentsPage,
   SettlementPage, TolerancePoliciesPage, AccrualsPage, PayablesPage, CostToServePage,
+  ClaimsPage, IncidentsPage,
   OwnFleetCostProfilesPage,
+  FleetDocumentsPage,
   WorkAssignmentsPage,
-  PlanningRunsPage, RateCardsPage, ReportsPage, RoutesPage, SchedulingReleasePage, TripWorkspacePage, TripsPage,
+  PlanningRunsPage, RateCardsPage, ReportsPage, RoutesPage, SchedulingReleasePage, TripRouteSheetPage, TripWorkspacePage, TripsPage, CarrierScorecardPage,
   UsersPage, VehicleTypesPage, VehiclesPage, ZonesPage,
   DeliveryTrackingPage, ShipmentTrackingPage,
   DocumentDeliveriesPage, PortalTripPage, PortalTripsPage, PortalInvoicePage, PortalInvoicesPage,
+  TrackingPublicPage,
 } from "./app/lazyRoutes";
 
 /**
@@ -50,6 +54,10 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            {/* ADR-029: el enlace de seguimiento que el cliente abre desde WhatsApp. Fuera de
+                ProtectedRoute y de todo armazón: no hay sesión, no hay menú, y la página no pide
+                nada al backend más que su propio token. */}
+            <Route path="/t/:token" element={<Suspense fallback={null}><TrackingPublicPage /></Suspense>} />
 
             <Route element={<ProtectedRoute />}>
               {/* ADR-018: el portal de transportistas, con su propio armazón para el teléfono y
@@ -67,6 +75,14 @@ export default function App() {
               {/* La aplicación de oficina. Quien opera la empresa elegida como transportista
                   sale de aquí hacia /portal, sea cual sea la ruta que pidió (incluida `/`). */}
               <Route element={<OfficeOnly />}>
+                {/* La hoja de ruta imprimible, fuera del armazón: sin menú ni barra, lo que se ve
+                    es lo que sale en el papel. Dentro de RequireCompany como el viaje del que sale,
+                    y con su propio Suspense porque el único de la oficina vive en AppLayout. */}
+                <Route element={<RequireCompany />}>
+                  <Route path="trips/:tripId/print" element={
+                    <Suspense fallback={<LoadingState minHeight="50vh" />}><TripRouteSheetPage /></Suspense>
+                  } />
+                </Route>
                 <Route element={<AppLayout />}>
                   <Route index element={<DashboardPage />} />
 
@@ -79,6 +95,8 @@ export default function App() {
                         dos pantallas es "de esta empresa", y sin una no hay nada que enseñar. */}
                     <Route path="control-tower" element={<ControlTowerPage />} />
                     <Route path="reporting" element={<ReportsPage />} />
+                    {/* ITEM 3: el scorecard. Mismo permiso que los KPIs (`monitoring.transport:read`). */}
+                    <Route path="reporting/carriers" element={<CarrierScorecardPage />} />
 
                     <Route path="masters/locations" element={<LocationsPage />} />
                     <Route path="masters/origins" element={<OriginsPage />} />
@@ -94,6 +112,7 @@ export default function App() {
                     <Route path="fleet/vehicle-types" element={<VehicleTypesPage />} />
                     <Route path="fleet/vehicles" element={<VehiclesPage />} />
                     <Route path="fleet/drivers" element={<DriversPage />} />
+                    <Route path="fleet/documents" element={<FleetDocumentsPage />} />
 
                     <Route path="orders" element={<OrdersPage />} />
                     <Route path="scheduling" element={<SchedulingReleasePage />} />
@@ -116,6 +135,8 @@ export default function App() {
                     <Route path="settlement/accruals" element={<AccrualsPage />} />
                     <Route path="settlement/payables" element={<PayablesPage />} />
                     <Route path="settlement/cost-to-serve" element={<CostToServePage />} />
+                    <Route path="settlement/claims" element={<ClaimsPage />} />
+                    <Route path="incidents" element={<IncidentsPage />} />
                     <Route path="work-assignments" element={<WorkAssignmentsPage />} />
                     {/* Una ruta completa y no un drawer sobre la lista: un despachador se queda
                         dentro de un viaje durante minutos, y `/trips/{id}` es lo que se pega en un

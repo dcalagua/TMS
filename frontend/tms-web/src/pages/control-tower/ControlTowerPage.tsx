@@ -22,6 +22,7 @@ import {
 } from "../../shared/ui/components";
 import { TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
+import { isIsoDay, useUrlFilters, type UrlFilterValidators } from "../../shared/ui/useUrlFilters";
 import { enumLabel } from "../../lib/enums";
 import type { StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
@@ -43,6 +44,13 @@ interface TripFilters {
 }
 
 const DEFAULT_FILTERS: TripFilters = { originId: "", carrierId: "", status: "" };
+
+type TowerUrl = { date: string; originId: string; carrierId: string; status: string };
+
+const TOWER_URL_VALIDATORS: UrlFilterValidators<TowerUrl> = {
+  date: (value) => value === "" || isIsoDay(value),
+  status: (value) => value === "" || (TRIP_STATUSES as readonly string[]).includes(value),
+};
 
 const TIMELINESS_TONE: Record<DepartureTimeliness, StatusTone> = {
   NOT_APPLICABLE: "neutral",
@@ -70,11 +78,15 @@ export function ControlTowerPage() {
   const companyId = selected?.id ?? "";
   const navigate = useNavigate();
 
-  const [date, setDate] = useState("");
   const [page, setPage] = useState(0);
-  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
-  const [filters, setFiltersState] = useState<TripFilters>(DEFAULT_FILTERS);
-  const setFilters = (next: TripFilters) => { setFiltersState(next); setPage(0); };
+  // Los filtros se aplican al momento: no hay borrador ni botón de aplicar. Viven en la URL
+  // (`?date=2026-10-20&status=IN_TRANSIT`): la torre se comparte por chat, y el enlace tiene que
+  // abrir el mismo día. Vacío = hoy en el huso de la empresa, que lo decide el backend.
+  const [url, setUrl] = useUrlFilters<TowerUrl>({ date: "", ...DEFAULT_FILTERS }, TOWER_URL_VALIDATORS);
+  const { date, ...rest } = url;
+  const filters = rest as TripFilters;
+  const setFilters = (next: TripFilters) => { setUrl({ ...next, date }); setPage(0); };
+  const setDate = (next: string) => setUrl({ ...filters, date: next });
 
   const overviewQuery = useQuery({
     queryKey: ["control-tower", companyId, date],

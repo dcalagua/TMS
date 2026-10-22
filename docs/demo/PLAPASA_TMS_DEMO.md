@@ -169,6 +169,14 @@ saber algo que sólo sabe el almacén: cómo se apila cada producto.»
    transportista la ve en su portal y puede reportar su entrega con foto.
    «La guía la emite el ERP y la autoriza el SRI; el TMS la recibe, la ata al pedido y al camión, y
    sigue que el original vuelva firmado. No la emite.»
+7. **Hoja de ruta** — `OPCIONAL` · 30 s. En el viaje, **«Imprimir hoja de ruta»**: una A4 con placa,
+   transportista, conductor, la parada de la ferretería con su ventana 08:00–12:00, las cuatro líneas
+   del pedido, la guía **001-001-000000123 (SRI 06)** y la casilla «Recibí conforme». Sin importes.
+   «Es lo que el conductor lleva a la garita; el TMS la arma con lo que ya sabe del viaje.»
+8. **Citas de muelle** — `OPCIONAL` · 1 min. Operación › **Citas de muelle** › Sitio **GYE-CD**: tres
+   muelles (MUE-01..03, lunes a sábado 07:00–19:00, hora de la planta). Reservar MUE-01 para la carga
+   del `VJ-…`; reservar el mismo muelle a la misma hora lo rechaza nombrando la cita que estorba.
+   Con admin@, **«Puertas y muelles»** muestra el horario y los cierres; planner@ no ve ese botón.
 
 ### (d) La prueba de entrega, y cómo la ve el almacén — 2 min · POD `VIVO TMS` · en el EWM `REQUIERE EWM v1.1`
 
@@ -268,6 +276,7 @@ la placa, el código del almacén. Nada más.»
 | Factura TRLIT 001-001-000000789 | 68,73 + IVA 0 % · retención IR 310 1 % = **0,69** · **a pagar 68,04** |
 | Guía SRI 06 | 001-001-000000123 · clave 2010202606099999999900110010010000001231234567811 |
 | RUC TRLIT | 0990000034001 (09-9-000003 · verificador 4 · 001) |
+| Muelles de GYE-CD | MUE-01, MUE-02 (60 min) · MUE-03 (90 min) · lunes a sábado 07:00–19:00 · domingo cerrado |
 
 ---
 

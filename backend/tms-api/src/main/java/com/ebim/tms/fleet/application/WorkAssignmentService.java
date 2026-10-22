@@ -73,12 +73,15 @@ public class WorkAssignmentService {
     private final RoutingPort routingPort;
     private final OriginLookupPort originLookupPort;
     private final AuditActorProvider auditActorProvider;
+    private final FleetComplianceService complianceService;
 
     public WorkAssignmentService(WorkAssignmentRepository assignmentRepository,
             VehicleRepository vehicleRepository, DriverRepository driverRepository,
             DriverShiftRepository shiftRepository, ResourceUnavailabilityRepository unavailabilityRepository,
             TripSchedulingPort tripSchedulingPort, RoutingPort routingPort,
-            OriginLookupPort originLookupPort, AuditActorProvider auditActorProvider) {
+            OriginLookupPort originLookupPort, AuditActorProvider auditActorProvider,
+            FleetComplianceService complianceService) {
+        this.complianceService = complianceService;
         this.assignmentRepository = assignmentRepository;
         this.vehicleRepository = vehicleRepository;
         this.driverRepository = driverRepository;
@@ -162,9 +165,13 @@ public class WorkAssignmentService {
         WorkAssignment assignment = lockedAssignment(scope, assignmentId);
 
         List<WorkSequenceValidator.Rejection> conflicts = validate(scope, assignment);
-        if (!conflicts.isEmpty()) {
+        // Only what blocks refuses the confirmation. A warning (V72: an unrecorded paper, or an
+        // expired one whose policy only warns) is shown on the day and committed to knowingly.
+        List<WorkSequenceValidator.Rejection> blocking = conflicts.stream()
+                .filter(WorkSequenceValidator.Rejection::blocking).toList();
+        if (!blocking.isEmpty()) {
             throw new ConflictException("This day cannot be confirmed: "
-                    + conflicts.stream().map(WorkSequenceValidator.Rejection::detail)
+                    + blocking.stream().map(WorkSequenceValidator.Rejection::detail)
                             .collect(Collectors.joining(" ")));
         }
         assignment.confirm(actorId);
@@ -271,7 +278,11 @@ public class WorkAssignmentService {
     private List<WorkSequenceValidator.Rejection> validate(CompanyScope scope, WorkAssignment assignment) {
         List<WorkAssignmentTrip> rows = assignment.trips();
         if (rows.isEmpty()) {
-            return List.of();
+            // Nothing to sequence, but the whole-day facts still hold: a truck committed to a day
+            // with an expired paper (V72) or a driver without a licence is worth saying so before
+            // anything is put in it.
+            return WorkSequenceValidator.validate(List.of(), List.of(), windowFor(scope, assignment),
+                    ZoneId.of(scope.timeZone() == null ? "UTC" : scope.timeZone()));
         }
         List<UUID> tripIds = rows.stream().map(WorkAssignmentTrip::tripId).toList();
         Map<UUID, TripSchedulingPort.TripSchedule> schedules =
@@ -339,8 +350,19 @@ public class WorkAssignmentService {
                             ResourceRejectionReason.DRIVER_UNAVAILABLE)));
         }
 
+        // V72: the vehicle's and the driver's papers on the operational date, judged by the
+        // company's policy - the same rule the trip assignment applies through FleetCompliancePort.
+        List<ResourceWindow.ComplianceIssue> compliance = complianceService
+                .findingsFor(scope.companyId(), assignment.vehicleId(), assignment.driverId(), date).stream()
+                .map(finding -> new ResourceWindow.ComplianceIssue(
+                        finding.status() == com.ebim.tms.shared.reference.FleetDocumentStatus.EXPIRED
+                                ? ResourceRejectionReason.COMPLIANCE_DOCUMENT_EXPIRED
+                                : ResourceRejectionReason.COMPLIANCE_DOCUMENT_UNRECORDED,
+                        finding.blocking(), finding.describe()))
+                .toList();
+
         return new ResourceWindow(shift == null ? null : shift.startsAt(),
-                shift == null ? null : shift.endsAt(), licenseValid, blocks);
+                shift == null ? null : shift.endsAt(), licenseValid, blocks, compliance);
     }
 
     private static boolean isMaintenance(com.ebim.tms.fleet.domain.UnavailabilityReason reason) {
@@ -396,7 +418,7 @@ public class WorkAssignmentService {
 
         return new WorkAssignmentView(assignment.id(), assignment.operationalDate(), assignment.vehicleId(),
                 vehicleCode, assignment.driverId(), driverName, assignment.status(), assignment.notes(),
-                assignment.version(), conflicts.isEmpty(), trips,
+                assignment.version(), conflicts.stream().noneMatch(WorkSequenceValidator.Rejection::blocking), trips,
                 conflicts.stream().map(WorkAssignmentView.ConflictView::of).toList());
     }
 

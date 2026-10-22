@@ -3,6 +3,7 @@ package com.ebim.tms.appointments.infrastructure;
 import com.ebim.tms.appointments.domain.ResourceBlockedSlot;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -30,4 +31,10 @@ public interface ResourceBlockedSlotRepository extends JpaRepository<ResourceBlo
             @Param("windowEnd") OffsetDateTime windowEnd);
 
     List<ResourceBlockedSlot> findByCompanyIdAndResourceIdOrderByStartsAtAsc(UUID companyId, UUID resourceId);
+
+    /** The closures that still matter: those that have not ended yet, soonest first. */
+    List<ResourceBlockedSlot> findByCompanyIdAndResourceIdAndEndsAtAfterOrderByStartsAtAsc(
+            UUID companyId, UUID resourceId, OffsetDateTime after);
+
+    Optional<ResourceBlockedSlot> findByIdAndCompanyIdAndResourceId(UUID id, UUID companyId, UUID resourceId);
 }

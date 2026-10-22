@@ -49,6 +49,24 @@ export interface IntegrationClientSecretView {
   notice: string
 }
 
+/**
+ * Mirrors the backend's `IntegrationScopeView`: one entry of `GET /integration-clients/scopes`, the
+ * catalogue the credentials form is drawn from. Served by the backend so a scope added by a
+ * migration reaches the form without a frontend release (D4: the hand-written list offered 5 of 12).
+ */
+export interface IntegrationScopeView {
+  /** The authority string, e.g. `integration.dispatch:write`. */
+  code: string
+  /** `ERP` | `WAREHOUSE` | `CARRIER` | `FINANCE`; an unknown group is shown under its own name. */
+  group: string
+  /** Whether a credential holding it must name a carrier (only `integration.tender:respond` today). */
+  requiresCarrier: boolean
+}
+
+export function fetchIntegrationScopes(companyId: string, signal?: AbortSignal): Promise<IntegrationScopeView[]> {
+  return apiRequest<IntegrationScopeView[]>('/integration-clients/scopes', { companyId, signal })
+}
+
 export interface IntegrationClientRequest {
   name: string
   description?: string | null

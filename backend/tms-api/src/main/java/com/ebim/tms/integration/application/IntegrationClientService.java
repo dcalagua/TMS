@@ -76,6 +76,15 @@ public class IntegrationClientService {
         this.clock = clock;
     }
 
+    /**
+     * Every scope a credential may hold, in declaration order - the vocabulary of the credentials
+     * form. Served from the enum so a scope added by a migration reaches the form without a
+     * frontend release: the hand-written list it replaces offered 5 of 12 and nothing failed.
+     */
+    public List<IntegrationScopeView> availableScopes() {
+        return Arrays.stream(IntegrationScope.values()).map(IntegrationScopeView::of).toList();
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<IntegrationClientView> list(CompanyScope scope, PageQuery pageQuery) {
         Page<IntegrationClient> page = clientRepository.findByCompanyId(scope.companyId(),

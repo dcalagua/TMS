@@ -1,9 +1,11 @@
 package com.ebim.tms.planning.application;
 
 import com.ebim.tms.planning.domain.Trip;
+import com.ebim.tms.shared.reference.ComplianceFinding;
 import com.ebim.tms.shared.reference.DriverLicenseStatus;
 import com.ebim.tms.shared.reference.DriverLookupPort;
 import com.ebim.tms.shared.reference.DriverReference;
+import com.ebim.tms.shared.reference.FleetCompliancePort;
 import com.ebim.tms.shared.reference.OrderHoldPort;
 import com.ebim.tms.shared.reference.ResourceAvailabilityPort;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
@@ -53,7 +55,12 @@ public class DispatchReadiness {
         CARRIER_OWNS_VEHICLE,
         RESOURCES_AVAILABLE,
         /** No order on the trip has an active blocking hold (ADR-014 section 7). */
-        ORDERS_NOT_HELD
+        ORDERS_NOT_HELD,
+        /**
+         * Neither the vehicle nor the driver carries an expired compliance paper whose company policy
+         * blocks (V72). Last, so the sentence a dispatcher has always been shown first is unchanged.
+         */
+        COMPLIANCE_DOCUMENTS
     }
 
     /** Why a trip cannot leave, stable enough for a client to switch on. */
@@ -65,7 +72,8 @@ public class DispatchReadiness {
         AWAITING_CARRIER_VEHICLE,
         VEHICLE_UNAVAILABLE,
         DRIVER_UNAVAILABLE,
-        ORDER_HOLD_ON_COMMITTED_TRIP
+        ORDER_HOLD_ON_COMMITTED_TRIP,
+        COMPLIANCE_DOCUMENT_EXPIRED
     }
 
     /**
@@ -83,9 +91,12 @@ public class DispatchReadiness {
     private final DriverLookupPort driverLookupPort;
     private final ResourceAvailabilityPort resourceAvailabilityPort;
     private final CommittedOrderHolds committedOrderHolds;
+    private final FleetCompliancePort fleetCompliancePort;
 
     public DispatchReadiness(VehicleLookupPort vehicleLookupPort, DriverLookupPort driverLookupPort,
-            ResourceAvailabilityPort resourceAvailabilityPort, CommittedOrderHolds committedOrderHolds) {
+            ResourceAvailabilityPort resourceAvailabilityPort, CommittedOrderHolds committedOrderHolds,
+            FleetCompliancePort fleetCompliancePort) {
+        this.fleetCompliancePort = fleetCompliancePort;
         this.vehicleLookupPort = vehicleLookupPort;
         this.driverLookupPort = driverLookupPort;
         this.resourceAvailabilityPort = resourceAvailabilityPort;
@@ -114,6 +125,9 @@ public class DispatchReadiness {
         }
         if (checks.contains(Check.ORDERS_NOT_HELD)) {
             heldOrders(scope, trip).ifPresent(blockers::add);
+        }
+        if (checks.contains(Check.COMPLIANCE_DOCUMENTS)) {
+            compliance(scope, trip).ifPresent(blockers::add);
         }
         return List.copyOf(blockers);
     }
@@ -159,6 +173,25 @@ public class DispatchReadiness {
                     "Driver licence expired on " + driver.get().licenseExpiresOn() + "."));
         }
         return Optional.empty();
+    }
+
+    /**
+     * An expired compliance paper of the vehicle or the driver whose company policy blocks (V72),
+     * judged today in the company's zone like the licence. A paper that is only unrecorded, or whose
+     * policy only warns, never stops a truck. Names every blocking paper.
+     */
+    Optional<Blocker> compliance(CompanyScope scope, Trip trip) {
+        if (trip.vehicleId() == null && trip.driverId() == null) {
+            return Optional.empty();
+        }
+        List<ComplianceFinding> blocking =
+                fleetCompliancePort.blockingFor(scope.companyId(), trip.vehicleId(), trip.driverId(), scope.today());
+        if (blocking.isEmpty()) {
+            return Optional.empty();
+        }
+        String detail = blocking.stream().map(ComplianceFinding::describe).collect(Collectors.joining(" "));
+        return Optional.of(new Blocker(BlockerCode.COMPLIANCE_DOCUMENT_EXPIRED,
+                "Trip " + trip.tripNumber() + " cannot depart: " + detail, detail));
     }
 
     /** Accepted by a carrier that does not own the vehicle on it (V42, debt D2). */

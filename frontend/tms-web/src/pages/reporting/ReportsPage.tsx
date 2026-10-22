@@ -26,6 +26,7 @@ import { notifyError } from "../../lib/ui";
 import { t } from "../../lib/i18n";
 import { fmtDate, fmtDateTime, fmtDecimal, fmtMoney, fmtPercent, fmtQuantity, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
 import { DailyColumnChart } from "./DailyColumnChart";
+import { CarbonFootprintSection } from "./CarbonFootprintSection";
 
 /**
  * KPIs de una empresa sobre un rango de días operativos.
@@ -40,8 +41,10 @@ import { DailyColumnChart } from "./DailyColumnChart";
  * enseñar un cero que nadie le contó.
  */
 export function ReportsPage() {
-  const { selected } = useCompany();
+  const { selected, hasPermission } = useCompany();
   const companyId = selected?.id ?? "";
+  // V73: la huella de carbono del período, con su propio permiso.
+  const canReadEmissions = hasPermission("settlement.emission:read");
 
   // Vacío = los últimos 30 días que decide el backend. Se aplica al elegirlo: no hay borrador.
   const [applied, setApplied] = useState({ from: "", to: "" });
@@ -299,6 +302,12 @@ export function ReportsPage() {
           </Table>
         </TableContainer>
       </AppCard>
+
+      {canReadEmissions && (
+        <Box sx={{ mt: 3 }}>
+          <CarbonFootprintSection companyId={companyId} from={report.from} to={report.to} />
+        </Box>
+      )}
     </>
   );
 }

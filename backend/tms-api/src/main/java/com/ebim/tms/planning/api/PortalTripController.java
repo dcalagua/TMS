@@ -4,10 +4,16 @@ import com.ebim.tms.planning.application.DeliveryEvidenceDownload;
 import com.ebim.tms.planning.application.DocumentReportCommand;
 import com.ebim.tms.planning.application.DocumentReportService;
 import com.ebim.tms.planning.application.EvidenceUpload;
+import com.ebim.tms.planning.application.PortalDeliveryCommand;
 import com.ebim.tms.planning.application.PortalDocumentView;
+import com.ebim.tms.planning.application.PortalExecutionService;
 import com.ebim.tms.planning.application.PortalTripDetailView;
 import com.ebim.tms.planning.application.PortalTripService;
 import com.ebim.tms.planning.application.PortalTripSummaryView;
+import com.ebim.tms.planning.application.TripExceptionRequest;
+import com.ebim.tms.planning.application.TripStopExecutionRequest;
+import com.ebim.tms.planning.application.TripStopFailureRequest;
+import com.ebim.tms.planning.domain.DeliveryResult;
 import com.ebim.tms.planning.domain.DocumentDeliveryReason;
 import com.ebim.tms.planning.domain.DocumentDeliveryStatus;
 import com.ebim.tms.shared.api.ApiHeaders;
@@ -17,7 +23,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -35,6 +43,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -42,8 +51,11 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * The carrier portal (ADR-018): a carrier user's dispatched trips and the report of each document.
- * Only {@code CARRIER_OPERATOR} holds these permissions, and only through a carrier membership.
+ * The carrier portal (ADR-018): a carrier user's dispatched trips and the report of each document,
+ * and since V70 the execution of their stops - arrival, service, completion or failure, the delivery
+ * result of each order with its evidence, and incidents - through the office's own services
+ * ({@link PortalExecutionService}). Only {@code CARRIER_OPERATOR} holds these permissions, and only
+ * through a carrier membership. Every write requires an {@code Idempotency-Key}.
  */
 @RestController
 @RequestMapping("${tms.api.base-path}/portal/trips")
@@ -52,10 +64,13 @@ public class PortalTripController {
 
     private final PortalTripService portal;
     private final DocumentReportService reports;
+    private final PortalExecutionService execution;
 
-    public PortalTripController(PortalTripService portal, DocumentReportService reports) {
+    public PortalTripController(PortalTripService portal, DocumentReportService reports,
+            PortalExecutionService execution) {
         this.portal = portal;
         this.reports = reports;
+        this.execution = execution;
     }
 
     @GetMapping
@@ -114,6 +129,110 @@ public class PortalTripController {
     public ResponseEntity<Resource> evidence(CompanyScope scope, @PathVariable UUID tripId,
             @PathVariable UUID documentId, @PathVariable UUID evidenceId) {
         return asAttachment(portal.download(scope, tripId, documentId, evidenceId));
+    }
+
+    // --- stop execution and proof of delivery (V70) -------------------------------------------
+
+    @PostMapping("/{tripId}/stops/{stopId}/arrive")
+    @PreAuthorize("hasAuthority('portal.stop:execute')")
+    @Operation(summary = "I arrived at a stop of my trip")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public PortalTripDetailView arrive(CompanyScope scope, @PathVariable UUID tripId, @PathVariable UUID stopId,
+            @RequestHeader(name = ApiHeaders.IDEMPOTENCY_KEY, required = false) String idempotencyKey,
+            @Valid @RequestBody TripStopExecutionRequest request) {
+        return execution.arrive(scope, tripId, stopId, idempotencyKey, request);
+    }
+
+    @PostMapping("/{tripId}/stops/{stopId}/service")
+    @PreAuthorize("hasAuthority('portal.stop:execute')")
+    @Operation(summary = "I started unloading at a stop of my trip")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public PortalTripDetailView startService(CompanyScope scope, @PathVariable UUID tripId,
+            @PathVariable UUID stopId,
+            @RequestHeader(name = ApiHeaders.IDEMPOTENCY_KEY, required = false) String idempotencyKey,
+            @Valid @RequestBody TripStopExecutionRequest request) {
+        return execution.startService(scope, tripId, stopId, idempotencyKey, request);
+    }
+
+    @PostMapping("/{tripId}/stops/{stopId}/complete")
+    @PreAuthorize("hasAuthority('portal.stop:execute')")
+    @Operation(summary = "I finished a stop of my trip and left")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public PortalTripDetailView complete(CompanyScope scope, @PathVariable UUID tripId, @PathVariable UUID stopId,
+            @RequestHeader(name = ApiHeaders.IDEMPOTENCY_KEY, required = false) String idempotencyKey,
+            @Valid @RequestBody TripStopExecutionRequest request) {
+        return execution.complete(scope, tripId, stopId, idempotencyKey, request);
+    }
+
+    @PostMapping("/{tripId}/stops/{stopId}/fail")
+    @PreAuthorize("hasAuthority('portal.stop:execute')")
+    @Operation(summary = "I could not serve a stop of my trip, with the reason")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public PortalTripDetailView fail(CompanyScope scope, @PathVariable UUID tripId, @PathVariable UUID stopId,
+            @RequestHeader(name = ApiHeaders.IDEMPOTENCY_KEY, required = false) String idempotencyKey,
+            @Valid @RequestBody TripStopFailureRequest request) {
+        return execution.fail(scope, tripId, stopId, idempotencyKey, request);
+    }
+
+    @PostMapping("/{tripId}/incidents")
+    @PreAuthorize("hasAuthority('portal.stop:execute')")
+    @Operation(summary = "Report an incident on my trip or one of its stops")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public PortalTripDetailView reportIncident(CompanyScope scope, @PathVariable UUID tripId,
+            @RequestHeader(name = ApiHeaders.IDEMPOTENCY_KEY, required = false) String idempotencyKey,
+            @Valid @RequestBody TripExceptionRequest request) {
+        return execution.reportIncident(scope, tripId, idempotencyKey, request);
+    }
+
+    /**
+     * The delivery result of one order at one stop, with its photos and signature, in one request
+     * so the offline queue holds one entry. {@code multipart/form-data} like the document report.
+     */
+    @PostMapping(path = "/{tripId}/stops/{stopId}/orders/{orderId}/delivery",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('portal.delivery:report')")
+    @Operation(summary = "Record what happened to one order at a stop of my trip")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    @SuppressWarnings("java:S107")
+    public PortalTripDetailView recordDelivery(CompanyScope scope, @PathVariable UUID tripId,
+            @PathVariable UUID stopId, @PathVariable UUID orderId,
+            @RequestHeader(name = ApiHeaders.IDEMPOTENCY_KEY, required = false) String idempotencyKey,
+            @RequestParam("result") DeliveryResult result,
+            @RequestParam(name = "deliveredAt", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime deliveredAt,
+            @RequestParam(name = "receiverName", required = false) String receiverName,
+            @RequestParam(name = "receiverDocument", required = false) String receiverDocument,
+            @RequestParam(name = "notes", required = false) String notes,
+            @RequestParam(name = "refusedWeightKg", required = false) BigDecimal refusedWeightKg,
+            @RequestParam(name = "refusedVolumeM3", required = false) BigDecimal refusedVolumeM3,
+            @RequestParam(name = "refusedPallets", required = false) BigDecimal refusedPallets,
+            @RequestParam(name = "photos", required = false) List<MultipartFile> photos,
+            @RequestParam(name = "signature", required = false) MultipartFile signature) {
+        requireLength("receiverName", receiverName, 120);
+        requireLength("receiverDocument", receiverDocument, 60);
+        requireLength("notes", notes, 1000);
+        List<EvidenceUpload> uploads = new ArrayList<>();
+        if (photos != null) {
+            photos.stream().filter(photo -> photo != null && !photo.isEmpty()).map(PortalTripController::toUpload)
+                    .forEach(uploads::add);
+        }
+        EvidenceUpload signatureUpload = signature == null || signature.isEmpty() ? null : toUpload(signature);
+        return execution.recordDelivery(scope, tripId, stopId, orderId, idempotencyKey,
+                new PortalDeliveryCommand(result, deliveredAt, receiverName, receiverDocument, notes,
+                        refusedWeightKg, refusedVolumeM3, refusedPallets, uploads, signatureUpload));
+    }
+
+    /** The bounds {@code DeliveryResultRequest} declares, for the form fields that bypass Bean Validation. */
+    private static void requireLength(String field, String value, int max) {
+        if (value != null && value.length() > max) {
+            throw new InvalidRequestException(field + " must be at most " + max + " characters.");
+        }
     }
 
     /** As {@code TripDeliveryController.toUpload}: the bare file name, never a path. */

@@ -31,6 +31,7 @@ public record TenderWaterfallView(
         int responseMinutes,
         int attemptsUsed,
         boolean currentOfferLapsed,
+        boolean autoAdvance,
         String outcomeNote,
         OffsetDateTime startedAt,
         OffsetDateTime completedAt,
@@ -68,6 +69,7 @@ public record TenderWaterfallView(
                 waterfall.responseMinutes(),
                 waterfall.attemptsUsed(),
                 false,
+                false,
                 waterfall.outcomeNote(),
                 waterfall.startedAt(),
                 waterfall.completedAt(),
@@ -77,7 +79,18 @@ public record TenderWaterfallView(
     /** The same view, told whether the offer currently out has passed its deadline. */
     TenderWaterfallView withLapsed(boolean lapsed) {
         return new TenderWaterfallView(id, tripId, status, maxAttempts, responseMinutes, attemptsUsed,
-                lapsed, outcomeNote, startedAt, completedAt, candidates);
+                lapsed, autoAdvance, outcomeNote, startedAt, completedAt, candidates);
+    }
+
+    /**
+     * Whether this installation advances lapsed offers on its own
+     * ({@code tms.planning.tender-waterfall.auto-advance.enabled}, ITEM 10). A property of the
+     * deployment, carried on the view so the card can say so instead of asking a dispatcher to click a
+     * button a timer is about to press.
+     */
+    TenderWaterfallView withAutoAdvance(boolean enabled) {
+        return new TenderWaterfallView(id, tripId, status, maxAttempts, responseMinutes, attemptsUsed,
+                currentOfferLapsed, enabled, outcomeNote, startedAt, completedAt, candidates);
     }
 
     private static CandidateView toCandidateView(TenderWaterfallCandidate candidate, MasterReference carrier) {

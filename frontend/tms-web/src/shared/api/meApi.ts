@@ -30,6 +30,12 @@ export interface CompanyAccessView {
   code: string;
   name: string;
   timeZone: string;
+  /**
+   * D1: `company_settings.default_country` (ISO 3166-1 alfa-2), `PE` si la empresa no tiene fila.
+   * De aquí parten el país de una ubicación nueva y los valores por defecto de los formularios.
+   * Opcional porque un backend anterior no lo envía; su ausencia se trata como `PE`.
+   */
+  defaultCountry?: string | null;
   organization: OrganizationView;
   permissions: string[];
   capabilities: string[];
@@ -80,14 +86,24 @@ export const CAPABILITY = {
   COST_TO_SERVE_VIEW: "COST_TO_SERVE_VIEW",
   /** Recalcular el reparto del costo de un viaje (una versión nueva). */
   COST_ALLOCATION_MANAGE: "COST_ALLOCATION_MANAGE",
+  /** V73: la huella de carbono por viaje y por cliente (`settlement.emission:read`). */
+  EMISSIONS_VIEW: "EMISSIONS_VIEW",
   /** Cuentas por pagar (fase 65): programar, retener, liberar y proponer un pago manual. */
   PAYMENT_RECORD: "PAYMENT_RECORD",
   /** Confirmar o rechazar el pago manual que propuso **otra** persona (cuatro ojos). */
   PAYMENT_CONFIRM: "PAYMENT_CONFIRM",
   /** Portal: «Mis facturas» del transportista (`portal.invoice:read`). */
   CARRIER_INVOICES: "CARRIER_INVOICES",
+  /** ITEM 3: el scorecard de transportistas (`monitoring.transport:read`, como los KPIs). */
+  CARRIER_SCORECARD_VIEW: "CARRIER_SCORECARD_VIEW",
   /** ADR-027: editar el régimen fiscal de la empresa (`settlement.tax:manage`). Leerlo es `SETTLEMENT_VIEW`. */
   TAX_REGIME_MANAGE: "TAX_REGIME_MANAGE",
+  /** V71: ver los reclamos de carga y el centro de incidencias (`settlement.claim:read`). */
+  CLAIMS_VIEW: "CLAIMS_VIEW",
+  /** Abrir, corregir, enviar a revisión, anular y cerrar un reclamo (`settlement.claim:manage`). */
+  CLAIMS_MANAGE: "CLAIMS_MANAGE",
+  /** Aceptar, aceptar en parte o rechazar el reclamo que abrió **otra** persona (cuatro ojos). */
+  CLAIMS_DECIDE: "CLAIMS_DECIDE",
 } as const;
 
 /**
@@ -114,4 +130,22 @@ export interface MeView {
  * permisos/capabilities por empresa, en una sola llamada. */
 export function fetchMe(signal?: AbortSignal): Promise<MeView> {
   return apiRequest<MeView>("/me", { signal });
+}
+
+/** El país por defecto de una empresa para un formulario nuevo; `PE` como último recurso. */
+export function companyDefaultCountry(company: Pick<CompanyAccessView, "defaultCountry"> | null | undefined): string {
+  return company?.defaultCountry || "PE";
+}
+
+/**
+ * El huso por defecto de un formulario nuevo: el de la empresa activa, si no el del navegador y,
+ * como último recurso, `America/Lima`.
+ */
+export function companyDefaultTimeZone(company: Pick<CompanyAccessView, "timeZone"> | null | undefined): string {
+  if (company?.timeZone) return company.timeZone;
+  try {
+    const browser = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (browser) return browser;
+  } catch { /* sin Intl: se usa el último recurso */ }
+  return "America/Lima";
 }

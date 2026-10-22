@@ -97,7 +97,8 @@ class ControlTowerSummaryTest {
                 tripRepository, stopRepository, exceptionRepository, mock(DestinationLookupPort.class),
                 mock(VehicleLookupPort.class), orderPlanningPort,
                 new DispatchReadiness(mock(VehicleLookupPort.class), mock(com.ebim.tms.shared.reference.DriverLookupPort.class),
-                        availabilityPort, mock(CommittedOrderHolds.class)),
+                        availabilityPort, mock(CommittedOrderHolds.class),
+                        com.ebim.tms.shared.reference.FleetCompliancePort.NONE),
                 settlementAdvisoryPort, mock(WarehouseDispatchAdvisories.class));
     }
 

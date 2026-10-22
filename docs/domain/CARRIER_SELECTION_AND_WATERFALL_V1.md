@@ -116,6 +116,32 @@ and does nothing.
 
 ### There is no background scheduler
 
+> **Amended by ITEM 10 (2026-10).** There is one now, **off by default**
+> (`tms.planning.tender-waterfall.auto-advance.enabled`, env `TMS_TENDER_WATERFALL_AUTO_ADVANCE_ENABLED`,
+> every `...interval`, default `1m`). `TenderWaterfallScheduler` → `TenderWaterfallSweep` →
+> `TenderWaterfallService.autoAdvance`, which is `advance` without the refusal: never before the
+> deadline, the lapsed tender materialised `EXPIRED`, the next stored candidate offered through the
+> ordinary tender path. It also picks up a waterfall left waiting at a rank by a rejection from a
+> carrier's own system.
+>
+> - **Attribution.** The two problems below are solved without inventing an actor: the job runs under
+>   `SystemJobAuthentication` (`system:tender-waterfall`, the same machine actor the accrual sweep
+>   uses), so the **audit trail names the job**; the tender row's `created_by`/`sent_by` names
+>   **the person who started the waterfall** (`tender_waterfall.started_by`) - starting it is the
+>   decision to offer the shipment down that list. A waterfall with no `started_by` is left for a
+>   dispatcher (`NO_SIGNATORY`).
+> - **Tenancy.** One cross-tenant read (which companies have a waterfall due), then each company under
+>   its own RLS-bound connection; inactive or suspended (ADR-021) companies are skipped.
+> - **Concurrency.** Each shipment in its own transaction that first takes the trip row with
+>   `FOR UPDATE SKIP LOCKED` - the lock every tender mutation serialises on - and re-reads the deadline
+>   inside it. Two nodes, a carrier accepting or a dispatcher clicking "Avanzar" at the same instant
+>   cannot produce two offers; `uq_trip_tender_live` stays the backstop. At most 100 shipments per
+>   company per pass. Proved by `TenderWaterfallAutoAdvanceIntegrationTest` (two threads, one offer).
+> - **What it still does not do.** No per-company opt-in (that would be a `company_settings` column,
+>   i.e. a migration): the switch is per deployment. The card shows "Avance automático" when it is on.
+>
+> The original reasoning follows, unchanged, because it is still why a machine never signs an offer.
+
 Creating a tender goes through `AuditActorProvider.requireAppUserId`, which **refuses a machine by
 design** — *"this operation is restricted to an interactive user."* That rule predates this feature
 and it is right: an offer to a carrier is a commercial commitment and the trail has to name the

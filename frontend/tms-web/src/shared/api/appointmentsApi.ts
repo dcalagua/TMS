@@ -164,3 +164,68 @@ export function createLocationResource(
     method: 'POST', companyId, body: request,
   })
 }
+
+export function updateLocationResource(
+  companyId: string, id: string, request: LocationResourceRequest,
+): Promise<LocationResourceView> {
+  return apiRequest<LocationResourceView>(`/appointments/resources/${id}`, {
+    method: 'PUT', companyId, body: request,
+  })
+}
+
+/** Fuera de servicio: rechaza reservas **nuevas** y deja en paz las que ya existen. */
+export function deactivateLocationResource(companyId: string, id: string): Promise<LocationResourceView> {
+  return apiRequest<LocationResourceView>(`/appointments/resources/${id}/deactivate`, { method: 'POST', companyId })
+}
+
+export function activateLocationResource(companyId: string, id: string): Promise<LocationResourceView> {
+  return apiRequest<LocationResourceView>(`/appointments/resources/${id}/activate`, { method: 'POST', companyId })
+}
+
+/** Un día de la semana en el horario de una puerta: horas **locales del sitio**, `HH:mm`. */
+export interface DayHoursRequest {
+  day: DayHoursView['day']
+  opensAt: string
+  closesAt: string
+}
+
+/**
+ * Reemplaza la semana entera de una puerta. Una lista vacía deja la puerta **sin horario**, y sin
+ * horario las reglas de reserva la leen como abierta siempre - no como cerrada.
+ */
+export function replaceResourceCalendar(
+  companyId: string, id: string, days: DayHoursRequest[],
+): Promise<LocationResourceView> {
+  return apiRequest<LocationResourceView>(`/appointments/resources/${id}/calendar`, {
+    method: 'PUT', companyId, body: { days },
+  })
+}
+
+/** Mirrors `ResourceBlockView`: un cierre puntual, en instantes absolutos. */
+export interface ResourceBlockView {
+  id: string
+  resourceId: string
+  startsAt: string
+  endsAt: string
+  reason: string
+}
+
+/** Los cierres de una puerta que todavía no terminaron, del más próximo al más lejano. */
+export function fetchResourceBlocks(
+  companyId: string, id: string, signal?: AbortSignal,
+): Promise<ResourceBlockView[]> {
+  return apiRequest<ResourceBlockView[]>(`/appointments/resources/${id}/blocks`, { companyId, signal })
+}
+
+/** Cierra la puerta en un intervalo. Las reservas que ya caen dentro **no** se cancelan solas. */
+export function blockLocationResource(
+  companyId: string, id: string, startsAt: string, endsAt: string, reason: string,
+): Promise<void> {
+  return apiRequest<void>(`/appointments/resources/${id}/block`, {
+    method: 'POST', companyId, query: { startsAt, endsAt, reason },
+  })
+}
+
+export function liftResourceBlock(companyId: string, id: string, blockId: string): Promise<void> {
+  return apiRequest<void>(`/appointments/resources/${id}/blocks/${blockId}`, { method: 'DELETE', companyId })
+}

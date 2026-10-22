@@ -1,5 +1,6 @@
 package com.ebim.tms.fleet.domain;
 
+import com.ebim.tms.shared.reference.FuelType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -82,6 +83,15 @@ public class VehicleType {
 
     @Column(name = "axles")
     private Integer axles;
+
+    /** What the type runs on (V73); descriptive, it says what the factor was measured for. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "fuel_type")
+    private FuelType fuelType;
+
+    /** kg CO2e per km driven (V73). Null = no factor: the type's trips have no footprint, never a zero one. */
+    @Column(name = "emission_factor_kg_co2e_per_km", precision = 8, scale = 4)
+    private BigDecimal emissionFactorKgCo2ePerKm;
 
     @Column(name = "active", nullable = false)
     private boolean active = true;
@@ -177,6 +187,20 @@ public class VehicleType {
      */
     public void changeLoadFloorFillFactor(BigDecimal factor) {
         this.loadFloorFillFactor = factor;
+    }
+
+    public FuelType fuelType() {
+        return fuelType;
+    }
+
+    public BigDecimal emissionFactorKgCo2ePerKm() {
+        return emissionFactorKgCo2ePerKm;
+    }
+
+    /** Both together: a factor is only readable beside the fuel it was measured for (V73). */
+    public void changeEmissionFactor(FuelType fuelType, BigDecimal kgCo2ePerKm) {
+        this.fuelType = fuelType;
+        this.emissionFactorKgCo2ePerKm = kgCo2ePerKm;
     }
 
     public VehicleBodyType bodyType() {

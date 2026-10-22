@@ -5,6 +5,7 @@ import com.ebim.tms.integration.application.IntegrationClientSecretView;
 import com.ebim.tms.integration.application.IntegrationClientService;
 import com.ebim.tms.integration.application.IntegrationClientView;
 import com.ebim.tms.integration.application.IntegrationRequestView;
+import com.ebim.tms.integration.application.IntegrationScopeView;
 import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
 import com.ebim.tms.shared.security.CompanyScope;
@@ -13,6 +14,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -59,6 +61,23 @@ public class IntegrationClientController {
             description = "Id of a company the caller is a member of")
     public PageResponse<IntegrationClientView> list(CompanyScope scope, @ModelAttribute PageQuery pageQuery) {
         return clientService.list(scope, pageQuery);
+    }
+
+    /**
+     * The scope catalogue the credentials form is drawn from. Keeps {@link CompanyScope} for the
+     * same reason {@code WebhookController.eventTypes} does: without it {@code X-Company-Id} would
+     * stop being required in fact while still documented as required.
+     */
+    @GetMapping("/scopes")
+    @PreAuthorize("hasAuthority('integration.client:read')")
+    @Operation(summary = "The scopes an integration credential may hold",
+            description = "Served from the backend so a scope added by a migration appears in the form without "
+                    + "a frontend release. Each entry carries its group (ERP, WAREHOUSE, CARRIER, FINANCE) and "
+                    + "whether a credential holding it must name a carrier.")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public List<IntegrationScopeView> scopes(CompanyScope scope) {
+        return clientService.availableScopes();
     }
 
     @GetMapping("/{id}")

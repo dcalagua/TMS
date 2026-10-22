@@ -128,14 +128,55 @@ public class PortalTripService {
             }
         }
 
+        // V70: the orders delivered at each stop, with what was recorded for them. An order is
+        // delivered at the stop of its destination - the same rule TripDeliveryService enforces.
+        Map<UUID, List<TripAssignmentView>> assignmentsByDestination = plan.assignments().stream()
+                .filter(assignment -> assignment.destinationId() != null)
+                .collect(Collectors.groupingBy(TripAssignmentView::destinationId, LinkedHashMap::new,
+                        Collectors.toList()));
+        Map<String, OrderDeliveryView> deliveryByStopAndOrder = plan.deliveries().stream()
+                .collect(Collectors.toMap(delivery -> delivery.tripStopId() + "|" + delivery.orderId(),
+                        delivery -> delivery, (left, right) -> left));
+
         List<PortalStopView> stops = new ArrayList<>();
-        plan.stops().stream().sorted(Comparator.comparingInt(TripStopView::sequence)).forEach(stop -> stops.add(
-                new PortalStopView(stop.id(), stop.sequence(), stop.destinationName(), stop.address(),
-                        stop.latitude(), stop.longitude(), byStop.getOrDefault(stop.id(), List.of()))));
+        plan.stops().stream().sorted(Comparator.comparingInt(TripStopView::sequence)).forEach(stop -> {
+            List<PortalStopOrderView> orders = assignmentsByDestination
+                    .getOrDefault(stop.destinationId(), List.of()).stream()
+                    .map(assignment -> new PortalStopOrderView(assignment.orderId(), assignment.orderNumber(),
+                            assignment.customerName(), assignment.assignedWeightKg(), assignment.assignedVolumeM3(),
+                            assignment.assignedPallets(),
+                            portalDelivery(deliveryByStopAndOrder.get(stop.id() + "|" + assignment.orderId()))))
+                    .toList();
+            stops.add(new PortalStopView(stop.id(), stop.sequence(), stop.destinationName(), stop.address(),
+                    stop.latitude(), stop.longitude(), byStop.getOrDefault(stop.id(), List.of()),
+                    stop.executionStatus(), stop.allowedExecutionTransitions(), stop.actualArrivalAt(),
+                    stop.serviceStartedAt(), stop.actualDepartureAt(), orders));
+        });
         if (!unplaced.isEmpty()) {
-            stops.add(new PortalStopView(null, null, null, null, null, null, unplaced));
+            stops.add(new PortalStopView(null, null, null, null, null, null, unplaced, null, null, null, null, null,
+                    List.of()));
         }
-        return new PortalTripDetailView(summaries(scope, List.of(row)).get(0), evidenceStore.isEnabled(), stops);
+        List<PortalIncidentView> incidents = plan.exceptions().stream()
+                .map(exception -> new PortalIncidentView(exception.id(), exception.tripStopId(),
+                        exception.stopSequence(), exception.exceptionType(), exception.status(),
+                        exception.reportedAt(), exception.notes(), exception.resolvedAt()))
+                .toList();
+        return new PortalTripDetailView(summaries(scope, List.of(row)).get(0), evidenceStore.isEnabled(), stops,
+                incidents);
+    }
+
+    /** The carrier's view of a recorded delivery: the office's row, without who in the office typed it. */
+    private static PortalDeliveryView portalDelivery(OrderDeliveryView delivery) {
+        if (delivery == null) {
+            return null;
+        }
+        OrderDeliveryView.DeliveryQuantitiesView quantities = delivery.quantities();
+        return new PortalDeliveryView(delivery.id(), delivery.result(), delivery.deliveredAt(),
+                delivery.receiverName(), delivery.receiverDocument(), delivery.notes(), delivery.source(),
+                delivery.recordedAt(), delivery.evidence().size(),
+                quantities == null ? null : quantities.refusedWeightKg(),
+                quantities == null ? null : quantities.refusedVolumeM3(),
+                quantities == null ? null : quantities.refusedPallets());
     }
 
     /** The bytes of one artefact of a document on a trip this carrier may see. */

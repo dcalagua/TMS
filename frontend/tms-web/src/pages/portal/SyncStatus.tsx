@@ -13,7 +13,7 @@ import { fmtDateTime, fmtTime } from "../../lib/locale";
 import { confirmDialog } from "../../lib/ui";
 import { R } from "../../theme";
 import { useOutbox } from "./offline/offlineContext";
-import type { OutboxEntry } from "./offline/types";
+import { isDocumentEntry, type OutboxEntry } from "./offline/types";
 import { SAFE_AREA, TOUCH_TARGET } from "./portalUi";
 
 type Tone = "ok" | "offline" | "pending" | "error" | "syncing";
@@ -71,6 +71,8 @@ export function SyncStatusChip({ onOpen }: { onOpen: () => void }) {
 }
 
 function entryTitle(entry: OutboxEntry): string {
+  // Una acción de parada (V70) ya trae su nombre, puesto al encolarla.
+  if (!isDocumentEntry(entry)) return entry.title;
   return `${enumLabel("deliveryDocumentType", entry.documentType)} ${entry.documentNumber}`;
 }
 
@@ -84,7 +86,9 @@ export function SyncSheet({ open, onClose }: { open: boolean; onClose: () => voi
   async function confirmDiscard(entry: OutboxEntry) {
     const confirmed = await confirmDialog({
       title: t("¿Descartar este reporte?"),
-      text: t("El reporte de {{doc}} no se enviará. Podrás volver a reportar el documento desde el viaje.", { doc: entryTitle(entry) }),
+      text: isDocumentEntry(entry)
+        ? t("El reporte de {{doc}} no se enviará. Podrás volver a reportar el documento desde el viaje.", { doc: entryTitle(entry) })
+        : t("«{{what}}» no se enviará. Podrás volver a registrarlo desde el viaje.", { what: entryTitle(entry) }),
       confirmLabel: t("Descartar"),
       dangerous: true,
     });
@@ -152,13 +156,13 @@ export function SyncSheet({ open, onClose }: { open: boolean; onClose: () => voi
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography sx={{ fontWeight: 800, fontSize: 16 }}>{entryTitle(entry)}</Typography>
                     <Typography color="text.secondary" sx={{ fontSize: 14 }}>
-                      {[entry.shipmentNumber, entry.customerName].filter(Boolean).join(" · ")}
+                      {[entry.shipmentNumber, isDocumentEntry(entry) ? entry.customerName : null].filter(Boolean).join(" · ")}
                     </Typography>
                     <Typography color="text.secondary" sx={{ fontSize: 14 }}>
                       {t("Guardado {{when}}", { when: fmtDateTime(entry.reportedAt) })}
                     </Typography>
                   </Box>
-                  <DocumentStatusChip status={entry.status} />
+                  {isDocumentEntry(entry) && <DocumentStatusChip status={entry.status} />}
                 </Box>
 
                 {entry.state === "FAILED" ? (

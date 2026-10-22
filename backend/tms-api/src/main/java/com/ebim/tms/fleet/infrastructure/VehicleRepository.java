@@ -42,4 +42,7 @@ public interface VehicleRepository extends JpaRepository<Vehicle, UUID>, JpaSpec
             UUID companyId, VehicleAvailabilityStatus availabilityStatus);
 
     List<Vehicle> findByCompanyIdAndLicensePlateIn(UUID companyId, Collection<String> licensePlates);
+
+    /** The active fleet, for the missing-mandatory-documents report (V72). */
+    List<Vehicle> findByCompanyIdAndActiveTrue(UUID companyId);
 }

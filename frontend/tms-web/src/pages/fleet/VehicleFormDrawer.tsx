@@ -14,6 +14,8 @@ import {
 import { ActiveBadge, FormDrawer, FormMeta, FormRow, FormSection } from "../../shared/ui/components";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
+import { useCompany } from "../../shared/company/CompanyContext";
+import { FleetDocumentsSection } from "./FleetDocumentsSection";
 import { fmtDateTime, fmtDecimal } from "../../lib/locale";
 
 const FORM_ID = "vehicle-form";
@@ -57,6 +59,7 @@ const KNOWN_FIELDS = new Set<keyof VehicleFormValues>([
  */
 export function VehicleFormDrawer({ companyId, vehicle, onClose, onSaved }: VehicleFormDrawerProps) {
   const isEdit = vehicle !== null;
+  const { hasPermission } = useCompany();
   const [formError, setFormError] = useState<string | null>(null);
 
   const carriersQuery = useQuery({
@@ -255,6 +258,13 @@ export function VehicleFormDrawer({ companyId, vehicle, onClose, onSaved }: Vehi
         </FormRow>
         </FormSection>
       </Box>
+
+      {isEdit && (
+        <FleetDocumentsSection
+          companyId={companyId} subjectType="VEHICLE" subjectId={vehicle.id} subjectLabel={`${vehicle.licensePlate} · ${vehicle.code}`}
+          canRead={hasPermission("fleet.document:read")} canManage={hasPermission("fleet.document:manage")}
+        />
+      )}
     </FormDrawer>
   );
 }

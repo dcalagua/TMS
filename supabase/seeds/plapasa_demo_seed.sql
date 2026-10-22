@@ -54,7 +54,7 @@
 --
 --     psql "$QAS_DB_URL" -v ON_ERROR_STOP=1 -f supabase/seeds/plapasa_demo_seed.sql
 --
--- Lo valida `PlapasaDemoSeedIntegrationTest` (Testcontainers): Flyway V1..V68 + este seed dos veces.
+-- Lo valida `PlapasaDemoSeedIntegrationTest` (Testcontainers): Flyway V1..V73 + este seed dos veces.
 
 BEGIN;
 
@@ -285,6 +285,38 @@ WHERE NOT EXISTS (
     SELECT 1 FROM tms.route_stop rs
     WHERE rs.route_id = r.id AND (rs.sequence = v.seq OR rs.destination_id = l.id));
 
+-- 3b. Muelles de la planta (citas de muelle, V41) ---------------------------------------------
+--
+-- Tres muelles en GYE-CD para que «Citas de muelle» tenga dónde reservar el día de la demo. Una
+-- fila por muelle porque cada uno atiende UN vehículo a la vez (V41 §1). Horario de lunes a sábado,
+-- 07:00-19:00 en hora LOCAL de la planta (America/Guayaquil), guardado en minutos desde la
+-- medianoche local (420 y 1140), igual que lo escribe `PUT /appointments/resources/{id}/calendar`.
+-- El domingo no tiene fila: ese día el muelle está CERRADO (una puerta sin ninguna fila de horario
+-- se lee como abierta siempre; con horario, el día que falta se lee como cerrado).
+-- Son de demostración: PLAPASA tiene que confirmar cuántas puertas y qué horario tiene la planta.
+INSERT INTO tms.location_resource (company_id, location_id, code, name, resource_type, default_slot_minutes)
+SELECT c.id, l.id, v.code, v.name, 'DOCK', v.slot
+FROM tms.company c
+JOIN tms.organization o ON o.id = c.organization_id AND o.code = 'QAS-PLAPASA'
+JOIN tms.location l ON l.company_id = c.id AND l.code = 'GYE-CD'
+CROSS JOIN (VALUES
+    ('MUE-01', 'Muelle 1 · despacho de producto terminado', 60),
+    ('MUE-02', 'Muelle 2 · despacho de producto terminado', 60),
+    ('MUE-03', 'Muelle 3 · recepción de materia prima',     90)
+) AS v(code, name, slot)
+WHERE c.code = 'QAS-PLAPASA'
+ON CONFLICT (location_id, code) DO NOTHING;
+
+INSERT INTO tms.resource_calendar (company_id, resource_id, day_of_week, opens_at_minutes, closes_at_minutes)
+SELECT r.company_id, r.id, d.day, 420, 1140
+FROM tms.location_resource r
+JOIN tms.location l ON l.id = r.location_id AND l.code = 'GYE-CD'
+JOIN tms.company c ON c.id = r.company_id AND c.code = 'QAS-PLAPASA'
+JOIN tms.organization o ON o.id = c.organization_id AND o.code = 'QAS-PLAPASA'
+CROSS JOIN (VALUES (1),(2),(3),(4),(5),(6)) AS d(day)
+WHERE r.code IN ('MUE-01', 'MUE-02', 'MUE-03')
+ON CONFLICT (resource_id, day_of_week) DO NOTHING;
+
 -- 4. Flota -----------------------------------------------------------------------------------
 --
 -- TRLIT, Transportes del Litoral S.A. (demo): el mismo código que en el EWM. El despacho del
@@ -374,6 +406,111 @@ CROSS JOIN (VALUES
 ) AS v(code, first_name, last_name, ci, phone, category, expires)
 WHERE c.code = 'QAS-PLAPASA'
 ON CONFLICT (company_id, code) DO NOTHING;
+
+-- 4b. Documentos de flota (V72) y factores de emisión (V73) ------------------------------------
+--
+-- La POLÍTICA es configuración de la empresa y se REAFIRMA en cada corrida, como company_settings:
+--   matrícula, revisión técnica (RTV) y seguro obligatorio (SPPAT)  obligatorios y BLOQUEAN vencidos
+--   permiso de operación (ANT / MTOP)                               obligatorio y AVISA vencido
+--   póliza de carga                                                 opcional y AVISA vencida
+-- El resto de tipos sigue el valor del producto (opcional; los papeles legales bloquean).
+INSERT INTO tms.fleet_document_policy (company_id, document_type, mandatory, enforcement)
+SELECT c.id, v.document_type, v.mandatory, v.enforcement
+FROM tms.company c
+JOIN tms.organization o ON o.id = c.organization_id AND o.code = 'QAS-PLAPASA'
+CROSS JOIN (VALUES
+    ('REGISTRATION',         true,  'BLOCK'),
+    ('TECHNICAL_INSPECTION', true,  'BLOCK'),
+    ('MANDATORY_INSURANCE',  true,  'BLOCK'),
+    ('OPERATING_PERMIT',     true,  'WARN'),
+    ('CARGO_INSURANCE',      false, 'WARN')
+) AS v(document_type, mandatory, enforcement)
+WHERE c.code = 'QAS-PLAPASA'
+ON CONFLICT (company_id, document_type) DO UPDATE
+    SET mandatory = EXCLUDED.mandatory, enforcement = EXCLUDED.enforcement;
+
+-- La ventana de alerta: 30 días, la misma de la licencia. Se reafirma.
+INSERT INTO tms.fleet_compliance_settings (company_id, expiry_alert_days)
+SELECT c.id, 30
+FROM tms.company c
+JOIN tms.organization o ON o.id = c.organization_id AND o.code = 'QAS-PLAPASA'
+WHERE c.code = 'QAS-PLAPASA'
+ON CONFLICT (company_id) DO UPDATE SET expiry_alert_days = EXCLUDED.expiry_alert_days;
+
+-- Los papeles. Números y emisores evidentemente ficticios. Fechas literales pensadas para la semana
+-- de la demo (fines de octubre de 2026), con DOS casos a la vista y NINGUNO que bloquee un viaje:
+--   CAM-02 (GBC-5678)  revisión técnica vence el 2026-11-15   -> «Por vencer»
+--   CAM-04 (GSD-1357)  póliza de carga venció el 2026-09-30   -> «Vencido», sólo AVISA (política WARN)
+--   COND-02            certificado médico vence el 2026-11-10 -> «Por vencer»
+-- CAM-04 es la caja baja con la que la demo muestra el re-apilado: un papel que bloqueara la sacaría
+-- de la planificación, así que el vencido es uno que avisa. Maestros: no se pisan (NOT EXISTS por
+-- vehículo o conductor, tipo y número), así que un ensayo que renueve un papel no se deshace.
+INSERT INTO tms.fleet_document (company_id, subject_type, vehicle_id, document_type, document_number, issuer,
+                                issued_on, expires_on)
+SELECT c.id, 'VEHICLE', ve.id, v.document_type, v.number, v.issuer, v.issued, v.expires
+FROM tms.company c
+JOIN tms.organization o ON o.id = c.organization_id AND o.code = 'QAS-PLAPASA'
+CROSS JOIN (VALUES
+    ('CAM-01', 'REGISTRATION',         'MAT-GBA1234-2026',  'ATM Guayaquil (demo)',     DATE '2026-03-31', DATE '2027-03-31'),
+    ('CAM-01', 'TECHNICAL_INSPECTION', 'RTV-GYE-0012345',   'ATM Guayaquil (demo)',     DATE '2026-04-30', DATE '2027-04-30'),
+    ('CAM-01', 'MANDATORY_INSURANCE',  'SPPAT-2026-0001',   'Aseguradora demo S.A.',    DATE '2026-02-01', DATE '2027-01-31'),
+    ('CAM-01', 'OPERATING_PERMIT',     'ANT-PO-2023-0451',  'ANT (demo)',               DATE '2023-07-01', DATE '2028-06-30'),
+    ('CAM-01', 'CARGO_INSURANCE',      'POL-CARGA-77001',   'Aseguradora demo S.A.',    DATE '2026-07-01', DATE '2027-06-30'),
+    ('CAM-02', 'REGISTRATION',         'MAT-GBC5678-2026',  'ATM Guayaquil (demo)',     DATE '2026-02-28', DATE '2027-02-28'),
+    ('CAM-02', 'TECHNICAL_INSPECTION', 'RTV-GYE-0011876',   'ATM Guayaquil (demo)',     DATE '2025-11-15', DATE '2026-11-15'),
+    ('CAM-02', 'MANDATORY_INSURANCE',  'SPPAT-2026-0002',   'Aseguradora demo S.A.',    DATE '2026-02-01', DATE '2027-01-31'),
+    ('CAM-02', 'OPERATING_PERMIT',     'ANT-PO-2023-0451',  'ANT (demo)',               DATE '2023-07-01', DATE '2028-06-30'),
+    ('CAM-03', 'REGISTRATION',         'MAT-GSC2468-2026',  'ATM Guayaquil (demo)',     DATE '2026-05-31', DATE '2027-05-31'),
+    ('CAM-03', 'TECHNICAL_INSPECTION', 'RTV-GYE-0013002',   'ATM Guayaquil (demo)',     DATE '2026-05-31', DATE '2027-05-31'),
+    ('CAM-03', 'MANDATORY_INSURANCE',  'SPPAT-2026-0003',   'Aseguradora demo S.A.',    DATE '2026-02-01', DATE '2027-01-31'),
+    ('CAM-03', 'OPERATING_PERMIT',     'ANT-PO-2023-0451',  'ANT (demo)',               DATE '2023-07-01', DATE '2028-06-30'),
+    ('CAM-04', 'REGISTRATION',         'MAT-GSD1357-2026',  'ATM Guayaquil (demo)',     DATE '2026-05-31', DATE '2027-05-31'),
+    ('CAM-04', 'TECHNICAL_INSPECTION', 'RTV-GYE-0012990',   'ATM Guayaquil (demo)',     DATE '2026-02-28', DATE '2027-02-28'),
+    ('CAM-04', 'MANDATORY_INSURANCE',  'SPPAT-2026-0004',   'Aseguradora demo S.A.',    DATE '2026-02-01', DATE '2027-01-31'),
+    ('CAM-04', 'OPERATING_PERMIT',     'ANT-PO-2023-0451',  'ANT (demo)',               DATE '2023-07-01', DATE '2028-06-30'),
+    ('CAM-04', 'CARGO_INSURANCE',      'POL-CARGA-76544',   'Aseguradora demo S.A.',    DATE '2025-10-01', DATE '2026-09-30')
+) AS v(vehicle_code, document_type, number, issuer, issued, expires)
+JOIN tms.vehicle ve ON ve.company_id = c.id AND ve.code = v.vehicle_code
+WHERE c.code = 'QAS-PLAPASA'
+  AND NOT EXISTS (
+    SELECT 1 FROM tms.fleet_document d
+    WHERE d.vehicle_id = ve.id AND d.document_type = v.document_type AND d.document_number = v.number);
+
+INSERT INTO tms.fleet_document (company_id, subject_type, driver_id, document_type, document_number, issuer,
+                                issued_on, expires_on)
+SELECT c.id, 'DRIVER', dr.id, v.document_type, v.number, v.issuer, v.issued, v.expires
+FROM tms.company c
+JOIN tms.organization o ON o.id = c.organization_id AND o.code = 'QAS-PLAPASA'
+CROSS JOIN (VALUES
+    ('COND-01', 'MEDICAL_CERTIFICATE',      'CM-2026-0101', 'Centro médico demo',  DATE '2026-08-31', DATE '2027-08-31'),
+    ('COND-02', 'MEDICAL_CERTIFICATE',      'CM-2025-0877', 'Centro médico demo',  DATE '2025-11-10', DATE '2026-11-10'),
+    ('COND-03', 'DEFENSIVE_DRIVING_COURSE', 'MD-2025-0033', 'Escuela de conducción demo', DATE '2025-12-15', DATE '2027-12-31')
+) AS v(driver_code, document_type, number, issuer, issued, expires)
+JOIN tms.driver dr ON dr.company_id = c.id AND dr.code = v.driver_code
+WHERE c.code = 'QAS-PLAPASA'
+  AND NOT EXISTS (
+    SELECT 1 FROM tms.fleet_document d
+    WHERE d.driver_id = dr.id AND d.document_type = v.document_type AND d.document_number = v.number);
+
+-- Factores de emisión (kg CO2e por km recorrido), todos diésel. Valores de DEMOSTRACIÓN (SUPUESTO),
+-- del orden de los factores públicos para camión rígido por tamaño: PLAPASA (o su auditor de huella)
+-- tiene que darnos los suyos. Sólo se escriben donde el tipo no tiene factor, así que el que alguien
+-- haya corregido en la pantalla no se pisa.
+--   NHR-35 0,30 · FURGON-5T y su caja baja 0,55 · CAMION-10T 0,90 · TRAILER-12M 1,10
+UPDATE tms.vehicle_type vt
+SET fuel_type = 'DIESEL', emission_factor_kg_co2e_per_km = v.factor
+FROM tms.company c
+JOIN tms.organization o ON o.id = c.organization_id AND o.code = 'QAS-PLAPASA'
+CROSS JOIN (VALUES
+    ('NHR-35',         0.3000),
+    ('FURGON-5T',      0.5500),
+    ('FURGON-5T-BAJO', 0.5500),
+    ('CAMION-10T',     0.9000),
+    ('TRAILER-12M',    1.1000)
+) AS v(code, factor)
+WHERE c.code = 'QAS-PLAPASA'
+  AND vt.company_id = c.id AND vt.code = v.code
+  AND vt.emission_factor_kg_co2e_per_km IS NULL;
 
 -- El usuario del portal del transportista (ADR-018): una membresía de la empresa atada a TRLIT, con
 -- sólo el rol CARRIER_OPERATOR. Ve los viajes de TRLIT recién cuando el almacén los despacha.

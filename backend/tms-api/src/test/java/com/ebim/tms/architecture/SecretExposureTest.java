@@ -43,7 +43,10 @@ class SecretExposureTest {
      */
     private static final Set<String> SHOW_ONCE_VIEWS = Set.of(
             "com.ebim.tms.integration.application.WebhookSubscriptionSecretView",
-            "com.ebim.tms.integration.application.IntegrationClientSecretView");
+            "com.ebim.tms.integration.application.IntegrationClientSecretView",
+            // ADR-029: a customer tracking link's token, shown to the person who generated it and stored
+            // only as its SHA-256. Every other view of a link (TrackingLinkView) carries neither.
+            "com.ebim.tms.orders.application.IssuedTrackingLinkView");
 
     /** Component names that carry something usable. A hint or a fingerprint carries nothing. */
     private static final Set<String> SAFE_SUFFIXES = Set.of("hint", "algorithm", "rotatedat",

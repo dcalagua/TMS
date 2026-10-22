@@ -6,6 +6,7 @@ import { AppCard, DetailGrid, DetailItem, PageHeader, SectionHeader } from "../s
 import { useColorMode } from "../lib/colorMode";
 import { DENSITY_LIST, THEME_LIST, type Density } from "../theme";
 import { getLang, setLang, t } from "../lib/i18n";
+import { PasswordCard } from "./account/PasswordCard";
 
 /**
  * El perfil de la persona, fuera del ámbito de empresa a propósito: una cuenta es de quien la
@@ -27,7 +28,7 @@ export function AccountPage() {
         icon={<PersonRounded />}
         tint="#B0BEC5"
         title={t("Mi cuenta")}
-        subtitle={t("Nombre y contraseña")}
+        subtitle={t("Identidad, contraseña y apariencia")}
       />
 
       <Box sx={{ display: "grid", gap: 3, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
@@ -44,6 +45,8 @@ export function AccountPage() {
             />
           </DetailGrid>
         </AppCard>
+
+        <PasswordCard email={profile?.email ?? user?.email ?? null} />
 
         <AppCard title={t("Apariencia")}>
           <SectionHeader title={t("Tema")} />

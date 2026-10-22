@@ -5,9 +5,10 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PortalTripDetail } from "../../shared/api/portalApi";
+import { emulatePhoneViewport } from "../../test/phoneViewport";
 import { createMemoryStore } from "./offline/memoryStore";
 import { PortalOfflineProvider } from "./offline/PortalOfflineProvider";
-import type { OutboxEntry } from "./offline/types";
+import type { DocumentOutboxEntry as OutboxEntry, ExecutionOutboxEntry } from "./offline/types";
 
 /**
  * La pantalla de un viaje en el teléfono (ADR-019 §1): la cola reflejada sobre los documentos,
@@ -17,9 +18,12 @@ import type { OutboxEntry } from "./offline/types";
 const COMPANY = "11111111-1111-4111-8111-111111111111";
 const TRIP = "t-1";
 
+/** Los permisos del usuario del portal; cada prueba puede quitarle los de V70. */
+let permissions: string[] = ["portal.trip:read", "portal.document:report", "portal.stop:execute", "portal.delivery:report"];
+
 vi.mock("../../shared/company/CompanyContext", () => ({
   CompanyProvider: ({ children }: { children: ReactNode }) => children,
-  useCompany: () => ({ selected: { id: COMPANY } }),
+  useCompany: () => ({ selected: { id: COMPANY }, hasPermission: (p: string) => permissions.includes(p) }),
 }));
 
 import { PortalTripPage } from "./PortalTripPage";
@@ -80,6 +84,8 @@ function renderTrip() {
 }
 
 beforeEach(() => {
+  emulatePhoneViewport(390);
+  permissions = ["portal.trip:read", "portal.document:report", "portal.stop:execute", "portal.delivery:report"];
   store = createMemoryStore();
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(DETAIL), {
     status: 200, headers: { "content-type": "application/json" },
@@ -155,4 +161,131 @@ describe("la pantalla del viaje en el portal", () => {
     expect(screen.getByRole("button", { name: "Factura F001-1" })).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  describe("V70: las paradas y las entregas desde el portal", () => {
+    const ON_THE_ROAD: PortalTripDetail = {
+      ...DETAIL,
+      trip: { ...DETAIL.trip, status: "IN_TRANSIT" },
+      incidents: [],
+      stops: [
+        {
+          ...DETAIL.stops[0],
+          executionStatus: "PENDING", allowedExecutionTransitions: ["ARRIVED", "SKIPPED", "FAILED"],
+          actualArrivalAt: null, serviceStartedAt: null, actualDepartureAt: null,
+          orders: [{ orderId: "o-1", orderNumber: "TO-1", customerName: "Bodega San Martín", assignedWeightKg: 1000,
+            assignedVolumeM3: 10, assignedPallets: 10, delivery: null }],
+        },
+        {
+          ...DETAIL.stops[1],
+          executionStatus: "ARRIVED", allowedExecutionTransitions: ["IN_SERVICE", "COMPLETED", "FAILED"],
+          actualArrivalAt: "2026-10-12T15:00:00Z", serviceStartedAt: null, actualDepartureAt: null,
+          orders: [{ orderId: "o-2", orderNumber: "TO-2", customerName: "Minimarket Lucía", assignedWeightKg: 500,
+            assignedVolumeM3: 5, assignedPallets: 4,
+            delivery: { id: "del-2", result: "DELIVERED", deliveredAt: "2026-10-12T15:10:00Z", receiverName: "Lucía",
+              receiverDocument: null, notes: null, source: "OPERATOR", recordedAt: "2026-10-12T15:11:00Z",
+              evidenceCount: 0, refusedWeightKg: null, refusedVolumeM3: null, refusedPallets: null } }],
+        },
+      ],
+    };
+
+    /** Un servidor con memoria: tras la llegada a la parada 1, también la lectura la trae. */
+    function serve(detail: PortalTripDetail) {
+      let current = detail;
+      vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          current = {
+            ...current,
+            stops: current.stops.map((stop, i) => i === 0 ? { ...stop, executionStatus: "ARRIVED",
+              allowedExecutionTransitions: ["IN_SERVICE", "COMPLETED", "FAILED"] } : stop),
+          };
+        }
+        return new Response(JSON.stringify(current), { status: 200, headers: { "content-type": "application/json" } });
+      }));
+    }
+
+    it("ofrece solo lo que la parada permite, y nunca «omitir», que es cosa de la oficina", async () => {
+      serve(ON_THE_ROAD);
+      renderTrip();
+
+      const first = await screen.findByRole("listitem", { name: "Bodega San Martín" });
+      expect(within(first).getByText("Sin iniciar")).toBeInTheDocument();
+      expect(within(first).getByRole("button", { name: "Llegué" })).toBeInTheDocument();
+      expect(within(first).getByRole("button", { name: "No se pudo atender" })).toBeInTheDocument();
+      expect(within(first).queryByRole("button", { name: /Omit/ })).not.toBeInTheDocument();
+      // Sin llegar a la parada no se registra una entrega: se dice por qué.
+      expect(within(first).queryByRole("button", { name: /Registrar entrega/ })).not.toBeInTheDocument();
+      expect(within(first).getByText("Marca «Llegué» para registrar la entrega de los pedidos.")).toBeInTheDocument();
+
+      const second = screen.getByRole("listitem", { name: "Minimarket Lucía" });
+      expect(within(second).getByRole("button", { name: "Empecé la descarga" })).toBeInTheDocument();
+      expect(within(second).getByRole("button", { name: "Terminé la parada" })).toBeInTheDocument();
+      expect(within(second).getByText("Registrado por la oficina")).toBeInTheDocument();
+      expect(within(second).getByRole("button", { name: "Corregir entrega TO-2" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Reportar incidencia del viaje" })).toBeInTheDocument();
+    });
+
+    it("«Llegué» envía la llegada con su clave y la hora del toque", async () => {
+      serve(ON_THE_ROAD);
+      const user = userEvent.setup();
+      renderTrip();
+
+      const first = await screen.findByRole("listitem", { name: "Bodega San Martín" });
+      await user.click(within(first).getByRole("button", { name: "Llegué" }));
+
+      const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls as [string, RequestInit][];
+      const post = await waitForPost(calls);
+      expect(post[0]).toContain(`/portal/trips/${TRIP}/stops/s-1/arrive`);
+      expect((post[1].headers as Record<string, string>)["Idempotency-Key"]).toMatch(/^[0-9a-f-]{36}$/);
+      expect(JSON.parse(post[1].body as string).occurredAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(await within(first).findByText("En el punto")).toBeInTheDocument();
+    });
+
+    it("sin los permisos de V70 la parada se ve, pero no ofrece ninguna acción", async () => {
+      permissions = ["portal.trip:read", "portal.document:report"];
+      serve(ON_THE_ROAD);
+      renderTrip();
+
+      const first = await screen.findByRole("listitem", { name: "Bodega San Martín" });
+      expect(within(first).getByText("Sin iniciar")).toBeInTheDocument();
+      expect(within(first).queryByRole("button", { name: "Llegué" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Reportar incidencia del viaje" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Corregir entrega/ })).not.toBeInTheDocument();
+    });
+
+    it("una llegada que espera en la cola ya se enseña, marcada «Pendiente de sincronizar»", async () => {
+      const queued: ExecutionOutboxEntry = {
+        id: "x-1", userId: "u-1", companyId: COMPANY, tripId: TRIP, kind: "EXECUTION", idempotencyKey: "k-x",
+        action: { type: "STOP", stopId: "s-1", transition: "arrive", occurredAt: "2026-10-12T14:30:00.000Z" },
+        title: "Llegué · Parada 1", reportedAt: "2026-10-12T14:30:00.000Z", createdAt: "2026-10-12T14:30:00.000Z",
+        attempts: 0, lastError: null, state: "PENDING", nextAttemptAt: "2099-01-01T00:00:00.000Z", shipmentNumber: "SH-0042",
+      };
+      await store.putOutbox(queued);
+      serve(ON_THE_ROAD);
+      renderTrip();
+
+      const first = await screen.findByRole("listitem", { name: "Bodega San Martín" });
+      expect(within(first).getByText("En el punto")).toBeInTheDocument();
+      expect(within(first).getAllByText("Pendiente de sincronizar").length).toBeGreaterThan(0);
+      // Ya en el punto: ahora sí se registra la entrega del pedido.
+      expect(within(first).getByRole("button", { name: "Registrar entrega TO-1" })).toBeInTheDocument();
+    });
+
+    it("un viaje que ya no está en ruta no ofrece acciones: las correcciones son de la oficina", async () => {
+      serve({ ...ON_THE_ROAD, trip: { ...ON_THE_ROAD.trip, status: "COMPLETED" },
+        stops: ON_THE_ROAD.stops.map((stop) => ({ ...stop, allowedExecutionTransitions: [] })) });
+      renderTrip();
+
+      const second = await screen.findByRole("listitem", { name: "Minimarket Lucía" });
+      expect(within(second).queryByRole("button", { name: /Terminé|Corregir/ })).not.toBeInTheDocument();
+    });
+  });
 });
+
+async function waitForPost(calls: [string, RequestInit][]): Promise<[string, RequestInit]> {
+  for (let i = 0; i < 50; i++) {
+    const found = calls.find(([, init]) => init?.method === "POST");
+    if (found) return found;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("no POST was sent");
+}

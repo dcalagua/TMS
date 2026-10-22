@@ -85,7 +85,7 @@ class TenderWaterfallResponseRoutingTest {
                 tenderRepository, tenderService, mock(CarrierLookupPort.class),
                 mock(CarrierQuotationPort.class), mock(TripCostingLookupPort.class), actors,
                 mock(AuditRecorder.class), new SimpleMeterRegistry(),
-                Clock.fixed(Instant.parse("2026-08-28T09:00:00Z"), ZoneOffset.UTC));
+                Clock.fixed(Instant.parse("2026-08-28T09:00:00Z"), ZoneOffset.UTC), false);
     }
 
     @Test
@@ -104,7 +104,7 @@ class TenderWaterfallResponseRoutingTest {
 
         assertThat(candidate(waterfall, 1).status()).isEqualTo(WaterfallCandidateStatus.REJECTED);
         assertThat(candidate(waterfall, 2).status()).isEqualTo(WaterfallCandidateStatus.OFFERED);
-        verify(tenderService).createFor(any(), any(), any(), any());
+        verify(tenderService).createFor(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -122,7 +122,7 @@ class TenderWaterfallResponseRoutingTest {
         assertThat(candidate(waterfall, 1).status()).isEqualTo(WaterfallCandidateStatus.REJECTED);
         assertThat(candidate(waterfall, 2).status()).isEqualTo(WaterfallCandidateStatus.PENDING);
         assertThat(waterfall.status()).isEqualTo(WaterfallStatus.ACTIVE);
-        verify(tenderService, never()).createFor(any(), any(), any(), any());
+        verify(tenderService, never()).createFor(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -140,7 +140,7 @@ class TenderWaterfallResponseRoutingTest {
         assertThat(waterfall.status()).isEqualTo(WaterfallStatus.ACCEPTED);
         assertThat(candidate(waterfall, 1).status()).isEqualTo(WaterfallCandidateStatus.ACCEPTED);
         assertThat(candidate(waterfall, 2).status()).isEqualTo(WaterfallCandidateStatus.SKIPPED);
-        verify(tenderService, never()).createFor(any(), any(), any(), any());
+        verify(tenderService, never()).createFor(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -153,7 +153,7 @@ class TenderWaterfallResponseRoutingTest {
         service.tenderAnswered(SCOPE, trip(), tender, TenderStatus.CANCELLED);
 
         assertThat(waterfall.status()).isEqualTo(WaterfallStatus.CANCELLED);
-        verify(tenderService, never()).createFor(any(), any(), any(), any());
+        verify(tenderService, never()).createFor(any(), any(), any(), any(), any());
     }
 
     @Test

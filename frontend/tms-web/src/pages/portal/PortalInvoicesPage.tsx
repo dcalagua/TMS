@@ -15,7 +15,7 @@ import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDate } from "../../lib/locale";
 import { R } from "../../theme";
-import { portalInvoicesKey, portalMoney } from "./portalUi";
+import { portalInvoicesKey, portalMoney, PORTAL_PAGE_GRID } from "./portalUi";
 
 /**
  * Lo que se enseña cuando la lectura falla. Sin señal no hay copia guardada de las facturas (no
@@ -52,7 +52,7 @@ export function PortalInvoicesPage() {
   const invoices = invoicesQuery.data ?? [];
 
   return (
-    <Box sx={{ display: "grid", gap: 2 }}>
+    <Box sx={PORTAL_PAGE_GRID}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <Typography component="h1" sx={{ fontWeight: 800, fontSize: 24, flex: 1 }}>{t("Mis facturas")}</Typography>
         <IconButton

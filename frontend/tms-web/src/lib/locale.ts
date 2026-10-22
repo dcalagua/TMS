@@ -140,3 +140,9 @@ export function toIsoDate(date: Date): string {
 
 /** Hoy en el formato que espera un `<input type="date">` y los filtros de fecha. */
 export const today = (): string => toIsoDate(new Date());
+
+/** «123,45 kg CO₂e»; arriba de una tonelada, en toneladas. */
+export function fmtCo2e(kg: number | null | undefined): string {
+  if (kg === null || kg === undefined) return "—";
+  return kg >= 1000 ? `${fmtDecimal(kg / 1000, 2)} t CO₂e` : `${fmtDecimal(kg, 2)} kg CO₂e`;
+}

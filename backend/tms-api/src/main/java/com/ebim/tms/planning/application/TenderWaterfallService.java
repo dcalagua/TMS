@@ -35,6 +35,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -98,12 +99,14 @@ public class TenderWaterfallService {
     private final AuditRecorder auditRecorder;
     private final MeterRegistry meterRegistry;
     private final Clock clock;
+    private final boolean autoAdvanceEnabled;
 
     public TenderWaterfallService(TenderWaterfallRepository waterfallRepository, TripRepository tripRepository,
             TripTenderRepository tenderRepository, TripTenderService tenderService,
             CarrierLookupPort carrierLookupPort, CarrierQuotationPort carrierQuotationPort,
             TripCostingLookupPort tripCostingLookupPort, AuditActorProvider auditActorProvider,
-            AuditRecorder auditRecorder, MeterRegistry meterRegistry, Clock clock) {
+            AuditRecorder auditRecorder, MeterRegistry meterRegistry, Clock clock,
+            @Value("${tms.planning.tender-waterfall.auto-advance.enabled:false}") boolean autoAdvanceEnabled) {
         this.waterfallRepository = waterfallRepository;
         this.tripRepository = tripRepository;
         this.tenderRepository = tenderRepository;
@@ -115,6 +118,7 @@ public class TenderWaterfallService {
         this.auditRecorder = auditRecorder;
         this.meterRegistry = meterRegistry;
         this.clock = clock;
+        this.autoAdvanceEnabled = autoAdvanceEnabled;
     }
 
     // --- starting ---------------------------------------------------------------------
@@ -162,7 +166,7 @@ public class TenderWaterfallService {
                         "maxAttempts", String.valueOf(waterfall.maxAttempts())));
         count(WATERFALL_METRIC, "started");
 
-        offerNext(scope, trip, waterfall, now);
+        offerNext(scope, trip, waterfall, now, null);
         return view(scope, waterfall);
     }
 
@@ -201,10 +205,16 @@ public class TenderWaterfallService {
      * <p>Called after a rejection, after a lapse, and once when the waterfall starts. Idempotent
      * in the way that matters: a waterfall that already has an offer out is left alone, so a
      * duplicate trigger cannot produce two live tenders for one shipment.
+     *
+     * @param onBehalfOf the person the offer is signed with, or null for the interactive caller. Only
+     *     {@link #autoAdvance} passes one: it runs as a machine and signs with whoever started the
+     *     waterfall. The audit trail still names the machine as the actor.
+     * @return true when an offer went out, false when the waterfall ended or was left alone
      */
-    private void offerNext(CompanyScope scope, Trip trip, TenderWaterfall waterfall, OffsetDateTime now) {
+    private boolean offerNext(CompanyScope scope, Trip trip, TenderWaterfall waterfall, OffsetDateTime now,
+            UUID onBehalfOf) {
         if (!waterfall.status().isActive() || waterfall.offered().isPresent()) {
-            return;
+            return false;
         }
         Optional<TenderWaterfallCandidate> next = waterfall.nextToOffer();
         if (next.isEmpty()) {
@@ -212,7 +222,7 @@ public class TenderWaterfallService {
                     ? "Reached the limit of " + waterfall.maxAttempts() + " offers."
                     : "Every carrier on the list has been offered the shipment.";
             end(scope, trip, waterfall, WaterfallStatus.EXHAUSTED, note, now);
-            return;
+            return false;
         }
 
         TenderWaterfallCandidate candidate = next.get();
@@ -223,16 +233,17 @@ public class TenderWaterfallService {
         TenderRequest request = new TenderRequest(
                 candidate.quotedAmount(), candidate.quotedCurrency(),
                 "Automatic tender waterfall, rank " + candidate.rank() + ".", deadline);
-        tenderService.createFor(scope, trip.id(), candidate.carrierId(), request);
+        tenderService.createFor(scope, trip.id(), candidate.carrierId(), request, onBehalfOf);
 
         TripTender opened = tenderRepository.findLive(scope.companyId(), trip.id())
                 .orElseThrow(() -> new IllegalStateException(
                         "the tender just created for shipment " + trip.shipmentNumber() + " is not live"));
-        tenderService.send(scope, trip.id(), opened.id());
+        tenderService.send(scope, trip.id(), opened.id(), onBehalfOf);
 
         candidate.offered(opened.id());
         waterfallRepository.saveAndFlush(waterfall);
-        count(ADVANCE_METRIC, "offered");
+        count(ADVANCE_METRIC, onBehalfOf == null ? "offered" : "auto-offered");
+        return true;
     }
 
     /**
@@ -330,7 +341,7 @@ public class TenderWaterfallService {
                     trip.shipmentNumber(), answered.rank());
             return;
         }
-        offerNext(scope, trip, waterfall, now);
+        offerNext(scope, trip, waterfall, now, null);
     }
 
     // --- ending -----------------------------------------------------------------------
@@ -432,7 +443,7 @@ public class TenderWaterfallService {
                 && tenderRepository.findLive(waterfall.companyId(), waterfall.tripId())
                         .map(live -> live.effectiveStatus(now) == TenderStatus.EXPIRED)
                         .orElse(false);
-        return TenderWaterfallView.from(waterfall, byId).withLapsed(lapsed);
+        return TenderWaterfallView.from(waterfall, byId).withLapsed(lapsed).withAutoAdvance(autoAdvanceEnabled);
     }
 
     // --- helpers ----------------------------------------------------------------------
@@ -482,9 +493,78 @@ public class TenderWaterfallService {
             count(ADVANCE_METRIC, "expired");
         }
 
-        offerNext(scope, trip, waterfall, now);
+        offerNext(scope, trip, waterfall, now, null);
         return view(scope, waterfall);
     }
+
+    /** What one automatic advance did; see {@link #autoAdvance}. */
+    public enum AutoAdvanceOutcome {
+        /** The lapsed offer was closed and the next carrier was offered the shipment. */
+        ADVANCED,
+        /** There was nobody left to offer it to: the waterfall ended EXHAUSTED. */
+        EXHAUSTED,
+        /** The offer that is out has not lapsed: nothing to do. */
+        NOT_DUE,
+        /** The waterfall records nobody who started it, so there is nobody to sign the next offer. */
+        NO_SIGNATORY,
+        /** No waterfall is running on the shipment any more. */
+        NOT_RUNNING
+    }
+
+    /**
+     * The automatic form of {@link #advance} (ITEM 10), for {@code TenderWaterfallSweep}: the same
+     * steps, never ahead of the deadline, and signed with the person who started the waterfall.
+     *
+     * <p><b>Why that signature and not the machine's.</b> An offer to a carrier is a commercial
+     * commitment and {@code trip_tender.created_by} names a person by design (V31). Starting a
+     * waterfall is that person's decision to offer the shipment down the stored list, one carrier after
+     * another, each for {@code response_minutes}; the sweep only keeps the clock the person would
+     * otherwise have to watch. So the tender row names the person who authorised the list, and the
+     * audit trail names the job ({@code system:tender-waterfall}) as the actor that sent it - both
+     * facts are kept and neither is invented. A waterfall with no {@code started_by} is left for a
+     * dispatcher.
+     *
+     * <p>Never throws for "not due": a sweep racing a carrier's acceptance or a dispatcher's click
+     * finds the state moved and reports it, rather than rolling back with a conflict. The caller holds
+     * the trip's row lock already ({@code FOR UPDATE SKIP LOCKED}); taking it again here is a no-op in
+     * the same transaction and keeps this method safe to call on its own.
+     */
+    @Transactional
+    public AutoAdvanceOutcome autoAdvance(CompanyScope scope, UUID tripId) {
+        Trip trip = lockedTrip(scope, tripId);
+        Optional<TenderWaterfall> found = waterfallRepository
+                .findByCompanyIdAndTripIdAndStatus(scope.companyId(), tripId, WaterfallStatus.ACTIVE);
+        if (found.isEmpty()) {
+            return AutoAdvanceOutcome.NOT_RUNNING;
+        }
+        TenderWaterfall waterfall = found.get();
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        Optional<TenderWaterfallCandidate> offered = waterfall.offered();
+        TripTender live = offered.isPresent()
+                ? tenderRepository.findLive(scope.companyId(), tripId).orElse(null)
+                : null;
+        if (live != null && live.effectiveStatus(now) != TenderStatus.EXPIRED) {
+            return AutoAdvanceOutcome.NOT_DUE;
+        }
+        if (waterfall.startedBy() == null) {
+            return AutoAdvanceOutcome.NO_SIGNATORY;
+        }
+        if (offered.isPresent()) {
+            offered.get().decided(WaterfallCandidateStatus.EXPIRED, now);
+            if (live != null) {
+                tenderService.resolveLiveLapse(scope, trip);
+            }
+            waterfallRepository.saveAndFlush(waterfall);
+            count(ADVANCE_METRIC, "auto-expired");
+        }
+        if (offerNext(scope, trip, waterfall, now, waterfall.startedBy())) {
+            return AutoAdvanceOutcome.ADVANCED;
+        }
+        return waterfall.status() == WaterfallStatus.EXHAUSTED
+                ? AutoAdvanceOutcome.EXHAUSTED
+                : AutoAdvanceOutcome.NOT_DUE;
+    }
+
 
     private Trip lockedTrip(CompanyScope scope, UUID tripId) {
         return tripRepository.findByIdAndCompanyIdForUpdate(tripId, scope.companyId())

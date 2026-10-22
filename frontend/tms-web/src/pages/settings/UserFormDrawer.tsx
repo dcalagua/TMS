@@ -14,6 +14,7 @@ import {
 } from "../../shared/api/administrationApi";
 import { ActiveBadge, FormDrawer, FormRow, FormSection } from "../../shared/ui/components";
 import { t } from "../../lib/i18n";
+import { roleDescription, roleLabel } from "../../lib/enums";
 
 const FORM_ID = "user-form";
 
@@ -226,10 +227,10 @@ export function UserFormDrawer({ companyId, user, onClose, onSaved }: UserFormDr
                     }
                     label={
                       <Box>
-                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{role.name}</Typography>
-                        {role.description && (
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{roleLabel(role.code, role.name)}</Typography>
+                        {roleDescription(role.code, role.description) && (
                           <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                            {role.description}
+                            {roleDescription(role.code, role.description)}
                           </Typography>
                         )}
                         {!role.assignable && (
