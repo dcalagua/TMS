@@ -38,6 +38,8 @@ export const ENUM_LABELS = {
     SHIPMENT_CONFIRMED: "Envío confirmado",
     SHIPMENT_DISPATCHED: "Envío despachado",
     SHIPMENT_READY: "Envío listo para despacho",
+    TRACKING_LINK_CREATED: "Enlace de seguimiento generado",
+    TRACKING_LINK_REVOKED: "Enlace de seguimiento revocado",
     TENDER_ACCEPTED: "Oferta aceptada",
     TENDER_CANCELLED: "Oferta retirada",
     TENDER_EXPIRED: "Oferta vencida",
@@ -302,6 +304,17 @@ export const ENUM_LABELS = {
     PALLETS: "Por pallets",
     STOPS: "Por paradas (y peso dentro de la parada)",
     EQUAL: "Partes iguales por pedido",
+  },
+  /** ADR-029: la placa en el enlace de seguimiento del cliente. */
+  trackingPlateDisplay: {
+    MASKED: "Parcial: solo los tres últimos caracteres",
+    HIDDEN: "Oculta",
+  },
+  /** ADR-029: el estado de un enlace de seguimiento, visto desde la oficina. */
+  trackingLinkState: {
+    ACTIVE: "Activo",
+    EXPIRED: "Caducado",
+    REVOKED: "Revocado",
   },
   /** ADR-026: de dónde sale el costo que se repartió. */
   allocationCostSource: {

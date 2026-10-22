@@ -94,6 +94,9 @@ class SchemaExposureIntegrationTest {
             "platform_provisioning_request", "platform_provisioning_audit",
             // V54: holds on an order (ADR-014). Lifted, never deleted - no DELETE grant.
             "order_hold",
+            // V74: customer tracking links (ADR-029). Revoked, never deleted; only revocation and the
+            // view counter are updatable (column grants).
+            "tracking_link",
             // V55: the documents that travel with orders (ADR-015).
             "logistics_document", "logistics_document_order",
             // V69: the destinatarios of a guide (ADR-028).
@@ -166,6 +169,8 @@ class SchemaExposureIntegrationTest {
             "external_dispatch", "external_dispatch_order", "warehouse_milestone",
             // V54: holds on an order (ADR-014).
             "order_hold",
+            // V74: customer tracking links (ADR-029).
+            "tracking_link",
             // V55: the documents that travel with orders (ADR-015).
             "logistics_document", "logistics_document_order",
             // V69: the destinatarios of a guide (ADR-028).
@@ -467,6 +472,9 @@ class SchemaExposureIntegrationTest {
         withheld.put("warehouse_milestone", List.of("UPDATE", "DELETE"));
         // A hold is lifted with a reason, never erased (V54).
         withheld.put("order_hold", List.of("DELETE"));
+        // V74: a tracking link is revoked, never erased; UPDATE is granted on the revocation and view columns only, so the
+        // table-level privilege is absent (column grants are not table grants).
+        withheld.put("tracking_link", List.of("UPDATE", "DELETE"));
         // V55: a document is replaced, never deleted; its order links are rewritten whole.
         withheld.put("logistics_document", List.of("DELETE"));
         withheld.put("logistics_document_order", List.of("UPDATE"));

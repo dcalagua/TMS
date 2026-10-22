@@ -220,5 +220,12 @@ public enum AuditAction {
     PAYMENT_RECORDED,
 
     /** A trip's cost was allocated to its orders: a new version of the allocation (V68, ADR-026). */
-    COST_ALLOCATED
+    COST_ALLOCATED,
+
+    /**
+     * A customer tracking link was generated for an order, and revoked (migration V74, ADR-029). The
+     * event carries the link id and its expiry - never the token, which exists only in the response.
+     */
+    TRACKING_LINK_CREATED,
+    TRACKING_LINK_REVOKED
 }

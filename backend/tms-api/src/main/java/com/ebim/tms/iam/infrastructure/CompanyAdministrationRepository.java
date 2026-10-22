@@ -42,7 +42,8 @@ public class CompanyAdministrationRepository {
                    s.shipment_number_prefix AS shipment_number_prefix,
                    s.dispatch_confirmation_mode AS dispatch_confirmation_mode,
                    s.accrual_trigger        AS accrual_trigger,
-                   s.cost_allocation_basis  AS cost_allocation_basis
+                   s.cost_allocation_basis  AS cost_allocation_basis,
+                   s.tracking_plate_display AS tracking_plate_display
             FROM tms.company c
             JOIN tms.organization o ON o.id = c.organization_id
             LEFT JOIN tms.company_settings s ON s.company_id = c.id
@@ -67,10 +68,10 @@ public class CompanyAdministrationRepository {
             INSERT INTO tms.company_settings (
                 company_id, default_country,
                 order_number_prefix, shipment_number_prefix, dispatch_confirmation_mode, accrual_trigger,
-                cost_allocation_basis, created_by, updated_by)
+                cost_allocation_basis, tracking_plate_display, created_by, updated_by)
             VALUES (:companyId, :defaultCountry,
                 :orderNumberPrefix, :shipmentNumberPrefix, :dispatchConfirmationMode, :accrualTrigger,
-                :costAllocationBasis, :actorId, :actorId)
+                :costAllocationBasis, :trackingPlateDisplay, :actorId, :actorId)
             ON CONFLICT (company_id) DO UPDATE
                SET default_country = EXCLUDED.default_country,
                    order_number_prefix = EXCLUDED.order_number_prefix,
@@ -78,6 +79,7 @@ public class CompanyAdministrationRepository {
                    dispatch_confirmation_mode = EXCLUDED.dispatch_confirmation_mode,
                    accrual_trigger = EXCLUDED.accrual_trigger,
                    cost_allocation_basis = EXCLUDED.cost_allocation_basis,
+                   tracking_plate_display = EXCLUDED.tracking_plate_display,
                    updated_by = EXCLUDED.updated_by
             """;
 
@@ -151,7 +153,8 @@ public class CompanyAdministrationRepository {
                                 CompanySettings.modeOf(rs.getString("dispatch_confirmation_mode")),
                                 null, null,
                                 CompanySettings.accrualTriggerOf(rs.getString("accrual_trigger")),
-                                CompanySettings.costAllocationBasisOf(rs.getString("cost_allocation_basis")))))
+                                CompanySettings.costAllocationBasisOf(rs.getString("cost_allocation_basis")),
+                                CompanySettings.trackingPlateDisplayOf(rs.getString("tracking_plate_display")))))
                 .optional();
     }
 
@@ -175,6 +178,7 @@ public class CompanyAdministrationRepository {
                 .param("accrualTrigger", settings.accrualTrigger().name())
                 .param("costAllocationBasis", settings.costAllocationBasis() == null
                         ? null : settings.costAllocationBasis().name())
+                .param("trackingPlateDisplay", settings.trackingPlateDisplay().name())
                 .param("actorId", actorId)
                 .update();
     }

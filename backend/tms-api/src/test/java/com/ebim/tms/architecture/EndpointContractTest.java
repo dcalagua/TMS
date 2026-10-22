@@ -87,6 +87,10 @@ class EndpointContractTest {
      *   <li>{@code PlatformProvisioningController#health} - MasterAdmin's CHECK_HEALTH probe, anonymous
      *       by contract on its own security chain. A fixed {@code {"status":"ok"}} or
      *       {@code {"status":"unavailable"}}, with no tenant, configuration or version in it.</li>
+     *   <li>{@code PublicTrackingController#view} - the customer tracking link (ADR-029), anonymous by
+     *       design on a chain of its own that reads no bearer token and permits only this {@code GET}.
+     *       The token in the path is the credential and names one order of one company; the projection
+     *       runs under RLS bound to that company and returns a fixed, minimal set of fields.</li>
      * </ul>
      */
     private static final Set<String> UNGUARDED_BY_DESIGN = Set.of(
@@ -96,7 +100,8 @@ class EndpointContractTest {
             "NotificationController#markRead",
             "NotificationController#markAllRead",
             "IntegrationIdentityController#ping",
-            "PlatformProvisioningController#health");
+            "PlatformProvisioningController#health",
+            "PublicTrackingController#view");
 
     /**
      * Every permission-guarded user-facing handler declares the scope its permission is evaluated

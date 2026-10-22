@@ -197,6 +197,13 @@ Authoritative documents live under `docs/architecture/`:
   aliases), nullable fiscal columns (country, authority code, clave de acceso, transport dates, carrier,
   plate, origin) and `logistics_document_recipient`. Only shape is validated (EC: 3-3-9 number,
   49-digit clave). Amends ADR-015 decision 1. Contract: `docs/integrations/INBOUND_API_V1.md` §15.
+- `ADR-029-customer-tracking-link.md` - the customer tracking link shared by WhatsApp (V74): one order
+  per link, a 256-bit token stored only as its SHA-256, revocable, expiring 30 days after creation or 7
+  after the order closes; read anonymously through `GET /api/v1/public/tracking/{token}` on a security
+  chain of its own (`PublicTrackingSecurityConfig`, no bearer processing, one route, 404 for the rest,
+  rate limited). Hash -> tenant is the only owner-connection statement; the projection runs as `tms_app`
+  bound to that company. Minimal projection: no prices, addresses, driver or internal ids; the plate is
+  masked or hidden per `company_settings.tracking_plate_display`. Frontend `/t/:token`.
 
 Database and security detail lives in `docs/database/DATA_MODEL.md`,
 `docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.

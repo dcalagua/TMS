@@ -27,6 +27,7 @@ import {
   UsersPage, VehicleTypesPage, VehiclesPage, ZonesPage,
   DeliveryTrackingPage, ShipmentTrackingPage,
   DocumentDeliveriesPage, PortalTripPage, PortalTripsPage, PortalInvoicePage, PortalInvoicesPage,
+  TrackingPublicPage,
 } from "./app/lazyRoutes";
 
 /**
@@ -51,6 +52,10 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            {/* ADR-029: el enlace de seguimiento que el cliente abre desde WhatsApp. Fuera de
+                ProtectedRoute y de todo armazón: no hay sesión, no hay menú, y la página no pide
+                nada al backend más que su propio token. */}
+            <Route path="/t/:token" element={<Suspense fallback={null}><TrackingPublicPage /></Suspense>} />
 
             <Route element={<ProtectedRoute />}>
               {/* ADR-018: el portal de transportistas, con su propio armazón para el teléfono y
