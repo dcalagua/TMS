@@ -1,13 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { reportPortalDocument, type PortalDocument } from "../../../shared/api/portalApi";
+import { reportPortalDocument, sendPortalExecution } from "../../../shared/api/portalApi";
 import { clearMeCopy } from "../../../shared/company/meOfflineCopy";
 import { portalTripKey, portalTripsKey } from "../portalReport";
 import { defaultOfflineStore } from "./defaultStore";
 import { isOnline } from "./network";
 import { createOutboxEngine, entryToReport, type OutboxEngine } from "./outboxEngine";
 import { PortalOfflineContext, type PortalOfflineValue } from "./offlineContext";
-import type { OfflineStore, OutboxEntry } from "./types";
+import { isDocumentEntry, type OfflineStore, type OutboxEntry } from "./types";
 
 /**
  * El estado sin señal del portal (ADR-019 §1) para toda la app del transportista: si hay red,
@@ -32,12 +32,15 @@ interface PortalOfflineProviderProps {
   /** Pruebas: un almacén en memoria. */
   store?: OfflineStore;
   /** Pruebas: el envío. Por defecto, el POST multipart del portal. */
-  send?: (entry: OutboxEntry) => Promise<PortalDocument>;
+  send?: (entry: OutboxEntry) => Promise<unknown>;
   /** Pruebas: la hora. */
   now?: () => number;
 }
 
-function defaultSend(entry: OutboxEntry): Promise<PortalDocument> {
+function defaultSend(entry: OutboxEntry): Promise<unknown> {
+  if (!isDocumentEntry(entry)) {
+    return sendPortalExecution(entry.companyId, entry.tripId, entry.action, entry.idempotencyKey);
+  }
   return reportPortalDocument(entry.companyId, entry.tripId, entry.documentId, entryToReport(entry), entry.idempotencyKey);
 }
 
@@ -178,7 +181,11 @@ export function PortalOfflineProvider({ userId, children, store: injectedStore, 
     },
     hasQueued(tripId, documentId) {
       return entriesRef.current.some((entry) =>
-        entry.tripId === tripId && entry.documentId === documentId && entry.state !== "FAILED");
+        isDocumentEntry(entry) && entry.tripId === tripId && entry.documentId === documentId && entry.state !== "FAILED");
+    },
+    hasQueuedExecution(tripId) {
+      return entriesRef.current.some((entry) =>
+        !isDocumentEntry(entry) && entry.tripId === tripId && entry.state !== "FAILED");
     },
   }), [userId, store, online, entries, syncing, engine, refresh, sync, queryClient]);
 

@@ -101,6 +101,8 @@ class SchemaExposureIntegrationTest {
             // V57: document delivery tracking (ADR-018).
             "document_delivery", "document_delivery_order", "document_delivery_event",
             "document_delivery_evidence",
+            // V70: the Idempotency-Key of each carrier-portal execution action. Append-only.
+            "portal_action_receipt",
             // V59: the warehouse's material profiles (ADR-022).
             "material_profile",
             // V61: order cancellation with the warehouse (ADR-025 section 4).
@@ -171,6 +173,8 @@ class SchemaExposureIntegrationTest {
             // V57: document delivery tracking (ADR-018).
             "document_delivery", "document_delivery_order", "document_delivery_event",
             "document_delivery_evidence",
+            // V70's portal_action_receipt is not here: append-only, its tenant policy is split into
+            // p_tenant_company_scope_select / _insert like transport_event's.
             // V59: the warehouse's material profiles (ADR-022).
             "material_profile",
             // V61: order cancellation with the warehouse (ADR-025 section 4).
@@ -366,6 +370,28 @@ class SchemaExposureIntegrationTest {
                 .isEmpty();
     }
 
+    /**
+     * V70: the execution tables a carrier session now reads and writes from the portal carry the
+     * same RESTRICTIVE {@code p_carrier_scope} as the trip they belong to. One left without it would
+     * let a carrier session read - or write against - another carrier's deliveries and evidence.
+     */
+    @Test
+    @DisplayName("every execution table the portal touches carries the restrictive carrier policy (V70)")
+    void executionTablesCarryTheCarrierPolicy() throws SQLException {
+        assertThat(strings("""
+                SELECT t.name
+                FROM unnest(ARRAY['trip', 'trip_stop', 'trip_order_assignment', 'order_delivery',
+                                  'order_delivery_line', 'delivery_evidence', 'transport_event',
+                                  'trip_exception', 'portal_action_receipt']) AS t(name)
+                WHERE NOT EXISTS (SELECT 1 FROM pg_policies p
+                                   WHERE p.schemaname = 'tms' AND p.tablename = t.name
+                                     AND p.policyname = 'p_carrier_scope' AND p.permissive = 'RESTRICTIVE')
+                ORDER BY 1
+                """))
+                .as("a carrier session must see and write only its own carrier's execution rows")
+                .isEmpty();
+    }
+
     @Test
     @DisplayName("no policy is granted to the Supabase API roles: the Data API stays denied")
     void policiesTargetTheRuntimeRoleOnly() throws SQLException {
@@ -451,6 +477,7 @@ class SchemaExposureIntegrationTest {
         withheld.put("document_delivery", List.of("DELETE"));
         withheld.put("document_delivery_order", List.of("UPDATE", "DELETE"));
         withheld.put("document_delivery_event", List.of("UPDATE", "DELETE"));
+        withheld.put("portal_action_receipt", List.of("UPDATE", "DELETE"));
         withheld.put("document_delivery_evidence", List.of("UPDATE", "DELETE"));
         // V59: a profile the warehouse stops sending stays as the last known copy.
         withheld.put("material_profile", List.of("DELETE"));

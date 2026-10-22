@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../shared/api/httpClient";
 import type { PortalDocument } from "../../../shared/api/portalApi";
 import { createMemoryStore } from "./memoryStore";
-import { BACKOFF_BASE_MS, backoffDelay, createOutboxEngine, type OutboxDraft } from "./outboxEngine";
-import type { OutboxEntry } from "./types";
+import { BACKOFF_BASE_MS, backoffDelay, createOutboxEngine, type DocumentOutboxDraft } from "./outboxEngine";
+import type { DocumentOutboxEntry, ExecutionOutboxEntry, OutboxEntry } from "./types";
 
 /**
  * La cola de reportes sin señal (ADR-019 §1). Lo que se protege: nada se pierde en silencio,
@@ -15,7 +15,7 @@ const USER = "u-1";
 const COMPANY = "c-1";
 const TRIP = "t-1";
 
-function draft(overrides: Partial<OutboxDraft> = {}): OutboxDraft {
+function draft(overrides: Partial<DocumentOutboxDraft> = {}): DocumentOutboxDraft {
   return {
     companyId: COMPANY,
     tripId: TRIP,
@@ -45,7 +45,7 @@ function setup(options: { online?: () => boolean } = {}) {
   const store = createMemoryStore();
   let clock = Date.parse("2026-10-12T15:00:00.000Z");
   let seq = 0;
-  const send = vi.fn<(entry: OutboxEntry) => Promise<PortalDocument>>();
+  const send = vi.fn<(entry: OutboxEntry) => Promise<unknown>>();
   const onSent = vi.fn();
   const engine = createOutboxEngine({
     store,
@@ -73,7 +73,7 @@ describe("la cola de reportes", () => {
     expect(stored).toMatchObject({
       userId: USER, state: "PENDING", attempts: 0, idempotencyKey: "k-1", reportedAt: "2026-10-12T14:00:00.000Z",
     });
-    expect(stored?.photos).toEqual([photo]);
+    expect((stored as DocumentOutboxEntry | null)?.photos).toEqual([photo]);
   });
 
   it("un 2xx borra la entrada y avisa para invalidar el viaje", async () => {
@@ -188,6 +188,33 @@ describe("la cola de reportes", () => {
 
     expect(send.mock.calls.map(([entry]) => entry.idempotencyKey)).toEqual(["first", "second"]);
     expect((await store.listOutbox(USER)).map((entry) => entry.idempotencyKey)).toEqual(["first", "correction"]);
+  });
+
+  it("V70: las acciones de las paradas de un viaje salen en orden, y una retenida retiene a las siguientes", async () => {
+    const { engine, store, send, advance } = setup();
+    const execution = (key: string, tripId: string, action: ExecutionOutboxEntry["action"]) => engine.enqueue({
+      kind: "EXECUTION", companyId: COMPANY, tripId, idempotencyKey: key, action, title: key,
+      reportedAt: "2026-10-12T14:00:00.000Z", shipmentNumber: "SH-1",
+    });
+    await execution("arrive", TRIP, { type: "STOP", stopId: "s-1", transition: "arrive", occurredAt: "2026-10-12T14:00:00.000Z" });
+    advance(1_000);
+    await execution("delivery", TRIP, { type: "DELIVERY", stopId: "s-1", orderId: "o-1",
+      input: { result: "DELIVERED", deliveredAt: "2026-10-12T14:05:00.000Z", photos: [] } });
+    advance(1_000);
+    await engine.enqueue(draft({ documentId: "d-9", idempotencyKey: "document" }));
+    advance(1_000);
+    await execution("other-trip", "t-2", { type: "STOP", stopId: "s-9", transition: "arrive", occurredAt: "2026-10-12T14:00:00.000Z" });
+
+    // La llegada falla por 5xx: la entrega de esa parada no puede adelantarla. Un documento del
+    // mismo viaje y otro viaje no dependen de ella.
+    send.mockImplementation(async (entry) => {
+      if (entry.idempotencyKey === "arrive") throw problem(503, "internal-error", "caído");
+      return OK;
+    });
+    await engine.sync();
+
+    expect(send.mock.calls.map(([entry]) => entry.idempotencyKey)).toEqual(["arrive", "document", "other-trip"]);
+    expect((await store.listOutbox(USER)).map((entry) => entry.idempotencyKey)).toEqual(["arrive", "delivery"]);
   });
 
   it("un fallo de red corta la pasada: el resto tampoco saldría", async () => {

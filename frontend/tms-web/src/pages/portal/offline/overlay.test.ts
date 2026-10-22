@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PortalDocument, PortalTripDetail } from "../../../shared/api/portalApi";
 import { applyOutboxOverlay, nextPendingDocument, queuedByTrip } from "./overlay";
-import type { OutboxEntry } from "./types";
+import type { DocumentOutboxEntry as OutboxEntry, ExecutionOutboxEntry } from "./types";
 
 /**
  * Lo que se enseña mientras un reporte espera en la cola (ADR-019 §1): el estado que eligió el
@@ -92,5 +92,64 @@ describe("el reflejo de la cola sobre el viaje", () => {
     expect(nextPendingDocument(shown)?.documentId).toBe("d-2");
     expect(nextPendingDocument(shown, "d-2")?.documentId).toBe("d-3");
     expect(nextPendingDocument(shown, "d-3")?.documentId).toBe("d-2");
+  });
+});
+
+describe("V70: el reflejo de las acciones de parada en cola", () => {
+  const onTheRoad: PortalTripDetail = {
+    ...DETAIL,
+    trip: { ...DETAIL.trip, status: "IN_TRANSIT" },
+    incidents: [],
+    stops: DETAIL.stops.map((stop) => ({
+      ...stop, executionStatus: "PENDING" as const, allowedExecutionTransitions: ["ARRIVED", "SKIPPED", "FAILED"] as const,
+      actualArrivalAt: null, serviceStartedAt: null, actualDepartureAt: null,
+      orders: [{ orderId: `o-${stop.stopId}`, orderNumber: `TO-${stop.stopId}`, customerName: null, assignedWeightKg: 10,
+        assignedVolumeM3: 1, assignedPallets: 1, delivery: null }],
+    })).map((stop) => ({ ...stop, allowedExecutionTransitions: [...stop.allowedExecutionTransitions] })),
+  };
+
+  function execution(id: string, createdAt: string, action: ExecutionOutboxEntry["action"],
+    state: ExecutionOutboxEntry["state"] = "PENDING"): ExecutionOutboxEntry {
+    return {
+      id, userId: "u-1", companyId: "c-1", tripId: "t-1", kind: "EXECUTION", idempotencyKey: id, action, title: id,
+      reportedAt: createdAt, createdAt, attempts: 0, lastError: null, state, nextAttemptAt: null, shipmentNumber: "SH-1",
+    };
+  }
+
+  it("aplica llegada, entrega e incidencia en el orden en que se hicieron, y lo marca", () => {
+    const shown = applyOutboxOverlay(onTheRoad, [
+      execution("e-2", "2026-10-12T14:05:00.000Z", { type: "DELIVERY", stopId: "s-1", orderId: "o-s-1",
+        input: { result: "PARTIAL", deliveredAt: "2026-10-12T14:05:00.000Z", notes: "1 roto", refusedPallets: 1,
+          photos: [new Blob(["x"])], signature: null } }),
+      execution("e-1", "2026-10-12T14:00:00.000Z", { type: "STOP", stopId: "s-1", transition: "arrive",
+        occurredAt: "2026-10-12T14:00:00.000Z" }),
+      execution("e-3", "2026-10-12T14:06:00.000Z", { type: "INCIDENT", tripStopId: "s-1", exceptionType: "OTHER",
+        occurredAt: "2026-10-12T14:06:00.000Z", notes: "Film roto" }),
+    ]);
+
+    const stop = shown.stops[0];
+    expect(stop).toMatchObject({ executionStatus: "ARRIVED", actualArrivalAt: "2026-10-12T14:00:00.000Z", pendingSync: true });
+    expect(stop.allowedExecutionTransitions).toEqual(["IN_SERVICE", "COMPLETED", "FAILED"]);
+    expect(stop.orders[0]).toMatchObject({ pendingSync: true, delivery: { result: "PARTIAL", source: "CARRIER_PORTAL",
+      refusedPallets: 1, evidenceCount: 1 } });
+    expect(shown.incidents).toEqual([expect.objectContaining({ exceptionType: "OTHER", stopSequence: 1, pendingSync: true })]);
+    // La otra parada no se toca.
+    expect(shown.stops[1]).toMatchObject({ executionStatus: "PENDING", pendingSync: false });
+  });
+
+  it("lo que el servidor rechazó no se aplica: se marca para que la persona lo vea", () => {
+    const shown = applyOutboxOverlay(onTheRoad, [
+      execution("e-1", "2026-10-12T14:00:00.000Z", { type: "STOP", stopId: "s-2", transition: "arrive",
+        occurredAt: "2026-10-12T14:00:00.000Z" }, "FAILED"),
+    ]);
+
+    expect(shown.stops[1]).toMatchObject({ executionStatus: "PENDING", pendingSync: false, syncFailed: true });
+  });
+
+  it("un viaje cacheado por una versión anterior, sin datos de ejecución, se enseña igual", () => {
+    const shown = applyOutboxOverlay(DETAIL, []);
+
+    expect(shown.stops[0].orders).toEqual([]);
+    expect(shown.incidents).toEqual([]);
   });
 });

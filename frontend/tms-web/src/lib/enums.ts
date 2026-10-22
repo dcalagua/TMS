@@ -629,6 +629,13 @@ export const ENUM_LABELS = {
     PENDING: "Sin iniciar",
     SKIPPED: "Omitida",
   },
+  /** Quién registró un hecho de la ejecución (V70): la oficina, el transportista desde el portal… */
+  transportEventSource: {
+    CARRIER_PORTAL: "Transportista (portal)",
+    INTEGRATION: "Integración",
+    OPERATOR: "Oficina",
+    SYSTEM: "Sistema",
+  },
   tenderResponseSource: {
     INTEGRATION: "Confirmado por el transportista",
     OPERATOR: "Registrado por nosotros",

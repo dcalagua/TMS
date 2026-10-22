@@ -66,9 +66,12 @@ export function TripTimeline({ events, loading }: TripTimelineProps) {
             <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.35 }}>
               {enumLabel("transportEventType", event.eventType)}
               {/* Un hito que escribió una máquina (el almacén) se distingue de uno tecleado. */}
-              {event.source === "INTEGRATION" && (
+              {/* ...y uno que registró el transportista desde el portal (V70), de uno de la oficina. */}
+              {(event.source === "INTEGRATION" || event.source === "CARRIER_PORTAL") && (
                 <Chip
-                  component="span" size="small" variant="outlined" label={t("Integración")}
+                  component="span" size="small" variant="outlined"
+                  color={event.source === "CARRIER_PORTAL" ? "info" : "default"}
+                  label={enumLabel("transportEventSource", event.source)}
                   sx={{ ml: 0.75, height: 18, fontSize: 10, verticalAlign: "middle" }}
                 />
               )}

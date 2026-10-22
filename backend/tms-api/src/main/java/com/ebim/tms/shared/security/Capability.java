@@ -89,7 +89,8 @@ public enum Capability {
     DOCUMENT_DELIVERY_MANAGE(Permission.PLANNING_DOCUMENT_DELIVERY_RETURN),
 
     /** The carrier portal (ADR-018): the only capability a carrier user holds. */
-    CARRIER_PORTAL(Permission.PORTAL_TRIP_READ, Permission.PORTAL_DOCUMENT_REPORT),
+    CARRIER_PORTAL(Permission.PORTAL_TRIP_READ, Permission.PORTAL_DOCUMENT_REPORT, Permission.PORTAL_STOP_EXECUTE,
+            Permission.PORTAL_DELIVERY_REPORT),
 
     /** "Mis facturas" in the carrier portal (V67, ADR-023 section 2). */
     CARRIER_INVOICES(Permission.PORTAL_INVOICE_READ),

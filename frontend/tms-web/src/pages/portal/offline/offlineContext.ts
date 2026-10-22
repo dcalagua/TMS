@@ -20,6 +20,11 @@ export interface PortalOfflineValue {
   wipe(): Promise<void>;
   /** Hay un reporte de ese documento esperando: uno nuevo tiene que ir detrás, a la cola. */
   hasQueued(tripId: string, documentId: string): boolean;
+  /**
+   * Hay una acción de parada de ese viaje esperando (V70): la siguiente tiene que ir detrás, a la
+   * cola, aunque haya red — si no, la entrega llegaría antes que la llegada a la parada.
+   */
+  hasQueuedExecution(tripId: string): boolean;
 }
 
 export const PortalOfflineContext = createContext<PortalOfflineValue | null>(null);

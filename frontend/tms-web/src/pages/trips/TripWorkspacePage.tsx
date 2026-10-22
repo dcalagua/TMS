@@ -796,6 +796,11 @@ export function TripWorkspacePage() {
                                       {recorded.receiverName && (
                                         <Typography variant="caption" color="text.secondary">{recorded.receiverName}</Typography>
                                       )}
+                                      {/* Quién lo registró (V70): la oficina o el transportista desde el portal. */}
+                                      <Typography variant="caption" color={recorded.source === "CARRIER_PORTAL" ? "info.main" : "text.secondary"}
+                                        sx={{ fontWeight: recorded.source === "CARRIER_PORTAL" ? 700 : 400 }}>
+                                        {[enumLabel("transportEventSource", recorded.source), recorded.recordedByName].filter(Boolean).join(" · ")}
+                                      </Typography>
                                       {recorded.evidence.map((evidence) => (
                                         <Tooltip key={evidence.id} title={evidence.originalFilename ?? enumLabel("evidenceType", evidence.evidenceType)}>
                                           <IconButton

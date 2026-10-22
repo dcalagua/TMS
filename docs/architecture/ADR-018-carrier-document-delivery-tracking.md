@@ -143,3 +143,79 @@ is routed to `/portal` and sees no other menu. The monitor is a page of the offi
   it as it was. Re-linking rules are left to a later ADR if the ERP ever unlinks documents.
 - Still deferred: a login per driver, offline capture, issuing a GRE transportista, and any rule that
   makes a document state move an order.
+
+## Addendum (V70, 2026-10-22) - stop execution and proof of delivery from the portal
+
+**Status:** Implemented with V70. Amends section 1 (the carrier role's permissions), section 2 (the
+tables under the carrier boundary) and section 6 (the portal API). "Nothing moves an order, a stop or
+a trip" (section 4) still holds for the document report; the actions below move a **stop** and record
+a **delivery**, exactly as the office does.
+
+### Decision
+
+- **The same rules, not a second implementation.** The portal's execution endpoints go through
+  `PortalExecutionService`, which delegates to the office's services in one transaction:
+  `TripStopExecutionService` (arrive, start service, complete, fail - the stop's own transition
+  table), `TripDeliveryService` (the delivery result per order, its field rules and its quantity
+  ceilings), `DeliveryEvidenceService` (photo and signature, bytes first and row second) and
+  `TripExceptionService` (incidents). The same events are published, so the warehouse webhook
+  `DELIVERY_RESULT_RECORDED` (ADR-025) fires exactly as for an office recording. Skipping a stop stays
+  an office decision; the portal does not offer it.
+- **Who recorded it.** `TransportEventSource` gains `CARRIER_PORTAL` (`ck_transport_event_source`,
+  `ck_order_delivery_source`); a carrier-scoped person is always `CARRIER_PORTAL`, an office person
+  `OPERATOR`, a machine `INTEGRATION` (`TransportEventSource.of`, used by both the timeline recorder and
+  the delivery row). The office's trip workspace shows "Transportista (portal)" and the person's name
+  on the timeline and on each delivery.
+- **The window.** A carrier acts only on a trip it can see (section 3) and only while it is
+  `IN_TRANSIT`; once the office closes the trip out, corrections are the office's (409 otherwise). A
+  delivery needs the stop reached (the office's rule).
+- **Permissions.** `portal.stop:execute` (stop moves and incidents) and `portal.delivery:report`
+  (delivery result and evidence), both to `CARRIER_OPERATOR` only, both inside the `CARRIER_PORTAL`
+  capability. The portal and the office still share no permission.
+- **A partial delivery from the door.** The driver enters what the customer refused; the attempt is
+  this trip's allocation for the order and the delivery is the attempt less the refusal
+  (`PortalDeliveryQuantities`). The office can still correct the row with all nine figures.
+- **Evidence.** Optional for every result, and only where `EvidenceStoragePort` is enabled. With the
+  store disabled the screen says so and the result is recorded without files; a request that sends
+  files anyway is a 400 (not a 503), so the offline queue shows it instead of resending it forever.
+- **Idempotency** (section 5). Every execution action requires an `Idempotency-Key`, kept in
+  `tms.portal_action_receipt` with the action and its target, unique per (company, user, key), written
+  in the action's transaction after the trip's row lock. A replay answers with the current trip and
+  records nothing; the same key on another action or target is a 409.
+- **Offline** (ADR-019 section 1). The portal's outbox gains a second kind of entry (`EXECUTION`):
+  stop moves, deliveries (with their photos and signature as blobs) and incidents, with their key and
+  the time the button was tapped. All execution entries of one trip are sent in the order they were
+  made - a delivery cannot reach the server before the arrival at its stop - and are shown on the trip
+  marked "Pendiente de sincronizar" until they do.
+
+### RLS (V70)
+
+RESTRICTIVE `p_carrier_scope` on `order_delivery`, `transport_event`, `trip_exception` and
+`portal_action_receipt` (the row's trip is visible) and on `order_delivery_line` and
+`delivery_evidence` (the row's delivery is visible), V57's pattern. A carrier transaction reads and
+writes only its own carrier's execution rows; an office transaction is not narrowed.
+`CarrierStopExecutionIntegrationTest` proves it as the runtime role, including a refused cross-carrier
+insert.
+
+### API (portal, `X-Company-Id` and `Idempotency-Key` on every write)
+
+| Method | Path | Permission |
+|---|---|---|
+| POST | `/api/v1/portal/trips/{tripId}/stops/{stopId}/arrive` `{occurredAt?, notes?}` | `portal.stop:execute` |
+| POST | `/api/v1/portal/trips/{tripId}/stops/{stopId}/service` | `portal.stop:execute` |
+| POST | `/api/v1/portal/trips/{tripId}/stops/{stopId}/complete` | `portal.stop:execute` |
+| POST | `/api/v1/portal/trips/{tripId}/stops/{stopId}/fail` `{exceptionType, occurredAt?, notes?}` | `portal.stop:execute` |
+| POST (multipart) | `/api/v1/portal/trips/{tripId}/stops/{stopId}/orders/{orderId}/delivery` | `portal.delivery:report` |
+| POST | `/api/v1/portal/trips/{tripId}/incidents` `{tripStopId?, exceptionType, occurredAt?, notes?}` | `portal.stop:execute` |
+
+The delivery form fields: `result`, `deliveredAt` (defaults to now; dropped for `NOT_ATTEMPTED`),
+`receiverName`, `receiverDocument`, `notes`, `refusedWeightKg|VolumeM3|Pallets` (`PARTIAL` only, at
+least one), files `photos` (0..5) and `signature`. Every endpoint answers with the portal trip, whose
+stops now carry `executionStatus`, `allowedExecutionTransitions`, the actual times and their `orders`
+(with the recorded delivery and its `source`), plus the trip's `incidents`.
+
+### Still deferred
+
+A login per driver, automatic arrival from positions (ADR-011), resolving an incident from the portal,
+and per-line delivery quantities from the portal (the office and the integration API own
+`order_delivery_line`).

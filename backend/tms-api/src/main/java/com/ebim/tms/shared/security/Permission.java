@@ -213,6 +213,16 @@ public enum Permission {
     PORTAL_DOCUMENT_REPORT("portal.document:report"),
 
     /**
+     * Stop execution and proof of delivery from the carrier portal (migration V70, ADR-018
+     * addendum): arrival, service, completion or failure of a stop and an incident on it; and the
+     * delivery result of an order with its evidence. Split like the office's own execution is not
+     * - the office holds both under {@code planning.trip:execute} - because a carrier company may
+     * want the driver to report the stop and the dispatcher to sign off the result.
+     */
+    PORTAL_STOP_EXECUTE("portal.stop:execute"),
+    PORTAL_DELIVERY_REPORT("portal.delivery:report"),
+
+    /**
      * My carrier's invoices, their due dates and what was paid (migration V67, ADR-023 section 2).
      * Held by {@code CARRIER_OPERATOR} only, like the other portal permissions.
      */

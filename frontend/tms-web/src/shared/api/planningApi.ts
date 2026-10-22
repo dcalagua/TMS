@@ -119,8 +119,9 @@ export type EvidenceType = 'SIGNATURE' | 'PHOTO' | 'DOCUMENT'
 
 export const EVIDENCE_TYPES: EvidenceType[] = ['SIGNATURE', 'PHOTO', 'DOCUMENT']
 
-/** Mirrors the backend's `TransportEventSource` enum: who or what reported the entry. */
-export type TransportEventSource = 'OPERATOR' | 'SYSTEM' | 'INTEGRATION'
+/** Mirrors the backend's `TransportEventSource` enum: who or what reported the entry.
+ * `CARRIER_PORTAL` (V70) is a user of the carrier, recording it from the carrier portal. */
+export type TransportEventSource = 'OPERATOR' | 'SYSTEM' | 'INTEGRATION' | 'CARRIER_PORTAL'
 
 /** Mirrors the backend's `TripExceptionType` enum - the catalogue of operational problems.
  *

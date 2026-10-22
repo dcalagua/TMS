@@ -10,6 +10,7 @@
 
 import { EN_SHIPMENT_TRACKING } from "./i18n.shipmentTracking";
 import { EN_PORTAL_OFFLINE } from "./i18n.portalOffline";
+import { EN_PORTAL_EXECUTION } from "./i18n.portalExecution";
 import { EN_TENANT_LIFECYCLE } from "./i18n.tenantLifecycle";
 import { EN_MATERIAL_PROFILES } from "./i18n.materialProfiles";
 import { EN_LOAD_GEOMETRY } from "./i18n.loadGeometry";
@@ -2398,7 +2399,7 @@ const EN_DOCUMENT_DELIVERY: Record<string, string> = {
   "Reporte del transportista": "Carrier report", "Cargo recibido en oficina": "Signed copy returned to the office",
 };
 
-const EN: Record<string, string> = { ...EN_CHROME, ...EN_DATA, ...EN_APP, ...EN_SCHEDULING, ...EN_DOCUMENT_DELIVERY, ...EN_SHIPMENT_TRACKING, ...EN_PORTAL_OFFLINE, ...EN_TENANT_LIFECYCLE, ...EN_MATERIAL_PROFILES, ...EN_LOAD_GEOMETRY, ...EN_LOGISTICS_DOCUMENTS, ...EN_TAX_REGIMES, ...EN_DOCKS, ...EN_ROUTE_SHEET, ...EN_QUICK_WINS, ...EN_CARRIER_SCORECARD };
+const EN: Record<string, string> = { ...EN_CHROME, ...EN_DATA, ...EN_APP, ...EN_SCHEDULING, ...EN_DOCUMENT_DELIVERY, ...EN_SHIPMENT_TRACKING, ...EN_PORTAL_OFFLINE, ...EN_TENANT_LIFECYCLE, ...EN_MATERIAL_PROFILES, ...EN_LOAD_GEOMETRY, ...EN_LOGISTICS_DOCUMENTS, ...EN_TAX_REGIMES, ...EN_DOCKS, ...EN_ROUTE_SHEET, ...EN_QUICK_WINS, ...EN_CARRIER_SCORECARD, ...EN_PORTAL_EXECUTION };
 
 export type Lang = "es" | "en";
 

@@ -142,6 +142,10 @@ Authoritative documents live under `docs/architecture/`:
   trip is tracked `PENDING` -> `DELIVERED` (photo mandatory) / `REJECTED` / `NOT_DELIVERED` (reason),
   every portal write carries an `Idempotency-Key`, and the office confirms the signed copy's return.
   Nothing moves an order or a trip. Supersedes ADR-016 and ADR-015 section 5. Implemented with V57.
+  Its V70 addendum lets the carrier work its own stops from the portal - arrival, service, completion
+  or failure, the delivery result with evidence, incidents - through the office's own services, with
+  the source `CARRIER_PORTAL`, `tms.portal_action_receipt` for idempotency and carrier-scope RLS on the
+  execution tables.
 - `ADR-019-carrier-offline-capture-and-shipment-tracking.md` - the carrier portal works without
   signal: a hand-written service worker caches the shell (never `/api`), trips are kept in IndexedDB
   per user, and reports (with photos) queue in an outbox replayed with their `Idempotency-Key`.
