@@ -148,6 +148,23 @@ public class DeliveryEvidenceService {
      * refusal names the accepted types, because "unsupported file" without a list is a support
      * ticket.
      */
+    /**
+     * Refuses a file before any is written - the check {@link #attach} runs first - so a caller
+     * attaching several (the carrier portal, V70) can refuse a bad one before the delivery and the
+     * good ones are stored. A signature must be an image whatever the allow-list admits.
+     */
+    public void requireAcceptable(EvidenceType evidenceType, EvidenceUpload upload) {
+        String contentType = requireAcceptedType(upload);
+        if (evidenceType == EvidenceType.SIGNATURE && !contentType.startsWith("image/")) {
+            throw new InvalidRequestException("A signature must be an image.");
+        }
+    }
+
+    /** Whether this deployment has somewhere to keep evidence (ADR-006): the portal hides its camera when not. */
+    public boolean isEnabled() {
+        return storage.isEnabled();
+    }
+
     private String requireAcceptedType(EvidenceUpload upload) {
         if (upload == null || upload.content() == null) {
             throw new InvalidRequestException("A file is required.");

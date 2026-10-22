@@ -2,58 +2,91 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
-  Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Paper, TextField, Typography,
+  Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Paper, Stack, TextField, Typography,
 } from "@mui/material";
-import { CheckRounded, PowerRounded } from "@mui/icons-material";
+import { CheckRounded, PowerRounded, WarehouseRounded } from "@mui/icons-material";
 import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchCarriers } from "../../shared/api/carriersApi";
 import {
-  createIntegrationClient, updateIntegrationClient,
+  createIntegrationClient, fetchIntegrationScopes, updateIntegrationClient,
   type IntegrationClientRequest, type IntegrationClientSecretView, type IntegrationClientView,
+  type IntegrationScopeView,
 } from "../../shared/api/integrationsApi";
 import { ActiveBadge, FormDrawer, FormMeta, FormRow, FormSection } from "../../shared/ui/components";
 import { t } from "../../lib/i18n";
+import { enumLabel } from "../../lib/enums";
 import { fmtDateTime } from "../../lib/locale";
 
 const FORM_ID = "integration-client-form";
 
 /**
- * Los alcances que puede tener una credencial, con lo que concede cada uno dicho en una frase.
+ * Lo que concede cada alcance, dicho en una frase. El catálogo de alcances viene del backend
+ * (`GET /integration-clients/scopes`): esta tabla sólo pone las palabras.
  *
  * La frase importa tanto como el código: quien concede `integration.order:write` está dejando que
- * un sistema cree pedidos sin que nadie mire, y el código por sí solo no dice eso.
+ * un sistema cree pedidos sin que nadie mire, y el código por sí solo no dice eso. Un alcance que
+ * esta versión no conoce se ofrece igual, con su código como nombre: es feo, pero no desaparece.
  */
-const SCOPES = [
-  {
-    code: "integration.location:write",
+const SCOPE_TEXT: Record<string, { label: string; help: string }> = {
+  "integration.location:write": {
     label: "Escribir ubicaciones",
     help: "Crear y actualizar tiendas y ubicaciones. No puede leer nada.",
   },
-  {
-    code: "integration.order:write",
+  "integration.order:write": {
     label: "Escribir pedidos",
     help: "Crear y actualizar pedidos de transporte sin supervisión. El alcance más potente: concédelo solo a un sistema al que dejarías crear pedidos sin que nadie mire.",
   },
-  {
-    code: "integration.shipment:read",
+  "integration.document:write": {
+    label: "Registrar documentos",
+    help: "Registrar los documentos que el ERP emitió para los pedidos (factura, guía de remisión). TMS los recibe; no emite ninguno.",
+  },
+  "integration.shipment:read": {
     label: "Leer embarques",
     help: "Leer embarques confirmados y consultar el feed de cambios. Solo lectura: no concede escritura en ningún sitio.",
   },
-  {
-    code: "integration.tracking:write",
+  "integration.dispatch:write": {
+    label: "Reportar despachos",
+    help: "Informar lo que el almacén despachó físicamente. Solo escritura: para leer el plan contra el que despacha, la credencial necesita también «Leer embarques».",
+  },
+  "integration.warehouse-milestone:write": {
+    label: "Reportar hitos del almacén",
+    help: "Informar que la carga empezó, quedó lista o se anuló. Solo escritura.",
+  },
+  "integration.material:write": {
+    label: "Escribir perfiles de material",
+    help: "Escribir el perfil físico que midió el almacén: dimensiones, peso y apilado. Solo escritura.",
+  },
+  "integration.order:read": {
+    label: "Leer pedidos",
+    help: "Leer los pedidos de transporte, uno por número o el feed por estado y fecha. Solo lectura.",
+  },
+  "integration.warehouse-order-event:write": {
+    label: "Reportar eventos de pedido del almacén",
+    help: "Informar que el almacén anuló su pedido o lo cerró con saldo. Como mucho genera una retención: TMS nunca anula por sí solo.",
+  },
+  "integration.tracking:write": {
     label: "Reportar posiciones",
     help: "Reportar posiciones de vehículos. Solo escritura: un proveedor de telemetría no aprende nada de los embarques contra los que reporta.",
   },
-  {
-    code: "integration.tender:respond",
+  "integration.tender:respond": {
     label: "Responder ofertas",
     help: "Ver y responder las ofertas hechas a un transportista. Necesita un transportista y muestra solo sus ofertas.",
   },
-] as const;
+  "integration.payable-payment:write": {
+    label: "Registrar pagos de facturas",
+    help: "El ERP informa lo que pagó contra una factura de transportista exportada. TMS lo registra y no mueve dinero.",
+  },
+};
 
-/** El único alcance que no significa nada sin transportista. */
-const TENDER_SCOPE = "integration.tender:respond";
+/** El orden de los grupos en el formulario; uno que esta versión no conoce va al final. */
+const GROUP_ORDER = ["ERP", "WAREHOUSE", "CARRIER", "FINANCE"];
+
+/** El grupo cuyos alcances marca de una vez la plantilla «Conector EWM». */
+const WAREHOUSE_GROUP = "WAREHOUSE";
+
+/** Los alcances de una credencial ya emitida que el catálogo actual no trae. */
+const UNLISTED_GROUP = "__UNLISTED__";
 
 interface ClientFormValues {
   name: string;
@@ -105,8 +138,18 @@ export function IntegrationClientDrawer({
     },
   });
 
+  const scopesQuery = useQuery({
+    queryKey: ["integration-scopes", companyId],
+    queryFn: ({ signal }) => fetchIntegrationScopes(companyId, signal),
+    enabled: companyId !== "",
+    staleTime: Infinity,
+  });
+  const catalogue = scopesQuery.data ?? [];
+  const carrierScopes = new Set(catalogue.filter((scope) => scope.requiresCarrier).map((scope) => scope.code));
+
   const scopes = watch("scopes");
-  const answersTenders = scopes.includes(TENDER_SCOPE);
+  const needsCarrier = (codes: string[]) => codes.some((code) => carrierScopes.has(code));
+  const answersTenders = needsCarrier(scopes);
 
   async function onSubmit(values: ClientFormValues) {
     setFormError(null);
@@ -114,7 +157,7 @@ export function IntegrationClientDrawer({
       setFormError(t("Selecciona al menos un alcance."));
       return;
     }
-    if (values.scopes.includes(TENDER_SCOPE) && values.carrierId === "") {
+    if (needsCarrier(values.scopes) && values.carrierId === "") {
       setFormError(t("Responder ofertas necesita un transportista."));
       return;
     }
@@ -123,7 +166,7 @@ export function IntegrationClientDrawer({
       name: values.name.trim(),
       description: values.description.trim() || null,
       scopes: values.scopes,
-      carrierId: values.scopes.includes(TENDER_SCOPE) ? values.carrierId : null,
+      carrierId: needsCarrier(values.scopes) ? values.carrierId : null,
     };
 
     try {
@@ -187,38 +230,13 @@ export function IntegrationClientDrawer({
           control={control}
           name="scopes"
           render={({ field }) => (
-            <Box sx={{ display: "grid", gap: 1 }}>
-              {SCOPES.map((scope) => (
-                <Paper key={scope.code} variant="outlined" sx={{ p: 1.25 }}>
-                  <FormControlLabel
-                    sx={{ alignItems: "flex-start", m: 0 }}
-                    control={
-                      <Checkbox
-                        sx={{ mt: -0.5 }}
-                        checked={field.value.includes(scope.code)}
-                        onChange={(e) => {
-                          const next = e.target.checked
-                            ? [...field.value, scope.code]
-                            : field.value.filter((code) => code !== scope.code);
-                          field.onChange(next);
-                        }}
-                      />
-                    }
-                    label={
-                      <Box>
-                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{t(scope.label)}</Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                          {t(scope.help)}
-                        </Typography>
-                        <Typography variant="caption" color="text.disabled" sx={{ display: "block", fontFamily: "monospace" }}>
-                          {scope.code}
-                        </Typography>
-                      </Box>
-                    }
-                  />
-                </Paper>
-              ))}
-            </Box>
+            <ScopePicker
+              catalogue={catalogue}
+              loading={scopesQuery.isPending}
+              failed={scopesQuery.isError}
+              value={field.value}
+              onChange={field.onChange}
+            />
           )}
         />
         </FormSection>
@@ -247,4 +265,105 @@ export function IntegrationClientDrawer({
       </Box>
     </FormDrawer>
   );
+}
+
+interface ScopePickerProps {
+  catalogue: IntegrationScopeView[];
+  loading: boolean;
+  failed: boolean;
+  value: string[];
+  onChange: (next: string[]) => void;
+}
+
+/**
+ * Los alcances agrupados por para quién son, cada uno con su consecuencia escrita. La plantilla
+ * «Conector EWM» marca de una vez los del almacén: son seis y conectar el EWM exige todos.
+ */
+function ScopePicker({ catalogue, loading, failed, value, onChange }: ScopePickerProps) {
+  if (loading) {
+    return <Typography variant="body2" color="text.secondary">{t("Cargando los alcances...")}</Typography>;
+  }
+  if (failed) {
+    return <Alert severity="error">{t("No se pudieron cargar los alcances. Cierra y vuelve a abrir el formulario.")}</Alert>;
+  }
+
+  const listed = new Set(catalogue.map((scope) => scope.code));
+  const entries = [
+    ...catalogue,
+    // Una credencial emitida con un alcance que el catálogo ya no trae sigue mostrándolo: si no,
+    // guardarla se lo quitaría sin que nadie lo hubiera decidido.
+    ...value.filter((code) => !listed.has(code)).map((code) => ({ code, group: UNLISTED_GROUP, requiresCarrier: false })),
+  ];
+  const groups = [...new Set(entries.map((scope) => scope.group))].sort((a, b) => rank(a) - rank(b));
+  const warehouseCodes = catalogue.filter((scope) => scope.group === WAREHOUSE_GROUP).map((scope) => scope.code);
+  const hasAllWarehouse = warehouseCodes.length > 0 && warehouseCodes.every((code) => value.includes(code));
+
+  const toggle = (code: string, checked: boolean) =>
+    onChange(checked ? [...value, code] : value.filter((existing) => existing !== code));
+
+  return (
+    <Stack spacing={1.5}>
+      {warehouseCodes.length > 0 && (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+          <Button
+            size="small" variant="outlined" startIcon={<WarehouseRounded />} disabled={hasAllWarehouse}
+            onClick={() => onChange([...new Set([...value, ...warehouseCodes])])}
+          >
+            {t("Plantilla: conector EWM")}
+          </Button>
+          <Typography variant="caption" color="text.secondary">
+            {t("Marca los {{count}} alcances que necesita el almacén.", { count: warehouseCodes.length })}
+          </Typography>
+        </Box>
+      )}
+      {groups.map((group) => (
+        <Box key={group} role="group" aria-label={groupLabel(group)}>
+          <Typography variant="overline" color="text.secondary" sx={{ display: "block", lineHeight: 2 }}>
+            {groupLabel(group)}
+          </Typography>
+          <Box sx={{ display: "grid", gap: 1 }}>
+            {entries.filter((scope) => scope.group === group).map((scope) => {
+              const text = SCOPE_TEXT[scope.code];
+              return (
+                <Paper key={scope.code} variant="outlined" sx={{ p: 1.25 }}>
+                  <FormControlLabel
+                    sx={{ alignItems: "flex-start", m: 0 }}
+                    control={
+                      <Checkbox
+                        sx={{ mt: -0.5 }}
+                        checked={value.includes(scope.code)}
+                        onChange={(e) => toggle(scope.code, e.target.checked)}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{text ? t(text.label) : scope.code}</Typography>
+                        {text && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                            {t(text.help)}
+                          </Typography>
+                        )}
+                        <Typography variant="caption" color="text.disabled" sx={{ display: "block", fontFamily: "monospace" }}>
+                          {scope.code}
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                </Paper>
+              );
+            })}
+          </Box>
+        </Box>
+      ))}
+    </Stack>
+  );
+}
+
+function rank(group: string): number {
+  const index = GROUP_ORDER.indexOf(group);
+  return index === -1 ? GROUP_ORDER.length + (group === UNLISTED_GROUP ? 1 : 0) : index;
+}
+
+function groupLabel(group: string): string {
+  return group === UNLISTED_GROUP ? t("Otros (fuera del catálogo actual)") : enumLabel("integrationScopeGroup", group);
 }

@@ -3,6 +3,7 @@ package com.ebim.tms.appointments.api;
 import com.ebim.tms.appointments.application.LocationResourceRequest;
 import com.ebim.tms.appointments.application.LocationResourceService;
 import com.ebim.tms.appointments.application.LocationResourceView;
+import com.ebim.tms.appointments.application.ResourceBlockView;
 import com.ebim.tms.appointments.application.ResourceCalendarRequest;
 import com.ebim.tms.shared.api.ApiHeaders;
 import com.ebim.tms.shared.security.CompanyScope;
@@ -16,6 +17,7 @@ import java.util.UUID;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -100,6 +102,27 @@ public class LocationResourceController {
             @RequestParam("endsAt") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime endsAt,
             @RequestParam("reason") String reason) {
         resourceService.block(scope, id, startsAt, endsAt, reason);
+    }
+
+    @GetMapping("/{id}/blocks")
+    @PreAuthorize("hasAuthority('appointments.appointment:read')")
+    @Operation(summary = "The closures on a door that have not ended yet, soonest first")
+    @Parameter(name = ApiHeaders.COMPANY_ID, in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public List<ResourceBlockView> blocks(CompanyScope scope, @PathVariable UUID id) {
+        return resourceService.listUpcomingBlocks(scope, id);
+    }
+
+    @DeleteMapping("/{id}/blocks/{blockId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('appointments.resource:manage')")
+    @Operation(summary = "Lift a closure",
+            description = "Reopens the door for that interval. The audit trail keeps who lifted it and "
+                    + "what the closure had said.")
+    @Parameter(name = ApiHeaders.COMPANY_ID, in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public void liftBlock(CompanyScope scope, @PathVariable UUID id, @PathVariable UUID blockId) {
+        resourceService.liftBlock(scope, id, blockId);
     }
 
     @PostMapping("/{id}/deactivate")

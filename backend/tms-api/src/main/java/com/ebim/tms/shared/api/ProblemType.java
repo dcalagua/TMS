@@ -139,6 +139,12 @@ public enum ProblemType {
      */
     PAYLOAD_TOO_LARGE("payload-too-large", "Payload too large", HttpStatus.PAYLOAD_TOO_LARGE),
 
+    /**
+     * An anonymous caller asked too often (ADR-029: the public tracking link). Carries a
+     * {@code Retry-After} header; never raised for an authenticated request.
+     */
+    RATE_LIMITED("rate-limited", "Too many requests", HttpStatus.TOO_MANY_REQUESTS),
+
     /** Anything unexpected. The detail is deliberately generic; the cause is only in the server log. */
     INTERNAL_ERROR("internal-error", "Internal server error", HttpStatus.INTERNAL_SERVER_ERROR);
 

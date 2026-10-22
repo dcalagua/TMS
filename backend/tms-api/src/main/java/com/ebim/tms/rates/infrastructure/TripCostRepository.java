@@ -95,4 +95,31 @@ public interface TripCostRepository extends JpaRepository<TripCost, UUID> {
 
         BigDecimal getComparableActual();
     }
+
+    /**
+     * Every cost row of a range of operating days, one per shipment - the whole of
+     * {@code TripCostAnalyticsPort.figuresForRange}. Rides {@code ix_trip_cost_company_planning_date}
+     * like {@link #totalsByCurrency}. Rows with neither figure are left out: they say nothing.
+     */
+    @Query("""
+            SELECT c.tripId AS tripId, c.currency AS currency,
+                   c.estimatedAmount AS estimatedAmount, c.actualAmount AS actualAmount
+              FROM TripCost c
+             WHERE c.companyId = :companyId
+               AND c.planningDate BETWEEN :from AND :to
+               AND (c.estimatedAmount IS NOT NULL OR c.actualAmount IS NOT NULL)
+            """)
+    List<TripCostFigureRow> figuresForRange(@Param("companyId") UUID companyId,
+            @Param("from") LocalDate from, @Param("to") LocalDate to);
+
+    /** The projection behind {@link #figuresForRange}. */
+    interface TripCostFigureRow {
+        UUID getTripId();
+
+        String getCurrency();
+
+        BigDecimal getEstimatedAmount();
+
+        BigDecimal getActualAmount();
+    }
 }

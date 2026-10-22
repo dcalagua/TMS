@@ -10,6 +10,7 @@ import com.ebim.tms.planning.application.DispatchReadiness.BlockerCode;
 import com.ebim.tms.planning.application.DispatchReadiness.Check;
 import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.shared.reference.DriverLookupPort;
+import com.ebim.tms.shared.reference.FleetCompliancePort;
 import com.ebim.tms.shared.reference.ResourceAvailabilityPort;
 import com.ebim.tms.shared.reference.ResourceBlock;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
@@ -49,7 +50,8 @@ class DispatchReadinessTest {
         vehicles = mock(VehicleLookupPort.class);
         drivers = mock(DriverLookupPort.class);
         availability = mock(ResourceAvailabilityPort.class);
-        readiness = new DispatchReadiness(vehicles, drivers, availability, mock(CommittedOrderHolds.class));
+        readiness = new DispatchReadiness(vehicles, drivers, availability, mock(CommittedOrderHolds.class),
+                FleetCompliancePort.NONE);
         trip = mock(Trip.class);
         when(trip.tripNumber()).thenReturn(7);
         when(trip.vehicleId()).thenReturn(VEHICLE);
@@ -103,7 +105,7 @@ class DispatchReadinessTest {
         when(holds.onTrips(COMPANY, java.util.List.of(tripId))).thenReturn(java.util.Map.of(tripId,
                 java.util.List.of(new com.ebim.tms.shared.reference.OrderHoldPort.HeldOrder(
                         orderId, "ORD-000042", java.util.List.of("COMMERCIAL")))));
-        DispatchReadiness withHolds = new DispatchReadiness(vehicles, drivers, availability, holds);
+        DispatchReadiness withHolds = new DispatchReadiness(vehicles, drivers, availability, holds, FleetCompliancePort.NONE);
 
         assertThat(withHolds.evaluate(SCOPE, trip, AT, EnumSet.of(Check.ORDERS_NOT_HELD)))
                 .singleElement()
@@ -112,6 +114,33 @@ class DispatchReadinessTest {
                     assertThat(blocker.message()).contains("ORD-000042", "COMMERCIAL", "Release the hold");
                 });
         assertThat(DispatchReadiness.ALL).contains(Check.ORDERS_NOT_HELD);
+    }
+
+    @Test
+    @DisplayName("V72: an expired paper whose policy blocks stops the truck; a warning does not")
+    void compliancePapers() {
+        com.ebim.tms.shared.reference.ComplianceFinding blocking = new com.ebim.tms.shared.reference.ComplianceFinding(
+                com.ebim.tms.shared.reference.FleetDocumentSubject.VEHICLE, VEHICLE, "GBA-1234",
+                com.ebim.tms.shared.reference.FleetDocumentType.TECHNICAL_INSPECTION,
+                com.ebim.tms.shared.reference.FleetDocumentStatus.EXPIRED, java.time.LocalDate.of(2026, 9, 1),
+                UUID.randomUUID(), "RTV-1", true, true);
+        com.ebim.tms.shared.reference.ComplianceFinding warning = new com.ebim.tms.shared.reference.ComplianceFinding(
+                com.ebim.tms.shared.reference.FleetDocumentSubject.DRIVER, DRIVER, "COND-01",
+                com.ebim.tms.shared.reference.FleetDocumentType.MEDICAL_CERTIFICATE,
+                com.ebim.tms.shared.reference.FleetDocumentStatus.UNRECORDED, null, null, null, false, false);
+        DispatchReadiness withPapers = new DispatchReadiness(vehicles, drivers, availability,
+                mock(CommittedOrderHolds.class), (company, vehicle, driver, on) -> java.util.List.of(blocking, warning));
+
+        assertThat(withPapers.evaluate(SCOPE, trip, AT, EnumSet.of(Check.COMPLIANCE_DOCUMENTS)))
+                .singleElement()
+                .satisfies(blocker -> {
+                    assertThat(blocker.code()).isEqualTo(BlockerCode.COMPLIANCE_DOCUMENT_EXPIRED);
+                    assertThat(blocker.message()).contains("GBA-1234", "technical inspection").doesNotContain("COND-01");
+                });
+
+        DispatchReadiness onlyWarnings = new DispatchReadiness(vehicles, drivers, availability,
+                mock(CommittedOrderHolds.class), (company, vehicle, driver, on) -> java.util.List.of(warning));
+        assertThat(onlyWarnings.evaluate(SCOPE, trip, AT, EnumSet.of(Check.COMPLIANCE_DOCUMENTS))).isEmpty();
     }
 
     @Test

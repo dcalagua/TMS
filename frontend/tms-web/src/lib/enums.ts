@@ -15,6 +15,15 @@ export const ENUM_LABELS = {
     ASSIGN_ORDER: "Pedido asignado",
     AUTO_PLAN: "Planificación automática",
     CANCEL: "Cancelación",
+    CLAIM_ACCEPTED: "Reclamo aceptado",
+    CLAIM_CANCELLED: "Reclamo anulado",
+    CLAIM_CLOSED: "Reclamo cerrado",
+    CLAIM_EVIDENCE_ADDED: "Evidencia de reclamo adjuntada",
+    CLAIM_OPENED: "Reclamo abierto",
+    CLAIM_PARTIALLY_ACCEPTED: "Reclamo con acuerdo parcial",
+    CLAIM_REJECTED: "Reclamo rechazado",
+    CLAIM_SUBMITTED: "Reclamo enviado a revisión",
+    CLAIM_UPDATED: "Reclamo corregido",
     CONFIRM: "Confirmación",
     COST_ACTUAL_RECORDED: "Costo real registrado",
     COST_CLOSED: "Costo cerrado",
@@ -38,6 +47,8 @@ export const ENUM_LABELS = {
     SHIPMENT_CONFIRMED: "Envío confirmado",
     SHIPMENT_DISPATCHED: "Envío despachado",
     SHIPMENT_READY: "Envío listo para despacho",
+    TRACKING_LINK_CREATED: "Enlace de seguimiento generado",
+    TRACKING_LINK_REVOKED: "Enlace de seguimiento revocado",
     TENDER_ACCEPTED: "Oferta aceptada",
     TENDER_CANCELLED: "Oferta retirada",
     TENDER_EXPIRED: "Oferta vencida",
@@ -51,6 +62,7 @@ export const ENUM_LABELS = {
     CARRIER: "Transportista",
     COMPANY: "Empresa",
     DRIVER: "Conductor",
+    FREIGHT_CLAIM: "Reclamo de carga",
     INTEGRATION_CLIENT: "Credencial de integración",
     LOCATION: "Ubicación",
     MASTER_DATA_IMPORT_BATCH: "Importación de maestros",
@@ -63,6 +75,8 @@ export const ENUM_LABELS = {
     TRIP: "Viaje",
     TRIP_COST: "Costo del viaje",
     VEHICLE: "Vehículo",
+    FLEET_DOCUMENT: "Documento de flota",
+    FLEET_DOCUMENT_POLICY: "Política de documentos de flota",
   },
   appointmentPurpose: {
     DELIVERY: "Entrega",
@@ -96,6 +110,8 @@ export const ENUM_LABELS = {
     DRIVER_UNAVAILABLE: "Conductor no disponible",
     INSUFFICIENT_REPOSITION_TIME: "Sin tiempo para desplazarse",
     LICENSE_INVALID: "Licencia no vigente",
+    COMPLIANCE_DOCUMENT_EXPIRED: "Documento de flota vencido",
+    COMPLIANCE_DOCUMENT_UNRECORDED: "Documento obligatorio sin registrar",
     MAINTENANCE_BLOCK: "Vehículo en taller",
     ROUTING_UNKNOWN: "Tramo sin medir",
     SHIFT_CONFLICT: "Fuera del turno",
@@ -197,6 +213,42 @@ export const ENUM_LABELS = {
     DELIVERY_FAILED: "Entrega fallida",
     LATE_ARRIVAL: "Demora",
     OTHER: "Otra",
+    FREIGHT_CLAIM: "Reclamo de carga",
+  },
+  /** V71: para qué es un reclamo de carga. */
+  claimType: {
+    DAMAGE: "Daño",
+    SHORTAGE: "Faltante",
+    LOSS: "Pérdida",
+    DELAY: "Demora",
+    WRONG_DELIVERY: "Entrega equivocada",
+    OTHER: "Otro",
+  },
+  /** V71: dónde está un reclamo. */
+  claimStatus: {
+    OPEN: "Abierto",
+    UNDER_REVIEW: "En revisión",
+    ACCEPTED: "Aceptado",
+    PARTIALLY_ACCEPTED: "Acuerdo parcial",
+    REJECTED: "Rechazado",
+    CLOSED: "Cerrado",
+    CANCELLED: "Anulado",
+  },
+  /** V71: la decisión, que sobrevive al cierre. */
+  claimResolution: {
+    ACCEPTED: "Aceptado",
+    PARTIALLY_ACCEPTED: "Acuerdo parcial",
+    REJECTED: "Rechazado",
+  },
+  /** V71: cómo se recupera un reclamo aceptado. TMS no mueve dinero. */
+  recoveryMethod: {
+    PENALTY: "Penalidad en la factura",
+    CREDIT_NOTE: "Nota de crédito del transportista",
+  },
+  /** V71: qué es una fila del centro de incidencias. */
+  incidentKind: {
+    EXCEPTION: "Incidencia",
+    CLAIM: "Reclamo",
   },
   /** Fase 50: contra qué cifra se comparó una factura o una línea. */
   expectedBasis: {
@@ -302,6 +354,17 @@ export const ENUM_LABELS = {
     PALLETS: "Por pallets",
     STOPS: "Por paradas (y peso dentro de la parada)",
     EQUAL: "Partes iguales por pedido",
+  },
+  /** ADR-029: la placa en el enlace de seguimiento del cliente. */
+  trackingPlateDisplay: {
+    MASKED: "Parcial: solo los tres últimos caracteres",
+    HIDDEN: "Oculta",
+  },
+  /** ADR-029: el estado de un enlace de seguimiento, visto desde la oficina. */
+  trackingLinkState: {
+    ACTIVE: "Activo",
+    EXPIRED: "Caducado",
+    REVOKED: "Revocado",
   },
   /** ADR-026: de dónde sale el costo que se repartió. */
   allocationCostSource: {
@@ -545,6 +608,62 @@ export const ENUM_LABELS = {
     OVERDUE: "Salida vencida",
     SCHEDULED: "Programado",
   },
+  /** V72: los papeles de flota. Nombre internacional; el local va en la etiqueta. */
+  fleetDocumentType: {
+    REGISTRATION: "Matrícula",
+    TECHNICAL_INSPECTION: "Revisión técnica (RTV / CITV)",
+    MANDATORY_INSURANCE: "Seguro obligatorio (SPPAT / SOAT)",
+    OPERATING_PERMIT: "Permiso de operación (ANT / MTOP / MTC)",
+    CARGO_INSURANCE: "Póliza de carga",
+    VEHICLE_OTHER: "Otro documento del vehículo",
+    MEDICAL_CERTIFICATE: "Certificado médico",
+    DEFENSIVE_DRIVING_COURSE: "Curso de manejo defensivo",
+    DRIVER_OTHER: "Otro documento del conductor",
+  },
+  /** V72: estado derivado al leer. */
+  fleetDocumentStatus: {
+    EXPIRED: "Vencido",
+    EXPIRING_SOON: "Por vencer",
+    UNRECORDED: "Sin registrar",
+    VALID: "Vigente",
+  },
+  fleetDocumentSubject: {
+    DRIVER: "Conductor",
+    VEHICLE: "Vehículo",
+  },
+  /** V72: lo que hace un papel vencido. */
+  complianceEnforcement: {
+    BLOCK: "Bloquea",
+    WARN: "Avisa",
+  },
+  /** V72: tramos de antigüedad del vencimiento. */
+  fleetDocumentAgeing: {
+    EXPIRED_OVER_90: "Vencido hace más de 90 días",
+    EXPIRED_31_90: "Vencido hace 31 a 90 días",
+    EXPIRED_1_30: "Vencido hace 1 a 30 días",
+    DUE_0_7: "Vence en 7 días o menos",
+    DUE_8_30: "Vence en 8 a 30 días",
+    DUE_31_90: "Vence en 31 a 90 días",
+    DUE_OVER_90: "Vence en más de 90 días",
+    NO_DATE: "Sin fecha de vencimiento",
+  },
+  /** V73: combustible del tipo de vehículo. */
+  fuelType: {
+    CNG: "GNV (gas natural)",
+    DIESEL: "Diésel",
+    ELECTRIC: "Eléctrico",
+    GASOLINE: "Gasolina",
+    HYBRID: "Híbrido",
+    LPG: "GLP",
+    OTHER: "Otro",
+  },
+  /** V73: por qué un viaje tiene o no huella. */
+  emissionStatus: {
+    CALCULATED: "Calculada",
+    NO_DISTANCE: "Sin recorrido medible",
+    NO_FACTOR: "Sin factor de emisión",
+    NO_VEHICLE: "Sin vehículo",
+  },
   driverLicenseStatus: {
     EXPIRED: "Vencida",
     EXPIRING_SOON: "Por vencer",
@@ -628,6 +747,13 @@ export const ENUM_LABELS = {
     IN_SERVICE: "En atención",
     PENDING: "Sin iniciar",
     SKIPPED: "Omitida",
+  },
+  /** Quién registró un hecho de la ejecución (V70): la oficina, el transportista desde el portal… */
+  transportEventSource: {
+    CARRIER_PORTAL: "Transportista (portal)",
+    INTEGRATION: "Integración",
+    OPERATOR: "Oficina",
+    SYSTEM: "Sistema",
   },
   tenderResponseSource: {
     INTEGRATION: "Confirmado por el transportista",
@@ -713,6 +839,33 @@ export const ENUM_LABELS = {
     VOLUME: "Volumen",
     WEIGHT: "Peso",
   },
+  /**
+   * Los roles del catálogo (`tms.role`, V3 y V57). El nombre que trae el servidor está en inglés;
+   * aquí se presenta por su código, y un rol que esta versión no conoce cae al nombre del servidor
+   * (ver `roleLabel`).
+   */
+  roleCode: {
+    CARRIER_OPERATOR: "Operador del transportista",
+    COMPANY_ADMIN: "Administrador de la empresa",
+    ORGANIZATION_ADMIN: "Administrador de la organización",
+    PLANNER: "Planificador",
+    VIEWER: "Consulta",
+  },
+  /** La descripción de cada rol, por el mismo motivo que `roleCode`. */
+  roleDescription: {
+    CARRIER_OPERATOR: "Usuario de un transportista: ve los viajes despachados asignados a su transportista y reporta la entrega de sus documentos. Nada más.",
+    COMPANY_ADMIN: "Control total de una empresa: datos maestros, flota, pedidos, planificación y los accesos de esa empresa.",
+    ORGANIZATION_ADMIN: "Control total de una organización: sus empresas, usuarios, accesos y datos operativos.",
+    PLANNER: "Lee datos maestros y flota, gestiona pedidos y arma viajes en una empresa.",
+    VIEWER: "Acceso de solo lectura a los datos operativos de una empresa.",
+  },
+  /** Para quién es un alcance de credencial (`IntegrationScopeGroup`): cómo se agrupan en el formulario. */
+  integrationScopeGroup: {
+    CARRIER: "Transportista y telemetría",
+    ERP: "ERP",
+    FINANCE: "Finanzas",
+    WAREHOUSE: "Almacén (EWM)",
+  },
   stackMode: {
     NESTABLE: "Anidable",
     NONE: "Sin apilar",
@@ -741,6 +894,23 @@ export function enumLabel<G extends EnumGroup>(group: G, value: string | null | 
   const dict = ENUM_LABELS[group] as Record<string, string>;
   const label = dict[value];
   return label === undefined ? value : t(label);
+}
+
+/**
+ * El nombre de un rol para mostrar: la etiqueta en español de su código y, para un rol que esta
+ * versión no conoce, el nombre que trajo el servidor antes que el código crudo.
+ */
+export function roleLabel(code: string, serverName?: string | null): string {
+  const known = (ENUM_LABELS.roleCode as Record<string, string>)[code];
+  if (known !== undefined) return t(known);
+  return serverName || code;
+}
+
+/** La descripción de un rol, con la misma caída al texto del servidor. */
+export function roleDescription(code: string, serverDescription?: string | null): string | null {
+  const known = (ENUM_LABELS.roleDescription as Record<string, string>)[code];
+  if (known !== undefined) return t(known);
+  return serverDescription ?? null;
 }
 
 /** Opciones {value,label} de un grupo completo, para selects y filtros. */

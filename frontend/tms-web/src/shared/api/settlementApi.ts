@@ -48,7 +48,7 @@ export type WithholdingBase = 'TOTAL' | 'SUBTOTAL' | 'VAT'
 
 export type TaxIdRule = 'PE_RUC' | 'EC_RUC' | 'FREE_TEXT'
 
-export const PENALTY_REFERENCE_TYPES = ['TRIP_EXCEPTION', 'DELIVERY_FAILED', 'LATE_ARRIVAL', 'OTHER'] as const
+export const PENALTY_REFERENCE_TYPES = ['TRIP_EXCEPTION', 'DELIVERY_FAILED', 'LATE_ARRIVAL', 'OTHER', 'FREIGHT_CLAIM'] as const
 export type PenaltyReferenceType = (typeof PENALTY_REFERENCE_TYPES)[number]
 
 export type DiscrepancyStatus = 'OPEN' | 'ACCEPTED' | 'REJECTED'

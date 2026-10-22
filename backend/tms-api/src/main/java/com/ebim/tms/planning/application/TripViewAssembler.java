@@ -18,9 +18,11 @@ import com.ebim.tms.planning.infrastructure.TripExceptionRepository;
 import com.ebim.tms.planning.infrastructure.TripOrderAssignmentRepository;
 import com.ebim.tms.planning.infrastructure.TripStopRepository;
 import com.ebim.tms.shared.reference.CarrierLookupPort;
+import com.ebim.tms.shared.reference.ComplianceFinding;
 import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.DriverLookupPort;
 import com.ebim.tms.shared.reference.DriverReference;
+import com.ebim.tms.shared.reference.FleetCompliancePort;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderGeometryProfile;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
@@ -78,6 +80,7 @@ public class TripViewAssembler {
     private final DestinationLookupPort destinationLookupPort;
     private final OrderPlanningPort orderPlanningPort;
     private final PlanningCapacityService capacityService;
+    private final FleetCompliancePort fleetCompliancePort;
 
     public TripViewAssembler(PlanningRunRepository planningRunRepository,
             TripOrderAssignmentRepository assignmentRepository, TripStopRepository tripStopRepository,
@@ -87,7 +90,8 @@ public class TripViewAssembler {
             CarrierLookupPort carrierLookupPort, DriverLookupPort driverLookupPort,
             RouteTemplateLookupPort routeTemplateLookupPort, DestinationLookupPort destinationLookupPort,
             OrderPlanningPort orderPlanningPort, PlanningCapacityService capacityService,
-            TripRoutingService tripRoutingService) {
+            TripRoutingService tripRoutingService, FleetCompliancePort fleetCompliancePort) {
+        this.fleetCompliancePort = fleetCompliancePort;
         this.planningRunRepository = planningRunRepository;
         this.assignmentRepository = assignmentRepository;
         this.tripStopRepository = tripStopRepository;
@@ -183,8 +187,40 @@ public class TripViewAssembler {
         TripRouteMetrics routing = tripRoutingService.measure(
                 trip, originOf(trip, references), destinations);
 
+        // V72: the vehicle's and the driver's papers on the day the trip is planned for - the same
+        // rule TripService refuses an assignment with, shown here so a warning is not silent.
+        List<ComplianceFinding> compliance = fleetCompliancePort.findingsFor(
+                companyId, trip.vehicleId(), trip.driverId(), trip.planningDate());
+
         return new TripDetailView(view, assignmentViews, stopViews, exceptionViews,
-                toDeliveryViews(deliveries, stopsById, orders, companyId), routing);
+                toDeliveryViews(deliveries, stopsById, orders, companyId), routing, compliance);
+    }
+
+    /**
+     * The routing metrics of many trips at once (V73, the carbon footprint): the runs, origins and
+     * destinations are looked up in three batched calls, then each trip is measured exactly as
+     * {@link #toDetail} measures it, so a footprint never disagrees with the distance on the trip.
+     */
+    public Map<UUID, TripRouteMetrics> routingOf(List<Trip> trips, UUID companyId) {
+        if (trips.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, PlanningRun> runs = planningRunRepository
+                .findByIdInAndCompanyId(idsOf(trips, Trip::planningRunId), companyId).stream()
+                .collect(Collectors.toMap(PlanningRun::id, Function.identity()));
+        Map<UUID, MasterReference> origins = originLookupPort.findAllInCompany(
+                runs.values().stream().map(PlanningRun::originId).collect(Collectors.toSet()), companyId);
+        Set<UUID> destinationIds = new HashSet<>();
+        trips.forEach(trip -> trip.stops().forEach(stop -> destinationIds.add(stop.destinationId())));
+        Map<UUID, MasterReference> destinations = destinationIds.isEmpty() ? Map.of()
+                : destinationLookupPort.findAllInCompany(destinationIds, companyId);
+        Map<UUID, TripRouteMetrics> metrics = new HashMap<>();
+        for (Trip trip : trips) {
+            PlanningRun run = runs.get(trip.planningRunId());
+            MasterReference origin = run == null ? null : origins.get(run.originId());
+            metrics.put(trip.id(), tripRoutingService.measure(trip, origin, destinations));
+        }
+        return metrics;
     }
 
     /**

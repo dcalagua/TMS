@@ -23,17 +23,17 @@ import java.util.stream.Collectors;
 public enum IntegrationScope {
 
     /** Create and update locations/stores. */
-    LOCATION_WRITE("integration.location:write"),
+    LOCATION_WRITE("integration.location:write", IntegrationScopeGroup.ERP, false),
 
     /** Create and update transport orders. */
-    ORDER_WRITE("integration.order:write"),
+    ORDER_WRITE("integration.order:write", IntegrationScopeGroup.ERP, false),
 
     /**
      * Read confirmed/cancelled shipments (job 08's outbound {@code ShipmentPlan V1}). Read-only:
      * holding it grants no write anywhere, on purpose - see
      * {@code docs/integrations/OUTBOUND_SHIPMENT_V1.md}.
      */
-    SHIPMENT_READ("integration.shipment:read"),
+    SHIPMENT_READ("integration.shipment:read", IntegrationScopeGroup.WAREHOUSE, false),
 
     /**
      * Report where a vehicle is (migration V29). Its own scope rather than part of any other,
@@ -42,7 +42,7 @@ public enum IntegrationScope {
      * holding it grants no read anywhere, so a provider pushing positions learns nothing about the
      * shipments it pushes against.
      */
-    TRACKING_WRITE("integration.tracking:write"),
+    TRACKING_WRITE("integration.tracking:write", IntegrationScopeGroup.CARRIER, false),
 
     /**
      * See and answer the tenders offered to <em>one</em> carrier (migration V31).
@@ -62,26 +62,26 @@ public enum IntegrationScope {
      * <p>Deliberately not {@link #SHIPMENT_READ}, which exposes every confirmed shipment of the
      * company. A carrier learns about the shipments it was offered and about no others.
      */
-    TENDER_RESPOND("integration.tender:respond"),
+    TENDER_RESPOND("integration.tender:respond", IntegrationScopeGroup.CARRIER, true),
 
     /**
      * Report what a warehouse physically dispatched (migration V53, ADR-013): the dispatch document
      * of a WMS. Write-only: it reads nothing, and a credential holding it should also hold
      * {@link #SHIPMENT_READ} to fetch the plan it dispatches against.
      */
-    DISPATCH_WRITE("integration.dispatch:write"),
+    DISPATCH_WRITE("integration.dispatch:write", IntegrationScopeGroup.WAREHOUSE, false),
 
     /** Report warehouse milestones - loading started, load ready, load cancelled (migration V53). */
-    WAREHOUSE_MILESTONE_WRITE("integration.warehouse-milestone:write"),
+    WAREHOUSE_MILESTONE_WRITE("integration.warehouse-milestone:write", IntegrationScopeGroup.WAREHOUSE, false),
 
     /** Record the documents an ERP issued for orders - invoice, delivery note, GRE (V55, ADR-015). */
-    DOCUMENT_WRITE("integration.document:write"),
+    DOCUMENT_WRITE("integration.document:write", IntegrationScopeGroup.ERP, false),
 
     /**
      * Write the physical profile of materials (migration V59, ADR-022): what a warehouse measured.
      * Write-only, like {@link #DISPATCH_WRITE}; the profile is master data the warehouse owns.
      */
-    MATERIAL_WRITE("integration.material:write"),
+    MATERIAL_WRITE("integration.material:write", IntegrationScopeGroup.WAREHOUSE, false),
 
     /**
      * Read transport orders back (migration V61, ADR-025 section 4): one by number and the feed by
@@ -89,27 +89,47 @@ public enum IntegrationScope {
      * Separate from {@link #ORDER_WRITE}: the ERP that writes orders need not read them, and the
      * warehouse that reads them must not write them.
      */
-    ORDER_READ("integration.order:read"),
+    ORDER_READ("integration.order:read", IntegrationScopeGroup.WAREHOUSE, false),
 
     /**
      * Report what the warehouse did to its order - cancelled it, or closed it short (migration V61,
      * ADR-025 section 4). Its effect is at most a hold; TMS never cancels by itself (D-03).
      */
-    WAREHOUSE_ORDER_EVENT_WRITE("integration.warehouse-order-event:write"),
+    WAREHOUSE_ORDER_EVENT_WRITE("integration.warehouse-order-event:write", IntegrationScopeGroup.WAREHOUSE, false),
 
     /**
      * The ERP reports what it paid against an exported carrier invoice (migration V67, ADR-023
      * section 2). TMS records it and moves no money (D-01).
      */
-    PAYABLE_PAYMENT_WRITE("integration.payable-payment:write");
+    PAYABLE_PAYMENT_WRITE("integration.payable-payment:write", IntegrationScopeGroup.FINANCE, false);
 
     private static final Map<String, IntegrationScope> BY_CODE = Arrays.stream(values())
             .collect(Collectors.toUnmodifiableMap(IntegrationScope::code, Function.identity()));
 
     private final String code;
+    private final IntegrationScopeGroup group;
+    private final boolean requiresCarrier;
 
-    IntegrationScope(String code) {
+    IntegrationScope(String code, IntegrationScopeGroup group, boolean requiresCarrier) {
         this.code = code;
+        this.group = group;
+        this.requiresCarrier = requiresCarrier;
+    }
+
+    /**
+     * Which kind of partner normally holds this scope - how the credentials form groups them.
+     * Presentation only: it grants nothing and no endpoint reads it.
+     */
+    public IntegrationScopeGroup group() {
+        return group;
+    }
+
+    /**
+     * Whether a credential holding this scope must name a carrier ({@code integration_client.carrier_id}).
+     * Only {@link #TENDER_RESPOND} today; {@code IntegrationClientService.resolveCarrier} is what enforces it.
+     */
+    public boolean requiresCarrier() {
+        return requiresCarrier;
     }
 
     /** The authority string the endpoints check, identical to {@code integration_client_scope.scope}. */

@@ -10,11 +10,19 @@
 
 import { EN_SHIPMENT_TRACKING } from "./i18n.shipmentTracking";
 import { EN_PORTAL_OFFLINE } from "./i18n.portalOffline";
+import { EN_PORTAL_EXECUTION } from "./i18n.portalExecution";
 import { EN_TENANT_LIFECYCLE } from "./i18n.tenantLifecycle";
 import { EN_MATERIAL_PROFILES } from "./i18n.materialProfiles";
 import { EN_LOAD_GEOMETRY } from "./i18n.loadGeometry";
 import { EN_LOGISTICS_DOCUMENTS } from "./i18n.logisticsDocuments";
 import { EN_TAX_REGIMES } from "./i18n.taxRegimes";
+import { EN_DOCKS } from "./i18n.docks";
+import { EN_ROUTE_SHEET } from "./i18n.routeSheet";
+import { EN_QUICK_WINS } from "./i18n.quickWins";
+import { EN_CARRIER_SCORECARD } from "./i18n.carrierScorecard";
+import { EN_TRACKING_LINKS } from "./i18n.trackingLinks";
+import { EN_CLAIMS } from "./i18n.claims";
+import { EN_FLEET_COMPLIANCE } from "./i18n.fleetCompliance";
 
 const EN_CHROME: Record<string, string> = {
   "Citas de muelle": "Dock appointments",
@@ -2317,7 +2325,7 @@ const EN_DOCUMENT_DELIVERY: Record<string, string> = {
     "Your carrier's trips show up here once the warehouse dispatches them.",
   "Abrir viaje {{n}}": "Open trip {{n}}", "Despachado {{when}}": "Dispatched {{when}}",
   "Despacho sin hora": "Dispatch time unknown", "Sin placa": "No plate",
-  "{{done}}/{{total}} entregados": "{{done}}/{{total}} delivered", "{{n}} paradas": "{{n}} stops",
+  "{{done}}/{{total}} entregados": "{{done}}/{{total}} delivered", "{{n}} paradas": "{{n}} stops", "1 parada": "1 stop",
   "Documentos entregados": "Documents delivered", "{{n}} pendientes": "{{n}} pending",
   "{{n}} rechazados": "{{n}} rejected", "{{n}} no entregados": "{{n}} not delivered",
   "{{n}} cargos recibidos": "{{n}} signed copies returned",
@@ -2394,7 +2402,7 @@ const EN_DOCUMENT_DELIVERY: Record<string, string> = {
   "Reporte del transportista": "Carrier report", "Cargo recibido en oficina": "Signed copy returned to the office",
 };
 
-const EN: Record<string, string> = { ...EN_CHROME, ...EN_DATA, ...EN_APP, ...EN_SCHEDULING, ...EN_DOCUMENT_DELIVERY, ...EN_SHIPMENT_TRACKING, ...EN_PORTAL_OFFLINE, ...EN_TENANT_LIFECYCLE, ...EN_MATERIAL_PROFILES, ...EN_LOAD_GEOMETRY, ...EN_LOGISTICS_DOCUMENTS, ...EN_TAX_REGIMES };
+const EN: Record<string, string> = { ...EN_CHROME, ...EN_DATA, ...EN_APP, ...EN_SCHEDULING, ...EN_DOCUMENT_DELIVERY, ...EN_SHIPMENT_TRACKING, ...EN_PORTAL_OFFLINE, ...EN_TENANT_LIFECYCLE, ...EN_MATERIAL_PROFILES, ...EN_LOAD_GEOMETRY, ...EN_LOGISTICS_DOCUMENTS, ...EN_TAX_REGIMES, ...EN_DOCKS, ...EN_ROUTE_SHEET, ...EN_QUICK_WINS, ...EN_CARRIER_SCORECARD, ...EN_PORTAL_EXECUTION, ...EN_TRACKING_LINKS, ...EN_CLAIMS, ...EN_FLEET_COMPLIANCE };
 
 export type Lang = "es" | "en";
 

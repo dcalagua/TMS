@@ -70,6 +70,12 @@ public enum Permission {
      * order for credit or stock is a commercial decision that the person keying orders may not hold.
      */
     ORDERS_HOLD_MANAGE("orders.hold:manage"),
+    /**
+     * Generate, list and revoke an order's customer tracking links (migration V74, ADR-029). Its own
+     * authority: handing an anonymous party a view of an order is a customer-facing decision that a
+     * VIEWER, who may read every order, must not be able to make.
+     */
+    ORDERS_TRACKING_LINK_MANAGE("orders.tracking_link:manage"),
 
     PLANNING_PLAN_READ("planning.plan:read"),
     PLANNING_PLAN_MANAGE("planning.plan:manage"),
@@ -151,11 +157,28 @@ public enum Permission {
     SETTLEMENT_COST_ALLOCATION_MANAGE("settlement.cost_allocation:manage"),
 
     /**
+     * The carbon footprint (migration V73): what each trip emitted, split between its orders on the
+     * cost-allocation basis, and reported per customer, destination and route. Read-only - nothing
+     * about it is ever stored.
+     */
+    SETTLEMENT_EMISSION_READ("settlement.emission:read"),
+
+    /**
      * Editing the company's fiscal regime (migration V66, ADR-027): its fiscal country, VAT rates and
      * withholdings. Reading the resolved regime is {@link #SETTLEMENT_INVOICE_READ}, so every invoice
      * form can preview with it; changing what is withheld from every carrier is an administrator's.
      */
     SETTLEMENT_TAX_MANAGE("settlement.tax:manage"),
+
+    /**
+     * Freight claims (migration V71): damage, shortage, loss and delay claimed from a carrier, and
+     * the incident centre that lists them beside the open trip exceptions. Three permissions because
+     * opening a claim and deciding what the carrier owes are different authorities: the planner who
+     * knows the chairs arrived broken opens it; an administrator - never the same person - accepts it.
+     */
+    SETTLEMENT_CLAIM_READ("settlement.claim:read"),
+    SETTLEMENT_CLAIM_MANAGE("settlement.claim:manage"),
+    SETTLEMENT_CLAIM_DECIDE("settlement.claim:decide"),
 
     /**
      * A driver-and-vehicle pairing's day (migration V47).
@@ -166,6 +189,16 @@ public enum Permission {
      */
     FLEET_WORK_ASSIGNMENT_READ("fleet.work_assignment:read"),
     FLEET_WORK_ASSIGNMENT_MANAGE("fleet.work_assignment:manage"),
+
+    /**
+     * Fleet compliance documents (migration V72): the papers of a vehicle or a driver beyond the
+     * licence - registration, technical inspection, insurance, operating permit, medical certificate.
+     * Keeping them and deciding which of them block a trip are separate authorities: the policy is
+     * an administrator's, because it is what refuses a planner's assignment.
+     */
+    FLEET_DOCUMENT_READ("fleet.document:read"),
+    FLEET_DOCUMENT_MANAGE("fleet.document:manage"),
+    FLEET_DOCUMENT_POLICY_MANAGE("fleet.document_policy:manage"),
 
     /**
      * What running our own trucks is modelled to cost (migration V48).
@@ -211,6 +244,16 @@ public enum Permission {
      */
     PORTAL_TRIP_READ("portal.trip:read"),
     PORTAL_DOCUMENT_REPORT("portal.document:report"),
+
+    /**
+     * Stop execution and proof of delivery from the carrier portal (migration V70, ADR-018
+     * addendum): arrival, service, completion or failure of a stop and an incident on it; and the
+     * delivery result of an order with its evidence. Split like the office's own execution is not
+     * - the office holds both under {@code planning.trip:execute} - because a carrier company may
+     * want the driver to report the stop and the dispatcher to sign off the result.
+     */
+    PORTAL_STOP_EXECUTE("portal.stop:execute"),
+    PORTAL_DELIVERY_REPORT("portal.delivery:report"),
 
     /**
      * My carrier's invoices, their due dates and what was paid (migration V67, ADR-023 section 2).

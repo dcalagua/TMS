@@ -11,14 +11,21 @@ import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDate } from "../../lib/locale";
 import { R } from "../../theme";
-import { PORTAL_BAR_HEIGHT, SAFE_AREA, portalInvoicesKey, portalMoney } from "./portalUi";
+import { PORTAL_BAR_HEIGHT, PORTAL_PAGE_GRID, SAFE_AREA, portalInvoicesKey, portalMoney } from "./portalUi";
 import { InvoiceLoadError } from "./PortalInvoicesPage";
 
+/**
+ * Una cifra con su etiqueta. El importe nunca se parte ni se encoge —«68,73 US» no es un
+ * importe— y es la etiqueta la que cede el ancho y salta de línea si hace falta.
+ */
 function Row({ label, children, strong = false }: { label: string; children: ReactNode; strong?: boolean }) {
   return (
-    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2, py: 0.75 }}>
-      <Typography color="text.secondary" sx={{ fontSize: 15 }}>{label}</Typography>
-      <Typography sx={{ fontSize: 15, fontWeight: strong ? 800 : 600, fontVariantNumeric: "tabular-nums", textAlign: "right" }}>
+    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 2, py: 0.75 }}>
+      <Typography color="text.secondary" sx={{ fontSize: 15, minWidth: 0, overflowWrap: "anywhere" }}>{label}</Typography>
+      <Typography data-testid="portal-row-value" sx={{
+        fontSize: 15, fontWeight: strong ? 800 : 600, fontVariantNumeric: "tabular-nums", textAlign: "right",
+        whiteSpace: "nowrap", flexShrink: 0,
+      }}>
         {children}
       </Typography>
     </Box>
@@ -53,13 +60,14 @@ export function PortalInvoicePage() {
   const invoice = invoiceQuery.data;
 
   return (
-    <Box sx={{ display: "grid", gap: 2 }}>
+    <Box data-testid="portal-invoice-page" sx={PORTAL_PAGE_GRID}>
       <Box sx={{
         position: "sticky", top: `calc(${SAFE_AREA.top} + ${PORTAL_BAR_HEIGHT}px)`, zIndex: 2,
         mx: -2, mt: -2, px: 2, pt: 1, pb: 1.25, bgcolor: "background.default",
         borderBottom: "1px solid", borderColor: "divider",
       }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+        {/* Por debajo de 360 px el chip de estado baja a su propia línea en vez de comerle el número. */}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, "@media (max-width: 359.95px)": { flexWrap: "wrap" } }}>
           <IconButton onClick={() => navigate("/portal/invoices")} aria-label={t("Volver")} edge="start" sx={{ width: 48, height: 48 }}>
             <ArrowBackRounded />
           </IconButton>
@@ -110,7 +118,7 @@ export function PortalInvoicePage() {
             {(invoice.withholdings ?? []).map((withholding) => (
               <Row key={withholding.kind} label={withholding.label ?? enumLabel("withholdingKind", withholding.kind)}>
                 {portalMoney(withholding.amount, invoice.currency)}
-                <Typography component="span" color="text.secondary" sx={{ display: "block", fontSize: 13 }}>
+                <Typography component="span" color="text.secondary" sx={{ display: "block", fontSize: 13, whiteSpace: "normal" }}>
                   {withholding.certificateNumber
                     ? t("Comprobante {{number}}", { number: withholding.certificateNumber })
                     : t("Comprobante pendiente")}

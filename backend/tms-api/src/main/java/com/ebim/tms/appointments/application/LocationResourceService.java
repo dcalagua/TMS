@@ -184,6 +184,44 @@ public class LocationResourceService {
                         "blockedTo", endsAt.toString(), "reason", reason.trim()));
     }
 
+    /**
+     * The closures on one door that have not ended yet, soonest first.
+     *
+     * <p>Past closures are left out on purpose: the screen that lists these is where somebody
+     * decides whether a door is shut <em>from now on</em>, and last year's stocktake is history the
+     * audit trail already keeps.
+     */
+    @Transactional(readOnly = true)
+    public List<ResourceBlockView> listUpcomingBlocks(CompanyScope scope, UUID id) {
+        LocationResource resource = require(scope, id);
+        return blockedSlotRepository
+                .findByCompanyIdAndResourceIdAndEndsAtAfterOrderByStartsAtAsc(scope.companyId(), resource.id(),
+                        OffsetDateTime.now(clock))
+                .stream()
+                .map(ResourceBlockView::from)
+                .toList();
+    }
+
+    /**
+     * Lifts a closure registered by mistake or no longer needed.
+     *
+     * <p>A closure is a decision, not a fact - unlike a booking that happened, there is nothing to
+     * preserve once the door is open again - so the row goes, and the audit trail records who
+     * reopened the door and what the closure had said.
+     */
+    @Transactional
+    public void liftBlock(CompanyScope scope, UUID id, UUID blockId) {
+        LocationResource resource = require(scope, id);
+        ResourceBlockedSlot slot = blockedSlotRepository
+                .findByIdAndCompanyIdAndResourceId(blockId, scope.companyId(), resource.id())
+                .orElseThrow(() -> new ResourceNotFoundException("Closure not found."));
+        blockedSlotRepository.delete(slot);
+        blockedSlotRepository.flush();
+        auditRecorder.record(scope, AuditAggregateType.LOCATION_RESOURCE, resource.id(), AuditAction.UPDATE,
+                Map.of("code", resource.code(), "unblockedFrom", slot.startsAt().toString(),
+                        "unblockedTo", slot.endsAt().toString(), "reason", slot.reason()));
+    }
+
     private List<ResourceCalendarEntry> calendar(CompanyScope scope, UUID resourceId) {
         return calendarRepository.findByCompanyIdAndResourceIdOrderByDayOfWeekAsc(scope.companyId(), resourceId);
     }

@@ -92,6 +92,12 @@ src/
   la cuenta no puede ver dice "no disponible para tu cuenta" en lugar de enseñar ceros.
 - **Idioma.** `t("texto en español")`: la clave *es* el castellano y el diccionario de
   `lib/i18n.ts` lleva el inglés. Cambiar de idioma recarga la pantalla.
+- **Filtros en la URL.** Las pantallas que se comparten por chat —torre de control, seguimiento
+  de reparto y de despachos, entrega de documentos, citas de muelle y programación— guardan sus
+  filtros en la URL con `useUrlFilters` (`shared/ui`): sólo lo que difiere del defecto, con
+  `replace`, y un valor inválido se ignora. La página y lo que está abierto no van ahí.
+- **Valores por defecto de la empresa.** El país (`defaultCountry`) y el huso (`timeZone`) de una
+  ubicación o empresa nueva salen de la empresa activa de `/me`, nunca de `PE`/`America/Lima`.
 - **Paleta de gráficas.** `datavizSeries()` reparte los colores en un orden validado con el
   comprobador de daltonismo, no en el orden de la paleta: el verde de marca y el teal quedan
   demasiado juntos y ese orden los separa.

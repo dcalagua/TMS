@@ -17,12 +17,15 @@ public record CompanySettingsView(
         String dispatchConfirmationMode,
         String accrualTrigger,
         /** Null = the deployment default (V68). */
-        String costAllocationBasis) {
+        String costAllocationBasis,
+        /** How a customer tracking link shows the plate: MASKED or HIDDEN (V74, ADR-029). */
+        String trackingPlateDisplay) {
 
     public static CompanySettingsView from(CompanySettings settings) {
         return new CompanySettingsView(settings.defaultCountry(), settings.orderNumberPrefix(),
                 settings.shipmentNumberPrefix(), settings.dispatchConfirmationMode().name(),
                 settings.accrualTrigger().name(),
-                settings.costAllocationBasis() == null ? null : settings.costAllocationBasis().name());
+                settings.costAllocationBasis() == null ? null : settings.costAllocationBasis().name(),
+                settings.trackingPlateDisplay().name());
     }
 }

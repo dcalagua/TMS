@@ -20,9 +20,11 @@ import com.ebim.tms.shared.audit.AuditAction;
 import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.audit.AuditAggregateType;
 import com.ebim.tms.shared.audit.AuditRecorder;
+import com.ebim.tms.shared.reference.ComplianceFinding;
 import com.ebim.tms.shared.reference.DriverLicenseStatus;
 import com.ebim.tms.shared.reference.DriverLookupPort;
 import com.ebim.tms.shared.reference.DriverReference;
+import com.ebim.tms.shared.reference.FleetCompliancePort;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.RouteTemplate;
@@ -104,6 +106,7 @@ public class TripService {
     private final CompanySettingsPort companySettingsPort;
     private final AuditActorProvider auditActorProvider;
     private final AuditRecorder auditRecorder;
+    private final FleetCompliancePort fleetCompliancePort;
 
     public TripService(TripRepository tripRepository, PlanningRunRepository planningRunRepository,
             TripOrderAssignmentRepository assignmentRepository, TripAssignmentService assignments,
@@ -111,7 +114,9 @@ public class TripService {
             DriverLookupPort driverLookupPort, RouteTemplateLookupPort routeTemplateLookupPort,
             PlanningCapacityService capacityService, TripViewAssembler assembler, ShipmentEventPublisher events,
             TripTenderService tenders, TripAlertPublisher alerts, CompanySettingsPort companySettingsPort,
-            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder) {
+            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder,
+            FleetCompliancePort fleetCompliancePort) {
+        this.fleetCompliancePort = fleetCompliancePort;
         this.tripRepository = tripRepository;
         this.planningRunRepository = planningRunRepository;
         this.assignmentRepository = assignmentRepository;
@@ -171,6 +176,7 @@ public class TripService {
         UUID carrierId = null;
         if (request.vehicleId() != null) {
             carrierId = requireAssignableVehicle(scope, request.vehicleId()).carrierId();
+            requireCompliantOn(scope, request.vehicleId(), null, run.planningDate());
             // No trip id exists yet, so nothing is excluded - the form of the check that says so.
             requireVehicleNotDoubleBooked(scope, request.vehicleId(), run.planningDate());
         }
@@ -197,6 +203,7 @@ public class TripService {
                 scope.timeZone(), "Trip " + trip.tripNumber());
 
         VehicleCapacityReference vehicle = requireAssignableVehicle(scope, request.vehicleId());
+        requireCompliantOn(scope, vehicle.id(), null, trip.planningDate());
         CapacityLimits vehicleLimits = CapacityLimits.of(vehicle);
         requireTripUnitsFit(scope, trip, vehicle.code(), vehicleLimits);
         CapacityLoad load = assignments.currentLoad(trip.id(), scope.companyId(), vehicleLimits);
@@ -250,6 +257,7 @@ public class TripService {
                 .orElseThrow(() -> new InvalidRequestException(
                         "driverId does not reference an active driver in this company."));
         requireValidLicenceOn(driver, trip.planningDate());
+        requireCompliantOn(scope, null, driver.id(), trip.planningDate());
         requireCarrierCompatible(driver, trip.carrierId());
         requireDriverNotDoubleBooked(scope, driver.id(), trip.planningDate(), trip.id());
 
@@ -747,6 +755,23 @@ public class TripService {
             throw new InvalidRequestException("Driver " + driver.code() + " has a licence that expired on "
                     + driver.licenseExpiresOn() + " and cannot be assigned to a trip planned for "
                     + planningDate + ".");
+        }
+    }
+
+    /**
+     * The vehicle's or the driver's compliance papers (V72) on the day they will be used - the trip's
+     * planning date, for the reason {@link #requireValidLicenceOn} gives. Only an expired paper whose
+     * company policy says BLOCK refuses; an unrecorded one, or one whose policy only warns, passes and
+     * shows on the trip ({@code TripDetailView.compliance}). Every blocking paper is named, so the
+     * planner knows what to renew. A 400, like an expired licence.
+     */
+    private void requireCompliantOn(CompanyScope scope, UUID vehicleId, UUID driverId, LocalDate planningDate) {
+        List<ComplianceFinding> blocking =
+                fleetCompliancePort.blockingFor(scope.companyId(), vehicleId, driverId, planningDate);
+        if (!blocking.isEmpty()) {
+            throw new InvalidRequestException(blocking.stream().map(ComplianceFinding::describe)
+                    .collect(java.util.stream.Collectors.joining(" "))
+                    + " It cannot be assigned to a trip planned for " + planningDate + ".");
         }
     }
 

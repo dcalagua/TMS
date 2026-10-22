@@ -22,6 +22,8 @@ export const ControlTowerPage = lazy(() =>
   import("../pages/control-tower/ControlTowerPage").then((m) => ({ default: m.ControlTowerPage })));
 export const ReportsPage = lazy(() =>
   import("../pages/reporting/ReportsPage").then((m) => ({ default: m.ReportsPage })));
+export const CarrierScorecardPage = lazy(() =>
+  import("../pages/reporting/CarrierScorecardPage").then((m) => ({ default: m.CarrierScorecardPage })));
 
 export const LocationsPage = lazy(() =>
   import("../pages/masters/LocationsPage").then((m) => ({ default: m.LocationsPage })));
@@ -47,6 +49,8 @@ export const VehiclesPage = lazy(() =>
   import("../pages/fleet/VehiclesPage").then((m) => ({ default: m.VehiclesPage })));
 export const DriversPage = lazy(() =>
   import("../pages/fleet/DriversPage").then((m) => ({ default: m.DriversPage })));
+export const FleetDocumentsPage = lazy(() =>
+  import("../pages/fleet/FleetDocumentsPage").then((m) => ({ default: m.FleetDocumentsPage })));
 
 export const OrdersPage = lazy(() =>
   import("../pages/orders/OrdersPage").then((m) => ({ default: m.OrdersPage })));
@@ -76,6 +80,10 @@ export const PayablesPage = lazy(() =>
   import("../pages/settlement/PayablesPage").then((m) => ({ default: m.PayablesPage })));
 export const CostToServePage = lazy(() =>
   import("../pages/settlement/CostToServePage").then((m) => ({ default: m.CostToServePage })));
+export const ClaimsPage = lazy(() =>
+  import("../pages/claims/ClaimsPage").then((m) => ({ default: m.ClaimsPage })));
+export const IncidentsPage = lazy(() =>
+  import("../pages/claims/IncidentsPage").then((m) => ({ default: m.IncidentsPage })));
 export const WorkAssignmentsPage = lazy(() =>
   import("../pages/fleet/WorkAssignmentsPage").then((m) => ({ default: m.WorkAssignmentsPage })));
 export const OwnFleetCostProfilesPage = lazy(() =>
@@ -83,6 +91,8 @@ export const OwnFleetCostProfilesPage = lazy(() =>
     .then((m) => ({ default: m.OwnFleetCostProfilesPage })));
 export const TripWorkspacePage = lazy(() =>
   import("../pages/trips/TripWorkspacePage").then((m) => ({ default: m.TripWorkspacePage })));
+export const TripRouteSheetPage = lazy(() =>
+  import("../pages/trips/TripRouteSheetPage").then((m) => ({ default: m.TripRouteSheetPage })));
 export const DeliveryTrackingPage = lazy(() =>
   import("../pages/delivery-tracking/DeliveryTrackingPage").then((m) => ({ default: m.DeliveryTrackingPage })));
 // ADR-019 §2: los envíos que el almacén despachó, con su mapa. Junto al seguimiento de reparto, sin tocarlo.
@@ -111,3 +121,8 @@ export const IntegrationsPage = lazy(() =>
   import("../pages/settings/IntegrationsPage").then((m) => ({ default: m.IntegrationsPage })));
 export const AuditPage = lazy(() =>
   import("../pages/security/AuditPage").then((m) => ({ default: m.AuditPage })));
+
+// ADR-029: la página pública del enlace de seguimiento. Fuera de todo armazón y sin sesión; lleva su
+// propio <Suspense> en App.tsx porque no vive bajo AppLayout.
+export const TrackingPublicPage = lazy(() =>
+  import("../pages/public/TrackingPublicPage").then((m) => ({ default: m.TrackingPublicPage })));

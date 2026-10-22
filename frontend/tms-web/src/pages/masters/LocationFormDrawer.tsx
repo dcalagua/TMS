@@ -17,6 +17,8 @@ import {
   ActiveBadge, FormDrawer, FormMeta, FormRow, FormSection, OptionCard, SectionIndex,
 } from "../../shared/ui/components";
 import { enumLabel } from "../../lib/enums";
+import { companyDefaultCountry, companyDefaultTimeZone } from "../../shared/api/meApi";
+import { useCompany } from "../../shared/company/CompanyContext";
 import { t } from "../../lib/i18n";
 import { fmtDateTime } from "../../lib/locale";
 import { LocationFrequencyPanel } from "./LocationFrequencyPanel";
@@ -101,6 +103,7 @@ const KNOWN_FIELDS = new Set<keyof LocationFormValues>([
 export function LocationFormDrawer({ companyId, location, presetRole, onClose, onSaved }: LocationFormDrawerProps) {
   const isEdit = location !== null;
   const [formError, setFormError] = useState<string | null>(null);
+  const { selected } = useCompany();
 
   const zonesQuery = useQuery({
     queryKey: ["zones-for-location-form", companyId],
@@ -123,8 +126,9 @@ export function LocationFormDrawer({ companyId, location, presetRole, onClose, o
       district: location?.district ?? "",
       province: location?.province ?? "",
       department: location?.department ?? "",
-      country: location?.country ?? "PE",
-      timeZone: location?.timeZone ?? "America/Lima",
+      // D1: una ubicación nueva nace en el país y el huso de la empresa activa, no en Perú.
+      country: location?.country ?? companyDefaultCountry(selected),
+      timeZone: location?.timeZone ?? companyDefaultTimeZone(selected),
       latitude: location?.latitude?.toString() ?? "",
       longitude: location?.longitude?.toString() ?? "",
       serviceTimeMinutes: location?.serviceTimeMinutes?.toString() ?? "0",

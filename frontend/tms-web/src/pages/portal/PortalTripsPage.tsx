@@ -19,6 +19,7 @@ import { usePortalOffline } from "./offline/offlineContext";
 import { queuedByTrip } from "./offline/overlay";
 import { usePortalQuery } from "./offline/usePortalQuery";
 import { describeLoadError, portalTripsKey } from "./portalReport";
+import { PORTAL_PAGE_GRID } from "./portalUi";
 import { usePullToRefresh } from "./usePullToRefresh";
 
 const DAY_OPTIONS = [7, 14, 30] as const;
@@ -76,7 +77,7 @@ export function PortalTripsPage() {
   const queued = queuedByTrip(entries, companyId);
 
   return (
-    <Box {...pull.handlers} sx={{ display: "grid", gap: 2 }}>
+    <Box {...pull.handlers} sx={PORTAL_PAGE_GRID}>
       <Box aria-hidden={!pull.refreshing} sx={{
         height: pull.refreshing ? 48 : pull.pull, overflow: "hidden", display: "grid", placeItems: "center",
         transition: pull.pull === 0 ? "height .2s ease" : "none", mt: pull.pull || pull.refreshing ? 0 : -2,
@@ -197,7 +198,7 @@ function PortalTripCard({ trip, queued, onOpen }: { trip: PortalTripSummary; que
               label={t("Cargo recibido: {{n}}", { n: trip.returnedCount })} />
           )}
           <Typography color="text.secondary" sx={{ fontSize: 14, ml: "auto" }}>
-            {t("{{n}} paradas", { n: trip.stopCount })}
+            {trip.stopCount === 1 ? t("1 parada") : t("{{n}} paradas", { n: trip.stopCount })}
           </Typography>
         </Box>
       </CardActionArea>

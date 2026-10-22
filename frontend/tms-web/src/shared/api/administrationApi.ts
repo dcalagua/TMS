@@ -2,6 +2,7 @@ import { apiRequest } from './httpClient'
 import type { OrganizationView } from './meApi'
 import type { PageResponse } from './pageResponse'
 import type { CostAllocationBasis } from './costToServeApi'
+import type { TrackingPlateDisplay } from './trackingLinksApi'
 
 /** Mirrors the backend's `CompanySettingsView` (migration V34). */
 export interface CompanySettingsView {
@@ -23,6 +24,8 @@ export interface CompanySettingsView {
    * defecto de la instalación (peso); ausente en un backend anterior.
    */
   costAllocationBasis?: CostAllocationBasis | null
+  /** Cómo el enlace de seguimiento del cliente muestra la placa (V74, ADR-029). Ausente en un backend anterior: `MASKED`. */
+  trackingPlateDisplay?: TrackingPlateDisplay
 }
 
 /** Mirrors `AccrualTrigger` (`shared/settings`): al despachar (por defecto) o al entregar. */
@@ -82,6 +85,8 @@ export interface CompanyProfileRequest {
   accrualTrigger?: AccrualTrigger
   /** Opcional: omitirlo conserva la base actual (V68). */
   costAllocationBasis?: CostAllocationBasis
+  /** Opcional: omitirlo conserva cómo se muestra la placa en los enlaces de seguimiento (V74). */
+  trackingPlateDisplay?: TrackingPlateDisplay
 }
 
 /** Mirrors the backend's `CompanyCreateRequest`. There is no `organizationId`: the caller's own is used. */

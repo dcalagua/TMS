@@ -113,6 +113,32 @@ check, and that branch is the one nobody tests.
 | A **closure** (`resource_blocked_slot`) | Refused, naming the reason |
 | A **deactivated** door | New bookings refused; **existing ones untouched** — a truck already on the road for yesterday's slot must not silently lose it |
 
+### Configuring doors from the UI (2026-10)
+
+Doors used to be created only through the API, so «Citas de muelle» was empty for any tenant nobody
+had `curl`ed. They are now configured from the screen, behind `appointments.resource:manage`:
+
+- **Where**: «Puertas y muelles» on the appointments board (once a site is chosen), and the row
+  menu of the location master. Both open the same panel
+  (`frontend/tms-web/src/pages/appointments/LocationResourcesDrawer.tsx`).
+- **What**: create and edit a door (code, name, DOCK/DOOR/BAY/YARD, default slot minutes), put it out
+  of service and back, replace its whole week (`PUT /appointments/resources/{id}/calendar`), and
+  register or lift closures.
+- **The site selector lists origins and destinations.** It used to read only destinations, so a plant
+  that only dispatches (PLAPASA's GYE-CD) could not be picked at all.
+- **Empty week = open, said aloud.** Unticking every day does not close a door - it removes its
+  calendar, and a door without one is open (the first row of the table above). The editor warns, and
+  points to «out of service» as the way to stop receiving trucks.
+- Two endpoints were added for the panel, with no migration: `GET /appointments/resources/{id}/blocks`
+  (closures that have not ended, soonest first; `appointments.appointment:read`) and
+  `DELETE /appointments/resources/{id}/blocks/{blockId}` (lift a closure;
+  `appointments.resource:manage`, audited as an `UPDATE` of the door with what the closure said). A
+  closure is a decision, not a fact, so lifting one removes the row; past closures stay out of the
+  list but in the audit trail.
+
+The PLAPASA demo seed gives GYE-CD three docks (MUE-01..03) open Monday to Saturday 07:00-19:00 local
+time; `PlapasaDemoSeedIntegrationTest` books one on a Wednesday and is refused on the Sunday.
+
 ## 6. Tenancy
 
 Four tables, all company-scoped with the tenant policy (ADR-005), and the composite foreign keys

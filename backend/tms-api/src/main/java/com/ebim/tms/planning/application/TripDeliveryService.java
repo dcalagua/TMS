@@ -126,8 +126,8 @@ public class TripDeliveryService {
 
         AuditActor actor = auditActorProvider.current().orElseThrow(() -> new IllegalStateException(
                 "no authenticated actor: a delivery must be recorded inside an authenticated request"));
-        TransportEventSource source =
-                actor.isMachine() ? TransportEventSource.INTEGRATION : TransportEventSource.OPERATOR;
+        // The same rule as the timeline (V70): a carrier user in the portal is CARRIER_PORTAL.
+        TransportEventSource source = TransportEventRecorder.sourceOf(scope, actor);
 
         OrderDelivery delivery = deliveryRepository
                 .findByCompanyIdAndTripStopIdAndOrderId(scope.companyId(), stop.id(), orderId)

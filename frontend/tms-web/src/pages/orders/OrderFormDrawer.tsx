@@ -27,6 +27,8 @@ import { fmtDecimal, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
 import { marginHint } from "./declaredTotals";
 import { T } from "../../theme";
 import { OrderDocumentsSection } from "./OrderDocumentsSection";
+import { TrackingLinksPanel } from "./TrackingLinksPanel";
+import { useCanShareTracking } from "./trackingLinks";
 import { OrderGeometrySection } from "./OrderGeometrySection";
 
 const FORM_ID = "order-form";
@@ -203,6 +205,7 @@ function OrderForm({
   onSaved: () => void;
 }) {
   const isEdit = order !== null;
+  const canShareTracking = useCanShareTracking();
   // Un pedido planificado o cancelado se abre en solo lectura: el ciclo de estados es del
   // backend, y ofrecer campos editables que él va a rechazar es una promesa que no se cumple.
   const isEditable = canManage && (order === null || order.status === "NOT_READY" || order.status === "READY_FOR_PLANNING");
@@ -667,6 +670,12 @@ function OrderForm({
 
         {/* ADR-015: los documentos del ERP, de solo lectura, solo para un pedido que ya existe. */}
         {isEdit && <OrderDocumentsSection companyId={companyId} orderId={order.id} />}
+
+        {/* ADR-029: el enlace que se manda al cliente. Tras su propio permiso: publicar la vista de
+            un pedido a quien no tiene sesión es una decisión distinta de leerlo. */}
+        {isEdit && canShareTracking && (
+          <TrackingLinksPanel companyId={companyId} orderId={order.id} orderNumber={order.orderNumber} />
+        )}
       </Box>
     </FormDrawer>
   );

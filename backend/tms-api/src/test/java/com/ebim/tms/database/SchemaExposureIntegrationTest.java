@@ -84,6 +84,9 @@ class SchemaExposureIntegrationTest {
             "carrier_invoice_withholding", "company_tax_withholding_setting",
             // V68: cost to serve (ADR-026). The rows are append-only; a run is only ever superseded.
             "trip_cost_allocation_run", "trip_cost_allocation",
+            // V71: freight claims. A claim is cancelled or closed, never deleted; its evidence is
+            // append-only; its lines are rewritten whole while it is OPEN.
+            "freight_claim", "freight_claim_line", "freight_claim_evidence",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
             "work_assignment", "work_assignment_trip",
@@ -94,6 +97,9 @@ class SchemaExposureIntegrationTest {
             "platform_provisioning_request", "platform_provisioning_audit",
             // V54: holds on an order (ADR-014). Lifted, never deleted - no DELETE grant.
             "order_hold",
+            // V74: customer tracking links (ADR-029). Revoked, never deleted; only revocation and the
+            // view counter are updatable (column grants).
+            "tracking_link",
             // V55: the documents that travel with orders (ADR-015).
             "logistics_document", "logistics_document_order",
             // V69: the destinatarios of a guide (ADR-028).
@@ -101,10 +107,14 @@ class SchemaExposureIntegrationTest {
             // V57: document delivery tracking (ADR-018).
             "document_delivery", "document_delivery_order", "document_delivery_event",
             "document_delivery_evidence",
+            // V70: the Idempotency-Key of each carrier-portal execution action. Append-only.
+            "portal_action_receipt",
             // V59: the warehouse's material profiles (ADR-022).
             "material_profile",
             // V61: order cancellation with the warehouse (ADR-025 section 4).
             "business_outbox_event", "warehouse_order_event",
+            // V72: fleet compliance documents, their policy and the alert window. Deactivated, never deleted.
+            "fleet_document", "fleet_document_policy", "fleet_compliance_settings",
             // V56: MasterAdmin commercial entitlements. Same posture as V51 - owner only, tms_app holds
             // no grant and a deny-all policy; the scoped read goes through a SECURITY DEFINER function.
             "platform_entitlement_applied", "platform_entitlement_audit", "platform_entitlement_jti",
@@ -157,6 +167,9 @@ class SchemaExposureIntegrationTest {
             "carrier_invoice_withholding", "company_tax_withholding_setting",
             // V68: cost to serve (ADR-026). The rows are append-only; a run is only ever superseded.
             "trip_cost_allocation_run", "trip_cost_allocation",
+            // V71: freight claims. A claim is cancelled or closed, never deleted; its evidence is
+            // append-only; its lines are rewritten whole while it is OPEN.
+            "freight_claim", "freight_claim_line", "freight_claim_evidence",
             // V47: a driver and vehicle's day. Both take the full grant - a day is rewritten all
             // morning as shipments are added, dropped and reordered.
             "work_assignment", "work_assignment_trip",
@@ -164,6 +177,8 @@ class SchemaExposureIntegrationTest {
             "external_dispatch", "external_dispatch_order", "warehouse_milestone",
             // V54: holds on an order (ADR-014).
             "order_hold",
+            // V74: customer tracking links (ADR-029).
+            "tracking_link",
             // V55: the documents that travel with orders (ADR-015).
             "logistics_document", "logistics_document_order",
             // V69: the destinatarios of a guide (ADR-028).
@@ -171,10 +186,14 @@ class SchemaExposureIntegrationTest {
             // V57: document delivery tracking (ADR-018).
             "document_delivery", "document_delivery_order", "document_delivery_event",
             "document_delivery_evidence",
+            // V70's portal_action_receipt is not here: append-only, its tenant policy is split into
+            // p_tenant_company_scope_select / _insert like transport_event's.
             // V59: the warehouse's material profiles (ADR-022).
             "material_profile",
             // V61: order cancellation with the warehouse (ADR-025 section 4).
-            "business_outbox_event", "warehouse_order_event");
+            "business_outbox_event", "warehouse_order_event",
+            // V72: fleet compliance documents (and a carrier session sees none of them).
+            "fleet_document", "fleet_document_policy", "fleet_compliance_settings");
 
     /**
      * The only tables allowed to carry a {@code company_id} and <em>not</em> the tenant policy.
@@ -366,6 +385,28 @@ class SchemaExposureIntegrationTest {
                 .isEmpty();
     }
 
+    /**
+     * V70: the execution tables a carrier session now reads and writes from the portal carry the
+     * same RESTRICTIVE {@code p_carrier_scope} as the trip they belong to. One left without it would
+     * let a carrier session read - or write against - another carrier's deliveries and evidence.
+     */
+    @Test
+    @DisplayName("every execution table the portal touches carries the restrictive carrier policy (V70)")
+    void executionTablesCarryTheCarrierPolicy() throws SQLException {
+        assertThat(strings("""
+                SELECT t.name
+                FROM unnest(ARRAY['trip', 'trip_stop', 'trip_order_assignment', 'order_delivery',
+                                  'order_delivery_line', 'delivery_evidence', 'transport_event',
+                                  'trip_exception', 'portal_action_receipt']) AS t(name)
+                WHERE NOT EXISTS (SELECT 1 FROM pg_policies p
+                                   WHERE p.schemaname = 'tms' AND p.tablename = t.name
+                                     AND p.policyname = 'p_carrier_scope' AND p.permissive = 'RESTRICTIVE')
+                ORDER BY 1
+                """))
+                .as("a carrier session must see and write only its own carrier's execution rows")
+                .isEmpty();
+    }
+
     @Test
     @DisplayName("no policy is granted to the Supabase API roles: the Data API stays denied")
     void policiesTargetTheRuntimeRoleOnly() throws SQLException {
@@ -441,6 +482,9 @@ class SchemaExposureIntegrationTest {
         withheld.put("warehouse_milestone", List.of("UPDATE", "DELETE"));
         // A hold is lifted with a reason, never erased (V54).
         withheld.put("order_hold", List.of("DELETE"));
+        // V74: a tracking link is revoked, never erased; UPDATE is granted on the revocation and view columns only, so the
+        // table-level privilege is absent (column grants are not table grants).
+        withheld.put("tracking_link", List.of("UPDATE", "DELETE"));
         // V55: a document is replaced, never deleted; its order links are rewritten whole.
         withheld.put("logistics_document", List.of("DELETE"));
         withheld.put("logistics_document_order", List.of("UPDATE"));
@@ -451,12 +495,17 @@ class SchemaExposureIntegrationTest {
         withheld.put("document_delivery", List.of("DELETE"));
         withheld.put("document_delivery_order", List.of("UPDATE", "DELETE"));
         withheld.put("document_delivery_event", List.of("UPDATE", "DELETE"));
+        withheld.put("portal_action_receipt", List.of("UPDATE", "DELETE"));
         withheld.put("document_delivery_evidence", List.of("UPDATE", "DELETE"));
         // V59: a profile the warehouse stops sending stays as the last known copy.
         withheld.put("material_profile", List.of("DELETE"));
         // V61: records of facts, written once.
         withheld.put("business_outbox_event", List.of("UPDATE", "DELETE"));
         withheld.put("warehouse_order_event", List.of("UPDATE", "DELETE"));
+        // V72: a fleet document is deactivated, never deleted; a policy and the window are edited in place.
+        withheld.put("fleet_document", List.of("DELETE"));
+        withheld.put("fleet_document_policy", List.of("DELETE"));
+        withheld.put("fleet_compliance_settings", List.of("DELETE"));
         // Canonical location replaced these; they are read-only projections now (V23).
         withheld.put("origin", List.of("INSERT", "UPDATE", "DELETE"));
         withheld.put("destination", List.of("INSERT", "UPDATE", "DELETE"));

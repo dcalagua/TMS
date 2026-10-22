@@ -16,6 +16,7 @@ import type { ApiError } from "../../shared/api/httpClient";
 import type { TripStatus } from "../../shared/api/planningApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
+import { isIsoDay, useUrlFilters, type UrlFilterValidators } from "../../shared/ui/useUrlFilters";
 import {
   DataTable, FilterBar, KpiCard, PageHeader, Pagination, StatusChip, type DataTableColumn,
 } from "../../shared/ui/components";
@@ -51,6 +52,13 @@ interface Filters {
 
 type BarFilters = Filters & { search: string };
 
+type DeliveryUrl = { date: string; carrierId: string; status: string; search: string };
+
+const DELIVERY_URL_VALIDATORS: UrlFilterValidators<DeliveryUrl> = {
+  date: (value) => value === "" || isIsoDay(value),
+  status: (value) => (STATUS_OPTIONS as string[]).includes(value),
+};
+
 /**
  * Seguimiento de reparto: los envíos que están en la calle hoy, cuánto llevan hecho y dónde hay
  * un problema.
@@ -67,8 +75,11 @@ export function DeliveryTrackingPage() {
   const companyId = selected?.id ?? "";
 
   const initial: Filters = { date: today(), carrierId: "", status: "IN_TRANSIT" };
-  const [filters, setFilters] = useState<Filters>(initial);
-  const [search, setSearch] = useState("");
+  // Ítem 11: los filtros y la búsqueda viven en la URL, así que
+  // `/delivery-tracking?date=2026-10-20&status=COMPLETED` abre con ellos y una recarga no los pierde.
+  const [url, setUrl] = useUrlFilters<DeliveryUrl>({ ...initial, search: "" }, DELIVERY_URL_VALIDATORS);
+  const { search, ...rest } = url;
+  const filters = rest as Filters;
   const [page, setPage] = useState(0);
   const [openRow, setOpenRow] = useState<ControlTowerTripView | null>(null);
 
@@ -107,9 +118,8 @@ export function DeliveryTrackingPage() {
   // objeto, pero la búsqueda se guarda aparte para no volver a pedir el tablero en cada tecla.
   const barValue: BarFilters = { ...filters, search };
   const barDefaults: BarFilters = { ...initial, search: "" };
-  const setBarValue = ({ search: nextSearch, ...next }: BarFilters) => {
-    setFilters(next);
-    setSearch(nextSearch);
+  const setBarValue = (next: BarFilters) => {
+    setUrl(next);
     setPage(0);
   };
 

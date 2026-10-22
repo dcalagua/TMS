@@ -197,6 +197,15 @@ public class TenderWaterfall {
         return outcomeNote;
     }
 
+    /**
+     * The person who started the waterfall, or null on a row that predates the column being set.
+     * The automatic advance (ITEM 10, {@code TenderWaterfallSweep}) signs every offer it sends with
+     * this person: starting a waterfall is the decision to offer the shipment down its list.
+     */
+    public UUID startedBy() {
+        return startedBy;
+    }
+
     public OffsetDateTime startedAt() {
         return startedAt;
     }

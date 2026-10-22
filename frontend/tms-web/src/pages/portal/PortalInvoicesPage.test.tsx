@@ -123,4 +123,24 @@ describe("mis facturas en el portal", () => {
     expect(await screen.findByText("Sin conexión")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
   });
+
+  it("a 390 px el detalle no se ensancha: la raíz encoge su pista y los importes no se parten (D2)", async () => {
+    // jsdom no calcula layout, así que se comprueba lo que lo decide: la pista de la raíz y que
+    // la cifra de cada renglón no se pueda partir ni encoger (la etiqueta es la que cede).
+    serve({
+      ...DETAIL, invoiceNumber: "001-001-000000123", currency: "USD",
+      withholdings: [{ ...DETAIL.withholdings[0], certificateNumber: null }],
+    });
+    renderAt("/portal/invoices/inv-1");
+
+    expect(await screen.findByText("001-001-000000123")).toBeInTheDocument();
+    expect(screen.getByTestId("portal-invoice-page")).toHaveStyle({ gridTemplateColumns: "minmax(0, 1fr)" });
+    const values = screen.getAllByTestId("portal-row-value");
+    expect(values.length).toBeGreaterThan(3);
+    for (const value of values) {
+      expect(value).toHaveStyle({ whiteSpace: "nowrap", flexShrink: "0" });
+    }
+    // El aviso del comprobante sí puede saltar de línea dentro de su renglón.
+    expect(screen.getByText("Comprobante pendiente")).toHaveStyle({ whiteSpace: "normal" });
+  });
 });

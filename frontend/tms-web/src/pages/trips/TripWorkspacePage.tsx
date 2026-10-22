@@ -10,7 +10,7 @@ import {
   PlaceRounded, BuildRounded, CheckRounded, SkipNextRounded, ReportProblemRounded,
   InventoryRounded, AttachFileRounded, DownloadRounded, BadgeRounded, EditRounded,
   HourglassTopRounded, LocalShippingOutlined, MapOutlined, PlaceOutlined, ReportProblemOutlined,
-  HistoryRounded, Inventory2Outlined,
+  HistoryRounded, Inventory2Outlined, PrintRounded, ShareRounded, GavelRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
@@ -49,8 +49,12 @@ import { TripTrackingCard } from "./TripTrackingCard";
 import { TripWarehouseCard } from "./TripWarehouseCard";
 import { TripDocumentsCard } from "./TripDocumentsCard";
 import { TripRouteCard } from "./TripRouteCard";
+import { TripEmissionCard } from "./TripEmissionCard";
+import { findingText } from "../fleet/fleetDocumentText";
 import { TenderWaterfallCard } from "./TenderWaterfallCard";
 import { WorkspaceCard } from "./WorkspaceCard";
+import { ShareTrackingDrawer } from "./ShareTrackingDrawer";
+import { useCanShareTracking } from "../orders/trackingLinks";
 import { R, STATUS, neutralSoft, type StatusTone } from "../../theme";
 
 function formatServiceWindow(start: string | null, end: string | null): string | null {
@@ -98,6 +102,9 @@ const STOP_ACTIONS = {
  * proveedor externo y es la única lectura de esta pantalla que puede fallar legítimamente
  * mientras el resto funciona.
  */
+/** V71: los resultados de una entrega que dejan algo que reclamarle al transportista. */
+const SHORTFALL_RESULTS = new Set(["PARTIAL", "REJECTED", "FAILED"]);
+
 export function TripWorkspacePage() {
   const theme = useTheme();
   const isNarrow = useMediaQuery(theme.breakpoints.down("lg"));
@@ -125,6 +132,10 @@ export function TripWorkspacePage() {
   /** Los documentos de un envío son los de sus pedidos (ADR-015): el endpoint pide además
    * `orders.order:read`, así que sin él la tarjeta no se pide. */
   const canReadOrders = hasPermission("orders.order:read");
+  /** V71: un faltante o una incidencia se reclaman al transportista desde aquí, ya prellenado. */
+  const canClaim = hasPermission("settlement.claim:manage");
+  // V73: la huella de carbono del viaje.
+  const canReadEmissions = hasPermission("settlement.emission:read");
   const queryClient = useQueryClient();
 
   const queryKey = tripQueryKeys.detail(companyId, tripId);
@@ -165,6 +176,9 @@ export function TripWorkspacePage() {
   const [evidenceFor, setEvidenceFor] = useState<{
     deliveryId: string; orderNumber: string; stopLabel: string; result: OrderDeliveryView["result"];
   } | null>(null);
+  /** ADR-029: el pedido de una parada cuyo enlace de seguimiento se está compartiendo. */
+  const [shareFor, setShareFor] = useState<{ orderId: string; orderNumber: string; stopLabel: string } | null>(null);
+  const canShareTracking = useCanShareTracking();
   const [busy, setBusy] = useState(false);
 
   const detail: TripDetailView | undefined = tripQuery.data;
@@ -613,6 +627,13 @@ export function TripWorkspacePage() {
                 </Button>
               </>
             )}
+            {/* La hoja de ruta se abre en otra pestaña: imprimirla no saca a nadie del viaje. */}
+            <Button
+              component={Link} to={`/trips/${trip.id}/print`} target="_blank" rel="noopener"
+              variant="outlined" color="inherit" sx={QUIET_OUTLINE} startIcon={<PrintRounded />}
+            >
+              {t("Imprimir hoja de ruta")}
+            </Button>
             {canCancel && can("CANCELLED") && (
               <Button variant="outlined" color="error" startIcon={<CancelRounded />} disabled={busy} onClick={() => void cancel()}>
                 {t("Cancelar")}
@@ -666,6 +687,19 @@ export function TripWorkspacePage() {
             </DetailGrid>
             {trip.cancelReason && (
               <Alert severity="error" sx={{ mt: 2 }}>{trip.cancelReason}</Alert>
+            )}
+            {/* V72: los papeles del vehículo y del conductor en la fecha del viaje. Uno que bloquea
+                ya impidió asignarlos; si aparece aquí es que venció después, y el despacho lo frena. */}
+            {(detail.compliance ?? []).length > 0 && (
+              <Box sx={{ mt: 2, display: "grid", gap: 0.75 }} aria-label={t("Documentos de flota")}>
+                {(detail.compliance ?? []).map((finding) => (
+                  <Alert key={`${finding.subjectId}-${finding.documentType}`}
+                    severity={finding.blocking ? "error" : "warning"} variant="outlined" sx={{ py: 0 }}>
+                    {findingText(finding)}
+                    {finding.blocking ? ` · ${t("Bloquea el despacho")}` : ""}
+                  </Alert>
+                ))}
+              </Box>
             )}
           </WorkspaceCard>
 
@@ -789,6 +823,11 @@ export function TripWorkspacePage() {
                                       {recorded.receiverName && (
                                         <Typography variant="caption" color="text.secondary">{recorded.receiverName}</Typography>
                                       )}
+                                      {/* Quién lo registró (V70): la oficina o el transportista desde el portal. */}
+                                      <Typography variant="caption" color={recorded.source === "CARRIER_PORTAL" ? "info.main" : "text.secondary"}
+                                        sx={{ fontWeight: recorded.source === "CARRIER_PORTAL" ? 700 : 400 }}>
+                                        {[enumLabel("transportEventSource", recorded.source), recorded.recordedByName].filter(Boolean).join(" · ")}
+                                      </Typography>
                                       {recorded.evidence.map((evidence) => (
                                         <Tooltip key={evidence.id} title={evidence.originalFilename ?? enumLabel("evidenceType", evidence.evidenceType)}>
                                           <IconButton
@@ -805,6 +844,20 @@ export function TripWorkspacePage() {
                                     <Typography variant="caption" color="text.disabled">{t("Sin registrar")}</Typography>
                                   )}
                                   <Box sx={{ flex: 1 }} />
+                                  {canShareTracking && (
+                                    <Tooltip title={t("Compartir seguimiento")}>
+                                      <IconButton
+                                        size="small"
+                                        aria-label={`${t("Compartir seguimiento")} ${assignment.orderNumber}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setShareFor({ orderId: assignment.orderId, orderNumber: assignment.orderNumber, stopLabel });
+                                        }}
+                                      >
+                                        <ShareRounded fontSize="small" />
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
                                   {canExecute && (
                                     <>
                                       <Tooltip title={recorded ? t("Corregir la entrega") : t("Registrar la entrega")}>
@@ -826,6 +879,19 @@ export function TripWorkspacePage() {
                                           {recorded ? <EditRounded fontSize="small" /> : <InventoryRounded fontSize="small" />}
                                         </IconButton>
                                       </Tooltip>
+                                      {recorded && canClaim && trip.carrierId !== null
+                                        && SHORTFALL_RESULTS.has(recorded.result) && (
+                                        <Tooltip title={t("Abrir reclamo")}>
+                                          <IconButton
+                                            size="small" component={Link}
+                                            to={`/settlement/claims?fromDelivery=${recorded.id}`}
+                                            aria-label={t("Abrir reclamo")}
+                                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                                          >
+                                            <GavelRounded fontSize="small" />
+                                          </IconButton>
+                                        </Tooltip>
+                                      )}
                                       {recorded && (
                                         <Tooltip title={t("Adjuntar prueba de entrega")}>
                                           <IconButton
@@ -907,6 +973,15 @@ export function TripWorkspacePage() {
                         tone={exception.status === "OPEN" ? "overdue" : "done"}
                       />
                       <Box sx={{ flex: 1 }} />
+                      {canClaim && trip.carrierId !== null && (
+                        <Button
+                          size="small" variant="outlined" color="inherit" sx={QUIET_OUTLINE}
+                          startIcon={<GavelRounded />} component={Link}
+                          to={`/settlement/claims?fromException=${exception.id}`}
+                        >
+                          {t("Abrir reclamo")}
+                        </Button>
+                      )}
                       {canExecute && exception.status === "OPEN" && (
                         <Button
                           size="small" variant="outlined" color="inherit" sx={QUIET_OUTLINE}
@@ -944,6 +1019,8 @@ export function TripWorkspacePage() {
         <Box sx={{ display: "grid", gap: 2, minWidth: 0 }}>
           {/* Primero el recorrido: es la pregunta que se hace antes de salir, no después. */}
           <TripRouteCard routing={detail.routing} />
+
+          {canReadEmissions && <TripEmissionCard companyId={companyId} tripId={trip.id} version={trip.version} />}
 
           {canMonitor && (
             <TripTrackingCard
@@ -1019,6 +1096,16 @@ export function TripWorkspacePage() {
           status={<StatusChip label={enumLabel("deliveryResult", evidenceFor.result)} tone={DELIVERY_RESULT_TONE[evidenceFor.result]} />}
           onClose={() => setEvidenceFor(null)}
           onSubmit={submitEvidence}
+        />
+      )}
+
+      {shareFor && (
+        <ShareTrackingDrawer
+          companyId={companyId}
+          orderId={shareFor.orderId}
+          orderNumber={shareFor.orderNumber}
+          stopLabel={shareFor.stopLabel}
+          onClose={() => setShareFor(null)}
         />
       )}
 

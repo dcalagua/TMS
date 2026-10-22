@@ -72,6 +72,14 @@ Simple now + correctly separable + scalable later.
     docs                  Architecture, ADRs, database, security, overnight reports
     scripts               Local developer/CI helper scripts
 
+## Product roadmap
+
+- `docs/roadmap/ROADMAP.md` - the product roadmap (in Spanish, for the business owner): where the TMS
+  stands today, what blocks production (H0), the next 4-6 weeks (H1), the next quarter (H2), vision,
+  explicit out-of-scope items (no issuing of electronic documents, no moving money) and the EWM <-> TMS
+  dependency table shared verbatim with the EWM roadmap. Supersedes `docs/product/ROADMAP_NEXT.md` as
+  the roadmap. Code and ADRs stay in English.
+
 ## Architecture references
 
 Authoritative documents live under `docs/architecture/`:
@@ -134,6 +142,10 @@ Authoritative documents live under `docs/architecture/`:
   trip is tracked `PENDING` -> `DELIVERED` (photo mandatory) / `REJECTED` / `NOT_DELIVERED` (reason),
   every portal write carries an `Idempotency-Key`, and the office confirms the signed copy's return.
   Nothing moves an order or a trip. Supersedes ADR-016 and ADR-015 section 5. Implemented with V57.
+  Its V70 addendum lets the carrier work its own stops from the portal - arrival, service, completion
+  or failure, the delivery result with evidence, incidents - through the office's own services, with
+  the source `CARRIER_PORTAL`, `tms.portal_action_receipt` for idempotency and carrier-scope RLS on the
+  execution tables.
 - `ADR-019-carrier-offline-capture-and-shipment-tracking.md` - the carrier portal works without
   signal: a hand-written service worker caches the shell (never `/api`), trips are kept in IndexedDB
   per user, and reports (with photos) queue in an outbox replayed with their `Idempotency-Key`.
@@ -185,6 +197,13 @@ Authoritative documents live under `docs/architecture/`:
   aliases), nullable fiscal columns (country, authority code, clave de acceso, transport dates, carrier,
   plate, origin) and `logistics_document_recipient`. Only shape is validated (EC: 3-3-9 number,
   49-digit clave). Amends ADR-015 decision 1. Contract: `docs/integrations/INBOUND_API_V1.md` §15.
+- `ADR-029-customer-tracking-link.md` - the customer tracking link shared by WhatsApp (V74): one order
+  per link, a 256-bit token stored only as its SHA-256, revocable, expiring 30 days after creation or 7
+  after the order closes; read anonymously through `GET /api/v1/public/tracking/{token}` on a security
+  chain of its own (`PublicTrackingSecurityConfig`, no bearer processing, one route, 404 for the rest,
+  rate limited). Hash -> tenant is the only owner-connection statement; the projection runs as `tms_app`
+  bound to that company. Minimal projection: no prices, addresses, driver or internal ids; the plate is
+  masked or hidden per `company_settings.tracking_plate_display`. Frontend `/t/:token`.
 
 Database and security detail lives in `docs/database/DATA_MODEL.md`,
 `docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.

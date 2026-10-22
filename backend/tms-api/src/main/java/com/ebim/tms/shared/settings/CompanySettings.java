@@ -38,7 +38,9 @@ public record CompanySettings(
          * How a trip's cost is split between its orders (V68, ADR-026). Null = the deployment's
          * {@code tms.finance.cost-allocation.default-basis}.
          */
-        CostAllocationBasis costAllocationBasis) {
+        CostAllocationBasis costAllocationBasis,
+        /** How a customer tracking link shows the plate (V74, ADR-029). Null reads MASKED. */
+        TrackingPlateDisplay trackingPlateDisplay) {
 
     /** ISO 3166-1 alpha-2 of the launch market, and the default of {@code tms.location.country}. */
     public static final String DEFAULT_COUNTRY = "PE";
@@ -49,7 +51,8 @@ public record CompanySettings(
 
     private static final CompanySettings DEFAULTS = new CompanySettings(
             DEFAULT_COUNTRY, DEFAULT_ORDER_NUMBER_PREFIX, DEFAULT_SHIPMENT_NUMBER_PREFIX,
-            DispatchConfirmationMode.MANUAL, null, null, AccrualTrigger.DISPATCHED, null);
+            DispatchConfirmationMode.MANUAL, null, null, AccrualTrigger.DISPATCHED, null,
+            TrackingPlateDisplay.MASKED);
 
     /**
      * Blank-tolerant on purpose. The columns behind this are all {@code NOT NULL} with defaults, so
@@ -64,6 +67,16 @@ public record CompanySettings(
                 ? DispatchConfirmationMode.MANUAL
                 : dispatchConfirmationMode;
         accrualTrigger = accrualTrigger == null ? AccrualTrigger.DISPATCHED : accrualTrigger;
+        trackingPlateDisplay = trackingPlateDisplay == null ? TrackingPlateDisplay.MASKED : trackingPlateDisplay;
+    }
+
+    /** The V68 shape, for callers that predate tracking links (V74): the plate reads MASKED. */
+    public CompanySettings(String defaultCountry, String orderNumberPrefix, String shipmentNumberPrefix,
+            DispatchConfirmationMode dispatchConfirmationMode, BigDecimal referenceLoadHeightM,
+            BigDecimal loadFloorFillFactor, AccrualTrigger accrualTrigger, CostAllocationBasis costAllocationBasis) {
+        this(defaultCountry, orderNumberPrefix, shipmentNumberPrefix, dispatchConfirmationMode,
+                referenceLoadHeightM, loadFloorFillFactor, accrualTrigger, costAllocationBasis,
+                TrackingPlateDisplay.MASKED);
     }
 
     /** The V65 shape, for callers that predate cost allocation (V68): the basis follows the deployment. */
@@ -97,19 +110,43 @@ public record CompanySettings(
     /** A copy with another dispatch mode. */
     public CompanySettings withDispatchConfirmationMode(DispatchConfirmationMode mode) {
         return new CompanySettings(defaultCountry, orderNumberPrefix, shipmentNumberPrefix, mode,
-                referenceLoadHeightM, loadFloorFillFactor, accrualTrigger, costAllocationBasis);
+                referenceLoadHeightM, loadFloorFillFactor, accrualTrigger, costAllocationBasis, trackingPlateDisplay);
     }
 
     /** A copy with another accrual trigger. */
     public CompanySettings withAccrualTrigger(AccrualTrigger trigger) {
         return new CompanySettings(defaultCountry, orderNumberPrefix, shipmentNumberPrefix,
-                dispatchConfirmationMode, referenceLoadHeightM, loadFloorFillFactor, trigger, costAllocationBasis);
+                dispatchConfirmationMode, referenceLoadHeightM, loadFloorFillFactor, trigger, costAllocationBasis,
+                trackingPlateDisplay);
     }
 
     /** A copy with another cost allocation basis (null = the deployment default). */
     public CompanySettings withCostAllocationBasis(CostAllocationBasis basis) {
         return new CompanySettings(defaultCountry, orderNumberPrefix, shipmentNumberPrefix,
-                dispatchConfirmationMode, referenceLoadHeightM, loadFloorFillFactor, accrualTrigger, basis);
+                dispatchConfirmationMode, referenceLoadHeightM, loadFloorFillFactor, accrualTrigger, basis,
+                trackingPlateDisplay);
+    }
+
+    /** A copy with another plate display for tracking links. */
+    public CompanySettings withTrackingPlateDisplay(TrackingPlateDisplay display) {
+        return new CompanySettings(defaultCountry, orderNumberPrefix, shipmentNumberPrefix,
+                dispatchConfirmationMode, referenceLoadHeightM, loadFloorFillFactor, accrualTrigger,
+                costAllocationBasis, display);
+    }
+
+    /**
+     * Reads a stored plate display. Absent reads MASKED, the column's default; a value this build does
+     * not know reads HIDDEN - when in doubt about what may be published, publish less.
+     */
+    public static TrackingPlateDisplay trackingPlateDisplayOf(String stored) {
+        if (stored == null || stored.isBlank()) {
+            return TrackingPlateDisplay.MASKED;
+        }
+        try {
+            return TrackingPlateDisplay.valueOf(stored.trim());
+        } catch (IllegalArgumentException unknown) {
+            return TrackingPlateDisplay.HIDDEN;
+        }
     }
 
     /** Reads a stored basis; null or unknown reads as unset, so the deployment default applies. */

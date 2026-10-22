@@ -16,7 +16,10 @@ import type { KpiReportView } from "../../shared/api/reportingApi";
 // La empresa seleccionada viene de un contexto que arrastra auth y red. La pantalla solo usa su
 // id, así que se sustituye por el valor y no se monta media aplicación para obtenerlo.
 vi.mock("../../shared/company/CompanyContext", () => ({
-  useCompany: () => ({ selected: { id: "company-1", code: "DEMO-LIMA", name: "Demo Lima" } }),
+  useCompany: () => ({
+    selected: { id: "company-1", code: "DEMO-LIMA", name: "Demo Lima" },
+    hasPermission: (permission: string) => permissions.includes(permission),
+  }),
 }));
 
 // El gráfico es SVG sobre recharts y mide su contenedor, que en jsdom siempre es 0x0. No es lo
@@ -39,8 +42,10 @@ function renderPage() {
 }
 
 let fetchMock: ReturnType<typeof vi.fn>;
+let permissions: string[] = [];
 
 beforeEach(() => {
+  permissions = [];
   fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -202,5 +207,43 @@ describe("ReportsPage", () => {
     renderPage();
 
     expect(await screen.findByRole("button", { name: /reintentar/i })).toBeInTheDocument();
+  });
+  /** V73: la huella de carbono por cliente, tras su permiso; un período sin factor dice «Sin datos», no 0. */
+  it("con settlement.emission:read pinta la huella por cliente y cuenta los viajes sin factor", async () => {
+    permissions = ["settlement.emission:read"];
+    fetchMock.mockImplementation(async (input: string) => {
+      const url = new URL(input);
+      const body = url.pathname.endsWith("/settlement/emissions")
+        ? {
+          from: KPI_REPORT_FIXTURE.from, to: KPI_REPORT_FIXTURE.to, groupBy: "CUSTOMER", basis: "WEIGHT", truncated: false,
+          totals: { trips: 3, tripsCalculated: 2, tripsEstimated: 2, tripsWithoutFactor: 1, tripsWithoutDistance: 0,
+            tripsWithoutVehicle: 0, kgCo2e: 412.5, distanceKm: 458.33, unallocatedKgCo2e: 0 },
+          groups: [{ key: "Agroexportadora (demo)", label: "Agroexportadora (demo)", trips: 2, orders: 3, kgCo2e: 412.5,
+            weightKg: 5000, kgCo2ePerTonne: 82.5 }],
+        }
+        : KPI_REPORT_FIXTURE;
+      return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Agroexportadora (demo)")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Huella de carbono" })).toBeInTheDocument();
+    expect(screen.getByText("1 sin factor · 0 sin recorrido · 0 sin vehículo")).toBeInTheDocument();
+    const call = fetchMock.mock.calls.map(([input]) => new URL(input as string))
+      .find((url) => url.pathname.endsWith("/settlement/emissions"));
+    expect(call?.searchParams.get("groupBy")).toBe("CUSTOMER");
+  });
+
+  it("sin el permiso no pide la huella de carbono", async () => {
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify(KPI_REPORT_FIXTURE), {
+      status: 200, headers: { "content-type": "application/json" },
+    }));
+
+    renderPage();
+
+    expect(await screen.findByText("Reportes y KPIs")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Huella de carbono" })).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/settlement/emissions"))).toBe(false);
   });
 });

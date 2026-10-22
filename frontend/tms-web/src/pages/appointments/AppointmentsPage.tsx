@@ -7,7 +7,7 @@ import {
 import {
   EventAvailableRounded, CheckCircleRounded, CancelRounded, LocalShippingRounded,
   DoneAllRounded, PersonOffRounded, ScheduleRounded, Inventory2Outlined, LocalShippingOutlined,
-  MeetingRoomOutlined, WarehouseRounded,
+  MeetingRoomOutlined, WarehouseRounded, MeetingRoomRounded,
 } from "@mui/icons-material";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
@@ -15,19 +15,22 @@ import {
   fetchAppointments, fetchLocationResources, markAppointmentNoShow, rescheduleAppointment,
   type AppointmentStatus, type AppointmentView,
 } from "../../shared/api/appointmentsApi";
-import { fetchDestinations } from "../../shared/api/destinationsApi";
+import { fetchLocations } from "../../shared/api/locationsApi";
 import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
 import {
   ActionMenu, EmptyState, ErrorState, FilterBar, LoadingState, PageHeader, StatusChip, dataTableSx,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
+import { isIsoDay, useUrlFilters } from "../../shared/ui/useUrlFilters";
 import { confirmDialog, notifyError, notifySuccess, promptDialog } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
 import { R, T, neutralSoft, type StatusTone } from "../../theme";
 import { fmtDateTime, today } from "../../lib/locale";
 import { t } from "../../lib/i18n";
 import { BookAppointmentDrawer } from "./BookAppointmentDrawer";
+import { LocationResourcesDrawer } from "./LocationResourcesDrawer";
+import { appointmentSites, dockResourcesKey } from "./dockCalendar";
 
 /**
  * El tablero de muelles (migración V41).
@@ -35,6 +38,10 @@ import { BookAppointmentDrawer } from "./BookAppointmentDrawer";
  * <h2>Por qué un día y un sitio</h2>
  * Un muelle es una cola, y una cola se lee por día. "Todas las citas" ordenadas por fecha sería una
  * lista que nadie usa: quien está en la garita quiere ver qué llega hoy a *esta* nave.
+ *
+ * <h2>Por qué orígenes y destinos</h2>
+ * Se citan camiones donde se carga y donde se descarga. Listar sólo destinos dejaba fuera justo a
+ * la planta o el CD que despacha (GYE-CD en PLAPASA), que es donde más citas hay.
  *
  * <h2>Por qué se dice la zona horaria</h2>
  * Las ventanas son instantes absolutos y se muestran en la zona del navegador. En una operación de
@@ -45,16 +52,19 @@ export function AppointmentsPage() {
   const { selected, hasPermission } = useCompany();
   const companyId = selected?.id ?? "";
   const canManage = hasPermission("appointments.appointment:manage");
+  /** Configurar puertas es de un administrador (V41 §7): un planificador reserva, no agrega muelles. */
+  const canManageDocks = hasPermission("appointments.resource:manage");
 
-  const [locationId, setLocationId] = useState("");
-  const [day, setDay] = useState(today);
+  // Ítem 11: el sitio y el día viven en la URL (`?locationId=…&day=2026-10-20`).
+  const [{ locationId, day }, setUrl] = useUrlFilters({ locationId: "", day: today() }, { day: isIsoDay });
   const [booking, setBooking] = useState(false);
+  const [configuringDocks, setConfiguringDocks] = useState(false);
   const queryClient = useQueryClient();
 
   const locationsQuery = useQuery({
     queryKey: ["locations-for-appointments", companyId],
     queryFn: ({ signal }) =>
-      fetchDestinations({ companyId, size: 200, active: true, sort: "code,asc", signal }),
+      fetchLocations({ companyId, size: 200, active: true, sort: "code,asc", signal }),
     enabled: Boolean(companyId),
   });
 
@@ -66,7 +76,7 @@ export function AppointmentsPage() {
   }), [day]);
 
   const resourcesQuery = useQuery({
-    queryKey: ["dock-resources", companyId, locationId],
+    queryKey: dockResourcesKey(companyId, locationId),
     queryFn: ({ signal }) => fetchLocationResources(companyId, locationId, signal),
     enabled: Boolean(companyId && locationId),
   });
@@ -174,6 +184,9 @@ export function AppointmentsPage() {
     ];
   }
 
+  const sites = useMemo(() => locationsQuery.data?.content ?? [], [locationsQuery.data]);
+  const siteOptions = useMemo(() => appointmentSites(sites), [sites]);
+  const site = sites.find((location) => location.id === locationId);
   const rows = appointmentsQuery.data ?? [];
   const docks = resourcesQuery.data ?? [];
   const outOfService = docks.filter((dock) => !dock.active).length;
@@ -185,20 +198,29 @@ export function AppointmentsPage() {
         tint={ICON_TINTS["/appointments"]}
         title={t("Citas de muelle")}
         subtitle={t("Qué camión llega a qué puerta y cuándo. Una puerta atiende un vehículo a la vez.")}
-        actions={canManage && locationId !== "" && (
-          <Button variant="contained" startIcon={<EventAvailableRounded />} onClick={() => setBooking(true)}>
-            {t("Reservar")}
-          </Button>
+        actions={locationId !== "" && (canManage || canManageDocks) && (
+          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+            {canManageDocks && (
+              <Button variant="outlined" startIcon={<MeetingRoomRounded />} onClick={() => setConfiguringDocks(true)}>
+                {t("Puertas y muelles")}
+              </Button>
+            )}
+            {canManage && (
+              <Button variant="contained" startIcon={<EventAvailableRounded />} onClick={() => setBooking(true)}>
+                {t("Reservar")}
+              </Button>
+            )}
+          </Box>
         )}
       />
 
       <FilterBar
         value={{ locationId, day }}
         defaults={{ locationId: "", day: today() }}
-        onChange={(next) => { setLocationId(next.locationId); setDay(next.day || today()); }}
+        onChange={(next) => setUrl({ locationId: next.locationId, day: next.day || today() })}
         fields={[
           { type: "select", key: "locationId", label: t("Sitio"), icon: <WarehouseRounded />,
-            options: (locationsQuery.data?.content ?? []).map((location) => ({ id: location.id, label: `${location.code} · ${location.name}` })) },
+            options: siteOptions },
           { type: "date", key: "day", label: t("Día") },
         ]}
         trailing={locationId !== "" && (
@@ -217,6 +239,19 @@ export function AppointmentsPage() {
         <EmptyState
           title={t("Elige un sitio")}
           message={t("El tablero muestra un día de una nave: qué llega a cada puerta y en qué estado está.")}
+        />
+      ) : resourcesQuery.isSuccess && docks.length === 0 ? (
+        <EmptyState
+          icon={<MeetingRoomOutlined />}
+          title={t("Este sitio no tiene puertas")}
+          message={canManageDocks
+            ? t("Da de alta sus puertas o muelles y su horario para empezar a reservar citas.")
+            : t("Pide a un administrador que configure las puertas de este sitio.")}
+          action={canManageDocks && (
+            <Button variant="contained" startIcon={<MeetingRoomRounded />} onClick={() => setConfiguringDocks(true)}>
+              {t("Configurar puertas")}
+            </Button>
+          )}
         />
       ) : appointmentsQuery.isPending ? (
         <LoadingState />
@@ -311,6 +346,14 @@ export function AppointmentsPage() {
             </Table>
           </TableContainer>
         </>
+      )}
+
+      {configuringDocks && site && (
+        <LocationResourcesDrawer
+          companyId={companyId}
+          site={site}
+          onClose={() => setConfiguringDocks(false)}
+        />
       )}
 
       {booking && (

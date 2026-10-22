@@ -5,5 +5,10 @@ public enum PenaltyReferenceType {
     TRIP_EXCEPTION,
     DELIVERY_FAILED,
     LATE_ARRIVAL,
-    OTHER
+    OTHER,
+    /**
+     * An accepted freight claim (V71): the reference id is the claim's, and the deduction is
+     * checked against what was accepted when the invoice is received.
+     */
+    FREIGHT_CLAIM
 }

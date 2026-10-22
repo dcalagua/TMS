@@ -182,10 +182,22 @@ public class TripTenderService {
     @Transactional
     public List<TripTenderView> createFor(CompanyScope scope, UUID tripId, UUID carrierId,
             TenderRequest request) {
+        return createFor(scope, tripId, carrierId, request, null);
+    }
+
+    /**
+     * {@link #createFor(CompanyScope, UUID, UUID, TenderRequest)} signed by a named person rather
+     * than by the caller - for the automatic waterfall advance only, which runs as a machine and signs
+     * the offer with whoever started the waterfall ({@code TenderWaterfallService.autoAdvance}). Null
+     * means "the interactive caller", exactly as before.
+     */
+    @Transactional
+    List<TripTenderView> createFor(CompanyScope scope, UUID tripId, UUID carrierId, TenderRequest request,
+            UUID onBehalfOf) {
         Trip trip = lockedTrip(scope, tripId);
         requireTenderable(trip);
         UUID offeredTo = carrierId != null ? carrierId : requireCarrier(trip);
-        UUID actorId = auditActorProvider.requireAppUserId();
+        UUID actorId = onBehalfOf != null ? onBehalfOf : auditActorProvider.requireAppUserId();
         OffsetDateTime now = OffsetDateTime.now();
 
         requireNotPlaced(scope, trip);
@@ -237,6 +249,12 @@ public class TripTenderService {
      */
     @Transactional
     public List<TripTenderView> send(CompanyScope scope, UUID tripId, UUID tenderId) {
+        return send(scope, tripId, tenderId, null);
+    }
+
+    /** {@link #send(CompanyScope, UUID, UUID)} signed by a named person; see the matching {@code createFor}. */
+    @Transactional
+    List<TripTenderView> send(CompanyScope scope, UUID tripId, UUID tenderId, UUID onBehalfOf) {
         Trip trip = lockedTrip(scope, tripId);
         TripTender tender = requireTender(scope, trip, tenderId);
         OffsetDateTime now = OffsetDateTime.now();
@@ -250,7 +268,7 @@ public class TripTenderService {
                     + "passed. Change it before sending the offer.");
         }
 
-        UUID actorId = auditActorProvider.requireAppUserId();
+        UUID actorId = onBehalfOf != null ? onBehalfOf : auditActorProvider.requireAppUserId();
         tender.send(now, actorId);
         tenderRepository.saveAndFlush(tender);
         publish(scope, trip, tender, ShipmentEventType.TENDER_SENT, now);

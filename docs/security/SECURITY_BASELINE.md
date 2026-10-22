@@ -212,6 +212,8 @@ browser changes nothing, because every endpoint re-checks server-side.
 | the preflight accepts `X-Company-Id`/`X-Correlation-Id` and the response exposes the correlation id | `ApiSecurityTest.CrossOrigin` |
 | no endpoint is unguarded without a written reason, and every guarded one declares its company | `EndpointContractTest` |
 | no finder hands out a row by bare id | `TenantScopedRepositoryTest` |
+| the anonymous area (`/api/v1/public/**`, ADR-029) serves one `GET` and nothing else, reads no bearer token, answers every refusal with the same 404 and throttles with 429 + `Retry-After` | `PublicTrackingSecurityTest` |
+| a customer tracking link stores only the SHA-256 of a 256-bit token, resolves to one order of one company under RLS, and dies on revocation and expiry | `TrackingTokenTest`, `TrackingLinkApiIntegrationTest` |
 
 No test contacts an authentication service, and no signing key exists outside the JVM that
 generated it.
