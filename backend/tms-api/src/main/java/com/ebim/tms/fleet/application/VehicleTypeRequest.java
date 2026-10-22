@@ -1,6 +1,7 @@
 package com.ebim.tms.fleet.application;
 
 import com.ebim.tms.fleet.domain.VehicleBodyType;
+import com.ebim.tms.shared.reference.FuelType;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
@@ -39,5 +40,23 @@ public record VehicleTypeRequest(
          * company's default, else the deployment's.
          */
         @DecimalMin(value = "0.0", inclusive = false, message = "must be greater than zero")
-        @DecimalMax(value = "1.0", message = "must be at most 1") BigDecimal loadFloorFillFactor) {
+        @DecimalMax(value = "1.0", message = "must be at most 1") BigDecimal loadFloorFillFactor,
+        /** What the type runs on (V73); optional and descriptive. */
+        FuelType fuelType,
+        /**
+         * kg CO2e per km driven (V73); null = no factor, so its trips show "no data" rather than zero.
+         * Bounded like {@code ck_vehicle_type_emission_factor}: above 50 is a unit mistake.
+         */
+        @DecimalMin(value = "0.0", inclusive = false, message = "must be greater than zero")
+        @DecimalMax(value = "50.0", message = "must be at most 50") BigDecimal emissionFactorKgCo2ePerKm) {
+
+    /** The pre-V73 shape: no fuel type and no emission factor. */
+    public VehicleTypeRequest(String code, String name, BigDecimal maxWeightKg, BigDecimal maxVolumeM3,
+            Integer maxPallets, BigDecimal lengthM, BigDecimal widthM, BigDecimal heightM, VehicleBodyType bodyType,
+            boolean temperatureControlled, BigDecimal minTemperatureCelsius, BigDecimal maxTemperatureCelsius,
+            Integer axles, BigDecimal loadFloorFillFactor) {
+        this(code, name, maxWeightKg, maxVolumeM3, maxPallets, lengthM, widthM, heightM, bodyType,
+                temperatureControlled, minTemperatureCelsius, maxTemperatureCelsius, axles, loadFloorFillFactor,
+                null, null);
+    }
 }

@@ -16,7 +16,8 @@ import java.util.UUID;
  * those are three different problems with three different fixes. Telling a planner only that
  * something is wrong makes them go and find out which.
  *
- * @param feasible true when the sequence has no conflicts. <b>Not a permission</b>: the shipments in
+ * @param feasible true when the sequence has no blocking conflict - warnings (V72) do not count.
+ *                 <b>Not a permission</b>: the shipments in
  *                 it are still dispatched one at a time, and every guard that refuses one today
  *                 goes on refusing it
  */
@@ -48,12 +49,17 @@ public record WorkAssignmentView(
             Integer repositionMinutes) {
     }
 
-    /** @param sequence which shipment it is about, 1-based; 0 for a whole-day problem */
-    public record ConflictView(int sequence, UUID tripId, ResourceRejectionReason reason, String detail) {
+    /**
+     * @param sequence which shipment it is about, 1-based; 0 for a whole-day problem
+     * @param blocking false for a warning (V72): an unrecorded compliance paper, or an expired one
+     *                 whose policy only warns. A warning never stops a day from being confirmed
+     */
+    public record ConflictView(int sequence, UUID tripId, ResourceRejectionReason reason, String detail,
+            boolean blocking) {
 
         static ConflictView of(WorkSequenceValidator.Rejection rejection) {
             return new ConflictView(rejection.sequence(), rejection.tripId(), rejection.reason(),
-                    rejection.detail());
+                    rejection.detail(), rejection.blocking());
         }
     }
 }

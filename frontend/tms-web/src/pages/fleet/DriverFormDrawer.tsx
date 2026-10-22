@@ -11,6 +11,8 @@ import {
   ActiveBadge, FormDateInput, FormDrawer, FormMeta, FormRow, FormSection,
 } from "../../shared/ui/components";
 import { t } from "../../lib/i18n";
+import { useCompany } from "../../shared/company/CompanyContext";
+import { FleetDocumentsSection } from "./FleetDocumentsSection";
 import { fmtDateTime } from "../../lib/locale";
 
 const FORM_ID = "driver-form";
@@ -53,6 +55,7 @@ const KNOWN_FIELDS = new Set<keyof DriverFormValues>([
  */
 export function DriverFormDrawer({ companyId, driver, onClose, onSaved }: DriverFormDrawerProps) {
   const isEdit = driver !== null;
+  const { hasPermission } = useCompany();
   const [formError, setFormError] = useState<string | null>(null);
 
   const carriersQuery = useQuery({
@@ -226,6 +229,13 @@ export function DriverFormDrawer({ companyId, driver, onClose, onSaved }: Driver
           </FormRow>
         </FormSection>
       </Box>
+
+      {isEdit && (
+        <FleetDocumentsSection
+          companyId={companyId} subjectType="DRIVER" subjectId={driver.id} subjectLabel={`${driver.code} · ${driver.fullName}`}
+          canRead={hasPermission("fleet.document:read")} canManage={hasPermission("fleet.document:manage")}
+        />
+      )}
     </FormDrawer>
   );
 }

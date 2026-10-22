@@ -86,6 +86,8 @@ export const CAPABILITY = {
   COST_TO_SERVE_VIEW: "COST_TO_SERVE_VIEW",
   /** Recalcular el reparto del costo de un viaje (una versión nueva). */
   COST_ALLOCATION_MANAGE: "COST_ALLOCATION_MANAGE",
+  /** V73: la huella de carbono por viaje y por cliente (`settlement.emission:read`). */
+  EMISSIONS_VIEW: "EMISSIONS_VIEW",
   /** Cuentas por pagar (fase 65): programar, retener, liberar y proponer un pago manual. */
   PAYMENT_RECORD: "PAYMENT_RECORD",
   /** Confirmar o rechazar el pago manual que propuso **otra** persona (cuatro ojos). */

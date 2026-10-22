@@ -1,4 +1,5 @@
 import { apiRequest } from './httpClient'
+import type { FuelType } from './emissionsApi'
 import type { PageResponse } from './pageResponse'
 
 /** Mirrors the backend's `VehicleBodyType` enum (`fleet/domain/VehicleBodyType.java`). */
@@ -26,6 +27,10 @@ export interface VehicleTypeView {
   axles: number | null
   /** Parte de largo × ancho que una carga puede cubrir (V62). Null: el de la empresa, o el del despliegue. */
   loadFloorFillFactor?: number | null
+  /** V73: con qué combustible se midió el factor. */
+  fuelType?: FuelType | null
+  /** V73: kg CO₂e por km. Null: sus viajes no tienen huella («sin datos»), nunca cero. */
+  emissionFactorKgCo2ePerKm?: number | null
   active: boolean
   createdAt: string
   updatedAt: string
@@ -48,6 +53,9 @@ export interface VehicleTypeRequest {
   axles?: number | null
   /** 0 < x ≤ 1. Null: el de la empresa. Enviarlo siempre: un PUT que lo omite lo borra. */
   loadFloorFillFactor?: number | null
+  /** V73. Enviarlos siempre: un PUT que los omite los borra. */
+  fuelType?: FuelType | null
+  emissionFactorKgCo2ePerKm?: number | null
 }
 
 export interface VehicleTypeListParams {

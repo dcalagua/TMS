@@ -139,6 +139,10 @@ function ResourceDay({
   onCancel: () => void;
 }) {
   const hasConflicts = assignment.conflicts.length > 0;
+  // V72: un aviso (papel sin registrar, o vencido con política «avisa») no impide confirmar el día.
+  // Un backend anterior no manda `blocking`: entonces todo conflicto bloquea, como siempre.
+  const blockingCount = assignment.conflicts.filter((conflict) => conflict.blocking !== false).length;
+  const warningCount = assignment.conflicts.length - blockingCount;
   return (
     <Paper variant="outlined" sx={{ borderRadius: `${R.lg}px`, overflow: "hidden" }}>
       {/* Cabecera del recurso: vehículo, conductor, estado y si la secuencia es viable. */}
@@ -173,7 +177,10 @@ function ResourceDay({
         {/* Factible no es permitido: los envíos siguen pasando por sus propios guards al salir. */}
         {assignment.feasible
           ? <Chip size="small" color="success" variant="outlined" label={t("Secuencia viable")} sx={{ fontWeight: 700 }} />
-          : <StatusChip tone="inProgress" label={t("{{n}} conflictos", { n: assignment.conflicts.length })} />}
+          : <StatusChip tone="inProgress" label={t("{{n}} conflictos", { n: blockingCount })} />}
+        {warningCount > 0 && (
+          <StatusChip tone="neutral" label={warningCount === 1 ? t("1 aviso") : t("{{n}} avisos", { n: warningCount })} />
+        )}
         {canManage && assignment.status === "PLANNED" && (
           <Box sx={{ display: "flex", gap: 1, ml: "auto" }}>
             <Button size="small" variant="outlined" color="error" disabled={busy} onClick={onCancel}>
@@ -257,12 +264,14 @@ function ResourceDay({
             <Box sx={{ display: "grid", gap: 1 }}>
               {assignment.conflicts.map((conflict: WorkAssignmentConflictView, index) => (
                 <Alert
-                  key={`${conflict.reason}-${index}`} severity="warning"
+                  key={`${conflict.reason}-${index}`} severity={conflict.blocking === false ? "info" : "warning"}
                   sx={{ borderRadius: `${R.md}px`, border: "none", "& .MuiAlert-icon": { fontSize: 18 } }}
                 >
-                  <Typography variant="body2" sx={{ fontWeight: 700, color: "warning.dark" }}>
+                  <Typography variant="body2"
+                    sx={{ fontWeight: 700, color: conflict.blocking === false ? "info.dark" : "warning.dark" }}>
                     {conflict.sequence > 0 ? `#${conflict.sequence} · ` : ""}
                     {enumLabel("resourceRejectionReason", conflict.reason)}
+                    {conflict.blocking === false ? ` · ${t("Aviso: no impide confirmar")}` : ""}
                   </Typography>
                   <Typography variant="caption" color="text.primary" sx={{ display: "block", lineHeight: 1.45 }}>
                     {conflict.detail}

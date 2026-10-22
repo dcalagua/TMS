@@ -180,7 +180,8 @@ class AutoPlanningServiceTest {
                 // in this fixture and no own-fleet profile is configured, so every proposal comes
                 // back unpriced - which is the honest answer and is asserted in ProposalPricerTest
                 // rather than here.
-                serviceCalendarPort, new ProposalPricer(quotationPort, ownFleetCostingPort), actors, auditRecorder);
+                serviceCalendarPort, new ProposalPricer(quotationPort, ownFleetCostingPort), actors, auditRecorder,
+                com.ebim.tms.shared.reference.FleetCompliancePort.NONE);
     }
 
     // --- fixtures ---------------------------------------------------------------------------

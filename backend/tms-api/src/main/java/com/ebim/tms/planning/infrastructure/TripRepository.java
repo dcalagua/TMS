@@ -276,6 +276,13 @@ public interface TripRepository extends JpaRepository<Trip, UUID>, JpaSpecificat
      */
     List<Trip> findByIdInAndCompanyId(Collection<UUID> ids, UUID companyId);
 
+    /**
+     * The trips of a period by planning date, for the carbon footprint report (V73): every status but
+     * {@code excluded}, oldest first, capped by {@code pageable}.
+     */
+    List<Trip> findByCompanyIdAndPlanningDateBetweenAndStatusNotOrderByPlanningDateAscIdAsc(
+            UUID companyId, LocalDate from, LocalDate to, TripStatus excluded, Pageable pageable);
+
     interface TripStatusCount {
         TripStatus getStatus();
 

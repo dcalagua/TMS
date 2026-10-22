@@ -113,6 +113,8 @@ class SchemaExposureIntegrationTest {
             "material_profile",
             // V61: order cancellation with the warehouse (ADR-025 section 4).
             "business_outbox_event", "warehouse_order_event",
+            // V72: fleet compliance documents, their policy and the alert window. Deactivated, never deleted.
+            "fleet_document", "fleet_document_policy", "fleet_compliance_settings",
             // V56: MasterAdmin commercial entitlements. Same posture as V51 - owner only, tms_app holds
             // no grant and a deny-all policy; the scoped read goes through a SECURITY DEFINER function.
             "platform_entitlement_applied", "platform_entitlement_audit", "platform_entitlement_jti",
@@ -189,7 +191,9 @@ class SchemaExposureIntegrationTest {
             // V59: the warehouse's material profiles (ADR-022).
             "material_profile",
             // V61: order cancellation with the warehouse (ADR-025 section 4).
-            "business_outbox_event", "warehouse_order_event");
+            "business_outbox_event", "warehouse_order_event",
+            // V72: fleet compliance documents (and a carrier session sees none of them).
+            "fleet_document", "fleet_document_policy", "fleet_compliance_settings");
 
     /**
      * The only tables allowed to carry a {@code company_id} and <em>not</em> the tenant policy.
@@ -498,6 +502,10 @@ class SchemaExposureIntegrationTest {
         // V61: records of facts, written once.
         withheld.put("business_outbox_event", List.of("UPDATE", "DELETE"));
         withheld.put("warehouse_order_event", List.of("UPDATE", "DELETE"));
+        // V72: a fleet document is deactivated, never deleted; a policy and the window are edited in place.
+        withheld.put("fleet_document", List.of("DELETE"));
+        withheld.put("fleet_document_policy", List.of("DELETE"));
+        withheld.put("fleet_compliance_settings", List.of("DELETE"));
         // Canonical location replaced these; they are read-only projections now (V23).
         withheld.put("origin", List.of("INSERT", "UPDATE", "DELETE"));
         withheld.put("destination", List.of("INSERT", "UPDATE", "DELETE"));

@@ -69,6 +69,7 @@ public class VehicleTypeService {
                 request.bodyType(), request.temperatureControlled(), request.minTemperatureCelsius(),
                 request.maxTemperatureCelsius(), request.axles(), actorId);
         type.changeLoadFloorFillFactor(request.loadFloorFillFactor());
+        type.changeEmissionFactor(request.fuelType(), request.emissionFactorKgCo2ePerKm());
         return VehicleTypeView.from(saveOrConflict(type, code));
     }
 
@@ -87,6 +88,7 @@ public class VehicleTypeService {
                 request.temperatureControlled(), request.minTemperatureCelsius(), request.maxTemperatureCelsius(),
                 request.axles(), actorId);
         type.changeLoadFloorFillFactor(request.loadFloorFillFactor());
+        type.changeEmissionFactor(request.fuelType(), request.emissionFactorKgCo2ePerKm());
         return VehicleTypeView.from(saveOrConflict(type, code));
     }
 

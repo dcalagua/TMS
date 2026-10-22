@@ -49,6 +49,8 @@ export const VehiclesPage = lazy(() =>
   import("../pages/fleet/VehiclesPage").then((m) => ({ default: m.VehiclesPage })));
 export const DriversPage = lazy(() =>
   import("../pages/fleet/DriversPage").then((m) => ({ default: m.DriversPage })));
+export const FleetDocumentsPage = lazy(() =>
+  import("../pages/fleet/FleetDocumentsPage").then((m) => ({ default: m.FleetDocumentsPage })));
 
 export const OrdersPage = lazy(() =>
   import("../pages/orders/OrdersPage").then((m) => ({ default: m.OrdersPage })));

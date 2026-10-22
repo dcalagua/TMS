@@ -157,6 +157,13 @@ public enum Permission {
     SETTLEMENT_COST_ALLOCATION_MANAGE("settlement.cost_allocation:manage"),
 
     /**
+     * The carbon footprint (migration V73): what each trip emitted, split between its orders on the
+     * cost-allocation basis, and reported per customer, destination and route. Read-only - nothing
+     * about it is ever stored.
+     */
+    SETTLEMENT_EMISSION_READ("settlement.emission:read"),
+
+    /**
      * Editing the company's fiscal regime (migration V66, ADR-027): its fiscal country, VAT rates and
      * withholdings. Reading the resolved regime is {@link #SETTLEMENT_INVOICE_READ}, so every invoice
      * form can preview with it; changing what is withheld from every carrier is an administrator's.
@@ -182,6 +189,16 @@ public enum Permission {
      */
     FLEET_WORK_ASSIGNMENT_READ("fleet.work_assignment:read"),
     FLEET_WORK_ASSIGNMENT_MANAGE("fleet.work_assignment:manage"),
+
+    /**
+     * Fleet compliance documents (migration V72): the papers of a vehicle or a driver beyond the
+     * licence - registration, technical inspection, insurance, operating permit, medical certificate.
+     * Keeping them and deciding which of them block a trip are separate authorities: the policy is
+     * an administrator's, because it is what refuses a planner's assignment.
+     */
+    FLEET_DOCUMENT_READ("fleet.document:read"),
+    FLEET_DOCUMENT_MANAGE("fleet.document:manage"),
+    FLEET_DOCUMENT_POLICY_MANAGE("fleet.document_policy:manage"),
 
     /**
      * What running our own trucks is modelled to cost (migration V48).

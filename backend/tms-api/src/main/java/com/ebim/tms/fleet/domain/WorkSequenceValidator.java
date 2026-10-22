@@ -73,10 +73,29 @@ public final class WorkSequenceValidator {
             LocalTime shiftStart,
             LocalTime shiftEnd,
             boolean licenseValid,
-            List<Block> blocks) {
+            List<Block> blocks,
+            /**
+             * What is wrong with the vehicle's and the driver's compliance papers on the day (V72),
+             * already judged against the company's policy - blocking or a warning.
+             */
+            List<ComplianceIssue> compliance) {
+
+        /** The pre-V72 shape: no compliance papers to report. */
+        public ResourceWindow(LocalTime shiftStart, LocalTime shiftEnd, boolean licenseValid, List<Block> blocks) {
+            this(shiftStart, shiftEnd, licenseValid, blocks, List.of());
+        }
+
+        public ResourceWindow {
+            blocks = List.copyOf(blocks);
+            compliance = compliance == null ? List.of() : List.copyOf(compliance);
+        }
 
         /** One period a resource cannot work, and which resource it is about. */
         public record Block(OffsetDateTime from, OffsetDateTime until, ResourceRejectionReason reason) {
+        }
+
+        /** One compliance finding, already worded (V72). */
+        public record ComplianceIssue(ResourceRejectionReason reason, boolean blocking, String detail) {
         }
     }
 
@@ -85,7 +104,13 @@ public final class WorkSequenceValidator {
      *
      * @param sequence which position in the day it is about, 1-based; 0 for a whole-day problem
      */
-    public record Rejection(int sequence, UUID tripId, ResourceRejectionReason reason, String detail) {
+    public record Rejection(int sequence, UUID tripId, ResourceRejectionReason reason, String detail,
+            boolean blocking) {
+
+        /** Every rejection before V72 blocks: a warning is only ever a compliance paper. */
+        public Rejection(int sequence, UUID tripId, ResourceRejectionReason reason, String detail) {
+            this(sequence, tripId, reason, detail, true);
+        }
     }
 
     /**
@@ -99,7 +124,8 @@ public final class WorkSequenceValidator {
      * @param repositionMinutes driving time into each shipment from the previous one, indexed the
      *                          same as {@code trips}. Element 0 is ignored (nothing to reposition
      *                          from); a null anywhere else means routing could not measure that leg
-     * @return every problem found, empty when the day works. All of them, not the first - a planner
+     * @return every problem found, empty when the day works - warnings included, each saying whether
+     *         it blocks. All of them, not the first - a planner
      *         fixing one at a time and re-submitting is how a five-minute change takes an hour
      */
     public static List<Rejection> validate(List<ScheduledTrip> trips, List<Long> repositionMinutes,
@@ -109,6 +135,11 @@ public final class WorkSequenceValidator {
         if (!window.licenseValid()) {
             rejections.add(new Rejection(0, null, ResourceRejectionReason.LICENSE_INVALID,
                     "The driver's licence is not valid on this date."));
+        }
+        // V72: the vehicle's and the driver's papers. A whole-day matter, like the licence; blocking
+        // only when an expired paper's policy says so, a warning for everything else.
+        for (ResourceWindow.ComplianceIssue issue : window.compliance()) {
+            rejections.add(new Rejection(0, null, issue.reason(), issue.detail(), issue.blocking()));
         }
 
         for (int index = 0; index < trips.size(); index++) {

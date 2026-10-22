@@ -23,6 +23,7 @@ import {
   SettlementPage, TolerancePoliciesPage, AccrualsPage, PayablesPage, CostToServePage,
   ClaimsPage, IncidentsPage,
   OwnFleetCostProfilesPage,
+  FleetDocumentsPage,
   WorkAssignmentsPage,
   PlanningRunsPage, RateCardsPage, ReportsPage, RoutesPage, SchedulingReleasePage, TripRouteSheetPage, TripWorkspacePage, TripsPage, CarrierScorecardPage,
   UsersPage, VehicleTypesPage, VehiclesPage, ZonesPage,
@@ -111,6 +112,7 @@ export default function App() {
                     <Route path="fleet/vehicle-types" element={<VehicleTypesPage />} />
                     <Route path="fleet/vehicles" element={<VehiclesPage />} />
                     <Route path="fleet/drivers" element={<DriversPage />} />
+                    <Route path="fleet/documents" element={<FleetDocumentsPage />} />
 
                     <Route path="orders" element={<OrdersPage />} />
                     <Route path="scheduling" element={<SchedulingReleasePage />} />
