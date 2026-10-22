@@ -145,6 +145,13 @@ would make revocation meaningless.
 | Rotate secret | `POST /api/v1/integration-clients/{id}/rotate?graceHours=` | `integration.client:manage` |
 | Revoke | `POST /api/v1/integration-clients/{id}/revoke` | `integration.client:manage` |
 | Inbox history | `GET /api/v1/integration-clients/requests` | `integration.client:read` |
+| Scope catalogue | `GET /api/v1/integration-clients/scopes` | `integration.client:read` |
+
+The scope catalogue is `IntegrationScope.values()` in declaration order, each entry with its
+`group` (`ERP`, `WAREHOUSE`, `CARRIER`, `FINANCE`) and `requiresCarrier`. The credentials form is
+drawn from it, so a scope added by a migration reaches the UI without a frontend release - the
+hand-written list it replaced offered 5 of the 12 scopes, and the EWM could not be connected from
+the screen (QAS, 2026-10-22). The form's "EWM connector" template ticks the six `WAREHOUSE` scopes.
 
 Only `ORGANIZATION_ADMIN` and `COMPANY_ADMIN` hold these permissions. `PLANNER` and `VIEWER` get
 nothing here - not even read, because the credential list is an inventory of who can write into

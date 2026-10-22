@@ -17,6 +17,11 @@ public record CompanyAccessView(
         String code,
         String name,
         String timeZone,
+        /**
+         * ISO 3166-1 alpha-2 of {@code company_settings.default_country} (V34), {@code PE} when the
+         * row is missing - what a new location's country and the forms' defaults start from (D1).
+         */
+        String defaultCountry,
         OrganizationView organization,
         List<String> permissions,
         List<String> capabilities,
