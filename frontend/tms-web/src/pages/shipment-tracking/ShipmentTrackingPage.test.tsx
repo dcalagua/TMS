@@ -121,11 +121,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function renderPage() {
+function renderPage(url = "/shipment-tracking") {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[url]}>
         <ShipmentTrackingPage />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -179,6 +179,18 @@ describe("el seguimiento de despachos", () => {
 
     await userEvent.type(screen.getByRole("textbox", { name: "Envío, despacho, placa o conductor" }), "DSP-77");
     await waitFor(() => expect(calls("/monitoring/shipment-tracking").some((u) => u.searchParams.get("q") === "DSP-77")).toBe(true));
+  });
+
+  it("un enlace con filtros abre con ellos (ítem 11)", async () => {
+    renderPage("/shipment-tracking?dateFrom=2026-10-20&dateTo=2026-10-21&status=COMPLETED&documents=PENDING&q=DSP-77");
+    await screen.findByText("SH-00000042");
+
+    const first = calls("/monitoring/shipment-tracking")[0];
+    expect(first.searchParams.get("dateFrom")).toBe("2026-10-20");
+    expect(first.searchParams.get("dateTo")).toBe("2026-10-21");
+    expect(first.searchParams.get("status")).toBe("COMPLETED");
+    expect(first.searchParams.get("documents")).toBe("PENDING");
+    expect(first.searchParams.get("q")).toBe("DSP-77");
   });
 
   it("al abrir un despacho trae sus documentos, los pone en su parada y dice que no hay posiciones", async () => {

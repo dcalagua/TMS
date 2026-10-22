@@ -30,6 +30,12 @@ export interface CompanyAccessView {
   code: string;
   name: string;
   timeZone: string;
+  /**
+   * D1: `company_settings.default_country` (ISO 3166-1 alfa-2), `PE` si la empresa no tiene fila.
+   * De aquí parten el país de una ubicación nueva y los valores por defecto de los formularios.
+   * Opcional porque un backend anterior no lo envía; su ausencia se trata como `PE`.
+   */
+  defaultCountry?: string | null;
   organization: OrganizationView;
   permissions: string[];
   capabilities: string[];
@@ -114,4 +120,22 @@ export interface MeView {
  * permisos/capabilities por empresa, en una sola llamada. */
 export function fetchMe(signal?: AbortSignal): Promise<MeView> {
   return apiRequest<MeView>("/me", { signal });
+}
+
+/** El país por defecto de una empresa para un formulario nuevo; `PE` como último recurso. */
+export function companyDefaultCountry(company: Pick<CompanyAccessView, "defaultCountry"> | null | undefined): string {
+  return company?.defaultCountry || "PE";
+}
+
+/**
+ * El huso por defecto de un formulario nuevo: el de la empresa activa, si no el del navegador y,
+ * como último recurso, `America/Lima`.
+ */
+export function companyDefaultTimeZone(company: Pick<CompanyAccessView, "timeZone"> | null | undefined): string {
+  if (company?.timeZone) return company.timeZone;
+  try {
+    const browser = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (browser) return browser;
+  } catch { /* sin Intl: se usa el último recurso */ }
+  return "America/Lima";
 }

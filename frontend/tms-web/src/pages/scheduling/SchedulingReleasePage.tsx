@@ -20,6 +20,7 @@ import {
   type SchedulingRow,
 } from "../../shared/api/schedulingApi";
 import { useCompany } from "../../shared/company/CompanyContext";
+import { isIsoDay, oneOf, useUrlFilters, type UrlFilterValidators } from "../../shared/ui/useUrlFilters";
 import {
   ActionMenu, AppCard, DataTable, PageHeader, Pagination, StatusChip,
   type DataTableColumn,
@@ -63,6 +64,15 @@ type Panel =
  * liberación en bloque y cuándo pedir un motivo. El juicio de verdad lo hace el backend en cada
  * liberación, y esta pantalla le cree.
  */
+const SCHEDULING_URL_VALIDATORS: UrlFilterValidators<Record<keyof Filters, string>> = {
+  serviceDateFrom: (value) => value === "" || isIsoDay(value),
+  serviceDateTo: (value) => value === "" || isIsoDay(value),
+  priority: oneOf(["", "LOW", "NORMAL", "HIGH", "URGENT"]),
+  eligibility: oneOf(["", "ELIGIBLE", "WARNING", "BLOCKED"]),
+  hold: oneOf(["", "with", "without"]),
+  status: oneOf(["", "NOT_READY", "READY_FOR_PLANNING"]),
+};
+
 export function SchedulingReleasePage() {
   const { selected, hasPermission } = useCompany();
   const companyId = selected?.id ?? "";
@@ -76,7 +86,10 @@ export function SchedulingReleasePage() {
 
   const [page, setPage] = useState(0);
   // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
-  const [filters, setFiltersState] = useState<Filters>(defaultFilters);
+  // Ítem 11: los filtros viven en la URL; un enlace o una recarga conservan el rango y la vista.
+  const [defaults] = useState(defaultFilters);
+  const [urlFilters, setUrlFilters] = useUrlFilters<Record<keyof Filters, string>>(defaults, SCHEDULING_URL_VALIDATORS);
+  const filters = urlFilters as Filters;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [panel, setPanel] = useState<Panel>(null);
   const [busy, setBusy] = useState(false);
@@ -117,7 +130,7 @@ export function SchedulingReleasePage() {
     void queryClient.invalidateQueries({ queryKey: ["eligible-orders", companyId] });
   }
 
-  const setFilters = useCallback((next: Filters) => { setFiltersState(next); setPage(0); setSelectedIds(new Set()); }, []);
+  const setFilters = useCallback((next: Filters) => { setUrlFilters(next); setPage(0); setSelectedIds(new Set()); }, [setUrlFilters]);
 
   function toggle(row: SchedulingRow) {
     setSelectedIds((current) => {

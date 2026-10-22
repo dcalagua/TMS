@@ -3,6 +3,7 @@ package com.ebim.tms.iam.application;
 import com.ebim.tms.iam.lifecycle.application.TenantLifecycleService;
 import com.ebim.tms.shared.reference.CarrierLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
+import com.ebim.tms.shared.settings.CompanySettingsPort;
 import com.ebim.tms.shared.security.TmsPrincipal;
 import java.util.Comparator;
 import java.util.List;
@@ -30,9 +31,14 @@ public class MeService {
     /** Optional too: a context without iam.lifecycle reports every organization ACTIVE. */
     private final ObjectProvider<TenantLifecycleService> lifecycle;
 
-    public MeService(ObjectProvider<CarrierLookupPort> carriers, ObjectProvider<TenantLifecycleService> lifecycle) {
+    /** Optional too: the default country is a form default, and without it {@code /me} answers {@code PE}. */
+    private final ObjectProvider<CompanySettingsPort> settings;
+
+    public MeService(ObjectProvider<CarrierLookupPort> carriers, ObjectProvider<TenantLifecycleService> lifecycle,
+            ObjectProvider<CompanySettingsPort> settings) {
         this.carriers = carriers;
         this.lifecycle = lifecycle;
+        this.settings = settings;
     }
 
     public MeView describe(TmsPrincipal principal) {
@@ -42,7 +48,7 @@ public class MeService {
                 .sorted(Comparator.comparing(CompanyScope::organizationCode)
                         .thenComparing(CompanyScope::companyCode))
                 .map(scope -> CompanyAccessViews.from(scope, carriers.getIfAvailable(),
-                        states.get(scope.organizationId())))
+                        states.get(scope.organizationId()), settings.getIfAvailable()))
                 .toList();
 
         return new MeView(

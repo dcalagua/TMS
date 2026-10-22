@@ -22,6 +22,7 @@ import {
   ActionMenu, EmptyState, ErrorState, FilterBar, LoadingState, PageHeader, StatusChip, dataTableSx,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
+import { isIsoDay, useUrlFilters } from "../../shared/ui/useUrlFilters";
 import { confirmDialog, notifyError, notifySuccess, promptDialog } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
 import { R, T, neutralSoft, type StatusTone } from "../../theme";
@@ -54,8 +55,8 @@ export function AppointmentsPage() {
   /** Configurar puertas es de un administrador (V41 §7): un planificador reserva, no agrega muelles. */
   const canManageDocks = hasPermission("appointments.resource:manage");
 
-  const [locationId, setLocationId] = useState("");
-  const [day, setDay] = useState(today);
+  // Ítem 11: el sitio y el día viven en la URL (`?locationId=…&day=2026-10-20`).
+  const [{ locationId, day }, setUrl] = useUrlFilters({ locationId: "", day: today() }, { day: isIsoDay });
   const [booking, setBooking] = useState(false);
   const [configuringDocks, setConfiguringDocks] = useState(false);
   const queryClient = useQueryClient();
@@ -216,7 +217,7 @@ export function AppointmentsPage() {
       <FilterBar
         value={{ locationId, day }}
         defaults={{ locationId: "", day: today() }}
-        onChange={(next) => { setLocationId(next.locationId); setDay(next.day || today()); }}
+        onChange={(next) => setUrl({ locationId: next.locationId, day: next.day || today() })}
         fields={[
           { type: "select", key: "locationId", label: t("Sitio"), icon: <WarehouseRounded />,
             options: siteOptions },

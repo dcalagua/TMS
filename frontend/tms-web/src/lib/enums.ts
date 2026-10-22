@@ -713,6 +713,33 @@ export const ENUM_LABELS = {
     VOLUME: "Volumen",
     WEIGHT: "Peso",
   },
+  /**
+   * Los roles del catálogo (`tms.role`, V3 y V57). El nombre que trae el servidor está en inglés;
+   * aquí se presenta por su código, y un rol que esta versión no conoce cae al nombre del servidor
+   * (ver `roleLabel`).
+   */
+  roleCode: {
+    CARRIER_OPERATOR: "Operador del transportista",
+    COMPANY_ADMIN: "Administrador de la empresa",
+    ORGANIZATION_ADMIN: "Administrador de la organización",
+    PLANNER: "Planificador",
+    VIEWER: "Consulta",
+  },
+  /** La descripción de cada rol, por el mismo motivo que `roleCode`. */
+  roleDescription: {
+    CARRIER_OPERATOR: "Usuario de un transportista: ve los viajes despachados asignados a su transportista y reporta la entrega de sus documentos. Nada más.",
+    COMPANY_ADMIN: "Control total de una empresa: datos maestros, flota, pedidos, planificación y los accesos de esa empresa.",
+    ORGANIZATION_ADMIN: "Control total de una organización: sus empresas, usuarios, accesos y datos operativos.",
+    PLANNER: "Lee datos maestros y flota, gestiona pedidos y arma viajes en una empresa.",
+    VIEWER: "Acceso de solo lectura a los datos operativos de una empresa.",
+  },
+  /** Para quién es un alcance de credencial (`IntegrationScopeGroup`): cómo se agrupan en el formulario. */
+  integrationScopeGroup: {
+    CARRIER: "Transportista y telemetría",
+    ERP: "ERP",
+    FINANCE: "Finanzas",
+    WAREHOUSE: "Almacén (EWM)",
+  },
   stackMode: {
     NESTABLE: "Anidable",
     NONE: "Sin apilar",
@@ -741,6 +768,23 @@ export function enumLabel<G extends EnumGroup>(group: G, value: string | null | 
   const dict = ENUM_LABELS[group] as Record<string, string>;
   const label = dict[value];
   return label === undefined ? value : t(label);
+}
+
+/**
+ * El nombre de un rol para mostrar: la etiqueta en español de su código y, para un rol que esta
+ * versión no conoce, el nombre que trajo el servidor antes que el código crudo.
+ */
+export function roleLabel(code: string, serverName?: string | null): string {
+  const known = (ENUM_LABELS.roleCode as Record<string, string>)[code];
+  if (known !== undefined) return t(known);
+  return serverName || code;
+}
+
+/** La descripción de un rol, con la misma caída al texto del servidor. */
+export function roleDescription(code: string, serverDescription?: string | null): string | null {
+  const known = (ENUM_LABELS.roleDescription as Record<string, string>)[code];
+  if (known !== undefined) return t(known);
+  return serverDescription ?? null;
 }
 
 /** Opciones {value,label} de un grupo completo, para selects y filtros. */

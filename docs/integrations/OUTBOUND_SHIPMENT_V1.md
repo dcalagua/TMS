@@ -475,6 +475,14 @@ during a cutover, without a gap or a duplicate.
 |---|---|---|
 | `IntegrationShipmentApiTest` | Scope enforcement, tenancy (a shipment never crosses companies), status/date filtering, `404` for a draft trip, the change-feed shape | no |
 | `PlanningRunConfirmationOutboxTest` (or equivalent under `planning`) | Confirming a run writes exactly one `SHIPMENT_CONFIRMED` row per trip confirmed, in the same transaction | yes (Testcontainers) |
+| `IntegrationShipmentFeedIntegrationTest` | Both feeds over real HTTP against real PostgreSQL: the list with and without `updatedSince` (and the EWM's own `sort=updatedAt,asc&size=200&page=0`), the change feed with and without `since`, oldest-touched first | yes (Testcontainers) |
+
+> **Incident, QAS 2026-10-22.** Both list endpoints answered `500` on every call (`could not determine
+> data type of parameter $3`): the queries read `(:since IS NULL OR column >= :since)`, and PostgreSQL
+> cannot type a timestamp bind parameter that appears only in an `IS NULL` test. Every test above used
+> a fake port, so nothing ran the real query. The repositories now carry two methods each - with and
+> without the lower bound - as `TransportOrderRepository.findPublishable` already did, and the
+> Testcontainers test is what keeps it that way.
 
 ---
 
