@@ -20,6 +20,7 @@ import { ACTIVE_FILTER_OPTIONS, activeParam, type ActiveFilter } from "../../sha
 import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
 import { t } from "../../lib/i18n";
+import { roleLabel } from "../../lib/enums";
 import { fmtDate } from "../../lib/locale";
 import { UserFormDrawer } from "./UserFormDrawer";
 
@@ -79,7 +80,7 @@ export function UsersPage() {
 
   /** El código de rol traducido a su nombre. Un código crudo en una tabla de personas no le dice
    * nada a quien administra. */
-  const roleName = (code: string) => rolesQuery.data?.find((role) => role.code === code)?.name ?? code;
+  const roleName = (code: string) => roleLabel(code, rolesQuery.data?.find((role) => role.code === code)?.name);
 
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["admin-users", companyId] });
 

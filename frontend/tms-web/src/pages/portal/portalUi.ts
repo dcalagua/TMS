@@ -56,3 +56,11 @@ export function portalMoney(value: number | null | undefined, currency: string):
   if (value === null || value === undefined) return "—";
   return `${fmtNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
+
+/**
+ * La raíz de una pantalla del portal. Un `display: grid` sin columnas declaradas crea una pista
+ * `auto` que toma el *min-content* del hijo más ancho: a 390 px un número de factura `noWrap` más
+ * su chip ensanchaba la página entera y cortaba los importes (D2, QAS 2026-10-22). `minmax(0, 1fr)`
+ * deja que la pista se encoja al ancho del teléfono y que cada hijo resuelva su propio desborde.
+ */
+export const PORTAL_PAGE_GRID = { display: "grid", gap: 2, gridTemplateColumns: "minmax(0, 1fr)" } as const;

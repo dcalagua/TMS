@@ -27,7 +27,7 @@ import {
 } from "./offline/overlay";
 import { usePortalQuery } from "./offline/usePortalQuery";
 import { describeLoadError, portalTripKey } from "./portalReport";
-import { PORTAL_BAR_HEIGHT, SAFE_AREA, directionsUrl } from "./portalUi";
+import { PORTAL_BAR_HEIGHT, SAFE_AREA, directionsUrl, PORTAL_PAGE_GRID } from "./portalUi";
 
 type ShownStop = ShownTripDetail["stops"][number];
 
@@ -85,7 +85,7 @@ export function PortalTripPage() {
   const progress = trip && trip.documentCount > 0 ? Math.round((reported / trip.documentCount) * 100) : 0;
 
   return (
-    <Box sx={{ display: "grid", gap: 2 }}>
+    <Box sx={PORTAL_PAGE_GRID}>
       {/* Cabecera fija bajo la barra: de qué viaje se trata y cuánto falta, siempre a la vista. */}
       <Box sx={{
         position: "sticky", top: `calc(${SAFE_AREA.top} + ${PORTAL_BAR_HEIGHT}px)`, zIndex: 2,
