@@ -158,6 +158,16 @@ public enum Permission {
     SETTLEMENT_TAX_MANAGE("settlement.tax:manage"),
 
     /**
+     * Freight claims (migration V71): damage, shortage, loss and delay claimed from a carrier, and
+     * the incident centre that lists them beside the open trip exceptions. Three permissions because
+     * opening a claim and deciding what the carrier owes are different authorities: the planner who
+     * knows the chairs arrived broken opens it; an administrator - never the same person - accepts it.
+     */
+    SETTLEMENT_CLAIM_READ("settlement.claim:read"),
+    SETTLEMENT_CLAIM_MANAGE("settlement.claim:manage"),
+    SETTLEMENT_CLAIM_DECIDE("settlement.claim:decide"),
+
+    /**
      * A driver-and-vehicle pairing's day (migration V47).
      *
      * <p>Under {@code fleet} rather than {@code planning} because the thing being scheduled is a

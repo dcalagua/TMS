@@ -96,5 +96,8 @@ public enum AuditAggregateType {
     FREIGHT_ACCRUAL,
 
     /** Which account a concept is booked to (V65, ADR-023). */
-    GL_ACCOUNT_MAPPING
+    GL_ACCOUNT_MAPPING,
+
+    /** A freight claim against a carrier (V71). */
+    FREIGHT_CLAIM
 }

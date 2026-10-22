@@ -220,5 +220,24 @@ public enum AuditAction {
     PAYMENT_RECORDED,
 
     /** A trip's cost was allocated to its orders: a new version of the allocation (V68, ADR-026). */
-    COST_ALLOCATED
+    COST_ALLOCATED,
+
+    /** A freight claim was opened against a trip's carrier (V71). */
+    CLAIM_OPENED,
+    /** An OPEN claim's description, amount or lines were corrected. */
+    CLAIM_UPDATED,
+    /** A claim was sent for review: from here on it is frozen until somebody decides it. */
+    CLAIM_SUBMITTED,
+    /** Somebody other than whoever opened it accepted the claim in full. */
+    CLAIM_ACCEPTED,
+    /** Somebody other than whoever opened it accepted part of the claim, saying why. */
+    CLAIM_PARTIALLY_ACCEPTED,
+    /** The claim was rejected, with a reason. */
+    CLAIM_REJECTED,
+    /** A decided claim was closed: an accepted one by the document that recovered it. */
+    CLAIM_CLOSED,
+    /** A claim was withdrawn before a decision, with a reason. */
+    CLAIM_CANCELLED,
+    /** A photo or document was attached to a claim. */
+    CLAIM_EVIDENCE_ADDED
 }

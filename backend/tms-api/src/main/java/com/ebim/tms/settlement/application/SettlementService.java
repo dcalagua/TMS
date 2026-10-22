@@ -129,6 +129,7 @@ public class SettlementService {
     private final com.ebim.tms.shared.reference.BusinessEventPublisher businessEventPublisher;
     private final java.time.Clock clock;
     private final CostAllocationService costAllocationService;
+    private final FreightClaimService freightClaimService;
 
     public SettlementService(CarrierInvoiceRepository invoiceRepository, FreightMatchRepository matchRepository,
             FreightDiscrepancyRepository discrepancyRepository, SettlementApprovalRepository approvalRepository,
@@ -140,7 +141,7 @@ public class SettlementService {
             FiscalSettingsResolver fiscalSettingsResolver, FiscalDocumentValidationPort fiscalDocumentValidationPort,
             GlAccountMappingRepository glAccountMappingRepository, PaymentTermsResolver paymentTermsResolver,
             com.ebim.tms.shared.reference.BusinessEventPublisher businessEventPublisher, java.time.Clock clock,
-            CostAllocationService costAllocationService) {
+            CostAllocationService costAllocationService, FreightClaimService freightClaimService) {
         this.invoiceRepository = invoiceRepository;
         this.matchRepository = matchRepository;
         this.discrepancyRepository = discrepancyRepository;
@@ -162,6 +163,7 @@ public class SettlementService {
         this.businessEventPublisher = businessEventPublisher;
         this.clock = clock;
         this.costAllocationService = costAllocationService;
+        this.freightClaimService = freightClaimService;
     }
 
     // ------------------------------------------------------------------ receiving
@@ -191,6 +193,9 @@ public class SettlementService {
         }
 
         requireTripsInScope(scope, request);
+        // A penalty that names a freight claim deducts no more than was accepted, from the claim's
+        // carrier and currency, once (V71). The claim is locked for the rest of this transaction.
+        freightClaimService.requireRecoverablePenalties(scope, request.carrierId(), currency, kind, request.lines());
 
         CarrierInvoice invoice = new CarrierInvoice(scope.companyId(), request.carrierId(),
                 invoiceNumber, request.invoiceDate(), currency,
