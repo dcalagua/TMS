@@ -15,6 +15,15 @@ export const ENUM_LABELS = {
     ASSIGN_ORDER: "Pedido asignado",
     AUTO_PLAN: "Planificación automática",
     CANCEL: "Cancelación",
+    CLAIM_ACCEPTED: "Reclamo aceptado",
+    CLAIM_CANCELLED: "Reclamo anulado",
+    CLAIM_CLOSED: "Reclamo cerrado",
+    CLAIM_EVIDENCE_ADDED: "Evidencia de reclamo adjuntada",
+    CLAIM_OPENED: "Reclamo abierto",
+    CLAIM_PARTIALLY_ACCEPTED: "Reclamo con acuerdo parcial",
+    CLAIM_REJECTED: "Reclamo rechazado",
+    CLAIM_SUBMITTED: "Reclamo enviado a revisión",
+    CLAIM_UPDATED: "Reclamo corregido",
     CONFIRM: "Confirmación",
     COST_ACTUAL_RECORDED: "Costo real registrado",
     COST_CLOSED: "Costo cerrado",
@@ -51,6 +60,7 @@ export const ENUM_LABELS = {
     CARRIER: "Transportista",
     COMPANY: "Empresa",
     DRIVER: "Conductor",
+    FREIGHT_CLAIM: "Reclamo de carga",
     INTEGRATION_CLIENT: "Credencial de integración",
     LOCATION: "Ubicación",
     MASTER_DATA_IMPORT_BATCH: "Importación de maestros",
@@ -197,6 +207,42 @@ export const ENUM_LABELS = {
     DELIVERY_FAILED: "Entrega fallida",
     LATE_ARRIVAL: "Demora",
     OTHER: "Otra",
+    FREIGHT_CLAIM: "Reclamo de carga",
+  },
+  /** V71: para qué es un reclamo de carga. */
+  claimType: {
+    DAMAGE: "Daño",
+    SHORTAGE: "Faltante",
+    LOSS: "Pérdida",
+    DELAY: "Demora",
+    WRONG_DELIVERY: "Entrega equivocada",
+    OTHER: "Otro",
+  },
+  /** V71: dónde está un reclamo. */
+  claimStatus: {
+    OPEN: "Abierto",
+    UNDER_REVIEW: "En revisión",
+    ACCEPTED: "Aceptado",
+    PARTIALLY_ACCEPTED: "Acuerdo parcial",
+    REJECTED: "Rechazado",
+    CLOSED: "Cerrado",
+    CANCELLED: "Anulado",
+  },
+  /** V71: la decisión, que sobrevive al cierre. */
+  claimResolution: {
+    ACCEPTED: "Aceptado",
+    PARTIALLY_ACCEPTED: "Acuerdo parcial",
+    REJECTED: "Rechazado",
+  },
+  /** V71: cómo se recupera un reclamo aceptado. TMS no mueve dinero. */
+  recoveryMethod: {
+    PENALTY: "Penalidad en la factura",
+    CREDIT_NOTE: "Nota de crédito del transportista",
+  },
+  /** V71: qué es una fila del centro de incidencias. */
+  incidentKind: {
+    EXCEPTION: "Incidencia",
+    CLAIM: "Reclamo",
   },
   /** Fase 50: contra qué cifra se comparó una factura o una línea. */
   expectedBasis: {

@@ -7,6 +7,7 @@ import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchCarriers } from "../../shared/api/carriersApi";
 import { fetchTrips } from "../../shared/api/planningApi";
+import { fetchPenaltySuggestions, type PenaltySuggestion } from "../../shared/api/claimsApi";
 import {
   CHARGE_CODES, DOCUMENT_KINDS, PENALTY_REFERENCE_TYPES, fetchFiscalSettings, fetchInvoices, receiveInvoice,
   type CarrierInvoiceRequest, type CarrierInvoiceView, type ChargeCode, type DocumentKind,
@@ -38,6 +39,8 @@ interface LineValues {
   /** Sólo en una línea PENALTY (V66): el motivo es obligatorio y el importe, negativo. */
   penaltyReason: string;
   penaltyReferenceType: PenaltyReferenceType | "";
+  /** V71: el reclamo de carga que recupera esta penalidad, cuando nació de una sugerencia. */
+  penaltyReferenceId: string;
 }
 
 interface InvoiceFormValues {
@@ -61,7 +64,7 @@ interface InvoiceFormValues {
 
 const EMPTY_LINE: LineValues = {
   trip: null, chargeCode: "FREIGHT", description: "", quantity: "", unitAmount: "", lineAmount: "",
-  penaltyReason: "", penaltyReferenceType: "",
+  penaltyReason: "", penaltyReferenceType: "", penaltyReferenceId: "",
 };
 
 const KNOWN_FIELDS = new Set<string>([
@@ -223,6 +226,33 @@ export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDr
     setValue("totalAmount", (subtotal + tax).toFixed(2), { shouldDirty: true, shouldValidate: true });
   }
 
+  // V71: los reclamos aceptados de este transportista que esta factura podría descontar. Una
+  // propuesta: la línea se agrega sólo si la persona la elige, y el servidor la valida al guardar.
+  const normalizedCurrency = (currency ?? "").trim().toUpperCase();
+  const suggestionsQuery = useQuery({
+    queryKey: ["claim-penalty-suggestions", companyId, carrierId, normalizedCurrency],
+    queryFn: ({ signal }) => fetchPenaltySuggestions(companyId, carrierId, normalizedCurrency, signal),
+    enabled: !isNote && Boolean(carrierId) && CURRENCY_PATTERN.test(normalizedCurrency),
+    retry: false,
+  });
+  const usedClaims = new Set((lines ?? []).map((line) => line?.penaltyReferenceId).filter(Boolean));
+  const suggestions = (suggestionsQuery.data ?? []).filter((suggestion) => !usedClaims.has(suggestion.claimId));
+
+  function addPenalty(suggestion: PenaltySuggestion) {
+    append({
+      ...EMPTY_LINE,
+      trip: { id: suggestion.tripId, code: suggestion.shipmentNumber ?? "", name: "" },
+      chargeCode: "PENALTY",
+      description: t("Reclamo {{number}}", { number: suggestion.claimNumber }),
+      lineAmount: String(suggestion.penaltyAmount),
+      penaltyReason: t("Reclamo de carga {{number}} ({{type}})", {
+        number: suggestion.claimNumber, type: enumLabel("claimType", suggestion.claimType).toLowerCase(),
+      }),
+      penaltyReferenceType: "FREIGHT_CLAIM",
+      penaltyReferenceId: suggestion.claimId,
+    });
+  }
+
   // Ayuda, no regla: la suma de las líneas al lado del total que se va a comparar.
   const linesSum = (lines ?? []).reduce((sum, line) => {
     const value = Number(line?.lineAmount);
@@ -273,7 +303,11 @@ export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDr
         unitAmount: toNumber(line.unitAmount),
         lineAmount: Number(line.lineAmount),
         ...(line.chargeCode === "PENALTY"
-          ? { penaltyReason: line.penaltyReason.trim(), penaltyReferenceType: line.penaltyReferenceType || null }
+          ? {
+            penaltyReason: line.penaltyReason.trim(),
+            penaltyReferenceType: line.penaltyReferenceType || null,
+            ...(line.penaltyReferenceId ? { penaltyReferenceId: line.penaltyReferenceId } : {}),
+          }
           : {}),
       })),
       documentKind: values.documentKind,
@@ -565,6 +599,24 @@ export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDr
           }
         >
           <Box sx={{ display: "grid", gap: 1.5 }}>
+            {suggestions.length > 0 && (
+              <Alert severity="info" variant="outlined">
+                <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                  {t("Reclamos aceptados que esta factura puede descontar")}
+                </Typography>
+                {suggestions.map((suggestion) => (
+                  <Box key={suggestion.claimId} sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                    <Typography variant="body2" sx={{ fontVariantNumeric: "tabular-nums" }}>
+                      {`${suggestion.claimNumber} · ${enumLabel("claimType", suggestion.claimType)} · ${suggestion.shipmentNumber ?? "—"} · `}
+                      {`${fmtDecimal(suggestion.penaltyAmount, 2)} ${suggestion.currency}`}
+                    </Typography>
+                    <Button size="small" startIcon={<AddRounded />} onClick={() => addPenalty(suggestion)}>
+                      {t("Agregar penalidad")}
+                    </Button>
+                  </Box>
+                ))}
+              </Alert>
+            )}
             {fields.map((item, index) => {
               const line = lines?.[index];
               const duplicated = line?.trip ? duplicateKeys.has(`${line.trip.id}|${line.chargeCode}`) : false;
@@ -696,7 +748,10 @@ export function InvoiceFormDrawer({ companyId, onClose, onSaved }: InvoiceFormDr
                             value={field.value} onChange={(e) => field.onChange(e.target.value)}
                           >
                             <MenuItem value="">{t("Sin referencia")}</MenuItem>
-                            {PENALTY_REFERENCE_TYPES.map((code) => (
+                            {PENALTY_REFERENCE_TYPES
+                              // Un reclamo se referencia desde su sugerencia, que trae su id: elegirlo a mano no diría cuál.
+                              .filter((code) => code !== "FREIGHT_CLAIM" || Boolean(line?.penaltyReferenceId))
+                              .map((code) => (
                               <MenuItem key={code} value={code}>{enumLabel("penaltyReferenceType", code)}</MenuItem>
                             ))}
                           </TextField>
