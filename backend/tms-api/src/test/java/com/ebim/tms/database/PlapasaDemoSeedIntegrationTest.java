@@ -170,6 +170,8 @@ class PlapasaDemoSeedIntegrationTest {
         assertThat(countIn("driver")).isEqualTo(3);
         assertThat(countIn("rate_card")).isEqualTo(1);
         assertThat(countIn("material_profile")).isEqualTo(25);
+        assertThat(countIn("location_resource")).isEqualTo(3);
+        assertThat(countIn("resource_calendar")).isEqualTo(18);
         assertThat(value("SELECT string_agg(license_plate, ',' ORDER BY code) FROM tms.vehicle"
                 + " WHERE company_id = '" + companyId + "'")).isEqualTo("GBA-1234,GBC-5678,GSC-2468,GSD-1357");
         assertThat(value("SELECT concat_ws('|', external_system, external_reference, country) FROM tms.location"
@@ -553,6 +555,48 @@ class PlapasaDemoSeedIntegrationTest {
                 .andExpect(jsonPath("$.withholdingTotalAmount").value(0.69))
                 .andExpect(jsonPath("$.payableAmount").value(68.04))
                 .andExpect(jsonPath("$.openBalance").value(68.04));
+    }
+
+    @Test
+    @Order(15)
+    @DisplayName("15. GYE-CD has three docks open Monday to Saturday 07:00-19:00, local to the plant")
+    void plantDocks() throws Exception {
+        String plant = value("SELECT id FROM tms.location WHERE company_id = '" + companyId + "' AND code = 'GYE-CD'");
+        mockMvc.perform(asPlanner(get("/api/v1/appointments/resources").param("locationId", plant)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[0].code").value("MUE-01"))
+                .andExpect(jsonPath("$[2].code").value("MUE-03"))
+                .andExpect(jsonPath("$[2].defaultSlotMinutes").value(90))
+                .andExpect(jsonPath("$[0].openingHours.length()").value(6))
+                .andExpect(jsonPath("$[0].openingHours[0].day").value("MONDAY"))
+                .andExpect(jsonPath("$[0].openingHours[5].day").value("SATURDAY"))
+                .andExpect(jsonPath("$[0].openingHours[0].opensAt").value(org.hamcrest.Matchers.startsWith("07:00")))
+                .andExpect(jsonPath("$[0].openingHours[0].closesAt").value(org.hamcrest.Matchers.startsWith("19:00")));
+        String dock = value("SELECT r.id FROM tms.location_resource r WHERE r.company_id = '" + companyId
+                + "' AND r.code = 'MUE-01'");
+
+        // A planner books and does not configure (V41 §7): adding a door is an administrator's job.
+        mockMvc.perform(asPlanner(post("/api/v1/appointments/resources")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"locationId\":\"" + plant + "\",\"code\":\"MUE-09\",\"name\":\"Extra\","
+                                + "\"resourceType\":\"DOCK\",\"defaultSlotMinutes\":60}"))
+                .andExpect(status().isForbidden());
+
+        // Wednesday 08:00 at the plant (UTC-5) is inside the calendar; Sunday has no row and is closed.
+        mockMvc.perform(asPlanner(post("/api/v1/appointments")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"resourceId\":\"" + dock + "\",\"purpose\":\"PICKUP\","
+                                + "\"windowStart\":\"2026-10-21T08:00:00-05:00\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.durationMinutes").value(60));
+        mockMvc.perform(asPlanner(post("/api/v1/appointments")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"resourceId\":\"" + dock + "\",\"purpose\":\"PICKUP\","
+                                + "\"windowStart\":\"2026-10-25T08:00:00-05:00\"}"))
+                .andExpect(status().isConflict());
+        // And 06:30 on a weekday is before the doors open.
+        mockMvc.perform(asPlanner(post("/api/v1/appointments")).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"resourceId\":\"" + dock + "\",\"purpose\":\"PICKUP\","
+                                + "\"windowStart\":\"2026-10-22T06:30:00-05:00\"}"))
+                .andExpect(status().isConflict());
     }
 
     @Test

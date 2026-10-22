@@ -10,7 +10,7 @@ import {
   PlaceRounded, BuildRounded, CheckRounded, SkipNextRounded, ReportProblemRounded,
   InventoryRounded, AttachFileRounded, DownloadRounded, BadgeRounded, EditRounded,
   HourglassTopRounded, LocalShippingOutlined, MapOutlined, PlaceOutlined, ReportProblemOutlined,
-  HistoryRounded, Inventory2Outlined,
+  HistoryRounded, Inventory2Outlined, PrintRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
@@ -613,6 +613,13 @@ export function TripWorkspacePage() {
                 </Button>
               </>
             )}
+            {/* La hoja de ruta se abre en otra pestaña: imprimirla no saca a nadie del viaje. */}
+            <Button
+              component={Link} to={`/trips/${trip.id}/print`} target="_blank" rel="noopener"
+              variant="outlined" color="inherit" sx={QUIET_OUTLINE} startIcon={<PrintRounded />}
+            >
+              {t("Imprimir hoja de ruta")}
+            </Button>
             {canCancel && can("CANCELLED") && (
               <Button variant="outlined" color="error" startIcon={<CancelRounded />} disabled={busy} onClick={() => void cancel()}>
                 {t("Cancelar")}

@@ -83,6 +83,8 @@ export const OwnFleetCostProfilesPage = lazy(() =>
     .then((m) => ({ default: m.OwnFleetCostProfilesPage })));
 export const TripWorkspacePage = lazy(() =>
   import("../pages/trips/TripWorkspacePage").then((m) => ({ default: m.TripWorkspacePage })));
+export const TripRouteSheetPage = lazy(() =>
+  import("../pages/trips/TripRouteSheetPage").then((m) => ({ default: m.TripRouteSheetPage })));
 export const DeliveryTrackingPage = lazy(() =>
   import("../pages/delivery-tracking/DeliveryTrackingPage").then((m) => ({ default: m.DeliveryTrackingPage })));
 // ADR-019 §2: los envíos que el almacén despachó, con su mapa. Junto al seguimiento de reparto, sin tocarlo.
