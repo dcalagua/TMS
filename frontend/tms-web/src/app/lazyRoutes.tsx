@@ -111,3 +111,8 @@ export const IntegrationsPage = lazy(() =>
   import("../pages/settings/IntegrationsPage").then((m) => ({ default: m.IntegrationsPage })));
 export const AuditPage = lazy(() =>
   import("../pages/security/AuditPage").then((m) => ({ default: m.AuditPage })));
+
+// ADR-029: la página pública del enlace de seguimiento. Fuera de todo armazón y sin sesión; lleva su
+// propio <Suspense> en App.tsx porque no vive bajo AppLayout.
+export const TrackingPublicPage = lazy(() =>
+  import("../pages/public/TrackingPublicPage").then((m) => ({ default: m.TrackingPublicPage })));

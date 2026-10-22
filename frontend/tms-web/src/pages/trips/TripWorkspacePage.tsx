@@ -10,7 +10,7 @@ import {
   PlaceRounded, BuildRounded, CheckRounded, SkipNextRounded, ReportProblemRounded,
   InventoryRounded, AttachFileRounded, DownloadRounded, BadgeRounded, EditRounded,
   HourglassTopRounded, LocalShippingOutlined, MapOutlined, PlaceOutlined, ReportProblemOutlined,
-  HistoryRounded, Inventory2Outlined,
+  HistoryRounded, Inventory2Outlined, ShareRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
@@ -51,6 +51,8 @@ import { TripDocumentsCard } from "./TripDocumentsCard";
 import { TripRouteCard } from "./TripRouteCard";
 import { TenderWaterfallCard } from "./TenderWaterfallCard";
 import { WorkspaceCard } from "./WorkspaceCard";
+import { ShareTrackingDrawer } from "./ShareTrackingDrawer";
+import { useCanShareTracking } from "../orders/trackingLinks";
 import { R, STATUS, neutralSoft, type StatusTone } from "../../theme";
 
 function formatServiceWindow(start: string | null, end: string | null): string | null {
@@ -165,6 +167,9 @@ export function TripWorkspacePage() {
   const [evidenceFor, setEvidenceFor] = useState<{
     deliveryId: string; orderNumber: string; stopLabel: string; result: OrderDeliveryView["result"];
   } | null>(null);
+  /** ADR-029: el pedido de una parada cuyo enlace de seguimiento se está compartiendo. */
+  const [shareFor, setShareFor] = useState<{ orderId: string; orderNumber: string; stopLabel: string } | null>(null);
+  const canShareTracking = useCanShareTracking();
   const [busy, setBusy] = useState(false);
 
   const detail: TripDetailView | undefined = tripQuery.data;
@@ -805,6 +810,20 @@ export function TripWorkspacePage() {
                                     <Typography variant="caption" color="text.disabled">{t("Sin registrar")}</Typography>
                                   )}
                                   <Box sx={{ flex: 1 }} />
+                                  {canShareTracking && (
+                                    <Tooltip title={t("Compartir seguimiento")}>
+                                      <IconButton
+                                        size="small"
+                                        aria-label={`${t("Compartir seguimiento")} ${assignment.orderNumber}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setShareFor({ orderId: assignment.orderId, orderNumber: assignment.orderNumber, stopLabel });
+                                        }}
+                                      >
+                                        <ShareRounded fontSize="small" />
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
                                   {canExecute && (
                                     <>
                                       <Tooltip title={recorded ? t("Corregir la entrega") : t("Registrar la entrega")}>
@@ -1019,6 +1038,16 @@ export function TripWorkspacePage() {
           status={<StatusChip label={enumLabel("deliveryResult", evidenceFor.result)} tone={DELIVERY_RESULT_TONE[evidenceFor.result]} />}
           onClose={() => setEvidenceFor(null)}
           onSubmit={submitEvidence}
+        />
+      )}
+
+      {shareFor && (
+        <ShareTrackingDrawer
+          companyId={companyId}
+          orderId={shareFor.orderId}
+          orderNumber={shareFor.orderNumber}
+          stopLabel={shareFor.stopLabel}
+          onClose={() => setShareFor(null)}
         />
       )}
 
