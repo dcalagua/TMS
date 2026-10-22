@@ -109,17 +109,30 @@ public interface TripRepository extends JpaRepository<Trip, UUID>, JpaSpecificat
 
     /**
      * The publishable set for {@code ShipmentPublicationAdapter}: this company's trips in one of
-     * {@code statuses}, touched at or after {@code updatedSince} (or all of them, when null),
-     * oldest-touched first with {@code id} as the tie-breaker for a deterministic page boundary -
-     * the same shape {@code ShipmentOutboxEventRepository.findPublishable} uses for the same
-     * reason. {@code DRAFT} is never one of {@code statuses} in production use; the caller
-     * decides that, not this query, so a test can still ask for it explicitly.
+     * {@code statuses}, touched at or after {@code updatedSince}, oldest-touched first with
+     * {@code id} as the tie-breaker for a deterministic page boundary - the same shape
+     * {@code ShipmentOutboxEventRepository.findPublishable} uses for the same reason.
+     * {@code DRAFT} is never one of {@code statuses} in production use; the caller decides that,
+     * not this query, so a test can still ask for it explicitly.
+     *
+     * <p>{@code updatedSince} must not be null: the unbounded read is the overload below.
      */
     @Query("SELECT t FROM Trip t WHERE t.companyId = :companyId AND t.status IN :statuses "
-            + "AND (:updatedSince IS NULL OR t.updatedAt >= :updatedSince) "
-            + "ORDER BY t.updatedAt ASC, t.id ASC")
+            + "AND t.updatedAt >= :updatedSince ORDER BY t.updatedAt ASC, t.id ASC")
     Page<Trip> findPublishable(@Param("companyId") UUID companyId, @Param("statuses") Collection<TripStatus> statuses,
             @Param("updatedSince") OffsetDateTime updatedSince, Pageable pageable);
+
+    /**
+     * {@link #findPublishable(UUID, Collection, OffsetDateTime, Pageable)} without a lower bound.
+     * Two queries rather than {@code (:updatedSince IS NULL OR ...)}: PostgreSQL cannot type a
+     * bind parameter that appears only in an {@code IS NULL} test, and the single-query form
+     * answered {@code could not determine data type of parameter $3} on every call - with the
+     * bound or without it (QAS, 2026-10-22). Same fix as {@code TransportOrderRepository}.
+     */
+    @Query("SELECT t FROM Trip t WHERE t.companyId = :companyId AND t.status IN :statuses "
+            + "ORDER BY t.updatedAt ASC, t.id ASC")
+    Page<Trip> findPublishable(@Param("companyId") UUID companyId, @Param("statuses") Collection<TripStatus> statuses,
+            Pageable pageable);
 
     /**
      * The double-booking pre-check ({@code TripService.requireVehicleNotDoubleBooked}): is this

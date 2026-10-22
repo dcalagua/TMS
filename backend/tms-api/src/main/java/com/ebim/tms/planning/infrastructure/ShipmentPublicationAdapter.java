@@ -94,8 +94,11 @@ public class ShipmentPublicationAdapter implements ShipmentPublicationPort {
     @Transactional(readOnly = true)
     public PageResponse<PublishedShipment> search(ShipmentPublicationQuery query, PageQuery pageQuery) {
         Set<TripStatus> statuses = toStatuses(query.statuses());
-        Page<Trip> page = tripRepository.findPublishable(
-                query.companyId(), statuses, query.updatedSince(), toPageable(pageQuery));
+        // Two repository methods, never one with a nullable bound: see TripRepository.findPublishable.
+        Pageable pageable = toPageable(pageQuery);
+        Page<Trip> page = query.updatedSince() == null
+                ? tripRepository.findPublishable(query.companyId(), statuses, pageable)
+                : tripRepository.findPublishable(query.companyId(), statuses, query.updatedSince(), pageable);
         List<Trip> trips = page.getContent();
         List<TripView> views = assembler.toViews(trips, query.companyId());
 
@@ -119,8 +122,10 @@ public class ShipmentPublicationAdapter implements ShipmentPublicationPort {
     @Override
     @Transactional(readOnly = true)
     public PageResponse<PublishedShipmentEvent> searchEvents(ShipmentEventQuery query, PageQuery pageQuery) {
-        Page<ShipmentOutboxEvent> page =
-                outboxRepository.findPublishable(query.companyId(), query.since(), toPageable(pageQuery));
+        Pageable pageable = toPageable(pageQuery);
+        Page<ShipmentOutboxEvent> page = query.since() == null
+                ? outboxRepository.findPublishable(query.companyId(), pageable)
+                : outboxRepository.findPublishable(query.companyId(), query.since(), pageable);
         List<PublishedShipmentEvent> content = page.getContent().stream()
                 .map(event -> new PublishedShipmentEvent(
                         event.id(), event.eventType().name(), event.shipmentNumber(), event.occurredAt()))
