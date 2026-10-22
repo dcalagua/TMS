@@ -285,6 +285,38 @@ WHERE NOT EXISTS (
     SELECT 1 FROM tms.route_stop rs
     WHERE rs.route_id = r.id AND (rs.sequence = v.seq OR rs.destination_id = l.id));
 
+-- 3b. Muelles de la planta (citas de muelle, V41) ---------------------------------------------
+--
+-- Tres muelles en GYE-CD para que «Citas de muelle» tenga dónde reservar el día de la demo. Una
+-- fila por muelle porque cada uno atiende UN vehículo a la vez (V41 §1). Horario de lunes a sábado,
+-- 07:00-19:00 en hora LOCAL de la planta (America/Guayaquil), guardado en minutos desde la
+-- medianoche local (420 y 1140), igual que lo escribe `PUT /appointments/resources/{id}/calendar`.
+-- El domingo no tiene fila: ese día el muelle está CERRADO (una puerta sin ninguna fila de horario
+-- se lee como abierta siempre; con horario, el día que falta se lee como cerrado).
+-- Son de demostración: PLAPASA tiene que confirmar cuántas puertas y qué horario tiene la planta.
+INSERT INTO tms.location_resource (company_id, location_id, code, name, resource_type, default_slot_minutes)
+SELECT c.id, l.id, v.code, v.name, 'DOCK', v.slot
+FROM tms.company c
+JOIN tms.organization o ON o.id = c.organization_id AND o.code = 'QAS-PLAPASA'
+JOIN tms.location l ON l.company_id = c.id AND l.code = 'GYE-CD'
+CROSS JOIN (VALUES
+    ('MUE-01', 'Muelle 1 · despacho de producto terminado', 60),
+    ('MUE-02', 'Muelle 2 · despacho de producto terminado', 60),
+    ('MUE-03', 'Muelle 3 · recepción de materia prima',     90)
+) AS v(code, name, slot)
+WHERE c.code = 'QAS-PLAPASA'
+ON CONFLICT (location_id, code) DO NOTHING;
+
+INSERT INTO tms.resource_calendar (company_id, resource_id, day_of_week, opens_at_minutes, closes_at_minutes)
+SELECT r.company_id, r.id, d.day, 420, 1140
+FROM tms.location_resource r
+JOIN tms.location l ON l.id = r.location_id AND l.code = 'GYE-CD'
+JOIN tms.company c ON c.id = r.company_id AND c.code = 'QAS-PLAPASA'
+JOIN tms.organization o ON o.id = c.organization_id AND o.code = 'QAS-PLAPASA'
+CROSS JOIN (VALUES (1),(2),(3),(4),(5),(6)) AS d(day)
+WHERE r.code IN ('MUE-01', 'MUE-02', 'MUE-03')
+ON CONFLICT (resource_id, day_of_week) DO NOTHING;
+
 -- 4. Flota -----------------------------------------------------------------------------------
 --
 -- TRLIT, Transportes del Litoral S.A. (demo): el mismo código que en el EWM. El despacho del

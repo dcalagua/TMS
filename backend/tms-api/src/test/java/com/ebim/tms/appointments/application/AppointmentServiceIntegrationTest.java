@@ -329,6 +329,49 @@ class AppointmentServiceIntegrationTest {
                     .withMessageContaining("Annual stocktake");
         }
 
+        /**
+         * The screen that registers closures lists the ones still ahead and lets a person lift one
+         * typed by mistake - and lifting it really reopens the door.
+         */
+        @Test
+        @DisplayName("upcoming closures are listed, past ones are not, and lifting one reopens the door")
+        void closuresAreListedAndLifted() {
+            UUID dock = newDock(companyA, locationA, "D-LIFT");
+            OffsetDateTime tomorrow = tomorrowMidMorningAtTheSite();
+            resourceService.block(scope(companyA), dock, tomorrow.minusDays(10), tomorrow.minusDays(9), "Old stocktake");
+            resourceService.block(scope(companyA), dock, tomorrow, tomorrow.plusHours(4), "Broken leveller");
+
+            List<ResourceBlockView> upcoming = resourceService.listUpcomingBlocks(scope(companyA), dock);
+            assertThat(upcoming).extracting(ResourceBlockView::reason).containsExactly("Broken leveller");
+            assertThatExceptionOfType(ConflictException.class)
+                    .isThrownBy(() -> book(companyA, dock, tomorrow.plusHours(1), tomorrow.plusHours(2)))
+                    .withMessageContaining("Broken leveller");
+
+            resourceService.liftBlock(scope(companyA), dock, upcoming.get(0).id());
+
+            assertThat(resourceService.listUpcomingBlocks(scope(companyA), dock)).isEmpty();
+            assertThat(book(companyA, dock, tomorrow.plusHours(1), tomorrow.plusHours(2)).status())
+                    .isEqualTo(AppointmentStatus.REQUESTED);
+        }
+
+        @Test
+        @DisplayName("another company can neither read nor lift a door's closures")
+        void closuresAreScoped() {
+            UUID dock = newDock(companyA, locationA, "D-LIFT-SCOPE");
+            OffsetDateTime tomorrow = tomorrowMidMorningAtTheSite();
+            resourceService.block(scope(companyA), dock, tomorrow, tomorrow.plusHours(1), "Inventory");
+            UUID block = resourceService.listUpcomingBlocks(scope(companyA), dock).get(0).id();
+
+            assertThatExceptionOfType(com.ebim.tms.shared.api.ResourceNotFoundException.class)
+                    .isThrownBy(() -> resourceService.listUpcomingBlocks(scope(companyB), dock));
+            assertThatExceptionOfType(com.ebim.tms.shared.api.ResourceNotFoundException.class)
+                    .isThrownBy(() -> resourceService.liftBlock(scope(companyB), dock, block));
+            UUID otherDock = newDock(companyA, locationA, "D-LIFT-OTHER");
+            assertThatExceptionOfType(com.ebim.tms.shared.api.ResourceNotFoundException.class)
+                    .isThrownBy(() -> resourceService.liftBlock(scope(companyA), otherDock, block));
+            assertThat(resourceService.listUpcomingBlocks(scope(companyA), dock)).hasSize(1);
+        }
+
         @Test
         @DisplayName("a door out of service takes no new bookings")
         void inactiveDock() {
@@ -477,6 +520,11 @@ class AppointmentServiceIntegrationTest {
     }
 
     // --- fixtures ------------------------------------------------------------------------
+
+    /** 10:00 in Lima tomorrow: far from the site's midnight, so a short booking never crosses it. */
+    private static OffsetDateTime tomorrowMidMorningAtTheSite() {
+        return OffsetDateTime.now(ZoneOffset.UTC).plusDays(1).withHour(15).withMinute(0).withSecond(0).withNano(0);
+    }
 
     private static UUID idOf(String sql) {
         try (Connection connection = PostgresTestDatabase.connect(jdbcUrl);
