@@ -49,6 +49,8 @@ import { TripTrackingCard } from "./TripTrackingCard";
 import { TripWarehouseCard } from "./TripWarehouseCard";
 import { TripDocumentsCard } from "./TripDocumentsCard";
 import { TripRouteCard } from "./TripRouteCard";
+import { TripEmissionCard } from "./TripEmissionCard";
+import { findingText } from "../fleet/fleetDocumentText";
 import { TenderWaterfallCard } from "./TenderWaterfallCard";
 import { WorkspaceCard } from "./WorkspaceCard";
 import { R, STATUS, neutralSoft, type StatusTone } from "../../theme";
@@ -125,6 +127,8 @@ export function TripWorkspacePage() {
   /** Los documentos de un envío son los de sus pedidos (ADR-015): el endpoint pide además
    * `orders.order:read`, así que sin él la tarjeta no se pide. */
   const canReadOrders = hasPermission("orders.order:read");
+  // V73: la huella de carbono del viaje.
+  const canReadEmissions = hasPermission("settlement.emission:read");
   const queryClient = useQueryClient();
 
   const queryKey = tripQueryKeys.detail(companyId, tripId);
@@ -667,6 +671,19 @@ export function TripWorkspacePage() {
             {trip.cancelReason && (
               <Alert severity="error" sx={{ mt: 2 }}>{trip.cancelReason}</Alert>
             )}
+            {/* V72: los papeles del vehículo y del conductor en la fecha del viaje. Uno que bloquea
+                ya impidió asignarlos; si aparece aquí es que venció después, y el despacho lo frena. */}
+            {(detail.compliance ?? []).length > 0 && (
+              <Box sx={{ mt: 2, display: "grid", gap: 0.75 }} aria-label={t("Documentos de flota")}>
+                {(detail.compliance ?? []).map((finding) => (
+                  <Alert key={`${finding.subjectId}-${finding.documentType}`}
+                    severity={finding.blocking ? "error" : "warning"} variant="outlined" sx={{ py: 0 }}>
+                    {findingText(finding)}
+                    {finding.blocking ? ` · ${t("Bloquea el despacho")}` : ""}
+                  </Alert>
+                ))}
+              </Box>
+            )}
           </WorkspaceCard>
 
           {isNarrow && (
@@ -944,6 +961,8 @@ export function TripWorkspacePage() {
         <Box sx={{ display: "grid", gap: 2, minWidth: 0 }}>
           {/* Primero el recorrido: es la pregunta que se hace antes de salir, no después. */}
           <TripRouteCard routing={detail.routing} />
+
+          {canReadEmissions && <TripEmissionCard companyId={companyId} tripId={trip.id} version={trip.version} />}
 
           {canMonitor && (
             <TripTrackingCard

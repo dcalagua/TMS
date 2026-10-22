@@ -1,6 +1,7 @@
 import type { DriverLicenseStatus } from './driversApi'
 import { apiDownload, apiRequest, apiUpload, type DownloadedFile } from './httpClient'
 import type { PageResponse } from './pageResponse'
+import type { ComplianceFinding } from './fleetDocumentsApi'
 
 /** Mirrors the backend's `PlanningRunStatus` enum (`planning/domain/PlanningRunStatus.java`). */
 export type PlanningRunStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED'
@@ -572,6 +573,11 @@ export interface TripDetailView {
   deliveries: OrderDeliveryView[]
   /** Nunca null: un viaje sin recorrido medible trae ceros y sus tramos no medidos contados. */
   routing: TripRouteMetrics
+  /**
+   * V72: lo que está mal con los papeles del vehículo y del conductor en la fecha de planificación.
+   * Opcional para tolerar un backend anterior.
+   */
+  compliance?: ComplianceFinding[]
 }
 
 export interface PlanningRunListParams {

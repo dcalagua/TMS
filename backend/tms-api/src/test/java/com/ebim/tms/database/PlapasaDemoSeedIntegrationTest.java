@@ -170,6 +170,23 @@ class PlapasaDemoSeedIntegrationTest {
         assertThat(countIn("driver")).isEqualTo(3);
         assertThat(countIn("rate_card")).isEqualTo(1);
         assertThat(countIn("material_profile")).isEqualTo(25);
+        // V72: four vehicles' and three drivers' papers, a five-type policy and the 30-day window; the
+        // two "about to expire" and the one expired warn - none blocks a trip of the demo.
+        assertThat(countIn("fleet_document")).isEqualTo(21);
+        assertThat(countIn("fleet_document_policy")).isEqualTo(5);
+        assertThat(value("SELECT expiry_alert_days FROM tms.fleet_compliance_settings WHERE company_id = '"
+                + companyId + "'")).isEqualTo("30");
+        assertThat(value("SELECT string_agg(v.code || ':' || d.document_type, ',' ORDER BY v.code)"
+                + " FROM tms.fleet_document d JOIN tms.vehicle v ON v.id = d.vehicle_id"
+                + " WHERE d.company_id = '" + companyId + "' AND d.expires_on < DATE '2026-12-01'"))
+                .isEqualTo("CAM-02:TECHNICAL_INSPECTION,CAM-04:CARGO_INSURANCE");
+        assertThat(value("SELECT enforcement FROM tms.fleet_document_policy WHERE company_id = '" + companyId
+                + "' AND document_type = 'CARGO_INSURANCE'")).isEqualTo("WARN");
+        // V73: every vehicle type has its demo factor, the 10 t truck at 0.9 kg CO2e/km.
+        assertThat(value("SELECT count(*) FROM tms.vehicle_type WHERE company_id = '" + companyId
+                + "' AND emission_factor_kg_co2e_per_km IS NOT NULL AND fuel_type = 'DIESEL'")).isEqualTo("5");
+        assertThat(value("SELECT emission_factor_kg_co2e_per_km FROM tms.vehicle_type WHERE company_id = '"
+                + companyId + "' AND code = 'CAMION-10T'")).isEqualTo("0.9000");
         assertThat(value("SELECT string_agg(license_plate, ',' ORDER BY code) FROM tms.vehicle"
                 + " WHERE company_id = '" + companyId + "'")).isEqualTo("GBA-1234,GBC-5678,GSC-2468,GSD-1357");
         assertThat(value("SELECT concat_ws('|', external_system, external_reference, country) FROM tms.location"

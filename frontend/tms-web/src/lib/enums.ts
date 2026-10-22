@@ -63,6 +63,8 @@ export const ENUM_LABELS = {
     TRIP: "Viaje",
     TRIP_COST: "Costo del viaje",
     VEHICLE: "Vehículo",
+    FLEET_DOCUMENT: "Documento de flota",
+    FLEET_DOCUMENT_POLICY: "Política de documentos de flota",
   },
   appointmentPurpose: {
     DELIVERY: "Entrega",
@@ -96,6 +98,8 @@ export const ENUM_LABELS = {
     DRIVER_UNAVAILABLE: "Conductor no disponible",
     INSUFFICIENT_REPOSITION_TIME: "Sin tiempo para desplazarse",
     LICENSE_INVALID: "Licencia no vigente",
+    COMPLIANCE_DOCUMENT_EXPIRED: "Documento de flota vencido",
+    COMPLIANCE_DOCUMENT_UNRECORDED: "Documento obligatorio sin registrar",
     MAINTENANCE_BLOCK: "Vehículo en taller",
     ROUTING_UNKNOWN: "Tramo sin medir",
     SHIFT_CONFLICT: "Fuera del turno",
@@ -544,6 +548,62 @@ export const ENUM_LABELS = {
     ON_TIME: "A tiempo",
     OVERDUE: "Salida vencida",
     SCHEDULED: "Programado",
+  },
+  /** V72: los papeles de flota. Nombre internacional; el local va en la etiqueta. */
+  fleetDocumentType: {
+    REGISTRATION: "Matrícula",
+    TECHNICAL_INSPECTION: "Revisión técnica (RTV / CITV)",
+    MANDATORY_INSURANCE: "Seguro obligatorio (SPPAT / SOAT)",
+    OPERATING_PERMIT: "Permiso de operación (ANT / MTOP / MTC)",
+    CARGO_INSURANCE: "Póliza de carga",
+    VEHICLE_OTHER: "Otro documento del vehículo",
+    MEDICAL_CERTIFICATE: "Certificado médico",
+    DEFENSIVE_DRIVING_COURSE: "Curso de manejo defensivo",
+    DRIVER_OTHER: "Otro documento del conductor",
+  },
+  /** V72: estado derivado al leer. */
+  fleetDocumentStatus: {
+    EXPIRED: "Vencido",
+    EXPIRING_SOON: "Por vencer",
+    UNRECORDED: "Sin registrar",
+    VALID: "Vigente",
+  },
+  fleetDocumentSubject: {
+    DRIVER: "Conductor",
+    VEHICLE: "Vehículo",
+  },
+  /** V72: lo que hace un papel vencido. */
+  complianceEnforcement: {
+    BLOCK: "Bloquea",
+    WARN: "Avisa",
+  },
+  /** V72: tramos de antigüedad del vencimiento. */
+  fleetDocumentAgeing: {
+    EXPIRED_OVER_90: "Vencido hace más de 90 días",
+    EXPIRED_31_90: "Vencido hace 31 a 90 días",
+    EXPIRED_1_30: "Vencido hace 1 a 30 días",
+    DUE_0_7: "Vence en 7 días o menos",
+    DUE_8_30: "Vence en 8 a 30 días",
+    DUE_31_90: "Vence en 31 a 90 días",
+    DUE_OVER_90: "Vence en más de 90 días",
+    NO_DATE: "Sin fecha de vencimiento",
+  },
+  /** V73: combustible del tipo de vehículo. */
+  fuelType: {
+    CNG: "GNV (gas natural)",
+    DIESEL: "Diésel",
+    ELECTRIC: "Eléctrico",
+    GASOLINE: "Gasolina",
+    HYBRID: "Híbrido",
+    LPG: "GLP",
+    OTHER: "Otro",
+  },
+  /** V73: por qué un viaje tiene o no huella. */
+  emissionStatus: {
+    CALCULATED: "Calculada",
+    NO_DISTANCE: "Sin recorrido medible",
+    NO_FACTOR: "Sin factor de emisión",
+    NO_VEHICLE: "Sin vehículo",
   },
   driverLicenseStatus: {
     EXPIRED: "Vencida",

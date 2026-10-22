@@ -1,5 +1,6 @@
 package com.ebim.tms.planning.application;
 
+import com.ebim.tms.shared.reference.ComplianceFinding;
 import java.util.List;
 
 /**
@@ -33,5 +34,17 @@ public record TripDetailView(
          * unmeasurable legs counted, because a board that cannot render a distance must still
          * render.
          */
-        TripRouteMetrics routing) {
+        TripRouteMetrics routing,
+        /**
+         * What is wrong with the vehicle's and the driver's compliance papers on the planning date
+         * (V72): expired papers - blocking or not by the company's policy - and mandatory ones that
+         * are not on file. Never null; empty when everything is in order or nothing is configured.
+         */
+        List<ComplianceFinding> compliance) {
+
+    /** The pre-V72 shape: no compliance findings. */
+    public TripDetailView(TripView trip, List<TripAssignmentView> assignments, List<TripStopView> stops,
+            List<TripExceptionView> exceptions, List<OrderDeliveryView> deliveries, TripRouteMetrics routing) {
+        this(trip, assignments, stops, exceptions, deliveries, routing, List.of());
+    }
 }

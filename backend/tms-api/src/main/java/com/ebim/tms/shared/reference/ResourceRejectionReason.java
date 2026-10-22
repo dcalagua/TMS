@@ -3,7 +3,7 @@ package com.ebim.tms.shared.reference;
 /**
  * Why a driver-and-vehicle pairing cannot run a shipment (migration V47).
  *
- * <p>Nine values, and the point of having nine is that <b>the system knows the cause</b>. Collapsing
+ * <p>Eleven values, and the point of having nine is that <b>the system knows the cause</b>. Collapsing
  * them into one {@code RESOURCE_NOT_AVAILABLE} would throw away the only part a planner can act on:
  * a licence that expired, a truck in the workshop and a gap too short to drive are three different
  * problems with three different fixes, and a planner told only "unavailable" has to go and find out
@@ -62,5 +62,18 @@ public enum ResourceRejectionReason {
      * a work assignment that quietly cleared this would be an alternative route past a dispatch
      * guard - which is the one thing V47 must not become.
      */
-    CARRIER_MISMATCH
+    CARRIER_MISMATCH,
+
+    /**
+     * A compliance document of the vehicle or the driver has expired (migration V72): technical
+     * inspection, insurance, operating permit, medical certificate... Blocking or a warning by the
+     * company's policy for that document type.
+     */
+    COMPLIANCE_DOCUMENT_EXPIRED,
+
+    /**
+     * A mandatory compliance document is not on file, or has no expiry date (migration V72). Always a
+     * warning: not knowing is not evidence of an expiry - the rule V26 wrote for the licence.
+     */
+    COMPLIANCE_DOCUMENT_UNRECORDED
 }

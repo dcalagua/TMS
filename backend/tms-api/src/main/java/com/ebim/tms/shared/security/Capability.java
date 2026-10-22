@@ -42,12 +42,16 @@ public enum Capability {
             Permission.FLEET_CARRIER_READ,
             Permission.FLEET_VEHICLE_TYPE_READ,
             Permission.FLEET_VEHICLE_READ,
-            Permission.FLEET_DRIVER_READ),
+            Permission.FLEET_DRIVER_READ,
+            // V72: the compliance documents screen lives in the fleet menu.
+            Permission.FLEET_DOCUMENT_READ),
     FLEET_MANAGE(
             Permission.FLEET_CARRIER_MANAGE,
             Permission.FLEET_VEHICLE_TYPE_MANAGE,
             Permission.FLEET_VEHICLE_MANAGE,
-            Permission.FLEET_DRIVER_MANAGE),
+            Permission.FLEET_DRIVER_MANAGE,
+            Permission.FLEET_DOCUMENT_MANAGE,
+            Permission.FLEET_DOCUMENT_POLICY_MANAGE),
 
     ORDERS_VIEW(Permission.ORDERS_ORDER_READ),
     ORDERS_MANAGE(Permission.ORDERS_ORDER_MANAGE, Permission.ORDERS_HOLD_MANAGE),
@@ -136,6 +140,13 @@ public enum Capability {
     /** Cost to serve (migration V68, ADR-026): the report, and recalculating a trip's allocation. */
     COST_TO_SERVE_VIEW(Permission.SETTLEMENT_COST_ALLOCATION_READ),
     COST_ALLOCATION_MANAGE(Permission.SETTLEMENT_COST_ALLOCATION_MANAGE),
+
+    /**
+     * The carbon footprint (migration V73). Its own capability rather than folded into cost to
+     * serve: a sustainability officer reads emissions and has no business reading what each
+     * customer costs.
+     */
+    EMISSIONS_VIEW(Permission.SETTLEMENT_EMISSION_READ),
 
     /**
      * The company's fiscal regime (migration V66, ADR-027): editing its fiscal country, VAT rates and

@@ -18,6 +18,7 @@ import {
   AccountBalanceWalletRounded,
   PaymentsRounded,
   InsightsRounded,
+  VerifiedUserRounded,
 } from "@mui/icons-material";
 
 /** Una hoja del menú: una pantalla concreta. */
@@ -97,6 +98,7 @@ export const ICON_TINTS: Record<string, string> = {
   "/fleet/vehicle-types": "#B0BEC5",
   "/fleet/vehicles": "#42A5F5",
   "/fleet/drivers": "#CE93D8",
+  "/fleet/documents": "#FFB74D",
   "/rates/rate-cards": "#FFCA28",
   "/costing/own-fleet": "#26A69A",
   "/settings/company": "#B0BEC5",
@@ -214,6 +216,9 @@ export const NAV_SECTIONS: NavSection[] = [
       { to: "/fleet/vehicle-types", label: "Tipos de vehículo", icon: <AccountTreeRounded /> },
       { to: "/fleet/vehicles", label: "Vehículos", icon: <LocalShippingRounded /> },
       { to: "/fleet/drivers", label: "Conductores", icon: <BadgeRounded /> },
+      // V72: los papeles con vencimiento. Su propio permiso: FLEET_VIEW se concede con cualquier lectura de flota.
+      { to: "/fleet/documents", label: "Documentos de flota", icon: <VerifiedUserRounded />,
+        permission: "fleet.document:read" },
     ],
   },
   {

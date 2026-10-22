@@ -11,6 +11,7 @@ import {
   createVehicleType, updateVehicleType, VEHICLE_BODY_TYPES,
   type VehicleBodyType, type VehicleTypeRequest, type VehicleTypeView,
 } from "../../shared/api/vehicleTypesApi";
+import { FUEL_TYPES, type FuelType } from "../../shared/api/emissionsApi";
 import { ActiveBadge, FormDrawer, FormMeta, FormRow, FormSection } from "../../shared/ui/components";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
@@ -44,6 +45,8 @@ interface VehicleTypeFormValues {
   minTemperatureCelsius: string;
   maxTemperatureCelsius: string;
   axles: string;
+  fuelType: FuelType | "";
+  emissionFactorKgCo2ePerKm: string;
 }
 
 interface VehicleTypeFormDrawerProps {
@@ -56,6 +59,7 @@ interface VehicleTypeFormDrawerProps {
 const KNOWN_FIELDS = new Set<keyof VehicleTypeFormValues>([
   "code", "name", "maxWeightKg", "maxVolumeM3", "maxPallets", "lengthM", "widthM", "heightM", "loadFloorFillFactor", "bodyType",
   "temperatureControlled", "minTemperatureCelsius", "maxTemperatureCelsius", "axles",
+  "fuelType", "emissionFactorKgCo2ePerKm",
 ]);
 
 /**
@@ -91,6 +95,8 @@ export function VehicleTypeFormDrawer({ companyId, vehicleType, onClose, onSaved
       minTemperatureCelsius: vehicleType?.minTemperatureCelsius?.toString() ?? "",
       maxTemperatureCelsius: vehicleType?.maxTemperatureCelsius?.toString() ?? "",
       axles: vehicleType?.axles?.toString() ?? "",
+      fuelType: vehicleType?.fuelType ?? "",
+      emissionFactorKgCo2ePerKm: vehicleType?.emissionFactorKgCo2ePerKm?.toString() ?? "",
     },
   });
 
@@ -121,6 +127,15 @@ export function VehicleTypeFormDrawer({ companyId, vehicleType, onClose, onSaved
     if (value.trim() === "") return t("Este campo es obligatorio");
     if (Number.isNaN(parsed)) return t("Debe ser un número");
     return parsed > 0 || t("Debe ser un número mayor que cero");
+  };
+
+  /** Mismo límite que `ck_vehicle_type_emission_factor`: por encima de 50 es un error de unidad. */
+  const emissionFactorRule: Validate<string, VehicleTypeFormValues> = (value) => {
+    if (value.trim() === "") return true;
+    const parsed = Number(value);
+    if (Number.isNaN(parsed)) return t("Debe ser un número");
+    if (parsed <= 0) return t("Debe ser un número mayor que cero");
+    return parsed <= 50 || t("Como máximo 50 kg por km: revisa la unidad (¿gramos?)");
   };
 
   const optionalPositive: Validate<string, VehicleTypeFormValues> = (value) => {
@@ -161,6 +176,9 @@ export function VehicleTypeFormDrawer({ companyId, vehicleType, onClose, onSaved
       minTemperatureCelsius: values.minTemperatureCelsius.trim() === "" ? null : Number(values.minTemperatureCelsius),
       maxTemperatureCelsius: values.maxTemperatureCelsius.trim() === "" ? null : Number(values.maxTemperatureCelsius),
       axles: values.axles.trim() === "" ? null : Number(values.axles),
+      // V73: siempre en el cuerpo - un PUT que los omite los borra.
+      fuelType: values.fuelType || null,
+      emissionFactorKgCo2ePerKm: numberOrNull(values.emissionFactorKgCo2ePerKm),
     };
 
     try {
@@ -349,6 +367,37 @@ export function VehicleTypeFormDrawer({ companyId, vehicleType, onClose, onSaved
               {t("Solo se permite si la unidad es de temperatura controlada")}
             </Typography>
           )}
+        </FormSection>
+
+        <FormSection
+          title={t("Emisiones")}
+          help={t("Cuántos kg de CO₂e emite por km recorrido. Sin factor, sus viajes muestran «sin datos», nunca cero.")}
+        >
+          <FormRow>
+            <Controller
+              control={control}
+              name="fuelType"
+              render={({ field }) => (
+                <TextField
+                  select label={t("Combustible")} size="small" fullWidth
+                  value={field.value} onChange={(e) => field.onChange(e.target.value)}
+                >
+                  <MenuItem value="">{t("Sin especificar")}</MenuItem>
+                  {FUEL_TYPES.map((fuel) => (
+                    <MenuItem key={fuel} value={fuel}>{enumLabel("fuelType", fuel)}</MenuItem>
+                  ))}
+                </TextField>
+              )}
+            />
+            <TextField
+              label={t("Factor (kg CO₂e/km)")} size="small" fullWidth type="number"
+              slotProps={{ htmlInput: { step: "0.0001", min: 0 } }}
+              error={Boolean(errors.emissionFactorKgCo2ePerKm)}
+              helperText={errors.emissionFactorKgCo2ePerKm?.message
+                ?? t("El de tu auditor o el de la ficha del fabricante; TMS no trae un valor por defecto.")}
+              {...register("emissionFactorKgCo2ePerKm", { validate: emissionFactorRule })}
+            />
+          </FormRow>
         </FormSection>
       </Box>
     </FormDrawer>
