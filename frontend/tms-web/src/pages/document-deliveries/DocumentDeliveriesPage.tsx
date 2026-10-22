@@ -15,6 +15,7 @@ import type { ApiError } from "../../shared/api/httpClient";
 import { CAPABILITY } from "../../shared/api/meApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
+import { isIsoDay, oneOf, useUrlFilters, type UrlFilterValidators } from "../../shared/ui/useUrlFilters";
 import { DocumentStatusChip } from "../../shared/ui/DocumentStatusChip";
 import {
   DataTable, FilterBar, KpiCard, PageHeader, Pagination, SectionHeader, StatusChip, type DataTableColumn,
@@ -28,6 +29,13 @@ import {
 } from "./documentDeliveries";
 
 const PAGE_SIZE = 25;
+
+const MONITOR_URL_VALIDATORS: UrlFilterValidators<Record<keyof MonitorFilters, string>> = {
+  dateFrom: (value) => value === "" || isIsoDay(value),
+  dateTo: (value) => value === "" || isIsoDay(value),
+  status: oneOf(["", "PENDING", "DELIVERED", "REJECTED", "NOT_DELIVERED"]),
+  returned: oneOf(["", "true", "false"]),
+};
 
 /**
  * Entrega de documentos (ADR-018): qué pasó con cada factura, guía y GRE que salió en un envío, y
@@ -44,10 +52,12 @@ export function DocumentDeliveriesPage() {
   const canManage = hasCapability(CAPABILITY.DOCUMENT_DELIVERY_MANAGE);
 
   const [defaults] = useState(() => defaultMonitorFilters());
-  const [filters, setFiltersState] = useState<MonitorFilters>(defaults);
+  // Ítem 11: los filtros viven en la URL; un enlace o una recarga conservan el rango y el estado.
+  const [urlFilters, setUrlFilters] = useUrlFilters<Record<keyof MonitorFilters, string>>(defaults, MONITOR_URL_VALIDATORS);
+  const filters = urlFilters as MonitorFilters;
   const [page, setPage] = useState(0);
   const [openRow, setOpenRow] = useState<DocumentDeliveryRow | null>(null);
-  const setFilters = (next: MonitorFilters) => { setFiltersState(next); setPage(0); };
+  const setFilters = (next: MonitorFilters) => { setUrlFilters(next); setPage(0); };
 
   const listParams = toListParams(filters);
 
