@@ -1,6 +1,7 @@
 package com.ebim.tms.rates.infrastructure;
 
 import com.ebim.tms.shared.reference.TripCostAnalyticsPort;
+import com.ebim.tms.shared.reference.TripCostFigure;
 import com.ebim.tms.shared.reference.TripCostTotals;
 import java.time.LocalDate;
 import java.util.List;
@@ -39,6 +40,15 @@ public class TripCostAnalyticsAdapter implements TripCostAnalyticsPort {
                 .map(row -> new TripCostTotals(row.getCurrency(), row.getTripsEstimated(),
                         row.getEstimatedAmount(), row.getTripsWithActual(), row.getActualAmount(),
                         row.getTripsComparable(), row.getComparableEstimated(), row.getComparableActual()))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TripCostFigure> figuresForRange(UUID companyId, LocalDate from, LocalDate to) {
+        return tripCostRepository.figuresForRange(companyId, from, to).stream()
+                .map(row -> new TripCostFigure(row.getTripId(), row.getCurrency(), row.getEstimatedAmount(),
+                        row.getActualAmount()))
                 .toList();
     }
 }

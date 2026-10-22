@@ -52,6 +52,11 @@ tms:
     accrual:
       # Tests drive the sweep by calling it; a timer firing mid-test would make them order-dependent.
       sweep-enabled: false
+  planning:
+    tender-waterfall:
+      auto-advance:
+        # Same reason: the waterfall sweep is driven by calling TenderWaterfallSweep.sweepAll().
+        enabled: false
 
 logging:
   level:

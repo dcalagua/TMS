@@ -18,6 +18,7 @@ import {
   AccountBalanceWalletRounded,
   PaymentsRounded,
   InsightsRounded,
+  LeaderboardRounded,
 } from "@mui/icons-material";
 
 /** Una hoja del menú: una pantalla concreta. */
@@ -72,6 +73,7 @@ export const ICON_TINTS: Record<string, string> = {
   "/": "#42A5F5",
   "/control-tower": "#FF5C5C",
   "/reporting": "#26C6DA",
+  "/reporting/carriers": "#26A69A",
   "/orders": "#29B6F6",
   "/scheduling": "#5C6BC0",
   "/planning": "#B085F5",
@@ -153,6 +155,11 @@ export const NAV_SECTIONS: NavSection[] = [
       // ADR-018: lo que pasó con los papeles de esos mismos envíos, y qué cargos faltan por volver.
       { to: "/document-deliveries", label: "Entrega de documentos", icon: <FactCheckRounded />,
         capability: "DOCUMENT_DELIVERY_VIEW" },
+      // ITEM 3: el mismo día visto por transportista y sobre un periodo. En Operación y no en
+      // Comercial: Comercial va detrás de RATES_VIEW, y quien evalúa transportistas no tiene por qué
+      // ver tarifarios. El costo y las facturas aparecen dentro sólo con su propio permiso.
+      { to: "/reporting/carriers", label: "Scorecard de transportistas", icon: <LeaderboardRounded />,
+        capability: "CARRIER_SCORECARD_VIEW" },
       // Después de Viajes: una cita existe por un viaje, y la garita la lee justo antes de que
       // llegue. Su propia entrada y no una pestaña del workspace porque quien la mira - patio,
       // garita, almacén - no planifica envíos.

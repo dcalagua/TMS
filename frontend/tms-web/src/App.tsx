@@ -23,7 +23,7 @@ import {
   SettlementPage, TolerancePoliciesPage, AccrualsPage, PayablesPage, CostToServePage,
   OwnFleetCostProfilesPage,
   WorkAssignmentsPage,
-  PlanningRunsPage, RateCardsPage, ReportsPage, RoutesPage, SchedulingReleasePage, TripRouteSheetPage, TripWorkspacePage, TripsPage,
+  PlanningRunsPage, RateCardsPage, ReportsPage, RoutesPage, SchedulingReleasePage, TripRouteSheetPage, TripWorkspacePage, TripsPage, CarrierScorecardPage,
   UsersPage, VehicleTypesPage, VehiclesPage, ZonesPage,
   DeliveryTrackingPage, ShipmentTrackingPage,
   DocumentDeliveriesPage, PortalTripPage, PortalTripsPage, PortalInvoicePage, PortalInvoicesPage,
@@ -88,6 +88,8 @@ export default function App() {
                         dos pantallas es "de esta empresa", y sin una no hay nada que enseñar. */}
                     <Route path="control-tower" element={<ControlTowerPage />} />
                     <Route path="reporting" element={<ReportsPage />} />
+                    {/* ITEM 3: el scorecard. Mismo permiso que los KPIs (`monitoring.transport:read`). */}
+                    <Route path="reporting/carriers" element={<CarrierScorecardPage />} />
 
                     <Route path="masters/locations" element={<LocationsPage />} />
                     <Route path="masters/origins" element={<OriginsPage />} />

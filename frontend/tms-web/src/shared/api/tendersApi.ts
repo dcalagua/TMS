@@ -196,6 +196,11 @@ export interface TenderWaterfallView {
   attemptsUsed: number
   /** La oferta que está fuera pasó su plazo. Se calcula al leer, no se guarda. */
   currentOfferLapsed: boolean
+  /**
+   * ITEM 10: la instalación avanza sola las ofertas vencidas (`tms.planning.tender-waterfall.auto-advance.enabled`).
+   * Opcional: un backend anterior no lo manda, y ausente se lee como "no".
+   */
+  autoAdvance?: boolean
   outcomeNote: string | null
   startedAt: string
   completedAt: string | null

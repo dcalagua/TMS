@@ -22,6 +22,8 @@ export const ControlTowerPage = lazy(() =>
   import("../pages/control-tower/ControlTowerPage").then((m) => ({ default: m.ControlTowerPage })));
 export const ReportsPage = lazy(() =>
   import("../pages/reporting/ReportsPage").then((m) => ({ default: m.ReportsPage })));
+export const CarrierScorecardPage = lazy(() =>
+  import("../pages/reporting/CarrierScorecardPage").then((m) => ({ default: m.CarrierScorecardPage })));
 
 export const LocationsPage = lazy(() =>
   import("../pages/masters/LocationsPage").then((m) => ({ default: m.LocationsPage })));
