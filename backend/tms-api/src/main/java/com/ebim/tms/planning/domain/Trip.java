@@ -495,6 +495,18 @@ public class Trip {
     /** The same, freezing the load space too (V62): floor area, height and width; each may be null. */
     public void confirm(BigDecimal maxWeightKg, BigDecimal maxVolumeM3, Integer maxPallets, BigDecimal maxFloorAreaM2,
             BigDecimal maxStackHeightM, BigDecimal loadWidthM, UUID actorId) {
+        confirm(maxWeightKg, maxVolumeM3, maxPallets, maxFloorAreaM2, maxStackHeightM, loadWidthM,
+                OffsetDateTime.now(), actorId);
+    }
+
+    /**
+     * The same, at the caller's clock. {@code PlanningRunService} passes the application
+     * {@code Clock}: a confirmation stamped with the JVM clock while everything else in the
+     * request reads the injected one puts {@code confirmedAt} after a dispatch the same test (or
+     * the same replay) recorded earlier, and the dispatch is then refused as out of order.
+     */
+    public void confirm(BigDecimal maxWeightKg, BigDecimal maxVolumeM3, Integer maxPallets, BigDecimal maxFloorAreaM2,
+            BigDecimal maxStackHeightM, BigDecimal loadWidthM, OffsetDateTime confirmedAt, UUID actorId) {
         requireTransitionTo(TripStatus.CONFIRMED);
         this.snapshotMaxFloorAreaM2 = maxFloorAreaM2;
         this.snapshotMaxStackHeightM = maxStackHeightM;
@@ -503,8 +515,8 @@ public class Trip {
         this.snapshotMaxWeightKg = maxWeightKg;
         this.snapshotMaxVolumeM3 = maxVolumeM3;
         this.snapshotMaxPallets = maxPallets;
-        this.capacitySnapshotAt = OffsetDateTime.now();
-        this.confirmedAt = OffsetDateTime.now();
+        this.capacitySnapshotAt = confirmedAt;
+        this.confirmedAt = confirmedAt;
         this.confirmedBy = actorId;
         this.updatedBy = actorId;
     }

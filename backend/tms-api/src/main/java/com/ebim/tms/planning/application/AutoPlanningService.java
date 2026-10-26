@@ -30,6 +30,7 @@ import com.ebim.tms.shared.reference.RouteTemplateLookupPort;
 import com.ebim.tms.shared.reference.ServiceCalendarPort;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
+import com.ebim.tms.shared.reference.FleetCompliancePort;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -93,6 +94,7 @@ public class AutoPlanningService {
     private final AuditRecorder auditRecorder;
 
     private final ProposalPricer proposalPricer;
+    private final FleetCompliancePort fleetCompliancePort;
 
     public AutoPlanningService(PlanningRunRepository planningRunRepository, TripRepository tripRepository,
             TripService tripService, PlanningEngines engines, RoutingPort routingPort,
@@ -101,7 +103,8 @@ public class AutoPlanningService {
             VehicleLookupPort vehicleLookupPort, RouteTemplateLookupPort routeTemplateLookupPort,
             ServiceCalendarPort serviceCalendarPort, ProposalPricer proposalPricer,
             AuditActorProvider auditActorProvider,
-            AuditRecorder auditRecorder) {
+            AuditRecorder auditRecorder, FleetCompliancePort fleetCompliancePort) {
+        this.fleetCompliancePort = fleetCompliancePort;
         this.proposalPricer = proposalPricer;
         this.planningRunRepository = planningRunRepository;
         this.tripRepository = tripRepository;
@@ -423,6 +426,10 @@ public class AutoPlanningService {
         return vehicleLookupPort.findAssignableInCompany(scope.companyId()).stream()
                 .filter(vehicle -> !tripRepository.existsByCompanyIdAndVehicleIdAndPlanningDateAndStatusNot(
                         scope.companyId(), vehicle.id(), run.planningDate(), TripStatus.CANCELLED))
+                // V72: a truck whose blocking paper has expired by the planning date would be refused by
+                // TripService when the proposal is applied - so it is not offered to the engine at all.
+                .filter(vehicle -> fleetCompliancePort
+                        .blockingFor(scope.companyId(), vehicle.id(), null, run.planningDate()).isEmpty())
                 .toList();
     }
 

@@ -3,6 +3,9 @@ import type {
   DocumentDeliveryReason, DocumentDeliveryStatus, DocumentEvidenceType,
 } from './documentDeliveriesApi'
 import type { DocumentKind, ReportedWithholding, WithholdingView } from './settlementApi'
+import type {
+  DeliveryResult, StopExecutionStatus, TransportEventSource, TripExceptionType,
+} from './planningApi'
 
 //
 // El portal de transportistas (ADR-018 §6). Lo usa un usuario con membresía de transportista y
@@ -82,14 +85,108 @@ export interface PortalStop {
   latitude?: number | null
   longitude?: number | null
   documents: PortalDocument[]
+  /**
+   * V70: where the vehicle is in this stop, and the moves the server allows next (empty unless the
+   * trip is on the road). Absent on a trip cached by an older version of the portal; null on the
+   * trailing group without a stop.
+   */
+  executionStatus?: StopExecutionStatus | null
+  allowedExecutionTransitions?: StopExecutionStatus[] | null
+  actualArrivalAt?: string | null
+  serviceStartedAt?: string | null
+  actualDepartureAt?: string | null
+  /** V70: the orders delivered here, each with what was recorded for it. */
+  orders?: PortalStopOrder[]
+}
+
+/** An order delivered at a portal stop (V70). The assigned amounts bound a partial delivery. */
+export interface PortalStopOrder {
+  orderId: string
+  orderNumber: string
+  customerName: string | null
+  assignedWeightKg: number | null
+  assignedVolumeM3: number | null
+  assignedPallets: number | null
+  /** Null while nothing was recorded for this order at this stop. */
+  delivery: PortalDelivery | null
+}
+
+/** The delivery the carrier (or the office, correcting it) recorded - `source` says who. */
+export interface PortalDelivery {
+  id: string
+  result: DeliveryResult
+  deliveredAt: string | null
+  receiverName: string | null
+  receiverDocument: string | null
+  notes: string | null
+  source: TransportEventSource
+  recordedAt: string | null
+  evidenceCount: number
+  refusedWeightKg: number | null
+  refusedVolumeM3: number | null
+  refusedPallets: number | null
+}
+
+/** A problem on the trip (V70), reported by the carrier or by the office. */
+export interface PortalIncident {
+  id: string
+  tripStopId: string | null
+  stopSequence: number | null
+  exceptionType: TripExceptionType
+  status: 'OPEN' | 'RESOLVED'
+  reportedAt: string
+  notes: string | null
+  resolvedAt: string | null
 }
 
 export interface PortalTripDetail {
   trip: PortalTripSummary
-  /** False when the deployment has no evidence store: `DELIVERED` (photo mandatory) cannot be reported. */
+  /**
+   * False when the deployment has no evidence store: `DELIVERED` (photo mandatory) cannot be
+   * reported for a document, and a delivery result is recorded without photo or signature (V70).
+   */
   evidenceEnabled: boolean
   stops: PortalStop[]
+  /** V70. Absent on a trip cached by an older version of the portal. */
+  incidents?: PortalIncident[]
 }
+
+/** The stop moves a carrier makes from the portal (V70). Skipping a stop is the office's decision. */
+export type PortalStopTransition = 'arrive' | 'service' | 'complete' | 'fail'
+
+/** What a stop move produces, so the screen can show it before the server answers. */
+export const STOP_TRANSITION_TARGET: Record<PortalStopTransition, StopExecutionStatus> = {
+  arrive: 'ARRIVED',
+  service: 'IN_SERVICE',
+  complete: 'COMPLETED',
+  fail: 'FAILED',
+}
+
+/** The fields of the delivery form (V70). Refused amounts only for `PARTIAL`. */
+export interface PortalDeliveryInput {
+  result: DeliveryResult
+  /** ISO-8601. When it happened at the door; omitted for `NOT_ATTEMPTED`. */
+  deliveredAt?: string | null
+  receiverName?: string | null
+  receiverDocument?: string | null
+  notes?: string | null
+  refusedWeightKg?: number | null
+  refusedVolumeM3?: number | null
+  refusedPallets?: number | null
+  photos: Blob[]
+  signature?: Blob | null
+}
+
+/**
+ * One execution action of the portal (V70), as the offline queue keeps it and sends it. Each has
+ * its `Idempotency-Key` on the queue entry, so a resend records nothing twice.
+ */
+export type PortalExecutionAction =
+  | { type: 'STOP'; stopId: string; transition: PortalStopTransition; occurredAt: string;
+      notes?: string | null; exceptionType?: TripExceptionType | null }
+  | { type: 'DELIVERY'; stopId: string; orderId: string; input: PortalDeliveryInput }
+  | { type: 'INCIDENT'; tripStopId: string | null; exceptionType: TripExceptionType; occurredAt: string;
+      notes?: string | null }
 
 export interface PortalReportInput {
   status: DocumentDeliveryStatus
@@ -150,6 +247,69 @@ export function reportPortalDocument(
     formData: buildReportFormData(input),
     headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
   })
+}
+
+/** Builds the multipart body of a delivery (V70). Exported for tests: the part names are the contract. */
+export function buildDeliveryFormData(input: PortalDeliveryInput): FormData {
+  const formData = new FormData()
+  formData.append('result', input.result)
+  const fields: [string, string | number | null | undefined][] = [
+    ['deliveredAt', input.deliveredAt], ['receiverName', input.receiverName],
+    ['receiverDocument', input.receiverDocument], ['notes', input.notes],
+    ['refusedWeightKg', input.refusedWeightKg], ['refusedVolumeM3', input.refusedVolumeM3],
+    ['refusedPallets', input.refusedPallets],
+  ]
+  for (const [name, value] of fields) {
+    if (value !== null && value !== undefined && value !== '') formData.append(name, String(value))
+  }
+  input.photos.forEach((photo, index) => {
+    formData.append('photos', photo, fileNameOf(photo, `foto-${index + 1}.jpg`))
+  })
+  if (input.signature) formData.append('signature', input.signature, 'firma.png')
+  return formData
+}
+
+/**
+ * Sends one execution action (V70): `portal.stop:execute` for a stop move or an incident,
+ * `portal.delivery:report` for a delivery. Answers with the whole trip, as the screen shows it.
+ */
+export function sendPortalExecution(
+  companyId: string,
+  tripId: string,
+  action: PortalExecutionAction,
+  idempotencyKey: string,
+): Promise<PortalTripDetail> {
+  const headers = { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey }
+  switch (action.type) {
+    case 'STOP':
+      return apiRequest<PortalTripDetail>(`/portal/trips/${tripId}/stops/${action.stopId}/${action.transition}`, {
+        method: 'POST',
+        companyId,
+        headers,
+        body: {
+          occurredAt: action.occurredAt,
+          notes: action.notes ?? null,
+          ...(action.transition === 'fail' ? { exceptionType: action.exceptionType ?? null } : {}),
+        },
+      })
+    case 'DELIVERY':
+      return apiUpload<PortalTripDetail>(
+        `/portal/trips/${tripId}/stops/${action.stopId}/orders/${action.orderId}/delivery`,
+        { companyId, headers, formData: buildDeliveryFormData(action.input) },
+      )
+    case 'INCIDENT':
+      return apiRequest<PortalTripDetail>(`/portal/trips/${tripId}/incidents`, {
+        method: 'POST',
+        companyId,
+        headers,
+        body: {
+          tripStopId: action.tripStopId,
+          exceptionType: action.exceptionType,
+          occurredAt: action.occurredAt,
+          notes: action.notes ?? null,
+        },
+      })
+  }
 }
 
 /** `portal.trip:read`. */

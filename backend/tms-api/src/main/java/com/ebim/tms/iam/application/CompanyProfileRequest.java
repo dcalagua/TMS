@@ -2,6 +2,7 @@ package com.ebim.tms.iam.application;
 
 import com.ebim.tms.shared.settings.AccrualTrigger;
 import com.ebim.tms.shared.settings.CostAllocationBasis;
+import com.ebim.tms.shared.settings.TrackingPlateDisplay;
 import com.ebim.tms.shared.settings.DispatchConfirmationMode;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -70,7 +71,19 @@ public record CompanyProfileRequest(
         AccrualTrigger accrualTrigger,
 
         // Optional (V68, ADR-026): absent keeps the company's current basis.
-        CostAllocationBasis costAllocationBasis) {
+        CostAllocationBasis costAllocationBasis,
+
+        // Optional (V74, ADR-029): absent keeps the company's current plate display.
+        TrackingPlateDisplay trackingPlateDisplay) {
+
+    /** The V68 shape, for callers that predate tracking links. */
+    public CompanyProfileRequest(String name, String taxIdentifier, String timeZone, String defaultCountry,
+            String orderNumberPrefix, String shipmentNumberPrefix,
+            DispatchConfirmationMode dispatchConfirmationMode, AccrualTrigger accrualTrigger,
+            CostAllocationBasis costAllocationBasis) {
+        this(name, taxIdentifier, timeZone, defaultCountry, orderNumberPrefix, shipmentNumberPrefix,
+                dispatchConfirmationMode, accrualTrigger, costAllocationBasis, null);
+    }
 
     /** The V65 shape, for callers that predate cost allocation. */
     public CompanyProfileRequest(String name, String taxIdentifier, String timeZone, String defaultCountry,

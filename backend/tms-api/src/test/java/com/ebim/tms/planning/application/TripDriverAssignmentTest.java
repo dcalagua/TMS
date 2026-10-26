@@ -96,7 +96,8 @@ class TripDriverAssignmentTest {
                 // The settings port only decides the shipment-number prefix (migration V34); it is
                 // stubbed with the product defaults rather than left unstubbed so that a later test
                 // in this file which creates a trip fails on its own rule, not on a null prefix.
-                mock(TripAlertPublisher.class), settings, actors, auditRecorder);
+                mock(TripAlertPublisher.class), settings, actors, auditRecorder,
+                com.ebim.tms.shared.reference.FleetCompliancePort.NONE);
 
         when(tripRepository.saveAndFlush(any(Trip.class))).thenAnswer(call -> call.getArgument(0));
         when(assembler.toDetail(any(Trip.class), eq(COMPANY)))

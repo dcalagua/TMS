@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InvoiceFormDrawer } from "./InvoiceFormDrawer";
 import type { TaxRegimeView } from "../../shared/api/settlementApi";
+import type { PenaltySuggestion } from "../../shared/api/claimsApi";
 import { EC_PRIVATE_RUC, EC_REGIME, GENERIC_REGIME, PE_REGIME } from "../../test/fixtures/taxRegimes";
 
 /**
@@ -18,11 +19,14 @@ function json(body: unknown, status = 200): Response {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 let regime: TaxRegimeView = PE_REGIME;
+let suggestions: PenaltySuggestion[] = [];
 
 beforeEach(() => {
   regime = PE_REGIME;
+  suggestions = [];
   fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
     const url = new URL(input);
+    if (url.pathname.endsWith("/settlement/claims/penalty-suggestions")) return json(suggestions);
     if (url.pathname.endsWith("/fleet/carriers")) {
       return json({ content: [{ id: "car-1", businessName: "Transportes Andinos SAC" }], page: 0, size: 200, totalElements: 1 });
     }
@@ -80,6 +84,36 @@ async function fillHeader(user: ReturnType<typeof userEvent.setup>) {
 function posts() {
   return fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "POST");
 }
+
+describe("los reclamos aceptados (V71)", () => {
+  it("se proponen como penalidad y sólo se envían si la persona los agrega", async () => {
+    suggestions = [{
+      claimId: "claim-1", claimNumber: "RC-000001", claimType: "DAMAGE", tripId: "trip-1",
+      shipmentNumber: "SH-00000042", acceptedAmount: 45.5, currency: "PEN", penaltyAmount: -45.5,
+      penaltyReason: "Freight claim RC-000001 (damage)",
+    }];
+    const user = userEvent.setup();
+    const onSaved = renderForm();
+    const drawer = await fillHeader(user);
+
+    expect(await within(drawer).findByText(/RC-000001 · Daño · SH-00000042/)).toBeInTheDocument();
+    await user.click(within(drawer).getByRole("button", { name: /agregar penalidad/i }));
+    // Una vez agregada, deja de proponerse.
+    expect(within(drawer).queryByRole("button", { name: /agregar penalidad/i })).not.toBeInTheDocument();
+    await user.click(within(drawer).getByRole("button", { name: /registrar factura/i }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    const body = JSON.parse((posts()[0][1] as RequestInit).body as string);
+    expect(body.lines[1]).toMatchObject({
+      tripId: "trip-1", chargeCode: "PENALTY", lineAmount: -45.5,
+      penaltyReferenceType: "FREIGHT_CLAIM", penaltyReferenceId: "claim-1",
+    });
+    const asked = fetchMock.mock.calls.map(([input]) => new URL(input as string))
+      .find((url) => url.pathname.endsWith("/settlement/claims/penalty-suggestions"));
+    expect(asked?.searchParams.get("carrierId")).toBe("car-1");
+    expect(asked?.searchParams.get("currency")).toBe("PEN");
+  });
+});
 
 describe("registrar una factura", () => {
   it("una cantidad sin precio unitario no se envía", async () => {

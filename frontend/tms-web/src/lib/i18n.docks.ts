@@ -1,0 +1,80 @@
+// Puertas y muelles de un sitio (citas de muelle, V41): sus textos en inglés, en un fichero propio
+// como los demás módulos. `i18n.ts` lo funde en su diccionario `EN`.
+
+export const EN_DOCKS: Record<string, string> = {
+  "Puertas y muelles": "Doors and docks",
+  "Configurar puertas": "Set up doors",
+  "Nueva puerta": "New door",
+  "Crear puerta": "Create door",
+  "Editar {{code}}": "Edit {{code}}",
+  "Horario de {{code}}": "Hours of {{code}}",
+  "Cierres de {{code}}": "Closures of {{code}}",
+  "Acciones de {{code}}": "Actions for {{code}}",
+  "Volver a las puertas": "Back to the doors",
+  "Cada puerta atiende un vehículo a la vez. Un sitio con tres muelles son tres puertas.":
+    "Each door takes one vehicle at a time. A site with three docks has three doors.",
+  "Este sitio no tiene puertas": "This site has no doors",
+  "Da de alta la primera para poder reservar citas aquí.": "Add the first one to start booking appointments here.",
+  "Da de alta sus puertas o muelles y su horario para empezar a reservar citas.":
+    "Add its doors or docks and their hours to start booking appointments.",
+  "Pide a un administrador que configure las puertas de este sitio.":
+    "Ask an administrator to set up this site's doors.",
+  "Horario": "Hours",
+  "Horario semanal": "Weekly hours",
+  "Cierres puntuales": "Closures",
+  "En servicio": "In service",
+  "Poner en servicio": "Put back in service",
+  "Poner fuera de servicio": "Take out of service",
+  "¿Poner {{code}} fuera de servicio?": "Take {{code}} out of service?",
+  "Las reservas nuevas se rechazan. Las que ya existen se mantienen: un camión en camino no pierde su hora en silencio.":
+    "New bookings are refused. Existing ones stay: a truck on its way does not silently lose its slot.",
+  "Puerta fuera de servicio": "Door out of service",
+  "Puerta en servicio": "Door in service",
+  "No se pudo cambiar el estado de la puerta": "The door's status could not be changed",
+  "Puerta creada": "Door created",
+  "Puerta actualizada": "Door updated",
+  "No se pudo guardar la puerta": "The door could not be saved",
+  "Hasta 32 caracteres: letras, números, guion o guion bajo.": "Up to 32 characters: letters, digits, hyphen or underscore.",
+  "Único dentro del sitio, p. ej. MUE-01.": "Unique within the site, e.g. MUE-01.",
+  "Tipo de recurso": "Resource type",
+  "Duración por defecto (minutos)": "Default duration (minutes)",
+  "Entre 5 y 1440 minutos.": "Between 5 and 1440 minutes.",
+  "Lo que dura una reserva aquí cuando nadie indica la hora de fin.":
+    "How long a booking here lasts when nobody gives an end time.",
+  "Horario en hora local del sitio ({{zone}}).": "Hours in the site's local time ({{zone}}).",
+  "Horario en hora local del sitio.": "Hours in the site's local time.",
+  "Un día sin marcar queda cerrado. Un turno nocturno son dos días.":
+    "A day left unticked is closed. An overnight shift is two days.",
+  "Sin ningún día abierto la puerta queda sin horario, y sin horario se considera abierta siempre. Para dejar de recibir camiones, ponla fuera de servicio.":
+    "With no open day the door has no hours, and a door without hours counts as always open. To stop receiving trucks, take it out of service.",
+  "Abre": "Opens",
+  "Cierra": "Closes",
+  "Abre el {{day}}": "Opens on {{day}}",
+  "Cierra el {{day}}": "Closes on {{day}}",
+  "Indica la hora de apertura y la de cierre.": "Enter the opening and the closing time.",
+  "El cierre tiene que ser después de la apertura. Un turno nocturno son dos días.":
+    "Closing must be after opening. An overnight shift is two days.",
+  "Copiar el horario del lunes a los días abiertos": "Copy Monday's hours to the open days",
+  "Guardar horario": "Save hours",
+  "Horario guardado": "Hours saved",
+  "No se pudo guardar el horario": "The hours could not be saved",
+  "Sin horario: abierta siempre": "No hours: always open",
+  "Un feriado, un inventario, una rampa averiada. Las reservas que ya caen dentro no se cancelan solas: alguien tiene que avisar a esos camiones. Las horas van en la zona de tu navegador ({{zone}}).":
+    "A holiday, a stocktake, a broken leveller. Bookings already inside it are not cancelled on their own: somebody has to warn those trucks. Times are in your browser's zone ({{zone}}).",
+  "El fin tiene que ser después del inicio.": "The end must be after the start.",
+  "Una puerta cerrada sin motivo es una que nadie se anima a reabrir.":
+    "A door closed for no stated reason is one nobody dares to reopen.",
+  "Registrar cierre": "Register closure",
+  "Registrando...": "Registering...",
+  "Cierre registrado": "Closure registered",
+  "No se pudo registrar el cierre": "The closure could not be registered",
+  "Cierres vigentes y próximos": "Current and upcoming closures",
+  "Esta puerta no tiene cierres por delante.": "This door has no closures ahead.",
+  "¿Levantar el cierre?": "Lift the closure?",
+  "La puerta vuelve a aceptar reservas en {{when}}.": "The door accepts bookings again in {{when}}.",
+  "Levantar cierre": "Lift closure",
+  "Levantar el cierre de {{when}}": "Lift the closure of {{when}}",
+  "Cierre levantado": "Closure lifted",
+  "No se pudo levantar el cierre": "The closure could not be lifted",
+  "Cerrada": "Closed",
+};

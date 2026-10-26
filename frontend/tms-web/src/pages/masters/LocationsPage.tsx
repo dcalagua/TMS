@@ -6,7 +6,7 @@ import {
 } from "@mui/material";
 import {
   AddRounded, UploadRounded, EditRounded, BlockRounded, CheckCircleRounded,
-  PlaceRounded, TripOriginRounded, PinDropRounded, MyLocationRounded,
+  PlaceRounded, TripOriginRounded, PinDropRounded, MyLocationRounded, MeetingRoomRounded,
   CategoryRounded, CropFreeRounded, SwapHorizRounded, ToggleOnRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
@@ -30,6 +30,7 @@ import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { GeofenceDrawer } from "./GeofenceDrawer";
+import { LocationResourcesDrawer } from "../appointments/LocationResourcesDrawer";
 import { LocationFormDrawer } from "./LocationFormDrawer";
 
 const DEFAULT_PAGE_SIZE = 25;
@@ -73,6 +74,8 @@ export function LocationsPage({ view }: LocationsPageProps = {}) {
   const { selected, hasPermission } = useCompany();
   const companyId = selected?.id ?? "";
   const canManage = hasPermission("masterdata.location:manage");
+  /** Las puertas y muelles del sitio (V41) son otra autoridad: `appointments.resource:manage`. */
+  const canManageDocks = hasPermission("appointments.resource:manage");
   const queryClient = useQueryClient();
 
   // El rol de la vista es parte del estado en reposo, no algo que aplicó el operador, así que
@@ -88,6 +91,7 @@ export function LocationsPage({ view }: LocationsPageProps = {}) {
   const setFilters = (next: AppliedFilters) => { setFiltersState(next); setPage(0); };
   const [modal, setModal] = useState<ModalState>(null);
   const [geofenceFor, setGeofenceFor] = useState<LocationView | null>(null);
+  const [docksFor, setDocksFor] = useState<LocationView | null>(null);
   const [showImport, setShowImport] = useState(false);
 
   const scope = view === "ORIGIN" ? "origins" : view === "DESTINATION" ? "destinations" : "locations";
@@ -200,7 +204,7 @@ export function LocationsPage({ view }: LocationsPageProps = {}) {
     { key: "active", header: t("Estado"), render: (l) => <ActiveBadge active={l.active} /> },
   ];
 
-  if (canManage) {
+  if (canManage || canManageDocks) {
     columns.push({
       key: "actions",
       header: t("Acciones"),
@@ -208,20 +212,29 @@ export function LocationsPage({ view }: LocationsPageProps = {}) {
       render: (location) => (
         <ActionMenu
           items={[
-            { key: "edit", label: t("Editar"), icon: <EditRounded />, onSelect: () => setModal({ mode: "edit", location }) },
-            {
-              key: "geofence",
-              label: t("Geocerco"),
-              icon: <MyLocationRounded />,
-              onSelect: () => setGeofenceFor(location),
-            },
-            {
+            ...(canManage ? [
+              { key: "edit", label: t("Editar"), icon: <EditRounded />, onSelect: () => setModal({ mode: "edit", location }) },
+              {
+                key: "geofence",
+                label: t("Geocerco"),
+                icon: <MyLocationRounded />,
+                onSelect: () => setGeofenceFor(location),
+              },
+            ] : []),
+            ...(canManageDocks && location.roles.length > 0 ? [{
+              key: "docks",
+              label: t("Puertas y muelles"),
+              icon: <MeetingRoomRounded />,
+              onSelect: () => setDocksFor(location),
+            }] : []),
+            ...(canManage ? [{
               key: "active",
               label: location.active ? t("Desactivar") : t("Activar"),
               icon: location.active ? <BlockRounded /> : <CheckCircleRounded />,
               dangerous: location.active,
+              divider: true,
               onSelect: () => void toggleActive(location),
-            },
+            }] : []),
           ]}
         />
       ),
@@ -334,6 +347,10 @@ export function LocationsPage({ view }: LocationsPageProps = {}) {
           onClose={() => setGeofenceFor(null)}
           onSaved={() => { setGeofenceFor(null); refresh(); }}
         />
+      )}
+
+      {docksFor && (
+        <LocationResourcesDrawer companyId={companyId} site={docksFor} onClose={() => setDocksFor(null)} />
       )}
 
       {showImport && (

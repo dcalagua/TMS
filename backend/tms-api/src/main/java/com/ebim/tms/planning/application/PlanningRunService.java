@@ -30,6 +30,7 @@ import com.ebim.tms.shared.reference.TripCostEstimationPort;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
+import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -64,6 +65,7 @@ public class PlanningRunService {
     private static final Set<String> SORTABLE_PROPERTIES =
             Set.of("planNumber", "planningDate", "status", "createdAt", "updatedAt");
 
+    private final Clock clock;
     private final PlanningRunRepository planningRunRepository;
     private final TripRepository tripRepository;
     private final TripOrderAssignmentRepository assignmentRepository;
@@ -85,7 +87,8 @@ public class PlanningRunService {
             DestinationLookupPort destinationLookupPort, OrderPlanningPort orderPlanningPort,
             VehicleLookupPort vehicleLookupPort, PlanningCapacityService capacityService,
             TripCostEstimationPort tripCostEstimationPort, TripViewAssembler assembler,
-            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder) {
+            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder, Clock clock) {
+        this.clock = clock;
         this.planningRunRepository = planningRunRepository;
         this.tripRepository = tripRepository;
         this.assignmentRepository = assignmentRepository;
@@ -285,7 +288,7 @@ public class PlanningRunService {
         // to, so a confirmed shipment cannot be missing one.
         assignments.refreshStops(trip, scope.companyId(), actorId);
         trip.confirm(vehicle.maxWeightKg(), vehicle.maxVolumeM3(), vehicle.maxPallets(), CapacityLimits.floorOf(vehicle),
-                vehicle.heightM(), vehicle.widthM(), actorId);
+                vehicle.heightM(), vehicle.widthM(), OffsetDateTime.now(clock), actorId);
         tripRepository.saveAndFlush(trip);
 
         // Written in THIS transaction, not after commit - the whole point of a transactional

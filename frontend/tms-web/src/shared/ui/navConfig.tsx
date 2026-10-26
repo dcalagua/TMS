@@ -18,6 +18,10 @@ import {
   AccountBalanceWalletRounded,
   PaymentsRounded,
   InsightsRounded,
+  LeaderboardRounded,
+  GavelRounded,
+  ReportProblemRounded,
+  VerifiedUserRounded,
 } from "@mui/icons-material";
 
 /** Una hoja del menú: una pantalla concreta. */
@@ -72,6 +76,7 @@ export const ICON_TINTS: Record<string, string> = {
   "/": "#42A5F5",
   "/control-tower": "#FF5C5C",
   "/reporting": "#26C6DA",
+  "/reporting/carriers": "#26A69A",
   "/orders": "#29B6F6",
   "/scheduling": "#5C6BC0",
   "/planning": "#B085F5",
@@ -85,6 +90,8 @@ export const ICON_TINTS: Record<string, string> = {
   "/settlement/accruals": "#BCAAA4",
   "/settlement/payables": "#C49A6C",
   "/settlement/cost-to-serve": "#A1887F",
+  "/settlement/claims": "#E57373",
+  "/incidents": "#FF8A65",
   "/work-assignments": "#7E57C2",
   "/masters/locations": "#4FC3F7",
   "/masters/origins": "#4DB6AC",
@@ -97,6 +104,7 @@ export const ICON_TINTS: Record<string, string> = {
   "/fleet/vehicle-types": "#B0BEC5",
   "/fleet/vehicles": "#42A5F5",
   "/fleet/drivers": "#CE93D8",
+  "/fleet/documents": "#FFB74D",
   "/rates/rate-cards": "#FFCA28",
   "/costing/own-fleet": "#26A69A",
   "/settings/company": "#B0BEC5",
@@ -153,6 +161,17 @@ export const NAV_SECTIONS: NavSection[] = [
       // ADR-018: lo que pasó con los papeles de esos mismos envíos, y qué cargos faltan por volver.
       { to: "/document-deliveries", label: "Entrega de documentos", icon: <FactCheckRounded />,
         capability: "DOCUMENT_DELIVERY_VIEW" },
+      // ITEM 3: el mismo día visto por transportista y sobre un periodo. En Operación y no en
+      // Comercial: Comercial va detrás de RATES_VIEW, y quien evalúa transportistas no tiene por qué
+      // ver tarifarios. El costo y las facturas aparecen dentro sólo con su propio permiso.
+      { to: "/reporting/carriers", label: "Scorecard de transportistas", icon: <LeaderboardRounded />,
+        capability: "CARRIER_SCORECARD_VIEW" },
+      // V71: lo que salió mal en los envíos, una sola lista - las incidencias abiertas de los viajes y
+      // los reclamos de carga - por antigüedad. Junto al seguimiento porque es el mismo día mirado
+      // por lo que quedó pendiente. Lee incidencias, así que además del permiso de reclamos pide el de
+      // viajes, igual que su endpoint.
+      { to: "/incidents", label: "Centro de incidencias", icon: <ReportProblemRounded />,
+        capability: "CLAIMS_VIEW", permission: "planning.trip:read" },
       // Después de Viajes: una cita existe por un viaje, y la garita la lee justo antes de que
       // llegue. Su propia entrada y no una pestaña del workspace porque quien la mira - patio,
       // garita, almacén - no planifica envíos.
@@ -161,6 +180,10 @@ export const NAV_SECTIONS: NavSection[] = [
       // Después de las citas y antes de Maestros: la auditoría de flete es lo último que pasa con
       // un envío, y quien la mira es finanzas - no planifica, pero necesita llegar a lo que se
       // planificó. TMS valida y exporta; el ERP paga.
+      // V71: justo antes de la auditoría de flete, porque es lo que ésta descuenta: un reclamo
+      // aceptado se propone como penalidad al registrar la factura del transportista.
+      { to: "/settlement/claims", label: "Reclamos de carga", icon: <GavelRounded />,
+        capability: "CLAIMS_VIEW" },
       { to: "/settlement", label: "Auditoría de flete", icon: <ReceiptLongRounded />,
         capability: "SETTLEMENT_VIEW" },
       // Justo detrás de la auditoría: es la regla con la que ésta decide qué diferencia se acepta.
@@ -214,6 +237,9 @@ export const NAV_SECTIONS: NavSection[] = [
       { to: "/fleet/vehicle-types", label: "Tipos de vehículo", icon: <AccountTreeRounded /> },
       { to: "/fleet/vehicles", label: "Vehículos", icon: <LocalShippingRounded /> },
       { to: "/fleet/drivers", label: "Conductores", icon: <BadgeRounded /> },
+      // V72: los papeles con vencimiento. Su propio permiso: FLEET_VIEW se concede con cualquier lectura de flota.
+      { to: "/fleet/documents", label: "Documentos de flota", icon: <VerifiedUserRounded />,
+        permission: "fleet.document:read" },
     ],
   },
   {

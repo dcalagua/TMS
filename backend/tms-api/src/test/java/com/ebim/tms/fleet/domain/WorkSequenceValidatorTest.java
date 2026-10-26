@@ -199,6 +199,34 @@ class WorkSequenceValidatorTest {
         }
 
         @Test
+        @DisplayName("compliance papers (V72) are whole-day findings, each saying whether it blocks")
+        void compliancePapers() {
+            ResourceWindow window = new ResourceWindow(null, null, true, List.of(), List.of(
+                    new ResourceWindow.ComplianceIssue(ResourceRejectionReason.COMPLIANCE_DOCUMENT_EXPIRED, true,
+                            "Vehicle GBA-1234: the technical inspection expired on 2026-09-01."),
+                    new ResourceWindow.ComplianceIssue(ResourceRejectionReason.COMPLIANCE_DOCUMENT_UNRECORDED, false,
+                            "Driver COND-01: the mandatory medical certificate is not on file.")));
+
+            List<Rejection> rejections = WorkSequenceValidator.validate(
+                    List.of(trip("SH-1", "07:00", "09:00")), Arrays.asList((Long) null), window, LIMA);
+
+            assertThat(rejections).extracting(Rejection::reason).containsExactly(
+                    ResourceRejectionReason.COMPLIANCE_DOCUMENT_EXPIRED,
+                    ResourceRejectionReason.COMPLIANCE_DOCUMENT_UNRECORDED);
+            assertThat(rejections).extracting(Rejection::blocking).containsExactly(true, false);
+            assertThat(rejections).allSatisfy(rejection -> assertThat(rejection.sequence()).isZero());
+        }
+
+        @Test
+        @DisplayName("every rejection that is not a compliance warning blocks")
+        void otherRejectionsBlock() {
+            List<Rejection> rejections = WorkSequenceValidator.validate(
+                    List.of(trip("SH-1", "07:00", "09:00")), Arrays.asList((Long) null),
+                    new ResourceWindow(null, null, false, List.of()), LIMA);
+            assertThat(rejections).allSatisfy(rejection -> assertThat(rejection.blocking()).isTrue());
+        }
+
+        @Test
         @DisplayName("work outside the driver's hours is a shift conflict")
         void outsideShift() {
             List<Rejection> rejections = WorkSequenceValidator.validate(

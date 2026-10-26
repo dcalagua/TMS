@@ -36,4 +36,18 @@ public interface TripCostAnalyticsPort {
      * dropped it would understate the month by exactly the amounts nobody wants to be reminded of.
      */
     List<TripCostTotals> totalsByCurrency(UUID companyId, LocalDate from, LocalDate to);
+
+    /**
+     * The cost row of every shipment planned between {@code from} and {@code to} (both inclusive)
+     * that has one, for the carrier scorecard to sum per carrier.
+     *
+     * <p>The one method on this port that returns a row per shipment, and the exception is
+     * deliberate and narrow: {@code rates} does not know carriers (a cost row has none) and
+     * {@code planning} must not read {@code tms.trip_cost}, so the grouping can only be done on the
+     * planning side. What leaves the server is still an aggregate - per carrier and currency - and
+     * only for a caller holding {@code rates.trip_cost:read}, the permission of the per-shipment cost
+     * endpoint itself, so this opens no second door onto a shipment's price. Bounded by the report's
+     * range cap ({@code KpiRange.MAX_DAYS}).
+     */
+    List<TripCostFigure> figuresForRange(UUID companyId, LocalDate from, LocalDate to);
 }

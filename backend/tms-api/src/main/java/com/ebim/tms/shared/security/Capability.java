@@ -42,15 +42,19 @@ public enum Capability {
             Permission.FLEET_CARRIER_READ,
             Permission.FLEET_VEHICLE_TYPE_READ,
             Permission.FLEET_VEHICLE_READ,
-            Permission.FLEET_DRIVER_READ),
+            Permission.FLEET_DRIVER_READ,
+            // V72: the compliance documents screen lives in the fleet menu.
+            Permission.FLEET_DOCUMENT_READ),
     FLEET_MANAGE(
             Permission.FLEET_CARRIER_MANAGE,
             Permission.FLEET_VEHICLE_TYPE_MANAGE,
             Permission.FLEET_VEHICLE_MANAGE,
-            Permission.FLEET_DRIVER_MANAGE),
+            Permission.FLEET_DRIVER_MANAGE,
+            Permission.FLEET_DOCUMENT_MANAGE,
+            Permission.FLEET_DOCUMENT_POLICY_MANAGE),
 
     ORDERS_VIEW(Permission.ORDERS_ORDER_READ),
-    ORDERS_MANAGE(Permission.ORDERS_ORDER_MANAGE, Permission.ORDERS_HOLD_MANAGE),
+    ORDERS_MANAGE(Permission.ORDERS_ORDER_MANAGE, Permission.ORDERS_HOLD_MANAGE, Permission.ORDERS_TRACKING_LINK_MANAGE),
 
     PLANNING_VIEW(Permission.PLANNING_PLAN_READ),
     PLANNING_MANAGE(Permission.PLANNING_PLAN_MANAGE),
@@ -75,12 +79,22 @@ public enum Capability {
 
     TRANSPORT_MONITOR_VIEW(Permission.MONITORING_TRANSPORT_READ),
 
+    /**
+     * The carrier scorecard ({@code docs/domain/CARRIER_SCORECARD_V1.md}). Backed by the same
+     * permission as the transport monitor - the endpoint enforces {@code monitoring.transport:read},
+     * because this is the transport the control tower shows by carrier, asked over a range - and a
+     * capability of its own so the menu entry is a name the product can grant, hide or document on
+     * its own. No migration: a capability is derived from permissions and never stored.
+     */
+    CARRIER_SCORECARD_VIEW(Permission.MONITORING_TRANSPORT_READ),
+
     /** The document delivery monitor (ADR-018). */
     DOCUMENT_DELIVERY_VIEW(Permission.PLANNING_DOCUMENT_DELIVERY_READ),
     DOCUMENT_DELIVERY_MANAGE(Permission.PLANNING_DOCUMENT_DELIVERY_RETURN),
 
     /** The carrier portal (ADR-018): the only capability a carrier user holds. */
-    CARRIER_PORTAL(Permission.PORTAL_TRIP_READ, Permission.PORTAL_DOCUMENT_REPORT),
+    CARRIER_PORTAL(Permission.PORTAL_TRIP_READ, Permission.PORTAL_DOCUMENT_REPORT, Permission.PORTAL_STOP_EXECUTE,
+            Permission.PORTAL_DELIVERY_REPORT),
 
     /** "Mis facturas" in the carrier portal (V67, ADR-023 section 2). */
     CARRIER_INVOICES(Permission.PORTAL_INVOICE_READ),
@@ -136,6 +150,21 @@ public enum Capability {
     /** Cost to serve (migration V68, ADR-026): the report, and recalculating a trip's allocation. */
     COST_TO_SERVE_VIEW(Permission.SETTLEMENT_COST_ALLOCATION_READ),
     COST_ALLOCATION_MANAGE(Permission.SETTLEMENT_COST_ALLOCATION_MANAGE),
+
+    /**
+     * Freight claims and the incident centre (migration V71): reading them, opening and working
+     * one, and deciding it - the last of which is four-eyes against whoever opened the claim.
+     */
+    CLAIMS_VIEW(Permission.SETTLEMENT_CLAIM_READ),
+    CLAIMS_MANAGE(Permission.SETTLEMENT_CLAIM_MANAGE),
+    CLAIMS_DECIDE(Permission.SETTLEMENT_CLAIM_DECIDE),
+
+    /**
+     * The carbon footprint (migration V73). Its own capability rather than folded into cost to
+     * serve: a sustainability officer reads emissions and has no business reading what each
+     * customer costs.
+     */
+    EMISSIONS_VIEW(Permission.SETTLEMENT_EMISSION_READ),
 
     /**
      * The company's fiscal regime (migration V66, ADR-027): editing its fiscal country, VAT rates and

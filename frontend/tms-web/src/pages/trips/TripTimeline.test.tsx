@@ -54,4 +54,23 @@ describe("la línea de tiempo", () => {
     expect(screen.getByText("Salida")).toBeInTheDocument();
     expect(screen.queryByText("Integración")).not.toBeInTheDocument();
   });
+
+  it("V70: lo que registró el transportista desde el portal se distingue de lo de la oficina, con su nombre", () => {
+    render(<TripTimeline events={[
+      event({ id: "e-3", eventType: "ARRIVED_AT_STOP", source: "CARRIER_PORTAL", actorName: "chofer@trlit.example",
+        tripStopId: "s-1", stopSequence: 1, stopDestinationName: "Bodega" }),
+      event({ id: "e-4", eventType: "STOP_COMPLETED", source: "OPERATOR", actorName: "ana@ebim.pe",
+        tripStopId: "s-1", stopSequence: 1, stopDestinationName: "Bodega" }),
+    ]} />);
+
+    expect(screen.getAllByText("Transportista (portal)")).toHaveLength(1);
+    expect(screen.getByText(/chofer@trlit\.example/)).toBeInTheDocument();
+    expect(screen.queryByText("Integración")).not.toBeInTheDocument();
+  });
+
+  it("toda fuente de un hecho tiene etiqueta en español", () => {
+    for (const source of ["OPERATOR", "SYSTEM", "INTEGRATION", "CARRIER_PORTAL"]) {
+      expect(enumLabel("transportEventSource", source)).not.toBe(source);
+    }
+  });
 });

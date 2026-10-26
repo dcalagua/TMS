@@ -33,4 +33,7 @@ public interface DriverRepository extends JpaRepository<Driver, UUID>, JpaSpecif
     boolean existsByCompanyIdAndLicenseNumber(UUID companyId, String licenseNumber);
 
     boolean existsByCompanyIdAndLicenseNumberAndIdNot(UUID companyId, String licenseNumber, UUID id);
+
+    /** The active fleet, for the missing-mandatory-documents report (V72). */
+    List<Driver> findByCompanyIdAndActiveTrue(UUID companyId);
 }

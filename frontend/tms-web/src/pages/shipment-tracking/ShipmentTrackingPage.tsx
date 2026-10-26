@@ -11,12 +11,13 @@ import {
 } from "@mui/icons-material";
 import { fetchCarriers } from "../../shared/api/carriersApi";
 import type { ApiError } from "../../shared/api/httpClient";
-import type { TripStatus } from "../../shared/api/planningApi";
+import { TRIP_STATUSES, type TripStatus } from "../../shared/api/planningApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import {
   fetchShipmentTracking, fetchShipmentTrackingSummary, type ShipmentTrackingRow,
 } from "../../shared/api/shipmentTrackingApi";
 import { useCompany } from "../../shared/company/CompanyContext";
+import { isIsoDay, oneOf, useUrlFilters, type UrlFilterValidators } from "../../shared/ui/useUrlFilters";
 import { ShipmentOverviewMap } from "../../shared/maps/ShipmentOverviewMap";
 import { STOP_STATE_COLOR } from "../../shared/maps/shipmentMarkers";
 import {
@@ -40,6 +41,13 @@ const STATUS_OPTIONS: TripStatus[] = ["IN_TRANSIT", "COMPLETED", "READY_FOR_DISP
 
 type View = "list" | "map";
 
+const SHIPMENT_URL_VALIDATORS: UrlFilterValidators<Record<keyof ShipmentFilters, string>> = {
+  dateFrom: (value) => value === "" || isIsoDay(value),
+  dateTo: (value) => value === "" || isIsoDay(value),
+  status: (value) => value === "" || (TRIP_STATUSES as readonly string[]).includes(value),
+  documents: oneOf(["", "PENDING", "COMPLETE"]),
+};
+
 /**
  * Seguimiento de despachos (ADR-019 §2): los envíos que salieron de verdad del almacén - su
  * despacho (ADR-013), con la placa y el conductor que reportó el almacén y su verificación contra
@@ -56,12 +64,14 @@ export function ShipmentTrackingPage() {
   const wide = useMediaQuery(theme.breakpoints.up("lg"), { noSsr: true });
 
   const [defaults] = useState(defaultShipmentFilters);
-  const [filters, setFiltersState] = useState<ShipmentFilters>(defaults);
+  // Ítem 11: los filtros viven en la URL; un enlace o una recarga conservan el rango y el estado.
+  const [urlFilters, setUrlFilters] = useUrlFilters<Record<keyof ShipmentFilters, string>>(defaults, SHIPMENT_URL_VALIDATORS);
+  const filters = urlFilters as ShipmentFilters;
   const [page, setPage] = useState(0);
   const [view, setView] = useState<View>("list");
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [openRow, setOpenRow] = useState<ShipmentTrackingRow | null>(null);
-  const setFilters = (next: ShipmentFilters) => { setFiltersState(next); setPage(0); };
+  const setFilters = (next: ShipmentFilters) => { setUrlFilters(next); setPage(0); };
 
   const params = toQueryParams(filters);
 

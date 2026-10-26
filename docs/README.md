@@ -28,7 +28,10 @@ capabilities.
   technical person in the room.
 - [`product/KNOWN_LIMITATIONS.md`](product/KNOWN_LIMITATIONS.md) - blockers, defects, gaps and scale
   ceilings, each with what closing it needs.
-- [`product/ROADMAP_NEXT.md`](product/ROADMAP_NEXT.md) - what comes next, and what was declined.
+- [`roadmap/ROADMAP.md`](roadmap/ROADMAP.md) - **the product roadmap** (Spanish, 2026-10-18): H0 before
+  production, H1–H2, out of scope and the shared EWM ⇄ TMS dependency table.
+- [`product/ROADMAP_NEXT.md`](product/ROADMAP_NEXT.md) - older roadmap note, superseded by
+  `roadmap/ROADMAP.md`; kept for what was declined.
 - [`product/API_EXAMPLES.md`](product/API_EXAMPLES.md) - runnable inbound/outbound calls, no real
   secrets.
 - [`product/demo-data/`](product/demo-data/) - **local/demo only** import fixtures.

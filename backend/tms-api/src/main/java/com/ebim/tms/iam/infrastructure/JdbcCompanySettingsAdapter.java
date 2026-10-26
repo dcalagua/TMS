@@ -26,7 +26,7 @@ public class JdbcCompanySettingsAdapter implements CompanySettingsPort {
     private static final String SETTINGS_SQL = """
             SELECT default_country, order_number_prefix, shipment_number_prefix, dispatch_confirmation_mode,
                    reference_load_height_m, load_floor_fill_factor, accrual_trigger,
-                   cost_allocation_basis
+                   cost_allocation_basis, tracking_plate_display
             FROM tms.company_settings
             WHERE company_id = :companyId
             """;
@@ -55,7 +55,8 @@ public class JdbcCompanySettingsAdapter implements CompanySettingsPort {
                         rs.getBigDecimal("reference_load_height_m"),
                         rs.getBigDecimal("load_floor_fill_factor"),
                         CompanySettings.accrualTriggerOf(rs.getString("accrual_trigger")),
-                        CompanySettings.costAllocationBasisOf(rs.getString("cost_allocation_basis"))))
+                        CompanySettings.costAllocationBasisOf(rs.getString("cost_allocation_basis")),
+                        CompanySettings.trackingPlateDisplayOf(rs.getString("tracking_plate_display"))))
                 .optional()
                 .orElseGet(CompanySettings::defaults);
     }

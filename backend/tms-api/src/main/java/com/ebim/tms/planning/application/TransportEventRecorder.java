@@ -68,7 +68,7 @@ public class TransportEventRecorder {
         AuditActor actor = auditActorProvider.current().orElseThrow(() -> new IllegalStateException(
                 "no authenticated actor: a transport event must be recorded inside an authenticated request"));
         return repository.saveAndFlush(new TransportEvent(
-                scope.companyId(), tripId, tripStopId, eventType, eventTime, sourceOf(actor),
+                scope.companyId(), tripId, tripStopId, eventType, eventTime, sourceOf(scope, actor),
                 actor.appUserId(), actor.email(), actor.machineActorLabel(),
                 // No position in V1: nothing reports one. The columns exist so that the day a
                 // telematics feed or a driver app does, recording it is a change here and not a
@@ -78,13 +78,14 @@ public class TransportEventRecorder {
     }
 
     /**
-     * A person acting in the UI is an {@code OPERATOR}; an authenticated partner over the M2M API
-     * is an {@code INTEGRATION}. {@link TransportEventSource#SYSTEM} has no producer yet and is
+     * A person acting in the office UI is an {@code OPERATOR}; a carrier user in the portal a
+     * {@code CARRIER_PORTAL} (V70); an authenticated partner over the M2M API an
+     * {@code INTEGRATION}. {@link TransportEventSource#SYSTEM} has no producer yet and is
      * deliberately unreachable from here: it describes a fact nobody typed, and every path into
      * this recorder today runs inside somebody's request.
      */
-    private static TransportEventSource sourceOf(AuditActor actor) {
-        return actor.isMachine() ? TransportEventSource.INTEGRATION : TransportEventSource.OPERATOR;
+    static TransportEventSource sourceOf(CompanyScope scope, AuditActor actor) {
+        return TransportEventSource.of(actor.isMachine(), scope.isCarrierScoped());
     }
 
     /**

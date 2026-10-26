@@ -23,6 +23,10 @@ export type ResourceRejectionReason =
   | 'LICENSE_INVALID'
   /** Aceptado por un transportista que no es dueño del vehículo (V42). Se reporta, nunca se repara. */
   | 'CARRIER_MISMATCH'
+  /** V72: un papel del vehículo o del conductor venció. Bloquea o avisa según la política del tipo. */
+  | 'COMPLIANCE_DOCUMENT_EXPIRED'
+  /** V72: un papel obligatorio no está registrado o no tiene fecha. Sólo avisa. */
+  | 'COMPLIANCE_DOCUMENT_UNRECORDED'
 
 export interface WorkAssignmentTripView {
   tripId: string
@@ -41,6 +45,11 @@ export interface WorkAssignmentConflictView {
   reason: ResourceRejectionReason
   /** La frase que dice qué pasa, compuesta en el servidor junto a las cifras que la sostienen. */
   detail: string
+  /**
+   * V72: false es un AVISO (un papel sin registrar, o uno vencido cuya política sólo avisa); no impide
+   * confirmar el día. Opcional para tolerar un backend anterior, que sólo conocía conflictos que bloquean.
+   */
+  blocking?: boolean
 }
 
 /**

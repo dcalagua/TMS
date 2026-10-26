@@ -371,6 +371,27 @@ duplicates, so the index needs a data decision before it can be a migration.
 Skipping a stop, failing one and reporting a trip-level problem share one drawer: they differ only
 in which stop the problem attaches to and in what the button says.
 
+### The printable route sheet (2026-10)
+
+*Imprimir hoja de ruta* opens `/trips/{id}/print` in a new tab: an A4 page outside the office shell
+(no menu, no top bar), printed with the browser's own dialog and `@media print` CSS - no PDF library;
+"Save as PDF" in that dialog already produces one. It carries the company, the shipment and plan
+numbers, origin, planned departure, route, plate, carrier (the one that accepted the tender when it
+differs) and driver; the totals assigned to the trip; and every stop in visiting order with its
+address, service window, ETA when there is one, the orders delivered there with their lines and the
+ERP's documents (for instance the SRI 06 remission guide and its clave de acceso), and a *Received in
+good order* box to fill in by hand. Driver, dispatch and gate signatures close the sheet.
+
+- **No amounts.** The sheet travels with the driver and is signed at the customer's door; what a trip
+  or an invoice is worth has its own permission in the office.
+- **Lines are the order's.** A split order travels in part and the trip knows its weight, volume and
+  pallets but not which lines: the sheet prints the order's lines and says the trip carries part of
+  it, rather than inventing a per-line split.
+- **Without `orders.order:read`** the sheet still prints, with what the trip knows of each stop, and
+  says that lines and documents are missing.
+- Fixed black-on-white colours: in dark mode the theme would print an unreadable page.
+  Code: `frontend/tms-web/src/pages/trips/TripRouteSheet.tsx` and `TripRouteSheetPage.tsx`.
+
 ## 12. Deliberately not in V1
 
 - **No planned arrival or departure per stop.** There is nothing to put in them: TMS has no ETA

@@ -10,6 +10,7 @@ import {
   type DispatchConfirmationMode, type AccrualTrigger, ACCRUAL_TRIGGERS,
 } from "../../shared/api/administrationApi";
 import { COST_ALLOCATION_BASES, type CostAllocationBasis } from "../../shared/api/costToServeApi";
+import { TRACKING_PLATE_DISPLAYS, type TrackingPlateDisplay } from "../../shared/api/trackingLinksApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
@@ -48,11 +49,12 @@ interface CompanyFormValues {
   accrualTrigger: AccrualTrigger;
   /** "" = la base por defecto de la instalación (peso); no se envía. */
   costAllocationBasis: CostAllocationBasis | "";
+  trackingPlateDisplay: TrackingPlateDisplay;
 }
 
 const KNOWN_FIELDS = new Set<keyof CompanyFormValues>([
   "name", "taxIdentifier", "timeZone", "defaultCountry", "orderNumberPrefix", "shipmentNumberPrefix",
-  "dispatchConfirmationMode", "accrualTrigger", "costAllocationBasis",
+  "dispatchConfirmationMode", "accrualTrigger", "costAllocationBasis", "trackingPlateDisplay",
 ]);
 
 /** Qué significa cada modo para quien opera, en una frase (ADR-013 §1). */
@@ -98,6 +100,7 @@ export function CompanySettingsPage() {
       dispatchConfirmationMode: "MANUAL",
       accrualTrigger: "DISPATCHED",
       costAllocationBasis: "",
+      trackingPlateDisplay: "MASKED",
     },
   });
 
@@ -117,6 +120,7 @@ export function CompanySettingsPage() {
       dispatchConfirmationMode: profile.settings.dispatchConfirmationMode ?? "MANUAL",
       accrualTrigger: profile.settings.accrualTrigger ?? "DISPATCHED",
       costAllocationBasis: profile.settings.costAllocationBasis ?? "",
+      trackingPlateDisplay: profile.settings.trackingPlateDisplay ?? "MASKED",
     });
   }, [profile, reset]);
 
@@ -142,6 +146,7 @@ export function CompanySettingsPage() {
       dispatchConfirmationMode: values.dispatchConfirmationMode,
       accrualTrigger: values.accrualTrigger,
       costAllocationBasis: values.costAllocationBasis === "" ? undefined : values.costAllocationBasis,
+      trackingPlateDisplay: values.trackingPlateDisplay,
     };
 
     try {
@@ -343,6 +348,26 @@ export function CompanySettingsPage() {
                   )}
                   {COST_ALLOCATION_BASES.map((basis) => (
                     <MenuItem key={basis} value={basis}>{enumLabel("costAllocationBasis", basis)}</MenuItem>
+                  ))}
+                </TextField>
+              )}
+            />
+          </AppCard>
+
+          <AppCard title={t("Seguimiento para el cliente")}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {t("Qué ve de la placa quien abre un enlace de seguimiento. El enlace nunca muestra la placa completa, el conductor, precios ni direcciones.")}
+            </Typography>
+            <Controller
+              name="trackingPlateDisplay"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  select size="small" fullWidth label={t("Placa en el enlace")}
+                  value={field.value} onChange={field.onChange} onBlur={field.onBlur}
+                >
+                  {TRACKING_PLATE_DISPLAYS.map((display) => (
+                    <MenuItem key={display} value={display}>{enumLabel("trackingPlateDisplay", display)}</MenuItem>
                   ))}
                 </TextField>
               )}

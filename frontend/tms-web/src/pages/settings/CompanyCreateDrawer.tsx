@@ -5,6 +5,8 @@ import { AddBusinessRounded, CheckRounded } from "@mui/icons-material";
 import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import { createCompany, type CompanyCreateRequest } from "../../shared/api/administrationApi";
+import { companyDefaultTimeZone } from "../../shared/api/meApi";
+import { useCompany } from "../../shared/company/CompanyContext";
 import { FormDrawer, FormRow, FormSection } from "../../shared/ui/components";
 import { t } from "../../lib/i18n";
 
@@ -41,12 +43,15 @@ const KNOWN_FIELDS = new Set<keyof CompanyCreateFormValues>(["code", "name", "ta
  */
 export function CompanyCreateDrawer({ companyId, onClose, onCreated }: CompanyCreateDrawerProps) {
   const [formError, setFormError] = useState<string | null>(null);
+  const { selected } = useCompany();
 
   const {
     register, handleSubmit, setError, setValue, watch,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<CompanyCreateFormValues>({
-    defaultValues: { code: "", name: "", taxIdentifier: "", timeZone: "America/Lima" },
+    // D1: el huso de la empresa activa (una empresa nueva de la misma organización suele operar en
+    // el mismo país); sin ella, el del navegador.
+    defaultValues: { code: "", name: "", taxIdentifier: "", timeZone: companyDefaultTimeZone(selected) },
   });
 
   async function onSubmit(values: CompanyCreateFormValues) {
