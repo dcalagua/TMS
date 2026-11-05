@@ -67,6 +67,9 @@ interface LocationFormValues {
   serviceTimeMinutes: string;
   externalSystem: string;
   externalReference: string;
+  contactName: string;
+  contactPhone: string;
+  deliveryInstructions: string;
 }
 
 interface LocationFormDrawerProps {
@@ -86,7 +89,7 @@ interface LocationFormDrawerProps {
 const KNOWN_FIELDS = new Set<keyof LocationFormValues>([
   "code", "name", "type", "roles", "zoneId", "address", "addressReference", "district", "province",
   "department", "country", "timeZone", "latitude", "longitude", "serviceTimeMinutes",
-  "externalSystem", "externalReference",
+  "externalSystem", "externalReference", "contactName", "contactPhone", "deliveryInstructions",
 ]);
 
 /**
@@ -134,9 +137,15 @@ export function LocationFormDrawer({ companyId, location, presetRole, onClose, o
       serviceTimeMinutes: location?.serviceTimeMinutes?.toString() ?? "0",
       externalSystem: location?.externalSystem ?? "",
       externalReference: location?.externalReference ?? "",
+      contactName: location?.contactName ?? "",
+      contactPhone: location?.contactPhone ?? "",
+      deliveryInstructions: location?.deliveryInstructions ?? "",
     },
   });
 
+  // V75: el contacto de entrega es de un destino. Un lugar que solo es origen no lo muestra ni lo
+  // guarda; uno que es origen y destino a la vez, sí.
+  const isDestination = useWatch({ control, name: "roles" }).includes("DESTINATION");
   const watchedLatitude = useWatch({ control, name: "latitude" });
   const watchedLongitude = useWatch({ control, name: "longitude" });
   const mapLatitude = parseCoordinate(watchedLatitude);
@@ -172,6 +181,7 @@ export function LocationFormDrawer({ companyId, location, presetRole, onClose, o
 
   async function onSubmit(values: LocationFormValues) {
     setFormError(null);
+    const destination = values.roles.includes("DESTINATION");
     const request: LocationRequest = {
       code: values.code.trim(),
       name: values.name.trim(),
@@ -190,6 +200,10 @@ export function LocationFormDrawer({ companyId, location, presetRole, onClose, o
       serviceTimeMinutes: values.serviceTimeMinutes.trim() === "" ? 0 : Number(values.serviceTimeMinutes),
       externalSystem: values.externalSystem.trim() || null,
       externalReference: values.externalReference.trim() || null,
+      // Solo un destino guarda contacto: al dejar de serlo, se limpia en lugar de quedar oculto.
+      contactName: destination ? values.contactName.trim() || null : null,
+      contactPhone: destination ? values.contactPhone.trim() || null : null,
+      deliveryInstructions: destination ? values.deliveryInstructions.trim() || null : null,
     };
 
     try {
@@ -205,6 +219,7 @@ export function LocationFormDrawer({ companyId, location, presetRole, onClose, o
     { id: "location-identification", label: t("Identificación") },
     { id: "location-roles", label: t("Uso operacional") },
     { id: "location-address", label: t("Dirección") },
+    ...(isDestination ? [{ id: "location-contact", label: t("Contacto de entrega") }] : []),
     { id: "location-geo", label: t("Ubicación geográfica") },
     { id: "location-operation", label: t("Operación") },
     { id: "location-external", label: t("Identificación externa") },
@@ -393,6 +408,41 @@ export function LocationFormDrawer({ companyId, location, presetRole, onClose, o
             />
           </FormRow>
         </FormSection>
+
+        {isDestination && (
+        <FormSection
+          id="location-contact"
+          title={t("Contacto de entrega")}
+          help={t("Quién recibe aquí y qué debe saber el conductor al llegar. Lo ve el transportista en la parada del portal.")}
+        >
+          <FormRow>
+            <TextField
+              label={t("Persona de contacto")} size="small" fullWidth placeholder={t("p. ej. Rosa Pérez, jefa de bodega")}
+              error={Boolean(errors.contactName)} helperText={errors.contactName?.message}
+              {...register("contactName", {
+                maxLength: { value: 120, message: t("No puede superar los {{count}} caracteres", { count: 120 }) },
+              })}
+            />
+            <TextField
+              label={t("Teléfono de contacto")} size="small" fullWidth placeholder="+593 99 123 4567"
+              slotProps={{ htmlInput: { inputMode: "tel" } }}
+              error={Boolean(errors.contactPhone)} helperText={errors.contactPhone?.message}
+              {...register("contactPhone", {
+                maxLength: { value: 40, message: t("No puede superar los {{count}} caracteres", { count: 40 }) },
+                pattern: { value: /^[0-9+()\s-]*$/, message: t("Solo dígitos, espacios y los signos + - ( )") },
+              })}
+            />
+          </FormRow>
+          <TextField
+            label={t("Indicaciones de entrega")} size="small" fullWidth multiline minRows={2}
+            placeholder={t("p. ej. Descargar por el portón trasero; recepción de 8:00 a 16:00")}
+            error={Boolean(errors.deliveryInstructions)} helperText={errors.deliveryInstructions?.message}
+            {...register("deliveryInstructions", {
+              maxLength: { value: 500, message: t("No puede superar los {{count}} caracteres", { count: 500 }) },
+            })}
+          />
+        </FormSection>
+        )}
 
         <FormSection
           id="location-geo"

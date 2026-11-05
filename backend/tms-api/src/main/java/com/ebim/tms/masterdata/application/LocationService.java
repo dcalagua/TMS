@@ -106,6 +106,8 @@ public class LocationService {
                 blankToNull(request.district()), blankToNull(request.province()), blankToNull(request.department()),
                 request.country().trim(), request.timeZone().trim(), request.latitude(), request.longitude(),
                 request.zoneId(), request.serviceTimeMinutes(), identity.system(), identity.reference(), actorId);
+        location.setDeliveryContact(blankToNull(request.contactName()), blankToNull(request.contactPhone()),
+                blankToNull(request.deliveryInstructions()), actorId);
         location.replaceRoles(request.roles());
 
         Location saved = saveOrConflict(location, code);
@@ -133,6 +135,8 @@ public class LocationService {
                 blankToNull(request.province()), blankToNull(request.department()), request.country().trim(),
                 request.timeZone().trim(), request.latitude(), request.longitude(), request.zoneId(),
                 request.serviceTimeMinutes(), identity.system(), identity.reference(), actorId);
+        location.setDeliveryContact(blankToNull(request.contactName()), blankToNull(request.contactPhone()),
+                blankToNull(request.deliveryInstructions()), actorId);
         location.replaceRoles(request.roles());
 
         Location saved = saveOrConflict(location, code);

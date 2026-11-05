@@ -18,6 +18,7 @@ import com.ebim.tms.shared.api.IdempotencyConflictException;
 import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.reference.GeoPoint;
 import com.ebim.tms.shared.reference.OrderAmounts;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.time.Clock;
@@ -95,12 +96,13 @@ public class PortalExecutionService {
         this.clock = clock;
     }
 
-    /** The vehicle is at the stop. */
+    /** The vehicle is at the stop, with the phone's position when the browser gave one (V75). */
     @Transactional
     public PortalTripDetailView arrive(CompanyScope scope, UUID tripId, UUID stopId, String idempotencyKey,
-            TripStopExecutionRequest request) {
+            PortalArrivalRequest request) {
+        GeoPoint position = request.position();
         return execute(scope, tripId, stopId, null, PortalAction.STOP_ARRIVE, idempotencyKey,
-                () -> stopExecution.arrive(scope, tripId, stopId, request));
+                () -> stopExecution.arrive(scope, tripId, stopId, request.toStopRequest(), position));
     }
 
     /** Unloading has started. Optional, as in the office: arrival may go straight to completion. */
@@ -254,11 +256,13 @@ public class PortalExecutionService {
                     .map(TripOrderAssignment::assigned)
                     .orElseThrow(() -> new ResourceNotFoundException("That order is not on this trip."));
             quantities = PortalDeliveryQuantities.fromRefused(allocated, command.refused());
-        } else if (result == DeliveryResult.PARTIAL) {
-            throw new InvalidRequestException("Say how much the customer refused to record a partial delivery.");
+        } else if (result == DeliveryResult.PARTIAL && command.refusedLines() == null) {
+            // V75: the refused products are the other way to say it; TripDeliveryService derives the
+            // kilos from them.
+            throw new InvalidRequestException("Say what the customer refused to record a partial delivery.");
         }
         return new DeliveryResultRequest(result, deliveredAt, command.receiverName(), command.receiverDocument(),
-                command.notes(), quantities);
+                command.notes(), quantities, command.refusedLines());
     }
 
     private static String requireKey(String key) {

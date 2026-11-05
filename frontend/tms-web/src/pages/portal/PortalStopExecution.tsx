@@ -10,7 +10,7 @@ import { StatusChip } from "../../shared/ui/components";
 import { DELIVERY_RESULT_TONE } from "../../shared/ui/statusTones";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
-import { fmtDateTime, fmtTime } from "../../lib/locale";
+import { fmtDateTime, fmtQuantity, fmtTime } from "../../lib/locale";
 import { R } from "../../theme";
 import type { ShownIncident, ShownOrder, ShownStop } from "./offline/overlay";
 import { PORTAL_STOP_ACTIONS } from "./portalExecution";
@@ -148,6 +148,14 @@ function OrderRow({ order, canReport, busy, onOpen }: { order: ShownOrder; canRe
             <Typography color="text.secondary" sx={{ fontSize: 13 }}>{t("Registrado por la oficina")}</Typography>
           )}
         </Box>
+        {/* V75: qué productos volvieron al camión, en la unidad de cada uno. */}
+        {delivery?.refusedLines && delivery.refusedLines.length > 0 && (
+          <Typography color="text.secondary" sx={{ fontSize: 14, mt: 0.25, fontVariantNumeric: "tabular-nums" }}>
+            {t("Rechazó")}: {delivery.refusedLines
+              .map((line) => `${fmtQuantity(line.quantity)} ${line.uom} ${line.materialCode ?? ""}`.trim())
+              .join(" · ")}
+          </Typography>
+        )}
       </Box>
       {canReport && (
         <Button

@@ -2,6 +2,7 @@ package com.ebim.tms.planning.application;
 
 import com.ebim.tms.planning.domain.TransportEventSource;
 import com.ebim.tms.planning.domain.TransportEventType;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -22,6 +23,10 @@ import java.util.UUID;
  * @param metadata the event's compact JSON detail, verbatim, or null. Passed through as a string
  *     rather than re-parsed into a map: nothing in the UI reads inside it, and re-serialising it
  *     would only create a second shape for the same bytes.
+ * @param distanceToStopKm straight-line kilometres between where the person reported this from and
+ *     the stop's destination (V75) - the carrier portal's «Llegué» sends the phone's position. Null
+ *     when either point is unknown: no position was granted, or the destination has no
+ *     coordinates. Display only; nothing compares it with anything (ADR-007, ADR-011).
  */
 public record TransportEventView(
         UUID id,
@@ -36,5 +41,6 @@ public record TransportEventView(
         TransportEventSource source,
         String actorName,
         String notes,
-        String metadata) {
+        String metadata,
+        BigDecimal distanceToStopKm) {
 }

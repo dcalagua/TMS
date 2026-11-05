@@ -333,6 +333,8 @@ class TripExecutionServiceTest {
             service.dispatch(scope, TRIP_ID, current(trip, left));
 
             verify(alerts).departed(scope, trip, left);
+            // V75: "it is on the road" is an alert of its own, late or not.
+            verify(alerts).dispatched(scope, trip, left);
         }
 
         @Test

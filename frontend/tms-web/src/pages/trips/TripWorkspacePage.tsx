@@ -38,13 +38,14 @@ import { TripDriverDrawer } from "../planning/TripDriverDrawer";
 import { confirmDialog, notifyError, notifySuccess, promptDialog } from "../../lib/ui";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
-import { fmtDate, fmtDateTime, fmtMinutes, fmtTime } from "../../lib/locale";
+import { fmtDate, fmtDateTime, fmtMinutes, fmtQuantity, fmtTime } from "../../lib/locale";
 import { DeliveryDrawer, type DeliveryValues } from "./DeliveryDrawer";
 import { DeliveryEvidenceDrawer, type DeliveryEvidenceValues } from "./DeliveryEvidenceDrawer";
 import { TripCostCard } from "./TripCostCard";
 import { TripProblemDrawer, type TripProblemMode, type TripProblemValues } from "./TripProblemDrawer";
 import { TripTenderCard } from "./TripTenderCard";
 import { TripTimeline } from "./TripTimeline";
+import { FAR_FROM_STOP_KM, arrivalDistanceByStop, arrivalDistanceHint, fmtDistance } from "./arrivalDistance";
 import { TripTrackingCard } from "./TripTrackingCard";
 import { TripWarehouseCard } from "./TripWarehouseCard";
 import { TripDocumentsCard } from "./TripDocumentsCard";
@@ -548,6 +549,8 @@ export function TripWorkspacePage() {
   /** Las entregas de una parada, indexadas por pedido: la respuesta viene plana a propósito
    * porque una pantalla la agrupa por parada y otra por pedido, y las dos claves están ahí. */
   const deliveriesByStop = (stopId: string) => deliveries.filter((entry) => entry.tripStopId === stopId);
+  // V75: a qué distancia del destino se pulsó «Llegué», de la misma historia que se pinta abajo.
+  const arrivalDistances = arrivalDistanceByStop(eventsQuery.data ?? []);
   const orderNumbers = new Map(assignments.map((assignment) => [assignment.orderId, assignment.orderNumber]));
 
   return (
@@ -773,6 +776,17 @@ export function TripWorkspacePage() {
                             <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                               {[stop.address, window].filter(Boolean).join(" · ") || stop.destinationCode}
                             </Typography>
+                            {/* V75: lo mismo que lee el transportista en el portal al llegar. */}
+                            {(stop.contactName || stop.contactPhone) && (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                                {t("Recibe")}: {[stop.contactName, stop.contactPhone].filter(Boolean).join(" · ")}
+                              </Typography>
+                            )}
+                            {stop.deliveryInstructions && (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontStyle: "italic" }}>
+                                {stop.deliveryInstructions}
+                              </Typography>
+                            )}
                           </Box>
                           <StatusChip
                             label={enumLabel("stopExecutionStatus", stop.executionStatus)}
@@ -786,6 +800,19 @@ export function TripWorkspacePage() {
                             {stop.actualDepartureAt && ` · ${t("Salida")} ${fmtTime(stop.actualDepartureAt)}`}
                             {stop.dwellMinutes !== null && ` · ${t("Permanencia")} ${fmtMinutes(stop.dwellMinutes)}`}
                           </Typography>
+                        )}
+                        {arrivalDistances.has(stop.id) && (
+                          <Tooltip title={arrivalDistanceHint()}>
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                display: "block", width: "fit-content", fontWeight: 600, fontVariantNumeric: "tabular-nums",
+                                color: (arrivalDistances.get(stop.id) ?? 0) > FAR_FROM_STOP_KM ? "warning.main" : "text.secondary",
+                              }}
+                            >
+                              {t("Llegó a {{distance}} del destino", { distance: fmtDistance(arrivalDistances.get(stop.id) ?? 0) })}
+                            </Typography>
+                          </Tooltip>
                         )}
 
                         {stop.executionNotes && (
@@ -822,6 +849,15 @@ export function TripWorkspacePage() {
                                       />
                                       {recorded.receiverName && (
                                         <Typography variant="caption" color="text.secondary">{recorded.receiverName}</Typography>
+                                      )}
+                                      {/* V75: qué productos rechazó el cliente, en la unidad de cada uno. */}
+                                      {recorded.lines && recorded.lines.some((line) => line.quantityRefused > 0) && (
+                                        <Typography variant="caption" color="error.main" sx={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                                          {t("Rechazó")}: {recorded.lines
+                                            .filter((line) => line.quantityRefused > 0)
+                                            .map((line) => `${fmtQuantity(line.quantityRefused)} ${line.uom} ${line.materialCode ?? ""}`.trim())
+                                            .join(" · ")}
+                                        </Typography>
                                       )}
                                       {/* Quién lo registró (V70): la oficina o el transportista desde el portal. */}
                                       <Typography variant="caption" color={recorded.source === "CARRIER_PORTAL" ? "info.main" : "text.secondary"}

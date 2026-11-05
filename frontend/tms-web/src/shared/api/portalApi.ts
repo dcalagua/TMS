@@ -81,6 +81,13 @@ export interface PortalStop {
   sequence: number | null
   destinationName: string | null
   address: string | null
+  /**
+   * V75: who receives at the destination, their phone and what the driver must know there, as the
+   * office set them on the location. Absent on a trip cached by an older version of the portal.
+   */
+  contactName?: string | null
+  contactPhone?: string | null
+  deliveryInstructions?: string | null
   /** WGS84 of the stop's destination (ADR-019 §2, additive): opens navigation. Absent on older servers. */
   latitude?: number | null
   longitude?: number | null
@@ -109,6 +116,32 @@ export interface PortalStopOrder {
   assignedPallets: number | null
   /** Null while nothing was recorded for this order at this stop. */
   delivery: PortalDelivery | null
+  /**
+   * V75: the order's products, so a partial delivery can say which came back. Empty when only part
+   * of the order travels on this trip (its refusal is in kilos); absent on an older cached trip.
+   */
+  lines?: PortalOrderLine[]
+}
+
+/** One product of an order (V75): how many were ordered, in what unit, and what one weighs. */
+export interface PortalOrderLine {
+  orderLineId: string
+  lineNumber: number
+  materialCode: string
+  materialDescription: string | null
+  quantity: number
+  uom: string
+  unitWeightKg: number | null
+}
+
+/** One product the customer refused (V75), in the line's own unit. */
+export interface PortalRefusedLine {
+  orderLineId: string
+  lineNumber: number | null
+  materialCode: string | null
+  quantity: number
+  uom: string
+  notes: string | null
 }
 
 /** The delivery the carrier (or the office, correcting it) recorded - `source` says who. */
@@ -125,6 +158,8 @@ export interface PortalDelivery {
   refusedWeightKg: number | null
   refusedVolumeM3: number | null
   refusedPallets: number | null
+  /** V75: the products that came back. Absent on an older cached trip. */
+  refusedLines?: PortalRefusedLine[]
 }
 
 /** A problem on the trip (V70), reported by the carrier or by the office. */
@@ -173,6 +208,11 @@ export interface PortalDeliveryInput {
   refusedWeightKg?: number | null
   refusedVolumeM3?: number | null
   refusedPallets?: number | null
+  /**
+   * V75: which products the customer refused, for a `PARTIAL` delivery of an order that travels
+   * whole. With no refused kilos, the server derives them from the products' unit weights.
+   */
+  refusedLines?: { orderLineId: string; quantity: number; notes?: string | null }[] | null
   photos: Blob[]
   signature?: Blob | null
 }
@@ -183,7 +223,9 @@ export interface PortalDeliveryInput {
  */
 export type PortalExecutionAction =
   | { type: 'STOP'; stopId: string; transition: PortalStopTransition; occurredAt: string;
-      notes?: string | null; exceptionType?: TripExceptionType | null }
+      notes?: string | null; exceptionType?: TripExceptionType | null;
+      /** V75, «Llegué» only: where the phone was, when the browser allowed it. Both or neither. */
+      latitude?: number | null; longitude?: number | null }
   | { type: 'DELIVERY'; stopId: string; orderId: string; input: PortalDeliveryInput }
   | { type: 'INCIDENT'; tripStopId: string | null; exceptionType: TripExceptionType; occurredAt: string;
       notes?: string | null }
@@ -262,6 +304,10 @@ export function buildDeliveryFormData(input: PortalDeliveryInput): FormData {
   for (const [name, value] of fields) {
     if (value !== null && value !== undefined && value !== '') formData.append(name, String(value))
   }
+  // V75: one JSON field, so a product's optional note cannot slide onto its neighbour.
+  if (input.refusedLines && input.refusedLines.length > 0) {
+    formData.append('refusedLines', JSON.stringify(input.refusedLines))
+  }
   input.photos.forEach((photo, index) => {
     formData.append('photos', photo, fileNameOf(photo, `foto-${index + 1}.jpg`))
   })
@@ -290,6 +336,9 @@ export function sendPortalExecution(
           occurredAt: action.occurredAt,
           notes: action.notes ?? null,
           ...(action.transition === 'fail' ? { exceptionType: action.exceptionType ?? null } : {}),
+          ...(action.transition === 'arrive' && action.latitude != null && action.longitude != null
+            ? { latitude: action.latitude, longitude: action.longitude }
+            : {}),
         },
       })
     case 'DELIVERY':

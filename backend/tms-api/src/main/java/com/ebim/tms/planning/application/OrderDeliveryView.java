@@ -52,7 +52,18 @@ public record OrderDeliveryView(
          * zero. Every delivery written before V45 carries null here and made no claim about
          * amounts; showing them as "0 delivered" would invent a shortfall that never happened.
          */
-        DeliveryQuantitiesView quantities) {
+        DeliveryQuantitiesView quantities,
+        /**
+         * What happened to each product (V75), by line number: delivered and refused in the line's
+         * own unit. Empty when the delivery recorded no per-product detail - a share of a split
+         * order, or a partial result given in kilos only.
+         */
+        List<DeliveryLineView> lines) {
+
+    /** One product of the delivery. {@code notes} says why it was refused, when somebody said. */
+    public record DeliveryLineView(UUID orderLineId, Integer lineNumber, String materialCode, String uom,
+            BigDecimal quantityAttempted, BigDecimal quantityDelivered, BigDecimal quantityRefused, String notes) {
+    }
 
     /**
      * The four figures, flattened for the wire. {@code outstanding} is derived server-side rather

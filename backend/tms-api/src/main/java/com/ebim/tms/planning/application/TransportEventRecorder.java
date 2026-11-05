@@ -6,7 +6,9 @@ import com.ebim.tms.planning.domain.TransportEventType;
 import com.ebim.tms.planning.infrastructure.TransportEventRepository;
 import com.ebim.tms.shared.audit.AuditActor;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.reference.GeoPoint;
 import com.ebim.tms.shared.security.CompanyScope;
+import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.UUID;
@@ -40,6 +42,9 @@ public class TransportEventRecorder {
     /** Matches {@code ck_transport_event_metadata_length} (migration V27). */
     private static final int MAX_METADATA_LENGTH = 4000;
 
+    /** The scale of {@code transport_event.latitude/longitude}, {@code numeric(9,6)} (migration V27). */
+    private static final int COORDINATE_SCALE = 6;
+
     private final TransportEventRepository repository;
     private final AuditActorProvider auditActorProvider;
     private final ObjectMapper objectMapper;
@@ -65,15 +70,28 @@ public class TransportEventRecorder {
      */
     public TransportEvent record(CompanyScope scope, UUID tripId, UUID tripStopId, TransportEventType eventType,
             OffsetDateTime eventTime, String notes, Map<String, Object> metadata) {
+        return record(scope, tripId, tripStopId, eventType, eventTime, notes, metadata, null);
+    }
+
+    /**
+     * {@link #record(CompanyScope, UUID, UUID, TransportEventType, OffsetDateTime, String, Map)} with
+     * the position the person reported the fact from (V75): the carrier portal's «Llegué» sends the
+     * phone's location when the browser grants it. The optional position of a <em>reported fact</em>
+     * that V27 created the columns for and ADR-007 keeps them for - it informs whoever reads the
+     * timeline and decides nothing.
+     *
+     * @param position where the reporter was, or null when nothing was reported. Rounded to the
+     *     column's six decimals (about 10 cm), which is finer than any phone's fix
+     */
+    public TransportEvent record(CompanyScope scope, UUID tripId, UUID tripStopId, TransportEventType eventType,
+            OffsetDateTime eventTime, String notes, Map<String, Object> metadata, GeoPoint position) {
         AuditActor actor = auditActorProvider.current().orElseThrow(() -> new IllegalStateException(
                 "no authenticated actor: a transport event must be recorded inside an authenticated request"));
         return repository.saveAndFlush(new TransportEvent(
                 scope.companyId(), tripId, tripStopId, eventType, eventTime, sourceOf(scope, actor),
                 actor.appUserId(), actor.email(), actor.machineActorLabel(),
-                // No position in V1: nothing reports one. The columns exist so that the day a
-                // telematics feed or a driver app does, recording it is a change here and not a
-                // migration - see the column comment in V27.
-                null, null,
+                position == null ? null : position.latitude().setScale(COORDINATE_SCALE, RoundingMode.HALF_UP),
+                position == null ? null : position.longitude().setScale(COORDINATE_SCALE, RoundingMode.HALF_UP),
                 blankToNull(notes), writeMetadata(eventType, metadata)));
     }
 

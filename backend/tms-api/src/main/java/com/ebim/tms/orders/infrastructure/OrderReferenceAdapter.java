@@ -3,6 +3,7 @@ package com.ebim.tms.orders.infrastructure;
 import com.ebim.tms.orders.domain.TransportOrder;
 import com.ebim.tms.orders.domain.TransportOrderLine;
 import com.ebim.tms.shared.reference.OrderExternalKey;
+import com.ebim.tms.shared.reference.OrderLineReference;
 import com.ebim.tms.shared.reference.OrderLineSnapshot;
 import com.ebim.tms.shared.reference.OrderReferencePort;
 import java.util.Collection;
@@ -79,6 +80,24 @@ class OrderReferenceAdapter implements OrderReferencePort {
                     line.uom()));
         }
         return byId;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, List<OrderLineReference>> lineReferencesOf(Set<UUID> orderIds, UUID companyId) {
+        Map<UUID, List<OrderLineReference>> byOrder = new HashMap<>();
+        if (orderIds.isEmpty()) {
+            return byOrder;
+        }
+        for (TransportOrder order : orders.findByIdInAndCompanyId(orderIds, companyId)) {
+            byOrder.put(order.id(), order.lines().stream()
+                    .sorted(Comparator.comparingInt(TransportOrderLine::lineNumber))
+                    .map(line -> new OrderLineReference(line.id(), order.id(), line.lineNumber(), line.materialCode(),
+                            line.materialDescription(), line.quantity(), line.uom(), line.unitWeightKg(),
+                            line.unitVolumeM3()))
+                    .toList());
+        }
+        return byOrder;
     }
 
     @Override

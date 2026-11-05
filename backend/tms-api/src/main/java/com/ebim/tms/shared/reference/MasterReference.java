@@ -25,9 +25,18 @@ import java.util.UUID;
  * @param latitude  decimal degrees, or null when the master has not been geocoded
  * @param longitude decimal degrees, or null when the master has not been geocoded
  * @param address   the master's free-text address line, or null when it has none
+ * @param contactName who receives at the place (V75), or null - only a location carries one
+ * @param contactPhone how to reach them (V75), or null
+ * @param deliveryInstructions what a driver must know on arrival (V75), or null
  */
 public record MasterReference(UUID id, String code, String name, BigDecimal latitude, BigDecimal longitude,
-        String address) {
+        String address, String contactName, String contactPhone, String deliveryInstructions) {
+
+    /** A reference with no delivery contact: every master but a location, and a location without one. */
+    public MasterReference(UUID id, String code, String name, BigDecimal latitude, BigDecimal longitude,
+            String address) {
+        this(id, code, name, latitude, longitude, address, null, null, null);
+    }
 
     /** A reference with no coordinates and no address - for a master that has neither, and for tests. */
     public static MasterReference of(UUID id, String code, String name) {

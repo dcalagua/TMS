@@ -583,8 +583,13 @@ exactly as above, except `geometry`, which stays absent until phase 40. Details 
 - `attempted` / `delivered` / `refused` are `null` when the delivery recorded no amounts (V45). Inside a
   block, a single measure is `null` when only the others were recorded; nothing is ever defaulted to `0`.
 - `lines[]` is read from `order_delivery_line` (V45), ordered by `lineNumber`; `lineNumber` and
-  `materialCode` come from the order line, `uom` is the unit snapshotted on the delivery line. No TMS API
-  writes per-line results yet, so today `lines` is `[]` unless such rows exist.
+  `materialCode` come from the order line, `uom` is the unit snapshotted on the delivery line. Since
+  TMS V75, every delivery of an order that travels **whole** on the trip writes one row per order line:
+  `DELIVERED` delivers every line, `REJECTED` refuses every line, `FAILED` attempts and delivers nothing,
+  `NOT_ATTEMPTED` attempts nothing, and `PARTIAL` carries what the carrier (portal) said came back of each
+  product - `quantityRefused` is what the warehouse gets back on the truck, per material. A share of a
+  split order, and a partial result recorded in kilograms only, still have `lines: []`. This is the input
+  for the pre-filled return (RMA) the EWM consumer offers below; TMS still creates no return itself.
 - The plan is assembled with batched reads (the trip's deliveries, then all their lines, then all the
   referenced order lines), never one query per order.
 - `DELIVERY_RESULT_RECORDED` needed no change: it is already a webhook event type, a subscription can

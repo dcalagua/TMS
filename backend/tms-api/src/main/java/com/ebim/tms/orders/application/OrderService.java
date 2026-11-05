@@ -10,6 +10,7 @@ import com.ebim.tms.orders.domain.PhysicalSource;
 import com.ebim.tms.orders.domain.SchedulingAssessment;
 import com.ebim.tms.orders.domain.SchedulingReason;
 import com.ebim.tms.orders.domain.TransportOrder;
+import com.ebim.tms.orders.domain.TransportOrderLine;
 import com.ebim.tms.orders.infrastructure.TransportOrderLineRepository;
 import com.ebim.tms.orders.infrastructure.TransportOrderRepository;
 import com.ebim.tms.orders.infrastructure.TransportOrderSpecifications;
@@ -187,10 +188,20 @@ public class OrderService {
         requireConsistentTotals(lines, declared);
 
         UUID actorId = auditActorProvider.writerAppUserId();
+        // V75: a delivery that recorded a result per product points at this order's lines, so a
+        // reopened order keeps them - applyLines would recreate every line, and the rows describing
+        // what the customer signed for would lose what they describe. The header may still change
+        // (a second attempt on another day is the usual reason to edit a reopened order).
+        boolean goodsFixed = orderFulfillmentPort.hasLineResults(order.id(), scope.companyId());
+        if (goodsFixed) {
+            requireSameGoods(order, lines, declared);
+        }
         order.applyChanges(externalSource, externalReference, request.originId(), request.destinationId(),
                 blankToNull(request.customerName()), blankToNull(request.customerReference()), request.serviceDate(),
                 request.priority(), request.requestedWindowStart(), request.requestedWindowEnd(), actorId);
-        order.applyLines(lines, declared, geometrySettings.referenceHeightOf(scope.companyId()), actorId);
+        if (!goodsFixed) {
+            order.applyLines(lines, declared, geometrySettings.referenceHeightOf(scope.companyId()), actorId);
+        }
         TransportOrder saved = saveOrConflict(order);
         auditRecorder.record(scope, AuditAggregateType.TRANSPORT_ORDER, saved.id(), AuditAction.UPDATE,
                 Map.of("orderNumber", saved.orderNumber()));
@@ -453,6 +464,38 @@ public class OrderService {
             throw new ConflictException("Order " + order.orderNumber() + " has part of it on a trip and cannot be "
                     + "edited while it is; unassign it from its trip, or cancel the trip, first.");
         }
+    }
+
+    /**
+     * The goods of an order with per-product delivery results (V75) are what they were: same lines,
+     * same material, quantity and unit, same declared totals. Compared on what a customer signs for;
+     * a request that matches leaves the stored lines untouched.
+     */
+    private static void requireSameGoods(TransportOrder order, List<OrderLineInput> requested,
+            DeclaredTotals declared) {
+        List<TransportOrderLine> stored = order.lines().stream()
+                .sorted(java.util.Comparator.comparingInt(TransportOrderLine::lineNumber))
+                .toList();
+        boolean same = stored.size() == requested.size()
+                && sameAmount(order.declaredWeightKg(), declared.weightKg())
+                && sameAmount(order.declaredVolumeM3(), declared.volumeM3())
+                && sameAmount(order.declaredPallets(), declared.pallets());
+        for (int index = 0; same && index < stored.size(); index++) {
+            TransportOrderLine line = stored.get(index);
+            OrderLineInput input = requested.get(index);
+            same = java.util.Objects.equals(line.materialCode(), input.materialCode())
+                    && java.util.Objects.equals(line.uom(), input.uom())
+                    && sameAmount(line.quantity(), input.quantity());
+        }
+        if (!same) {
+            throw new ConflictException("Order " + order.orderNumber() + " already has delivery results per product"
+                    + " from an earlier attempt, so its lines and quantities cannot change. Edit the date, window"
+                    + " or other header fields only, or create a new order for different goods.");
+        }
+    }
+
+    private static boolean sameAmount(BigDecimal stored, BigDecimal requested) {
+        return stored == null ? requested == null : requested != null && stored.compareTo(requested) == 0;
     }
 
     private static void requireCurrentVersion(TransportOrder order, Long requestVersion) {

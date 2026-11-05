@@ -11,6 +11,8 @@ import com.ebim.tms.planning.domain.TransportEventSource;
 import com.ebim.tms.planning.domain.Trip;
 import com.ebim.tms.planning.domain.TripStatus;
 import com.ebim.tms.planning.domain.TripStop;
+import com.ebim.tms.planning.infrastructure.OrderDeliveryLineQueries;
+import com.ebim.tms.planning.infrastructure.OrderDeliveryLineQueries.DeliveryLineWrite;
 import com.ebim.tms.planning.infrastructure.OrderDeliveryRepository;
 import com.ebim.tms.planning.infrastructure.TripOrderAssignmentRepository;
 import com.ebim.tms.planning.infrastructure.TripRepository;
@@ -21,15 +23,19 @@ import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.audit.AuditActor;
 import com.ebim.tms.shared.audit.AuditActorProvider;
 import com.ebim.tms.shared.reference.OrderAmounts;
+import com.ebim.tms.shared.reference.OrderLineReference;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
+import com.ebim.tms.shared.reference.OrderReferencePort;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.security.CompanyScope;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -78,11 +84,14 @@ public class TripDeliveryService {
     private final TripViewAssembler assembler;
     private final OrderExecutionPropagator orderExecution;
     private final AuditActorProvider auditActorProvider;
+    private final OrderReferencePort orderReferencePort;
+    private final OrderDeliveryLineQueries deliveryLines;
 
     public TripDeliveryService(TripRepository tripRepository, OrderDeliveryRepository deliveryRepository,
             TripOrderAssignmentRepository assignmentRepository, OrderPlanningPort orderPlanningPort,
             ShipmentEventPublisher eventPublisher, TripAlertPublisher alerts, TripViewAssembler assembler,
-            OrderExecutionPropagator orderExecution, AuditActorProvider auditActorProvider) {
+            OrderExecutionPropagator orderExecution, AuditActorProvider auditActorProvider,
+            OrderReferencePort orderReferencePort, OrderDeliveryLineQueries deliveryLines) {
         this.tripRepository = tripRepository;
         this.deliveryRepository = deliveryRepository;
         this.assignmentRepository = assignmentRepository;
@@ -92,6 +101,8 @@ public class TripDeliveryService {
         this.assembler = assembler;
         this.orderExecution = orderExecution;
         this.auditActorProvider = auditActorProvider;
+        this.orderReferencePort = orderReferencePort;
+        this.deliveryLines = deliveryLines;
     }
 
     /**
@@ -141,11 +152,28 @@ public class TripDeliveryService {
                     actor.email(), actor.machineActorLabel());
         }
 
+        // V75: which products, for an order that travels whole on this trip. Checked before anything
+        // is written; written after the delivery row exists, because each line points at it.
+        TripOrderAssignment assignment = assignmentRepository
+                .findByTripIdAndOrderIdAndStatus(trip.id(), orderId, AssignmentStatus.ACTIVE)
+                .orElse(null);
+        boolean wholeOrder = assignment != null && assignment.wholeOrder();
+        List<OrderLineReference> orderLines = wholeOrder
+                ? orderReferencePort.lineReferencesOf(Set.of(orderId), scope.companyId()).getOrDefault(orderId, List.of())
+                : List.of();
+        Optional<List<DeliveryLineWrite>> lineWrites =
+                DeliveryLineResults.of(result, request.refusedLines(), orderLines, wholeOrder);
+
         // V45, debt D3. Applied after the outcome so NOT_ATTEMPTED is judged against the result the
         // caller is setting now, not the one the row happened to hold.
-        DeliveryQuantities quantities = request.quantities() == null
+        DeliveryResultRequest.DeliveryQuantitiesRequest quantitiesRequest = request.quantities();
+        if (quantitiesRequest == null && result == DeliveryResult.PARTIAL && request.refusedLines() != null
+                && assignment != null) {
+            quantitiesRequest = quantitiesFromRefusedLines(assignment, request.refusedLines(), orderLines);
+        }
+        DeliveryQuantities quantities = quantitiesRequest == null
                 ? DeliveryQuantities.NOT_RECORDED
-                : request.quantities().toDomain();
+                : quantitiesRequest.toDomain();
         if (quantities.isRecorded()) {
             requireWithinAllocation(scope, trip, orderId, delivery, quantities);
         }
@@ -153,6 +181,9 @@ public class TripDeliveryService {
         // The returned instance is kept: the alert below is keyed on the delivery's id, and on the
         // insert path that id does not exist until this flush.
         delivery = deliveryRepository.saveAndFlush(delivery);
+        if (lineWrites.isPresent()) {
+            deliveryLines.upsert(scope.companyId(), delivery.id(), orderId, lineWrites.get(), actor.appUserId());
+        }
 
         // One user action, three records - the outbox row a partner polls, the audit row a
         // compliance reader searches, and the timeline entry a dispatcher reads - written together
@@ -262,6 +293,28 @@ public class TripDeliveryService {
                     + describe(deliveredInAll) + " has already been delivered on its trips. Delivering "
                     + describe(quantities.delivered()) + " more would exceed what was ordered.");
         }
+    }
+
+    /**
+     * The nine figures of a partial delivery whose refusal was said per product and not in kilos
+     * (V75): the refused kilos and cubic metres are the products' unit weights and volumes times the
+     * units refused, never more than the trip carried. Null when no refused product has a unit
+     * weight or volume - the result is then recorded with its products and without amounts, which is
+     * still more than kilos alone would say.
+     */
+    private static DeliveryResultRequest.DeliveryQuantitiesRequest quantitiesFromRefusedLines(
+            TripOrderAssignment assignment, List<DeliveryResultRequest.RefusedLineRequest> refusedLines,
+            List<OrderLineReference> orderLines) {
+        OrderAmounts carried = assignment.assigned().withoutGeometry();
+        OrderAmounts derived = DeliveryLineResults.refusedAmounts(refusedLines, orderLines);
+        if (derived.isZero()) {
+            return null;
+        }
+        // A few grams of rounding between unit weight x units and the order's total must not read as
+        // refusing more than was carried.
+        OrderAmounts refused = new OrderAmounts(derived.weightKg().min(carried.weightKg()),
+                derived.volumeM3().min(carried.volumeM3()), BigDecimal.ZERO);
+        return PortalDeliveryQuantities.fromRefused(assignment.assigned(), refused);
     }
 
     /** The three measures in a sentence a dispatcher can act on, rather than a triple of numbers. */

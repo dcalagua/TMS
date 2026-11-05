@@ -71,8 +71,33 @@ public class TripAlertPublisher {
                 departedAt, args);
     }
 
-    /** The shipment is closed out. The one informational alert - see {@link NotificationType}. */
+    /**
+     * The shipment is on the road (V75), whichever door dispatched it. Keyed on the trip, so a
+     * dispatch retried after a timeout - or a warehouse revision of an applied dispatch - rings once.
+     */
+    public void dispatched(CompanyScope scope, Trip trip, OffsetDateTime dispatchedAt) {
+        raise(scope, NotificationType.TRIP_DISPATCHED, trip,
+                NotificationType.TRIP_DISPATCHED.dedupeKey(trip.id()), dispatchedAt, shipmentArgs(trip));
+    }
+
+    /**
+     * The last outstanding stop was just resolved (V75): the road is done and the office can close
+     * the shipment. Keyed on the trip - a stop cannot be reopened, so this happens once per trip.
+     */
+    public void readyToClose(CompanyScope scope, Trip trip, OffsetDateTime resolvedAt) {
+        Map<String, Object> args = shipmentArgs(trip);
+        args.put("stopCount", trip.stops().size());
+        raise(scope, NotificationType.TRIP_READY_TO_CLOSE, trip,
+                NotificationType.TRIP_READY_TO_CLOSE.dedupeKey(trip.id()), resolvedAt, args);
+    }
+
+    /**
+     * The shipment is closed out. Also resolves {@link NotificationType#TRIP_READY_TO_CLOSE}: the
+     * question it asked has been answered, and the pair lives here for the reason the class comment
+     * gives.
+     */
     public void completed(CompanyScope scope, Trip trip, OffsetDateTime completedAt) {
+        notifications.resolve(scope, NotificationType.TRIP_READY_TO_CLOSE.dedupeKey(trip.id()), completedAt);
         raise(scope, NotificationType.TRIP_COMPLETED, trip,
                 NotificationType.TRIP_COMPLETED.dedupeKey(trip.id()), completedAt, shipmentArgs(trip));
     }

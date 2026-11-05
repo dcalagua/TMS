@@ -7,7 +7,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * The seven operational facts TMS raises an in-app alert for (migration V32), each with the
+ * The operational facts TMS raises an in-app alert for (migrations V32 and V75), each with the
  * severity it is always shown at and the permission that gates being told about it.
  *
  * <p><b>Every value has a real source.</b> Each one is written by a business transaction that was
@@ -67,11 +67,28 @@ public enum NotificationType {
             Permission.FLEET_DRIVER_READ),
 
     /**
-     * A shipment finished. The one {@link NotificationSeverity#INFO} type, and it earns its place
-     * for a reason that is not "good news is nice": customer service is regularly asked whether a
-     * load is closed, and the alternative is refreshing a board.
+     * A shipment finished. {@link NotificationSeverity#INFO}, and it earns its place for a reason
+     * that is not "good news is nice": customer service is regularly asked whether a load is
+     * closed, and the alternative is refreshing a board.
      */
     TRIP_COMPLETED(NotificationSeverity.INFO, NotificationEntityType.TRIP,
+            Permission.MONITORING_TRANSPORT_READ),
+
+    /**
+     * A shipment went on the road (migration V75) - dispatched from the office or by the
+     * warehouse's dispatch confirmation. Informational, for the same reason as
+     * {@link #TRIP_COMPLETED}: "has it left yet?" is the question customer service gets asked first.
+     * A late departure still raises {@link #TRIP_DELAYED} on top of this one.
+     */
+    TRIP_DISPATCHED(NotificationSeverity.INFO, NotificationEntityType.TRIP,
+            Permission.MONITORING_TRANSPORT_READ),
+
+    /**
+     * Every stop of a shipment is resolved and the shipment is still open (migration V75): nothing
+     * is left to do on the road, and only the office can close it. Resolved when the shipment is
+     * completed, so the bell stops asking once somebody has.
+     */
+    TRIP_READY_TO_CLOSE(NotificationSeverity.INFO, NotificationEntityType.TRIP,
             Permission.MONITORING_TRANSPORT_READ),
 
     /**

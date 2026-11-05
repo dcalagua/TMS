@@ -7,7 +7,7 @@ import {
   ArrowBackRounded, ChevronRightRounded, CloudUploadRounded, ContentCopyRounded, DirectionsRounded, ErrorOutlineRounded,
   LockRounded,
   PersonRounded, PhotoCameraRounded, PlaceRounded, RefreshRounded, ScheduleRounded, SkipNextRounded, TripOriginRounded,
-  LocalShippingRounded, ReportProblemRounded,
+  LocalShippingRounded, ReportProblemRounded, PhoneRounded, SpeakerNotesRounded,
 } from "@mui/icons-material";
 import type { PortalStopTransition } from "../../shared/api/portalApi";
 import { fetchPortalTrip } from "../../shared/api/portalApi";
@@ -36,6 +36,7 @@ import {
 import { usePortalQuery } from "./offline/usePortalQuery";
 import { describeLoadError, portalTripKey } from "./portalReport";
 import { PORTAL_BAR_HEIGHT, SAFE_AREA, directionsUrl, PORTAL_PAGE_GRID } from "./portalUi";
+import { arrivalPosition } from "./arrivalPosition";
 
 type ShownStop = ShownTripDetail["stops"][number];
 
@@ -124,7 +125,11 @@ export function PortalTripPage() {
     const at = new Date().toISOString();
     setBusy(true);
     try {
-      const outcome = await run({ type: "STOP", stopId: stop.stopId, transition: move, occurredAt: at },
+      // V75: con «Llegué» va la ubicación del teléfono, si el navegador la da. Sin permiso o sin
+      // señal la llegada se guarda igual; la hora es la del toque, no la de la respuesta del GPS.
+      const position = move === "arrive" ? await arrivalPosition() : null;
+      const outcome = await run({ type: "STOP", stopId: stop.stopId, transition: move, occurredAt: at,
+        ...(position ? { latitude: position.latitude, longitude: position.longitude } : {}) },
         `${t(action?.label ?? move)} · ${label}`, crypto.randomUUID(), at);
       executed(outcome, t("Parada actualizada"));
     } catch (error) {
@@ -352,6 +357,8 @@ function StopStep({ stop, last, onOpen, execution }: {
           )}
         </Box>
 
+        {!unassigned && <DeliveryContact stop={stop} />}
+
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
           <Typography sx={{ fontSize: 14, fontWeight: 700, color: complete ? "success.main" : "text.secondary", fontVariantNumeric: "tabular-nums" }}>
             {t("{{done}} de {{total}} reportados", { done, total: stop.documents.length })}
@@ -374,6 +381,41 @@ function StopStep({ stop, last, onOpen, execution }: {
           {stop.documents.map((doc) => <DocumentRow key={doc.documentId} doc={doc} onOpen={() => onOpen(doc)} />)}
         </Box>
       </Box>
+    </Box>
+  );
+}
+
+/**
+ * Quién recibe en el destino y qué debe saber el conductor al llegar (V75), tal como la oficina lo
+ * dejó en la ubicación. El teléfono es un enlace: en el teléfono del conductor, un toque llama.
+ */
+function DeliveryContact({ stop }: { stop: ShownStop }) {
+  const { contactName, contactPhone, deliveryInstructions } = stop;
+  if (!contactName && !contactPhone && !deliveryInstructions) return null;
+  return (
+    <Box
+      aria-label={t("Contacto de entrega")}
+      sx={{ display: "grid", gap: 0.75, p: 1.25, borderRadius: `${R.md}px`, bgcolor: "action.hover" }}
+    >
+      {(contactName || contactPhone) && (
+        <InfoLine icon={<PersonRounded />}>
+          <span>{contactName ?? t("Contacto")}</span>
+          {contactPhone && (
+            <Button
+              component="a" href={`tel:${contactPhone.replace(/[^0-9+]/g, "")}`} size="small"
+              startIcon={<PhoneRounded />} aria-label={t("Llamar a {{phone}}", { phone: contactPhone })}
+              sx={{ ml: "auto", minHeight: 40, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}
+            >
+              {contactPhone}
+            </Button>
+          )}
+        </InfoLine>
+      )}
+      {deliveryInstructions && (
+        <InfoLine icon={<SpeakerNotesRounded />}>
+          <span style={{ whiteSpace: "pre-line" }}>{deliveryInstructions}</span>
+        </InfoLine>
+      )}
     </Box>
   );
 }

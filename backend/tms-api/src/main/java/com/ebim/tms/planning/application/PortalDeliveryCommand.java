@@ -16,13 +16,18 @@ import java.util.List;
  * @param deliveredAt when it happened at the door - the phone's time, so a report replayed from the
  *     offline queue keeps the moment it was made; null means now
  * @param refusedWeightKg what the customer refused, for a {@code PARTIAL} delivery only; any of the
- *     three may be null and counts as zero, but a partial delivery must carry at least one
+ *     three may be null and counts as zero, but a partial delivery must carry at least one - or
+ *     {@code refusedLines}
+ * @param refusedLines which products the customer refused and how many of each (V75), for a
+ *     {@code PARTIAL} delivery of an order that travels whole; null when the driver gave none. With
+ *     no refused amounts, the kilos are derived from the products' unit weights
  * @param photos zero to five
  * @param signature optional
  */
 public record PortalDeliveryCommand(DeliveryResult result, OffsetDateTime deliveredAt, String receiverName,
         String receiverDocument, String notes, BigDecimal refusedWeightKg, BigDecimal refusedVolumeM3,
-        BigDecimal refusedPallets, List<EvidenceUpload> photos, EvidenceUpload signature) {
+        BigDecimal refusedPallets, List<DeliveryResultRequest.RefusedLineRequest> refusedLines,
+        List<EvidenceUpload> photos, EvidenceUpload signature) {
 
     public PortalDeliveryCommand {
         photos = photos == null ? List.of() : List.copyOf(photos);

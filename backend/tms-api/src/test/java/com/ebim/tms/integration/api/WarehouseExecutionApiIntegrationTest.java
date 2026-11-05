@@ -778,7 +778,8 @@ class WarehouseExecutionApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("plan v1.1: a result recorded without amounts has null blocks - never zero - and no lines")
+    @DisplayName("plan v1.1: a result recorded without amounts has null blocks - never zero - and, since V75,"
+            + " the whole order's lines delivered")
     void planDeliveryWithoutAmounts() throws Exception {
         Shipment shipment = readyShipment("100");
         transition(shipment.tripId, "dispatch", null).andExpect(status().isOk());
@@ -793,7 +794,10 @@ class WarehouseExecutionApiIntegrationTest {
                 .andExpect(jsonPath("$.orders[0].delivery.attempted").value(nullValue()))
                 .andExpect(jsonPath("$.orders[0].delivery.delivered").value(nullValue()))
                 .andExpect(jsonPath("$.orders[0].delivery.refused").value(nullValue()))
-                .andExpect(jsonPath("$.orders[0].delivery.lines").isEmpty());
+                // V75: the order travels whole, so a DELIVERED result says every line arrived, in
+                // the line's own unit - while the measure blocks stay null, as nobody gave kilos.
+                .andExpect(jsonPath("$.orders[0].delivery.lines[0].quantityDelivered").value(100))
+                .andExpect(jsonPath("$.orders[0].delivery.lines[0].quantityRefused").value(0));
     }
 
     // --- helpers ----------------------------------------------------------------------------------

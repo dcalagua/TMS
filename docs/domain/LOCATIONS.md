@@ -163,6 +163,7 @@ repositorio.
 | Zona horaria | `time_zone` (IANA, validada en el servicio) |
 | Geografía | `latitude`, `longitude` + `geo_point geography(Point,4326)` GENERATED, índice GiST |
 | Operación | `service_time_minutes`, `zone_id` |
+| Contacto de entrega (V75) | `contact_name`, `contact_phone`, `delivery_instructions`: quién recibe, cómo llamarlo y qué debe saber el conductor al llegar. Los ve el transportista en la parada del portal. Solo los tiene un lugar con el uso Destino: el formulario los oculta en un origen y los guarda vacíos si el lugar deja de ser destino. Los mantiene la oficina; la API de integración no los manda ni los borra |
 | Estado | `active` |
 | Auditoría | `created_at`, `updated_at`, `created_by`, `updated_by` |
 

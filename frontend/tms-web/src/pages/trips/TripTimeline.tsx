@@ -1,4 +1,4 @@
-import { Box, Chip, Typography } from "@mui/material";
+import { Box, Chip, Tooltip, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import {
   PlayArrowRounded, FlagRounded, PlaceRounded, BuildRounded, DoneRounded,
@@ -10,6 +10,7 @@ import { EmptyState, LoadingState } from "../../shared/ui/components";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDateTime } from "../../lib/locale";
+import { FAR_FROM_STOP_KM, arrivalDistanceHint, fmtDistance } from "./arrivalDistance";
 
 interface TripTimelineProps {
   events: TransportEventView[];
@@ -87,6 +88,18 @@ export function TripTimeline({ events, loading }: TripTimelineProps) {
               {fmtDateTime(event.eventTime)}
               {!sameTime && ` · ${t("registrado")} ${fmtDateTime(event.recordedAt)}`}
               {event.actorName && ` · ${event.actorName}`}
+              {event.distanceToStopKm != null && (
+                <Tooltip title={arrivalDistanceHint()}>
+                  <Box
+                    component="span"
+                    sx={{ color: event.distanceToStopKm > FAR_FROM_STOP_KM ? "warning.main" : "inherit", fontWeight: 600 }}
+                  >
+                    {" · "}
+                    {t(event.eventType === "ARRIVED_AT_STOP" ? "Llegó a {{distance}} del destino" : "A {{distance}} del destino",
+                      { distance: fmtDistance(event.distanceToStopKm) })}
+                  </Box>
+                </Tooltip>
+              )}
             </Typography>
 
             {event.notes && (

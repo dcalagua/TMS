@@ -72,5 +72,12 @@ public record TripStopView(
         EtaSource etaSource,
         OffsetDateTime etaCalculatedAt,
         /** The schedule has the vehicle arriving after this stop's window closes. */
-        boolean etaMissesWindow) {
+        boolean etaMissesWindow,
+        /**
+         * Who receives at the destination, their phone and what the driver must know on arrival
+         * (migration V75), read live from the location like the address. Null when not set.
+         */
+        String contactName,
+        String contactPhone,
+        String deliveryInstructions) {
 }

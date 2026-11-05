@@ -295,9 +295,10 @@ public class TripExecutionService {
      *
      * <p>Two of the three transitions produce one. {@code READY_FOR_DISPATCH} produces none on
      * purpose - a shipment declared ready is the plan going right, and an alert per shipment per
-     * ordinary step is how a bell gets ignored. Whether a departure is late enough to be worth
-     * saying is {@code TripAlertPublisher}'s question, not this one's, so that the bell and the
-     * control tower judge lateness with the same rule.
+     * ordinary step is how a bell gets ignored. A departure is the exception V75 makes: "has it
+     * left?" is asked often enough to be worth an informational alert. Whether it is also late
+     * enough to be worth a warning is {@code TripAlertPublisher}'s question, not this one's, so
+     * that the bell and the control tower judge lateness with the same rule.
      *
      * <p>Raised here rather than inside {@link ShipmentEventPublisher} with the other three
      * audiences, deliberately: that class publishes one fact to everybody who must hear it, and an
@@ -307,7 +308,10 @@ public class TripExecutionService {
      */
     private void announce(CompanyScope scope, Trip trip, ShipmentEventType eventType, OffsetDateTime occurredAt) {
         switch (eventType) {
-            case SHIPMENT_DISPATCHED -> alerts.departed(scope, trip, occurredAt);
+            case SHIPMENT_DISPATCHED -> {
+                alerts.dispatched(scope, trip, occurredAt);
+                alerts.departed(scope, trip, occurredAt);
+            }
             case SHIPMENT_COMPLETED -> alerts.completed(scope, trip, occurredAt);
             default -> {
                 // Every other transition this service can publish is the plan going right.

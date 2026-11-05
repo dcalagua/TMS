@@ -29,14 +29,14 @@ const ORDER: ShownOrder = {
 let store: ReturnType<typeof createMemoryStore>;
 let fetchMock: ReturnType<typeof vi.fn>;
 
-function renderDrawer(overrides: { evidenceEnabled?: boolean; onSaved?: (outcome: string) => void } = {}) {
+function renderDrawer(overrides: { evidenceEnabled?: boolean; onSaved?: (outcome: string) => void; order?: ShownOrder } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return render(
     <QueryClientProvider client={queryClient}>
       <PortalOfflineProvider userId={USER} store={store} send={() => Promise.reject(new TypeError("Failed to fetch"))}>
         <PortalDeliveryDrawer
           companyId={COMPANY} tripId={TRIP} shipmentNumber="SH-0042" stopId={STOP}
-          stopLabel="Parada 1 · Bodega San Martín" order={ORDER}
+          stopLabel="Parada 1 · Bodega San Martín" order={overrides.order ?? ORDER}
           evidenceEnabled={overrides.evidenceEnabled ?? true}
           onClose={() => {}} onSaved={overrides.onSaved}
         />
@@ -130,6 +130,54 @@ describe("el panel de entrega del portal a 390 px", () => {
     expect(body.get("notes")).toBe("Dos pallets con film roto");
     expect(body.get("deliveredAt")).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(store.outbox.size).toBe(0);
+  });
+
+  describe("con el pedido entero en el viaje, el rechazo se dice por producto (V75)", () => {
+    const WHOLE: ShownOrder = {
+      ...ORDER,
+      lines: [
+        { orderLineId: "l-1", lineNumber: 1, materialCode: "PLP-1601", materialDescription: "Gaveta agrícola",
+          quantity: 60, uom: "UN", unitWeightKg: 1.9 },
+        { orderLineId: "l-2", lineNumber: 2, materialCode: "PLP-1623", materialDescription: "Caja cosechera",
+          quantity: 40, uom: "UN", unitWeightKg: 2.6 },
+      ],
+    };
+
+    it("pregunta qué productos rechazó, no cuántos kilos, y no deja rechazar más de lo pedido", async () => {
+      renderDrawer({ order: WHOLE });
+
+      await userEvent.click(screen.getByRole("button", { name: "Entrega parcial" }));
+      expect(screen.getByText("¿Qué productos rechazó el cliente?")).toBeInTheDocument();
+      expect(screen.queryByLabelText("Pallets")).not.toBeInTheDocument();
+      await userEvent.type(screen.getByLabelText("Qué pasó (obligatorio)"), "Gavetas rotas");
+      await userEvent.click(screen.getByRole("button", { name: "Guardar entrega" }));
+      expect(await screen.findByText("Indica cuántas unidades de qué producto rechazó el cliente.")).toBeInTheDocument();
+
+      await userEvent.type(screen.getByLabelText("Rechazadas de PLP-1601"), "61");
+      await userEvent.click(screen.getByRole("button", { name: "Guardar entrega" }));
+      expect(await screen.findByText("No se puede rechazar más de lo que pidió el cliente.")).toBeInTheDocument();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("envía los productos rechazados en un solo campo JSON y enseña los kilos que suman", async () => {
+      fetchMock.mockResolvedValue(new Response(JSON.stringify(TRIP_DETAIL), {
+        status: 200, headers: { "content-type": "application/json" },
+      }));
+      const onSaved = vi.fn();
+      renderDrawer({ order: WHOLE, onSaved });
+
+      await userEvent.click(screen.getByRole("button", { name: "Entrega parcial" }));
+      await userEvent.type(screen.getByLabelText("Rechazadas de PLP-1601"), "10");
+      expect(screen.getByText(/Unos 19 kg rechazados/)).toBeInTheDocument();
+      await userEvent.type(screen.getByLabelText("Qué pasó (obligatorio)"), "Gavetas rotas");
+      await userEvent.click(screen.getByRole("button", { name: "Guardar entrega" }));
+
+      await waitFor(() => expect(onSaved).toHaveBeenCalledWith("sent"));
+      const body = bodyOf(fetchMock.mock.calls[0]);
+      expect(JSON.parse(body.get("refusedLines") as string)).toEqual([{ orderLineId: "l-1", quantity: 10 }]);
+      expect(body.get("refusedWeightKg")).toBeNull();
+      expect(body.get("refusedPallets")).toBeNull();
+    });
   });
 
   it("si el envío se queda sin red, la entrega queda en el teléfono con la misma clave y la misma hora", async () => {

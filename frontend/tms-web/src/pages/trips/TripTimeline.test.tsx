@@ -68,6 +68,28 @@ describe("la línea de tiempo", () => {
     expect(screen.queryByText("Integración")).not.toBeInTheDocument();
   });
 
+  it("V75: junto al correo del transportista dice a qué distancia del destino pulsó «Llegué»", () => {
+    render(<TripTimeline events={[
+      event({ id: "e-5", eventType: "ARRIVED_AT_STOP", source: "CARRIER_PORTAL", actorName: "chofer@trlit.example",
+        tripStopId: "s-1", stopSequence: 1, stopDestinationName: "Bodega", distanceToStopKm: 2.14 }),
+      event({ id: "e-6", eventType: "ARRIVED_AT_STOP", source: "CARRIER_PORTAL", actorName: "chofer@trlit.example",
+        tripStopId: "s-2", stopSequence: 2, stopDestinationName: "Ferretería", distanceToStopKm: 0.347 }),
+    ]} />);
+
+    expect(screen.getByText(/Llegó a 2[,.]1 km del destino/)).toBeInTheDocument();
+    expect(screen.getByText(/Llegó a 350 m del destino/)).toBeInTheDocument();
+  });
+
+  it("V75: sin ubicación (sin permiso o sin señal) no dice nada de la distancia", () => {
+    render(<TripTimeline events={[
+      event({ id: "e-7", eventType: "ARRIVED_AT_STOP", source: "CARRIER_PORTAL", actorName: "chofer@trlit.example",
+        tripStopId: "s-1", stopSequence: 1, stopDestinationName: "Bodega", distanceToStopKm: null }),
+    ]} />);
+
+    expect(screen.getByText(/chofer@trlit\.example/)).toBeInTheDocument();
+    expect(screen.queryByText(/del destino/)).not.toBeInTheDocument();
+  });
+
   it("toda fuente de un hecho tiene etiqueta en español", () => {
     for (const source of ["OPERATOR", "SYSTEM", "INTEGRATION", "CARRIER_PORTAL"]) {
       expect(enumLabel("transportEventSource", source)).not.toBe(source);

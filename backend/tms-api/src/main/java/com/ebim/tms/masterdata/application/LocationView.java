@@ -45,6 +45,10 @@ public record LocationView(
         Integer geofenceRadiusM,
         String externalSystem,
         String externalReference,
+        /** Who receives here, their phone and what the driver must know on arrival (V75), or null. */
+        String contactName,
+        String contactPhone,
+        String deliveryInstructions,
         boolean active,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt) {
@@ -61,7 +65,8 @@ public record LocationView(
                 location.timeZone(), location.latitude(), location.longitude(), location.zoneId(),
                 zone == null ? null : zone.code(), zone == null ? null : zone.name(),
                 location.serviceTimeMinutes(), location.geofenceRadiusM(), location.externalSystem(),
-                location.externalReference(),
+                location.externalReference(), location.contactName(), location.contactPhone(),
+                location.deliveryInstructions(),
                 location.active(), location.createdAt(), location.updatedAt());
     }
 }

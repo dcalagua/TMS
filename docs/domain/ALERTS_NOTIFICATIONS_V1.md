@@ -30,7 +30,7 @@ The same business fact legitimately produces one row in several of these. That i
 `ShipmentEventPublisher` writes the outbox row, the audit row and the timeline entry together, and
 why the alert is raised beside them in the same transaction.
 
-## 2. The seven alert types
+## 2. The nine alert types
 
 | Type | Severity | About | Raised when |
 |---|---|---|---|
@@ -41,6 +41,8 @@ why the alert is raised beside them in the same transaction.
 | `DRIVER_LICENSE_EXPIRING` | WARNING | driver | a driver is assigned to a trip with a licence expiring within 30 days |
 | `TRIP_COMPLETED` | INFO | trip | a shipment is closed out |
 | `DELIVERY_FAILED` | CRITICAL | trip | an order is recorded `PARTIAL`, `REJECTED` or `FAILED` at a stop |
+| `TRIP_DISPATCHED` | INFO | trip | a shipment goes on the road - office «Despachar» or an applied warehouse dispatch confirmation (V75) |
+| `TRIP_READY_TO_CLOSE` | INFO | trip | the last outstanding stop of an open shipment is resolved; resolved when the shipment is completed (V75) |
 
 Severity is a property of the type (`NotificationType.severity`), never chosen by the raiser and
 never configured per company. A caller that could choose would eventually choose differently at two
@@ -49,9 +51,12 @@ call sites for one fact, and the panel's colours would stop meaning anything.
 `DELIVERY_FAILED` is the only `CRITICAL` one. It is the only type that says a customer did not get
 their goods.
 
-`TRIP_COMPLETED` is the only `INFO` one, and it earns its place for a reason that is not "good news
-is nice": customer service is asked several times a day whether a load is closed, and the
-alternative is refreshing a board.
+`TRIP_COMPLETED` earns its `INFO` place for a reason that is not "good news is nice": customer
+service is asked several times a day whether a load is closed, and the alternative is refreshing a
+board. V75 added two more `INFO` types for the same reason, at the two other moments people ask
+about: `TRIP_DISPATCHED` ("has it left?") and `TRIP_READY_TO_CLOSE` ("the road is done - who closes
+it?"). The second is the only informational type that resolves itself: completing the shipment
+answers it.
 
 ### 2.1 Why these seven and not more
 
@@ -85,8 +90,9 @@ placeholders its sentence needs.
 
 | Call site | Raises |
 |---|---|
-| `TripExecutionService.dispatch` → `announce` | `TRIP_DELAYED`, judged with the `DepartureDelay` rule the control tower uses |
-| `TripExecutionService.complete` → `announce` | `TRIP_COMPLETED` |
+| `TripExecutionService.dispatch` / `applyWarehouseDispatch` → `announce` | `TRIP_DISPATCHED` always (V75), and `TRIP_DELAYED` when late, judged with the `DepartureDelay` rule the control tower uses |
+| `TripExecutionService.complete` → `announce` | `TRIP_COMPLETED`, and *resolves* `TRIP_READY_TO_CLOSE` |
+| `TripStopExecutionService.transition` | `TRIP_READY_TO_CLOSE` when the stop it resolves was the last outstanding one (V75) |
 | `TripExceptionService.report` | `EXCEPTION_OPENED` |
 | `TripExceptionService.resolve` | *resolves* the alert `report` raised |
 | `TripStopExecutionService.transition` | `EXCEPTION_OPENED`, for the exception a skipped/failed stop opens automatically |
@@ -96,7 +102,8 @@ placeholders its sentence needs.
 
 `markReadyForDispatch` raises nothing, and neither do `TENDER_SENT`, `TENDER_ACCEPTED` or
 `TENDER_CANCELLED`. Those are the plan going right. An alert per shipment per ordinary step is how a
-bell gets ignored.
+bell gets ignored. V75 made the departure the exception, on request: at the volumes this targets it
+is one informational alert per truck per day, and it is the step customer service is asked about.
 
 ### 3.1 The port, and why it cannot fail a business transaction
 
@@ -182,7 +189,7 @@ mean the thing being disclosed:
 
 | Types | Permission |
 |---|---|
-| `TRIP_DELAYED`, `TRIP_COMPLETED`, `EXCEPTION_OPENED`, `DELIVERY_FAILED` | `monitoring.transport:read` |
+| `TRIP_DELAYED`, `TRIP_COMPLETED`, `EXCEPTION_OPENED`, `DELIVERY_FAILED`, `TRIP_DISPATCHED`, `TRIP_READY_TO_CLOSE` | `monitoring.transport:read` |
 | `TENDER_REJECTED`, `TENDER_EXPIRED` | `planning.tender:read` |
 | `DRIVER_LICENSE_EXPIRING` | `fleet.driver:read` |
 
@@ -204,6 +211,8 @@ every installation another grant to make before a bell worked at all.
 |---|---|---|
 | `TRIP_DELAYED` | the trip | a dispatch retried after a timeout rings once |
 | `TRIP_COMPLETED` | the trip | same |
+| `TRIP_DISPATCHED` | the trip | a retried dispatch, or a warehouse revision of an applied dispatch, rings once |
+| `TRIP_READY_TO_CLOSE` | the trip | a resolved stop cannot be reopened, so the last one is resolved once; completion resolves the same key |
 | `EXCEPTION_OPENED` | the **exception** | a day with a breakdown and two refused docks is three alerts, not one |
 | `TENDER_REJECTED` / `TENDER_EXPIRED` | the **tender** | a shipment refused twice rings twice - two refusals is a harder problem than one |
 | `DELIVERY_FAILED` | the **delivery** | one alert per order per stop, corrected in place with the row |

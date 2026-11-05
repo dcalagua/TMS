@@ -16,8 +16,12 @@ import java.util.UUID;
  * stop's own transition table allows next (the portal offers arrive, start service, complete and
  * fail; skipping is the office's decision) - and the orders delivered there, each with the result
  * recorded for it. All execution fields are null on the trailing group without a stop.
+ *
+ * <p>Since V75 it also carries who receives at the destination, their phone and what the driver
+ * must know on arrival, as the office set them on the location. Null when not set.
  */
 public record PortalStopView(UUID stopId, Integer sequence, String destinationName, String address,
+        String contactName, String contactPhone, String deliveryInstructions,
         BigDecimal latitude, BigDecimal longitude, List<PortalDocumentView> documents,
         StopExecutionStatus executionStatus, Set<StopExecutionStatus> allowedExecutionTransitions,
         OffsetDateTime actualArrivalAt, OffsetDateTime serviceStartedAt, OffsetDateTime actualDepartureAt,

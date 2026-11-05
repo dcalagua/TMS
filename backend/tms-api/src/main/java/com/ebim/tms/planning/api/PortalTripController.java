@@ -1,9 +1,11 @@
 package com.ebim.tms.planning.api;
 
 import com.ebim.tms.planning.application.DeliveryEvidenceDownload;
+import com.ebim.tms.planning.application.DeliveryResultRequest;
 import com.ebim.tms.planning.application.DocumentReportCommand;
 import com.ebim.tms.planning.application.DocumentReportService;
 import com.ebim.tms.planning.application.EvidenceUpload;
+import com.ebim.tms.planning.application.PortalArrivalRequest;
 import com.ebim.tms.planning.application.PortalDeliveryCommand;
 import com.ebim.tms.planning.application.PortalDocumentView;
 import com.ebim.tms.planning.application.PortalExecutionService;
@@ -49,6 +51,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * The carrier portal (ADR-018): a carrier user's dispatched trips and the report of each document,
@@ -62,15 +67,22 @@ import org.springframework.web.multipart.MultipartFile;
 @Tag(name = "Carrier portal", description = "Trips assigned to my carrier and the delivery of their documents")
 public class PortalTripController {
 
+    /** The refused products of a delivery arrive as one JSON form field (V75); see {@link #refusedLinesOf}. */
+    private static final TypeReference<List<DeliveryResultRequest.RefusedLineRequest>> REFUSED_LINES =
+            new TypeReference<>() {
+            };
+
     private final PortalTripService portal;
     private final DocumentReportService reports;
     private final PortalExecutionService execution;
+    private final ObjectMapper objectMapper;
 
     public PortalTripController(PortalTripService portal, DocumentReportService reports,
-            PortalExecutionService execution) {
+            PortalExecutionService execution, ObjectMapper objectMapper) {
         this.portal = portal;
         this.reports = reports;
         this.execution = execution;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping
@@ -135,12 +147,14 @@ public class PortalTripController {
 
     @PostMapping("/{tripId}/stops/{stopId}/arrive")
     @PreAuthorize("hasAuthority('portal.stop:execute')")
-    @Operation(summary = "I arrived at a stop of my trip")
+    @Operation(summary = "I arrived at a stop of my trip",
+            description = "Optionally with the phone's latitude and longitude (both or neither), kept on the "
+                    + "timeline entry for the office to read. A position never refuses or confirms an arrival.")
     @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
             description = "Id of a company the caller is a member of")
     public PortalTripDetailView arrive(CompanyScope scope, @PathVariable UUID tripId, @PathVariable UUID stopId,
             @RequestHeader(name = ApiHeaders.IDEMPOTENCY_KEY, required = false) String idempotencyKey,
-            @Valid @RequestBody TripStopExecutionRequest request) {
+            @Valid @RequestBody PortalArrivalRequest request) {
         return execution.arrive(scope, tripId, stopId, idempotencyKey, request);
     }
 
@@ -212,6 +226,7 @@ public class PortalTripController {
             @RequestParam(name = "refusedWeightKg", required = false) BigDecimal refusedWeightKg,
             @RequestParam(name = "refusedVolumeM3", required = false) BigDecimal refusedVolumeM3,
             @RequestParam(name = "refusedPallets", required = false) BigDecimal refusedPallets,
+            @RequestParam(name = "refusedLines", required = false) String refusedLines,
             @RequestParam(name = "photos", required = false) List<MultipartFile> photos,
             @RequestParam(name = "signature", required = false) MultipartFile signature) {
         requireLength("receiverName", receiverName, 120);
@@ -225,7 +240,36 @@ public class PortalTripController {
         EvidenceUpload signatureUpload = signature == null || signature.isEmpty() ? null : toUpload(signature);
         return execution.recordDelivery(scope, tripId, stopId, orderId, idempotencyKey,
                 new PortalDeliveryCommand(result, deliveredAt, receiverName, receiverDocument, notes,
-                        refusedWeightKg, refusedVolumeM3, refusedPallets, uploads, signatureUpload));
+                        refusedWeightKg, refusedVolumeM3, refusedPallets, refusedLinesOf(refusedLines), uploads,
+                        signatureUpload));
+    }
+
+    /**
+     * The {@code refusedLines} form field (V75): a JSON array of
+     * {@code {"orderLineId", "quantity", "notes"}}, one per product the customer refused. A form
+     * field rather than parallel repeated fields because a note is optional per product, and
+     * positional lists with gaps are how two products' notes get swapped. Null when absent.
+     */
+    private List<DeliveryResultRequest.RefusedLineRequest> refusedLinesOf(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        List<DeliveryResultRequest.RefusedLineRequest> lines;
+        try {
+            lines = objectMapper.readValue(json, REFUSED_LINES);
+        } catch (JacksonException malformed) {
+            throw new InvalidRequestException("refusedLines must be a JSON array of {orderLineId, quantity, notes}.");
+        }
+        if (lines == null) {
+            return null;
+        }
+        for (DeliveryResultRequest.RefusedLineRequest line : lines) {
+            if (line == null || line.orderLineId() == null || line.quantity() == null) {
+                throw new InvalidRequestException("Each refused product needs its orderLineId and quantity.");
+            }
+            requireLength("refusedLines.notes", line.notes(), 300);
+        }
+        return lines;
     }
 
     /** The bounds {@code DeliveryResultRequest} declares, for the form fields that bypass Bean Validation. */

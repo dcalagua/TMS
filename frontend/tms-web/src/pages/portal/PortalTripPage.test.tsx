@@ -240,6 +240,48 @@ describe("la pantalla del viaje en el portal", () => {
       expect(await within(first).findByText("En el punto")).toBeInTheDocument();
     });
 
+    it("«Llegué» manda la ubicación del teléfono cuando el navegador la da (V75)", async () => {
+      // jsdom no trae geolocalización: se la pone el test y se la quita al terminar.
+      Object.defineProperty(navigator, "geolocation", {
+        configurable: true,
+        value: {
+          getCurrentPosition: (ok: PositionCallback) => ok({
+            coords: { latitude: -2.1709987, longitude: -79.9223591 },
+          } as GeolocationPosition),
+        },
+      });
+      try {
+        serve(ON_THE_ROAD);
+        const user = userEvent.setup();
+        renderTrip();
+
+        const first = await screen.findByRole("listitem", { name: "Bodega San Martín" });
+        await user.click(within(first).getByRole("button", { name: "Llegué" }));
+
+        const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls as [string, RequestInit][];
+        const body = JSON.parse((await waitForPost(calls))[1].body as string);
+        expect(body.latitude).toBe(-2.170999);
+        expect(body.longitude).toBe(-79.922359);
+      } finally {
+        Reflect.deleteProperty(navigator, "geolocation");
+      }
+    });
+
+    it("muestra quién recibe en la parada, con su teléfono para llamar (V75)", async () => {
+      serve({
+        ...ON_THE_ROAD,
+        stops: [{ ...ON_THE_ROAD.stops[0], contactName: "Rosa Pérez", contactPhone: "+593 99 123 4567",
+          deliveryInstructions: "Portón trasero" }, ON_THE_ROAD.stops[1]],
+      });
+      renderTrip();
+
+      const first = await screen.findByRole("listitem", { name: "Bodega San Martín" });
+      expect(within(first).getByText("Rosa Pérez")).toBeInTheDocument();
+      expect(within(first).getByText("Portón trasero")).toBeInTheDocument();
+      expect(within(first).getByRole("link", { name: "Llamar a +593 99 123 4567" }))
+        .toHaveAttribute("href", "tel:+593991234567");
+    });
+
     it("sin los permisos de V70 la parada se ve, pero no ofrece ninguna acción", async () => {
       permissions = ["portal.trip:read", "portal.document:report"];
       serve(ON_THE_ROAD);
