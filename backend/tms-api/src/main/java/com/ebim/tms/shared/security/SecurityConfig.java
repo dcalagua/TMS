@@ -156,7 +156,8 @@ public class SecurityConfig {
                 HttpHeaders.ACCEPT,
                 ApiHeaders.COMPANY_ID,
                 ApiHeaders.CORRELATION_ID,
-                ApiHeaders.REQUEST_ID));
+                ApiHeaders.REQUEST_ID,
+                ApiHeaders.IDEMPOTENCY_KEY));
         configuration.setExposedHeaders(List.of(ApiHeaders.CORRELATION_ID));
         configuration.setAllowCredentials(false);
         configuration.setMaxAge(1800L);

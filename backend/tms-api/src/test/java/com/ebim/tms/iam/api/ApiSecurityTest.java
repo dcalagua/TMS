@@ -270,14 +270,15 @@ class ApiSecurityTest {
     }
 
     /**
-     * The browser half of the contract, which only shows up in a deployment where the React
-     * application and the API are on different origins - which QAS is (Amplify to Render) and a
-     * developer's machine, proxied through Vite, is not.
+     * The browser half of the contract, which only shows up where the React application and the
+     * API are on different origins - which QAS is (Amplify to Render) and so is a developer's
+     * machine: Vite reaches the API by absolute URL, with no proxy ({@code vite.config.ts}).
      *
-     * <p>{@code httpClient.ts} sends {@code X-Company-Id} and {@code X-Correlation-Id}. Neither is
-     * a CORS-simple header, so every cross-origin call is preceded by a preflight, and a
-     * {@code SecurityConfig} that did not name them would fail every request in QAS while passing
-     * every test here. The exposed-headers rule is the quieter of the two: without it the browser
+     * <p>{@code httpClient.ts} sends {@code X-Company-Id} and {@code X-Correlation-Id}, and every
+     * carrier portal write adds {@code Idempotency-Key}. None is a CORS-simple header, so every
+     * cross-origin call is preceded by a preflight, and a {@code SecurityConfig} that did not name
+     * them would fail those requests in a browser while passing every test that skips the
+     * preflight. The exposed-headers rule is the quieter of the two: without it the browser
      * still completes the call and simply hides the response header, so the correlation id an
      * operator reads back off the screen becomes {@code null} and stops matching the server's logs.
      */
@@ -302,6 +303,24 @@ class ApiSecurityTest {
                             org.hamcrest.Matchers.allOf(
                                     org.hamcrest.Matchers.containsStringIgnoringCase(ApiHeaders.COMPANY_ID),
                                     org.hamcrest.Matchers.containsStringIgnoringCase(ApiHeaders.CORRELATION_ID))));
+        }
+
+        @Test
+        @DisplayName("the preflight accepts the Idempotency-Key every carrier portal write carries")
+        void preflightAllowsTheIdempotencyKey() throws Exception {
+            String portalWrite = "/api/v1/portal/trips/" + UUID.randomUUID() + "/stops/" + UUID.randomUUID()
+                    + "/arrive";
+            mockMvc.perform(options(portalWrite)
+                            .header(HttpHeaders.ORIGIN, ALLOWED_ORIGIN)
+                            .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                            .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
+                                    HttpHeaders.AUTHORIZATION + "," + HttpHeaders.CONTENT_TYPE + ","
+                                            + ApiHeaders.COMPANY_ID + "," + ApiHeaders.CORRELATION_ID + ","
+                                            + ApiHeaders.IDEMPOTENCY_KEY))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ALLOWED_ORIGIN))
+                    .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
+                            org.hamcrest.Matchers.containsStringIgnoringCase(ApiHeaders.IDEMPOTENCY_KEY)));
         }
 
         @Test
