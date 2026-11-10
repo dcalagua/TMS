@@ -26,6 +26,11 @@ const MESSAGE: Record<NotificationType, { title: string; text: string }> = {
   DRIVER_LICENSE_EXPIRING: { title: "Licencia por vencer", text: "La licencia de {{driver}} vence pronto." },
   TRIP_COMPLETED: { title: "Viaje completado", text: "El viaje {{trip}} se cerró." },
   DELIVERY_FAILED: { title: "Entrega fallida", text: "Una entrega del viaje {{trip}} no se pudo completar." },
+  TRIP_DISPATCHED: { title: "Viaje en ruta", text: "El viaje {{trip}} salió a ruta." },
+  TRIP_READY_TO_CLOSE: {
+    title: "Viaje listo para cerrar",
+    text: "El viaje {{trip}} terminó sus {{stopCount}} paradas. Falta completarlo.",
+  },
 };
 
 const SEVERITY_ICON: Record<NotificationSeverity, typeof InfoOutlined> = {

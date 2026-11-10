@@ -26,7 +26,9 @@ import com.ebim.tms.shared.api.ConflictException;
 import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.reference.GeoPoint;
 import com.ebim.tms.shared.security.CompanyScope;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -69,6 +71,7 @@ class TripStopExecutionServiceTest {
     private TripRepository tripRepository;
     private TripExceptionRepository exceptionRepository;
     private TransportEventRecorder transportEvents;
+    private TripAlertPublisher alerts;
     private TripStopExecutionService service;
     private Trip trip;
     private TripStop stop;
@@ -82,9 +85,9 @@ class TripStopExecutionServiceTest {
         AuditActorProvider actors = mock(AuditActorProvider.class);
         when(actors.requireAppUserId()).thenReturn(ACTOR);
 
+        alerts = mock(TripAlertPublisher.class);
         service = new TripStopExecutionService(
-                tripRepository, exceptionRepository, transportEvents, mock(TripAlertPublisher.class),
-                assembler, actors);
+                tripRepository, exceptionRepository, transportEvents, alerts, assembler, actors);
 
         stop = mock(TripStop.class);
         when(stop.id()).thenReturn(STOP_ID);
@@ -208,7 +211,7 @@ class TripStopExecutionServiceTest {
             service.arrive(SCOPE, TRIP_ID, STOP_ID, at(null));
 
             verify(transportEvents).record(eq(SCOPE), eq(TRIP_ID), eq(STOP_ID),
-                    eq(TransportEventType.ARRIVED_AT_STOP), any(), isNull(), anyMap());
+                    eq(TransportEventType.ARRIVED_AT_STOP), any(), isNull(), anyMap(), isNull());
         }
 
         @Test
@@ -225,7 +228,7 @@ class TripStopExecutionServiceTest {
             assertThat(captor.getValue().notes()).isEqualTo("refused at the dock");
 
             verify(transportEvents).record(eq(SCOPE), eq(TRIP_ID), eq(STOP_ID),
-                    eq(TransportEventType.STOP_FAILED), any(), eq("refused at the dock"), anyMap());
+                    eq(TransportEventType.STOP_FAILED), any(), eq("refused at the dock"), anyMap(), isNull());
         }
 
         /**
@@ -253,7 +256,7 @@ class TripStopExecutionServiceTest {
             verify(trip).recordStopOutcome(eq(STOP_ID), eq(StopExecutionStatus.FAILED), any(),
                     eq("refused at the dock"), eq(ACTOR));
             verify(transportEvents).record(eq(SCOPE), eq(TRIP_ID), eq(STOP_ID),
-                    eq(TransportEventType.STOP_FAILED), any(), eq("refused at the dock"), anyMap());
+                    eq(TransportEventType.STOP_FAILED), any(), eq("refused at the dock"), anyMap(), isNull());
         }
 
         @Test
@@ -274,6 +277,53 @@ class TripStopExecutionServiceTest {
                             new TripStopFailureRequest(null, TripExceptionType.OTHER, "   ")))
                     .withMessageContaining("notes");
             verifyNoInteractions(transportEvents);
+        }
+    }
+
+    @Nested
+    @DisplayName("V75: where the arrival was reported from, and the last stop")
+    class PositionAndLastStop {
+
+        @Test
+        @DisplayName("keeps the reported position on the arrival's timeline entry, and decides nothing with it")
+        void arrivalCarriesThePosition() {
+            GeoPoint phone = new GeoPoint(new BigDecimal("-2.170998"), new BigDecimal("-79.922359"));
+
+            service.arrive(SCOPE, TRIP_ID, STOP_ID, at(null), phone);
+
+            verify(transportEvents).record(eq(SCOPE), eq(TRIP_ID), eq(STOP_ID),
+                    eq(TransportEventType.ARRIVED_AT_STOP), any(), isNull(), anyMap(), eq(phone));
+            verify(trip).recordStopOutcome(eq(STOP_ID), eq(StopExecutionStatus.ARRIVED), any(), isNull(), eq(ACTOR));
+        }
+
+        @Test
+        @DisplayName("asks the office to close once the last outstanding stop is resolved")
+        void lastStopAsksToClose() {
+            when(stop.executionStatus()).thenReturn(StopExecutionStatus.ARRIVED);
+            when(trip.hasUnresolvedStops()).thenReturn(false);
+
+            service.complete(SCOPE, TRIP_ID, STOP_ID, at(null));
+
+            verify(alerts).readyToClose(eq(SCOPE), eq(trip), any());
+        }
+
+        @Test
+        @DisplayName("says nothing while another stop is still outstanding")
+        void otherStopsOutstanding() {
+            when(stop.executionStatus()).thenReturn(StopExecutionStatus.ARRIVED);
+            when(trip.hasUnresolvedStops()).thenReturn(true);
+
+            service.complete(SCOPE, TRIP_ID, STOP_ID, at(null));
+
+            verify(alerts, never()).readyToClose(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("says nothing on an arrival - an arrived stop is not resolved")
+        void arrivalIsNotTheEnd() {
+            service.arrive(SCOPE, TRIP_ID, STOP_ID, at(null));
+
+            verify(alerts, never()).readyToClose(any(), any(), any());
         }
     }
 }

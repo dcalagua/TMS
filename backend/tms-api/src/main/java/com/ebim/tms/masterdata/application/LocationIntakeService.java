@@ -131,7 +131,13 @@ public class LocationIntakeService implements LocationIntakePort {
                 zoneId,
                 command.serviceTimeMinutes(),
                 trimmed(command.externalSystem()),
-                trimmed(command.externalReference()));
+                trimmed(command.externalReference()),
+                // The delivery contact (V75) is office-maintained and the integration contract does
+                // not carry it. The update is a full replace, so the row's own values are passed
+                // through - a partner syncing addresses must not erase who receives at the dock.
+                existing != null ? existing.contactName() : null,
+                existing != null ? existing.contactPhone() : null,
+                existing != null ? existing.deliveryInstructions() : null);
     }
 
     /**

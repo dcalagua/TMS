@@ -112,6 +112,21 @@ public class Location {
     @Column(name = "geofence_radius_m")
     private Integer geofenceRadiusM;
 
+    /**
+     * Who receives at this place, how to reach them and what the driver must know on arrival
+     * (migration V75): "ask for Rosa at the warehouse", "unload at the back gate, no trucks over 8
+     * tonnes before 10:00". Shown to the carrier on the portal's stop. Office-maintained; the
+     * integration API carries none of the three and leaves them as they are.
+     */
+    @Column(name = "contact_name")
+    private String contactName;
+
+    @Column(name = "contact_phone")
+    private String contactPhone;
+
+    @Column(name = "delivery_instructions")
+    private String deliveryInstructions;
+
     @Column(name = "external_system")
     private String externalSystem;
 
@@ -247,6 +262,32 @@ public class Location {
 
     public Integer geofenceRadiusM() {
         return geofenceRadiusM;
+    }
+
+    /**
+     * Sets or clears who receives at this place and what the driver must know there (V75). Its own
+     * method rather than three more parameters on the constructor and {@code applyChanges}, which
+     * the CSV import and the integration intake share: neither carries these, and both must leave
+     * them alone. Blank values are the caller's to turn into null.
+     */
+    public void setDeliveryContact(String contactName, String contactPhone, String deliveryInstructions,
+            UUID actorId) {
+        this.contactName = contactName;
+        this.contactPhone = contactPhone;
+        this.deliveryInstructions = deliveryInstructions;
+        this.updatedBy = actorId;
+    }
+
+    public String contactName() {
+        return contactName;
+    }
+
+    public String contactPhone() {
+        return contactPhone;
+    }
+
+    public String deliveryInstructions() {
+        return deliveryInstructions;
     }
 
     /** Whether this place has a circle at all. Coordinates are needed too - a radius around nothing is nothing. */

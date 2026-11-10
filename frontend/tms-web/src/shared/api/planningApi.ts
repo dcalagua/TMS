@@ -420,6 +420,10 @@ export interface TripStopView {
   etaCalculatedAt: string | null
   /** El horario hace llegar al vehículo después de que la ventana de esta parada cierra. */
   etaMissesWindow: boolean
+  /** Quién recibe en el destino, su teléfono y qué debe saber el conductor (V75). Null si no se cargó. */
+  contactName?: string | null
+  contactPhone?: string | null
+  deliveryInstructions?: string | null
 }
 
 /** Mirrors the backend's `TransportEventView` record - one entry of a trip's timeline.
@@ -442,6 +446,13 @@ export interface TransportEventView {
   actorName: string | null
   notes: string | null
   metadata: string | null
+  /**
+   * Kilómetros en línea recta entre donde estaba quien lo registró y el destino de la parada (V75):
+   * el «Llegué» del portal manda la ubicación del teléfono. `null` si no hubo ubicación (sin permiso
+   * o sin señal) o el destino no tiene coordenadas. Solo informa; no confirma ni rechaza nada.
+   * Ausente en un servidor anterior.
+   */
+  distanceToStopKm?: number | null
 }
 
 /** Mirrors the backend's `TripExceptionView` record. */
@@ -504,6 +515,23 @@ export interface OrderDeliveryView {
    * ocurrió. La pantalla muestra el hueco.
    */
   quantities: DeliveryQuantitiesView | null
+  /**
+   * Qué pasó con cada producto (V75), por número de línea, en la unidad de cada uno. Vacío si la
+   * entrega no lo detalló: una parte de un pedido dividido, o un parcial dicho solo en kilos.
+   */
+  lines?: DeliveryLineView[]
+}
+
+/** Mirrors `OrderDeliveryView.DeliveryLineView`. */
+export interface DeliveryLineView {
+  orderLineId: string
+  lineNumber: number | null
+  materialCode: string | null
+  uom: string
+  quantityAttempted: number
+  quantityDelivered: number
+  quantityRefused: number
+  notes: string | null
 }
 
 /**

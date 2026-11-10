@@ -48,6 +48,11 @@ export interface DeliveryFormValues {
   refusedWeightKg: string;
   refusedVolumeM3: string;
   refusedPallets: string;
+  /**
+   * V75: lo rechazado de cada producto, por id de línea, tal como se escribió. `null` (o ausente)
+   * cuando el pedido no ofrece productos: viaja solo una parte de él y el rechazo va en kilos.
+   */
+  refusedLines?: Record<string, string> | null;
   photos: Blob[];
   signature: Blob | null;
 }
@@ -59,6 +64,8 @@ export interface Loaded {
   weightKg: number | null;
   volumeM3: number | null;
   pallets: number | null;
+  /** V75: lo pedido de cada producto, por id de línea: el tope de lo rechazado de cada uno. */
+  lines?: Record<string, number>;
 }
 
 /** Un número escrito con coma o punto; vacío es «no lo dijo». `NaN` si no es un número. */
@@ -88,7 +95,17 @@ export function validateDelivery(values: DeliveryFormValues, loaded: Loaded): De
   if (needsNotes(values.result) && values.notes.trim() === "") {
     errors.notes = t("Cuenta qué pasó: es obligatorio cuando no se entregó todo.");
   }
-  if (values.result === "PARTIAL") {
+  if (values.result === "PARTIAL" && values.refusedLines != null) {
+    const refused = Object.entries(values.refusedLines)
+      .map(([lineId, raw]) => ({ value: parseAmount(raw), max: loaded.lines?.[lineId] ?? null }));
+    if (refused.some(({ value }) => value !== null && (Number.isNaN(value) || value < 0))) {
+      errors.refused = t("Escribe cantidades válidas, sin negativos.");
+    } else if (refused.every(({ value }) => value === null || value === 0)) {
+      errors.refused = t("Indica cuántas unidades de qué producto rechazó el cliente.");
+    } else if (refused.some(({ value, max }) => value !== null && max !== null && value > max)) {
+      errors.refused = t("No se puede rechazar más de lo que pidió el cliente.");
+    }
+  } else if (values.result === "PARTIAL") {
     const refused = [
       { value: parseAmount(values.refusedPallets), max: loaded.pallets },
       { value: parseAmount(values.refusedWeightKg), max: loaded.weightKg },

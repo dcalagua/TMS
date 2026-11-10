@@ -23,9 +23,6 @@ import java.math.RoundingMode;
  */
 public final class GeodesicDistance {
 
-    /** Mean earth radius in kilometres (IUGG). */
-    private static final double EARTH_RADIUS_KM = 6371.0088;
-
     /**
      * How much longer a road is than the straight line under it.
      *
@@ -39,30 +36,11 @@ public final class GeodesicDistance {
     private GeodesicDistance() {}
 
     /**
-     * Straight-line kilometres between two points, to three decimals.
-     *
-     * <p>Returns exactly zero for two points that are the same, without going through the
-     * trigonometry: the formula's own rounding can otherwise produce a few millimetres of distance
-     * between a point and itself, and "this stop is 0.000003 km from where I am" is a number that
-     * makes a reader distrust everything beside it.
+     * Straight-line kilometres between two points, to three decimals. The math lives on
+     * {@link GeoPoint#greatCircleKmTo}, which planning shares.
      */
     public static BigDecimal greatCircleKm(GeoPoint origin, GeoPoint destination) {
-        if (origin.sameAs(destination)) {
-            return BigDecimal.ZERO.setScale(3);
-        }
-
-        double lat1 = Math.toRadians(origin.latitudeDegrees());
-        double lat2 = Math.toRadians(destination.latitudeDegrees());
-        double deltaLat = lat2 - lat1;
-        double deltaLon = Math.toRadians(destination.longitudeDegrees() - origin.longitudeDegrees());
-
-        double a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2)
-                + Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
-        // atan2 rather than asin: asin loses precision for the short hops that make up most of a
-        // distribution route, which is exactly where this is used most.
-        double centralAngle = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-        return BigDecimal.valueOf(EARTH_RADIUS_KM * centralAngle).setScale(3, RoundingMode.HALF_UP);
+        return origin.greatCircleKmTo(destination);
     }
 
     /** The straight line stretched by {@link #ROAD_FACTOR} - the estimated road distance. */

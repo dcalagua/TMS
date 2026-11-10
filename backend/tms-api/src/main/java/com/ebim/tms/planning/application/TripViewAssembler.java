@@ -12,6 +12,7 @@ import com.ebim.tms.planning.domain.TripOrderAssignment;
 import com.ebim.tms.planning.domain.TripStatus;
 import com.ebim.tms.planning.domain.TripStop;
 import com.ebim.tms.planning.infrastructure.DeliveryEvidenceRepository;
+import com.ebim.tms.planning.infrastructure.OrderDeliveryLineQueries;
 import com.ebim.tms.planning.infrastructure.OrderDeliveryRepository;
 import com.ebim.tms.planning.infrastructure.PlanningRunRepository;
 import com.ebim.tms.planning.infrastructure.TripExceptionRepository;
@@ -23,15 +24,19 @@ import com.ebim.tms.shared.reference.DestinationLookupPort;
 import com.ebim.tms.shared.reference.DriverLookupPort;
 import com.ebim.tms.shared.reference.DriverReference;
 import com.ebim.tms.shared.reference.FleetCompliancePort;
+import com.ebim.tms.shared.reference.GeoPoint;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderGeometryProfile;
+import com.ebim.tms.shared.reference.OrderLineSnapshot;
 import com.ebim.tms.shared.reference.OrderPlanningPort;
+import com.ebim.tms.shared.reference.OrderReferencePort;
 import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.reference.PlannableOrder;
 import com.ebim.tms.shared.reference.RouteTemplate;
 import com.ebim.tms.shared.reference.RouteTemplateLookupPort;
 import com.ebim.tms.shared.reference.VehicleCapacityReference;
 import com.ebim.tms.shared.reference.VehicleLookupPort;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Comparator;
@@ -81,6 +86,8 @@ public class TripViewAssembler {
     private final OrderPlanningPort orderPlanningPort;
     private final PlanningCapacityService capacityService;
     private final FleetCompliancePort fleetCompliancePort;
+    private final OrderDeliveryLineQueries deliveryLineQueries;
+    private final OrderReferencePort orderReferencePort;
 
     public TripViewAssembler(PlanningRunRepository planningRunRepository,
             TripOrderAssignmentRepository assignmentRepository, TripStopRepository tripStopRepository,
@@ -90,8 +97,11 @@ public class TripViewAssembler {
             CarrierLookupPort carrierLookupPort, DriverLookupPort driverLookupPort,
             RouteTemplateLookupPort routeTemplateLookupPort, DestinationLookupPort destinationLookupPort,
             OrderPlanningPort orderPlanningPort, PlanningCapacityService capacityService,
-            TripRoutingService tripRoutingService, FleetCompliancePort fleetCompliancePort) {
+            TripRoutingService tripRoutingService, FleetCompliancePort fleetCompliancePort,
+            OrderDeliveryLineQueries deliveryLineQueries, OrderReferencePort orderReferencePort) {
         this.fleetCompliancePort = fleetCompliancePort;
+        this.deliveryLineQueries = deliveryLineQueries;
+        this.orderReferencePort = orderReferencePort;
         this.planningRunRepository = planningRunRepository;
         this.assignmentRepository = assignmentRepository;
         this.tripStopRepository = tripStopRepository;
@@ -240,6 +250,7 @@ public class TripViewAssembler {
                         deliveries.stream().map(OrderDelivery::id).collect(Collectors.toSet()))
                 .stream()
                 .collect(Collectors.groupingBy(DeliveryEvidence::orderDeliveryId));
+        Map<UUID, List<OrderDeliveryView.DeliveryLineView>> lines = deliveryLinesOf(deliveries, companyId);
 
         return deliveries.stream()
                 // Visiting order, then recording order within a stop: the sequence a dispatcher
@@ -261,9 +272,41 @@ public class TripViewAssembler {
                                     .toList(),
                             // V45: null for a delivery that recorded no amounts, so a screen
                             // renders the gap rather than inventing a zero.
-                            OrderDeliveryView.DeliveryQuantitiesView.of(delivery.quantities()));
+                            OrderDeliveryView.DeliveryQuantitiesView.of(delivery.quantities()),
+                            lines.getOrDefault(delivery.id(), List.of()));
                 })
                 .toList();
+    }
+
+    /**
+     * The per-product results of each delivery (V75), with the line number and material resolved
+     * through the orders module - two batched reads for the whole trip, and none when nothing was
+     * recorded per product.
+     */
+    private Map<UUID, List<OrderDeliveryView.DeliveryLineView>> deliveryLinesOf(List<OrderDelivery> deliveries,
+            UUID companyId) {
+        Map<UUID, List<OrderDeliveryLineQueries.DeliveryLineRow>> rows = deliveryLineQueries.linesOf(companyId,
+                deliveries.stream().map(OrderDelivery::id).collect(Collectors.toSet()));
+        if (rows.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, OrderLineSnapshot> orderLines = orderReferencePort.linesByIds(rows.values().stream()
+                .flatMap(List::stream)
+                .map(OrderDeliveryLineQueries.DeliveryLineRow::orderLineId)
+                .collect(Collectors.toSet()), companyId);
+        Map<UUID, List<OrderDeliveryView.DeliveryLineView>> byDelivery = new HashMap<>();
+        rows.forEach((deliveryId, deliveryRows) -> byDelivery.put(deliveryId, deliveryRows.stream()
+                .map(row -> {
+                    OrderLineSnapshot line = orderLines.get(row.orderLineId());
+                    return new OrderDeliveryView.DeliveryLineView(row.orderLineId(),
+                            line == null ? null : line.lineNumber(), line == null ? null : line.materialCode(),
+                            row.uom(), row.quantityAttempted(), row.quantityDelivered(), row.quantityRefused(),
+                            row.notes());
+                })
+                .sorted(Comparator.comparing(OrderDeliveryView.DeliveryLineView::lineNumber,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList()));
+        return byDelivery;
     }
 
     private static int sequenceOf(Map<UUID, TripStop> stopsById, OrderDelivery delivery) {
@@ -300,8 +343,21 @@ public class TripViewAssembler {
                     destination == null ? null : destination.code(),
                     destination == null ? null : destination.name(),
                     event.eventType(), event.eventTime(), event.recordedAt(), event.source(),
-                    event.actorDisplayName(), event.notes(), event.metadata());
+                    event.actorDisplayName(), event.notes(), event.metadata(),
+                    distanceToStopKm(event, destination));
         }).toList();
+    }
+
+    /**
+     * How far from the stop the person was when they reported the event (V75), or null when either
+     * end is unknown. Straight line: it answers "was the phone at the place", not "how far by road".
+     */
+    private static BigDecimal distanceToStopKm(TransportEvent event, MasterReference destination) {
+        GeoPoint reported = GeoPoint.of(event.latitude(), event.longitude());
+        if (reported == null || destination == null || !destination.hasCoordinates()) {
+            return null;
+        }
+        return reported.greatCircleKmTo(new GeoPoint(destination.latitude(), destination.longitude()));
     }
 
     /**
@@ -568,7 +624,10 @@ public class TripViewAssembler {
                 stop.actualDepartureAt(), stop.executionNotes(),
                 dwellMinutes(stop.actualArrivalAt(), stop.actualDepartureAt()), (int) openExceptionCount,
                 stop.etaArrivalAt(), stop.etaDepartureAt(), stop.etaSource(), stop.etaCalculatedAt(),
-                stop.etaMissesWindow());
+                stop.etaMissesWindow(),
+                destination == null ? null : destination.contactName(),
+                destination == null ? null : destination.contactPhone(),
+                destination == null ? null : destination.deliveryInstructions());
     }
 
     /** Null until both ends are known: a stop still being served has no dwell time yet, only a start. */

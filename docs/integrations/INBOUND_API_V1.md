@@ -391,6 +391,10 @@ trip and a race for no benefit.
 | `externalReference` | string(100) | no | Your identifier for this store |
 | `active` | boolean | no | Omit to leave unchanged |
 
+The delivery contact of a location (TMS V75: `contactName`, `contactPhone`, `deliveryInstructions`,
+shown to the carrier on the portal stop) is maintained in the TMS office and is **not** part of this
+contract: an upsert neither sends nor clears it.
+
 **Request**
 
 ```http

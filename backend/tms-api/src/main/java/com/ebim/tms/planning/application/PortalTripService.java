@@ -13,6 +13,7 @@ import com.ebim.tms.planning.infrastructure.TripRepository;
 import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.reference.MasterReference;
+import com.ebim.tms.shared.reference.OrderReferencePort;
 import com.ebim.tms.shared.reference.OriginLookupPort;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.storage.StoredObjectContent;
@@ -20,6 +21,7 @@ import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -55,12 +57,14 @@ public class PortalTripService {
     private final OriginLookupPort origins;
     private final TripViewAssembler assembler;
     private final Clock clock;
+    private final OrderReferencePort orderReferencePort;
 
     @SuppressWarnings("java:S107")
     public PortalTripService(DocumentDeliveryQueries queries, DocumentDeliveryRepository deliveries,
             DocumentDeliveryEvidenceRepository evidence, DocumentDeliveryViews views,
             DocumentEvidenceStore evidenceStore, TripRepository trips, PlanningRunRepository planningRuns,
-            OriginLookupPort origins, TripViewAssembler assembler, Clock clock) {
+            OriginLookupPort origins, TripViewAssembler assembler, Clock clock, OrderReferencePort orderReferencePort) {
+        this.orderReferencePort = orderReferencePort;
         this.queries = queries;
         this.deliveries = deliveries;
         this.evidence = evidence;
@@ -134,6 +138,8 @@ public class PortalTripService {
                 .filter(assignment -> assignment.destinationId() != null)
                 .collect(Collectors.groupingBy(TripAssignmentView::destinationId, LinkedHashMap::new,
                         Collectors.toList()));
+        // V75: the products of each order that travels whole, so a partial delivery can name them.
+        Map<UUID, List<PortalStopOrderView.PortalOrderLineView>> linesByOrder = orderLinesOf(scope, plan);
         Map<String, OrderDeliveryView> deliveryByStopAndOrder = plan.deliveries().stream()
                 .collect(Collectors.toMap(delivery -> delivery.tripStopId() + "|" + delivery.orderId(),
                         delivery -> delivery, (left, right) -> left));
@@ -145,16 +151,18 @@ public class PortalTripService {
                     .map(assignment -> new PortalStopOrderView(assignment.orderId(), assignment.orderNumber(),
                             assignment.customerName(), assignment.assignedWeightKg(), assignment.assignedVolumeM3(),
                             assignment.assignedPallets(),
-                            portalDelivery(deliveryByStopAndOrder.get(stop.id() + "|" + assignment.orderId()))))
+                            portalDelivery(deliveryByStopAndOrder.get(stop.id() + "|" + assignment.orderId())),
+                            linesByOrder.getOrDefault(assignment.orderId(), List.of())))
                     .toList();
             stops.add(new PortalStopView(stop.id(), stop.sequence(), stop.destinationName(), stop.address(),
+                    stop.contactName(), stop.contactPhone(), stop.deliveryInstructions(),
                     stop.latitude(), stop.longitude(), byStop.getOrDefault(stop.id(), List.of()),
                     stop.executionStatus(), stop.allowedExecutionTransitions(), stop.actualArrivalAt(),
                     stop.serviceStartedAt(), stop.actualDepartureAt(), orders));
         });
         if (!unplaced.isEmpty()) {
-            stops.add(new PortalStopView(null, null, null, null, null, null, unplaced, null, null, null, null, null,
-                    List.of()));
+            stops.add(new PortalStopView(null, null, null, null, null, null, null, null, null, unplaced, null, null,
+                    null, null, null, List.of()));
         }
         List<PortalIncidentView> incidents = plan.exceptions().stream()
                 .map(exception -> new PortalIncidentView(exception.id(), exception.tripStopId(),
@@ -163,6 +171,26 @@ public class PortalTripService {
                 .toList();
         return new PortalTripDetailView(summaries(scope, List.of(row)).get(0), evidenceStore.isEnabled(), stops,
                 incidents);
+    }
+
+    /**
+     * The lines of the trip's whole-order assignments, one batched read. A share of a split order
+     * has no per-line allocation, so it gets none and its refusal stays in kilos (V75).
+     */
+    private Map<UUID, List<PortalStopOrderView.PortalOrderLineView>> orderLinesOf(CompanyScope scope,
+            TripDetailView plan) {
+        Set<UUID> wholeOrders = plan.assignments().stream()
+                .filter(TripAssignmentView::wholeOrder)
+                .map(TripAssignmentView::orderId)
+                .collect(Collectors.toSet());
+        Map<UUID, List<PortalStopOrderView.PortalOrderLineView>> byOrder = new HashMap<>();
+        orderReferencePort.lineReferencesOf(wholeOrders, scope.companyId()).forEach((orderId, lines) ->
+                byOrder.put(orderId, lines.stream()
+                        .map(line -> new PortalStopOrderView.PortalOrderLineView(line.id(), line.lineNumber(),
+                                line.materialCode(), line.materialDescription(), line.quantity(), line.uom(),
+                                line.unitWeightKg()))
+                        .toList()));
+        return byOrder;
     }
 
     /** The carrier's view of a recorded delivery: the office's row, without who in the office typed it. */
@@ -176,7 +204,12 @@ public class PortalTripService {
                 delivery.recordedAt(), delivery.evidence().size(),
                 quantities == null ? null : quantities.refusedWeightKg(),
                 quantities == null ? null : quantities.refusedVolumeM3(),
-                quantities == null ? null : quantities.refusedPallets());
+                quantities == null ? null : quantities.refusedPallets(),
+                delivery.lines().stream()
+                        .filter(line -> line.quantityRefused().signum() > 0)
+                        .map(line -> new PortalDeliveryView.RefusedLineView(line.orderLineId(), line.lineNumber(),
+                                line.materialCode(), line.quantityRefused(), line.uom(), line.notes()))
+                        .toList());
     }
 
     /** The bytes of one artefact of a document on a trip this carrier may see. */

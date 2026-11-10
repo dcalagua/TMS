@@ -817,7 +817,9 @@ class AutoPlanningServiceTest {
                         null, null, 0,
                         // V43: no ETA in this fixture - these stops were never scheduled, which is
                         // what four nulls and a false say.
-                        null, null, null, null, false));
+                        null, null, null, null, false,
+                        // V75: no delivery contact on these destinations.
+                        null, null, null));
             }
 
             TripView trip = new TripView(tripId, COMPANY, RUN, null, DATE, 1, "SH-" + tripId,

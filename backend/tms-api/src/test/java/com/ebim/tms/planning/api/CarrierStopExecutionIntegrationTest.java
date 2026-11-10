@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -251,6 +252,93 @@ class CarrierStopExecutionIntegrationTest {
     }
 
     @Test
+    @DisplayName("V75: the stop shows who receives; «Llegué» keeps the phone's position; a partial delivery says"
+            + " which product came back, for the office, the warehouse and a reopened order's lines")
+    void deliveryFollowUp() throws Exception {
+        execute("UPDATE tms.location SET latitude = -12.050000, longitude = -77.040000, contact_name = 'Rosa Pérez',"
+                + " contact_phone = '+51 999 111 222', delivery_instructions = 'Portón trasero'"
+                + " WHERE id = '" + destination + "'");
+        Shipment shipment = dispatchedShipment(carrierA);
+        String lineId = value("SELECT id FROM tms.transport_order_line WHERE order_id = '" + shipment.orderId + "'");
+
+        String detail = asCarrier(CARRIER_A_AUTH, get(PORTAL + "/" + shipment.tripId)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.stops[0].contactName").value("Rosa Pérez"))
+                .andExpect(jsonPath("$.stops[0].contactPhone").value("+51 999 111 222"))
+                .andExpect(jsonPath("$.stops[0].deliveryInstructions").value("Portón trasero"))
+                // The whole order travels, so its products are offered for a partial delivery.
+                .andExpect(jsonPath("$.stops[0].orders[0].lines[0].orderLineId").value(lineId))
+                .andExpect(jsonPath("$.stops[0].orders[0].lines[0].materialCode").value("SKU-100"))
+                .andReturn().getResponse().getContentAsString();
+        String stopId = JsonPath.read(detail, "$.stops[0].stopId");
+
+        // Half a coordinate is a broken client, refused rather than silently dropped.
+        stopAction(CARRIER_A_AUTH, shipment.tripId, stopId, "arrive", UUID.randomUUID().toString(),
+                "{\"latitude\":-12.0365}").andExpect(status().isBadRequest());
+        stopAction(CARRIER_A_AUTH, shipment.tripId, stopId, "arrive", UUID.randomUUID().toString(),
+                "{\"latitude\":-12.0365,\"longitude\":-77.04}").andExpect(status().isOk());
+        assertThat(value("SELECT latitude || ',' || longitude FROM tms.transport_event WHERE trip_id = '"
+                + shipment.tripId + "' AND event_type = 'ARRIVED_AT_STOP'")).isEqualTo("-12.036500,-77.040000");
+        // 0.0135 degrees of latitude: a kilometre and a half, straight line.
+        asAdmin(get(TRIPS + "/" + shipment.tripId + "/events")).andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.eventType == 'ARRIVED_AT_STOP')].distanceToStopKm").value(1.501));
+
+        MockMultipartHttpServletRequestBuilder partial = multipart(PORTAL + "/" + shipment.tripId + "/stops/"
+                + stopId + "/orders/" + shipment.orderId + "/delivery");
+        partial.param("result", "PARTIAL");
+        partial.param("notes", "30 sacos mojados");
+        partial.param("refusedLines", "[{\"orderLineId\":\"" + lineId + "\",\"quantity\":30,\"notes\":\"mojados\"}]");
+        partial.header(ApiHeaders.IDEMPOTENCY_KEY, UUID.randomUUID().toString());
+        asCarrier(CARRIER_A_AUTH, partial).andExpect(status().isOk())
+                .andExpect(jsonPath("$.stops[0].orders[0].delivery.result").value("PARTIAL"))
+                .andExpect(jsonPath("$.stops[0].orders[0].delivery.refusedLines[0].materialCode").value("SKU-100"))
+                .andExpect(jsonPath("$.stops[0].orders[0].delivery.refusedLines[0].quantity").value(30));
+        assertThat(value("SELECT quantity_attempted || '/' || quantity_delivered || '/' || quantity_refused || '/'"
+                + " || notes FROM tms.order_delivery_line WHERE order_id = '" + shipment.orderId + "'"))
+                .isEqualTo("100.000/70.000/30.000/mojados");
+
+        asAdmin(get(TRIPS + "/" + shipment.tripId)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.deliveries[0].lines[0].materialCode").value("SKU-100"))
+                .andExpect(jsonPath("$.deliveries[0].lines[0].quantityRefused").value(30));
+        // The warehouse's proof of delivery now says which product came back (it was always []).
+        String reader = client("WMS-POD-" + SEQUENCE.incrementAndGet(), "integration.shipment:read");
+        mockMvc.perform(get("/integration/v1/shipments/" + shipment.shipmentNumber)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + reader))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.orders[0].delivery.lines[0].materialCode").value("SKU-100"))
+                .andExpect(jsonPath("$.orders[0].delivery.lines[0].quantityRefused").value(30));
+
+        // Close the stop and the trip, reopen the order: its header may change, its goods may not.
+        stopAction(CARRIER_A_AUTH, shipment.tripId, stopId, "complete", UUID.randomUUID().toString(), "{}")
+                .andExpect(status().isOk());
+        asAdmin(post(TRIPS + "/" + shipment.tripId + "/complete").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":" + value("SELECT version FROM tms.trip WHERE id = '" + shipment.tripId
+                                + "'") + "}"))
+                .andExpect(status().isOk());
+        asAdmin(post("/api/v1/orders/" + shipment.orderId + "/reopen")).andExpect(status().isOk());
+        LocalDate later = LocalDate.now(LIMA).plusDays(3);
+        asAdmin(put("/api/v1/orders/" + shipment.orderId).contentType(MediaType.APPLICATION_JSON)
+                        .content(orderEdit(shipment.orderId, later, "90")))
+                .andExpect(status().isConflict());
+        asAdmin(put("/api/v1/orders/" + shipment.orderId).contentType(MediaType.APPLICATION_JSON)
+                        .content(orderEdit(shipment.orderId, later, "100")))
+                .andExpect(status().isOk());
+        assertThat(value("SELECT service_date || '/' || (SELECT count(*) FROM tms.transport_order_line l"
+                + " WHERE l.id = '" + lineId + "') FROM tms.transport_order WHERE id = '" + shipment.orderId + "'"))
+                .isEqualTo(later + "/1");
+    }
+
+    /** The order as an office PUT sends it: the seeded header, a new date and the one line's quantity. */
+    private String orderEdit(String orderId, LocalDate serviceDate, String quantity) {
+        return """
+                {"externalSource":"SAPB1_PE","externalReference":"%s","originId":"%s","destinationId":"%s",
+                 "customerName":"Cliente Uno SAC","serviceDate":"%s","priority":"NORMAL","version":%s,
+                 "lines":[{"materialCode":"SKU-100","materialDescription":"Cemento","quantity":%s,"uom":"UN"}]}
+                """.formatted(value("SELECT external_reference FROM tms.transport_order WHERE id = '" + orderId + "'"),
+                origin, destination, serviceDate,
+                value("SELECT version FROM tms.transport_order WHERE id = '" + orderId + "'"), quantity);
+    }
+
+    @Test
     @DisplayName("the office's rules refuse a bad portal delivery, and nothing is half-written")
     void deliveryRules() throws Exception {
         Shipment shipment = dispatchedShipment(carrierA);
@@ -344,11 +432,14 @@ class CarrierStopExecutionIntegrationTest {
             // With no carrier setting - every office request - nothing is narrowed.
             assertThat(asRuntimeRole(null, sql)).as(sql).isNotEqualTo("0");
         }
-        // The delivery's lines are behind the delivery: a carrier B session cannot read them.
+        // The delivery's lines are behind the delivery: a carrier B session cannot read them. Since
+        // V75 the delivery recorded above wrote its line itself; the insert only covers a row that
+        // is not there, so the assertion below reads one line either way.
         execute("INSERT INTO tms.order_delivery_line (company_id, order_delivery_id, order_id, order_line_id, uom,"
                 + " quantity_attempted, quantity_delivered, quantity_refused) SELECT d.company_id, d.id, d.order_id,"
                 + " l.id, l.uom, 100, 100, 0 FROM tms.order_delivery d JOIN tms.transport_order_line l"
-                + " ON l.order_id = d.order_id WHERE d.trip_id = " + trip);
+                + " ON l.order_id = d.order_id WHERE d.trip_id = " + trip
+                + " ON CONFLICT (order_delivery_id, order_line_id) DO NOTHING");
         assertThat(asRuntimeRole(carrierB, "SELECT count(*) FROM tms.order_delivery_line WHERE order_id = '"
                 + shipment.orderId + "'")).isEqualTo("0");
         assertThat(asRuntimeRole(carrierA, "SELECT count(*) FROM tms.order_delivery_line WHERE order_id = '"

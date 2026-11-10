@@ -15,6 +15,7 @@ import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.ProblemTimes;
 import com.ebim.tms.shared.api.ResourceNotFoundException;
 import com.ebim.tms.shared.audit.AuditActorProvider;
+import com.ebim.tms.shared.reference.GeoPoint;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -72,8 +73,23 @@ public class TripStopExecutionService {
     /** The vehicle is at the destination. */
     @Transactional
     public TripDetailView arrive(CompanyScope scope, UUID tripId, UUID stopId, TripStopExecutionRequest request) {
+        return arrive(scope, tripId, stopId, request, null);
+    }
+
+    /**
+     * The vehicle is at the destination, reported from where the person was (V75): the carrier
+     * portal sends the phone's location when the browser grants it. The position goes on the
+     * timeline entry and nowhere else - it is not compared with the destination here, and no
+     * distance can refuse or confirm an arrival (ADR-007, ADR-011). A person said they arrived;
+     * that is the fact.
+     *
+     * @param position where the reporter was, or null when the browser gave nothing
+     */
+    @Transactional
+    public TripDetailView arrive(CompanyScope scope, UUID tripId, UUID stopId, TripStopExecutionRequest request,
+            GeoPoint position) {
         return transition(scope, tripId, stopId, StopExecutionStatus.ARRIVED, request.occurredAt(), request.notes(),
-                null);
+                null, position);
     }
 
     /**
@@ -85,7 +101,7 @@ public class TripStopExecutionService {
     public TripDetailView startService(CompanyScope scope, UUID tripId, UUID stopId,
             TripStopExecutionRequest request) {
         return transition(scope, tripId, stopId, StopExecutionStatus.IN_SERVICE, request.occurredAt(),
-                request.notes(), null);
+                request.notes(), null, null);
     }
 
     /**
@@ -96,21 +112,21 @@ public class TripStopExecutionService {
     @Transactional
     public TripDetailView complete(CompanyScope scope, UUID tripId, UUID stopId, TripStopExecutionRequest request) {
         return transition(scope, tripId, stopId, StopExecutionStatus.COMPLETED, request.occurredAt(),
-                request.notes(), null);
+                request.notes(), null, null);
     }
 
     /** Never attempted, by decision. Carries no times at all - see {@code StopExecutionStatus}. */
     @Transactional
     public TripDetailView skip(CompanyScope scope, UUID tripId, UUID stopId, TripStopFailureRequest request) {
         return transition(scope, tripId, stopId, StopExecutionStatus.SKIPPED, request.occurredAt(), request.notes(),
-                request.exceptionType());
+                request.exceptionType(), null);
     }
 
     /** Attempted and not served. */
     @Transactional
     public TripDetailView fail(CompanyScope scope, UUID tripId, UUID stopId, TripStopFailureRequest request) {
         return transition(scope, tripId, stopId, StopExecutionStatus.FAILED, request.occurredAt(), request.notes(),
-                request.exceptionType());
+                request.exceptionType(), null);
     }
 
     /**
@@ -119,9 +135,10 @@ public class TripStopExecutionService {
      * one, and log it.
      *
      * @param exceptionType non-null exactly for the outcomes that require a reason on file
+     * @param position where the reporter was, for the timeline entry only; null when unknown
      */
     private TripDetailView transition(CompanyScope scope, UUID tripId, UUID stopId, StopExecutionStatus target,
-            OffsetDateTime requestedAt, String notes, TripExceptionType exceptionType) {
+            OffsetDateTime requestedAt, String notes, TripExceptionType exceptionType, GeoPoint position) {
         Trip trip = tripRepository.findByIdAndCompanyIdForUpdate(tripId, scope.companyId())
                 .orElseThrow(() -> new ResourceNotFoundException("Trip not found."));
         TripStop stop = trip.stops().stream()
@@ -171,13 +188,18 @@ public class TripStopExecutionService {
 
         Trip saved = tripRepository.saveAndFlush(trip);
         transportEvents.record(scope, saved.id(), stop.id(), TransportEventType.forStopOutcome(target),
-                occurredAt, notes, detail);
+                occurredAt, notes, detail, position);
         if (opened != null) {
             // The same alert TripExceptionService raises when a dispatcher reports a problem by
             // hand (V32). Raised here too rather than only there, because a stop that was skipped
             // or failed is exactly the case nobody will go on to write up separately - and the two
             // paths must not produce two different-looking entries for one kind of fact.
             alerts.exceptionOpened(scope, saved, opened, stop);
+        }
+        if (target.isResolved() && !saved.hasUnresolvedStops()) {
+            // The last outstanding stop (V75). A resolved stop cannot be reopened and a retry
+            // returned above, so this runs once per trip; the dedupe key is the backstop.
+            alerts.readyToClose(scope, saved, occurredAt);
         }
         return assembler.toDetail(saved, scope.companyId());
     }

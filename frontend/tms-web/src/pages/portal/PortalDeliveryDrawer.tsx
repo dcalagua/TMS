@@ -76,6 +76,14 @@ export function PortalDeliveryDrawer({
   const [refusedPallets, setRefusedPallets] = useState(existing?.refusedPallets?.toString() ?? "");
   const [refusedWeightKg, setRefusedWeightKg] = useState(existing?.refusedWeightKg?.toString() ?? "");
   const [refusedVolumeM3, setRefusedVolumeM3] = useState(existing?.refusedVolumeM3?.toString() ?? "");
+  // V75: con el pedido entero en el viaje, el rechazo se dice por producto y los kilos los deriva el
+  // servidor del peso unitario. Si solo viaja una parte, no hay productos y se dice en kilos.
+  const products = order.lines ?? [];
+  const perProduct = products.length > 0;
+  const [refusedByLine, setRefusedByLine] = useState<Record<string, string>>(() => Object.fromEntries(
+    products.map((line) => [line.orderLineId,
+      existing?.refusedLines?.find((refused) => refused.orderLineId === line.orderLineId)?.quantity.toString() ?? ""]),
+  ));
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   const [signature, setSignature] = useState<Blob | null>(null);
   const [signing, setSigning] = useState(false);
@@ -83,7 +91,14 @@ export function PortalDeliveryDrawer({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const loaded = { weightKg: order.assignedWeightKg, volumeM3: order.assignedVolumeM3, pallets: order.assignedPallets };
+  const loaded = {
+    weightKg: order.assignedWeightKg, volumeM3: order.assignedVolumeM3, pallets: order.assignedPallets,
+    lines: Object.fromEntries(products.map((line) => [line.orderLineId, line.quantity])),
+  };
+  const refusedKg = products.reduce((sum, line) => {
+    const units = parseAmount(refusedByLine[line.orderLineId] ?? "");
+    return line.unitWeightKg !== null && units !== null && !Number.isNaN(units) ? sum + units * line.unitWeightKg : sum;
+  }, 0);
   const dirty = result !== (existing?.result ?? null) || photos.length > 0 || signature !== null
     || receiverName !== (existing?.receiverName ?? "") || notes !== (existing?.notes ?? "");
 
@@ -112,6 +127,7 @@ export function PortalDeliveryDrawer({
     if (submitting) return;
     const values = {
       result, receiverName, receiverDocument, notes, refusedPallets, refusedWeightKg, refusedVolumeM3,
+      refusedLines: perProduct ? refusedByLine : null,
       photos: photos.map((photo) => photo.file), signature,
     };
     const found = validateDelivery(values, loaded);
@@ -127,9 +143,14 @@ export function PortalDeliveryDrawer({
       receiverName: allowsReceiver(result) ? receiverName.trim() || null : null,
       receiverDocument: allowsReceiver(result) ? receiverDocument.trim() || null : null,
       notes: notes.trim() || null,
-      refusedPallets: partial ? parseAmount(refusedPallets) : null,
-      refusedWeightKg: partial ? parseAmount(refusedWeightKg) : null,
-      refusedVolumeM3: partial ? parseAmount(refusedVolumeM3) : null,
+      refusedPallets: partial && !perProduct ? parseAmount(refusedPallets) : null,
+      refusedWeightKg: partial && !perProduct ? parseAmount(refusedWeightKg) : null,
+      refusedVolumeM3: partial && !perProduct ? parseAmount(refusedVolumeM3) : null,
+      refusedLines: partial && perProduct
+        ? products
+          .map((line) => ({ orderLineId: line.orderLineId, quantity: parseAmount(refusedByLine[line.orderLineId] ?? "") ?? 0 }))
+          .filter((line) => line.quantity > 0)
+        : null,
       photos: evidenceEnabled && takesEvidence(result) ? values.photos : [],
       signature: evidenceEnabled && allowsReceiver(result) ? signature : null,
     };
@@ -255,7 +276,43 @@ export function PortalDeliveryDrawer({
           {errors.result && <Typography color="error" sx={{ mt: 0.75, fontWeight: 700, fontSize: 15 }}>{errors.result}</Typography>}
         </Box>
 
-        {result === "PARTIAL" && (
+        {result === "PARTIAL" && perProduct && (
+          <Box role="group" aria-labelledby="delivery-refused-label">
+            <Typography component="h3" id="delivery-refused-label" sx={{ fontWeight: 800, fontSize: 17, mb: 1 }}>
+              {t("¿Qué productos rechazó el cliente?")}
+            </Typography>
+            <Box sx={{ display: "grid", gap: 1 }}>
+              {products.map((line) => (
+                <Box key={line.orderLineId} sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 112px", gap: 1, alignItems: "center" }}>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 700, fontSize: 15, overflowWrap: "anywhere" }}>
+                      {line.materialDescription ?? line.materialCode}
+                    </Typography>
+                    <Typography color="text.secondary" sx={{ fontSize: 13, fontVariantNumeric: "tabular-nums" }}>
+                      {line.materialCode} · {t("Pedido")}: {fmtQuantity(line.quantity)} {line.uom}
+                    </Typography>
+                  </Box>
+                  <TextField
+                    label={t("Rechazadas")} value={refusedByLine[line.orderLineId] ?? ""}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setRefusedByLine((current) => ({ ...current, [line.orderLineId]: value }));
+                      setErrors((x) => ({ ...x, refused: undefined }));
+                    }}
+                    slotProps={{ htmlInput: { inputMode: "decimal", "aria-label": t("Rechazadas de {{material}}", { material: line.materialCode }) } }}
+                  />
+                </Box>
+              ))}
+            </Box>
+            <Typography color={errors.refused ? "error" : "text.secondary"} sx={{ mt: 0.75, fontSize: 14, fontWeight: errors.refused ? 700 : 400 }}>
+              {errors.refused ?? (refusedKg > 0
+                ? t("Unos {{kg}} kg rechazados. Lo que no rechazó se registra como entregado.", { kg: fmtQuantity(refusedKg) })
+                : t("Lo que no rechazó se registra como entregado."))}
+            </Typography>
+          </Box>
+        )}
+
+        {result === "PARTIAL" && !perProduct && (
           <Box role="group" aria-labelledby="delivery-refused-label">
             <Typography component="h3" id="delivery-refused-label" sx={{ fontWeight: 800, fontSize: 17, mb: 1 }}>
               {t("¿Cuánto rechazó el cliente?")}

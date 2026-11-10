@@ -9,6 +9,8 @@ import jakarta.validation.constraints.PositiveOrZero;
 import java.math.BigDecimal;
 import jakarta.validation.constraints.Size;
 import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.UUID;
 
 /**
  * The body of "record what happened to this order at this stop" (migration V28).
@@ -52,7 +54,15 @@ public record DeliveryResultRequest(
          * V45 did. A caller that omits this block is making no claim about quantities; a caller that
          * sends zeros is claiming the customer took nothing.
          */
-        @Valid DeliveryQuantitiesRequest quantities) {
+        @Valid DeliveryQuantitiesRequest quantities,
+        /**
+         * Which products the customer refused, and how many of each (V75) - for a
+         * {@code PARTIAL} delivery of an order that travels whole on this trip. Null leaves the
+         * per-product detail already on file as it is; any other result writes it from the result
+         * itself (everything delivered, everything refused, nothing handed over). See
+         * {@link DeliveryLineResults}.
+         */
+        @Valid List<RefusedLineRequest> refusedLines) {
 
     /**
      * An outcome with no amounts - what every delivery recorded before V45 was, and a legitimate
@@ -61,7 +71,26 @@ public record DeliveryResultRequest(
      */
     public DeliveryResultRequest(DeliveryResult result, OffsetDateTime deliveredAt, String receiverName,
             String receiverDocument, String notes) {
-        this(result, deliveredAt, receiverName, receiverDocument, notes, null);
+        this(result, deliveredAt, receiverName, receiverDocument, notes, null, null);
+    }
+
+    /** An outcome with amounts and no per-product detail - every delivery recorded before V75. */
+    public DeliveryResultRequest(DeliveryResult result, OffsetDateTime deliveredAt, String receiverName,
+            String receiverDocument, String notes, DeliveryQuantitiesRequest quantities) {
+        this(result, deliveredAt, receiverName, receiverDocument, notes, quantities, null);
+    }
+
+    /**
+     * One product the customer refused (V75).
+     *
+     * @param orderLineId the order line, which must belong to the order being delivered
+     * @param quantity how many units were refused, in the line's own unit; at most what was ordered
+     * @param notes why, when the delivery's own notes do not say it for this product ("10 broken")
+     */
+    public record RefusedLineRequest(
+            @NotNull(message = "is required") UUID orderLineId,
+            @NotNull(message = "is required") @PositiveOrZero(message = "cannot be negative") BigDecimal quantity,
+            @Size(max = 300, message = "must be at most 300 characters") String notes) {
     }
 
     /**

@@ -60,6 +60,14 @@ export interface LocationView {
   geofenceRadiusM: number | null
   externalSystem: string | null
   externalReference: string | null
+  /**
+   * Quién recibe aquí, su teléfono y lo que el conductor debe saber al llegar (migración V75). Los ve
+   * el transportista en la parada del portal. Los mantiene la oficina: la API de integración no los
+   * manda ni los borra.
+   */
+  contactName: string | null
+  contactPhone: string | null
+  deliveryInstructions: string | null
   active: boolean
   createdAt: string
   updatedAt: string
@@ -84,6 +92,9 @@ export interface LocationRequest {
   serviceTimeMinutes: number
   externalSystem?: string | null
   externalReference?: string | null
+  contactName?: string | null
+  contactPhone?: string | null
+  deliveryInstructions?: string | null
 }
 
 export interface LocationListParams {

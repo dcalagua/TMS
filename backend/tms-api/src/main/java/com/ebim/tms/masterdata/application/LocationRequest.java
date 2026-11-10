@@ -22,6 +22,10 @@ import java.util.UUID;
  * business record, it is a typo. {@code externalSystem}/{@code externalReference} must be
  * supplied together - a reference with no system cannot be deduplicated, which is the whole
  * point of carrying it (see {@code ck_location_external_pair_complete} in V14).
+ *
+ * <p>{@code contactName}, {@code contactPhone} and {@code deliveryInstructions} (V75) are what the
+ * carrier reads on the portal at this stop. Like every field here they are replaced by an update,
+ * so an office form that omits them clears them.
  */
 public record LocationRequest(
         @NotBlank @Size(max = 32) @Pattern(regexp = "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$",
@@ -43,5 +47,9 @@ public record LocationRequest(
         UUID zoneId,
         @NotNull @Min(value = 0, message = "must be zero or greater") Integer serviceTimeMinutes,
         @Size(max = 60) String externalSystem,
-        @Size(max = 100) String externalReference) {
+        @Size(max = 100) String externalReference,
+        @Size(max = 120) String contactName,
+        @Size(max = 40) @Pattern(regexp = "^[0-9+()\\s-]*$",
+                message = "only digits, spaces, +, -, ( and )") String contactPhone,
+        @Size(max = 500) String deliveryInstructions) {
 }

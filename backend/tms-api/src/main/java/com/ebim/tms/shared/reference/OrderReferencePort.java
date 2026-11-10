@@ -26,6 +26,13 @@ public interface OrderReferencePort {
     Map<UUID, OrderLineSnapshot> linesByIds(Set<UUID> lineIds, UUID companyId);
 
     /**
+     * The lines of each order in {@code orderIds} with their ids, by line number (V75) - what a
+     * delivery result per product is recorded against. An order of another company is absent; an
+     * order with no lines maps to an empty list.
+     */
+    Map<UUID, List<OrderLineReference>> lineReferencesOf(Set<UUID> orderIds, UUID companyId);
+
+    /**
      * What the cost-to-serve report groups an order by (V68, ADR-026 section 7), keyed by order id.
      * An order of another company is absent.
      */

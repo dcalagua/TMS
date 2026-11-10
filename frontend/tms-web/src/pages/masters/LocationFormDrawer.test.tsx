@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -37,10 +38,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderNew() {
+function renderNew(presetRole?: "ORIGIN" | "DESTINATION") {
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <LocationFormDrawer companyId={company.selected.id} location={null} onClose={vi.fn()} onSaved={vi.fn()} />
+      <LocationFormDrawer companyId={company.selected.id} location={null} presetRole={presetRole}
+        onClose={vi.fn()} onSaved={vi.fn()} />
     </QueryClientProvider>,
   );
 }
@@ -59,5 +61,32 @@ describe("una ubicación nueva", () => {
 
     expect(await screen.findByRole("textbox", { name: /País/ })).toHaveValue("PE");
     expect(screen.getByRole("combobox", { name: /Zona horaria/ })).toHaveValue("America/Lima");
+  });
+});
+
+describe("el contacto de entrega (V75) es solo de un destino", () => {
+  it("un origen no muestra quién recibe ni las indicaciones", async () => {
+    renderNew("ORIGIN");
+
+    await screen.findByRole("textbox", { name: /País/ });
+    expect(screen.queryByText("Contacto de entrega")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Persona de contacto" })).not.toBeInTheDocument();
+  });
+
+  it("un destino sí los muestra", async () => {
+    renderNew("DESTINATION");
+
+    expect(await screen.findByRole("textbox", { name: "Persona de contacto" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Teléfono de contacto" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Indicaciones de entrega" })).toBeInTheDocument();
+  });
+
+  it("aparecen en cuanto el lugar se marca también como destino", async () => {
+    renderNew("ORIGIN");
+    await screen.findByRole("textbox", { name: /País/ });
+
+    await userEvent.click(screen.getByRole("checkbox", { name: /Destino/ }));
+
+    expect(screen.getByRole("textbox", { name: "Persona de contacto" })).toBeInTheDocument();
   });
 });

@@ -109,6 +109,7 @@ class LocationReferenceAdapter {
 
     private static MasterReference toReference(Location location) {
         return new MasterReference(location.id(), location.code(), location.name(),
-                location.latitude(), location.longitude(), location.address());
+                location.latitude(), location.longitude(), location.address(),
+                location.contactName(), location.contactPhone(), location.deliveryInstructions());
     }
 }

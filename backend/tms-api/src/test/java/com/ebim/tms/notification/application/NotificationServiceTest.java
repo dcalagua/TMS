@@ -127,7 +127,9 @@ class NotificationServiceTest {
                             NotificationType.TRIP_DELAYED,
                             NotificationType.TRIP_COMPLETED,
                             NotificationType.EXCEPTION_OPENED,
-                            NotificationType.DELIVERY_FAILED);
+                            NotificationType.DELIVERY_FAILED,
+                            NotificationType.TRIP_DISPATCHED,
+                            NotificationType.TRIP_READY_TO_CLOSE);
         }
 
         @Test

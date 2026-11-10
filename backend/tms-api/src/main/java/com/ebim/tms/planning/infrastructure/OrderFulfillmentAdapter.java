@@ -39,11 +39,20 @@ public class OrderFulfillmentAdapter implements OrderFulfillmentPort {
      * construction. {@code @Lazy} is the narrowest fix and keeps the port boundary intact.
      */
     private final OrderPlanningPort orderPlanningPort;
+    private final OrderDeliveryLineQueries deliveryLines;
 
     public OrderFulfillmentAdapter(OrderDeliveryRepository deliveries,
-            @org.springframework.context.annotation.Lazy OrderPlanningPort orderPlanningPort) {
+            @org.springframework.context.annotation.Lazy OrderPlanningPort orderPlanningPort,
+            OrderDeliveryLineQueries deliveryLines) {
         this.deliveries = deliveries;
         this.orderPlanningPort = orderPlanningPort;
+        this.deliveryLines = deliveryLines;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasLineResults(UUID orderId, UUID companyId) {
+        return deliveryLines.anyForOrder(companyId, orderId);
     }
 
     @Override

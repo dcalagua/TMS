@@ -29,4 +29,17 @@ public interface OrderFulfillmentPort {
      * elsewhere.
      */
     Map<UUID, OrderFulfillmentStatus> fulfillmentOf(Collection<UUID> orderIds, UUID companyId);
+
+    /**
+     * Whether any delivery of this order recorded a result per order line (V75): what was
+     * delivered and refused of each product. Such an order keeps its lines - the delivery rows point
+     * at them, and what a customer signed for cannot be re-described afterwards - so a reopened order
+     * may change its header but not its goods.
+     *
+     * <p>Default false, so a test double written as a lambda for {@link #fulfillmentOf} keeps
+     * compiling; the one production implementation answers it.
+     */
+    default boolean hasLineResults(UUID orderId, UUID companyId) {
+        return false;
+    }
 }

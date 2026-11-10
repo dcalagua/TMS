@@ -28,6 +28,7 @@ import com.ebim.tms.shared.reference.DriverReference;
 import com.ebim.tms.shared.security.CompanyScope;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -146,6 +147,43 @@ class TripAlertPublisherTest {
             assertThat(request.type()).isEqualTo(NotificationType.TRIP_COMPLETED);
             assertThat(request.severity()).isEqualTo(NotificationSeverity.INFO);
             assertThat(request.dedupeKey()).isEqualTo("TRIP_COMPLETED:" + TRIP_ID);
+        }
+
+        @Test
+        @DisplayName("clears the ready-to-close alert with the key it was raised under (V75)")
+        void completionResolvesReadyToClose() {
+            alerts.completed(SCOPE, trip, NOW);
+
+            verify(notifications).resolve(SCOPE, "TRIP_READY_TO_CLOSE:" + TRIP_ID, NOW);
+        }
+    }
+
+    @Nested
+    @DisplayName("on the road and back (V75)")
+    class RoadAndBack {
+
+        @Test
+        @DisplayName("a dispatch is informational and keyed on the trip, whichever door dispatched it")
+        void dispatchIsInformational() {
+            alerts.dispatched(SCOPE, trip, NOW);
+
+            NotificationRequest request = raised();
+            assertThat(request.type()).isEqualTo(NotificationType.TRIP_DISPATCHED);
+            assertThat(request.severity()).isEqualTo(NotificationSeverity.INFO);
+            assertThat(request.dedupeKey()).isEqualTo("TRIP_DISPATCHED:" + TRIP_ID);
+        }
+
+        @Test
+        @DisplayName("every stop resolved asks the office to close, naming how many stops there were")
+        void readyToCloseCountsTheStops() {
+            when(trip.stops()).thenReturn(List.of(mock(TripStop.class), mock(TripStop.class)));
+
+            alerts.readyToClose(SCOPE, trip, NOW);
+
+            NotificationRequest request = raised();
+            assertThat(request.type()).isEqualTo(NotificationType.TRIP_READY_TO_CLOSE);
+            assertThat(request.dedupeKey()).isEqualTo("TRIP_READY_TO_CLOSE:" + TRIP_ID);
+            assertThat(request.messageArgs()).containsEntry("stopCount", 2);
         }
     }
 

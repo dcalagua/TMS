@@ -15,6 +15,8 @@ export const NOTIFICATION_TYPES = [
   "DRIVER_LICENSE_EXPIRING",
   "TRIP_COMPLETED",
   "DELIVERY_FAILED",
+  "TRIP_DISPATCHED",
+  "TRIP_READY_TO_CLOSE",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

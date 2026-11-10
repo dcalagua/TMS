@@ -226,7 +226,10 @@ is noise that reads like a problem.
 
 ## 11. Deliberately not in V1
 
-- **No delivered/refused quantities and no line-level result.** See §3.
+- **No delivered/refused quantities and no line-level result.** See §3. *(Superseded: V45 added the
+  quantities, and since V75 every delivery of an order that travels whole writes its line-level
+  result to `tms.order_delivery_line` - the portal's partial delivery says which product came back.
+  See `docs/integrations/WAREHOUSE_EXECUTION_V1.md` §7.2.)*
 - **No change to `transport_order.status`.** A `DELIVERED` order here is still `PLANNED` there. The
   orders module owns that lifecycle (V25 and V27 both said so), and the day it grows a delivered
   state, this table is what will feed it. **This remains the known gap.**
