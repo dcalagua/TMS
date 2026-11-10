@@ -14,7 +14,7 @@ import type { TripRouteMetrics } from "../../shared/api/planningApi";
 
 const BASE: TripRouteMetrics = {
   totalDistanceKm: 42.5,
-  totalMinutes: 95,
+  totalDuration: "PT1H35M",
   provider: "LOCAL_GEODESIC_V1",
   estimated: true,
   unmeasurableLegs: 0,
@@ -47,6 +47,20 @@ describe("la tarjeta de recorrido", () => {
     expect(screen.getByText("1 h 35 min")).toBeInTheDocument();
   });
 
+  it("el tiempo total es la suma de sus tramos, tal como llega del servidor", () => {
+    render(<TripRouteCard routing={{
+      ...BASE,
+      totalDistanceKm: 19.33,
+      totalDuration: "PT47M",
+      legs: [
+        { fromStopSequence: null, fromLabel: "CD Guayaquil", toStopSequence: 1, toLabel: "Costa Azul", distanceKm: 14.97, travelMinutes: 36, estimated: true },
+        { fromStopSequence: 1, fromLabel: "Costa Azul", toStopSequence: 2, toLabel: "Ferretería", distanceKm: 4.36, travelMinutes: 11, estimated: true },
+      ],
+    }} />);
+
+    expect(screen.getByText("47 min")).toBeInTheDocument();
+  });
+
   it("avisa cuando un tramo no se pudo medir, en vez de mostrar un total corto en silencio", () => {
     render(<TripRouteCard routing={{ ...BASE, complete: false, unmeasurableLegs: 2 }} />);
 
@@ -73,7 +87,7 @@ describe("la tarjeta de recorrido", () => {
   });
 
   it("un viaje sin tramos medibles lo dice en lugar de mostrar ceros", () => {
-    render(<TripRouteCard routing={{ ...BASE, legs: [], totalDistanceKm: 0, totalMinutes: 0 }} />);
+    render(<TripRouteCard routing={{ ...BASE, legs: [], totalDistanceKm: 0, totalDuration: "PT0S" }} />);
 
     expect(screen.getByText(/no tiene paradas con coordenadas/)).toBeInTheDocument();
   });

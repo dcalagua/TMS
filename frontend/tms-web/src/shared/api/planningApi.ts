@@ -583,7 +583,7 @@ export interface TripRouteLegView {
  */
 export interface TripRouteMetrics {
   totalDistanceKm: number
-  totalMinutes: number
+  totalDuration: string
   legs: TripRouteLegView[]
   provider: string | null
   estimated: boolean

@@ -20,6 +20,8 @@ import { t } from "../../lib/i18n";
  */
 export function TripRouteCard({ routing }: { routing: TripRouteMetrics }) {
   const hasLegs = routing.legs.length > 0;
+  const drivingMinutes = routing.legs.reduce(
+    (sum, leg) => sum + (Number.isFinite(leg.travelMinutes) ? leg.travelMinutes : 0), 0);
 
   return (
     <WorkspaceCard
@@ -55,7 +57,7 @@ export function TripRouteCard({ routing }: { routing: TripRouteMetrics }) {
                 {t("Tiempo de conducción")}
               </Typography>
               <Typography sx={{ fontSize: 16, fontVariantNumeric: "tabular-nums", fontWeight: 800 }}>
-                {formatMinutes(routing.totalMinutes)}
+                {formatMinutes(drivingMinutes)}
               </Typography>
             </Box>
           </Box>
