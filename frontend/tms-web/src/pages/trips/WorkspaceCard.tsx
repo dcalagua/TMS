@@ -10,6 +10,11 @@ export interface WorkspaceCardProps {
   children: ReactNode;
   /** Quita el padding del cuerpo para un contenido que trae el suyo. */
   flush?: boolean;
+  /**
+   * Alto máximo del cuerpo, en px: pasado ese alto se desplaza y el título queda a la vista. Para
+   * las listas que crecen con el viaje (las paradas de un reparto de ocho locales).
+   */
+  maxHeight?: number;
 }
 
 /**
@@ -18,7 +23,7 @@ export interface WorkspaceCardProps {
  * y no en `shared/` porque es la densidad de esta pantalla, donde una docena de paneles se leen
  * de corrido y una raya bajo cada título los partía en el doble de bloques.
  */
-export function WorkspaceCard({ title, icon, actions, children, flush = false }: WorkspaceCardProps) {
+export function WorkspaceCard({ title, icon, actions, children, flush = false, maxHeight }: WorkspaceCardProps) {
   return (
     <Card variant="outlined" sx={{ borderRadius: `${R.lg}px`, p: flush ? 0 : 2 }}>
       {(title || actions) && (
@@ -42,7 +47,10 @@ export function WorkspaceCard({ title, icon, actions, children, flush = false }:
           {actions && <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", justifyContent: "flex-end", ml: "auto" }}>{actions}</Box>}
         </Box>
       )}
-      {children}
+      {maxHeight === undefined ? children : (
+        // `tabIndex`: un contenedor que solo se desplaza con la rueda deja fuera a quien usa teclado.
+        <Box tabIndex={0} sx={{ maxHeight, overflowY: "auto", pr: 0.5, mr: -0.5 }}>{children}</Box>
+      )}
     </Card>
   );
 }

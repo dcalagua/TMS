@@ -20,10 +20,12 @@ import { hasFiscalDetail, logisticsDocumentLabel } from "./logisticsDocumentLabe
  * documento con datos fiscales - clave de acceso, traslado, transportista, destinatarios - se
  * despliega en su fila. Todo es lo que mandó el ERP; el TMS no emite ni valida ante la autoridad.
  */
-export function LogisticsDocumentsTable({ documents, showOrder }: {
+export function LogisticsDocumentsTable({ documents, showOrder, maxHeight }: {
   documents: (LogisticsDocumentView & { orderLabel?: string })[];
   /** Añade la columna de pedido, para la vista por viaje. */
   showOrder?: boolean;
+  /** Alto máximo en px: la tabla se desplaza con la cabecera fija. Sin él crece con sus filas. */
+  maxHeight?: number;
 }) {
   const cellSx = { py: 0.5, px: 1, fontSize: 12.5 } as const;
   const [open, setOpen] = useState<Set<string>>(() => new Set());
@@ -38,8 +40,16 @@ export function LogisticsDocumentsTable({ documents, showOrder }: {
   }
 
   return (
-    <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: "4px" }}>
-      <Table size="small" aria-label={t("Documentos")}>
+    <TableContainer
+      tabIndex={maxHeight === undefined ? undefined : 0}
+      sx={{
+        border: "1px solid", borderColor: "divider", borderRadius: "4px", maxHeight,
+        // La cabecera fija lleva el fondo del papel: con el de la página, las filas se veían a
+        // través de ella al desplazar.
+        "& thead th": { bgcolor: "background.paper" },
+      }}
+    >
+      <Table size="small" stickyHeader={maxHeight !== undefined} aria-label={t("Documentos")}>
         <TableHead>
           <TableRow>
             <TableCell sx={{ ...cellSx, width: 32 }} aria-label={t("Detalle")} />

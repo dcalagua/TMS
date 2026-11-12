@@ -15,7 +15,7 @@ import { fetchSystemInfo } from "../shared/api/systemApi";
 import { fetchVehicles } from "../shared/api/vehiclesApi";
 import { useAuth } from "../shared/auth/AuthContext";
 import { useCompany } from "../shared/company/CompanyContext";
-import { StatusChip } from "../shared/ui/components";
+import { CountUp, StatusChip } from "../shared/ui/components";
 import { getLang, t } from "../lib/i18n";
 import { fmtDateTime, fmtPercent, fmtQuantity, localeFor } from "../lib/locale";
 import { R, T } from "../theme";
@@ -248,7 +248,7 @@ function BigValue({ value, loading, size = 32 }: { value?: number; loading: bool
       fontSize: size, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1,
       fontVariantNumeric: "tabular-nums",
     }}>
-      {value === undefined ? "-" : fmtQuantity(value)}
+      <CountUp value={value === undefined ? "-" : fmtQuantity(value)} />
     </Typography>
   );
 }
@@ -472,7 +472,7 @@ function AttentionCard(props: {
                 fontSize: 20, fontWeight: 800, fontVariantNumeric: "tabular-nums",
                 color: active ? `${row.tone}.dark` : "text.secondary",
               }}>
-                {fmtQuantity(row.value ?? 0)}
+                <CountUp value={fmtQuantity(row.value ?? 0)} />
               </Typography>
             )}
             <ChevronRightRounded sx={{ fontSize: 18, color: "text.secondary" }} aria-hidden />

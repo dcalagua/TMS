@@ -41,7 +41,7 @@ export function TripDocumentsCard({ companyId, tripId, orderNumbers }: {
           {t("Ningún pedido de este envío tiene documentos registrados por el ERP.")}
         </Typography>
       ) : (
-        <LogisticsDocumentsTable documents={rows} showOrder />
+        <LogisticsDocumentsTable documents={rows} showOrder maxHeight={350} />
       )}
     </WorkspaceCard>
   );

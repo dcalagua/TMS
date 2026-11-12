@@ -2,6 +2,7 @@ export { ActionMenu, type ActionMenuItem } from "./ActionMenu";
 export { DataTable, type DataTableColumn } from "./DataTable";
 export { FormDrawer, type FormDrawerProps, type DrawerSize } from "./FormDrawer";
 export { ImportDrawer, ImportOutcomeChip } from "./ImportDrawer";
+export { CountUp } from "./CountUp";
 export { KpiCard } from "./KpiCard";
 export { LookupField, type LookupOption } from "./LookupField";
 export { PageHeader } from "./PageHeader";

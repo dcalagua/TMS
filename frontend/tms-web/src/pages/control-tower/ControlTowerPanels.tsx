@@ -9,7 +9,7 @@ import type {
   ControlTowerAdvisoryView,
   ControlTowerBlockerView, ControlTowerExceptionView, ControlTowerStopView, ControlTowerWorkloadView,
 } from "../../shared/api/controlTowerApi";
-import { AppCard, StatusChip } from "../../shared/ui/components";
+import { AppCard, CountUp, StatusChip } from "../../shared/ui/components";
 import { R, T } from "../../theme";
 import { STOP_EXECUTION_TONE, TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
 import { enumLabel } from "../../lib/enums";
@@ -76,7 +76,7 @@ export function BandMetric({ icon, title, value, sub, color = "primary.main" }: 
         fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
         color: color.startsWith("error") ? "error.main" : "text.primary",
       }}>
-        {value}
+        <CountUp value={value} />
       </Typography>
       {sub && (
         <Typography sx={{ fontSize: T.label, color: "text.secondary", lineHeight: 1.35 }}>{sub}</Typography>
