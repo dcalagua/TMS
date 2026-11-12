@@ -9,24 +9,28 @@ import {
   InventoryRounded, ReportProblemRounded, PaidRounded, AssignmentTurnedInRounded,
   ReceiptLongRounded, FactCheckRounded, TimerRounded,
 } from "@mui/icons-material";
+import { saveCsvAsExcel } from "../../shared/api/excelDownload";
 import type { ApiError } from "../../shared/api/httpClient";
-import { saveDownloadedFile } from "../../shared/api/httpClient";
 import {
   downloadKpiCsv, fetchKpiReport, type KpiFinanceView, type KpiSettlementView,
 } from "../../shared/api/reportingApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  AppCard, ErrorState, FilterBar, KpiCard, LoadingState, PageHeader, SectionHeader, dataTableSx,
+  AppCard, DateRangeFilter, ErrorState, KpiCard, LoadingState, PageHeader, SectionHeader, dataTableSx,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { alpha } from "@mui/material/styles";
 import { T } from "../../theme";
+import { lastDays } from "../../lib/dateRange";
 import { notifyError } from "../../lib/ui";
 import { t } from "../../lib/i18n";
 import { fmtDate, fmtDateTime, fmtDecimal, fmtMoney, fmtPercent, fmtQuantity, fmtVolumeM3, fmtWeightKg } from "../../lib/locale";
 import { DailyColumnChart } from "./DailyColumnChart";
 import { CarbonFootprintSection } from "./CarbonFootprintSection";
+
+/** El periodo más largo que se puede elegir, en días con los dos extremos. */
+const MAX_RANGE_DAYS = 30;
 
 /**
  * KPIs de una empresa sobre un rango de días operativos.
@@ -46,22 +50,23 @@ export function ReportsPage() {
   // V73: la huella de carbono del período, con su propio permiso.
   const canReadEmissions = hasPermission("settlement.emission:read");
 
-  // Vacío = los últimos 30 días que decide el backend. Se aplica al elegirlo: no hay borrador.
-  const [applied, setApplied] = useState({ from: "", to: "" });
+  // Los últimos 30 días, escritos en el filtro y no dejados al backend: así el chip dice qué
+  // periodo rige. Se aplica al elegirlo, no se puede vaciar y no pasa de 30 días.
+  const [defaultRange] = useState(() => lastDays(MAX_RANGE_DAYS));
+  const [applied, setApplied] = useState(defaultRange);
   const [exporting, setExporting] = useState(false);
 
   const reportQuery = useQuery({
     queryKey: ["kpi-report", companyId, applied],
-    queryFn: ({ signal }) =>
-      fetchKpiReport({ companyId, from: applied.from || undefined, to: applied.to || undefined, signal }),
+    queryFn: ({ signal }) => fetchKpiReport({ companyId, from: applied.from, to: applied.to, signal }),
     enabled: companyId !== "",
   });
 
-  async function exportCsv() {
+  async function exportExcel() {
     setExporting(true);
     try {
-      const file = await downloadKpiCsv({ companyId, from: applied.from || undefined, to: applied.to || undefined });
-      saveDownloadedFile(file, "kpis.csv");
+      const file = await downloadKpiCsv({ companyId, from: applied.from, to: applied.to });
+      await saveCsvAsExcel(file, "kpis.csv", t("KPIs por día"));
     } catch (error) {
       notifyError(t("No se pudo exportar"), describeApiError(error as ApiError));
     } finally {
@@ -98,22 +103,20 @@ export function ReportsPage() {
           from: fmtDate(report.from), to: fmtDate(report.to), days: report.days,
         })}
         meta={<Chip size="small" variant="outlined" label={t("Al {{time}}", { time: fmtDateTime(report.generatedAt) })} />}
+        filters={
+          <DateRangeFilter
+            label={t("Periodo")} required maxDays={MAX_RANGE_DAYS}
+            from={applied.from} to={applied.to} defaultFrom={defaultRange.from} defaultTo={defaultRange.to}
+            onChange={(from, to) => setApplied({ from, to })}
+          />
+        }
         onRefresh={() => void reportQuery.refetch()}
         refreshing={reportQuery.isFetching}
         actions={
-          <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-            <Button variant="contained" startIcon={<DownloadRounded />} disabled={exporting} onClick={() => void exportCsv()}>
-              {t("Exportar CSV")}
-            </Button>
-          </Box>
+          <Button variant="contained" startIcon={<DownloadRounded />} disabled={exporting} onClick={() => void exportExcel()}>
+            {t("Exportar Excel")}
+          </Button>
         }
-      />
-
-      <FilterBar
-        value={applied}
-        defaults={{ from: "", to: "" }}
-        onChange={setApplied}
-        fields={[{ type: "dateRange", from: "from", to: "to", label: t("Periodo") }]}
       />
 
       <SectionHeader title={t("Envíos")} level={2} />

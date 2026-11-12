@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { Alert, Box, Button, Chip, LinearProgress, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import {
-  LocalShippingRounded, PlaceRounded, TaskAltRounded, PendingActionsRounded, ScheduleRounded,
+  LocalShippingRounded, TaskAltRounded, PendingActionsRounded,
   ReportProblemRounded, DonutLargeRounded, TravelExploreRounded, EventRounded, FlagRounded, BusinessRounded,
   RouteRounded,
 } from "@mui/icons-material";
@@ -225,17 +225,15 @@ export function DeliveryTrackingPage() {
 
       <Box sx={(th) => ({
         display: "grid", gap: { xs: 1.5, xl: 1.25 }, mb: 2.5,
-        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0,1fr))", md: "repeat(4, minmax(0,1fr))", lg: "repeat(7, minmax(0,1fr))" },
-        // Siete cifras en una fila: tarjetas más compactas en pantalla ancha.
+        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0,1fr))", md: "repeat(5, minmax(0,1fr))" },
+        // Cinco cifras en una fila: tarjetas más compactas en pantalla ancha.
         [th.breakpoints.up("lg")]: {
           "& .MuiCardContent-root": { p: 1.5, gap: 1, "&:last-child": { pb: 1.5 } },
         },
       })}>
         <KpiCard loading={boardQuery.isPending} icon={<LocalShippingRounded />} color="warning.main" title={t("Viajes en reparto")} value={fmtQuantity(kpis.tripsInTransit)} />
-        <KpiCard loading={boardQuery.isPending} icon={<PlaceRounded />} color="info.main" title={t("Paradas totales")} value={fmtQuantity(kpis.stopsTotal)} />
-        <KpiCard loading={boardQuery.isPending} icon={<TaskAltRounded />} color="success.main" title={t("Paradas resueltas")} sub={t("Atendidas, omitidas o fallidas")} value={fmtQuantity(kpis.stopsResolved)} />
+        <KpiCard loading={boardQuery.isPending} icon={<TaskAltRounded />} color="success.main" title={t("Paradas resueltas")} value={fmtQuantity(kpis.stopsResolved)} />
         <KpiCard loading={boardQuery.isPending} icon={<PendingActionsRounded />} color="text.secondary" title={t("Paradas pendientes")} value={fmtQuantity(kpis.stopsPending)} />
-        <KpiCard loading={boardQuery.isPending} icon={<ScheduleRounded />} color="warning.main" title={t("Fuera de ventana")} value={fmtQuantity(kpis.stopsPastWindow)} />
         <KpiCard loading={boardQuery.isPending} icon={<ReportProblemRounded />} color="error.main" title={t("Incidencias abiertas")} value={fmtQuantity(kpis.openExceptions)} />
         {/* El avance del día es la cifra que resume la fila: su tarjeta va teñida del color primario. */}
         <Box sx={(th) => ({

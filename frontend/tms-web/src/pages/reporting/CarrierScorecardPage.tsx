@@ -2,15 +2,15 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { Link as RouterLink, useSearchParams } from "react-router-dom";
 import {
-  Alert, Box, Button, Chip, Link, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Tooltip, Typography,
+  Alert, Box, Button, ButtonBase, Card, Chip, Collapse, Divider, Link, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Tooltip, Typography,
 } from "@mui/material";
 import {
-  DownloadRounded, InfoOutlined, LeaderboardRounded, LocalShippingRounded, HelpOutlineRounded,
+  DownloadRounded, ExpandMoreRounded, InfoOutlined, LeaderboardRounded, LocalShippingRounded, HelpOutlineRounded,
   ListAltRounded,
 } from "@mui/icons-material";
+import { saveCsvAsExcel } from "../../shared/api/excelDownload";
 import type { ApiError } from "../../shared/api/httpClient";
-import { saveDownloadedFile } from "../../shared/api/httpClient";
 import {
   downloadCarrierScorecardCsv, fetchCarrierScorecard, fetchCarrierScorecardTrips,
   type CarrierScorecardRow, type CarrierScorecardView,
@@ -18,14 +18,18 @@ import {
 import { describeApiError } from "../../shared/api/problemMessages";
 import { useCompany } from "../../shared/company/CompanyContext";
 import {
-  AppCard, ErrorState, FilterBar, FormDrawer, KpiCard, LoadingState, PageHeader, StatusChip, dataTableSx,
+  AppCard, DateRangeFilter, ErrorState, FormDrawer, KpiCard, LoadingState, PageHeader, StatusChip, dataTableSx,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
 import type { StatusTone } from "../../theme";
+import { lastDays } from "../../lib/dateRange";
 import { notifyError } from "../../lib/ui";
 import { t } from "../../lib/i18n";
 import { enumLabel } from "../../lib/enums";
 import { fmtDate, fmtDateTime, fmtDecimal, fmtMinutes, fmtMoney, fmtPercent, fmtQuantity } from "../../lib/locale";
+
+/** El periodo más largo que se puede elegir, en días con los dos extremos. */
+const MAX_RANGE_DAYS = 30;
 
 /**
  * Scorecard de transportistas (ITEM 3, `docs/domain/CARRIER_SCORECARD_V1.md`): por transportista —y la
@@ -43,12 +47,15 @@ export function CarrierScorecardPage() {
   const companyId = selected?.id ?? "";
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [applied, setApplied] = useState({ from: "", to: "" });
+  // Los últimos 30 días, escritos en el filtro para que el chip diga qué periodo rige. No se puede
+  // vaciar y no pasa de 30 días.
+  const [defaultRange] = useState(() => lastDays(MAX_RANGE_DAYS));
+  const [applied, setApplied] = useState(defaultRange);
   const [exporting, setExporting] = useState(false);
   // `?carrier=` abre el detalle: es lo que usa "Ver desempeño" desde el maestro de transportistas.
   const drillCarrier = searchParams.get("carrier");
 
-  const range = { from: applied.from || undefined, to: applied.to || undefined };
+  const range = { from: applied.from, to: applied.to };
   const scorecardQuery = useQuery({
     queryKey: ["carrier-scorecard", companyId, applied],
     queryFn: ({ signal }) => fetchCarrierScorecard({ companyId, ...range, signal }),
@@ -62,11 +69,12 @@ export function CarrierScorecardPage() {
     setSearchParams(next, { replace: true });
   }
 
-  async function exportCsv() {
+  async function exportExcel() {
     setExporting(true);
     try {
+      // El servidor da el CSV; el Excel se arma con él, con las mismas columnas y cifras.
       const file = await downloadCarrierScorecardCsv({ companyId, ...range });
-      saveDownloadedFile(file, "carrier-scorecard.csv");
+      await saveCsvAsExcel(file, "carrier-scorecard.csv", t("Scorecard de transportistas"));
     } catch (error) {
       notifyError(t("No se pudo exportar"), describeApiError(error as ApiError));
     } finally {
@@ -97,20 +105,20 @@ export function CarrierScorecardPage() {
           from: fmtDate(report.from), to: fmtDate(report.to), days: report.days,
         })}
         meta={<Chip size="small" variant="outlined" label={t("Al {{time}}", { time: fmtDateTime(report.generatedAt) })} />}
+        filters={
+          <DateRangeFilter
+            label={t("Periodo")} required maxDays={MAX_RANGE_DAYS}
+            from={applied.from} to={applied.to} defaultFrom={defaultRange.from} defaultTo={defaultRange.to}
+            onChange={(from, to) => setApplied({ from, to })}
+          />
+        }
         onRefresh={() => void scorecardQuery.refetch()}
         refreshing={scorecardQuery.isFetching}
         actions={
-          <Button variant="contained" startIcon={<DownloadRounded />} disabled={exporting} onClick={() => void exportCsv()}>
-            {t("Exportar CSV")}
+          <Button variant="contained" startIcon={<DownloadRounded />} disabled={exporting} onClick={() => void exportExcel()}>
+            {t("Exportar Excel")}
           </Button>
         }
-      />
-
-      <FilterBar
-        value={applied}
-        defaults={{ from: "", to: "" }}
-        onChange={setApplied}
-        fields={[{ type: "dateRange", from: "from", to: "to", label: t("Periodo") }]}
       />
 
       <Box sx={{
@@ -209,7 +217,13 @@ function PerCurrency({ entries }: { entries: ReactNode[] }) {
 
 function ScorecardTable({ report, onDrill }: { report: CarrierScorecardView; onDrill: (row: CarrierScorecardRow) => void }) {
   return (
-    <TableContainer>
+    // Anchos mínimos: con doce columnas en el ancho de la pantalla, cada cifra se partía en tres
+    // renglones. Así la tabla se desplaza a lo ancho dentro del panel y cada celda se lee de una vez.
+    <TableContainer tabIndex={0} sx={{
+      "& th, & td": { minWidth: 136 },
+      "& th:first-of-type, & td:first-of-type": { minWidth: 240 },
+      "& th:last-of-type, & td:last-of-type": { minWidth: 0, whiteSpace: "nowrap" },
+    }}>
       <Table size="small" sx={dataTableSx}>
         <TableHead>
           <TableRow>
@@ -360,22 +374,45 @@ function Definitions({ report }: { report: CarrierScorecardView }) {
     ...(report.invoicesVisible ? [[t("Facturas con diferencia"), DEFINITIONS.invoices]] as [string, string][] : []),
     ...(report.costVisible ? [[t("Costo por viaje"), DEFINITIONS.costPerTrip], [t("Costo por kg"), DEFINITIONS.costPerKg]] as [string, string][] : []),
   ];
+  const [open, setOpen] = useState(false);
   return (
-    <Box sx={{ mt: 3 }}>
-      <AppCard title={t("Cómo se calcula")}>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          {t("«sin datos» quiere decir que no hubo nada que medir — nunca 0%. El color es una ayuda de lectura de esta pantalla.")}
-        </Typography>
-        <Box component="dl" sx={{ m: 0, display: "grid", gap: 1, gridTemplateColumns: { xs: "1fr", md: "220px 1fr" } }}>
-          {rows.map(([label, definition]) => (
-            <Box key={label} sx={{ display: "contents" }}>
-              <Typography component="dt" variant="body2" sx={{ fontWeight: 700 }}>{label}</Typography>
-              <Typography component="dd" variant="body2" color="text.secondary" sx={{ m: 0 }}>{definition}</Typography>
-            </Box>
-          ))}
+    // Un acordeón cerrado: la leyenda se consulta, no se lee cada vez que se abre la pantalla.
+    <Card variant="outlined" sx={{ mt: 3 }}>
+      {/* El botón dentro del encabezado, como pide el patrón de acordeón: el lector de pantalla lo
+          encuentra entre los títulos y lo anuncia como expandible. */}
+      <Typography component="h2" variant="subtitle1" sx={{ m: 0 }}>
+        <ButtonBase
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          aria-controls="scorecard-definitions"
+          sx={{
+            width: "100%", justifyContent: "space-between", gap: 1.5, px: 2, py: 1.35, textAlign: "left",
+            font: "inherit", "&:hover": { bgcolor: "action.hover" },
+          }}
+        >
+          {t("Cómo se calcula")}
+          <ExpandMoreRounded aria-hidden sx={{
+            color: "text.secondary", transition: "transform .2s", transform: open ? "rotate(180deg)" : "none",
+          }} />
+        </ButtonBase>
+      </Typography>
+      <Collapse in={open} id="scorecard-definitions">
+        <Divider />
+        <Box sx={{ p: 2 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            {t("«sin datos» quiere decir que no hubo nada que medir — nunca 0%. El color es una ayuda de lectura de esta pantalla.")}
+          </Typography>
+          <Box component="dl" sx={{ m: 0, display: "grid", gap: 1, gridTemplateColumns: { xs: "1fr", md: "220px 1fr" } }}>
+            {rows.map(([label, definition]) => (
+              <Box key={label} sx={{ display: "contents" }}>
+                <Typography component="dt" variant="body2" sx={{ fontWeight: 700 }}>{label}</Typography>
+                <Typography component="dd" variant="body2" color="text.secondary" sx={{ m: 0 }}>{definition}</Typography>
+              </Box>
+            ))}
+          </Box>
         </Box>
-      </AppCard>
-    </Box>
+      </Collapse>
+    </Card>
   );
 }
 

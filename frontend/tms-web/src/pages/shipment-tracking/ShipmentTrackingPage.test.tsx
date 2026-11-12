@@ -144,10 +144,11 @@ describe("el seguimiento de despachos", () => {
     expect(await screen.findByText("SH-00000042")).toBeInTheDocument();
     await waitFor(() => expect(within(kpi("Despachos")).getByText("12")).toBeInTheDocument());
     expect(within(kpi("En ruta")).getByText("7")).toBeInTheDocument();
-    expect(within(kpi("Con documentos pendientes")).getByText("4")).toBeInTheDocument();
-    expect(within(kpi("Documentos pendientes")).getByText("18")).toBeInTheDocument();
     expect(within(kpi("Cargo por recibir")).getByText("25")).toBeInTheDocument();
     expect(within(kpi("Diferencias de despacho")).getByText("1")).toBeInTheDocument();
+    // Las cifras de documentos salieron de la fila: los documentos tienen su propia pantalla.
+    expect(screen.queryByText("Documentos pendientes")).not.toBeInTheDocument();
+    expect(screen.queryByText("Documentos entregados")).not.toBeInTheDocument();
 
     expect(screen.getByText("DSP-7781")).toBeInTheDocument();
     expect(screen.getByText("XYZ-987 · Juan Quispe")).toBeInTheDocument();
@@ -170,7 +171,8 @@ describe("el seguimiento de despachos", () => {
     const summary = calls("/monitoring/shipment-tracking/summary")[0];
     expect(summary.searchParams.get("dateFrom")).toBe(first.searchParams.get("dateFrom"));
 
-    await userEvent.click(kpi("Con documentos pendientes"));
+    await userEvent.click(screen.getByRole("button", { name: /^Documentos/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Con documentos pendientes" }));
     await waitFor(() => expect(calls("/monitoring/shipment-tracking").some((u) => u.searchParams.get("documents") === "PENDING")).toBe(true));
 
     await userEvent.click(kpi("En ruta"));

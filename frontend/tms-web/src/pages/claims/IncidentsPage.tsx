@@ -17,6 +17,7 @@ import { DataTable, FilterBar, KpiCard, PageHeader, StatusChip, type DataTableCo
 import { ICON_TINTS } from "../../shared/ui/navConfig";
 import { useCompany } from "../../shared/company/CompanyContext";
 import { notifyError, notifySuccess, promptDialog } from "../../lib/ui";
+import { lastDays } from "../../lib/dateRange";
 import { ENUM_LABELS, enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDateTime, fmtQuantity } from "../../lib/locale";
@@ -33,7 +34,14 @@ interface Filters {
   to: string;
 }
 
-const DEFAULTS: Filters = { status: "OPEN", kind: "", carrierId: "", type: "", from: "", to: "" };
+/** El periodo más largo que se puede elegir, en días con los dos extremos. */
+const MAX_RANGE_DAYS = 30;
+
+/** Abiertas de los últimos 30 días, hoy incluido. El periodo siempre está puesto: no se puede vaciar. */
+function defaultFilters(): Filters {
+  const period = lastDays(MAX_RANGE_DAYS);
+  return { status: "OPEN", kind: "", carrierId: "", type: "", from: period.from, to: period.to };
+}
 
 const EXCEPTION_TYPES = Object.keys(ENUM_LABELS.tripExceptionType);
 
@@ -57,7 +65,8 @@ export function IncidentsPage() {
   const canOpenClaim = hasCapability(CAPABILITY.CLAIMS_MANAGE);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [filters, setFilters] = useState<Filters>(DEFAULTS);
+  const [defaults] = useState(defaultFilters);
+  const [filters, setFilters] = useState<Filters>(defaults);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const query: IncidentQuery = {
@@ -106,11 +115,14 @@ export function IncidentsPage() {
   }
 
   const columns: DataTableColumn<IncidentRow>[] = [
+    // Anchos mínimos: sin ellos, el envío, el transportista y la fecha se partían en tres o cuatro
+    // renglones. La tabla se desplaza a lo ancho dentro de su panel.
     {
       key: "kind",
       header: t("Qué"),
+      minWidth: 150,
       render: (row) => (
-        <Box>
+        <Box sx={{ whiteSpace: "nowrap" }}>
           <Typography variant="body2" sx={{ fontWeight: 700 }}>
             {row.kind === "CLAIM" ? row.reference : enumLabel("incidentKind", row.kind)}
           </Typography>
@@ -121,6 +133,7 @@ export function IncidentsPage() {
     {
       key: "status",
       header: t("Estado"),
+      minWidth: 130,
       render: (row) => row.kind === "CLAIM"
         ? <StatusChip label={enumLabel("claimStatus", row.status)} tone={CLAIM_STATUS_TONE[row.status as ClaimStatus] ?? "neutral"} />
         : <StatusChip label={enumLabel("tripExceptionStatus", row.status)} tone={row.open ? "overdue" : "done"} />,
@@ -128,18 +141,24 @@ export function IncidentsPage() {
     {
       key: "shipment",
       header: t("Envío"),
+      minWidth: 130,
       render: (row) => (
-        <Link component={RouterLink} to={`/trips/${row.tripId}`} underline="hover" onClick={(e) => e.stopPropagation()}>
+        <Link component={RouterLink} to={`/trips/${row.tripId}`} underline="hover" onClick={(e) => e.stopPropagation()}
+          sx={{ whiteSpace: "nowrap" }}>
           {row.shipmentNumber ?? "—"}
         </Link>
       ),
     },
-    { key: "carrier", header: t("Transportista"), render: (row) => row.carrierName ?? t("Flota propia") },
-    { key: "occurredAt", header: t("Desde"), render: (row) => fmtDateTime(row.occurredAt) },
+    { key: "carrier", header: t("Transportista"), minWidth: 230, render: (row) => row.carrierName ?? t("Flota propia") },
+    {
+      key: "occurredAt", header: t("Desde"), minWidth: 160,
+      render: (row) => <Box component="span" sx={{ whiteSpace: "nowrap" }}>{fmtDateTime(row.occurredAt)}</Box>,
+    },
     {
       key: "age",
       header: t("Antigüedad"),
       numeric: true,
+      minWidth: 110,
       render: (row) => (
         <Typography variant="body2" component="span" sx={{ color: ageTone(row.ageDays, row.open), fontVariantNumeric: "tabular-nums" }}>
           {ageLabel(row.ageDays)}
@@ -150,13 +169,15 @@ export function IncidentsPage() {
       key: "amount",
       header: t("Importe"),
       numeric: true,
+      minWidth: 130,
       render: (row) => row.amount === null || row.currency === null ? "—" : <Money value={row.amount} currency={row.currency} />,
     },
     {
       key: "summary",
       header: t("Detalle"),
+      minWidth: 320,
       render: (row) => (
-        <Box sx={{ maxWidth: 320 }}>
+        <Box sx={{ maxWidth: 420 }}>
           <Typography variant="body2" noWrap title={row.summary ?? undefined}>{row.summary ?? "—"}</Typography>
           {row.claims.length > 0 && (
             <Typography variant="caption" color="text.secondary">{t("Reclamado en {{list}}", { list: row.claims.join(", ") })}</Typography>
@@ -214,17 +235,15 @@ export function IncidentsPage() {
         <KpiCard icon={<GavelRounded />} color="warning.main" title={t("Reclamos activos")}
           loading={incidentsQuery.isPending} value={fmtQuantity(view?.totals.activeClaims ?? 0)} />
         <KpiCard icon={<HourglassTopRounded />} color="info.main" title={t("Abiertas hace 8 a 30 días")}
-          loading={incidentsQuery.isPending} value={fmtQuantity(ageing?.from8To30 ?? 0)}
-          sub={t("{{n}} de hasta 7 días", { n: fmtQuantity(ageing?.upTo7 ?? 0) })} />
+          loading={incidentsQuery.isPending} value={fmtQuantity(ageing?.from8To30 ?? 0)} />
         <KpiCard icon={<WarningAmberRounded />} color="error.main" title={t("Más de 30 días")}
           loading={incidentsQuery.isPending}
-          value={fmtQuantity((ageing?.from31To60 ?? 0) + (ageing?.over60 ?? 0))}
-          sub={t("{{n}} de más de 60", { n: fmtQuantity(ageing?.over60 ?? 0) })} />
+          value={fmtQuantity((ageing?.from31To60 ?? 0) + (ageing?.over60 ?? 0))} />
       </Box>
 
       <FilterBar
         value={filters}
-        defaults={DEFAULTS}
+        defaults={defaults}
         onChange={setFilters}
         fields={[
           {
@@ -247,7 +266,7 @@ export function IncidentsPage() {
             options: (carriersQuery.data?.content ?? []).map((carrier) => ({ id: carrier.id, label: carrier.businessName })),
           },
           { type: "select", key: "type", label: t("Tipo"), allLabel: t("Todos"), options: typeOptions, more: true },
-          { type: "dateRange", from: "from", to: "to", label: t("Periodo") },
+          { type: "dateRange", from: "from", to: "to", label: t("Periodo"), required: true, maxDays: MAX_RANGE_DAYS },
         ]}
       />
 

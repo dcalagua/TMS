@@ -6,7 +6,8 @@ import {
   COST_TO_SERVE_GROUPS, downloadCostToServe, fetchCostToServe,
   type CostToServeGroup, type CostToServeGroupBy, type CostToServeQuery,
 } from "../../shared/api/costToServeApi";
-import { saveDownloadedFile, type ApiError } from "../../shared/api/httpClient";
+import { saveCsvAsExcel } from "../../shared/api/excelDownload";
+import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { DataTable, FilterBar, KpiCard, PageHeader, type DataTableColumn } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
@@ -51,11 +52,13 @@ export function CostToServePage() {
     enabled: companyId !== "" && range.from !== "" && range.to !== "",
   });
 
-  async function exportCsv() {
+  async function exportExcel() {
     setExporting(true);
     try {
+      // El servidor da el CSV; el Excel se arma con él, con las mismas columnas y cifras.
       const file = await downloadCostToServe(companyId, query, "CSV");
-      saveDownloadedFile(file, `cost-to-serve-${groupBy.toLowerCase()}-${range.from}-${range.to}.csv`);
+      await saveCsvAsExcel(file, `cost-to-serve-${groupBy.toLowerCase()}-${range.from}-${range.to}.csv`,
+        t("Costo por {{group}}", { group: enumLabel("costToServeGroupBy", groupBy).toLowerCase() }));
     } catch (error) {
       notifyError(t("No se pudo exportar"), describeApiError(error as ApiError));
     } finally {
@@ -108,9 +111,9 @@ export function CostToServePage() {
         actions={
           <Button
             variant="contained" startIcon={<DownloadRounded />} disabled={exporting || companyId === ""}
-            onClick={() => void exportCsv()}
+            onClick={() => void exportExcel()}
           >
-            {t("Exportar CSV")}
+            {t("Exportar Excel")}
           </Button>
         }
       />

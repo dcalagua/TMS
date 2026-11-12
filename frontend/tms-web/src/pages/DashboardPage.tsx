@@ -178,7 +178,7 @@ export function DashboardPage() {
       )}
 
       {canMonitor && (
-        <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "minmax(0,1fr) 440px" } }}>
+        <Box sx={{ display: "grid", gap: 2, alignItems: "start", gridTemplateColumns: { xs: "1fr", lg: "minmax(0,1fr) 440px" } }}>
           <TodayCard
             loading={tower.isPending}
             error={tower.isError}
@@ -393,15 +393,15 @@ function TodayCard(props: {
               ))}
             </Box>
           </Box>
-          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 1.5, flex: 1 }}>
+          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 1.5 }}>
             {[
               { icon: <DirectionsRunRounded />, label: t("En tránsito"), value: props.inTransit, tone: "warning" as Tone },
               { icon: <ScheduleRounded />, label: t("Programados"), value: props.scheduled, tone: "info" as Tone },
               { icon: <DoneAllRounded />, label: t("Completados"), value: props.completed, tone: "success" as Tone },
             ].map((metric) => (
               <Box key={metric.label} sx={{
-                p: 1.75, borderRadius: `${R.md}px`, bgcolor: "background.default",
-                display: "flex", flexDirection: "column", justifyContent: "center",
+                px: 1.75, py: 1.25, borderRadius: `${R.md}px`, bgcolor: "background.default",
+                display: "flex", flexDirection: "column",
               }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, color: toneColor(metric.tone), "& svg": { fontSize: 16 } }}>
                   {metric.icon}

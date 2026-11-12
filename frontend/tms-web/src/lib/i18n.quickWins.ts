@@ -62,4 +62,10 @@ export const EN_QUICK_WINS: Record<string, string> = {
   "Contraseña actualizada": "Password updated",
   "La próxima vez entra con la nueva.": "Sign in with the new one next time.",
   "Cambiar contraseña": "Change password",
+
+  // Ajustes de pantalla de noviembre: periodos acotados y exportación a Excel
+  "Máximo {{n}} días": "Up to {{n}} days",
+  "Exportar Excel": "Export to Excel",
+  "KPIs por día": "KPIs by day",
+  "Costo por {{group}}": "Cost by {{group}}",
 };

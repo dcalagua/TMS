@@ -20,6 +20,6 @@ export {
   type DateInputProps, type DateInputMode,
 } from "./DateInputs";
 export { FilterMenuChip, FilterOptionList, type FilterOption } from "./FilterChip";
-export { FilterBar, type FilterBarProps, type FilterField } from "./FilterBar";
+export { DateRangeFilter, FilterBar, type FilterBarProps, type FilterField } from "./FilterBar";
 export { ContextCard, FormMeta, FormRow, FormSection, OptionCard, SectionIndex } from "./FormLayout";
 export { DetailSection, KeyFacts, VerdictBanner } from "./DetailLayout";

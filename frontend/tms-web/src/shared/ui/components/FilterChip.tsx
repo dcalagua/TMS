@@ -9,13 +9,14 @@ export interface FilterOption { id: string; label: string }
 
 /**
  * Un filtro en forma de chip: sin valor se lee como «Origen ⌄»; con valor, en el color de acción,
- * con el valor y una ✕ para quitarlo sin abrir el menú.
+ * con el valor y una ✕ para quitarlo sin abrir el menú. Sin `onClear` el filtro no se puede quitar
+ * (un periodo obligatorio): lleva la flecha también cuando tiene valor.
  */
 export function FilterMenuChip({ icon, label, valueLabel, onClear, children }: {
   icon: ReactNode;
   label: string;
   valueLabel: string | null;
-  onClear: () => void;
+  onClear?: () => void;
   children: (close: () => void) => ReactNode;
 }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -31,7 +32,7 @@ export function FilterMenuChip({ icon, label, valueLabel, onClear, children }: {
         aria-haspopup="dialog"
         aria-expanded={anchor !== null}
         startIcon={icon}
-        endIcon={active ? (
+        endIcon={active && onClear ? (
           <Box
             component="span"
             role="button"

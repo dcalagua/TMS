@@ -218,7 +218,6 @@ export function FleetDocumentsPage() {
           color="error.main" loading={summaryQuery.isPending} onClick={() => showStatus("EXPIRED")} />
         <KpiCard title={t("Por vencer")} value={fmtQuantity(summary?.expiringSoon ?? 0)} icon={<ScheduleRounded />}
           color="warning.main" loading={summaryQuery.isPending}
-          sub={summary ? t("En los próximos {{n}} días", { n: summary.alertDays }) : undefined}
           onClick={() => showStatus("EXPIRING_SOON")} />
         <KpiCard title={t("Vigentes")} value={fmtQuantity(summary?.valid ?? 0)} icon={<VerifiedRounded />}
           color="success.main" loading={summaryQuery.isPending} onClick={() => showStatus("VALID")} />

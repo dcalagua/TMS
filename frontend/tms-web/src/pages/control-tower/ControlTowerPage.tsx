@@ -255,7 +255,7 @@ export function ControlTowerPage() {
           <BandMetric icon={<DoneAllRounded />} color="success.main" title={t("Completados")} value={fmtQuantity(summary.tripsCompleted)} />
           <BandMetric
             icon={<HourglassBottomRounded />} color="error.main"
-            title={t("Vencidos sin salir")} sub={t("Debían haber salido")}
+            title={t("Vencidos sin salir")}
             value={fmtQuantity(summary.tripsOverdue)}
           />
           <BandMetric icon={<PendingActionsRounded />} color="error.main" title={t("Salieron tarde")} value={fmtQuantity(summary.tripsDepartedLate)} />
@@ -265,12 +265,12 @@ export function ControlTowerPage() {
           {/* JOB 12: lo único de esta fila que mira hacia adelante. */}
           <BandMetric
             icon={<BlockRounded />} color="warning.main"
-            title={t("No pueden salir")} sub={t("Bloqueados ahora mismo")}
+            title={t("No pueden salir")}
             value={fmtQuantity(summary.blockedShipments)}
           />
           <BandMetric
             icon={<ScheduleRounded />} color="warning.main"
-            title={t("Paradas pendientes")} sub={t("{{n}} fuera de ventana", { n: fmtQuantity(summary.stopsPastWindow) })}
+            title={t("Paradas pendientes")}
             value={fmtQuantity(summary.outstandingStops)}
           />
           {/* `null` y no `0` cuando la cuenta no puede ver pedidos: un cero sería una afirmación

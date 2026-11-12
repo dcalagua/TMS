@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Box, Button, InputAdornment, MenuItem, TextField, Typography } from "@mui/material";
 import { EventRounded, SearchRounded, TuneRounded } from "@mui/icons-material";
+import { clampRange } from "../../../lib/dateRange";
 import { t } from "../../../lib/i18n";
 import { fmtDate, fmtDateTime } from "../../../lib/locale";
 import { T } from "../../../theme";
@@ -13,13 +14,19 @@ import { FilterMenuChip, FilterOptionList, type FilterOption } from "./FilterChi
  * valor por defecto de la pantalla diga otra cosa.
  *
  * `more: true` lo manda a «Más filtros»: para lo que se usa poco y no merece un chip propio.
+ *
+ * Un periodo `required` no se puede vaciar ni quitar con la ✕ (su valor por defecto ya es un rango:
+ * «Limpiar» lo devuelve a ése), y con `maxDays` nunca cubre más de esos días, extremos incluidos.
  */
 export type FilterField<K extends string = string> =
   | { type: "search"; key: K; placeholder: string; width?: number }
   | { type: "select"; key: K; label: string; icon?: ReactNode; options: FilterOption[]; allLabel?: string; more?: boolean }
   | { type: "text"; key: K; label: string; icon?: ReactNode; placeholder?: string; more?: boolean }
   | { type: "date"; key: K; label: string; icon?: ReactNode; mode?: "date" | "datetime"; more?: boolean }
-  | { type: "dateRange"; from: K; to: K; label: string; icon?: ReactNode; mode?: "date" | "datetime"; more?: boolean };
+  | {
+    type: "dateRange"; from: K; to: K; label: string; icon?: ReactNode; mode?: "date" | "datetime"; more?: boolean;
+    required?: boolean; maxDays?: number;
+  };
 
 export interface FilterBarProps<V extends object> {
   /** Los filtros aplicados. No hay borrador: cada cambio llama a `onChange` al momento. */
@@ -85,6 +92,77 @@ function rangeLabel(from: string, to: string, mode?: "date" | "datetime"): strin
 const panelTitle = {
   fontSize: T.micro, fontWeight: 700, color: "text.secondary", textTransform: "uppercase", letterSpacing: ".05em",
 } as const;
+
+interface DateRangeOptions {
+  mode?: "date" | "datetime";
+  /** Sin «Limpiar» en los calendarios, y un extremo vacío no se aplica. */
+  required?: boolean;
+  /** Largo máximo, en días con los dos extremos: al pasarlo se mueve el otro extremo. */
+  maxDays?: number;
+}
+
+/** «Desde» y «Hasta» de un periodo. Un cambio que lo alargaría de más arrastra el otro extremo. */
+function DateRangeInputs({ from, to, onChange, mode, required, maxDays }: DateRangeOptions & {
+  from: string; to: string; onChange: (from: string, to: string) => void;
+}) {
+  // El largo se cuenta en días: en un periodo con hora no aplica.
+  const limit = mode === "datetime" ? undefined : maxDays;
+  const apply = (next: { from: string; to: string }, changed: "from" | "to") => {
+    if (required && (next.from === "" || next.to === "")) return;
+    const clamped = clampRange(next, changed, limit);
+    onChange(clamped.from, clamped.to);
+  };
+  return (
+    <Box sx={{ display: "grid", gap: 1.5 }}>
+      <DateInput mode={mode ?? "date"} label={t("Desde")} value={from} fullWidth
+        max={to || undefined} clearable={required ? false : undefined}
+        onChange={(v) => apply({ from: v, to }, "from")} />
+      <DateInput mode={mode ?? "date"} label={t("Hasta")} value={to} fullWidth
+        min={from || undefined} clearable={required ? false : undefined}
+        onChange={(v) => apply({ from, to: v }, "to")} />
+      {limit && (
+        <Typography sx={{ fontSize: T.label, color: "text.secondary" }}>
+          {t("Máximo {{n}} días", { n: limit })}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+/**
+ * El chip de un periodo, también fuera de la barra: Reportes y el Scorecard lo llevan en la
+ * cabecera, junto a «Recargar». Su rótulo dice siempre qué periodo rige, también el de por defecto:
+ * un chip que dijera solo «Periodo» parecería no filtrar nada.
+ */
+export function DateRangeFilter({
+  label, icon, from, to, defaultFrom, defaultTo, onChange, mode, required, maxDays,
+}: DateRangeOptions & {
+  label: string;
+  icon?: ReactNode;
+  from: string;
+  to: string;
+  defaultFrom: string;
+  defaultTo: string;
+  onChange: (from: string, to: string) => void;
+}) {
+  const active = from !== defaultFrom || to !== defaultTo;
+  const shown = rangeLabel(defaultFrom, defaultTo, mode);
+  return (
+    <FilterMenuChip
+      icon={icon ?? <EventRounded />}
+      label={active || !shown ? label : `${label}: ${shown}`}
+      valueLabel={active ? rangeLabel(from, to, mode) : null}
+      onClear={required ? undefined : () => onChange(defaultFrom, defaultTo)}
+    >
+      {() => (
+        <Box sx={{ p: 2, display: "grid", gap: 1.5, width: 270 }}>
+          <Typography sx={panelTitle}>{label}</Typography>
+          <DateRangeInputs from={from} to={to} onChange={onChange} mode={mode} required={required} maxDays={maxDays} />
+        </Box>
+      )}
+    </FilterMenuChip>
+  );
+}
 
 /**
  * La barra de filtros de las listas: un buscador y un chip por filtro, aplicados al momento. Un
@@ -154,12 +232,9 @@ export function FilterBar<V extends object>({ value, defaults, onChange, fields,
           onChange={(v) => set({ [field.key]: v })} />;
       case "dateRange":
         return (
-          <Box sx={{ display: "grid", gap: 1.5 }}>
-            <DateInput mode={field.mode ?? "date"} label={t("Desde")} value={get(field.from)} fullWidth
-              max={get(field.to) || undefined} onChange={(v) => set({ [field.from]: v })} />
-            <DateInput mode={field.mode ?? "date"} label={t("Hasta")} value={get(field.to)} fullWidth
-              min={get(field.from) || undefined} onChange={(v) => set({ [field.to]: v })} />
-          </Box>
+          <DateRangeInputs from={get(field.from)} to={get(field.to)} mode={field.mode}
+            required={field.required} maxDays={field.maxDays}
+            onChange={(from, to) => set({ [field.from]: from, [field.to]: to })} />
         );
       default:
         return null;
@@ -175,11 +250,21 @@ export function FilterBar<V extends object>({ value, defaults, onChange, fields,
 
       {chips.map((field) => {
         if (field.type === "search") return null;
-        const panel = field.type === "select" ? null : field.type === "dateRange" || field.type === "date" ? 270 : 260;
+        if (field.type === "dateRange") {
+          return (
+            <DateRangeFilter
+              key={keysOf(field).join("-")}
+              label={field.label} icon={field.icon} mode={field.mode} required={field.required} maxDays={field.maxDays}
+              from={get(field.from)} to={get(field.to)} defaultFrom={def(field.from)} defaultTo={def(field.to)}
+              onChange={(from, to) => set({ [field.from]: from, [field.to]: to })}
+            />
+          );
+        }
+        const panel = field.type === "select" ? null : field.type === "date" ? 270 : 260;
         return (
           <FilterMenuChip
             key={keysOf(field).join("-")}
-            icon={field.icon ?? (field.type === "date" || field.type === "dateRange" ? <EventRounded /> : <TuneRounded />)}
+            icon={field.icon ?? (field.type === "date" ? <EventRounded /> : <TuneRounded />)}
             label={chipLabel(field)}
             valueLabel={valueLabel(field)}
             onClear={() => reset(field)}
