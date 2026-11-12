@@ -8,7 +8,8 @@ import { Co2Rounded, DownloadRounded, LocalShippingRounded, RouteRounded, Warnin
 import {
   downloadEmissionReport, fetchEmissionReport, type EmissionGroupBy,
 } from "../../shared/api/emissionsApi";
-import { saveDownloadedFile, type ApiError } from "../../shared/api/httpClient";
+import { saveCsvAsExcel } from "../../shared/api/excelDownload";
+import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
 import { AppCard, KpiCard, SectionHeader, dataTableSx } from "../../shared/ui/components";
 import { enumLabel } from "../../lib/enums";
@@ -32,11 +33,12 @@ export function CarbonFootprintSection({ companyId, from, to }: { companyId: str
     enabled: companyId !== "" && from !== "" && to !== "",
   });
 
-  async function exportCsv() {
+  async function exportExcel() {
     setExporting(true);
     try {
+      // El servidor da el CSV; el Excel se arma con él, con las mismas columnas y cifras.
       const file = await downloadEmissionReport(companyId, { from, to, groupBy }, "CSV");
-      saveDownloadedFile(file, "huella-carbono.csv");
+      await saveCsvAsExcel(file, "huella-carbono.csv", t("Huella de carbono"));
     } catch (error) {
       notifyError(t("No se pudo exportar"), describeApiError(error as ApiError));
     } finally {
@@ -65,8 +67,8 @@ export function CarbonFootprintSection({ companyId, from, to }: { companyId: str
               ))}
             </ToggleButtonGroup>
             <Button size="small" variant="outlined" startIcon={<DownloadRounded />} disabled={exporting || !report}
-              onClick={() => void exportCsv()}>
-              {t("CSV")}
+              onClick={() => void exportExcel()}>
+              {t("Excel")}
             </Button>
           </Box>
         )}
@@ -104,8 +106,10 @@ export function CarbonFootprintSection({ companyId, from, to }: { companyId: str
                 {t("Ningún viaje del período tiene huella: carga el factor de emisión de los tipos de vehículo.")}
               </Typography>
             ) : (
-              <TableContainer>
-                <Table size="small" sx={dataTableSx}>
+              // Hasta 450 px y después se desplaza, con la cabecera fija: un periodo con cien
+              // clientes no empuja el resto del reporte fuera de la pantalla.
+              <TableContainer tabIndex={0} sx={{ maxHeight: 450 }}>
+                <Table size="small" stickyHeader sx={dataTableSx}>
                   <TableHead>
                     <TableRow>
                       <TableCell>{groupBy === "CUSTOMER" ? t("Cliente") : groupBy === "DESTINATION" ? t("Destino") : t("Ruta")}</TableCell>

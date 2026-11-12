@@ -17,6 +17,7 @@ import {
 } from "../../shared/ui/components";
 import { TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
+import { lastDays } from "../../lib/dateRange";
 import { enumLabel } from "../../lib/enums";
 import { t } from "../../lib/i18n";
 import { fmtDate, fmtQuantity, fmtTime } from "../../lib/locale";
@@ -33,10 +34,17 @@ interface AppliedFilters {
   planningDateTo: string;
 }
 
-const DEFAULT_FILTERS: AppliedFilters = {
-  shipmentNumber: "", status: "", originId: "", carrierId: "", driverId: "",
-  planningDateFrom: "", planningDateTo: "",
-};
+/** El periodo más largo que se puede elegir, en días con los dos extremos. */
+const MAX_RANGE_DAYS = 30;
+
+/** La última semana, hoy incluido: el periodo siempre está puesto y no se puede vaciar. */
+function defaultFilters(): AppliedFilters {
+  const week = lastDays(7);
+  return {
+    shipmentNumber: "", status: "", originId: "", carrierId: "", driverId: "",
+    planningDateFrom: week.from, planningDateTo: week.to,
+  };
+}
 
 /**
  * El tablero de ejecución: todos los viajes de la empresa, indexados por día en lugar de por
@@ -54,7 +62,8 @@ export function TripsPage() {
 
   const [page, setPage] = useState(0);
   // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
-  const [filters, setFiltersState] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const [defaults] = useState(defaultFilters);
+  const [filters, setFiltersState] = useState<AppliedFilters>(defaults);
   const setFilters = (next: AppliedFilters) => { setFiltersState(next); setPage(0); };
 
   const tripsQuery = useQuery({
@@ -69,8 +78,8 @@ export function TripsPage() {
         originId: filters.originId || undefined,
         carrierId: filters.carrierId || undefined,
         driverId: filters.driverId || undefined,
-        planningDateFrom: filters.planningDateFrom || undefined,
-        planningDateTo: filters.planningDateTo || undefined,
+        planningDateFrom: filters.planningDateFrom,
+        planningDateTo: filters.planningDateTo,
         signal,
       }),
     enabled: companyId !== "",
@@ -180,11 +189,12 @@ export function TripsPage() {
 
       <FilterBar
         value={filters}
-        defaults={DEFAULT_FILTERS}
+        defaults={defaults}
         onChange={setFilters}
         fields={[
           { type: "search", key: "shipmentNumber", placeholder: t("Envío") },
-          { type: "dateRange", from: "planningDateFrom", to: "planningDateTo", label: t("Fecha"), icon: <EventRounded /> },
+          { type: "dateRange", from: "planningDateFrom", to: "planningDateTo", label: t("Fecha"), icon: <EventRounded />,
+            required: true, maxDays: MAX_RANGE_DAYS },
           { type: "select", key: "status", label: t("Estado"), icon: <FlagRounded />,
             allLabel: t("Todos los estados"),
             options: TRIP_STATUSES.map((status) => ({ id: status, label: enumLabel("tripStatus", status) })) },

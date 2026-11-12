@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Box, Card, CardContent, Typography, Skeleton, LinearProgress } from "@mui/material";
 import { useTheme, alpha } from "@mui/material/styles";
 import { R, T } from "../../../theme";
+import { CountUp } from "./CountUp";
 
 interface KpiCardProps {
   title: string;
@@ -68,7 +69,8 @@ export function KpiCard({ title, value, icon, color = "primary.main", sub, loadi
           lineHeight: 1, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
           color: isError ? "error.dark" : "text.primary",
         }}>
-          {loading ? <Skeleton width={64} height={30} /> : value}
+          {/* La cifra se cuenta desde 0 al aparecer, cuando la tarjeta deja de cargar. */}
+          {loading ? <Skeleton width={64} height={30} /> : <CountUp value={value} />}
         </Typography>
 
         {typeof progress === "number" && !loading && (

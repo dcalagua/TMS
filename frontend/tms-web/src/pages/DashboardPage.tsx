@@ -15,7 +15,7 @@ import { fetchSystemInfo } from "../shared/api/systemApi";
 import { fetchVehicles } from "../shared/api/vehiclesApi";
 import { useAuth } from "../shared/auth/AuthContext";
 import { useCompany } from "../shared/company/CompanyContext";
-import { StatusChip } from "../shared/ui/components";
+import { CountUp, StatusChip } from "../shared/ui/components";
 import { getLang, t } from "../lib/i18n";
 import { fmtDateTime, fmtPercent, fmtQuantity, localeFor } from "../lib/locale";
 import { R, T } from "../theme";
@@ -178,7 +178,7 @@ export function DashboardPage() {
       )}
 
       {canMonitor && (
-        <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "minmax(0,1fr) 440px" } }}>
+        <Box sx={{ display: "grid", gap: 2, alignItems: "start", gridTemplateColumns: { xs: "1fr", lg: "minmax(0,1fr) 440px" } }}>
           <TodayCard
             loading={tower.isPending}
             error={tower.isError}
@@ -248,7 +248,7 @@ function BigValue({ value, loading, size = 32 }: { value?: number; loading: bool
       fontSize: size, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1,
       fontVariantNumeric: "tabular-nums",
     }}>
-      {value === undefined ? "-" : fmtQuantity(value)}
+      <CountUp value={value === undefined ? "-" : fmtQuantity(value)} />
     </Typography>
   );
 }
@@ -393,15 +393,15 @@ function TodayCard(props: {
               ))}
             </Box>
           </Box>
-          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 1.5, flex: 1 }}>
+          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 1.5 }}>
             {[
               { icon: <DirectionsRunRounded />, label: t("En tránsito"), value: props.inTransit, tone: "warning" as Tone },
               { icon: <ScheduleRounded />, label: t("Programados"), value: props.scheduled, tone: "info" as Tone },
               { icon: <DoneAllRounded />, label: t("Completados"), value: props.completed, tone: "success" as Tone },
             ].map((metric) => (
               <Box key={metric.label} sx={{
-                p: 1.75, borderRadius: `${R.md}px`, bgcolor: "background.default",
-                display: "flex", flexDirection: "column", justifyContent: "center",
+                px: 1.75, py: 1.25, borderRadius: `${R.md}px`, bgcolor: "background.default",
+                display: "flex", flexDirection: "column",
               }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, color: toneColor(metric.tone), "& svg": { fontSize: 16 } }}>
                   {metric.icon}
@@ -472,7 +472,7 @@ function AttentionCard(props: {
                 fontSize: 20, fontWeight: 800, fontVariantNumeric: "tabular-nums",
                 color: active ? `${row.tone}.dark` : "text.secondary",
               }}>
-                {fmtQuantity(row.value ?? 0)}
+                <CountUp value={fmtQuantity(row.value ?? 0)} />
               </Typography>
             )}
             <ChevronRightRounded sx={{ fontSize: 18, color: "text.secondary" }} aria-hidden />

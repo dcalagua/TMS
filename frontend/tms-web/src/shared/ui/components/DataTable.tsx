@@ -44,6 +44,11 @@ export interface DataTableColumn<T> {
   actions?: boolean;
   /** Ancho fijo, cuando la columna tiene que dejar de pelearse por el espacio. */
   width?: number | string;
+  /**
+   * Ancho mínimo. Con varias columnas así, una tabla ancha deja de apilar su texto en renglones y
+   * se desplaza a lo ancho dentro de su panel, que para eso tiene el scroll.
+   */
+  minWidth?: number | string;
 }
 
 interface DataTableProps<T> {
@@ -150,7 +155,7 @@ export function DataTable<T>({
           <TableHead>
             <TableRow>
               {columns.map((column) => (
-                <TableCell key={column.key} className={cellClass(column)} sx={{ width: column.width }}>
+                <TableCell key={column.key} className={cellClass(column)} sx={{ width: column.width, minWidth: column.minWidth }}>
                   {column.header}
                 </TableCell>
               ))}
@@ -206,7 +211,8 @@ export function DataTable<T>({
                     }}
                   >
                     {columns.map((column) => (
-                      <TableCell key={column.key} className={cellClass(column)}>
+                      <TableCell key={column.key} className={cellClass(column)}
+                        sx={column.minWidth === undefined ? undefined : { minWidth: column.minWidth }}>
                         {column.render(row)}
                       </TableCell>
                     ))}

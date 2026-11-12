@@ -5,8 +5,8 @@ import {
   Box, Button, Chip, LinearProgress, ToggleButton, ToggleButtonGroup, Typography, useMediaQuery, useTheme,
 } from "@mui/material";
 import {
-  AssignmentReturnRounded, BlockRounded, BusinessRounded, CheckCircleRounded, CompareArrowsRounded, DateRangeRounded,
-  DescriptionRounded, DoNotDisturbOnRounded, FlagRounded, HourglassEmptyRounded, ListRounded, LocalShippingRounded,
+  AssignmentReturnRounded, BusinessRounded, CompareArrowsRounded, DateRangeRounded,
+  DescriptionRounded, FlagRounded, ListRounded, LocalShippingRounded,
   MapRounded, PendingActionsRounded, RouteRounded, TaskAltRounded, TravelExploreRounded,
 } from "@mui/icons-material";
 import { fetchCarriers } from "../../shared/api/carriersApi";
@@ -237,7 +237,7 @@ export function ShipmentTrackingPage() {
 
       <Box sx={(th) => ({
         display: "grid", gap: { xs: 1.5, xl: 1.25 }, mb: 2.5,
-        gridTemplateColumns: { xs: "repeat(2, minmax(0,1fr))", md: "repeat(3, minmax(0,1fr))", lg: "repeat(5, minmax(0,1fr))" },
+        gridTemplateColumns: { xs: "repeat(2, minmax(0,1fr))", md: "repeat(5, minmax(0,1fr))" },
         [th.breakpoints.up("lg")]: { "& .MuiCardContent-root": { p: 1.5, gap: 1, "&:last-child": { pb: 1.5 } } },
       })}>
         <KpiCard loading={loadingSummary} icon={<LocalShippingRounded />} color="primary.main" title={t("Despachos")}
@@ -246,19 +246,8 @@ export function ShipmentTrackingPage() {
           value={fmtQuantity(summary?.inTransit)} onClick={() => filterBy({ status: "IN_TRANSIT" })} />
         <KpiCard loading={loadingSummary} icon={<TaskAltRounded />} color="success.main" title={t("Completados")}
           value={fmtQuantity(summary?.completed)} onClick={() => filterBy({ status: "COMPLETED" })} />
-        <KpiCard loading={loadingSummary} icon={<DescriptionRounded />} color="info.main" title={t("Con documentos pendientes")}
-          value={fmtQuantity(summary?.withPendingDocuments)} onClick={() => filterBy({ documents: "PENDING" })} />
         <KpiCard loading={loadingSummary} icon={<CompareArrowsRounded />} color="error.main" title={t("Diferencias de despacho")}
-          sub={t("Lo que salió no coincide con el plan")} value={fmtQuantity(summary?.dispatchMismatches)} />
-        <KpiCard loading={loadingSummary} icon={<HourglassEmptyRounded />} color="text.secondary" title={t("Documentos pendientes")}
-          sub={summary ? t("de {{n}} documentos", { n: fmtQuantity(summary.documentsTotal) }) : undefined}
-          value={fmtQuantity(summary?.documentsPending)} />
-        <KpiCard loading={loadingSummary} icon={<CheckCircleRounded />} color="success.main" title={t("Documentos entregados")}
-          value={fmtQuantity(summary?.documentsDelivered)} />
-        <KpiCard loading={loadingSummary} icon={<BlockRounded />} color="error.main" title={t("Documentos rechazados")}
-          value={fmtQuantity(summary?.documentsRejected)} />
-        <KpiCard loading={loadingSummary} icon={<DoNotDisturbOnRounded />} color="warning.main" title={t("Documentos no entregados")}
-          value={fmtQuantity(summary?.documentsNotDelivered)} />
+          value={fmtQuantity(summary?.dispatchMismatches)} />
         <KpiCard loading={loadingSummary} icon={<AssignmentReturnRounded />} color="info.main" title={t("Cargo por recibir")}
           value={fmtQuantity(summary?.awaitingReturn)} />
       </Box>

@@ -5,6 +5,7 @@ import {
   Toolbar, Tooltip, Typography, useMediaQuery, useTheme,
 } from "@mui/material";
 import { ThemeProvider, lighten } from "@mui/material/styles";
+import { keyframes } from "@mui/system";
 import {
   MenuRounded, ChevronLeftRounded, ChevronRightRounded, LightModeRounded, DarkModeRounded,
   ApartmentRounded, CorporateFareRounded,
@@ -34,6 +35,28 @@ const COLLAPSE_KEY = "ebim-sidebar-collapsed";
  * quedar resuelto aquí y no depender del modo claro/oscuro del lienzo.
  */
 const SIDEBAR_TEXT = "rgba(237,247,241,.9)";
+
+/**
+ * La entrada de una pantalla: se funde desde transparente y sube unos píxeles, en 350 ms.
+ *
+ * Dos animaciones y no una, porque cada una pide su curva. El desplazamiento frena al final
+ * (sale rápido y se asienta); la opacidad va pareja de principio a fin, porque con la curva del
+ * desplazamiento llegaba casi entera en los primeros 100 ms y el fundido no se notaba.
+ *
+ * Sin rebote: es una pista de que el contenido cambió, no un efecto que haya que esperar. Solo
+ * opacidad y desplazamiento, que el navegador anima sin recalcular el diseño. El estado final es
+ * `transform: none`, así que al terminar no queda ningún transform que cambie cómo se posicionan
+ * los elementos `fixed` o `sticky` de la pantalla.
+ */
+const PAGE_ENTER_MS = 350;
+const pageFade = keyframes`
+  from { opacity: 0; }
+  to { opacity: 1; }
+`;
+const pageRise = keyframes`
+  from { transform: translateY(8px); }
+  to { transform: none; }
+`;
 
 /**
  * El armazón de la aplicación: barra lateral, barra superior y el hueco donde vive cada pantalla.
@@ -414,7 +437,17 @@ export function AppLayout() {
           {/* El único límite de Suspense de la app: el armazón se queda en pantalla mientras se
               descarga el trozo de una pantalla, en lugar de parpadear entero. */}
           <Suspense fallback={<LoadingState minHeight="50vh" />}>
-            <Outlet />
+            {/* La clave es la ruta y no la URL entera: cambiar de pantalla (o de viaje) anima la
+                entrada, pero cambiar un filtro —que vive en el `?` de la URL— no vuelve a montar
+                la pantalla ni la hace parpadear. Va dentro de Suspense para que la animación corra
+                cuando la pantalla de verdad aparece, no mientras se descarga su código. Quien pidió
+                al sistema reducir el movimiento no la ve. */}
+            <Box key={location.pathname} sx={{
+              animation: `${pageFade} ${PAGE_ENTER_MS}ms ease-in-out both, ${pageRise} ${PAGE_ENTER_MS}ms cubic-bezier(.2,.7,.2,1) both`,
+              "@media (prefers-reduced-motion: reduce)": { animation: "none" },
+            }}>
+              <Outlet />
+            </Box>
           </Suspense>
         </Box>
       </Box>

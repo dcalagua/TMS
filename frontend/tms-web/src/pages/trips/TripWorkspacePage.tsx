@@ -734,7 +734,7 @@ export function TripWorkspacePage() {
           )}
 
           {(!isNarrow || mobileTab === "stops") && (
-            <WorkspaceCard icon={<PlaceOutlined />} title={t("Paradas")}>
+            <WorkspaceCard icon={<PlaceOutlined />} title={t("Paradas")} maxHeight={350}>
               {stops.length === 0 ? (
                 <Alert severity="info">{t("Este viaje todavía no tiene paradas.")}</Alert>
               ) : (

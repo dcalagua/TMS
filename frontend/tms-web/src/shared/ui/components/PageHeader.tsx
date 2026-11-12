@@ -20,6 +20,8 @@ interface PageHeaderProps {
   meta?: ReactNode;
   /** Si se pasa, muestra el buscador de tabla. */
   search?: { value: string; onChange: (v: string) => void; placeholder?: string };
+  /** Filtros de la página entera (un periodo): van justo a la izquierda de «Recargar». */
+  filters?: ReactNode;
   /** Si se pasa, muestra el botón de recargar. */
   onRefresh?: () => void;
   refreshing?: boolean;
@@ -37,7 +39,7 @@ interface PageHeaderProps {
  * producto.
  */
 export function PageHeader({
-  title, subtitle, icon, meta, search, onRefresh, refreshing, actions,
+  title, subtitle, icon, meta, search, filters, onRefresh, refreshing, actions,
 }: PageHeaderProps) {
   const tint = "primary.main";
   return (
@@ -79,10 +81,11 @@ export function PageHeader({
         </Box>
       </Box>
 
-      <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexShrink: 0 }}>
+      <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexShrink: 0, flexWrap: "wrap" }}>
         {search && (
           <TableSearch value={search.value} onChange={search.onChange} placeholder={search.placeholder} />
         )}
+        {filters}
         {onRefresh && (
           <Button
             variant="outlined"

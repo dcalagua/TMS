@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Box, Button, Typography } from "@mui/material";
 import {
-  AddRounded, ViewKanbanRounded, ArrowForwardRounded, BoltRounded, PanToolOutlined,
+  AddRounded, ViewKanbanRounded, BoltRounded, PanToolOutlined,
   WarehouseRounded, EventRounded, FlagRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
@@ -18,6 +18,7 @@ import {
   DataTable, FilterBar, PageHeader, Pagination, StatusChip, type DataTableColumn,
 } from "../../shared/ui/components";
 import { ICON_TINTS } from "../../shared/ui/navConfig";
+import { lastDays } from "../../lib/dateRange";
 import { enumLabel } from "../../lib/enums";
 import type { StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
@@ -40,9 +41,14 @@ interface AppliedFilters {
   status: PlanningRunStatus | "";
 }
 
-const DEFAULT_FILTERS: AppliedFilters = {
-  planNumber: "", originId: "", planningDateFrom: "", planningDateTo: "", status: "",
-};
+/** El periodo más largo que se puede elegir, en días con los dos extremos. */
+const MAX_RANGE_DAYS = 30;
+
+/** La última semana, hoy incluido: el periodo siempre está puesto y no se puede vaciar. */
+function defaultFilters(): AppliedFilters {
+  const week = lastDays(7);
+  return { planNumber: "", originId: "", planningDateFrom: week.from, planningDateTo: week.to, status: "" };
+}
 
 /**
  * La puerta de entrada de la planificación manual: encuentra o abre un plan, y a partir de ahí
@@ -59,7 +65,8 @@ export function PlanningRunsPage() {
 
   const [page, setPage] = useState(0);
   // Los filtros se aplican al momento: no hay borrador ni botón de aplicar.
-  const [filters, setFiltersState] = useState<AppliedFilters>(DEFAULT_FILTERS);
+  const [defaults] = useState(defaultFilters);
+  const [filters, setFiltersState] = useState<AppliedFilters>(defaults);
   const setFilters = (next: AppliedFilters) => { setFiltersState(next); setPage(0); };
   const [showCreate, setShowCreate] = useState(false);
 
@@ -73,8 +80,8 @@ export function PlanningRunsPage() {
         sort: "planningDate,desc",
         planNumber: filters.planNumber || undefined,
         originId: filters.originId || undefined,
-        planningDateFrom: filters.planningDateFrom || undefined,
-        planningDateTo: filters.planningDateTo || undefined,
+        planningDateFrom: filters.planningDateFrom,
+        planningDateTo: filters.planningDateTo,
         status: filters.status || undefined,
         signal,
       }),
@@ -113,21 +120,8 @@ export function PlanningRunsPage() {
       render: (run) => <StatusChip label={enumLabel("planningRunStatus", run.status)} tone={STATUS_TONE[run.status]} />,
     },
     { key: "trips", header: t("Viajes"), numeric: true, render: (run) => fmtQuantity(run.tripCount) },
+    // Sin botón «Abrir»: la fila entera abre el plan, y el chevron del final ya lo dice.
     { key: "orders", header: t("Pedidos asignados"), numeric: true, render: (run) => fmtQuantity(run.assignedOrderCount) },
-    {
-      key: "actions",
-      header: t("Acciones"),
-      actions: true,
-      render: (run) => (
-        <Button
-          size="small" variant="outlined" color="inherit" endIcon={<ArrowForwardRounded sx={{ fontSize: "15px !important" }} />}
-          onClick={(e) => { e.stopPropagation(); navigate(`/planning/${run.id}`); }}
-          sx={{ borderColor: "divider", whiteSpace: "nowrap" }}
-        >
-          {t("Abrir")}
-        </Button>
-      ),
-    },
   ];
 
   const pageData = runsQuery.data;
@@ -150,7 +144,7 @@ export function PlanningRunsPage() {
 
       <FilterBar
         value={filters}
-        defaults={DEFAULT_FILTERS}
+        defaults={defaults}
         onChange={setFilters}
         fields={[
           { type: "search", key: "planNumber", placeholder: t("Plan") },
@@ -158,7 +152,7 @@ export function PlanningRunsPage() {
             allLabel: t("Todos los orígenes"),
             options: (originsQuery.data?.content ?? []).map((origin) => ({ id: origin.id, label: origin.name })) },
           { type: "dateRange", from: "planningDateFrom", to: "planningDateTo", label: t("Fecha de planificación"),
-            icon: <EventRounded /> },
+            icon: <EventRounded />, required: true, maxDays: MAX_RANGE_DAYS },
           { type: "select", key: "status", label: t("Estado"), icon: <FlagRounded />,
             allLabel: t("Todos los estados"),
             options: PLANNING_RUN_STATUSES.map((status) => ({ id: status, label: enumLabel("planningRunStatus", status) })) },

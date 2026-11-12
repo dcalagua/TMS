@@ -9,7 +9,7 @@ import type {
   ControlTowerAdvisoryView,
   ControlTowerBlockerView, ControlTowerExceptionView, ControlTowerStopView, ControlTowerWorkloadView,
 } from "../../shared/api/controlTowerApi";
-import { AppCard, StatusChip } from "../../shared/ui/components";
+import { AppCard, CountUp, StatusChip } from "../../shared/ui/components";
 import { R, T } from "../../theme";
 import { STOP_EXECUTION_TONE, TRIP_STATUS_TONE } from "../../shared/ui/statusTones";
 import { enumLabel } from "../../lib/enums";
@@ -76,7 +76,7 @@ export function BandMetric({ icon, title, value, sub, color = "primary.main" }: 
         fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
         color: color.startsWith("error") ? "error.main" : "text.primary",
       }}>
-        {value}
+        <CountUp value={value} />
       </Typography>
       {sub && (
         <Typography sx={{ fontSize: T.label, color: "text.secondary", lineHeight: 1.35 }}>{sub}</Typography>
@@ -110,8 +110,15 @@ const ROW_SX = {
   transition: "border-color .15s",
 } as const;
 
-/** La lista de filas de un panel. */
-const LIST_SX = { display: "grid", gap: 1 } as const;
+/**
+ * La lista de filas de un panel. Hasta 350 px y después se desplaza: un día con cuarenta paradas
+ * pendientes no empuja los demás paneles fuera de la pantalla, y la cabecera con el contador sigue
+ * a la vista.
+ */
+const LIST_SX = {
+  display: "grid", gap: 1, alignContent: "start",
+  maxHeight: 350, overflowY: "auto", pr: 0.5, mr: -0.5,
+} as const;
 
 /**
  * Los envíos más cargados del día, con el peor de sus tres ejes de capacidad.
@@ -134,18 +141,26 @@ export function WorkloadPanel({ items, total }: { items: ControlTowerWorkloadVie
               to={`/trips/${trip.id}`}
               variant="outlined"
               sx={{
-                ...ROW_SX, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap",
+                ...ROW_SX, display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", alignItems: "center", columnGap: 1.5,
                 "&:hover": { borderColor: "primary.main" },
               }}
             >
-              <Box sx={{ flex: 1, minWidth: 140 }}>
-                <Typography variant="body2" sx={{ fontWeight: 700, fontSize: T.bodyStrong }}>{trip.shipmentNumber}</Typography>
-                <Typography variant="caption" color="text.secondary" noWrap>
+              {/* El estado va en el renglón del número y la placa con el transportista debajo, a lo
+                  ancho y cortada con «…»: en un renglón compartido, el nombre largo del
+                  transportista se metía debajo del chip. */}
+              <Box sx={{ minWidth: 0 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, fontSize: T.bodyStrong }}>{trip.shipmentNumber}</Typography>
+                  <StatusChip label={enumLabel("tripStatus", trip.status)} tone={TRIP_STATUS_TONE[trip.status]} />
+                </Box>
+                <Typography
+                  variant="caption" color="text.secondary" noWrap component="div" sx={{ mt: 0.25 }}
+                  title={[trip.vehicleLicensePlate, trip.carrierName].filter(Boolean).join(" · ")}
+                >
                   {trip.vehicleLicensePlate ?? t("Sin vehículo asignado")}
                   {trip.carrierName && ` · ${trip.carrierName}`}
                 </Typography>
               </Box>
-              <StatusChip label={enumLabel("tripStatus", trip.status)} tone={TRIP_STATUS_TONE[trip.status]} />
               <Typography
                 variant="body2"
                 sx={{

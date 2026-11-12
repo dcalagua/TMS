@@ -86,12 +86,16 @@ export function DocumentDeliveriesPage() {
   const loadingSummary = summaryQuery.isPending;
   const filterStatus = (status: DocumentDeliveryStatus) => setFilters({ ...filters, status, returned: "" });
 
+  // Anchos mínimos y renglones sin partir: con diez columnas en el ancho de la pantalla, el envío,
+  // el transportista y el documento se apilaban en cinco renglones. Así la tabla se desplaza a lo
+  // ancho dentro de su panel y cada fila se lee en dos renglones.
   const columns: DataTableColumn<DocumentDeliveryRow>[] = [
     {
       key: "shipment",
       header: t("Envío"),
+      minWidth: 150,
       render: (row) => (
-        <Box>
+        <Box sx={{ whiteSpace: "nowrap" }}>
           <Typography variant="body2" sx={{ fontWeight: 800 }}>{row.shipmentNumber}</Typography>
           <Typography variant="caption" color="text.secondary">{row.dispatchedAt ? fmtDateTime(row.dispatchedAt) : "-"}</Typography>
         </Box>
@@ -100,10 +104,11 @@ export function DocumentDeliveriesPage() {
     {
       key: "carrier",
       header: t("Transportista"),
+      minWidth: 260,
       render: (row) => (
         <Box>
           <Typography variant="body2">{row.carrierName ?? t("Sin transportista")}</Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
             {[row.vehicleLicensePlate, row.driverName].filter(Boolean).join(" · ")}
           </Typography>
         </Box>
@@ -112,8 +117,9 @@ export function DocumentDeliveriesPage() {
     {
       key: "document",
       header: t("Documento"),
+      minWidth: 150,
       render: (row) => (
-        <Box>
+        <Box sx={{ whiteSpace: "nowrap" }}>
           <Typography variant="body2" sx={{ fontWeight: 700 }}>{row.documentNumber}</Typography>
           <Typography variant="caption" color="text.secondary">{enumLabel("deliveryDocumentType", row.documentType)}</Typography>
         </Box>
@@ -122,9 +128,10 @@ export function DocumentDeliveriesPage() {
     {
       key: "customer",
       header: t("Cliente / pedidos"),
+      minWidth: 280,
       render: (row) => (
-        <Box sx={{ maxWidth: 240 }}>
-          <Typography variant="body2" noWrap>{row.customerName ?? "-"}</Typography>
+        <Box sx={{ maxWidth: 340 }}>
+          <Typography variant="body2" noWrap title={row.customerName ?? undefined}>{row.customerName ?? "-"}</Typography>
           <Typography variant="caption" color="text.secondary" noWrap component="div">{row.orderNumbers.join(", ")}</Typography>
         </Box>
       ),
@@ -132,6 +139,7 @@ export function DocumentDeliveriesPage() {
     {
       key: "status",
       header: t("Estado"),
+      minWidth: 130,
       render: (row) => (
         <Box sx={{ display: "grid", gap: 0.25, justifyItems: "start" }}>
           <DocumentStatusChip status={row.status} />
@@ -144,8 +152,9 @@ export function DocumentDeliveriesPage() {
     {
       key: "reported",
       header: t("Reportado"),
+      minWidth: 260,
       render: (row) => row.reportedAt ? (
-        <Box>
+        <Box sx={{ whiteSpace: "nowrap" }}>
           <Typography variant="body2">{fmtDateTime(row.reportedAt)}</Typography>
           {row.recordedByName && <Typography variant="caption" color="text.secondary">{row.recordedByName}</Typography>}
         </Box>
@@ -165,6 +174,7 @@ export function DocumentDeliveriesPage() {
     {
       key: "return",
       header: t("Cargo"),
+      minWidth: 120,
       render: (row) => row.returnedAt
         ? <StatusChip tone="done" label={t("Recibido")} />
         : row.status === "PENDING" ? <Typography variant="caption" color="text.disabled">-</Typography>
@@ -173,6 +183,7 @@ export function DocumentDeliveriesPage() {
     {
       key: "flags",
       header: t("Alertas"),
+      minWidth: 130,
       render: (row) => row.inconsistency ? (
         <Tooltip title={enumLabel("documentInconsistency", row.inconsistency)}>
           <Chip size="small" color="warning" icon={<ReportProblemRounded />} label={t("Inconsistencia")} sx={{ height: 22, fontSize: 11 }} />

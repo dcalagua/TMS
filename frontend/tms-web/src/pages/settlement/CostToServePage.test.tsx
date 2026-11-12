@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CostToServeView } from "../../shared/api/costToServeApi";
@@ -116,17 +116,20 @@ describe("CostToServePage", () => {
       .toBe(true);
   });
 
-  it("exporta el CSV del mismo filtro", async () => {
+  it("exporta a Excel lo que el servidor da en CSV, con el mismo filtro", async () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("CUST-1");
 
-    await user.click(screen.getByRole("button", { name: "Exportar CSV" }));
+    await user.click(screen.getByRole("button", { name: "Exportar Excel" }));
 
     const exportCall = fetchMock.mock.calls.map(([input]) => new URL(input as string))
       .find((url) => url.pathname.endsWith("/cost-to-serve/export"));
     expect(exportCall?.searchParams.get("format")).toBe("CSV");
     expect(exportCall?.searchParams.get("groupBy")).toBe("CUSTOMER");
-    expect(saveDownloadedFile).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(saveDownloadedFile).toHaveBeenCalledTimes(1));
+    const [file, fallbackName] = saveDownloadedFile.mock.calls[0] as [{ blob: Blob; fileName: string | null }, string];
+    expect(file.blob.type).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    expect(fallbackName).toMatch(/^cost-to-serve-customer-.*\.xlsx$/);
   });
 });

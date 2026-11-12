@@ -2,6 +2,7 @@ export { ActionMenu, type ActionMenuItem } from "./ActionMenu";
 export { DataTable, type DataTableColumn } from "./DataTable";
 export { FormDrawer, type FormDrawerProps, type DrawerSize } from "./FormDrawer";
 export { ImportDrawer, ImportOutcomeChip } from "./ImportDrawer";
+export { CountUp } from "./CountUp";
 export { KpiCard } from "./KpiCard";
 export { LookupField, type LookupOption } from "./LookupField";
 export { PageHeader } from "./PageHeader";
@@ -20,6 +21,6 @@ export {
   type DateInputProps, type DateInputMode,
 } from "./DateInputs";
 export { FilterMenuChip, FilterOptionList, type FilterOption } from "./FilterChip";
-export { FilterBar, type FilterBarProps, type FilterField } from "./FilterBar";
+export { DateRangeFilter, FilterBar, type FilterBarProps, type FilterField } from "./FilterBar";
 export { ContextCard, FormMeta, FormRow, FormSection, OptionCard, SectionIndex } from "./FormLayout";
 export { DetailSection, KeyFacts, VerdictBanner } from "./DetailLayout";

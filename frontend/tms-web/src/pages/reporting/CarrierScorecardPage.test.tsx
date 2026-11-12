@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -16,6 +16,12 @@ import type {
 
 vi.mock("../../shared/company/CompanyContext", () => ({
   useCompany: () => ({ selected: { id: "company-1", code: "DEMO-LIMA", name: "Demo Lima" } }),
+}));
+
+const saveDownloadedFile = vi.fn();
+vi.mock("../../shared/api/httpClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../shared/api/httpClient")>()),
+  saveDownloadedFile: (...args: unknown[]) => saveDownloadedFile(...args),
 }));
 
 import { CarrierScorecardPage } from "./CarrierScorecardPage";
@@ -87,6 +93,9 @@ beforeEach(() => {
   fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.includes("/reporting/carrier-scorecard/trips")) return json(TRIPS);
+    if (url.includes("/reporting/carrier-scorecard/export")) {
+      return new Response("carrier_code,trips\nTRLIT,4\n", { status: 200, headers: { "content-type": "text/csv" } });
+    }
     return json(scorecard());
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -149,5 +158,22 @@ describe("CarrierScorecardPage", () => {
   it("abre el detalle directo con ?carrier=, que es lo que usa «Ver desempeño»", async () => {
     renderPage(`/reporting/carriers?carrier=${TRLIT}`);
     expect(await screen.findByText("SH-00000042")).toBeInTheDocument();
+  });
+
+  it("exporta a Excel lo que el servidor da en CSV, con el periodo puesto", async () => {
+    saveDownloadedFile.mockClear();
+    renderPage();
+    await screen.findByText("Transportes Litoral");
+
+    fireEvent.click(screen.getByRole("button", { name: "Exportar Excel" }));
+
+    await waitFor(() => expect(saveDownloadedFile).toHaveBeenCalledTimes(1));
+    const call = fetchMock.mock.calls.map(([input]) => new URL(String(input)))
+      .find((url) => url.pathname.endsWith("/reporting/carrier-scorecard/export"));
+    expect(call?.searchParams.get("from")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(call?.searchParams.get("to")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const [file, fallbackName] = saveDownloadedFile.mock.calls[0] as [{ blob: Blob }, string];
+    expect(file.blob.type).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    expect(fallbackName).toBe("carrier-scorecard.xlsx");
   });
 });
