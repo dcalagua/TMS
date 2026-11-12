@@ -227,10 +227,9 @@ export function DocumentDeliveriesPage() {
         <KpiCard loading={loadingSummary} icon={<DoNotDisturbOnRounded />} color="warning.main" title={t("No entregados")}
           value={fmtQuantity(summary?.notDelivered)} onClick={() => filterStatus("NOT_DELIVERED")} />
         <KpiCard loading={loadingSummary} icon={<AssignmentReturnRounded />} color="info.main" title={t("Cargo por recibir")}
-          sub={summary ? t("{{n}} recibidos", { n: fmtQuantity(summary.returned) }) : undefined}
           value={fmtQuantity(summary?.awaitingReturn)} />
         <KpiCard loading={loadingSummary} icon={<ReportProblemRounded />} color="warning.main" title={t("Inconsistencias")}
-          sub={t("Documento y mercadería no coinciden")} value={fmtQuantity(summary?.inconsistent)} />
+          value={fmtQuantity(summary?.inconsistent)} />
       </Box>
 
       {summary && summary.byCarrier.length > 0 && (
