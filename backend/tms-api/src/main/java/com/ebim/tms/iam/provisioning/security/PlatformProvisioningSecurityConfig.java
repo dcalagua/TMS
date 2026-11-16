@@ -20,6 +20,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
@@ -66,12 +67,17 @@ import tools.jackson.databind.ObjectMapper;
  * The tenant suspension filter of the user and partner chains is deliberately absent here: this is the
  * channel that lifts a suspension, so it is never itself suspended.
  *
+ * <p>The tenant inventory ({@code GET /tenants}) and tenant link ({@code PUT /tenants/{id}/link}) of
+ * {@code tenant-inventory.v1} (V76) ride here too, with the same error body, but their scopes come from
+ * {@link PlatformInventoryProperties}: unset, the route lets an authenticated token through to a handler
+ * that answers {@code 503 ..._NOT_CONFIGURED} - closed, and saying so.
+ *
  * <p>One scope per operation, declared here where it is structural: a method added under the prefix
  * without its line is caught by {@code anyRequest().denyAll()}, not left open to any MasterAdmin
  * token. {@code actor_role} never becomes an authority. No CORS: the caller is a server.
  */
 @Configuration
-@EnableConfigurationProperties(PlatformProvisioningProperties.class)
+@EnableConfigurationProperties({PlatformProvisioningProperties.class, PlatformInventoryProperties.class})
 public class PlatformProvisioningSecurityConfig {
 
     private static final Logger log = LoggerFactory.getLogger(PlatformProvisioningSecurityConfig.class);
@@ -79,7 +85,8 @@ public class PlatformProvisioningSecurityConfig {
     @Bean
     @Order(Ordered.HIGHEST_PRECEDENCE + 2)
     public SecurityFilterChain platformProvisioningSecurityFilterChain(
-            HttpSecurity http, PlatformProvisioningProperties properties, ObjectMapper objectMapper) throws Exception {
+            HttpSecurity http, PlatformProvisioningProperties properties, PlatformInventoryProperties inventory,
+            ObjectMapper objectMapper) throws Exception {
 
         ContractErrorWriter errors = new ContractErrorWriter(objectMapper, properties.enabled());
 
@@ -112,10 +119,27 @@ public class PlatformProvisioningSecurityConfig {
 
         log.info("MasterAdmin provisioning is ON at {}: ES256 tokens from iss={} for aud={}",
                 PlatformProvisioningPaths.ALL, properties.issuer(), properties.audience());
+        inventory.problems().forEach(problem -> log.error("tenant-inventory.v1: {}", problem));
+        log.info("tenant-inventory.v1: list {}, link {}",
+                inventory.listScope().map(scope -> "requires " + scope).orElse("is NOT configured (503)"),
+                inventory.adoptScope().map(scope -> "requires " + scope).orElse("is NOT configured (503)"));
 
         http
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.GET, PlatformProvisioningPaths.HEALTH).permitAll()
+                .authorizeHttpRequests(auth -> {
+                    auth.requestMatchers(HttpMethod.GET, PlatformProvisioningPaths.HEALTH).permitAll();
+                    // tenant-inventory.v1 (V76): scopes from configuration. Unconfigured, any valid
+                    // MasterAdmin token reaches the handler, which answers 503 ..._NOT_CONFIGURED.
+                    // GET /tenants is the list; GET /tenants/* (status) and POST /tenants (create)
+                    // are other matchers - the patterns do not overlap.
+                    AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizedUrl list =
+                            auth.requestMatchers(HttpMethod.GET, PlatformProvisioningPaths.TENANTS);
+                    inventory.listScope().ifPresentOrElse(
+                            scope -> list.hasAuthority(PlatformScopes.AUTHORITY_PREFIX + scope), list::authenticated);
+                    AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizedUrl link =
+                            auth.requestMatchers(HttpMethod.PUT, PlatformProvisioningPaths.TENANT_LINK);
+                    inventory.adoptScope().ifPresentOrElse(
+                            scope -> link.hasAuthority(PlatformScopes.AUTHORITY_PREFIX + scope), link::authenticated);
+                    auth
                         .requestMatchers(HttpMethod.POST, PlatformProvisioningPaths.TENANTS)
                                 .hasAuthority(PlatformScopes.AUTHORITY_TENANT_CREATE)
                         .requestMatchers(HttpMethod.GET, PlatformProvisioningPaths.TENANT)
@@ -130,7 +154,8 @@ public class PlatformProvisioningSecurityConfig {
                                 .hasAuthority(PlatformScopes.AUTHORITY_LIFECYCLE_WRITE)
                         .requestMatchers(HttpMethod.GET, PlatformProvisioningPaths.TENANT_LIFECYCLE)
                                 .hasAuthority(PlatformScopes.AUTHORITY_LIFECYCLE_READ)
-                        .anyRequest().denyAll())
+                        .anyRequest().denyAll();
+                })
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .bearerTokenResolver(ignoringHealth())
                         .authenticationEntryPoint(errors)
@@ -174,7 +199,7 @@ public class PlatformProvisioningSecurityConfig {
         @Override
         public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException failure)
                 throws IOException {
-            if (isContractRoute(request.getRequestURI())) {
+            if (isContractRoute(request)) {
                 if (enabled) {
                     response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
                 }
@@ -194,11 +219,9 @@ public class PlatformProvisioningSecurityConfig {
         @Override
         public void handle(HttpServletRequest request, HttpServletResponse response,
                 org.springframework.security.access.AccessDeniedException failure) throws IOException {
-            if (isContractRoute(request.getRequestURI())) {
-                boolean lifecycle = PlatformProvisioningPaths.isLifecycle(request.getRequestURI());
+            if (isContractRoute(request)) {
                 writeEntitlements(response, enabled ? 403 : 503, enabled ? "INSUFFICIENT_SCOPE" : "M2M_NOT_CONFIGURED",
-                        enabled ? "The token lacks the " + (lifecycle ? "lifecycle" : "entitlements")
-                                + " scope this operation needs"
+                        enabled ? "The token lacks the " + contractName(request) + " scope this operation needs"
                                 : "Platform provisioning is not enabled");
                 return;
             }
@@ -213,9 +236,23 @@ public class PlatformProvisioningSecurityConfig {
                     : ProvisioningErrorCode.ACCESS_DENIED);
         }
 
-        /** Entitlements and lifecycle both answer {@code {error, message}}; tenant creation keeps its own body. */
-        private static boolean isContractRoute(String requestUri) {
-            return PlatformProvisioningPaths.isEntitlements(requestUri) || PlatformProvisioningPaths.isLifecycle(requestUri);
+        /**
+         * Entitlements, lifecycle and tenant-inventory all answer {@code {error, message}}; tenant creation
+         * and status keep their own body.
+         */
+        private static boolean isContractRoute(HttpServletRequest request) {
+            String requestUri = request.getRequestURI();
+            return PlatformProvisioningPaths.isEntitlements(requestUri) || PlatformProvisioningPaths.isLifecycle(requestUri)
+                    || PlatformProvisioningPaths.isInventory(request.getMethod(), requestUri);
+        }
+
+        private static String contractName(HttpServletRequest request) {
+            String requestUri = request.getRequestURI();
+            if (PlatformProvisioningPaths.isLifecycle(requestUri)) {
+                return "lifecycle";
+            }
+            return PlatformProvisioningPaths.isInventory(request.getMethod(), requestUri) ? "tenant-inventory"
+                    : "entitlements";
         }
 
         /**

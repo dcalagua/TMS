@@ -20,6 +20,11 @@ public final class PlatformProvisioningPaths {
     public static final String ENTITLEMENTS_MANIFEST = BASE + "/entitlements/manifest";
     /** Operational lifecycle (lifecycle.v1, V58, ADR-021): additive, with scopes of their own. */
     public static final String TENANT_LIFECYCLE = BASE + "/tenants/*/lifecycle";
+    /**
+     * Tenant inventory (tenant-inventory.v1, V76): {@code GET} {@link #TENANTS} lists every organization,
+     * and {@code PUT} this path adopts an existing one. Scopes of their own, from configuration.
+     */
+    public static final String TENANT_LINK = BASE + "/tenants/*/link";
 
     /** Whether a request URI belongs to the entitlements contract, whose errors are {@code {error, message}}. */
     public static boolean isEntitlements(String requestUri) {
@@ -30,6 +35,18 @@ public final class PlatformProvisioningPaths {
     /** Whether a request URI belongs to the lifecycle contract, whose errors are {@code {error, message}} too. */
     public static boolean isLifecycle(String requestUri) {
         return requestUri != null && requestUri.startsWith(TENANTS + "/") && requestUri.endsWith("/lifecycle");
+    }
+
+    /**
+     * Whether a request belongs to the tenant-inventory contract: {@code GET /tenants} (not the
+     * {@code POST} that creates a tenant) or anything on {@code /tenants/{id}/link}.
+     */
+    public static boolean isInventory(String method, String requestUri) {
+        if (requestUri == null) {
+            return false;
+        }
+        return (requestUri.equals(TENANTS) && "GET".equalsIgnoreCase(method))
+                || (requestUri.startsWith(TENANTS + "/") && requestUri.endsWith("/link"));
     }
 
     private PlatformProvisioningPaths() {}

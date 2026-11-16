@@ -2,6 +2,7 @@ package com.ebim.tms.iam.provisioning.api;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -99,5 +100,20 @@ class PlatformProvisioningDisabledApiTest {
                                 "admin@alpha.ebim.test", "Alpha")))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("M2M_NOT_CONFIGURED"));
+    }
+
+    @Test
+    @DisplayName("the tenant inventory and link are refused with 503 M2M_NOT_CONFIGURED in their {error} body")
+    void inventoryRefused() throws Exception {
+        mockMvc.perform(get("/internal/platform-provisioning/tenants")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + PlatformM2mTestTokens.valid("tms:tenants:list")))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error").value("M2M_NOT_CONFIGURED"));
+        mockMvc.perform(put("/internal/platform-provisioning/tenants/" + GenericProvisioningFixtures.TENANT_A + "/link")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + PlatformM2mTestTokens.valid("tms:tenants:link"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error").value("M2M_NOT_CONFIGURED"));
     }
 }

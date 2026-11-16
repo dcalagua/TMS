@@ -25,10 +25,15 @@ public class InMemoryPlatformProvisioningRepository extends PlatformProvisioning
 
     public record Membership(UUID id, UUID appUserId, UUID organizationId, UUID companyId, List<String> roles) {}
 
-    private record Stored(String idempotencyKey, NewProvisioning row, UUID id, OffsetDateTime createdAt) {}
+    private record Stored(String idempotencyKey, NewProvisioning row, UUID id, OffsetDateTime createdAt,
+            boolean linked) {}
 
     public final Map<UUID, Organization> organizations = new ConcurrentHashMap<>();
     public final Map<UUID, Company> companies = new ConcurrentHashMap<>();
+    /** Company ids in insertion order: "the oldest company" of an organization, as V76 picks it. */
+    public final List<UUID> companyOrder = new ArrayList<>();
+    /** Organizations deactivated in TMS (tms.organization.active = false). */
+    public final java.util.Set<UUID> inactiveOrganizations = ConcurrentHashMap.newKeySet();
     public final Map<UUID, String> companySettings = new ConcurrentHashMap<>();
     public final Map<UUID, Profile> profiles = new ConcurrentHashMap<>();
     public final Map<UUID, Membership> memberships = new ConcurrentHashMap<>();
@@ -42,6 +47,8 @@ public class InMemoryPlatformProvisioningRepository extends PlatformProvisioning
     public void reset() {
         organizations.clear();
         companies.clear();
+        companyOrder.clear();
+        inactiveOrganizations.clear();
         companySettings.clear();
         profiles.clear();
         memberships.clear();
@@ -55,9 +62,51 @@ public class InMemoryPlatformProvisioningRepository extends PlatformProvisioning
         return id;
     }
 
-    public void addOrganization(String code) {
+    public UUID addOrganization(String code) {
         UUID id = UUID.randomUUID();
         organizations.put(id, new Organization(id, code, code));
+        return id;
+    }
+
+    /** An organization that exists in TMS without MasterAdmin, with its companies (oldest first). */
+    public UUID addLegacyOrganization(UUID id, String code, String name, String... companyCodes) {
+        organizations.put(id, new Organization(id, code, name));
+        for (String companyCode : companyCodes) {
+            insertCompany(id, companyCode, companyCode, null, "America/Lima");
+        }
+        return id;
+    }
+
+    /** The oldest company of an organization, or null. */
+    public UUID oldestCompany(UUID organizationId) {
+        return companyOrder.stream().filter(id -> companies.get(id).organizationId().equals(organizationId))
+                .findFirst().orElse(null);
+    }
+
+    /** The MasterAdmin tenant mapped to an organization, created or linked. */
+    public Optional<UUID> tenantOf(UUID organizationId) {
+        return provisionings.values().stream().filter(s -> s.row().organizationId().equals(organizationId))
+                .map(s -> s.row().controlPlaneTenantId()).findFirst();
+    }
+
+    /** The provisioning id of an organization's row. */
+    public Optional<UUID> provisioningIdOf(UUID organizationId) {
+        return provisionings.values().stream().filter(s -> s.row().organizationId().equals(organizationId))
+                .map(Stored::id).findFirst();
+    }
+
+    /** Writes a LINKED row (V76): no administrator, the organization's oldest company. */
+    public synchronized UUID link(UUID controlPlaneTenantId, UUID organizationId, UUID companyId, String tenantCode,
+            String requestHash) {
+        if (provisionings.containsKey(controlPlaneTenantId) || tenantOf(organizationId).isPresent()) {
+            throw new org.springframework.dao.DuplicateKeyException("uq_platform_provisioning_request");
+        }
+        UUID id = UUID.randomUUID();
+        provisionings.put(controlPlaneTenantId, new Stored("link:" + controlPlaneTenantId,
+                new NewProvisioning(controlPlaneTenantId, requestHash, organizationId, companyId, null, null, false,
+                        "tms", "tenant-inventory.v1", tenantCode, "DEV", null, null, null),
+                id, OffsetDateTime.now(), true));
+        return id;
     }
 
     @Override
@@ -98,6 +147,7 @@ public class InMemoryPlatformProvisioningRepository extends PlatformProvisioning
     public UUID insertCompany(UUID organizationId, String code, String name, String taxIdentifier, String timeZone) {
         UUID id = UUID.randomUUID();
         companies.put(id, new Company(id, organizationId, code, name, taxIdentifier, timeZone));
+        companyOrder.add(id);
         return id;
     }
 
@@ -130,7 +180,7 @@ public class InMemoryPlatformProvisioningRepository extends PlatformProvisioning
     public UUID insertProvisioning(NewProvisioning row, ProvisioningMetadata metadata) {
         UUID id = UUID.randomUUID();
         provisionings.put(row.controlPlaneTenantId(),
-                new Stored(metadata.idempotencyKey(), row, id, OffsetDateTime.now()));
+                new Stored(metadata.idempotencyKey(), row, id, OffsetDateTime.now(), false));
         return id;
     }
 
@@ -142,10 +192,13 @@ public class InMemoryPlatformProvisioningRepository extends PlatformProvisioning
     private ProvisioningRecord toRecord(Stored stored) {
         NewProvisioning row = stored.row();
         Organization organization = organizations.get(row.organizationId());
-        Company company = companies.get(row.companyId());
-        Profile admin = profiles.get(row.adminAppUserId());
+        Company company = row.companyId() == null ? null : companies.get(row.companyId());
+        Profile admin = row.adminAppUserId() == null ? null : profiles.get(row.adminAppUserId());
         return new ProvisioningRecord(stored.id(), row.controlPlaneTenantId(), row.requestHash(),
-                organization.id(), organization.code(), true, company.id(), company.code(), company.timeZone(),
-                true, row.adminProfileReused(), admin.authUserId() != null, stored.createdAt());
+                organization.id(), organization.code(), !inactiveOrganizations.contains(organization.id()),
+                company == null ? null : company.id(), company == null ? null : company.code(),
+                company == null ? null : company.timeZone(), company != null,
+                row.adminProfileReused(), admin != null && admin.authUserId() != null, stored.createdAt(),
+                stored.linked());
     }
 }

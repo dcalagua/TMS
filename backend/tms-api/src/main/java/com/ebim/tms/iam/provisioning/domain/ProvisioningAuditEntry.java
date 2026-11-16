@@ -20,7 +20,9 @@ public record ProvisioningAuditEntry(
         String actorId,
         String actorRole) {
 
-    public enum Operation { CREATE_TENANT, GET_TENANT_STATUS }
+    /** {@code LIST_TENANTS} and {@code LINK_TENANT}: {@code tenant-inventory.v1} (V76). */
+    public enum Operation { CREATE_TENANT, GET_TENANT_STATUS, LIST_TENANTS, LINK_TENANT }
 
-    public enum Result { CREATED, REPLAYED, FOUND, REJECTED, CONFLICT, ERROR }
+    /** {@code LINKED} and {@code ALREADY_LINKED}: the outcomes of {@code LINK_TENANT} (V76). */
+    public enum Result { CREATED, REPLAYED, FOUND, REJECTED, CONFLICT, ERROR, LINKED, ALREADY_LINKED }
 }
