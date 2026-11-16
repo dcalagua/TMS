@@ -3,6 +3,8 @@ package com.ebim.tms.iam.entitlements.application;
 import com.ebim.tms.iam.entitlements.domain.EntitlementRejection;
 import java.time.Instant;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Single-use {@code jti} on the entitlements routes (CCP spec section 8.1).
@@ -21,6 +23,14 @@ public class JtiGuard {
         this.store = store;
     }
 
+    /**
+     * Spends the {@code jti} in its OWN transaction. The read routes (GET lifecycle, GET entitlements) run
+     * {@code @Transactional(readOnly = true)}: joining them, this INSERT failed with 25006 ("cannot execute
+     * INSERT in a read-only transaction") and every read answered 500. Its own transaction also keeps the
+     * token spent when the request is then refused and its transaction rolls back (contract: every request
+     * spends its {@code jti}).
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void consume(Call call) {
         if (call.jti() == null || !store.consumeJti(call.issuer(), call.jti(), call.rememberUntil())) {
             throw new EntitlementRejection(EntitlementRejection.Code.JTI_REPLAYED, "jti already used");
