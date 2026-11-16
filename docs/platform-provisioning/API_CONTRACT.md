@@ -19,6 +19,11 @@ V1 has **no** delete. Suspend / reactivate is a separate MasterAdmin contract, `
 (`PUT|GET /internal/platform-provisioning/tenants/{controlPlaneTenantId}/lifecycle`, scopes
 `tms:lifecycle:write|read`): see [`LIFECYCLE.md`](LIFECYCLE.md) and ADR-021.
 
+The tenant inventory (`GET /internal/platform-provisioning/tenants`) and the tenant link
+(`PUT /internal/platform-provisioning/tenants/{controlPlaneTenantId}/link`) are `tenant-inventory.v1`
+(V76), with scopes taken from configuration and closed (503) until set: see
+[`TENANT_INVENTORY.md`](TENANT_INVENTORY.md).
+
 ## Required headers
 
 | Header | On | Notes |

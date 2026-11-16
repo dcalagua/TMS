@@ -46,11 +46,14 @@ public class PlatformProvisioningRepository {
                    c.active                  AS company_active,
                    r.admin_profile_reused    AS admin_profile_reused,
                    (u.auth_user_id IS NOT NULL) AS admin_auth_linked,
-                   r.created_at              AS created_at
+                   r.created_at              AS created_at,
+                   r.origin                  AS origin
             FROM tms.platform_provisioning_request r
             JOIN tms.organization o ON o.id = r.organization_id
-            JOIN tms.company c ON c.id = r.company_id
-            JOIN tms.app_user u ON u.id = r.admin_app_user_id
+            -- LEFT: a LINKED row (V76) names no administrator, and names no company when the
+            -- organization it adopted had none. A PROVISIONED row always has both (V76 check).
+            LEFT JOIN tms.company c ON c.id = r.company_id
+            LEFT JOIN tms.app_user u ON u.id = r.admin_app_user_id
             """;
 
     private static final String BY_IDEMPOTENCY_KEY_SQL = RECORD_SQL + " WHERE r.idempotency_key = :key";
@@ -251,7 +254,8 @@ public class PlatformProvisioningRepository {
                 rs.getBoolean("company_active"),
                 rs.getBoolean("admin_profile_reused"),
                 rs.getBoolean("admin_auth_linked"),
-                rs.getObject("created_at", OffsetDateTime.class));
+                rs.getObject("created_at", OffsetDateTime.class),
+                ProvisioningRecord.ORIGIN_LINKED.equals(rs.getString("origin")));
     }
 
     /** An existing {@code tms.app_user} with the requested email. */

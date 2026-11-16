@@ -19,11 +19,10 @@ services:
     region: oregon
     dockerfilePath: ./backend/tms-api/Dockerfile
     dockerContext: ./backend/tms-api
-    # OPEN QUESTION, and the first thing to settle before the next promotion: this blueprint
-    # declares no `branch:`, so which branch this service deploys from lives only in the Render
-    # dashboard and nothing in this repository can answer it. Two merges into `qas` have happened
-    # and no backend appears to have booted from them. `main` sits at an old, unrelated commit, so
-    # "this service tracks main" is the leading explanation and is worth checking first.
+    # This blueprint declares no `branch:`, so which branch this service deploys from lives only in
+    # the Render dashboard. OBSERVED (audit of 2026-11-16): the live tms-api runs 14e75bf, a merge
+    # into `qas`, so the service tracks `qas` - not `main`, which sits at an old, unrelated commit
+    # (the earlier "tracks main" hypothesis is withdrawn). Pushing `dev` deploys nothing.
     #
     # A `branch:` line is deliberately NOT added here on a guess. Render honours it only for a
     # service it manages from this blueprint; for one created by hand in the dashboard the

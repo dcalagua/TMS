@@ -42,16 +42,24 @@ public record ProvisionedTenantView(
         resources.put("organizationCode", record.organizationCode());
         resources.put("companyCode", record.companyCode());
         resources.put("companyTimeZone", record.companyTimeZone());
-        resources.put("adminStatus", record.adminAuthLinked() ? ADMIN_ACTIVE : ADMIN_PREPROVISIONED);
-        resources.put("adminProfileReused", record.adminProfileReused());
+        if (record.linked()) {
+            // Adopted through tenant-inventory.v1 (V76): no administrator was created, so there is no
+            // administrator status to report - only that the tenant was linked rather than created.
+            resources.put("linked", true);
+        } else {
+            resources.put("adminStatus", record.adminAuthLinked() ? ADMIN_ACTIVE : ADMIN_PREPROVISIONED);
+            resources.put("adminProfileReused", record.adminProfileReused());
+        }
         resources.put("organizationActive", record.organizationActive());
-        resources.put("companyActive", record.companyActive());
+        if (record.companyId() != null) {
+            resources.put("companyActive", record.companyActive());
+        }
         return new ProvisionedTenantView(
                 "ACTIVE",
                 record.controlPlaneTenantId().toString(),
                 record.organizationId().toString(),
                 record.organizationId().toString(),
-                record.companyId().toString(),
+                record.companyId() == null ? null : record.companyId().toString(),
                 resources,
                 record.provisioningId().toString(),
                 record.createdAt() != null ? record.createdAt().toString() : null,
