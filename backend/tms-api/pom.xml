@@ -24,6 +24,7 @@
         <archunit.version>1.5.0</archunit.version>
         <!-- XLSX support for the order import; see the dependency comment below. -->
         <poi.version>5.4.0</poi.version>
+        <anthropic-java.version>3.3.0</anthropic-java.version>
         <!--
           Latest 1.x. Testcontainers 2.0.x exists but changes API surface, and this repository
           cannot execute container tests on every machine (Docker is not always running), so a
@@ -115,6 +116,19 @@
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
             <version>${poi.version}</version>
+        </dependency>
+
+        <!--
+          The official Anthropic SDK, for the AI assistants (ADR-030). The browser never talks to
+          Anthropic: React -> Spring Boot -> Anthropic, with the key in the backend's environment.
+          Nothing outside com.ebim.tms.ai may import com.anthropic - ModuleBoundaryTest
+          .anthropic_sdk_stays_inside_the_ai_module enforces it, so swapping the vendor stays a
+          change to one package.
+        -->
+        <dependency>
+            <groupId>com.anthropic</groupId>
+            <artifactId>anthropic-java</artifactId>
+            <version>${anthropic-java.version}</version>
         </dependency>
 
         <!-- Testing. -->

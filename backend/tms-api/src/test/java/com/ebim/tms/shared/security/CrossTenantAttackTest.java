@@ -142,6 +142,11 @@ class CrossTenantAttackTest {
     // ADR-025 section 4: a cancellation's ORDER_CANCELLED event, published in the same transaction.
     @MockitoBean
     private com.ebim.tms.shared.reference.BusinessEventPublisher businessEventPublisher;
+    // The list's "Ruta" and "Zona" columns: the route resolved from origin and destination, and its zone.
+    @MockitoBean
+    private com.ebim.tms.shared.reference.RouteResolutionPort routeResolutionPort;
+    @MockitoBean
+    private com.ebim.tms.shared.reference.RouteReferenceLookupPort routeReferenceLookupPort;
 
     // A second module, to show the property is the chain's and not one service's habit.
     @MockitoBean

@@ -45,8 +45,20 @@ class TenantSuspensionCoverageTest {
     private static final Set<RequestMethod> WRITES =
             Set.of(RequestMethod.POST, RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE);
 
-    /** Write routes under /api/v1 allowed without a company scope. Empty: add one only with a reason. */
-    private static final Set<String> UNSCOPED_API_WRITES = Set.of();
+    /**
+     * Write routes under /api/v1 allowed without a company scope, each with a reason.
+     *
+     * <p>{@code /auth/password-reset} (ADR-031): anonymous, so it has no company to be scoped to, and
+     * it must keep working while a tenant is suspended - asking for a new password is part of signing
+     * in, which the lifecycle contract keeps allowed. It writes no tenant data.
+     */
+    private static final Set<String> UNSCOPED_API_WRITES = Set.of(API + "/auth/password-reset");
+
+    /**
+     * Anonymous authentication writes the API does have, on purpose. Unscoped (above), so the
+     * suspension filter never sees them and a suspended tenant's people can still recover access.
+     */
+    private static final Set<String> ANONYMOUS_AUTH_WRITES = Set.of(API + "/auth/password-reset");
 
     record Route(String controller, String method, String path, boolean companyScoped) {}
 
@@ -99,8 +111,14 @@ class TenantSuspensionCoverageTest {
         assertThat(routes)
                 .filteredOn(route -> route.path().toLowerCase().matches(
                         ".*/(login|logout|signin|signout|session|sessions|token|refresh|password|auth|preferences)(/.*)?"))
+                .filteredOn(route -> !ANONYMOUS_AUTH_WRITES.contains(route.path()))
                 .as("an auth/session write in the API would be blocked by a suspension; exempt it explicitly")
                 .isEmpty();
+        // The ones that exist must stay unscoped, or a suspension would start refusing them.
+        assertThat(routes)
+                .filteredOn(route -> ANONYMOUS_AUTH_WRITES.contains(route.path()))
+                .hasSize(ANONYMOUS_AUTH_WRITES.size())
+                .allSatisfy(route -> assertThat(route.companyScoped()).isFalse());
 
         org.springframework.util.AntPathMatcher matcher = new org.springframework.util.AntPathMatcher();
         for (String pattern : com.ebim.tms.shared.security.TenantSuspensionFilter.SESSION_STATE_WRITES) {

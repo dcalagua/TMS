@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -36,7 +37,9 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  *   <li>no form login, HTTP Basic, session or "remember me" - the only credential is a bearer
  *       token, so there is no second authentication path to secure;</li>
  *   <li>no {@code permitAll()} on a business path other than the unauthenticated service
- *       identification endpoint;</li>
+ *       identification endpoint and {@code POST /auth/password-reset} (ADR-031), which cannot
+ *       require a sign-in because it exists for people who cannot sign in, reveals nothing and is
+ *       rate limited;</li>
  *   <li>no profile-conditional relaxation. Test support supplies a different key source, never
  *       a different chain.</li>
  * </ul>
@@ -95,6 +98,7 @@ public class SecurityConfig {
                         auth.requestMatchers(DOCUMENTATION_ENDPOINTS).permitAll();
                     }
                     auth.requestMatchers(publicApiPaths.systemInfo()).permitAll()
+                            .requestMatchers(HttpMethod.POST, publicApiPaths.passwordReset()).permitAll()
                             .anyRequest().authenticated();
                 })
                 .oauth2ResourceServer(oauth2 -> oauth2

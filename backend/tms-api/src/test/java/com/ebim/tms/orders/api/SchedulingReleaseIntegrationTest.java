@@ -216,6 +216,47 @@ class SchedulingReleaseIntegrationTest {
     }
 
     @Test
+    @DisplayName("the order list shows the route resolved from origin and destination, and its zone, as scheduling does")
+    void orderListShowsTheResolvedRouteAndItsZone() throws Exception {
+        String zone = insertReturningId("INSERT INTO tms.zone (company_id, code, name) VALUES ('" + COMPANY_A
+                + "', 'SR-ZN', 'Zona SR')");
+        execute("UPDATE tms.route SET zone_id = '" + zone + "' WHERE company_id = '" + COMPANY_A + "' AND code = 'R-1'");
+        LocalDate date = farDate();
+        String resolved = order(origin, onRoute, date);
+        String ambiguity = order(origin, ambiguous, date);
+        String notFound = order(origin, offRoute, date);
+        String notConfigured = order(originWithoutRoutes, onRoute, date);
+
+        String body = mockMvc.perform(asAdmin(get(ORDERS))
+                        .param("serviceDateFrom", date.toString())
+                        .param("serviceDateTo", date.toString())
+                        .param("size", "100"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(orderRow(body, resolved))
+                .containsEntry("routeResolution", "RESOLVED")
+                .containsEntry("routeCode", "R-1")
+                .containsEntry("routeName", "R-1")
+                .containsEntry("zoneName", "Zona SR");
+        // Two routes stop there and none is picked: no route and no zone, only the verdict.
+        assertThat(orderRow(body, ambiguity))
+                .containsEntry("routeResolution", "AMBIGUOUS")
+                .containsEntry("routeId", null)
+                .containsEntry("zoneName", null);
+        assertThat(orderRow(body, notFound)).containsEntry("routeResolution", "NOT_FOUND").containsEntry("routeId", null);
+        assertThat(orderRow(body, notConfigured))
+                .containsEntry("routeResolution", "NOT_CONFIGURED").containsEntry("routeId", null);
+    }
+
+    /** The one row of an order list response that belongs to {@code orderId}. */
+    private static java.util.Map<String, Object> orderRow(String body, String orderId) {
+        List<java.util.Map<String, Object>> rows = JsonPath.read(body, "$.content[?(@.id == '" + orderId + "')]");
+        assertThat(rows).hasSize(1);
+        return rows.get(0);
+    }
+
+    @Test
     @DisplayName("MISSING_CAPACITY keeps today's rule: blocked only when weight, volume and pallets are all zero")
     void missingCapacity() throws Exception {
         String empty = order(origin, onRoute, farDate(), "0", "0", "0");

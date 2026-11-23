@@ -79,9 +79,11 @@ export function RoutesPage() {
 
   function refresh() {
     void queryClient.invalidateQueries({ queryKey: ["routes", companyId] });
-    // El detalle abierto en caché describe la ruta anterior; invalidarlo evita que reabrirla
-    // enseñe las paradas de antes de guardar.
-    void queryClient.invalidateQueries({ queryKey: ["route", companyId] });
+    // El detalle en caché describe la ruta de antes de guardar, y se borra en vez de invalidarse.
+    // Invalidarlo no bastaba: el drawer se cierra en el mismo gesto, la recarga se cancela con él y
+    // la caché vuelve a la versión vieja; al reabrir, el formulario —que lee sus valores una sola
+    // vez— se pintaba con ella y no se enteraba de la recarga. Sin caché, reabrir carga la de ahora.
+    queryClient.removeQueries({ queryKey: ["route", companyId] });
   }
 
   async function toggleActive(route: RouteView) {

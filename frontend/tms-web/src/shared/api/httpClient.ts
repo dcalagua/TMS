@@ -29,6 +29,12 @@ export type ProblemCode =
   | "feature-not-configured"
   /** ADR-013 §13.8: la empresa exige la confirmación del almacén y el despacho manual no trae override. */
   | "dispatch-requires-external-confirmation"
+  /** Demasiadas solicitudes seguidas (ADR-029, ADR-031). HTTP 429, con `Retry-After`. */
+  | "rate-limited"
+  /** ADR-030: un cálculo necesita coordenadas que el maestro de ubicaciones aún no tiene. */
+  | "missing-coordinates"
+  /** ADR-030: el asistente de IA falló, tardó demasiado o respondió algo inutilizable. HTTP 502. */
+  | "ai-unavailable"
   | "internal-error";
 
 export interface ProblemFieldError {

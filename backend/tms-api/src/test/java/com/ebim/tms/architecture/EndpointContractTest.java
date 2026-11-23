@@ -91,9 +91,14 @@ class EndpointContractTest {
      *       design on a chain of its own that reads no bearer token and permits only this {@code GET}.
      *       The token in the path is the credential and names one order of one company; the projection
      *       runs under RLS bound to that company and returns a fixed, minimal set of fields.</li>
+     *   <li>{@code PasswordResetController#request} - «¿Olvidaste tu contraseña?» (ADR-031), anonymous
+     *       because the person cannot sign in. It answers 202 for every well-formed address, works in
+     *       the background so its timing says nothing either, is rate limited per client and per
+     *       address, and the link it causes is emailed only to the address's owner.</li>
      * </ul>
      */
     private static final Set<String> UNGUARDED_BY_DESIGN = Set.of(
+            "PasswordResetController#request",
             "SystemInfoController#info",
             "MeController#me",
             "NotificationController#feed",

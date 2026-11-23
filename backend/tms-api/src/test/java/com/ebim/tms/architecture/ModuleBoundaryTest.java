@@ -53,7 +53,11 @@ class ModuleBoundaryTest {
                     // held to "talk through shared": it reads trips, costs and carriers through
                     // TripSettlementLookupPort, TripCostLookupPort and CarrierLookupPort, and the
                     // KPI report reads it back through SettlementKpiPort.
-                    "settlement");
+                    "settlement",
+                    // The AI assistants (ADR-030). Listed the day it was created, like costing and
+                    // platform: it answers StopSequenceAdvisorPort for masterdata and must never be
+                    // reached any other way - nor reach into the modules it advises.
+                    "ai");
 
     @ArchTest
     static final ArchRule modules_are_free_of_cycles =
@@ -106,6 +110,20 @@ class ModuleBoundaryTest {
                     .should().dependOnClassesThat().resideInAnyPackage("org.apache.poi..")
                     .because("Apache POI is a file-format detail of the import features, not an "
                             + "architectural building block")
+                    .allowEmptyShould(true);
+
+    /**
+     * The Anthropic SDK is a vendor detail of the AI module (ADR-030), the way Apache POI is a
+     * file-format detail of the import. Everything else asks a port in {@code shared.reference}; so
+     * changing the model, the vendor or the SDK version is a change to {@code com.ebim.tms.ai} alone.
+     */
+    @ArchTest
+    static final ArchRule anthropic_sdk_stays_inside_the_ai_module =
+            noClasses()
+                    .that().resideOutsideOfPackages(ROOT + ".ai..")
+                    .should().dependOnClassesThat().resideInAnyPackage("com.anthropic..")
+                    .because("the AI provider's SDK is a vendor detail of the ai module, reached "
+                            + "through ports in shared.reference")
                     .allowEmptyShould(true);
 
     private static String[] businessPackages() {

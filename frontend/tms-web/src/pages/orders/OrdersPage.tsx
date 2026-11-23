@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { Box, Button, Tooltip, Typography } from "@mui/material";
 import {
   AddRounded, UploadRounded, AssignmentTurnedInRounded, EditRounded, VisibilityRounded,
-  CheckCircleRounded, CancelRounded, ReplayRounded, ArrowForwardRounded,
+  CheckCircleRounded, CancelRounded, ReplayRounded,
 } from "@mui/icons-material";
 import { fetchDestinations } from "../../shared/api/destinationsApi";
 import type { ApiError } from "../../shared/api/httpClient";
@@ -105,6 +105,34 @@ function TwoLine({ primary, secondary, mono, strike }: {
       )}
     </Box>
   );
+}
+
+/** Origen o destino del pedido, con la misma forma que la columna Pedido: el nombre en negrita
+ * arriba y el código debajo. Sin nombre, el código sube al primer renglón para no repetirlo. */
+function PlaceCell({ name, code }: { name: string | null; code: string | null }) {
+  return <TwoLine primary={name ?? code ?? "-"} secondary={name ? code : undefined} />;
+}
+
+/**
+ * La ruta del pedido. Resuelta: el nombre en negrita y el código debajo. Si no se resolvió, el
+ * veredicto con el color de aviso que usa Programación y Liberación: «Ambigua» cuando varias rutas
+ * paran en ese destino (no se elige ninguna), «No encontrada» o «Sin rutas en el origen».
+ */
+function RouteCell({ order }: { order: OrderView }) {
+  if (order.routeResolution === "RESOLVED" && order.routeName) {
+    return <TwoLine primary={order.routeName} secondary={order.routeCode} />;
+  }
+  if (!order.routeResolution) return <EmptyCell />;
+  return (
+    <Typography variant="body2" noWrap sx={{ fontWeight: 700, color: "warning.dark" }}>
+      {enumLabel("routeResolution", order.routeResolution)}
+    </Typography>
+  );
+}
+
+/** Una celda sin dato (ruta sin zona, ruta no resuelta): una raya tenue. */
+function EmptyCell() {
+  return <Typography variant="body2" sx={{ color: "text.disabled" }}>—</Typography>;
 }
 
 const PRIORITY_COLOR: Partial<Record<OrderPriority, string>> = { HIGH: "warning.main", URGENT: "error.main" };
@@ -244,30 +272,32 @@ export function OrdersPage() {
       ),
     },
     {
-      // Origen y destino en una sola columna: se leen como un trayecto, que es lo que son.
+      key: "origin",
+      header: t("Origen"),
+      width: 200,
+      render: (order) => <PlaceCell name={order.originName} code={order.originCode} />,
+    },
+    {
+      key: "destination",
+      header: t("Destino"),
+      width: 200,
+      render: (order) => <PlaceCell name={order.destinationName} code={order.destinationCode} />,
+    },
+    {
+      // La ruta que resulta del origen y el destino del pedido (ADR-014 §6), como en Programación y
+      // Liberación: no depende de si ya se planificó ni en qué viaje.
       key: "route",
       header: t("Ruta"),
-      width: 250,
-      render: (order) => (
-        <Tooltip title={`${order.originName ?? order.originCode ?? "-"} → ${order.destinationName ?? order.destinationCode ?? "-"}`}>
-          <Box sx={{ minWidth: 0, maxWidth: 260 }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
-              <Typography noWrap sx={{ fontFamily: MONO, fontSize: T.micro + 0.5, fontWeight: 600, color: "text.secondary", flexShrink: 0 }}>
-                {order.originCode ?? order.originName ?? "-"}
-              </Typography>
-              <ArrowForwardRounded aria-hidden sx={{ fontSize: 13, color: "text.secondary", flexShrink: 0 }} />
-              <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
-                {order.destinationName ?? order.destinationCode ?? "-"}
-              </Typography>
-            </Box>
-            {order.destinationCode && (
-              <Typography noWrap sx={{ fontFamily: MONO, fontSize: T.micro, color: "text.secondary", mt: "1px" }}>
-                {t("Destino")} {order.destinationCode}
-              </Typography>
-            )}
-          </Box>
-        </Tooltip>
-      ),
+      width: 200,
+      render: (order) => <RouteCell order={order} />,
+    },
+    {
+      key: "zone",
+      header: t("Zona"),
+      width: 140,
+      render: (order) => order.zoneName
+        ? <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>{order.zoneName}</Typography>
+        : <EmptyCell />,
     },
     {
       key: "serviceDate",

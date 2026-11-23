@@ -4,8 +4,8 @@ import {
   Box, Card, CardActionArea, CircularProgress, IconButton, Skeleton, ToggleButton, ToggleButtonGroup, Typography,
 } from "@mui/material";
 import {
-  ArrowDownwardRounded, AssignmentTurnedInRounded, ChevronRightRounded, CloudUploadRounded, LocalShippingRounded,
-  PersonRounded, RefreshRounded, ScheduleRounded, TripOriginRounded,
+  ArrowDownwardRounded, AssignmentTurnedInRounded, ChevronRightRounded, CloudUploadRounded, DescriptionRounded,
+  LocalShippingRounded, PersonRounded, RefreshRounded, ScheduleRounded, TripOriginRounded,
 } from "@mui/icons-material";
 import { fetchPortalTrips, type PortalTripSummary } from "../../shared/api/portalApi";
 import { useCompany } from "../../shared/company/CompanyContext";
@@ -48,7 +48,8 @@ const SEGMENT_SX = {
 
 /**
  * Los viajes del transportista que el almacén ya despachó (ADR-018 §3), del más reciente al más
- * antiguo, cada uno con cuántos de sus documentos están reportados y qué falta.
+ * antiguo, cada uno con cuántos de sus documentos están reportados y qué falta. «Pendientes» deja
+ * los que tienen un documento por reportar o un pedido sin entrega registrada en ese viaje.
  *
  * Un transportista no ve borradores ni viajes cancelados, ni nada que no le asignaron: lo filtra
  * el servidor. Aquí se elige si mirar solo lo pendiente —lo que se mira al empezar el reparto— y
@@ -139,7 +140,7 @@ export function PortalTripsPage() {
           icon={<LocalShippingRounded />}
           title={pendingOnly ? t("Nada pendiente") : t("Aún no tienes viajes despachados")}
           message={pendingOnly
-            ? t("Todos los documentos de tus viajes de estos días ya están reportados.")
+            ? t("No tienes documentos por reportar ni entregas por registrar en los viajes de estos días.")
             : t("Los viajes aparecen aquí cuando el almacén los despacha a tu transportista. Si esperas uno, tira hacia abajo para recargar o pregunta en el almacén.")}
         />
       ) : (
@@ -178,7 +179,13 @@ function PortalTripCard({ trip, queued, onOpen }: { trip: PortalTripSummary; que
               {trip.dispatchedAt ? t("Despachado {{when}}", { when: fmtDateTime(trip.dispatchedAt) }) : t("Despacho sin hora")}
             </Typography>
           </Box>
-          <ProgressRing done={reported} total={trip.documentCount} />
+          {/* El anillo cuenta entregas registradas; los documentos van como texto, bajo la ubicación. */}
+          {trip.orderCount !== undefined && (
+            <ProgressRing
+              done={trip.recordedOrderCount ?? 0} total={trip.orderCount}
+              label={t("{{done}} de {{total}} entregas registradas", { done: trip.recordedOrderCount ?? 0, total: trip.orderCount })}
+            />
+          )}
           <ChevronRightRounded color="action" />
         </Box>
 
@@ -186,6 +193,11 @@ function PortalTripCard({ trip, queued, onOpen }: { trip: PortalTripSummary; que
           <Line icon={<LocalShippingRounded />}>{trip.vehicleLicensePlate ?? t("Sin placa")}</Line>
           <Line icon={<PersonRounded />}>{trip.driverName ?? t("Sin conductor")}</Line>
           {trip.originName && <Line icon={<TripOriginRounded />}>{trip.originName}</Line>}
+          <Line icon={<DescriptionRounded />}>
+            {trip.documentCount === 0
+              ? t("Sin documentos")
+              : t("{{done}} de {{total}} documentos reportados", { done: reported, total: trip.documentCount })}
+          </Line>
         </Box>
 
         <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", alignItems: "center" }}>

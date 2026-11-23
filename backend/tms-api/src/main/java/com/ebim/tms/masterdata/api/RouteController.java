@@ -4,6 +4,9 @@ import com.ebim.tms.masterdata.application.RouteDetailView;
 import com.ebim.tms.masterdata.application.RouteFilter;
 import com.ebim.tms.masterdata.application.RouteRequest;
 import com.ebim.tms.masterdata.application.RouteService;
+import com.ebim.tms.masterdata.application.RouteStopOptimizationRequest;
+import com.ebim.tms.masterdata.application.RouteStopOptimizationService;
+import com.ebim.tms.masterdata.application.RouteStopOptimizationView;
 import com.ebim.tms.masterdata.application.RouteView;
 import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
@@ -44,9 +47,27 @@ import org.springframework.web.bind.annotation.RestController;
 public class RouteController {
 
     private final RouteService routeService;
+    private final RouteStopOptimizationService stopOptimizationService;
 
-    public RouteController(RouteService routeService) {
+    public RouteController(RouteService routeService, RouteStopOptimizationService stopOptimizationService) {
         this.routeService = routeService;
+        this.stopOptimizationService = stopOptimizationService;
+    }
+
+    /**
+     * "Optimizar paradas" (ADR-030): the AI assistant's proposed stop order for the origin and stops
+     * the form has now, measured against the current one. Writes nothing - the planner applies the
+     * proposal in the form and saves the route as usual. {@code manage}, not {@code read}: it exists
+     * to edit a route, and each call costs an AI request.
+     */
+    @PostMapping("/optimize-stops")
+    @PreAuthorize("hasAuthority('masterdata.route:manage')")
+    @Operation(summary = "Propose an AI-optimised stop order for a route being edited (nothing is saved)")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public RouteStopOptimizationView optimizeStops(CompanyScope scope,
+            @Valid @RequestBody RouteStopOptimizationRequest request) {
+        return stopOptimizationService.optimize(scope, request);
     }
 
     @GetMapping

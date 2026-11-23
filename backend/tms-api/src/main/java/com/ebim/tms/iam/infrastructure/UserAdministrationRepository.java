@@ -62,7 +62,8 @@ public class UserAdministrationRepository {
                    m.active                 AS membership_active,
                    (m.company_id IS NULL)   AS organization_wide,
                    m.created_at             AS created_at,
-                   m.carrier_id             AS carrier_id
+                   m.carrier_id             AS carrier_id,
+                   (u.auth_user_id IS NOT NULL) AS account_linked
             FROM tms.membership m
             JOIN tms.app_user u ON u.id = m.app_user_id
             """;
@@ -110,9 +111,27 @@ public class UserAdministrationRepository {
             """;
 
     private static final String APP_USER_BY_EMAIL_SQL = """
-            SELECT id, full_name, active
+            SELECT id, email, full_name, active, auth_user_id
             FROM tms.app_user
             WHERE email = :email
+            """;
+
+    private static final String APP_USER_BY_ID_SQL = """
+            SELECT id, email, full_name, active, auth_user_id
+            FROM tms.app_user
+            WHERE id = :appUserId
+            """;
+
+    /**
+     * Links a profile to its Auth account (ADR-031), only while it has none: a profile already linked
+     * is never re-pointed by an invitation. {@code uq_app_user_auth_user_id} refuses an account already
+     * linked to another profile.
+     */
+    private static final String LINK_AUTH_ACCOUNT_SQL = """
+            UPDATE tms.app_user
+               SET auth_user_id = :authUserId
+             WHERE id = :appUserId
+               AND auth_user_id IS NULL
             """;
 
     private static final String INSERT_APP_USER_SQL = """
@@ -285,10 +304,29 @@ public class UserAdministrationRepository {
     public Optional<ExistingAppUser> findAppUserByEmail(String email) {
         return jdbcClient.sql(APP_USER_BY_EMAIL_SQL)
                 .param("email", email)
-                .query((rs, rowNum) -> new ExistingAppUser(
-                        rs.getObject("id", UUID.class), rs.getString("full_name"), rs.getBoolean("active")))
+                .query(APP_USER_MAPPER)
                 .optional();
     }
+
+    /** The profile behind a membership, for the invitation email (ADR-031). */
+    public Optional<ExistingAppUser> findAppUserById(UUID appUserId) {
+        return jdbcClient.sql(APP_USER_BY_ID_SQL)
+                .param("appUserId", appUserId)
+                .query(APP_USER_MAPPER)
+                .optional();
+    }
+
+    /** @return whether the profile is now linked to {@code authUserId} (false: it already had an account) */
+    public boolean linkAuthAccount(UUID appUserId, UUID authUserId) {
+        return jdbcClient.sql(LINK_AUTH_ACCOUNT_SQL)
+                .param("appUserId", appUserId)
+                .param("authUserId", authUserId)
+                .update() == 1;
+    }
+
+    private static final RowMapper<ExistingAppUser> APP_USER_MAPPER = (rs, rowNum) -> new ExistingAppUser(
+            rs.getObject("id", UUID.class), rs.getString("email"), rs.getString("full_name"), rs.getBoolean("active"),
+            rs.getObject("auth_user_id", UUID.class));
 
     public UUID insertAppUser(String email, String fullName, UUID actorId) {
         return jdbcClient.sql(INSERT_APP_USER_SQL)
@@ -428,7 +466,8 @@ public class UserAdministrationRepository {
             rs.getBoolean("membership_active"),
             rs.getBoolean("organization_wide"),
             rs.getObject("created_at", OffsetDateTime.class),
-            rs.getObject("carrier_id", UUID.class));
+            rs.getObject("carrier_id", UUID.class),
+            rs.getBoolean("account_linked"));
 
     private static List<String> splitCodes(String aggregated) {
         if (aggregated == null || aggregated.isBlank()) {
@@ -451,7 +490,8 @@ public class UserAdministrationRepository {
     }
 
     /** An existing {@code tms.app_user} found by email - the invite path's "this person is already here". */
-    public record ExistingAppUser(UUID id, String fullName, boolean active) {}
+    /** @param authUserId the Supabase Auth account, or null while the profile has none (ADR-012) */
+    public record ExistingAppUser(UUID id, String email, String fullName, boolean active, UUID authUserId) {}
 
     /** An existing company-scoped membership, active or revoked. */
     public record ExistingMembership(UUID id, boolean active, UUID carrierId) {}

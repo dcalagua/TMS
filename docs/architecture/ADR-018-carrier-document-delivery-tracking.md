@@ -113,6 +113,13 @@ Portal (role `CARRIER_OPERATOR`, header `X-Company-Id` as everywhere):
 The report form fields: `status`, `reasonCode`, `remark`, `reportedAt` (ISO-8601, optional), files
 `photos` (1..5, mandatory for `DELIVERED`) and `signature` (optional).
 
+`pendingOnly=true` («Pendientes», amended 2026-11-16) keeps a trip that has a document still
+`PENDING` **or** an order on it (an `ACTIVE` assignment) with no delivery recorded on that trip
+(`tms.order_delivery`). Any recorded result counts - delivered, partial, rejected, failed, not
+attempted: what is pending is the carrier's report, not a good outcome. The order's lifecycle status
+is deliberately not used: per ADR-009 it stays `IN_EXECUTION` until the trip completes, so it would
+keep a trip pending after the carrier had recorded every delivery.
+
 Office monitor:
 
 | Method | Path | Permission |

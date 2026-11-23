@@ -20,6 +20,12 @@ import { hasFiscalDetail, logisticsDocumentLabel } from "./logisticsDocumentLabe
  * documento con datos fiscales - clave de acceso, traslado, transportista, destinatarios - se
  * despliega en su fila. Todo es lo que mandó el ERP; el TMS no emite ni valida ante la autoridad.
  */
+/** El segundo renglón de una celda: el tipo bajo el número, el transporte bajo el destinatario. */
+const SECONDARY_SX = { display: "block", fontSize: 11.5, color: "text.secondary", mt: "1px" } as const;
+
+/** Un destinatario o un transportista largos se cortan con «…» aquí; el detalle fiscal los da enteros. */
+const TEXT_MAX_WIDTH = 220;
+
 export function LogisticsDocumentsTable({ documents, showOrder, maxHeight }: {
   documents: (LogisticsDocumentView & { orderLabel?: string })[];
   /** Añade la columna de pedido, para la vista por viaje. */
@@ -27,9 +33,12 @@ export function LogisticsDocumentsTable({ documents, showOrder, maxHeight }: {
   /** Alto máximo en px: la tabla se desplaza con la cabecera fija. Sin él crece con sus filas. */
   maxHeight?: number;
 }) {
-  const cellSx = { py: 0.5, px: 1, fontSize: 12.5 } as const;
+  // Ninguna celda parte su texto: en una columna angosta (el viaje la pone en la columna derecha)
+  // nueve columnas que se doblan apilaban cada dato en tres renglones. Si no cabe, la tabla se
+  // desplaza de lado, que se lee mejor que una fila del alto de un párrafo.
+  const cellSx = { py: 0.5, px: 1, fontSize: 12.5, whiteSpace: "nowrap", verticalAlign: "top" } as const;
   const [open, setOpen] = useState<Set<string>>(() => new Set());
-  const columns = 8 + (showOrder ? 1 : 0);
+  const columns = 6 + (showOrder ? 1 : 0);
 
   function toggle(key: string) {
     setOpen((current) => {
@@ -54,11 +63,9 @@ export function LogisticsDocumentsTable({ documents, showOrder, maxHeight }: {
           <TableRow>
             <TableCell sx={{ ...cellSx, width: 32 }} aria-label={t("Detalle")} />
             {showOrder && <TableCell sx={cellSx}>{t("Pedido")}</TableCell>}
-            <TableCell sx={cellSx}>{t("Tipo")}</TableCell>
-            <TableCell sx={cellSx}>{t("Número")}</TableCell>
+            <TableCell sx={cellSx}>{t("Número y tipo")}</TableCell>
             <TableCell sx={cellSx}>{t("Emisión")}</TableCell>
-            <TableCell sx={cellSx}>{t("Destinatario")}</TableCell>
-            <TableCell sx={cellSx}>{t("Transporte")}</TableCell>
+            <TableCell sx={cellSx}>{t("Destinatario y transporte")}</TableCell>
             <TableCell sx={cellSx} align="right">{t("Importe")}</TableCell>
             <TableCell sx={cellSx}>{t("Estado")}</TableCell>
           </TableRow>
@@ -88,24 +95,31 @@ export function LogisticsDocumentsTable({ documents, showOrder, maxHeight }: {
                     )}
                   </TableCell>
                   {showOrder && <TableCell sx={{ ...cellSx, fontWeight: 700 }}>{document.orderLabel ?? "-"}</TableCell>}
-                  <TableCell sx={cellSx}>{label}</TableCell>
                   <TableCell sx={cellSx}>
                     <Tooltip title={`${t("Origen")}: ${document.sourceSystem}`}>
-                      <Typography component="span" variant="body2" sx={{ fontSize: 12.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+                      <Typography component="span" variant="body2" sx={{ display: "block", fontSize: 12.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
                         {document.documentNumber}
                       </Typography>
                     </Tooltip>
+                    <Typography component="span" sx={SECONDARY_SX}>{label}</Typography>
                   </TableCell>
                   <TableCell sx={cellSx}>{document.issueDate ? fmtDate(document.issueDate) : "-"}</TableCell>
-                  <TableCell sx={cellSx}>{recipient ? `${recipient}${more}` : "-"}</TableCell>
-                  <TableCell sx={cellSx}>{transport || "-"}</TableCell>
+                  <TableCell sx={cellSx}>
+                    <Typography component="span" variant="body2" sx={{ display: "block", fontSize: 12.5, maxWidth: TEXT_MAX_WIDTH, overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {recipient ? `${recipient}${more}` : "-"}
+                    </Typography>
+                    {transport && <Typography component="span" sx={{ ...SECONDARY_SX, maxWidth: TEXT_MAX_WIDTH, overflow: "hidden", textOverflow: "ellipsis" }}>{transport}</Typography>}
+                  </TableCell>
                   <TableCell sx={cellSx} align="right">
                     {document.amount === null ? "-" : fmtMoney(document.amount, document.currency)}
                   </TableCell>
                   <TableCell sx={cellSx}>{document.externalStatus ?? "-"}</TableCell>
                 </TableRow>
                 {expandable && (
-                  <TableRow>
+                  // `height: auto`: el tema da a toda fila un alto fijo (MuiTableRow), y esta fila,
+                  // vacía mientras el detalle está cerrado, se comía ese alto entero entre documento
+                  // y documento. Cerrada no mide nada; abierta, lo que mida el detalle.
+                  <TableRow sx={{ height: "auto" }}>
                     <TableCell colSpan={columns} sx={{ py: 0, px: 1.5, borderBottom: expanded ? undefined : "none" }}>
                       <Collapse in={expanded} timeout="auto" unmountOnExit>
                         <LogisticsDocumentFiscalDetail document={document} />

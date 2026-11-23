@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useState } from "react";
 import { Box, Button, Chip, MenuItem, TextField, Typography } from "@mui/material";
 import {
-  AddRounded, EditRounded, AutorenewRounded, BlockRounded, CheckCircleRounded, ReplayRounded,
+  AddRounded, EditRounded, AutorenewRounded, BlockRounded, CheckCircleRounded, MenuBookRounded, ReplayRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
@@ -20,6 +20,7 @@ import { confirmDialog, notifyError, notifySuccess } from "../../lib/ui";
 import type { StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
 import { fmtDateTime, fmtQuantity } from "../../lib/locale";
+import { SubscriptionDocsDrawer } from "./IntegrationDocsDrawer";
 import { SecretRevealDrawer } from "./SecretRevealDrawer";
 import { WebhookDeliveryDrawer } from "./WebhookDeliveryDrawer";
 import { WebhookSubscriptionDrawer } from "./WebhookSubscriptionDrawer";
@@ -55,6 +56,7 @@ export function OutboundPanel({ companyId, canManage }: OutboundPanelProps) {
   const [creating, setCreating] = useState(false);
   const [secret, setSecret] = useState<WebhookSubscriptionSecretView | null>(null);
   const [openDeliveryId, setOpenDeliveryId] = useState<string | null>(null);
+  const [docsFor, setDocsFor] = useState<WebhookSubscriptionView | null>(null);
 
   // JOB 13: una respuesta antes que una búsqueda. Los dos listados de abajo son a dónde se va
   // *después* de que esto diga dónde mirar.
@@ -203,29 +205,33 @@ export function OutboundPanel({ companyId, canManage }: OutboundPanelProps) {
     },
   ];
 
-  if (canManage) {
-    subColumns.push({
-      key: "actions",
-      header: t("Acciones"),
-      actions: true,
-      render: (sub) => (
-        <ActionMenu
-          items={[
-            { key: "edit", label: t("Editar"), icon: <EditRounded />, onSelect: () => setEditing(sub) },
-            { key: "rotate", label: t("Rotar secreto"), icon: <AutorenewRounded />, onSelect: () => void rotate(sub) },
-            {
-              key: "active",
-              label: sub.active ? t("Desactivar") : t("Activar"),
-              icon: sub.active ? <BlockRounded /> : <CheckCircleRounded />,
-              dangerous: sub.active,
-              divider: true,
-              onSelect: () => void toggleActive(sub),
-            },
-          ]}
-        />
-      ),
-    });
-  }
+  // «Documentación» solo lee: está para quien ve las suscripciones aunque no pueda gestionarlas.
+  subColumns.push({
+    key: "actions",
+    header: t("Acciones"),
+    actions: true,
+    render: (sub) => (
+      <ActionMenu
+        items={[
+          ...(canManage ? [{ key: "edit", label: t("Editar"), icon: <EditRounded />, onSelect: () => setEditing(sub) }] : []),
+          { key: "docs", label: t("Documentación"), icon: <MenuBookRounded />, onSelect: () => setDocsFor(sub) },
+          ...(canManage
+            ? [
+              { key: "rotate", label: t("Rotar secreto"), icon: <AutorenewRounded />, onSelect: () => void rotate(sub) },
+              {
+                key: "active",
+                label: sub.active ? t("Desactivar") : t("Activar"),
+                icon: sub.active ? <BlockRounded /> : <CheckCircleRounded />,
+                dangerous: sub.active,
+                divider: true,
+                onSelect: () => void toggleActive(sub),
+              },
+            ]
+            : []),
+        ]}
+      />
+    ),
+  });
 
   const deliveryColumns: DataTableColumn<WebhookDeliveryView>[] = [
     { key: "event", header: t("Evento"), render: (row) => <Typography variant="body2" sx={{ fontWeight: 600 }}>{row.eventType}</Typography> },
@@ -428,6 +434,8 @@ export function OutboundPanel({ companyId, canManage }: OutboundPanelProps) {
           onClose={() => setOpenDeliveryId(null)}
         />
       )}
+
+      {docsFor && <SubscriptionDocsDrawer subscription={docsFor} onClose={() => setDocsFor(null)} />}
     </>
   );
 }

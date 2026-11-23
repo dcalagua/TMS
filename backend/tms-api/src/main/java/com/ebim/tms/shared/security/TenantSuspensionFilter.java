@@ -36,7 +36,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *   <li>login and session: the contract keeps login allowed. TMS has no login, refresh, logout or
  *       password route of its own - the browser talks to Supabase Auth directly (ADR-001), company
  *       switching is the {@code X-Company-Id} header plus {@code GET /me}, and display preferences
- *       live in the browser - so nothing of that reaches this filter
+ *       live in the browser - so nothing of that reaches this filter. The one exception,
+ *       {@code POST /auth/password-reset} (ADR-031), is anonymous and unscoped, so it never reaches
+ *       it either
  *       ({@code TenantSuspensionCoverageTest} keeps it so). The one per-user session state the API
  *       stores, the notification inbox's read marks ({@link #SESSION_STATE_WRITES}), is exempt: it is
  *       the user's own inbox, not the tenant's operation.</li>

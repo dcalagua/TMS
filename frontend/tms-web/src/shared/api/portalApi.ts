@@ -34,6 +34,12 @@ export interface PortalTripSummary {
   rejectedCount: number
   notDeliveredCount: number
   returnedCount: number
+  /**
+   * Los pedidos del viaje y cuántos ya tienen su entrega registrada en él, con cualquier resultado.
+   * Opcionales: una lista guardada sin señal por una versión anterior del portal no los trae.
+   */
+  orderCount?: number
+  recordedOrderCount?: number
 }
 
 export interface EvidenceRef {

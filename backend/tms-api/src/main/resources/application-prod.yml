@@ -28,6 +28,34 @@ tms:
     # is closed by authentication, which is testable (DocumentationExposureTest) and does not
     # remove a legitimate operational capability.
     public-documentation: false
+  ai:
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY:}
+      model: ${TMS_AI_ANTHROPIC_MODEL:claude-opus-5-5}
+      effort: ${TMS_AI_ANTHROPIC_EFFORT:medium}
+      timeout: ${TMS_AI_ANTHROPIC_TIMEOUT:90s}
+      max-retries: ${TMS_AI_ANTHROPIC_MAX_RETRIES:1}
+      max-tokens: ${TMS_AI_ANTHROPIC_MAX_TOKENS:16000}
+  mailhub:
+    url: ${TMS_MAILHUB_URL:https://bfoqzrvkolrokeqgtnjr.supabase.co/functions/v1/mailhub-send}
+    token: ${MAILHUB_TOKEN:}
+    region: ${TMS_MAILHUB_REGION:us-east-1}
+  auth:
+    password-reset:
+      redirect-url: ${TMS_PASSWORD_RESET_REDIRECT_URL:}
+      link-validity: ${TMS_PASSWORD_RESET_LINK_VALIDITY:1 hora}
+      product-name: ${TMS_PASSWORD_RESET_PRODUCT_NAME:TMS}
+      time-zone: ${TMS_PASSWORD_RESET_TIME_ZONE:America/Lima}
+    invitation:
+      # The new user's welcome email, template registro-usuario (ADR-031). Its link lands on the
+      # same page as the reset's. urlAcceso: the frontend's public URL; empty turns invitations off.
+      access-url: ${TMS_INVITATION_ACCESS_URL:}
+      # vigencia: must say what the project's Auth email OTP expiry actually is.
+      link-validity: ${TMS_INVITATION_LINK_VALIDITY:${TMS_PASSWORD_RESET_LINK_VALIDITY:1 hora}}
+    supabase:
+      # The same project and service_role key the evidence store uses (ADR-020), unless set apart.
+      url: ${TMS_SUPABASE_URL:${TMS_EVIDENCE_SUPABASE_URL:}}
+      service-key: ${TMS_SUPABASE_SERVICE_KEY:${TMS_EVIDENCE_SUPABASE_SERVICE_KEY:}}
 
 # `prod` also switches on the stricter JWT rules in SupabaseJwtDecoders: the issuer and JWKS
 # URIs must be https and must not resolve to a loopback address, so a local development

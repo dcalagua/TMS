@@ -105,7 +105,7 @@ describe("la pantalla del viaje en el portal", () => {
     const row = await screen.findByRole("button", { name: "Factura F001-1" });
     expect(within(row).getByText("Rechazado")).toBeInTheDocument();
     expect(within(row).getByText("Pendiente de sincronizar")).toBeInTheDocument();
-    expect(screen.getByText("1 de 3 reportados · 2 pendientes")).toBeInTheDocument();
+    expect(screen.getByText("1 de 3 documentos reportados · 2 pendientes")).toBeInTheDocument();
   });
 
   it("«Cómo llegar» abre la navegación por coordenadas, o por dirección si no las hay", async () => {

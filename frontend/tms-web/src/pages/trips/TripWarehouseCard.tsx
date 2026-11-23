@@ -311,7 +311,8 @@ function DocumentSection({
           <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 700, color: "text.secondary" }}>
             {t("Pedidos despachados")}
           </Typography>
-          <Box sx={{ display: "grid", gap: 0.5, mt: 0.75 }}>
+          {/* Un despacho grande trae decenas de pedidos: la lista se desplaza en vez de alargar la tarjeta. */}
+          <Box tabIndex={0} sx={{ display: "grid", gap: 0.5, mt: 0.75, maxHeight: 180, overflowY: "auto", pr: 0.5 }}>
             {document.orders.map((order, index) => {
               const tmsNumber = order.orderId ? orderNumbers.get(order.orderId) : undefined;
               const footprintDiffs = geometryVariances(document, order.externalReference);
