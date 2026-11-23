@@ -33,4 +33,6 @@ export const EN_LOGISTICS_DOCUMENTS: Record<string, string> = {
   "Emisión": "Issued",
   "Destinatario": "Recipient",
   "Número": "Number",
+  "Número y tipo": "Number and type",
+  "Destinatario y transporte": "Recipient and transport",
 };

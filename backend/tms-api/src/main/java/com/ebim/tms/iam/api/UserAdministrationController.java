@@ -91,6 +91,21 @@ public class UserAdministrationController {
         return userAdministrationService.invite(scope, request);
     }
 
+    /**
+     * «Reenviar invitación» (ADR-031): the welcome email again, with a fresh link. The same guard as
+     * inviting - it is the same act of letting somebody in - and it answers 202: the email goes out in
+     * the background.
+     */
+    @PostMapping("/{membershipId}/resend-invitation")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    @PreAuthorize("hasAuthority('iam.membership:manage')")
+    @Operation(summary = "Send the welcome email again, with a new link to create the password")
+    @Parameter(name = "X-Company-Id", in = ParameterIn.HEADER, required = true,
+            description = "Id of a company the caller is a member of")
+    public void resendInvitation(CompanyScope scope, @PathVariable UUID membershipId) {
+        userAdministrationService.resendInvitation(scope, membershipId);
+    }
+
     @PutMapping("/{membershipId}")
     @PreAuthorize("hasAuthority('iam.user:manage')")
     @Operation(summary = "Correct the display name of somebody who works in this company")

@@ -38,6 +38,10 @@ body, one standard response.
 7. **Idempotency in the database**: unique key, unique MasterAdmin tenant, SHA-256 of the
    normalized request, advisory locks for concurrent retries. One transaction or nothing.
 
+> **Amended by ADR-031 (2026-11-18):** a person invited from Usuarios y accesos now gets their
+> Supabase Auth account created and linked, and a welcome email through MailHub, with the backend's
+> `service_role` key. The MasterAdmin-provisioned administrator described here is still linked by hand.
+
 ## Consequences
 
 - MasterAdmin can create a TMS tenant without SQL; seeds stay for local and QAS demo data.

@@ -33,7 +33,8 @@ interface UserFormDrawerProps {
   /** `null` invita a alguien nuevo; si no, edita esta membresía. */
   user: AdministeredUserView | null;
   onClose: () => void;
-  onSaved: () => void;
+  /** Con la persona invitada al crear (para decir si le llegará un correo); sin nada al editar. */
+  onSaved: (invited?: AdministeredUserView) => void;
 }
 
 const KNOWN_FIELDS = new Set<keyof UserFormValues>(["email", "fullName", "roleCodes", "carrierId"]);
@@ -103,15 +104,16 @@ export function UserFormDrawer({ companyId, user, onClose, onSaved }: UserFormDr
         // decisiones distintas — corregir cómo se llama alguien no es cambiar lo que puede hacer.
         await updateUserProfile(companyId, user.membershipId, values.fullName.trim());
         await updateUserRoles(companyId, user.membershipId, values.roleCodes);
+        onSaved();
       } else {
-        await inviteUser(companyId, {
+        const invited = await inviteUser(companyId, {
           email: values.email.trim(),
           fullName: values.fullName.trim(),
           roleCodes: values.roleCodes,
           carrierId: values.carrierId || null,
         });
+        onSaved(invited);
       }
-      onSaved();
     } catch (error) {
       setFormError(applyApiFieldErrors(error as ApiError, KNOWN_FIELDS, setError, t("Corrige los campos marcados.")));
     }

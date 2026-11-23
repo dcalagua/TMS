@@ -1,12 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Controller, useFieldArray, useForm } from "react-hook-form";
+import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import {
-  Alert, Box, Button, IconButton, MenuItem, Paper, TextField, Tooltip, Typography,
+  Alert, Box, Button, CircularProgress, IconButton, MenuItem, Paper, TextField, ToggleButton, ToggleButtonGroup,
+  Tooltip, Typography,
 } from "@mui/material";
 import {
-  AltRouteRounded, AddRounded, ArrowUpwardRounded, ArrowDownwardRounded, CheckRounded, DeleteRounded,
+  AltRouteRounded, AddRounded, ArrowUpwardRounded, ArrowDownwardRounded, AutoAwesomeRounded, CheckRounded,
+  DeleteRounded, MapRounded, ViewListRounded,
 } from "@mui/icons-material";
+import { TripStopMap, type TripStopMapOrigin, type TripStopMapStop } from "../../shared/maps/TripStopMap";
 import { applyApiFieldErrors } from "../../shared/api/formErrors";
 import type { ApiError } from "../../shared/api/httpClient";
 import { fetchOrigins } from "../../shared/api/originsApi";
@@ -14,15 +17,17 @@ import { fetchZones } from "../../shared/api/zonesApi";
 import { fetchFrequencies } from "../../shared/api/frequenciesApi";
 import { fetchDestinations } from "../../shared/api/destinationsApi";
 import {
-  createRoute, fetchRoute, updateRoute,
-  type RouteDetailView, type RouteRequest, type RouteStopRequest,
+  createRoute, fetchRoute, optimizeRouteStops, updateRoute,
+  type RouteDetailView, type RouteRequest, type RouteStopOptimizationView, type RouteStopRequest,
 } from "../../shared/api/routesApi";
 import { describeApiError } from "../../shared/api/problemMessages";
 import {
   ActiveBadge, FormDrawer, FormMeta, FormRow, FormSection, LoadingState,
 } from "../../shared/ui/components";
+import { notifyError } from "../../lib/ui";
 import { t } from "../../lib/i18n";
 import { fmtDateTime } from "../../lib/locale";
+import { RouteStopProposal } from "./RouteStopProposal";
 
 const FORM_ID = "route-form";
 
@@ -173,7 +178,7 @@ function RouteForm({
   }, [availableDestinations, route]);
 
   const {
-    register, control, handleSubmit, setError,
+    register, control, handleSubmit, setError, getValues,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<RouteFormValues>({
     defaultValues: {
@@ -190,7 +195,101 @@ function RouteForm({
       })),
     },
   });
-  const { fields, append, remove, move } = useFieldArray({ control, name: "stops" });
+  const { fields, append, remove, move, replace } = useFieldArray({ control, name: "stops" });
+
+  // «Optimizar paradas» (ADR-030). Una propuesta más corta se aplica al llegar; el banner la
+  // acompaña mientras la lista siga en ese orden, y «Descartar» vuelve al de antes. Si alguien
+  // cambia las paradas o el origen después, el banner desaparece: ya no describe la lista.
+  const originId = useWatch({ control, name: "originId" });
+  const watchedStops = useWatch({ control, name: "stops" });
+  const stopIds = (watchedStops ?? []).map((stop) => stop.destinationId);
+  const [optimizing, setOptimizing] = useState(false);
+  const [proposal, setProposal] = useState<{
+    view: RouteStopOptimizationView; originId: string; previousIds: string[]; shownIds: string[];
+  } | null>(null);
+  const liveProposal = proposal && proposal.originId === originId && proposal.shownIds.join() === stopIds.join()
+    ? proposal
+    : null;
+  // Basta con dos paradas: al crear una ruta el origen empieza vacío, y un botón apagado no dice
+  // por qué. Sin origen, el clic lo pide (el recorrido se mide desde él).
+  const canOptimize = stopIds.length >= 2 && !optimizing;
+
+  // Lista o mapa de las paradas. El mapa sigue el orden de la lista, así que enseña al momento lo
+  // que cambia «Optimizar paradas». Memorizado por origen y orden: TripStopMap redibuja y reencuadra
+  // cuando cambian sus props, y no debe hacerlo en cada tecla que se escribe en el formulario.
+  const [stopsView, setStopsView] = useState<"list" | "map">("list");
+  const mapOrigin = useMemo<TripStopMapOrigin | null>(() => {
+    const origin = (originsQuery.data?.content ?? []).find((option) => option.id === originId);
+    return origin ? { latitude: origin.latitude, longitude: origin.longitude, label: `${origin.code} · ${origin.name}` } : null;
+  }, [originsQuery.data, originId]);
+  const stopsKey = stopIds.join(",");
+  const mapStops = useMemo<TripStopMapStop[]>(() => (stopsKey === "" ? [] : stopsKey.split(",")).map((id, index) => {
+    // Las coordenadas salen de los destinos activos; una parada cuyo destino se desactivó no las
+    // trae, y el mapa la cuenta como «sin coordenadas» en vez de inventar dónde está.
+    const destination = availableDestinations.find((option) => option.id === id);
+    const info = destinationLookup.get(id);
+    return {
+      id, sequence: index + 1,
+      latitude: destination?.latitude ?? null, longitude: destination?.longitude ?? null,
+      label: info ? [info.code, info.name].filter(Boolean).join(" · ") : id,
+    };
+  }), [stopsKey, availableDestinations, destinationLookup]);
+
+  /** Lo que el formulario ya sabe que no tiene coordenadas, para nombrarlo antes de preguntar. */
+  function placesWithoutCoordinates(): string[] {
+    const missing: string[] = [];
+    const origin = (originsQuery.data?.content ?? []).find((option) => option.id === originId);
+    if (origin && (origin.latitude === null || origin.longitude === null)) missing.push(origin.name);
+    for (const id of stopIds) {
+      const destination = availableDestinations.find((option) => option.id === id);
+      if (destination && (destination.latitude === null || destination.longitude === null)) {
+        missing.push(destination.name);
+      }
+    }
+    return missing;
+  }
+
+  async function optimizeStops() {
+    if (originId === "") {
+      notifyError(t("Falta el origen"), t("La ruta parte del origen: elígelo para poder optimizar las paradas."));
+      return;
+    }
+    const missing = placesWithoutCoordinates();
+    if (missing.length > 0) {
+      notifyError(t("Faltan coordenadas"),
+        t("Sin coordenadas: {{names}}. Cárgalas en Maestros › Ubicaciones para poder optimizar.", { names: missing.join(", ") }));
+      return;
+    }
+    const askedOrigin = originId;
+    const askedIds = stopIds;
+    setOptimizing(true);
+    try {
+      const view = await optimizeRouteStops(companyId, { originId: askedOrigin, destinationIds: askedIds });
+      // Mientras el asistente pensaba alguien pudo tocar la lista: la respuesta es de la de antes.
+      const nowIds = getValues("stops").map((stop) => stop.destinationId);
+      if (getValues("originId") !== askedOrigin || nowIds.join() !== askedIds.join()) return;
+      if (view.improved) reorderStops(view.destinationIds);
+      setProposal({
+        view, originId: askedOrigin, previousIds: askedIds, shownIds: view.improved ? view.destinationIds : askedIds,
+      });
+    } catch (error) {
+      notifyError(t("No se pudieron optimizar las paradas"), describeApiError(error as ApiError));
+    } finally {
+      setOptimizing(false);
+    }
+  }
+
+  /** Pone las paradas en este orden, conservando el tiempo de servicio de cada una. */
+  function reorderStops(ids: string[]) {
+    const byId = new Map(getValues("stops").map((stop) => [stop.destinationId, stop]));
+    replace(ids.map((id) => byId.get(id) ?? { destinationId: id, serviceTimeOverrideMinutes: "" }));
+  }
+
+  /** Quita el banner y, si el orden propuesto se había aplicado, vuelve al de antes. */
+  function discardProposal() {
+    if (liveProposal?.view.improved) reorderStops(liveProposal.previousIds);
+    setProposal(null);
+  }
 
   const addableDestinations = availableDestinations.filter(
     (destination) => !fields.some((field) => field.destinationId === destination.id),
@@ -364,8 +463,22 @@ function RouteForm({
         <FormSection
           title={t("Paradas")}
           help={t("El orden de la lista ES la secuencia de paradas. Deja el tiempo de atención vacío para heredar el de la ubicación.")}
+          actions={
+            <Tooltip title={canOptimize || optimizing
+              ? t("Ordena las paradas con IA para recorrer menos kilómetros. Se guarda solo cuando guardas la ruta.")
+              : t("Agrega al menos dos paradas para optimizar.")}>
+              <span>
+                <Button
+                  variant="outlined" size="small" onClick={() => void optimizeStops()} disabled={!canOptimize}
+                  startIcon={optimizing ? <CircularProgress size={16} /> : <AutoAwesomeRounded />}
+                >
+                  {optimizing ? t("Optimizando...") : t("Optimizar paradas")}
+                </Button>
+              </span>
+            </Tooltip>
+          }
         >
-        <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start" }}>
+        <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
           <TextField
             select size="small" label={t("Destino a agregar")} value={stopToAdd}
             onChange={(e) => setStopToAdd(e.target.value)}
@@ -381,10 +494,29 @@ function RouteForm({
           <Button variant="outlined" startIcon={<AddRounded />} onClick={addStop} disabled={stopToAdd === ""}>
             {t("Agregar")}
           </Button>
+          <ToggleButtonGroup
+            size="small" exclusive value={stopsView} aria-label={t("Vista de paradas")}
+            onChange={(_event, next: "list" | "map" | null) => { if (next) setStopsView(next); }}
+            sx={{ "& .MuiToggleButton-root": { gap: 0.5, textTransform: "none" } }}
+          >
+            <ToggleButton value="list"><ViewListRounded fontSize="small" />{t("Lista")}</ToggleButton>
+            <ToggleButton value="map"><MapRounded fontSize="small" />{t("Mapa")}</ToggleButton>
+          </ToggleButtonGroup>
         </Box>
+
+        {liveProposal && (
+          <RouteStopProposal proposal={liveProposal.view} onDiscard={discardProposal} />
+        )}
 
         {fields.length === 0 ? (
           <Alert severity="info">{t("Esta ruta todavía no tiene paradas.")}</Alert>
+        ) : stopsView === "map" ? (
+          <Box>
+            <TripStopMap origin={mapOrigin} stops={mapStops} height={380} />
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+              {t("El origen es el 0 y las paradas van numeradas en el orden de la lista. Las líneas unen los puntos en línea recta: no son el recorrido por carretera.")}
+            </Typography>
+          </Box>
         ) : (
           <Box sx={{ display: "grid", gap: 1 }}>
             {fields.map((field, index) => {

@@ -204,6 +204,23 @@ Authoritative documents live under `docs/architecture/`:
   rate limited). Hash -> tenant is the only owner-connection statement; the projection runs as `tms_app`
   bound to that company. Minimal projection: no prices, addresses, driver or internal ids; the plate is
   masked or hidden per `company_settings.tracking_plate_display`. Frontend `/t/:token`.
+- `ADR-030-ai-assistants-and-route-stop-sequencing.md` - AI assistants live in the `ai` module behind
+  ports in `shared.reference`; only `com.ebim.tms.ai` may import the Anthropic SDK (ArchUnit). Off
+  unless `tms.ai.anthropic.api-key` (`ANTHROPIC_API_KEY`) is set (`503 feature-not-configured`). First
+  assistant: «Optimizar paradas» on the route master, `POST /masterdata/routes/optimize-stops`
+  (`masterdata.route:manage`, writes nothing): only numbered coordinates and the `RoutingPort` matrix
+  leave TMS, the answer must be a permutation (else `502 ai-unavailable`), both orders are measured;
+  a shorter order is applied to the form at once and «Descartar» restores the previous one - nothing
+  is saved until the planner saves the route. The Planificación assistant is not built yet.
+- `ADR-031-email-through-mailhub-and-password-reset.md` - email goes through EBIM MailHub behind
+  `shared.reference.TemplateEmailPort` (`tms.mailhub.*`, token `MAILHUB_TOKEN`, off without it). First
+  use: «¿Olvidaste tu contraseña?» - anonymous, rate-limited `POST /api/v1/auth/password-reset`,
+  `202` for every address, background lookup of `tms.app_user`, recovery link from the Supabase Auth
+  admin API (`service_role`), template `restablecer-contrasena`; the link lands on `/reset-password`.
+  Also the new user's invitation (amends ADR-012): «Invitar» creates and links the Supabase Auth account
+  of somebody with none and sends `registro-usuario` after the commit; «Reenviar invitación»
+  (`POST /admin/users/{id}/resend-invitation`) sends it again. People who already have an account get
+  no email.
 
 Database and security detail lives in `docs/database/DATA_MODEL.md`,
 `docs/database/MIGRATION_STRATEGY.md` and `docs/security/RLS_STRATEGY.md`.
@@ -239,7 +256,10 @@ overruled: V27 refused per-stop planned times on the grounds that "there is noth
 them", and V38/ADR-010 (per-leg driving time), V14 (service time) and V11 (service windows) have
 since supplied every term. TMS computes an arrival estimate on request, stamps it with the
 provenance of the weakest leg behind it, and leaves a visible gap wherever a leg could not be
-measured. Route optimisation - choosing the sequence rather than scheduling it - stays deferred.
+measured. Route optimisation - choosing the sequence rather than scheduling it - stays deferred,
+with one exception (ADR-030): on the **route master**, an AI assistant may *propose* a stop order that
+a person applies and saves. Optimising trips or planning runs, automatic re-sequencing and solvers
+remain deferred.
 
 Geofencing is a circle on a location and nothing more (ADR-011). **Automatic arrival detection
 remains deferred**, and ADR-007's rule is not weakened by the circle existing: a position informs a

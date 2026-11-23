@@ -83,3 +83,38 @@ describe("los roles en «Usuarios y accesos»", () => {
     expect(roleDescription("UNKNOWN_ROLE", "Server text")).toBe("Server text");
   });
 });
+
+/** ADR-031: quien no tiene cuenta de acceso se ve así, y se le puede reenviar la invitación. */
+describe("la invitación en «Usuarios y accesos»", () => {
+  it("marca a quien no tiene cuenta y reenvía su invitación", async () => {
+    const pending: AdministeredUserView = { ...USER, membershipId: "m-2", email: "nuevo@example.invalid",
+      fullName: "Nuevo Usuario", accountLinked: false };
+    const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
+      const url = new URL(input);
+      if (url.pathname.endsWith("/resend-invitation") && init?.method === "POST") return new Response(null, { status: 202 });
+      if (url.pathname.endsWith("/admin/users/roles")) return json(ROLES);
+      if (url.pathname.endsWith("/admin/users")) return json({ content: [pending], page: 0, size: 25, totalElements: 1 });
+      return json({ content: [], page: 0, size: 200, totalElements: 0 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = (await import("@testing-library/user-event")).default.setup();
+
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <UsersPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const row = (await screen.findByText("Nuevo Usuario")).closest("tr") as HTMLElement;
+    expect(within(row).getByText("Sin cuenta de acceso")).toBeInTheDocument();
+
+    await user.click(within(row).getByRole("button", { name: "Abrir menú de acciones" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Reenviar invitación/ }));
+
+    expect(fetchMock.mock.calls.some(([input, init]) =>
+      String(input).endsWith("/admin/users/m-2/resend-invitation") && (init as RequestInit | undefined)?.method === "POST"))
+      .toBe(true);
+  });
+});

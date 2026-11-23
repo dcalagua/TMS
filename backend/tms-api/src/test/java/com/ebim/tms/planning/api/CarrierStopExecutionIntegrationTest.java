@@ -379,6 +379,41 @@ class CarrierStopExecutionIntegrationTest {
     }
 
     @Test
+    @DisplayName("«Pendientes» keeps a trip with no documents while an order on it has no delivery recorded")
+    void pendingFollowsUnrecordedDeliveries() throws Exception {
+        Shipment shipment = dispatchedShipment(carrierA);
+        String mine = "$[?(@.tripId == '" + shipment.tripId + "')]";
+        assertThat(value("SELECT count(*) FROM tms.document_delivery WHERE trip_id = '" + shipment.tripId + "'"))
+                .isEqualTo("0");
+
+        // No document to report, but the order's delivery is not recorded yet: there is work left.
+        asCarrier(CARRIER_A_AUTH, get(PORTAL).param("days", "30").param("pendingOnly", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(mine).exists())
+                .andExpect(jsonPath(mine + ".orderCount").value(1))
+                .andExpect(jsonPath(mine + ".recordedOrderCount").value(0));
+
+        String stopId = stopIdOf(shipment);
+        stopAction(CARRIER_A_AUTH, shipment.tripId, stopId, "arrive", UUID.randomUUID().toString(), "{}")
+                .andExpect(status().isOk());
+        delivery(CARRIER_A_AUTH, shipment, stopId, UUID.randomUUID().toString(), "DELIVERED", null, false)
+                .andExpect(status().isOk());
+        // The trip is still on the road and the order still IN_EXECUTION (ADR-009 closes it out with
+        // the trip) - and none of that matters here: the carrier recorded the delivery, nothing is left.
+        assertThat(value("SELECT status FROM tms.trip WHERE id = '" + shipment.tripId + "'")).isEqualTo("IN_TRANSIT");
+
+        // Recorded and nothing to report: no longer pending, still listed under «Todos».
+        asCarrier(CARRIER_A_AUTH, get(PORTAL).param("days", "30").param("pendingOnly", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(mine).doesNotExist());
+        asCarrier(CARRIER_A_AUTH, get(PORTAL).param("days", "30"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(mine).exists())
+                .andExpect(jsonPath(mine + ".orderCount").value(1))
+                .andExpect(jsonPath(mine + ".recordedOrderCount").value(1));
+    }
+
+    @Test
     @DisplayName("another carrier cannot act on the trip; the office cannot use the portal; as the runtime role nothing leaks")
     void carrierBoundary() throws Exception {
         Shipment shipment = dispatchedShipment(carrierA);

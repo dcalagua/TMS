@@ -7,6 +7,7 @@ import com.ebim.tms.iam.infrastructure.UserAdministrationRepository.ExistingAppU
 import com.ebim.tms.iam.infrastructure.UserAdministrationRepository.ExistingMembership;
 import com.ebim.tms.iam.infrastructure.UserAdministrationRepository.RoleReference;
 import com.ebim.tms.shared.api.ConflictException;
+import com.ebim.tms.shared.api.FeatureNotConfiguredException;
 import com.ebim.tms.shared.api.InvalidRequestException;
 import com.ebim.tms.shared.api.PageQuery;
 import com.ebim.tms.shared.api.PageResponse;
@@ -78,10 +79,16 @@ public class UserAdministrationService {
     private final AuditRecorder auditRecorder;
     /** A carrier user's carrier (ADR-018): checked on invite, named in the list. */
     private final CarrierLookupPort carriers;
+    /** The welcome email of somebody with no sign-in account yet (ADR-031). */
+    private final UserInvitationService invitations;
+    private final AuthEmailRateLimiter rateLimiter;
 
     public UserAdministrationService(UserAdministrationRepository repository,
             CompanyAdministrationRepository companyRepository,
-            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder, CarrierLookupPort carriers) {
+            AuditActorProvider auditActorProvider, AuditRecorder auditRecorder, CarrierLookupPort carriers,
+            UserInvitationService invitations, AuthEmailRateLimiter rateLimiter) {
+        this.invitations = invitations;
+        this.rateLimiter = rateLimiter;
         this.repository = repository;
         this.companyRepository = companyRepository;
         this.auditActorProvider = auditActorProvider;
@@ -196,7 +203,38 @@ public class UserAdministrationService {
             detail.put("carrierId", carrierId.toString());
         }
         auditRecorder.record(scope, AuditAggregateType.MEMBERSHIP, membershipId, action, detail);
-        return toView(scope, find(scope, membershipId));
+        AdministeredUserView view = toView(scope, find(scope, membershipId));
+        // ADR-031: only somebody with no sign-in account gets the welcome email - who already has one
+        // signs in as always. It goes out after this transaction commits, never before.
+        if (!view.accountLinked()) {
+            invitations.sendWhenCommitted(appUserId);
+        }
+        return view;
+    }
+
+    /**
+     * «Reenviar invitación» (ADR-031): the welcome email again, with a fresh link - for a link that
+     * expired, an email that never arrived, or somebody invited before the email existed. Refused for
+     * an organization-wide row (not this screen's to touch), a revoked access and a disabled account,
+     * whose invitation would let in somebody who is not let in; limited per person.
+     */
+    public void resendInvitation(CompanyScope scope, UUID membershipId) {
+        AdministeredUserRow row = find(scope, membershipId);
+        if (row.organizationWide()) {
+            throw new ConflictException("An organization-wide membership is administered at the organization level.");
+        }
+        if (!row.membershipActive()) {
+            throw new ConflictException("Access to this company is revoked; restore it before inviting again.");
+        }
+        if (!row.userActive()) {
+            throw new ConflictException("The account is disabled for the whole installation.");
+        }
+        if (!invitations.isAvailable()) {
+            throw new FeatureNotConfiguredException("Invitation emails are not configured: set tms.mailhub.token "
+                    + "(MAILHUB_TOKEN), tms.auth.supabase.* and tms.auth.invitation.access-url.");
+        }
+        rateLimiter.admitInvitation(row.appUserId());
+        invitations.sendWhenCommitted(row.appUserId());
     }
 
     /** Corrects the display name. See {@link UserProfileRequest} for what is deliberately not here. */

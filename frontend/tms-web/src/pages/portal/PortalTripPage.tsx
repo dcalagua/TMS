@@ -160,7 +160,7 @@ export function PortalTripPage() {
             </Typography>
             {trip && (
               <Typography color="text.secondary" sx={{ fontSize: 14, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                {t("{{done}} de {{total}} reportados", { done: reported, total: trip.documentCount })}
+                {t("{{done}} de {{total}} documentos reportados", { done: reported, total: trip.documentCount })}
                 {trip.pendingCount > 0 && ` · ${t("{{n}} pendientes", { n: trip.pendingCount })}`}
               </Typography>
             )}
@@ -361,7 +361,7 @@ function StopStep({ stop, last, onOpen, execution }: {
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
           <Typography sx={{ fontSize: 14, fontWeight: 700, color: complete ? "success.main" : "text.secondary", fontVariantNumeric: "tabular-nums" }}>
-            {t("{{done}} de {{total}} reportados", { done, total: stop.documents.length })}
+            {t("{{done}} de {{total}} documentos reportados", { done, total: stop.documents.length })}
           </Typography>
           {navigation && (
             <Button

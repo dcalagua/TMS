@@ -4,9 +4,11 @@ import {
   onApiResponseError,
   setAuthRefreshHandler,
   setAuthTokenProvider,
-  type ApiError,
+  ApiError,
 } from "../api/httpClient";
 import { isAuthProblem } from "../api/problemMessages";
+import { requestPasswordReset as requestPasswordResetEmail } from "../api/passwordResetApi";
+import { t } from "../../lib/i18n";
 import { setRememberSession, supabase } from "./supabaseClient";
 
 export type AuthStatus = "loading" | "signedOut" | "signedIn";
@@ -148,10 +150,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus("signedOut");
       },
       async requestPasswordReset(email) {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/reset-password`,
-        });
-        return error ? { ok: false, message: error.message } : { ok: true };
+        // ADR-031: el correo lo envía el backend por MailHub con la plantilla de EBIM, no Supabase.
+        // El enlace sigue llevando a /reset-password, que no cambia.
+        try {
+          await requestPasswordResetEmail(email);
+          return { ok: true };
+        } catch (error) {
+          const status = error instanceof ApiError ? error.status : 0;
+          if (status === 429) return { ok: false, message: t("Demasiados intentos. Espera unos minutos y vuelve a intentarlo.") };
+          if (status === 503) return { ok: false, message: t("El envío de correos no está disponible por ahora. Contacta a tu administrador.") };
+          if (status === 400) return { ok: false, message: t("Revisa el correo electrónico: no tiene un formato válido.") };
+          return { ok: false, message: t("No se pudo enviar el correo. Inténtalo de nuevo en unos minutos.") };
+        }
       },
       async updatePassword(password) {
         const { error } = await supabase.auth.updateUser({ password });

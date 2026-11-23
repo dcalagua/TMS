@@ -257,7 +257,7 @@ public class PortalTripService {
                     row.dispatchedAt(), origin == null ? null : origin.name(),
                     crew == null ? null : crew.plate(), crew == null ? null : crew.driverName(), row.stopCount(),
                     row.documentCount(), row.pendingCount(), row.deliveredCount(), row.rejectedCount(),
-                    row.notDeliveredCount(), row.returnedCount());
+                    row.notDeliveredCount(), row.returnedCount(), row.orderCount(), row.recordedOrderCount());
         }).toList();
     }
 

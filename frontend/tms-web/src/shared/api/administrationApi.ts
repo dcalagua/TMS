@@ -121,6 +121,12 @@ export interface AdministeredUserView {
    */
   carrierId?: string | null
   carrierName?: string | null
+  /**
+   * ADR-031: si la persona tiene cuenta de acceso. `false` mientras no la tiene — recién invitada, o
+   * invitada antes de que existiera el correo de bienvenida —; «Reenviar invitación» lo resuelve.
+   * Opcional para tolerar un backend anterior.
+   */
+  accountLinked?: boolean
 }
 
 /** Mirrors the backend's `RoleView`. */
@@ -233,6 +239,14 @@ export function updateUserRoles(
     companyId,
     body: { roleCodes },
   })
+}
+
+/**
+ * «Reenviar invitación» (ADR-031): el correo de bienvenida otra vez, con un enlace nuevo para crear la
+ * contraseña. 202 sin cuerpo; 429 si se reenvió demasiadas veces, 503 si el correo no está configurado.
+ */
+export function resendInvitation(companyId: string, membershipId: string): Promise<void> {
+  return apiRequest<void>(`/admin/users/${membershipId}/resend-invitation`, { method: 'POST', companyId })
 }
 
 export function revokeUserAccess(companyId: string, membershipId: string): Promise<AdministeredUserView> {

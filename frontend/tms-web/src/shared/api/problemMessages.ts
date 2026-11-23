@@ -29,6 +29,10 @@ const CODE_COPY: Record<ProblemCode, string> = {
   "feature-not-configured":
     "Esta funcionalidad no está configurada en esta instalación. Un administrador debe habilitarla antes de poder usarla.",
   "internal-error": "Ocurrió un error de nuestro lado. Vuelve a intentarlo.",
+  "rate-limited": "Demasiados intentos. Espera unos minutos y vuelve a intentarlo.",
+  "missing-coordinates":
+    "El origen o alguna parada no tiene coordenadas. Cárgalas en Maestros › Ubicaciones y vuelve a intentarlo.",
+  "ai-unavailable": "El asistente de IA no respondió a tiempo o dio una respuesta no válida. Vuelve a intentarlo en un momento.",
   "dispatch-requires-external-confirmation":
     "En esta empresa el despacho lo confirma el almacén (WMS). Espera su confirmación o despacha con override indicando un motivo.",
 };

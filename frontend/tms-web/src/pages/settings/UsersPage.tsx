@@ -3,11 +3,11 @@ import { useState } from "react";
 import { Box, Button, Chip, Typography } from "@mui/material";
 import {
   PersonAddRounded, GroupsRounded, EditRounded, BlockRounded, CheckCircleRounded, ToggleOnRounded,
-  LocalShippingRounded,
+  LocalShippingRounded, ForwardToInboxRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
-  fetchAdministeredUsers, fetchAssignableRoles, restoreUserAccess, revokeUserAccess,
+  fetchAdministeredUsers, fetchAssignableRoles, resendInvitation, restoreUserAccess, revokeUserAccess,
   type AdministeredUserView,
 } from "../../shared/api/administrationApi";
 import { describeApiError } from "../../shared/api/problemMessages";
@@ -107,6 +107,18 @@ export function UsersPage() {
     }
   }
 
+  /** ADR-031: el correo de bienvenida otra vez, con un enlace nuevo para crear la contraseña. */
+  async function resend(user: AdministeredUserView) {
+    try {
+      await resendInvitation(companyId, user.membershipId);
+      notifySuccess(t("Invitación reenviada"), t("{{email}} recibirá un correo para crear su contraseña.", { email: user.email }));
+      // La cuenta se crea y se vincula en segundo plano: un momento después la lista ya lo refleja.
+      window.setTimeout(refresh, 2000);
+    } catch (error) {
+      notifyError(t("No se pudo reenviar la invitación"), describeApiError(error as ApiError));
+    }
+  }
+
   const columns: DataTableColumn<AdministeredUserView>[] = [
     {
       key: "person",
@@ -153,6 +165,10 @@ export function UsersPage() {
           {/* La cuenta desactivada a nivel de instalación explica por qué alguien con membresía
               activa no puede entrar. Se enseña; no se toca desde aquí. */}
           {!user.userActive && <StatusChip label={t("Cuenta deshabilitada")} tone="overdue" />}
+          {/* ADR-031: sin cuenta de acceso no puede entrar; «Reenviar invitación» se la crea. */}
+          {user.userActive && user.accountLinked === false && (
+            <StatusChip label={t("Sin cuenta de acceso")} tone="inProgress" />
+          )}
         </Box>
       ),
     },
@@ -167,6 +183,14 @@ export function UsersPage() {
         <ActionMenu
           items={[
             { key: "edit", label: t("Editar"), icon: <EditRounded />, onSelect: () => setModal({ mode: "edit", user }) },
+            ...(user.membershipActive && user.userActive && !user.organizationWide
+              ? [{
+                  key: "resend",
+                  label: t("Reenviar invitación"),
+                  icon: <ForwardToInboxRounded />,
+                  onSelect: () => void resend(user),
+                }]
+              : []),
             {
               key: "access",
               label: user.membershipActive ? t("Revocar acceso") : t("Restaurar acceso"),
@@ -229,10 +253,16 @@ export function UsersPage() {
           companyId={companyId}
           user={modal.mode === "edit" ? modal.user : null}
           onClose={() => setModal(null)}
-          onSaved={() => {
-            const wasEdit = modal.mode === "edit";
+          onSaved={(invited) => {
             setModal(null);
-            notifySuccess(wasEdit ? t("Registro actualizado") : t("Invitación enviada"));
+            if (!invited) notifySuccess(t("Registro actualizado"));
+            // ADR-031: el correo de bienvenida va solo a quien no tenía cuenta; quien ya la tenía entra
+            // con su contraseña de siempre.
+            else if (invited.accountLinked) {
+              notifySuccess(t("Acceso otorgado"), t("{{email}} ya tenía cuenta: entra con su contraseña de siempre.", { email: invited.email }));
+            } else {
+              notifySuccess(t("Invitación enviada"), t("{{email}} recibirá un correo para crear su contraseña.", { email: invited.email }));
+            }
             refresh();
           }}
         />

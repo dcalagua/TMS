@@ -15,6 +15,12 @@ export interface WorkspaceCardProps {
    * las listas que crecen con el viaje (las paradas de un reparto de ocho locales).
    */
   maxHeight?: number;
+  /**
+   * Alto máximo de la tarjeta entera, título incluido, en px. A diferencia de `maxHeight`, no se
+   * desplaza todo el cuerpo: el título y los totales conservan su alto y lo que se desplaza es el
+   * listado, envuelto en `WorkspaceCardScroll`.
+   */
+  cardMaxHeight?: number;
 }
 
 /**
@@ -23,9 +29,14 @@ export interface WorkspaceCardProps {
  * y no en `shared/` porque es la densidad de esta pantalla, donde una docena de paneles se leen
  * de corrido y una raya bajo cada título los partía en el doble de bloques.
  */
-export function WorkspaceCard({ title, icon, actions, children, flush = false, maxHeight }: WorkspaceCardProps) {
+export function WorkspaceCard({ title, icon, actions, children, flush = false, maxHeight, cardMaxHeight }: WorkspaceCardProps) {
   return (
-    <Card variant="outlined" sx={{ borderRadius: `${R.lg}px`, p: flush ? 0 : 2 }}>
+    <Card variant="outlined" sx={{
+      borderRadius: `${R.lg}px`, p: flush ? 0 : 2,
+      // Una columna flexible: cada bloque guarda su alto natural y solo el listado, que es
+      // contenedor de desplazamiento, cede lo que sobra del alto máximo.
+      ...(cardMaxHeight === undefined ? {} : { maxHeight: cardMaxHeight, display: "flex", flexDirection: "column" }),
+    }}>
       {(title || actions) && (
         <Box sx={{
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.5, flexWrap: "wrap",
@@ -53,4 +64,12 @@ export function WorkspaceCard({ title, icon, actions, children, flush = false, m
       )}
     </Card>
   );
+}
+
+/**
+ * El listado de una tarjeta con `cardMaxHeight`: es lo único que se desplaza cuando la tarjeta no
+ * cabe. `tabIndex` por lo mismo que en `maxHeight`: quien usa teclado también tiene que llegar.
+ */
+export function WorkspaceCardScroll({ children }: { children: ReactNode }) {
+  return <Box tabIndex={0} sx={{ minHeight: 0, overflowY: "auto", pr: 0.5, mr: -0.5 }}>{children}</Box>;
 }

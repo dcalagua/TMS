@@ -24,6 +24,8 @@ import { EN_TRACKING_LINKS } from "./i18n.trackingLinks";
 import { EN_CLAIMS } from "./i18n.claims";
 import { EN_FLEET_COMPLIANCE } from "./i18n.fleetCompliance";
 import { EN_DELIVERY_FOLLOW_UP } from "./i18n.deliveryFollowUp";
+import { EN_AI_ASSISTANTS } from "./i18n.aiAssistants";
+import { EN_INTEGRATION_DOCS } from "./i18n.integrationDocs";
 
 const EN_CHROME: Record<string, string> = {
   "Citas de muelle": "Dock appointments",
@@ -96,6 +98,9 @@ const EN_CHROME: Record<string, string> = {
   "Te enviaremos un enlace para crear una contraseña nueva.": "We will send you a link to create a new password.",
   "Si {{email}} tiene una cuenta, en unos minutos recibirá el enlace. Revisa también la carpeta de spam.": "If {{email}} has an account, the link will arrive in a few minutes. Check your spam folder too.",
   "No se pudo enviar el correo. Inténtalo de nuevo en unos minutos.": "The email could not be sent. Try again in a few minutes.",
+  "Demasiados intentos. Espera unos minutos y vuelve a intentarlo.": "Too many attempts. Wait a few minutes and try again.",
+  "El envío de correos no está disponible por ahora. Contacta a tu administrador.": "Email delivery is not available right now. Contact your administrator.",
+  "Revisa el correo electrónico: no tiene un formato válido.": "Check the email address: its format is not valid.",
   "Enviando...": "Sending...",
   "Enviar enlace": "Send link",
   "Volver al inicio de sesión": "Back to sign in",
@@ -2320,8 +2325,8 @@ const EN_DOCUMENT_DELIVERY: Record<string, string> = {
   "Mis viajes": "My trips", "{{n}} días": "{{n}} days", "Solo con pendientes": "Pending only",
   "Cargando viajes...": "Loading trips...", "Cargando viaje...": "Loading trip...",
   "Nada pendiente": "Nothing pending", "Sin viajes despachados": "No dispatched trips",
-  "Todos los documentos de tus viajes de estos días ya están reportados.":
-    "Every document on your trips for these days has been reported.",
+  "No tienes documentos por reportar ni entregas por registrar en los viajes de estos días.":
+    "You have no documents to report and no deliveries to record on your trips for these days.",
   "Aquí aparecen los viajes de tu transportista cuando el almacén los despacha.":
     "Your carrier's trips show up here once the warehouse dispatches them.",
   "Abrir viaje {{n}}": "Open trip {{n}}", "Despachado {{when}}": "Dispatched {{when}}",
@@ -2403,7 +2408,7 @@ const EN_DOCUMENT_DELIVERY: Record<string, string> = {
   "Reporte del transportista": "Carrier report", "Cargo recibido en oficina": "Signed copy returned to the office",
 };
 
-const EN: Record<string, string> = { ...EN_CHROME, ...EN_DATA, ...EN_APP, ...EN_SCHEDULING, ...EN_DOCUMENT_DELIVERY, ...EN_SHIPMENT_TRACKING, ...EN_PORTAL_OFFLINE, ...EN_TENANT_LIFECYCLE, ...EN_MATERIAL_PROFILES, ...EN_LOAD_GEOMETRY, ...EN_LOGISTICS_DOCUMENTS, ...EN_TAX_REGIMES, ...EN_DOCKS, ...EN_ROUTE_SHEET, ...EN_QUICK_WINS, ...EN_CARRIER_SCORECARD, ...EN_PORTAL_EXECUTION, ...EN_TRACKING_LINKS, ...EN_CLAIMS, ...EN_FLEET_COMPLIANCE, ...EN_DELIVERY_FOLLOW_UP };
+const EN: Record<string, string> = { ...EN_CHROME, ...EN_DATA, ...EN_APP, ...EN_SCHEDULING, ...EN_DOCUMENT_DELIVERY, ...EN_SHIPMENT_TRACKING, ...EN_PORTAL_OFFLINE, ...EN_TENANT_LIFECYCLE, ...EN_MATERIAL_PROFILES, ...EN_LOAD_GEOMETRY, ...EN_LOGISTICS_DOCUMENTS, ...EN_TAX_REGIMES, ...EN_DOCKS, ...EN_ROUTE_SHEET, ...EN_QUICK_WINS, ...EN_CARRIER_SCORECARD, ...EN_PORTAL_EXECUTION, ...EN_TRACKING_LINKS, ...EN_CLAIMS, ...EN_FLEET_COMPLIANCE, ...EN_DELIVERY_FOLLOW_UP, ...EN_AI_ASSISTANTS, ...EN_INTEGRATION_DOCS };
 
 export type Lang = "es" | "en";
 

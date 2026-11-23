@@ -41,6 +41,7 @@ export const EN_PORTAL_OFFLINE: Record<string, string> = {
     "Trips show up here once the warehouse dispatches them to your carrier. If you are expecting one, pull down to reload or ask the warehouse.",
   "Cargo recibido: {{n}}": "Signed copies returned: {{n}}",
   "{{done}} de {{total}} documentos reportados": "{{done}} of {{total}} documents reported",
+  "{{done}} de {{total}} entregas registradas": "{{done}} of {{total}} deliveries recorded",
   // Viaje
   "{{done}} de {{total}} reportados": "{{done}} of {{total}} reported", "Documentos reportados": "Documents reported",
   "Cómo llegar": "Directions", "Cómo llegar a {{place}}": "Directions to {{place}}",

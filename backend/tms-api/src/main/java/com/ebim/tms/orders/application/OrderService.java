@@ -30,6 +30,11 @@ import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderFulfillmentPort;
 import com.ebim.tms.shared.reference.OrderFulfillmentStatus;
 import com.ebim.tms.shared.reference.OriginLookupPort;
+import com.ebim.tms.shared.reference.RouteReference;
+import com.ebim.tms.shared.reference.RouteReferenceLookupPort;
+import com.ebim.tms.shared.reference.RouteResolution;
+import com.ebim.tms.shared.reference.RouteResolutionPort;
+import com.ebim.tms.shared.reference.RouteResolutionPort.OriginDestination;
 import com.ebim.tms.shared.security.CompanyScope;
 import com.ebim.tms.shared.settings.CompanySettingsPort;
 import com.ebim.tms.shared.settings.LoadGeometrySettings;
@@ -79,6 +84,8 @@ public class OrderService {
     private final OrderLinePhysicalResolver physicalResolver;
     private final BusinessEventPublisher businessEvents;
     private final LoadGeometrySettings geometrySettings;
+    private final RouteResolutionPort routeResolutionPort;
+    private final RouteReferenceLookupPort routeReferenceLookupPort;
 
     public OrderService(TransportOrderRepository transportOrderRepository,
             TransportOrderLineRepository transportOrderLineRepository, OriginLookupPort originLookupPort,
@@ -86,7 +93,10 @@ public class OrderService {
             CompanySettingsPort companySettingsPort, AuditActorProvider auditActorProvider,
             AuditRecorder auditRecorder, OrderSchedulingService orderSchedulingService,
             OrderLinePhysicalResolver physicalResolver, BusinessEventPublisher businessEvents,
-            LoadGeometrySettings geometrySettings) {
+            LoadGeometrySettings geometrySettings, RouteResolutionPort routeResolutionPort,
+            RouteReferenceLookupPort routeReferenceLookupPort) {
+        this.routeResolutionPort = routeResolutionPort;
+        this.routeReferenceLookupPort = routeReferenceLookupPort;
         this.businessEvents = businessEvents;
         this.geometrySettings = geometrySettings;
         this.orderSchedulingService = orderSchedulingService;
@@ -117,13 +127,32 @@ public class OrderService {
         // One call for the whole page, like the two lookups above it. What happened to the goods
         // is planning's to answer (OrderFulfillmentPort), and it is a second dimension beside
         // `status`, never a replacement for it - see OrderFulfillmentStatus.
-        Map<UUID, OrderFulfillmentStatus> fulfillment = orderFulfillmentPort.fulfillmentOf(
-                orders.stream().map(TransportOrder::id).collect(Collectors.toSet()), scope.companyId());
+        Set<UUID> orderIds = orders.stream().map(TransportOrder::id).collect(Collectors.toSet());
+        Map<UUID, OrderFulfillmentStatus> fulfillment = orderFulfillmentPort.fulfillmentOf(orderIds, scope.companyId());
+        // The "Ruta" and "Zona" columns: the route the master assigns to the order's origin and
+        // destination (ADR-014 section 6), the same resolution Programación y Liberación shows - not
+        // the trip it was planned on. The zone is the resolved route's, so only a RESOLVED order has
+        // one. Two batched calls for the page, never one per row.
+        Map<OriginDestination, RouteResolution> resolutions = routeResolutionPort.resolveAll(scope.companyId(),
+                orders.stream().map(order -> new OriginDestination(order.originId(), order.destinationId()))
+                        .collect(Collectors.toSet()));
+        Set<UUID> resolvedRouteIds = resolutions.values().stream()
+                .flatMap(resolution -> resolution.route().stream())
+                .map(RouteResolution.ResolvedRoute::routeId)
+                .collect(Collectors.toSet());
+        Map<UUID, RouteReference> zonesByRoute = routeReferenceLookupPort.findAllInCompany(resolvedRouteIds,
+                scope.companyId());
 
         List<OrderView> content = orders.stream()
-                .map(order -> OrderView.from(order, origins.get(order.originId()), destinations.get(order.destinationId()),
-                        lineCountOf(lineCounts.get(order.id())), stacksOf(lineCounts.get(order.id())),
-                        fulfillment.getOrDefault(order.id(), OrderFulfillmentStatus.PENDING)))
+                .map(order -> {
+                    RouteResolution resolution = resolutions.getOrDefault(
+                            new OriginDestination(order.originId(), order.destinationId()), RouteResolution.NOT_CONFIGURED);
+                    RouteReference zone = resolution.route()
+                            .map(route -> zonesByRoute.get(route.routeId())).orElse(null);
+                    return OrderView.from(order, origins.get(order.originId()), destinations.get(order.destinationId()),
+                            lineCountOf(lineCounts.get(order.id())), stacksOf(lineCounts.get(order.id())),
+                            fulfillment.getOrDefault(order.id(), OrderFulfillmentStatus.PENDING), resolution, zone);
+                })
                 .toList();
         return new PageResponse<>(content, pageQuery.pageNumber(), pageQuery.pageSize(), page.getTotalElements());
     }

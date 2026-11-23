@@ -1,6 +1,6 @@
 import { Alert, Box, Chip, Divider, Tooltip, Typography } from "@mui/material";
 import { RouteRounded, InfoOutlined } from "@mui/icons-material";
-import { WorkspaceCard } from "./WorkspaceCard";
+import { WorkspaceCard, WorkspaceCardScroll } from "./WorkspaceCard";
 import type { TripRouteMetrics } from "../../shared/api/planningApi";
 import { fmtDecimal } from "../../lib/locale";
 import { t } from "../../lib/i18n";
@@ -27,6 +27,7 @@ export function TripRouteCard({ routing }: { routing: TripRouteMetrics }) {
     <WorkspaceCard
       icon={<RouteRounded />}
       title={t("Recorrido")}
+      cardMaxHeight={320}
       actions={
         routing.estimated ? (
           <Tooltip title={t("Sin proveedor de rutas configurado: las distancias se estiman a partir de las coordenadas.")}>
@@ -71,7 +72,8 @@ export function TripRouteCard({ routing }: { routing: TripRouteMetrics }) {
           )}
 
           <Divider sx={{ mt: 1.5, mb: 0.5 }} />
-          <Box sx={{ display: "grid" }}>
+          {/* Solo los tramos se desplazan: la distancia y el tiempo totales quedan siempre a la vista. */}
+          <WorkspaceCardScroll>
             {routing.legs.map((leg) => (
               <Box
                 key={`${leg.fromStopSequence ?? "origin"}-${leg.toStopSequence}`}
@@ -92,7 +94,7 @@ export function TripRouteCard({ routing }: { routing: TripRouteMetrics }) {
                 </Typography>
               </Box>
             ))}
-          </Box>
+          </WorkspaceCardScroll>
 
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.25 }}>
             {t("Solo conducción. El tiempo de servicio en cada parada no está incluido.")}

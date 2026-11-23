@@ -24,5 +24,12 @@ public record PortalTripSummaryView(
         int deliveredCount,
         int rejectedCount,
         int notDeliveredCount,
-        int returnedCount) {
+        int returnedCount,
+        /** The orders on the trip (ACTIVE assignments). */
+        int orderCount,
+        /**
+         * How many of them have a delivery recorded on this trip, with any result - the carrier's
+         * report is what is counted, not a good outcome. The same rule «Pendientes» reads.
+         */
+        int recordedOrderCount) {
 }

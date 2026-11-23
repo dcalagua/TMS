@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useState } from "react";
 import { Box, Button, Chip, MenuItem, TextField, Typography } from "@mui/material";
 import {
-  AddRounded, EditRounded, AutorenewRounded, BlockRounded,
+  AddRounded, EditRounded, AutorenewRounded, BlockRounded, MenuBookRounded,
 } from "@mui/icons-material";
 import type { ApiError } from "../../shared/api/httpClient";
 import {
@@ -18,6 +18,7 @@ import type { StatusTone } from "../../theme";
 import { t } from "../../lib/i18n";
 import { fmtDateTime, fmtQuantity } from "../../lib/locale";
 import { IntegrationClientDrawer } from "./IntegrationClientDrawer";
+import { CredentialDocsDrawer } from "./IntegrationDocsDrawer";
 import { SecretRevealDrawer } from "./SecretRevealDrawer";
 
 const PAGE_SIZE = 20;
@@ -49,6 +50,7 @@ export function InboundPanel({ companyId, canManage }: InboundPanelProps) {
   const [editing, setEditing] = useState<IntegrationClientView | null>(null);
   const [creating, setCreating] = useState(false);
   const [secret, setSecret] = useState<IntegrationClientSecretView | null>(null);
+  const [docsFor, setDocsFor] = useState<IntegrationClientView | null>(null);
 
   const clientsQuery = useQuery({
     queryKey: ["integration-clients", companyId, clientsPage],
@@ -162,26 +164,33 @@ export function InboundPanel({ companyId, canManage }: InboundPanelProps) {
     },
   ];
 
-  if (canManage) {
-    clientColumns.push({
-      key: "actions",
-      header: t("Acciones"),
-      actions: true,
-      render: (client) => (
-        <ActionMenu
-          items={[
-            { key: "edit", label: t("Editar"), icon: <EditRounded />, disabled: !client.active, onSelect: () => setEditing(client) },
-            { key: "rotate", label: t("Rotar secreto"), icon: <AutorenewRounded />, disabled: !client.active, onSelect: () => void rotate(client) },
-            {
-              key: "revoke", label: t("Revocar"), icon: <BlockRounded />,
-              dangerous: true, divider: true, disabled: !client.active,
-              onSelect: () => void revoke(client),
-            },
-          ]}
-        />
-      ),
-    });
-  }
+  // «Documentación» solo lee, así que la columna está para quien ve la lista aunque no pueda
+  // gestionar credenciales; editar, rotar y revocar siguen siendo de quien gestiona.
+  clientColumns.push({
+    key: "actions",
+    header: t("Acciones"),
+    actions: true,
+    render: (client) => (
+      <ActionMenu
+        items={[
+          ...(canManage
+            ? [{ key: "edit", label: t("Editar"), icon: <EditRounded />, disabled: !client.active, onSelect: () => setEditing(client) }]
+            : []),
+          { key: "docs", label: t("Documentación"), icon: <MenuBookRounded />, onSelect: () => setDocsFor(client) },
+          ...(canManage
+            ? [
+              { key: "rotate", label: t("Rotar secreto"), icon: <AutorenewRounded />, disabled: !client.active, onSelect: () => void rotate(client) },
+              {
+                key: "revoke", label: t("Revocar"), icon: <BlockRounded />,
+                dangerous: true, divider: true, disabled: !client.active,
+                onSelect: () => void revoke(client),
+              },
+            ]
+            : []),
+        ]}
+      />
+    ),
+  });
 
   const requestColumns: DataTableColumn<IntegrationRequestView>[] = [
     { key: "operation", header: t("Operación"), render: (row) => <Typography variant="body2" sx={{ fontWeight: 600 }}>{row.operation}</Typography> },
@@ -303,6 +312,8 @@ export function InboundPanel({ companyId, canManage }: InboundPanelProps) {
           onClose={() => setSecret(null)}
         />
       )}
+
+      {docsFor && <CredentialDocsDrawer client={docsFor} onClose={() => setDocsFor(null)} />}
     </>
   );
 }

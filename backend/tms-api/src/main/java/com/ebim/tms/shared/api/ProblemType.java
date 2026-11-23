@@ -145,6 +145,21 @@ public enum ProblemType {
      */
     RATE_LIMITED("rate-limited", "Too many requests", HttpStatus.TOO_MANY_REQUESTS),
 
+    /**
+     * A calculation needs coordinates that master data does not have yet - today, optimising a
+     * route's stops (ADR-030) when its origin or a stop was never geocoded. Distinct from
+     * {@link #MALFORMED_REQUEST}: the request is fine, and the fix is in Ubicaciones, not in it.
+     */
+    MISSING_COORDINATES("missing-coordinates", "Locations without coordinates", HttpStatus.BAD_REQUEST),
+
+    /**
+     * The AI provider failed, timed out, refused, or answered with something unusable (ADR-030).
+     * 502 and not 500: TMS is fine and the request was valid; an upstream service let it down,
+     * and the same request may well succeed in a minute. Not raised when the assistant is simply
+     * not configured - that is {@link #FEATURE_NOT_CONFIGURED}.
+     */
+    AI_UNAVAILABLE("ai-unavailable", "AI assistant unavailable", HttpStatus.BAD_GATEWAY),
+
     /** Anything unexpected. The detail is deliberately generic; the cause is only in the server log. */
     INTERNAL_ERROR("internal-error", "Internal server error", HttpStatus.INTERNAL_SERVER_ERROR);
 

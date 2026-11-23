@@ -1,6 +1,7 @@
 import { apiDownload, apiRequest, apiUpload, type DownloadedFile } from './httpClient'
 import type { StackMode } from './materialProfilesApi'
 import type { PageResponse } from './pageResponse'
+import type { RouteResolutionStatus } from './schedulingApi'
 
 /** Mirrors the backend's `OrderStatus` enum (`orders/domain/OrderStatus.java`). See
  * `docs/domain/ORDER_LIFECYCLE_V2.md` for the full lifecycle, planning and execution. */
@@ -111,6 +112,18 @@ export interface OrderView {
    * el detalle, leída de la cabecera del pedido. Opcional para tolerar un backend anterior.
    */
   geometry?: OrderGeometrySummary | null
+  /**
+   * Columnas «Ruta» y «Zona»: la ruta maestra que resulta del origen y el destino del pedido
+   * (ADR-014 §6), la misma que enseña Programación y Liberación, no la del viaje en que se planificó.
+   * La ruta solo viene con `RESOLVED`; con `AMBIGUOUS` (varias rutas paran en ese destino) no se
+   * elige ninguna. La zona es la de la ruta resuelta. Opcionales para tolerar un backend anterior.
+   */
+  routeResolution?: RouteResolutionStatus | null
+  routeId?: string | null
+  routeCode?: string | null
+  routeName?: string | null
+  zoneCode?: string | null
+  zoneName?: string | null
 }
 
 /** Mirrors `GeometryStatus` (`shared/geometry/GeometryStatus.java`). Null: la línea no trae bloque físico. */

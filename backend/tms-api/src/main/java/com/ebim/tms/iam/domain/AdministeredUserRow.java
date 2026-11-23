@@ -33,4 +33,6 @@ public record AdministeredUserRow(
         boolean organizationWide,
         OffsetDateTime createdAt,
         /** The carrier this membership acts for (ADR-018), or null. */
-        UUID carrierId) {}
+        UUID carrierId,
+        /** Whether the profile has its Supabase Auth account linked - without one the person cannot sign in. */
+        boolean accountLinked) {}

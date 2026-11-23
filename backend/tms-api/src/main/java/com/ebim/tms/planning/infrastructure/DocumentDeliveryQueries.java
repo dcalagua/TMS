@@ -166,11 +166,15 @@ public class DocumentDeliveryQueries {
     // Portal
     // -----------------------------------------------------------------------------------------
 
-    /** A trip as the carrier's list shows it, with its document counts. */
+    /**
+     * A trip as the carrier's list shows it, with its document counts and its order counts: the
+     * orders on it ({@code ACTIVE} assignments) and how many of them already have a delivery recorded
+     * on this trip - the same rule «Pendientes» reads.
+     */
     public record PortalTripRow(UUID tripId, String shipmentNumber, TripStatus status, LocalDate planningDate,
             UUID planningRunId, UUID vehicleId, UUID driverId, OffsetDateTime dispatchedAt, String dispatchPlate,
             String dispatchDriverName, int stopCount, int documentCount, int pendingCount, int deliveredCount,
-            int rejectedCount, int notDeliveredCount, int returnedCount) {
+            int rejectedCount, int notDeliveredCount, int returnedCount, int orderCount, int recordedOrderCount) {
     }
 
     private static final String PORTAL_TRIP_COLUMNS = """
@@ -178,6 +182,15 @@ public class DocumentDeliveryQueries {
                    x.actual_dispatch_at, x.vehicle_license_plate, x.driver_name,
                    (SELECT count(*) FROM tms.trip_stop s WHERE s.trip_id = t.id AND s.company_id = t.company_id)
                        AS stop_count,
+                   (SELECT count(DISTINCT a.order_id) FROM tms.trip_order_assignment a
+                     WHERE a.trip_id = t.id AND a.company_id = t.company_id AND a.status = 'ACTIVE')
+                       AS order_count,
+                   (SELECT count(DISTINCT a.order_id) FROM tms.trip_order_assignment a
+                     WHERE a.trip_id = t.id AND a.company_id = t.company_id AND a.status = 'ACTIVE'
+                       AND EXISTS (SELECT 1 FROM tms.order_delivery od
+                                   WHERE od.trip_id = t.id AND od.company_id = t.company_id
+                                     AND od.order_id = a.order_id))
+                       AS recorded_order_count,
                    count(dd.id) AS document_count,
                    count(dd.id) FILTER (WHERE dd.status = 'PENDING') AS pending_count,
                    count(dd.id) FILTER (WHERE dd.status = 'DELIVERED') AS delivered_count,
@@ -194,14 +207,33 @@ public class DocumentDeliveryQueries {
                      t.driver_id, x.actual_dispatch_at, x.vehicle_license_plate, x.driver_name
             """;
 
-    /** The carrier's visible trips dispatched since {@code since}, newest first. */
+    /**
+     * «Pendientes»: the trip still has something for the carrier to do - a document still to report,
+     * or an order on it (an ACTIVE assignment) with no delivery recorded on this trip. Any recorded
+     * result counts, a refusal or a failure included: what is pending is the report, not a good
+     * outcome. Both tables are planning's own, so no other module is asked.
+     */
+    private static final String PENDING_TRIP = """
+             HAVING count(dd.id) FILTER (WHERE dd.status = 'PENDING') > 0
+                 OR EXISTS (SELECT 1 FROM tms.trip_order_assignment pa
+                            WHERE pa.trip_id = t.id AND pa.company_id = t.company_id AND pa.status = 'ACTIVE'
+                              AND NOT EXISTS (SELECT 1 FROM tms.order_delivery od
+                                              WHERE od.trip_id = t.id AND od.company_id = t.company_id
+                                                AND od.order_id = pa.order_id))
+            """;
+
+    /**
+     * The carrier's visible trips dispatched since {@code since}, newest first. {@code pendingOnly}
+     * filters in the query, before the limit, so a pending trip is never cut by a busy carrier's
+     * newer finished ones.
+     */
     public List<PortalTripRow> carrierTrips(UUID companyId, UUID carrierId, OffsetDateTime since, boolean pendingOnly,
             int limit) {
         return jdbc.sql(PORTAL_TRIP_COLUMNS + """
                 WHERE t.company_id = :companyId AND t.carrier_id = :carrierId
                   AND x.actual_dispatch_at >= :since
                   AND """ + VISIBLE_TRIP + PORTAL_TRIP_GROUP
-                + (pendingOnly ? " HAVING count(dd.id) FILTER (WHERE dd.status = 'PENDING') > 0 " : "")
+                + (pendingOnly ? PENDING_TRIP : "")
                 + " ORDER BY x.actual_dispatch_at DESC, t.shipment_number LIMIT :limit")
                 .param("companyId", companyId).param("carrierId", carrierId).param("since", since)
                 .param("limit", limit)
@@ -226,7 +258,8 @@ public class DocumentDeliveryQueries {
                 rs.getObject("driver_id", UUID.class), rs.getObject("actual_dispatch_at", OffsetDateTime.class),
                 rs.getString("vehicle_license_plate"), rs.getString("driver_name"), rs.getInt("stop_count"),
                 rs.getInt("document_count"), rs.getInt("pending_count"), rs.getInt("delivered_count"),
-                rs.getInt("rejected_count"), rs.getInt("not_delivered_count"), rs.getInt("returned_count"));
+                rs.getInt("rejected_count"), rs.getInt("not_delivered_count"), rs.getInt("returned_count"),
+                rs.getInt("order_count"), rs.getInt("recorded_order_count"));
     }
 
     // -----------------------------------------------------------------------------------------

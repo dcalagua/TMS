@@ -32,6 +32,37 @@ tms:
       jwk-set-uri: ${TMS_SUPABASE_JWKS_URI:http://127.0.0.1:54321/auth/v1/.well-known/jwks.json}
     cors:
       allowed-origins: ${TMS_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  ai:
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY:}
+      model: ${TMS_AI_ANTHROPIC_MODEL:claude-opus-5-5}
+      effort: ${TMS_AI_ANTHROPIC_EFFORT:medium}
+      timeout: ${TMS_AI_ANTHROPIC_TIMEOUT:90s}
+      max-retries: ${TMS_AI_ANTHROPIC_MAX_RETRIES:1}
+      max-tokens: ${TMS_AI_ANTHROPIC_MAX_TOKENS:16000}
+  mailhub:
+    url: ${TMS_MAILHUB_URL:https://bfoqzrvkolrokeqgtnjr.supabase.co/functions/v1/mailhub-send}
+    token: ${MAILHUB_TOKEN:}
+    region: ${TMS_MAILHUB_REGION:us-east-1}
+  auth:
+    password-reset:
+      redirect-url: ${TMS_PASSWORD_RESET_REDIRECT_URL:http://localhost:5173/reset-password}
+      link-validity: ${TMS_PASSWORD_RESET_LINK_VALIDITY:1 hora}
+      product-name: ${TMS_PASSWORD_RESET_PRODUCT_NAME:TMS}
+      time-zone: ${TMS_PASSWORD_RESET_TIME_ZONE:America/Lima}
+    invitation:
+      # The new user's welcome email, template registro-usuario (ADR-031). Its link lands on the
+      # same page as the reset's (password-reset.redirect-url).
+      # urlAcceso: where the person signs in from then on.
+      access-url: ${TMS_INVITATION_ACCESS_URL:http://localhost:5173}
+      # vigencia: how long the invitation link lasts - Supabase's email OTP expiry, the same one the
+      # reset link has (otp_expiry = 3600 in supabase/config.toml, i.e. 1 hora).
+      link-validity: ${TMS_INVITATION_LINK_VALIDITY:${TMS_PASSWORD_RESET_LINK_VALIDITY:1 hora}}
+    supabase:
+      # The Auth admin API issues the recovery link (it sends nothing; MailHub does). The
+      # service_role key of the local stack is printed by `supabase status`.
+      url: ${TMS_SUPABASE_URL:http://127.0.0.1:54321}
+      service-key: ${TMS_SUPABASE_SERVICE_KEY:${TMS_EVIDENCE_SUPABASE_SERVICE_KEY:}}
 
 management:
   endpoint:

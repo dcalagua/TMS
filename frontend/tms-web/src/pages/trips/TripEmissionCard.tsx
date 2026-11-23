@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Box, Chip, Divider, Tooltip, Typography } from "@mui/material";
 import { Co2Rounded, InfoOutlined } from "@mui/icons-material";
-import { WorkspaceCard } from "./WorkspaceCard";
+import { WorkspaceCard, WorkspaceCardScroll } from "./WorkspaceCard";
 import { fetchTripEmissions, type TripEmissionView } from "../../shared/api/emissionsApi";
 import type { ApiError } from "../../shared/api/httpClient";
 import { describeApiError } from "../../shared/api/problemMessages";
@@ -29,6 +29,7 @@ export function TripEmissionCard({ companyId, tripId, version }: { companyId: st
     <WorkspaceCard
       icon={<Co2Rounded />}
       title={t("Huella de carbono")}
+      cardMaxHeight={320}
       actions={emission?.status === "CALCULATED" && emission.estimated ? (
         <Tooltip title={t("La distancia es una estimación a partir de las coordenadas: la huella también lo es.")}>
           <Chip size="small" color="warning" variant="outlined" label={t("Estimado")} icon={<InfoOutlined />} sx={{ fontWeight: 700 }} />
@@ -89,19 +90,22 @@ function EmissionBody({ emission }: { emission: TripEmissionView }) {
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
             {t("Reparto por pedido · base {{basis}}", { basis: enumLabel("costAllocationBasis", emission.basis) })}
           </Typography>
-          {emission.orders.map((order) => (
-            <Box key={order.assignmentId} sx={{
-              display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 1.5, py: 0.5,
-              "& + &": { borderTop: "1px solid", borderColor: "divider" },
-            }}>
-              <Typography variant="body2" sx={{ minWidth: 0, fontSize: 12.5 }}>
-                {order.orderNumber}{order.customerLabel ? ` · ${order.customerLabel}` : ""}
-              </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                {order.kgCo2e === null ? t("sin base") : `${fmtCo2e(order.kgCo2e)} · ${fmtPercent((order.share ?? 0) * 100, 1)}`}
-              </Typography>
-            </Box>
-          ))}
+          {/* Solo el reparto por pedido se desplaza: la cifra del viaje queda siempre a la vista. */}
+          <WorkspaceCardScroll>
+            {emission.orders.map((order) => (
+              <Box key={order.assignmentId} sx={{
+                display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 1.5, py: 0.5,
+                "& + &": { borderTop: "1px solid", borderColor: "divider" },
+              }}>
+                <Typography variant="body2" sx={{ minWidth: 0, fontSize: 12.5 }}>
+                  {order.orderNumber}{order.customerLabel ? ` · ${order.customerLabel}` : ""}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                  {order.kgCo2e === null ? t("sin base") : `${fmtCo2e(order.kgCo2e)} · ${fmtPercent((order.share ?? 0) * 100, 1)}`}
+                </Typography>
+              </Box>
+            ))}
+          </WorkspaceCardScroll>
         </>
       )}
     </>

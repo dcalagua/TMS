@@ -6,6 +6,8 @@ import com.ebim.tms.orders.domain.TotalsSource;
 import com.ebim.tms.orders.domain.TransportOrder;
 import com.ebim.tms.shared.reference.MasterReference;
 import com.ebim.tms.shared.reference.OrderFulfillmentStatus;
+import com.ebim.tms.shared.reference.RouteReference;
+import com.ebim.tms.shared.reference.RouteResolution;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -70,7 +72,21 @@ public record OrderView(
          * {@link OrderDetailView.OrderGeometryView} carries, read from the order header, plus the
          * stack count summed by the same grouped query that counts the lines (never the lines).
          */
-        OrderGeometrySummary geometry) {
+        OrderGeometrySummary geometry,
+        /**
+         * The list's "Ruta" and "Zona" columns: the master route resolved from the order's origin
+         * and destination (ADR-014 section 6), as Programación y Liberación shows it - RESOLVED,
+         * AMBIGUOUS, NOT_FOUND or NOT_CONFIGURED. Never the trip the order was planned on, and never
+         * persisted: a route edited in the master shows at the next read.
+         */
+        RouteResolution.Status routeResolution,
+        /** The resolved route; all three null unless {@code routeResolution} is RESOLVED. */
+        UUID routeId,
+        String routeCode,
+        String routeName,
+        /** The resolved route's zone; null when the route did not resolve or has no zone. */
+        String zoneCode,
+        String zoneName) {
 
     /** What the list shows of an order's geometry. {@code stacks} is null when no line was measured. */
     public record OrderGeometrySummary(
@@ -86,12 +102,18 @@ public record OrderView(
     /** The pre-V62 shape: a line count and no geometry figures beyond the order header. */
     public static OrderView from(TransportOrder order, MasterReference origin, MasterReference destination,
             long lineCount, OrderFulfillmentStatus fulfillmentStatus) {
-        return from(order, origin, destination, lineCount, null, fulfillmentStatus);
+        return from(order, origin, destination, lineCount, null, fulfillmentStatus, null, null);
     }
 
-    /** {@code stacks} is the sum of the measured lines' stacks, or null when none was measured. */
+    /**
+     * {@code stacks} is the sum of the measured lines' stacks, or null when none was measured;
+     * {@code resolution} is the order's route resolution, or null when it was not computed;
+     * {@code zone} is the resolved route as masterdata names it with its zone, or null.
+     */
     public static OrderView from(TransportOrder order, MasterReference origin, MasterReference destination,
-            long lineCount, Integer stacks, OrderFulfillmentStatus fulfillmentStatus) {
+            long lineCount, Integer stacks, OrderFulfillmentStatus fulfillmentStatus, RouteResolution resolution,
+            RouteReference zone) {
+        RouteResolution.ResolvedRoute route = resolution == null ? null : resolution.route().orElse(null);
         return new OrderView(order.id(), order.orderNumber(), order.externalSource(), order.externalReference(),
                 order.originId(), origin == null ? null : origin.code(), origin == null ? null : origin.name(),
                 order.destinationId(), destination == null ? null : destination.code(),
@@ -106,6 +128,11 @@ public record OrderView(
                 order.allocation().pending().pallets(),
                 new OrderGeometrySummary(order.planningVolumeM3(), order.floorAreaM2(), order.maxStackHeightM(),
                         order.maxUnitHeightM(), stacks, order.geometryUnmeasuredLines(),
-                        order.geometryReferenceHeightM()));
+                        order.geometryReferenceHeightM()),
+                resolution == null ? null : resolution.status(),
+                route == null ? null : route.routeId(), route == null ? null : route.code(),
+                route == null ? null : route.name(),
+                route == null || zone == null ? null : zone.zoneCode(),
+                route == null || zone == null ? null : zone.zoneName());
     }
 }

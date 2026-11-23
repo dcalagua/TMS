@@ -38,7 +38,12 @@ public record AdministeredUserView(
         List<String> roleCodes,
         OffsetDateTime createdAt,
         UUID carrierId,
-        String carrierName) {
+        String carrierName,
+        /**
+         * Whether the person has a sign-in account (ADR-031). False for a profile invited before the
+         * invitation email existed, or whose invitation could not be issued: «Reenviar invitación».
+         */
+        boolean accountLinked) {
 
     public static AdministeredUserView from(AdministeredUserRow row, List<String> roleCodes, String carrierName) {
         return new AdministeredUserView(
@@ -52,6 +57,7 @@ public record AdministeredUserView(
                 List.copyOf(roleCodes),
                 row.createdAt(),
                 row.carrierId(),
-                carrierName);
+                carrierName,
+                row.accountLinked());
     }
 }

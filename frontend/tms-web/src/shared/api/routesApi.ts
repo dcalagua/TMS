@@ -114,6 +114,40 @@ export function updateRoute(companyId: string, id: string, request: RouteRequest
   return apiRequest<RouteDetailView>(`/masterdata/routes/${id}`, { method: 'PUT', companyId, body: request })
 }
 
+/** Mirrors `RouteStopOptimizationRequest`: el origen y las paradas tal como están ahora en el formulario. */
+export interface RouteStopOptimizationRequest {
+  originId: string
+  destinationIds: string[]
+}
+
+/**
+ * Mirrors `RouteStopOptimizationView` (ADR-030): el orden que propone el asistente de IA, medido
+ * contra el actual con la misma matriz de distancias. Es una propuesta: no se guardó nada.
+ */
+export interface RouteStopOptimizationView {
+  /** Todas las paradas pedidas, una vez cada una, en el orden propuesto. */
+  destinationIds: string[]
+  /** Del origen a la última parada en el orden actual; el regreso no cuenta. */
+  currentDistanceKm: number
+  proposedDistanceKm: number
+  /** Si la propuesta es estrictamente más corta que el orden actual. */
+  improved: boolean
+  /** Si alguna distancia es una estimación por coordenadas (sin proveedor de rutas, siempre). */
+  estimated: boolean
+  /** La explicación del modelo, en español, con las paradas por su número en el orden actual. */
+  rationale: string
+  model: string
+}
+
+/** Las paradas sin coordenadas (y el origen) se rechazan con `missing-coordinates`; sin API key, `feature-not-configured`. */
+export function optimizeRouteStops(
+  companyId: string, request: RouteStopOptimizationRequest,
+): Promise<RouteStopOptimizationView> {
+  return apiRequest<RouteStopOptimizationView>('/masterdata/routes/optimize-stops', {
+    method: 'POST', companyId, body: request,
+  })
+}
+
 export function activateRoute(companyId: string, id: string): Promise<RouteDetailView> {
   return apiRequest<RouteDetailView>(`/masterdata/routes/${id}/activate`, { method: 'POST', companyId })
 }

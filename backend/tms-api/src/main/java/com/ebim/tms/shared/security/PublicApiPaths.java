@@ -45,6 +45,14 @@ public class PublicApiPaths {
         return properties.basePath() + "/public/tracking/*";
     }
 
+    /**
+     * «¿Olvidaste tu contraseña?» (ADR-031): anonymous because the person cannot sign in. It reveals
+     * nothing - the answer is the same for every address - and it is rate limited.
+     */
+    public String passwordReset() {
+        return properties.basePath() + "/auth/password-reset";
+    }
+
     /** @see TmsApiProperties#publicDocumentation() */
     public boolean documentationIsPublic() {
         return properties.publicDocumentation();
