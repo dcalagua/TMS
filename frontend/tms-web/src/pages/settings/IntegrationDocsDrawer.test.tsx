@@ -120,7 +120,7 @@ describe("CredentialDocsDrawer", () => {
     render(<CredentialDocsDrawer client={CLIENT} onClose={() => {}} />);
 
     // El primer alcance viene abierto: su petición lleva la cabecera de la credencial.
-    const request = await screen.findAllByText(/^POST http:\/\/.*\/integration\/v1\/locations\n/, RAW);
+    const request = await screen.findAllByText(/^POST https?:\/\/.*\/integration\/v1\/locations\n/, RAW);
     expect(request[0].textContent).toContain(`Authorization: Bearer ${CLIENT.clientId}.<secreto>`);
     expect(request[0].textContent).toContain('"code": "ST-4711"');
     expect(screen.getAllByText(/Respuesta 201 Created/).length).toBeGreaterThan(0);
